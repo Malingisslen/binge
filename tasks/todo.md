@@ -1,3 +1,369 @@
+# Sprint 2026-09-03 — tre byggbuntar + en mätning utan diff
+
+Föregående sprintplan arkiverad under `---` längst ned.
+
+## Urval
+
+Backloggen hade 23 öppna biljetter; noll låg i Todo eller In Progress vid urvalet.
+Tre byggs, en avgörs med en mätning som inte producerar någon diff, resten står under
+"Inte valda" med ett skäl per grupp.
+
+Skälen som dominerar bortvalet är fyra:
+
+* **En bindande handbroms i tråden** — biljetten säger själv att Malin måste svara först
+  (BIN-1063 gruppfrågan, BIN-871 takten, BIN-990, BIN-939, BIN-1075) eller att den ska ha
+  ett eget designpass och aldrig plockas av en obevakad sprint (BIN-559).
+* **`neverBuildLabels`** — `idea`/`Feature` (BIN-189, BIN-521, BIN-170).
+* **Bor i `C:/claude-plugins`** och kräver en egen session i det repot (BIN-1052,
+  BIN-1013, BIN-1035, BIN-959). Lärdomen 2026-08-03: en session som rör delad infra och
+  sedan startar subagenter förgiftar dem — och den här sessionen startar granskare.
+* **Ops-blockerad eller uttryckligen framskjuten** (BIN-1071 kräver en människa med
+  webbläsare; BIN-454/BIN-402 är pinnade till ~nov och rör den förbjudna `mutateEnabled`;
+  BIN-824 byggs uttryckligen inte förrän spärrhakens luft är förbrukad; BIN-624 halva 2
+  förutsätter en nollräkning på skarp data som aldrig kördes; BIN-613 väljer mellan tre
+  alternativ i deploy-kedjan och är nästa naturliga bunt när budget finns).
+
+Routningen kördes på varje bunts faktiska filuppsättning; kommandot står i buntens eget
+avsnitt. Var och en gav `tier: medium` → en blind rollkritik före bygget. Routningen körs
+OM på `git diff --cached --name-only` omedelbart före varje commit (BIN-1052/1050/938:s
+lärdom), och varje commits filuppsättning måste routa till en kritik som faktiskt kördes.
+
+Push-grinden budgeteras som ett eget granskningsvarv med samma vikt som en bunt
+(lärdomen 2026-09-01, BIN-1059).
+
+---
+
+## Bunt A — BIN-1077: de tre TMDB-id:na verifierade mot skarp SE-katalog [Tier A]
+
+Disposition: **build**. Ingen produktfråga — biljetten ber om en mätning och en strykning.
+
+```
+node docs/org/route.mjs src/lib/tmdb/providers.ts
+```
+→ `tier: medium`, `reasonCode: owned`, `panel: [11]` (#11 Localization / i18n).
+
+### Mätningen är gjord, och den står här före bygget
+
+`GET /watch/providers/movie?watch_region=SE` mot skarp nyckel, 2026-09-03, 67 poster:
+
+| id | `provider_name` i SE-katalogen | katalogens antagande | utfall |
+| -- | -- | -- | -- |
+| 423 | `Blockbuster` | Blockbuster, `type: 'rent'` | stämmer |
+| 538 | `Plex` | Plex, `isAds`, kostnad 0 | stämmer |
+| 175 | `Netflix Kids` | alias till Netflix (8) | stämmer |
+
+Alla tre stämmer, alltså är åtgärden en strykning — inte en defektlagning.
+
+### Premisskontroll mot HEAD (`9a94f82`)
+
+Klausulen står på tre ställen, alla i `src/lib/tmdb/providers.ts`:
+
+```
+grep -n omverifierat src/lib/tmdb/providers.ts
+```
+→ rad 41, 176, 191. Premissen håller.
+
+### Blind rollkritik #11 — accept-with-conditions, 2 must-haves (inviktna nedan)
+
+Rollen hade RATT pa en punkt jag hade fel om: kontrollen ar TMDB mot TMDB, inte oberoende.
+De ovriga `live-verifierat`-noteringarna i filen korsar TMDB mot en EXTERN kalla
+(help.netflix.com, tele2.se); den har lasningen fragar samma endpoint som id:na kom ifran.
+Att bara stryka ordet "oberoende" hade darfor last som en starkare kontroll an den som
+gjordes. Villkoren ar bindande acceptanskriterier 2 och 3.
+
+### Acceptanskriterier
+1. Klausulen "ej oberoende omverifierat i den commit som lade in det" finns inte kvar på
+   någon av de tre platserna. *(kind: diff)*
+2. **#11 villkor 1.** Den text som star kvar innehaller inte ordet "oberoende", och den
+   namnger endpointen, datumet 2026-09-03 och vad som faktiskt kontrollerades
+   (`provider_name` ur TMDB:s SE-katalog) — inte att aliaset som sadant ar validerat.
+   *(kind: diff)*
+3. **#11 villkor 2.** Diffen ror bara kommentarstext pa de tre stallena: inget `id`,
+   `type`, `defaultMonthlyCost`, `isAds`, `shortName` eller `aliases`-varde andras.
+   *(kind: diff, negativt villkor)*
+4. `npm run typecheck` och `npm test` gröna. *(kind: diff)*
+
+---
+
+## Bunt B — BIN-790: flaggan städas av en pre-commit-rensning i stället för att överleva [Tier C]
+
+Disposition: **build**. Fjärde gången flaggan städas för hand är ett verktygsfel, och
+Malins beslut 2026-08-08 är "bygg". Blockeraren från 2026-08-26/31 är borta: hooken har
+sedan BIN-1009 ett test, och BIN-1059 la in commit-msg-maskineriet som läser
+`git diff --cached --name-only` (`lefthook.yml` → `check_staged_routing.mjs`).
+
+**Punkt 2 i biljetten byggs INTE här** — "en utdragen bunt ska rensa sina egna flaggor"
+bor i sprintmotorn under `C:/claude-plugins`. Den delen står kvar öppen.
+
+```
+node docs/org/route.mjs .claude/hooks/freshness.mjs .claude/hooks/freshness.test.mjs \
+  lefthook.yml scripts/prune-map-flag.mjs scripts/prune-map-flag.test.mjs
+```
+→ `tier: medium`, `reasonCode: owned`, `panel: [25]` (#25 Engineering Manager / Release
+Manager). `unmapped`: de två nya `scripts/`-filerna — de får en ägare i
+`docs/role-responsibilities.md` och kartan regenereras (aldrig `--update-gaps`).
+
+### Mekanismen, och varför den formen
+
+En trigger är ett SPÖKE när redigeringen som stämplade den drogs tillbaka. Den skiljs från
+en trigger vars redigering just committats utan att kartan hunnit med genom att fråga båda
+frågorna, inte bara den ena:
+
+* Filen skiljer sig från HEAD i arbetsträdet → **lev**, redigeringen ligger kvar.
+* Ingen commit sedan flaggans `firstStampedAt` rörde filen → **spöke**, släpps.
+* Annars → **lev**, redigeringen är committad och kartan är ännu inte uppdaterad.
+
+Steget körs som en pre-commit-rensning och **blockerar aldrig** — det skriver om flaggan
+eller raderar den när inga triggers står kvar, och avslutar alltid 0. Det är skillnaden mot
+den obligation `freshness.mjs`s daterade avstegsblock avvisade: det blocket handlar om
+BIN-969:s git-apply-lucka och en BLOCKERANDE skyldighet; den här ändringen är varken.
+Avstegsblockets text uppdateras inte — den beskriver en annan lucka.
+
+### Blind rollkritik #25 — accept-with-conditions, 5 must-haves
+
+Rollen sparade bade planens premisser: den spprade tre-stegsscenariot sjalv och bekraftade
+att regeln haller genom steg 2, och att luckan ar en ANNAN an BIN-969:s. Men den pekade ut
+att "blockerar aldrig" ar sant bara om det ar TESTAT, och att det har blir forsta
+pre-commit-kommandot som inte ar glob-gatat — vilket bryter filens egen uttalade regel och
+darfor maste motiveras pa plats. Villkoren ar acceptanskriterier 2, 3, 5, 6 och 7.
+
+Rollens tredje risk — att ett steg som aldrig sager nagot ocksa aldrig ger aterkoppling —
+antas ocksa: rensningen skriver EN rad nar den faktiskt slapper en trigger, och tiger annars.
+
+### Acceptanskriterier
+1. En trigger vars fil är oförändrad mot HEAD **och** som ingen commit sedan
+   `firstStampedAt` rört släpps; en trigger vars fil har en commit i det intervallet
+   behålls. Båda riktningarna pinnade av var sitt test. *(kind: diff)*
+2. **#25 villkor 1.** Rensningen kan aldrig fälla en commit: tva test tvingar fram felen —
+   ett trasigt flagg-JSON och ett git-anrop som kastar — och bada haevdar avslutskod 0.
+   *(kind: diff, negativt villkor)*
+3. **#25 villkor 2.** Vanliga fallet ar gratis: saknas flaggfilen gor skriptet NOLL
+   git-subprocesser, och det bevisas genom att RAKNA dem via en injicerad git-korare — inte
+   genom att skanna kallan, som inte kan se ett anrop i rot-upplosningen ett steg upp.
+   Roten loses darfor upp genom en fs-uppgang efter `.git`. Den nya `lefthook.yml`-posten
+   bar en matt kostnadskommentar, matt UTAN `CLAUDE_PROJECT_DIR`. *(kind: diff)*
+4. Testfilen körs av `npm test` — dess namn ska synas i den fulla körningens fillista
+   (BIN-802:s andra vägg). *(kind: diff)*
+5. **#25 villkor 3.** `lefthook.yml` forklarar pa plats varfor det har steget INTE ar
+   glob-gatat, i samma form som `review-coverage`/`staged-routing` forklarar sin egen.
+   *(kind: diff)*
+6. **#25 villkor 4.** Minst ett test SPAWNAR skriptet som barnprocess (som
+   `freshness.test.mjs`s `runHook`), inte bara importerar dess hjalpare — annars ar
+   inkopplingen otestad och kan raderas gron. *(kind: diff)*
+7. **#25 villkor 5.** Minst ett test lagger commiten inom samma minut som `firstStampedAt`
+   och bevisar att KEEP/DROP inte glider pa tidszon (BIN-1050:s `%cI`-fotangel).
+   *(kind: diff)*
+8. `freshness.mjs`s daterade avstegsblock om git-apply-luckan lämnas oförändrat i sak.
+   *(kind: diff, negativt villkor)*
+9. `node docs/org/gen-ownership-map.mjs --check` grön utan `--update-gaps`. *(kind: diff)*
+
+### Kvarstaende risk rollen namngav, inte atgardad har
+
+`firstStampedAt` ar flagg-niva, inte per trigger. En langlivad flagga dar en tidigare
+slappt sokvag stamplas om arver flaggans URSPRUNGLIGA tidsstampel, vilket vidgar
+DROP-fonstret och gor en ny spoktrigger mindre trolig att fangas. Riktningen ar saker
+(over-keep, aldrig en tyst radering av en levande redigering), sa det byggs inte om nu —
+det filas som foljdbiljett.
+
+---
+
+## Bunt C — BIN-826: spärrhaken säger ifrån om sitt eget utbyte [Tier A]
+
+Disposition: **build**. Ren observabilitet på en spärrhake som annars bara märks i Search
+Console veckor senare.
+
+```
+node docs/org/route.mjs src/lib/tmdb/selectionManifest.ts \
+  src/lib/tmdb/selectionManifest.test.ts src/lib/tmdb/selectionResolve.test.ts \
+  src/app/titleParams.watchdog.test.ts
+```
+→ `tier: medium`, `reasonCode: owned`, `panel: [15]`.
+
+### Premisskontroll mot HEAD (`9a94f82`)
+
+* `mergeManifest` skriver ingen utbytesrad — inga `::notice::`/`::warning::` i funktionen.
+* En härledning som LYCKAS MED TOM LISTA passerar tyst: `derived.ok` är sant,
+  `mergeManifest` returnerar `previous` oförändrat, ingen varning skrivs.
+* Ingen varning när `freshIds.length >= SELECTION_CEILING[type]`.
+* `src/app/titleParams.watchdog.test.ts` motiverar `STUCK_REPORT_LIMIT` med kömotivet.
+* `src/lib/tmdb/selectionResolve.test.ts` pinnar `toContain('&& 175 || 45')`.
+
+Alla fem premisser håller.
+
+### Vad som INTE byggs
+
+`REFRESH_DERIVE_TIMEOUT_MS` rörs inte. Biljetten säger själv att konstanten ska sättas
+med några veckors data från just den loggning den här bunten inför — att välja den nu vore
+att gissa mellan två enskilda mätningar med tio minuters marginal.
+
+### Blind rollkritik #15 — accept-with-conditions, 4 must-haves
+
+Rollen kontrollerade forst det som ar dess egen insats: ingen av de fem delarna ror
+`assertCoverageFloor`, `SELECTION_CEILING`, `SELECTION_ABSOLUTE_FLOOR` eller
+evakueringsordningen, sa inget hogljutt fel gors tyst. Den kontrollerade ocksa mot filens
+egna matningar att tak-varningen (del 3) inte fyrar pa en normal veckokorning — den ar en
+riktig avvikelsesignal, inte brus. Villkoren ar acceptanskriterier 2, 3, 4 och 5.
+
+### Acceptanskriterier
+1. En rad på ett refresh-bygge namnger behållna / evakuerade / nytillkomna id:n per typ.
+   `mergeManifest` förblir REN — raden skrivs där refresh-sammanhanget är känt. *(kind: diff)*
+2. **#15 villkor 1.** Raden rapporterar ANTAL plus ett avgransat urval, aldrig en full
+   id-lista: taket for movie/tv ar 15 000 och en radlangd i den storleksordningen ar
+   olasbar. Formen ar den `buildFetch.ts` redan etablerat (`… och N till`). *(kind: diff)*
+3. **#15 villkor 2.** Diffen mellan foregaende och farsk mangd byggs med `Set`/`.has()`,
+   aldrig nastlade `.includes()`/`.find()` — annars ar det O(n²) pa precis den veckokorning
+   vars budget redan ar trang. *(kind: diff, negativt villkor)*
+4. **#15 villkor 3.** Exakt ETT `mergeManifest(`-anropsstalle i `resolveSelection`; det
+   evakuerade harleds ur den enda korningens in- och utdata, aldrig ur ett andra anrop.
+   *(kind: diff, negativt villkor)*
+5. **#15 villkor 4.** Utbytesraden och tom-harledningsvarningen har SYNBART olika lydelse,
+   inte bara olika utlosare — bada intraffar pa samma handelse nar `freshIds` ar tom. Tva
+   test pinnar var sin distinkta delstrang. *(kind: diff)*
+6. En härledning som lyckas med tom lista skriver en `::warning::` som namnger just det
+   fallet, pinnad av ett test med `derive: async () => []`. *(kind: diff)*
+7. En `::warning::` när `freshIds.length >= SELECTION_CEILING[type]`. *(kind: diff)*
+8. Kommentaren i `titleParams.watchdog.test.ts` som avfärdar STUCK-signalen som kö-brus
+   STRYKS (den är falsk: en enbart köad väntare avregistreras före `STUCK_AFTER_MS`).
+   *(kind: diff)*
+9. `selectionResolve.test.ts` matchar radbundet i stället för på delsträng, så `45 → 450`
+   fäller. *(kind: diff)*
+10. `REFRESH_DERIVE_TIMEOUT_MS` är oförändrad. *(kind: diff, negativt villkor)*
+11. `npm run typecheck` och `npm test` gröna. *(kind: diff)*
+
+---
+
+## Bunt D — BIN-658: återöppningsutlösaren prövad, och den har inte fyrat [ingen diff]
+
+Disposition: **build**, men utfallet är en mätning. Malins beslut 2026-08-06 är "vänta";
+kommentaren 2026-08-29 gjorde biljetten till bevakningen och namngav exakt två kommandon.
+
+Körda 2026-09-03:
+
+```
+npm view eslint-plugin-react@latest peerDependencies
+npm view eslint-config-next@latest dependencies
+```
+
+→ `{ eslint: '^3 || ^4 || ^5 || ^6 || ^7 || ^8 || ^9.7' }` och
+`'eslint-plugin-react': '^7.37.0'` står kvar bland `eslint-config-next`s beroenden.
+
+**Ingen av de två utlösarna har fyrat.** Posten i `.github/dependabot.yml` ska alltså inte
+röras. Utfallet skrivs som en daterad kommentar på biljetten; ingen kod ändras. Detta
+avsnitt finns för att "ingen diff" annars är omöjlig att skilja från "aldrig försökt"
+(BIN-707/708:s evaporationsklass).
+
+---
+
+## Inte valda
+
+| Biljett(er) | Skäl |
+| -- | -- |
+| BIN-1063 | Biljetten kräver uttryckligen Malins svar på gruppfrågan (radera vs lämna över) före bygget. |
+| BIN-559 | Malins beslut 2026-08-06: eget designpass, ska inte plockas av en obevakad sprint. Panelen 2026-08-30 har dessutom två villkorat blockerande roller och river premissen. |
+| BIN-871 | Väntar på Malins takt ("hur många filer per sprint"). |
+| BIN-990, BIN-939, BIN-1075 | Biljetterna säger själva att valet är Malins. |
+| BIN-624 | Halva 2 förutsätter en nollräkning på skarp data som #4 mätte aldrig kördes. |
+| BIN-1052, BIN-1013, BIN-1035, BIN-959 | Bor i `C:/claude-plugins`; kräver egen session i det repot. |
+| BIN-1071 | Tier D — tre prissidor kräver en människa med vanlig webbläsare. |
+| BIN-454, BIN-402 | Pinnade till ~nov; rör `mutateEnabled`, som en sprint aldrig får flippa. |
+| BIN-824 | Byggs uttryckligen inte förrän spärrhakens luft är förbrukad, och då med GSC-data. |
+| BIN-613 | Väljer mellan tre alternativ i deploy-kedjan; nästa naturliga bunt när budget finns. |
+| BIN-189, BIN-521, BIN-170 | `idea`-etiketten → `neverBuildLabels`. |
+
+## Behöver dig (Tier D)
+
+* **BIN-1071** — Crunchyroll, YouTube Premium och SkyShowtimes reklamnivå gick inte att
+  läsa maskinellt. Öppna de tre sidorna i en vanlig webbläsare och skriv priserna i
+  biljetten, så tar nästa körning in dem.
+
+## Efter sprinten
+
+1. `npm run lint`, `npm run typecheck`, hela `npm test`.
+2. Följdbiljetter filas FÖRE commit.
+3. Routningen körs om på `git diff --cached --name-only` per commit; buntarna committas
+   splittat så att varje commits filuppsättning routar till en kritik som faktiskt kördes
+   (A → [11], B → [25], C → [15]).
+4. Push (= deploy), invänta grön körning, purga Cloudflare.
+5. Linear-transitioner PARVIS med varje commit (BIN-754).
+
+## Deviation log
+
+- [discovery] BIN-790, ETT ÄKTA FEL i koden, hittat av utfallsverifieraren: `repoRoot()`
+  körde `git rev-parse --show-toplevel` FÖRE den tidiga returen när `CLAUDE_PROJECT_DIR`
+  är osatt — vilket är precis vad lefthook gör vid en riktig commit. "Noll git-subprocesser"
+  var alltså falskt, och min egen kostnadsmätning dolde det genom att sätta variabeln.
+  Fixat: roten löses nu upp genom att gå uppåt efter `.git` i filsystemet. Och testet som
+  påstod saken SKANNADE KÄLLAN efter den tidiga returen — det kunde per konstruktion inte se
+  ett anrop ett steg upp. Ersatt med en RÄKNING genom en injicerad git-körare, plus ett
+  kontrollprov som visar att anropen blir fler än noll när en flagga finns (annars uppfylls
+  "noll" lika gärna av en rensning som inte gör något — BIN-1069:s frånvaro-fälla).
+  Kostnadskommentaren i `lefthook.yml` är ommätt utan variabeln: 46–98 ms.
+- [discovery] BIN-1077, hittat av kodgranskaren: min egen `log_event.mjs --help` hade
+  skrivit en skräprad `{"type":"--help"}` i `events.jsonl`. Skriptet har ingen `--help`;
+  det tar `argv[2]` ordagrant som `type`. Raden borttagen ur det stageade innehållet.
+  Rättelse till granskarens formulering: det finns TVÅ sådana rader, och den andra
+  (2026-08-30) är REDAN COMMITTAD. Loggen är append-only, så bara den här sessionens rad
+  togs bort.
+
+
+- [discovery] BIN-1077: rollkritiken #11 hittade det mitt eget bygge inte hade stött på.
+  Omläsningen är TMDB mot TMDB, inte oberoende — filens övriga `live-verifierat`-noteringar
+  korsar mot en EXTERN källa (help.netflix.com, tele2.se). Att bara stryka ordet "oberoende"
+  hade därför läst som en STARKARE kontroll än den som gjordes. Ersättningstexten namnger nu
+  endpoint, datum och exakt vad som kontrollerades — och säger uttryckligen att aliaset som
+  sådant inte är validerat, bara att TMDB:s klassning står kvar.
+- [deviation] BIN-826: `REFRESH_DERIVE_TIMEOUT_MS` rörs inte. Biljetten säger själv att
+  konstanten ska sättas med några veckors data från just den loggning bunten inför; fönstret
+  är 55–85 min och den enda KALLA mätningen 44,5 min, alltså tio minuters marginal mellan två
+  ENSKILDA mätningar. Att välja nu vore att gissa.
+- [discovery] BIN-790: hela sviten (`npm test`) fällde två test i `docs/org/route.test.mjs`
+  som ingen per-bunt-körning kunde se — en ny `.mjs` med test i vitests globs måste stå i
+  BÅDE `TOOLING_CODE_FILES` (routern, rådgivande) och `reviewGates` (grinden, blockerande).
+  Båda vidgade i samma commit, per BIN-830. Routern kördes om på den vidgade unionen:
+  fortsatt `tier: medium`, `panel: [25]` — samma kritik som redan körts.
+- [needs-human] BIN-790: att SÄTTA de två nya `scripts/`-filerna i
+  `docs/role-responsibilities.md` gav sex NYA ägarlöshetsluckor
+  (`scripts/check-{workflow-map,public-env,knowledge-caps}` × 2), eftersom en katalog börjar
+  ärva ägare först när något i den ägs — generatorns egen kommentar beskriver just den vassa
+  kanten. `--check` gick från 0 till 1, alltså röd deploy. Att sätta även de sex är ett
+  org-designval: `check-public-env.mjs` är #4 Säkerhetsarkitektens yta, inte #25:s, och att
+  lägga den under släppansvarig för att slippa ett granskningsvarv är precis fel skäl.
+  KONSERVATIVT VAL: doc-redigeringen backad, de två nya filerna lämnas oägda som sina sex
+  syskon, luckorna kvar på 298. Filat som följdbiljett. ALDRIG `--update-gaps` (BIN-1013).
+- [discovery] BIN-790: flaggan i trädet vid sprintens slut namnger
+  `src/app/titleParams.watchdog.test.ts` (nod `static-passive-pages`, token `src/app`) och är
+  en ÄKTA trigger, inte ett spöke — redigeringen ligger kvar i arbetsträdet, och den nya
+  rensningen behåller den korrekt. Flödet spårades om: ändringen stryker en falsk kommentar i
+  en testfil, alltså ingen beteende- eller flödesändring, så kartans prosa behöver inte röras.
+  `node scripts/check-workflow-map.mjs` grön (100 noder, 31 flöden, täckning 76/76). Flaggan
+  raderas för hand vid avslut — femte gången, och exakt det biljetten finns för.
+
+## Mutationsbevis
+
+Muteringarna kördes en i taget, med `grep -c MUTANT` FÖRE och EFTER sviten i samma kommando,
+och återställning från en scratchpad-kopia verifierad med `git hash-object`. `deploy.yml`
+muterades ALDRIG på disk — de två formerna prövades mot en strängkopia i minnet, eftersom
+filen inte ingår i någon bunt och en samtidig session delar trädet.
+
+| mutation | fil | utfall |
+| -- | -- | -- |
+| tom-lista-grenen till `if (false)` | `selectionManifest.ts` | 1 test fällt |
+| takvillkoret `>=` till `>` | `selectionManifest.ts` | 1 test fällt |
+| `45` → `450` (strängkopia av deploy.yml) | — | gamla `toContain`-formen ÖVERLEVER, nya radbundna formen faller |
+| sänkt live-rad + citat i kommentar (strängkopia) | — | samma: gamla överlever, nya faller |
+| lefthook-posten ersatt med ett `echo` | `lefthook.yml` | 1 test fällt |
+| keep-on-throw → drop-on-throw | `prune-map-flag.mjs` | 2 test fällda |
+| `JSON.parse` utan inre try/catch | `prune-map-flag.mjs` | **ÖVERLEVDE** — och den är EKVIVALENT för kontraktet: entry-pointens yttre catch ger ändå avslutskod 0, och en flagga som inte gick att parsa lämnas orörd i båda fallen. Prövad, inte bortförklarad; den inre vakten är bälte-och-hängslen i en fail-open-fil, inte bärande. |
+
+Kontrollprov: den orörda deploy.yml passerar BÅDA formerna, så den nya regexen är inte
+trasig-och-därför-röd.
+
+
+
+---
+
+# ARKIV — sprintplan 2026-09-02
+
 # Sprint 2026-09-02 — fyra biljetter, alla `medium`/`single`
 
 Föregående sprintplan arkiverad under `---` längst ned.
