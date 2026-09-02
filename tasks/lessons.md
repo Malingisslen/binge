@@ -1204,3 +1204,68 @@ Blaze som gjordes för länge sedan — på tre ställen i samma fil. En jourhav
 i ett driftläge. Ingen kod, inget test och ingen lint kan se det; bara någon som läser dokumentet
 mot verkligheten.
 
+### [Testing] Ett test som pinnar en konstant på dess VÄRDE matchar kommentaren som nämner den (2026-09-02, BIN-790)
+
+**Trigger:** ett test ska hålla ihop en sträng som står som eget literal i två filer — en delad
+sökväg, ett delat id-format, ett delat felkodsprefix.
+
+**Regel:** ankra på DEKLARATIONEN, inte på värdet. `expect(fil).toContain(VÄRDE)` uppfylls av
+vilken kommentar som helst i filen som råkar nämna värdet; `toContain(\`const NAMN = '${VÄRDE}';\`)`
+uppfylls bara av tilldelningen. Och pröva det: en omdöpning på den andra sidan ska fälla exakt
+det testet.
+
+**Exempel:** BIN-790:s rensning läser flaggan `.claude/state/workflow-map-stale.json`, som är ett
+eget literal i stämplaren (`freshness.mjs`), i rensningen och i rensningens test. Döps
+konstanten om på stämplarsidan blir rensningen en PERMANENT tyst no-op — `existsSync` faller,
+tidig retur, avslutskod 0 — med hela sviten grön, eftersom testerna bygger sin egen flagga ur
+sitt eget literal. Push-grinden bad om ett test som håller ihop dem. Min första version gjorde
+`toContain(FLAG_REL)` och ÖVERLEVDE omdöpningsmuteringen, 20/20 gröna: sökvägen står också i
+stämplarens egen huvudkommentar, så den matchade kommentaren i stället för symbolen. Andra
+versionen pinnar hela tilldelningen och fäller muteringen ensam (19/1). Det är commit-grindens
+egen fälla nummer ett — "grep the changed TOKEN, never the comment beside it" — och den bet i
+det test som skrevs för att stänga en tyst spärr.
+
+**Sidoregel, från #14:s kritik:** att i stället bryta ut strängen till en DELAD KONSTANTMODUL vore
+sämre här. Det flyttar kopplingen till import-tid, före den `try/catch` som gör skriptet
+fail-open, och gör därmed en medvetet icke-blockerande städning till en blockerande.
+
+### [Testing] En miljövariabel som läses inne i funktionskroppen slår ut en injicerad parameter — och kan radera skarpt tillstånd (2026-09-02, BIN-790)
+
+**Trigger:** en funktion tar en `cwd`, en rot, en katalog eller en klient som parameter, och
+läser samtidigt ett fallback-värde ur `process.env` inne i kroppen.
+
+**Regel:** läs miljön i SIGNATUREN, inte i kroppen. `function run({ dir = process.env.X })` låter
+ett test skicka `dir: null` och verkligen få sin egen katalog; `const dir = process.env.X || arg`
+gör den injicerade parametern tyst verkningslös så fort variabeln råkar vara satt. Skillnaden är
+osynlig i en grön svit och beror på vem som körde kommandot.
+
+**Exempel:** `prune-map-flag.mjs` löste roten som `process.env.CLAUDE_PROJECT_DIR ||
+findRepoRoot(cwd)`. Två test injicerade en tillfällig katalog som `cwd`. Med variabeln satt — och
+den sätts av flera verktyg i det här repot — blev roten det RIKTIGA repot: testet läste den skarpa
+gitignorerade flaggan, släppte varje trigger mot en stubbad git, och `unlinkSync`:ade en äkta
+arbetsorder som sidoeffekt av `npm test`. Provat i båda riktningarna: med den gamla formen och
+variabeln satt föll 2 test OCH flaggan raderades på riktigt; efter fixen 19/19 gröna och flaggans
+hash oförändrad. Gitignorerat tillstånd har ingen diff som kan visa förlusten.
+
+### [Workflow] Rättelsen av ett granskningsfynd är buntens farligaste prosa (2026-09-02, BIN-1077/826/790)
+
+**Trigger:** en granskare har hittat ett falskt påstående och du skriver om meningen.
+
+**Regel:** stryk. Om en mening måste stå kvar, skriv den så att den inte kan gå fel — namnge
+symbolen i stället för att räkna den, peka på biljetten i stället för att påstå var något står.
+Och räkna med att rättelsen själv blir nästa varvs fynd tills du slutar formulera om.
+
+**Exempel:** sprinten tog fyra granskningsvarv per bunt. TRE gånger bar min egen rättelse ett nytt
+falskt påstående: jag pekade ut fel tal som svaret på "hur länge räcker andrummet" och skrev sedan
+i rättelsen att `refreshed` är komplementet till `evicted` (det är `retained`; `refreshed` är en
+äkta delmängd av den); jag strök ett wall-clock-tal ur `lefthook.yml` och lämnade en pekare i en
+annan fil som pekade på talet som inte längre fanns; och jag strök ett påstående om ägarskap och
+ersatte det med "utfallet står i avvikelseloggen", där `grep -c BIN-1080
+.claude/rules/accepted-deviations.md` ger 0. Den formen som höll varje gång var densamma: peka på
+biljetten, namnge parametrarna, ta bort kvantifikatorn.
+
+**Och det push-grinden gjorde som ingen per-bunt kunde:** den läser HELA intervallet, så den ser
+en mening i en TIDIGARE commit som en SENARE commit gjorde falsk. Här blev
+`check_review_coverage.mjs`s "a `pre-commit` block with two live commands" falsk i samma stund
+som bunten lade till ett tredje kommando i `lefthook.yml` — två filer, två commitar, ingen
+per-bunts-granskning kunde se båda.
