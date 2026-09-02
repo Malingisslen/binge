@@ -1144,3 +1144,63 @@ en `*.knowledge.md` är ingen kodsökväg och kan aldrig sätta en roll i panele
 
 **Följdregel:** en strykning som lämnar ett stycke bredvid utan subjekt är ett nytt fynd. Ta
 med det som hänger löst i samma redigering.
+
+### [Testing] En assertion om att något INTE hittas uppfylls också av en förstörd mätning (2026-09-02, BIN-1069)
+
+**Trigger:** ett test som pinnar att en vakt FÄLLER — `expect(guard(x)).toBe(false)`, ett index
+som ska ha flyttat, en sökning som ska ha missat.
+
+**Regel:** fråga vad uttrycket svarar när mätapparaten är helt trasig, inte bara när koden är
+trasig. `awaitsTheFetch(body, at)` är `false` både när vakten fäller rätt och när `firstAwaitIndex`
+svarar `-1` för att skanningen inte hittar något någonstans. "Vakten fäller" och "vakten är
+förstörd" uppfyller då samma assertion, och muteringen som förstör mätningen ÖVERLEVER testet.
+Pinna det positiva utfallet — vilket index, vilket värde — inte bara frånvaron av det gamla.
+
+**Följdregel, och den är den som bet hårdast:** om den FÖRVÄNTADE sidan också härleds genom att
+anropa samma funktion som prövas, kollapsar båda sidor till samma meningslöshet under total
+förstörelse. Hjälparen räknade `at + mutation.indexOf("await")` där `at` kom ur samma
+`firstAwaitIndex`; med den stubbad till `-1` blev jämförelsen `-1 === -1 + 0` och passerade. En
+baslinje hämtad ur funktionen under prövning behöver en egen rimlighetskoll
+(`expect(at).toBeGreaterThan(-1)`) INNAN den används som facit.
+
+**Exempel:** BIN-1069. Första utkastets två sömtest gick igenom citat-rusningsmuteringen. Efter
+att indexet pinnats fäller den muteringen exakt sitt test; efter att baslinjen kontrollerats
+fäller den totala förstörelsen nio av tio test i stället för ett. Den tionde är kastvägen, som
+med flit inte går genom skanningen alls — en överlevare man kan namnge är inte samma sak som en
+oförklarad.
+
+**Samma runda, samma familj:** ett fixturtest kan vara grönt av fel skäl. `'abc'.length / 2` har
+en identifierare före snedstrecket, så det passerade även mot den avgränsarblinda versionen och
+bevisade ingenting om citattecknet. Snedstrecket måste sitta DIREKT efter avgränsaren.
+
+### [Workflow] Fixen för en tyst spärr kan återinföra exakt den tystnad den stänger (2026-09-02, BIN-1069/1067/1074)
+
+**Trigger:** en ändring som gör en källkodsskannande vakt, en lexer eller en heuristik bättre.
+
+**Regel:** räkna upp båda felriktningarna innan du bygger, och pröva den TYSTA med en mutering.
+`DIVIDES_AFTER` fick identifierare, tal, `)` och `]` men inte avgränsarna som AVSLUTAR ett värde
+— backtick, citattecken, regexens eget snedstreck. Så `` `abc` / 2 `` öppnade en regex som
+blankade till radslutet och svalde ett `await` efter sig: vakten rapporterade friskt. Det är
+precis felet vakten finns för, återinfört av lagningen av det. Rollkritiken hade varnat för
+formen i förväg (#13:s villkor 3) utan att någon av oss såg att jag byggt den.
+
+**Regel 2:** trädet måste stå STILLA under push-granskningen. Två av den här sprintens
+granskningsvarv ogiltigförklarades av att jag redigerade och stageade om filer medan granskaren
+läste dem — ledgern pinnar de bytes den öppnade, så en dom över bytes som inte längre finns är
+ingen dom. Frys, kör, läs domen, rätta, frys igen. 2026-08-26:s lärdom med rollerna ombytta.
+
+**Exempel:** sprinten 2026-09-02 tog nio blockerande fynd. TVÅ låg i koden, båda i min egen fix
+för det föregående fyndet. De sju andra var falska tal och kvantifierare i min egen prosa i
+sprintplanen: en tallystring över testsviten, ett teckenantal mätt före samma commits egen
+redigering av filen det mätte, "två träffar" där kommandot bredvid svarar tre, "299 ägarlösa
+filer" där repots egen härledning svarar något annat, "8/8 grön" mot en filversion commiten
+ersatte, en uppräkning som inte täckte sin egen lista, och en commit-form planen bockat av innan
+commitarna fanns. Varje enskild ströks i stället för att rättas — en rättelse bär ett nytt omätt
+tal, vilket är hur ett fynd blir en kedja.
+
+**Och det som faktiskt var värt mest:** push-granskningen hittade att `docs/RUNBOOK.md` sa att vi
+ligger på Spark, rådde att invänta en dygnskvots nollställning, och föreslog en uppgradering till
+Blaze som gjordes för länge sedan — på tre ställen i samma fil. En jourhavande hade följt det mitt
+i ett driftläge. Ingen kod, inget test och ingen lint kan se det; bara någon som läser dokumentet
+mot verkligheten.
+
