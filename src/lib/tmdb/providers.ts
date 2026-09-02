@@ -65,10 +65,12 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
     id: 76, name: 'Viaplay', shortName: 'Viaplay', color: '#FF6B00', type: 'flatrate', defaultMonthlyCost: 169,
     // live-verifierat 2026-07-02 — https://viaplay.se — reklam = 99 ORDINARIE utan bindning
     // (79 var reklam + 6 mån bindning); total = 749 ordinarie reklamfritt (699 = Total med reklam) (BIN-406)
+    // live-verifierat 2026-09-02 — https://viaplay.se — medium = 449 ordinarie, ingen kampanj
+    // på den nivån (katalogen stod på 399) (BIN-1070)
     tiers: [
       { id: 'reklam', name: 'Film & Serier med reklam', cost: 99 },
       { id: 'standard', name: 'Film & Serier', cost: 169 },
-      { id: 'medium', name: 'Medium (inkl. sport)', cost: 399, kind: 'sport' },
+      { id: 'medium', name: 'Medium (inkl. sport)', cost: 449, kind: 'sport' },
       { id: 'total', name: 'Total (all sport)', cost: 749, kind: 'sport' },
     ],
   },
