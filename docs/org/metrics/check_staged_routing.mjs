@@ -24,6 +24,17 @@
 // route to. A commit whose tickets have no rows at all passes here, so the two messages never
 // compete to explain the same failure. Whether the sibling refuses it instead depends on that
 // check's own commit-type list — read it there.
+//
+// AND IT DOES NOT TEST A ROW'S AGE OR SCOPE. `loggedPanel` unions every `review` row bearing
+// one of the ticket ids, whenever it was written and whatever fileset it was written about.
+// A wide panel logged for an earlier version of a ticket therefore satisfies a later, narrower
+// routing of the same ticket, and this check stays silent. The sibling documents the identical
+// gap about itself; testing it means first deciding what a review row's shelf life is, which
+// is a policy question nobody has answered.
+//
+// The failure direction is under-blocking only: an untested age can make this check miss a
+// case, never refuse a real one. That asymmetry is why it is written down here rather than
+// closed (BIN-1074).
 
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';

@@ -1,3 +1,352 @@
+# Sprint 2026-09-02 — fyra biljetter, alla `medium`/`single`
+
+Föregående sprintplan arkiverad under `---` längst ned.
+
+## Urval
+
+Fyra biljetter valda ur backloggen; noll låg i Todo eller In Progress vid urvalet. Skälen
+till att resten inte valdes står under "Inte valda", ett skäl per grupp. Två skäl dominerar:
+en produktfråga som är Malins, och en fix som bor i `C:/claude-plugins` och
+kräver en egen session i det repot (lärdomen 2026-08-03: en session som rör delad infra och
+sedan startar subagenter förgiftar dem — och den här sessionen startar granskare).
+
+Routningen kördes på varje bunts faktiska filuppsättning; kommandot står i buntens eget
+avsnitt. Var och en gav `tier: medium` → en blind rollkritik. Routningen körs OM på
+`git diff --cached --name-only` omedelbart före varje commit (BIN-1052/1050/938:s lärdom).
+Varje commits filuppsättning måste routa till en kritik som faktiskt kördes; hur många
+commitar det blir följer av det, och står under "Efter sprinten" när de finns.
+
+Push-grinden budgeteras som ett eget granskningsvarv med samma vikt som en bunt
+(lärdomen 2026-09-01, BIN-1059) — den kräver EN körning som läst varje granskningsbar fil i
+hela `@{u}..HEAD`, och per-buntsgranskningarna summerar inte till den.
+
+## Bunt A — BIN-1070: Viaplay Medium 399 → 449 [Tier A]
+
+Disposition: **build**. Prisändringen är mätt och verifierad mot viaplay.se 2026-09-02; det
+enda som saknades var en ren commit-väg.
+
+```
+node docs/org/route.mjs src/lib/tmdb/providers.ts
+```
+→ `tier: medium`, `reasonCode: owned`, `panel: [11]` (#11 Localization / i18n).
+`dropped`: 3, 5, 10, 13, 15, 24.
+
+Premisskontroll, mätt vid urvalet mot 5ff6204 (dessa rader beskriver det läget, inte nuet): `src/lib/tmdb/providers.ts` har Viaplay-nivån
+`{ id: 'medium', name: 'Medium (inkl. sport)', cost: 399, kind: 'sport' }`. Premissen håller.
+
+### Acceptanskriterier
+1. Viaplay-nivån `medium` står på `cost: 449` med en `live-verifierat 2026-09-02 — https://viaplay.se`-notering i providerns kommentarsblock. *(kind: diff)*
+2. Ingen annan nivås `cost` ändras i samma diff — de priser biljettens svep fann oförändrade rörs inte. *(kind: diff, negativt villkor)*
+3. `npm run typecheck` och `npm test` gröna med ändringen inne. *(kind: diff)*
+4. Grön deploy + Cloudflare-purge. *(kind: run)*
+
+## Bunt B — BIN-1067: RUNBOOK pekar på en sektionsnumrering som inte finns [Tier A]
+
+Disposition: **build**. En trasig pekare i ett driftdokument.
+
+```
+node docs/org/route.mjs docs/RUNBOOK.md
+```
+→ `tier: medium`, `reasonCode: owned`, `panel: [20]` (#20 Manual / Release QA Tester).
+`dropped`: 21.
+
+Premisskontroll, mätt vid urvalet mot 5ff6204 (dessa rader beskriver det läget, inte nuet): `docs/RUNBOOK.md:87` skriver `EXTERNAL_ACTIONS.md §1.2`;
+`docs/analysis/EXTERNAL_ACTIONS.md` har bara `##`-rubriker, ingen numrering. Premissen håller.
+
+### Acceptanskriterier
+1. `docs/RUNBOOK.md` hänvisar inte längre till ett sektionsNUMMER i EXTERNAL_ACTIONS.md — rubriken namnges, eller hänvisningen stryks. *(kind: diff)*
+2. Ingen numrering införs i `docs/analysis/EXTERNAL_ACTIONS.md`. *(kind: diff, negativt villkor ur biljetten)*
+3. Ett sökkommando över repot efter andra §-nummerhänvisningar in i den filen körs, kommandot skrivs ned här, och varje träff åtgärdas på samma sätt. *(kind: diff)*
+
+Kommandot, avgränsat till hänvisningar IN i filen enligt #20:s villkor 2 — RUNBOOK:s egna
+interna `§`-referenser går mot dess egna numrerade rubriker och ska inte röras:
+
+```
+git grep -n "EXTERNAL_ACTIONS.md §"
+```
+
+Kört efter rättelsen: de enda träffarna ligger i den här planfilen, som beskriver felet.
+Ingen levande pekare bär ett sektionsnummer. Bredare svep över alla hänvisningar in i filen:
+`git grep -n "EXTERNAL_ACTIONS" -- docs` — ingen av dem namnger ett nummer.
+
+## Bunt C — BIN-1074: tre prosafynd, alla strykningar [Tier A]
+
+Disposition: **build**. Tre påståenden som inte håller. Alla tre åtgärdas genom att stryka,
+inte formulera om (strykregeln, `.claude/rules/code-style.md`).
+
+```
+node docs/org/route.mjs vitest.config.ts docs/org/metrics/check_staged_routing.mjs .claude/shared-plugin.json
+```
+→ `tier: medium`, `reasonCode: owned`, `panel: [25]` (#25 Engineering Manager / Release Manager).
+`dropped`: 7, 21.
+
+Premisskontroll, mätt vid urvalet mot 5ff6204 (dessa rader beskriver det läget, inte nuet):
+- `vitest.config.ts:33` bär klausulen `--selftest` … `is wired to no gate (BIN-802)`; samma klausul är struken i `docs/org/route.test.mjs:7-11`, som skriver att `gate-symmetry.test.mjs` startar den under `npm test`. Premissen håller.
+- `docs/org/metrics/check_staged_routing.mjs:90-104` `loggedPanel` unionerar varje `review`-rad som bär biljettens id, utan test av ålder eller omfång. Syskonet `check_review_coverage.mjs:120-123` redovisar exakt samma begränsning om sig självt. Premissen håller.
+- `.claude/shared-plugin.json` → `reviewGates[3]._note13` slutar `"…in the same commit, and the two named files became one afterwards."` Premissen håller.
+
+Punkt 2 är en förgrening i biljetten (pröva åldern, ELLER skriv in begränsningen). **Valet är
+att skriva in begränsningen**, av två skäl: felriktningen är enbart under-blockering, aldrig
+över, och syskonmodulen redovisar redan sin identiska begränsning i prosa i stället för att
+pröva den. Att bygga åldersprövningen kräver ett hållbarhetsbeslut ("hur gammal får en rad
+vara?") som ingen svarat på — samma öppna policyfråga syskonet namnger.
+
+### Acceptanskriterier
+1. Klausulen om `--selftest` är STRUKEN ur `vitest.config.ts`. Ingen ersättande formulering skrivs. *(kind: diff)*
+2. `_note13`:s sista sats är struken; meningen slutar vid `"in the same commit."` och stycket runt den har fortfarande ett subjekt. *(kind: diff)*
+3. `loggedPanel`s begränsning — ingen prövning av radens ålder eller omfång, felriktningen enbart under-blockering — står i modulens befintliga `WHAT THIS DOES NOT DO`-block, utan något nytt räknat påstående. *(kind: diff)*
+4. `npm test` grön. *(kind: diff)*
+
+## Bunt D — BIN-1069: vakten är blind för ett `await` inuti `${...}` [Tier A]
+
+Disposition: **build**. En källkodsskannande vakt som kan gå tyst sönder.
+
+```
+node docs/org/route.mjs functions/src/availableNotify/runNotify.processTitle.test.ts
+```
+→ `tier: medium`, `reasonCode: owned`, `panel: [13]` (#13 Data / Integrations Engineer).
+`dropped`: inga.
+
+Premisskontroll, mätt vid urvalet mot 5ff6204 (dessa rader beskriver det läget, inte nuet): `functions/src/availableNotify/runNotify.processTitle.test.ts:47`
+`blankCommentsAndStrings` finns, `:118` `firstAwaitIndex` finns, och raderna 150-156 beskriver
+själva den mätta blinda fläcken. Premissen håller.
+
+### Acceptanskriterier
+1. `blankCommentsAndStrings` behandlar innehållet i `${...}` inuti en template-literal som KOD, inte som stränginnehåll. *(kind: diff)*
+2. Båda riktningarna pinnas: ett `await` i en interpolation ovanför hämtningen FÄLLER vakten; ett `await` i en vanlig sträng eller en kommentar är fortsatt osynligt. Mutanten asserteras närvarande FÖRE och EFTER sviten, i ett kommando. *(kind: diff)*
+3. **Ur biljettens kommentarstråd 2026-08-31, mätt av integrationsgranskaren:** samma söm har en ANDRA form som ska lagas i samma pass — en regex-literal med ett obalanserat citattecken (`/'/`) får citat-grenen att skanna fram till nästa citattecken längre ner i kroppen och blanka bort riktig kod på vägen. Båda formerna lagas, båda pinnas. *(kind: diff)*
+4. Vaktens docblock NAMNGER kvarvarande blinda fläckar i stället för att påstå att den är komplett. *(kind: diff)*
+5. Filens befintliga test är fortsatt gröna, och `npm test` är grön. *(kind: diff)*
+
+**Utanför bunten, ur samma tråd:** `.claude/agents/binge-test-reviewer.knowledge.md` passerade sitt
+80 000-teckenstak i BIN-1060:s commit utan kompenserande strykning. Vilken punkt som pensioneras
+är ett innehållsval, inte något ett bygge avgör under commit-tryck. Går till "Needs you".
+
+## Bindande villkor ur de blinda rollkritikerna (2026-09-02)
+
+Fyra kritiker, en per bunt, var och en blind för de andra och körd FÖRE bygget. Var och en
+läste sin egen dossiersektion och `.claude/rules/accepted-deviations.md`. Alla fyra
+loggade i `docs/org/metrics/events.jsonl` med `via: "sprint-execute"`.
+
+### BIN-1070 — #11 Localization / i18n: **accept-with-conditions** (2 villkor)
+1. Den nya noteringen ska SÄGA VAD DEN VERIFIERAT — nivån, talet, och att den nivån inte har
+   något kampanjpris — inte bara bära datum och URL. Rollen räknade själv att ingen befintlig
+   notering i blocket täcker `medium`, så en bar rad hade varit den första i blocket som inte
+   säger vad den verifierade. *(kind: diff)* — uppfyllt.
+2. Den befintliga 2026-07-02-noteringen om `reklam` och `total` skrivs INTE över; den nya
+   läggs till. *(kind: diff)* — uppfyllt.
+
+Rollen läste dessutom `cheapestEntertainmentTier` själv och bekräftade att `kind: 'sport'`
+filtreras bort där, i stället för att lita på biljettens påstående om det.
+
+### BIN-1067 — #20 Manual / Release QA Tester: **accept-with-conditions** (2 villkor)
+1. Pekaren ska namnge den rubrik som faktiskt är rätt mål för sammanhanget — `Blaze vs Spark`
+   — inte strykas till ett hängande "se EXTERNAL_ACTIONS.md". Det är raden en jourhavande
+   följer under tryck. *(kind: diff)* — uppfyllt.
+2. Repo-sökningen avgränsas till hänvisningar IN i EXTERNAL_ACTIONS.md, inte ett bart
+   `§`-svep: RUNBOOK:s egna interna `§`-referenser går mot dess egna numrerade rubriker och
+   ska inte röras. *(kind: diff)* — uppfyllt.
+
+### BIN-1074 — #25 Engineering Manager / Release Manager: **accept-with-conditions** (4 villkor)
+1. Tillägget om `loggedPanel` ligger i det befintliga `WHAT THIS DOES NOT DO`-blocket och
+   påstår ingen mildring. *(kind: diff)* — uppfyllt.
+2. `.claude/shared-plugin.json` parsar fortfarande, och HELA sviten är grön — filen läses som
+   indata av `gate-symmetry.test.mjs` och `route.test.mjs`, och ett escape-fel där har
+   tidigare kaskadat till hundratals orelaterade fel. *(kind: run)* — uppfyllt:
+   `node -e "JSON.parse(require('fs').readFileSync('.claude/shared-plugin.json','utf8'))"`
+   svarar rent, och `npm test` är grön.
+3. `git grep -n "wired to no gate"` efter ändringen ska inte ge några levande kopior.
+   *(kind: diff)* — uppfyllt: kvarvarande träffar ligger i
+   `.claude/agents/binge-test-reviewer.knowledge.archive.md` (arkivfil, undantagen av
+   dok-taxonomin) och i den här planen, som beskriver felet. Ingen av dem är en levande
+   kopia av påståendet.
+4. Den här commiten är routningskollens EGET dogfood-fall, eftersom
+   `check_staged_routing.mjs` ligger i dess filuppsättning: biljetten måste ha en `review`-rad
+   som namnger roll 25 före push. *(kind: run)* — uppfyllt, raden är loggad och stageas med
+   bunt A.
+
+Rollen noterade också att de tre strykningarna är oberoende gradbara, och att en delvis
+landning (2 av 3) inte får läsas som klar. Alla tre landade.
+
+### BIN-1069 — #13 Data / Integrations Engineer: **accept-with-conditions** (5 villkor)
+1. Vakten ska fortfarande PASSERA mot oförändrad `runNotify.ts` efter fixen. *(kind: run)* —
+   uppfyllt, ren kontrollkörning grön.
+2. Ett test som bevisar att den första sömmen är stängd. *(kind: diff)* — uppfyllt.
+3. Ett test som stänger den andra sömmen UTAN att öppna en ny: en naiv regexfix som börjar
+   läsa varje `/` som regexöppning skulle svälja resten av raden och tysta vakten, vilket är
+   BIN-852/1048:s form. *(kind: diff)* — uppfyllt, och det var villkoret som bar mest: en
+   mutation som gör exakt det fäller precis divisionstestet.
+4. De befintliga negativa kontrollerna passerar i SAMMA körning. *(kind: run)* — uppfyllt.
+5. Docblockraden som namnger BIN-1069 som öppen blir falsk i samma commit som stänger den —
+   stryk den och namnge i stället de blinda fläckar som faktiskt återstår. *(kind: diff)* —
+   uppfyllt.
+
+## Vad kritikerna och muteringarna faktiskt hittade
+
+Ett fynd i koden, och det var i mitt eget första testutkast, inte i produktionskod:
+
+De två sömtesten asserterade först bara `awaitsTheFetch(...) === false`. Den assertionen är
+inte avgörande — en skanner som är trasig nog att blanka resten av kroppen ger `-1` ur
+`firstAwaitIndex`, och `awaitsTheFetch(body, -1)` är också `false`. "Vakten fäller rätt" och
+"vakten är förstörd" uppfyller alltså samma assertion. Muteringen som återställer
+citat-rusningen ÖVERLEVDE den. Assertionen pinnar nu vilket index det första `await`:et
+hamnar på, vilket skiljer de två fallen åt, och samma mutering fäller nu exakt det testet.
+
+Det är BIN-645:s lärdom i ny förklädnad: ett test som pinnar att något INTE händer är blint
+för mutanten som förstör mätningen i stället för att laga den.
+
+### Vad TESTGRANSKAREN sedan hittade — två blockerande, båda äkta
+
+Testgranskaren körde sina EGNA sonder i stället för att läsa min beskrivning, och fällde två
+saker jag missat. Båda i koden, inte i prosan.
+
+1. **Den befintliga positiva kontrollen migrerades aldrig.** Den låg kvar på den svaga
+   assertionen — och granskaren mätte det: med `firstAwaitIndex` stubbad att alltid svara
+   `-1`, alltså vakten helt förstörd, stod det testet kvar grönt medan sex syskon föll.
+   Åtgärd: den går nu genom `expectSeenAt`.
+2. **`DIVIDES_AFTER` saknade värdeavgränsarna.** Den listade identifierare, tal, `)` och `]`
+   men inte den avslutande backticken, citattecknet eller regexens egen snedstreck. Så
+   `` `abc` / 2 `` öppnade en regex som blankade till radslutet och svalde ett `await` efter
+   sig — vakten rapporterade friskt. Det är den TYSTA riktningen, alltså precis felet hela
+   filen finns för att förhindra, återinfört av fixen för det. Åtgärd: de tre avgränsarna in
+   i mängden, plus två nya pinnade fall.
+
+Att laga (1) räckte inte heller. `expectSeenAt` hämtar sin baslinje ur samma funktion som
+prövas, så under total förstörelse blev det förväntade indexet `-1 + 0` och jämförelsen
+uppfylldes av två lika meningslösheter. Hjälparen kräver nu att baslinjen finns
+(`at > -1`) innan den jämför — och det är den raden som gör att en förstörd skanning fäller
+varje fixtur.
+
+Mitt första strängtest var dessutom grönt av fel skäl: `'abc'.length / 2` har en identifierare
+före snedstrecket, så det passerade även mot den avgränsarblinda versionen. Snedstrecket måste
+sitta direkt efter citattecknet.
+
+### Muteringsprotokoll (bunt D)
+
+Fem muteringar, en i taget, var och en asserterad närvarande FÖRE och EFTER sin körning,
+återställd ur en scratchpad-kopia verifierad med `git hash-object`. Ren kontrollkörning:
+10/10 grön, hash `c5a771689c24e25446f504694959406fe4efd75c` före och efter hela svepet.
+
+| Mutering | Fäller |
+| -- | -- |
+| interpolationen blankas som text igen | interpolationstestet (1 av 10) |
+| ingen regexhantering + citat rusar förbi radslutet | regexlitteral-testet (1 av 10) |
+| varje `/` läses som regexöppning | de tre divisionstesten (3 av 10) |
+| `DIVIDES_AFTER` utan värdeavgränsare | de två avgränsartesten (2 av 10) |
+| `firstAwaitIndex` svarar alltid `-1` (vakten förstörd) | 9 av 10 |
+
+Den enda som överlever den totala förstörelsen är testet för kastvägen, som med flit inte
+går genom skanningen alls.
+
+## Inte valda
+
+**Produktval som är Malins (needs-approval — kommenteras, byggs inte):**
+- BIN-1072 (TV4 Play: tre nya sportnivåer) — biljetten ställer tre frågor rakt ut, och `id`-strängarna fryses så fort de landat.
+- BIN-1073 (fyra saknade tjänster i katalogen) — vilka som ska in, och hur Cineasterna och BritBox klassas; varje tillägg är dessutom en färgtoken och ett kortnamn som väljs för hand.
+- BIN-1063 (orphan-svepets fältägda halva) — biljetten säger uttryckligen att gruppfrågan (radera vs lämna över) måste besvaras innan något byggs.
+- BIN-990 (`.claude/settings.json` når noll granskare) — öppen fråga: vidga, låt vara, eller bygg nyckelgranskningen.
+- BIN-939 (ska #4 också grinda `package.json`?) — en fråga #4 själv ska svara på.
+- BIN-189, BIN-521, BIN-170 — bär etiketten `idea`, som aldrig går in i en bunt.
+
+**Bor i `C:/claude-plugins`, kräver egen session i det repot:**
+- BIN-1052, BIN-1013, BIN-1035, och pluginhalvan av BIN-959.
+
+**För stora för en bunt i den här körningen:**
+- BIN-826 (spärrhakens veckoutbyte) — sex delfrågor i en biljett, varav en väntar på veckor av mätdata.
+- BIN-871.
+- BIN-613 (ingen First Load JS-baslinje) — tre alternativ, varav det rekommenderade ändrar `deploy.yml`.
+- BIN-559 (offlinesäker kontoskapning) — biljetten säger själv "needs its own design work, not a quick patch".
+
+**Blockerad uppströms:** BIN-658 (eslint 9→10) — höjningen är blockerad uppströms, bokfört i `7f40382`.
+
+**Ops / står redan på sin egen klocka:** BIN-454 och BIN-402 (tmdbFieldsSweep-utrullningen) — Tier D, och `mutateEnabled`-flippen är en stående "gör aldrig detta"-punkt i CLAUDE.md.
+
+**Fortsatt utdragen:** BIN-790 — samma skäl som 2026-08-31: punkt 1 som den är skriven raderar arbetsordern mellan funktionskodens commit och kartans egen commit.
+
+## Needs you (Tier D)
+
+Inget i den här bunten är Tier D. Efter push: den vanliga gröna deployen + Cloudflare-purge
+(automatisk i den här sessionen), och besluten på BIN-1072/1073/1063/990/939 som listas ovan.
+
+Filade följdbiljetter (före commit, per följdregeln):
+- **BIN-1075** — `binge-test-reviewer.knowledge.md` ligger över sitt tak
+  (`node scripts/check-knowledge-caps.mjs`). Varning-bara, inget är rött. Vilken punkt som
+  pensioneras är ett innehållsval.
+
+## Deviation log
+
+- [discovery] BIN-1069: planen antog att de två sömtesten skulle vara klara med
+  `expect(awaitsTheFetch(...)).toBe(false)` → muteringskörningen visade att den assertionen
+  också uppfylls av en helt förstörd skanner (`-1` ur `firstAwaitIndex`), och
+  citat-rusningsmuteringen överlevde den → testen pinnar nu vilket index det första `await`:et
+  hamnar på. Ingen omfångsökning; samma fil, samma bunt.
+- [discovery] BIN-1074 punkt 2 var en förgrening i biljetten. Vald gren: skriv in
+  begränsningen, bygg inte åldersprövningen. Skälet står i buntens eget avsnitt ovan.
+  Konservativt val — det bygger ingen mekanism ovanpå en obesvarad policyfråga.
+- [needs-human] Ur BIN-1069:s kommentarstråd: `binge-test-reviewer.knowledge.md` ligger över
+  sitt tak (`node scripts/check-knowledge-caps.mjs`). Vilken punkt som pensioneras är ett innehållsval. Filad som BIN-1075,
+  inte byggd.
+- [deviation] BIN-1070: integrationsgranskningen fällde ett fynd i en fil bunten inte rörde —
+  `src/lib/streaming/cheapestPath.test.ts`s testNAMN motiverade sig med "not sport 399/749",
+  vilket prisändringen gjorde falskt medan varje assertion förblev grön. Rättat på plats
+  (strykregelns undantag: den sanna lydelsen är direkt läsbar ur katalogen). Rättelsen VIDGADE
+  den stageade unionen, och en omkörning av routern flyttade panelen från `[11]` till `[24]` —
+  #24 låg i `dropped` på den smalare mängden. #24:s blinda kritik kördes före commiten och gav
+  `accept`, 0 villkor. BIN-1052/766 i vidgande riktning, fångat av att routa om det STAGEADE.
+  Kostnad: ett extra kritikvarv plus en omkörning av alla tre commit-granskare.
+- [discovery] BIN-1067 VIDGADES av push-granskningen, och det var rätt: den lagade pekaren
+  satt inne i en falsk diagnos. RUNBOOK §2c öppnade med "Vi överstiger Spark-plan-kvoten",
+  listade Sparks dygnskvoter, rådde att invänta nollställningen vid midnatt UTC och föreslog
+  som förebyggande att uppgradera till Blaze. Binge ligger på Blaze sedan länge — `CLAUDE.md`
+  säger det, och molnfunktionerna är deployade, vilket kräver Blaze. En jourhavande hade
+  alltså fått veta att hen ligger på en plan hon lämnat och blivit skickad att göra en
+  uppgradering som redan är gjord. Allt tre struket. Vad som utlöser `resource-exhausted`
+  under Blaze är INTE utrett och ingen gissning skrivs in i dess ställe. #20:s villkor 1
+  pekade ut precis den raden som den en jourhavande följer under tryck.
+- [discovery] Samma påstående bodde på fler ställen i samma fil, hittat av nästa
+  granskningsvarv: §1c sa `(bara om Blaze, vilket vi inte är på idag)` en skärm ovanför
+  rättelsen, och §9a angav Sparks MAU-kvot som den gällande gränsen. Båda parenteserna
+  strukna, ingen ersättning skriven — det sanna talet under Blaze går inte att läsa ur
+  repot. Att laga ett ställe och lämna kopian står är BIN-1040/1002/1038:s form, och den här
+  gången satt kopian i samma fil som fixen. Kvarvarande `Spark`-omnämnanden i filen härleds
+  med `grep -n Spark docs/RUNBOOK.md`.
+- [deviation] Jag redigerade och stageade om filer MEDAN integrationsgranskaren läste dem, så
+  dess första dom gällde bytes som inte längre fanns. Granskaren fångade det själv. Push-
+  grinden måste läsa exakt de bytes som går ut; efter det stod trädet stilla under varje
+  körning. 2026-08-26:s lärdom, med rollerna ombytta.
+- [deviation] Två `node -e`-kommandon med escape-tecken kollapsade i skalet (`\n` blev ett
+  riktigt radbrott, en anchor slutade matcha på CRLF). Åtgärd: muteringarna kördes ur
+  skriptfiler i scratchpad i stället, utan escape-tecken i skalraden. Lärdomen från
+  2026-09-01 gällde alltså igen — och gäller `node -e` lika mycket som heredocs.
+
+## Utfallsgradering (Fas 2.7, färska granskare per biljett, skivad diff)
+
+Fyra granskare, var och en med BARA sin biljetts acceptanskriterier och sin egen
+diffskiva. 22 pass, 0 fail, 0 unclear, 1 `awaiting-run`.
+
+| Biljett | Utfall |
+| -- | -- |
+| BIN-1070 | 5 pass, 1 awaiting-run (deployen) |
+| BIN-1067 | 4 pass |
+| BIN-1074 | 6 pass |
+| BIN-1069 | 7 pass |
+
+## Efter sprinten
+
+1. Full `npm run typecheck`.
+2. Följdbiljetter filas FÖRE commit.
+3. Routningen körs om på det stageade omedelbart före varje commit. Det blev två commitar:
+   `7e7bac8` bär BIN-1070 ensam (panel `[24]` efter att push-granskningens rättelse vidgade
+   unionen), och den andra bär BIN-1067, BIN-1074 och BIN-1069 tillsammans (panel `[25]`).
+   Båda routar till en roll vars blinda kritik kördes före bygget.
+4. Push (= deploy), invänta grön körning, purga Cloudflare.
+5. Linear-transitioner PARVIS med varje commit, inte i ett efterföljande avslutningssteg (BIN-754).
+
+
+---
+
+# ARKIV — sprintplan 2026-08-31
+
 # Sprint 2026-08-31 — fyra biljetter, alla `medium`/`single`
 
 Föregående sprintplan arkiverad under `---` längst ned.

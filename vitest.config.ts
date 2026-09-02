@@ -30,7 +30,7 @@ export default defineConfig({
       'functions/scripts/**/*.{test,spec}.mjs',
       // The blast-radius router (docs/org/route.mjs) decides whether a stakeholder panel is
       // convened and whether a sprint may pick a ticket up at all, so its tests belong in the
-      // suite everything else runs in — its own `--selftest` flag is wired to no gate (BIN-802).
+      // suite everything else runs in.
       'docs/org/**/*.{test,spec}.mjs',
       // BIN-850: the release-path guards under scripts/ — check-public-env.mjs (the linter
       // that exists because NEXT_PUBLIC_FCM_VAPID_KEY was missing from the production build

@@ -41,8 +41,7 @@ _Version: 1.0 (2026-04-24)_
 
 - Extremt sällsynt. Status.firebase.google.com berättar allt.
 - Ingen direkt åtgärd — vänta ut det.
-- Kolla Firebase Console billing — ifall vi träffat en plan-kvot (bara om
-  Blaze, vilket vi inte är på idag)
+- Kolla Firebase Console billing — ifall vi träffat en plan-kvot
 
 ---
 
@@ -73,18 +72,15 @@ deploy. Dokumentera vad som gick fel i commit-meddelandet.
 
 ### 2c. `resource-exhausted` / rate-limit
 
-Vi överstiger Spark-plan-kvoten:
-- 50K reads/dag
-- 20K writes/dag
+Projektet ligger på **Blaze**, med ett budgettak på 25 SEK/mån — se `CLAUDE.md` och
+`docs/analysis/EXTERNAL_ACTIONS.md`, rubriken "Blaze vs Spark".
 
-**Immediate:** det återställs vid midnatt UTC. Användare kan fortsätta
-browsa (cache:ad data).
+Vad som utlöser `resource-exhausted` under Blaze är inte utrett — utred det när det händer,
+skriv inte in en gissning här.
 
 **Prevention:**
 1. Kolla `src/hooks/useFollow.ts` `useFollowerCount` — vi använder redan
    `getCountFromServer` (1 read). Verifiera att inga andra counters slukar.
-2. Överväg att uppgradera till Blaze (billig för vår volym — se
-   EXTERNAL_ACTIONS.md §1.2)
 
 ---
 
@@ -525,8 +521,7 @@ Eller Cloudflare Dashboard → Caching → Configuration → Purge Everything.
 
 Sannolika orsaker:
 - OAuth consent screen har inte verifierade domäner (ovanligt efter launch)
-- Firebase Authentication-kvot överstigen (Spark: 10K MAUs för Google/email —
-  vi är långt under)
+- Firebase Authentication-kvot överstigen
 
 Verifikation: https://console.firebase.google.com/project/binge-nu/authentication/providers
 

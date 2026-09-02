@@ -24414,3 +24414,81 @@ gap. Read `.claude/rules/accepted-deviations.md` in full; nothing there covers t
 
 **Verdict:** pass (0 blocking). One informational, non-blocking finding filed and folded into the
 principles file in the same pass.
+
+## 2026-09-02 — BIN-1069/1060 re-review, both prior blocking findings verified fixed
+
+**Diff reviewed.** Staged: `functions/src/availableNotify/runNotify.processTitle.test.ts` (the
+`blankCommentsAndStrings` scanner rewritten to a real lexer with a `code`/`template` frame
+stack, a `DIVIDES_AFTER` division-vs-regex heuristic, and a shared `expectSeenAt` assertion
+helper reused by 6 of the file's 10 tests) and `vitest.config.ts` (one comment line struck,
+BIN-1074, no `include` glob change — confirmed byte-identical globs by reading the file).
+Also staged but outside this agent's patterns: `.claude/shared-plugin.json`, `docs/RUNBOOK.md`,
+`docs/org/metrics/check_staged_routing.mjs`, `tasks/todo.md`.
+
+**Prior blocking finding 1** (the positive control used a non-decisive assertion — stubbing
+`firstAwaitIndex` to always return `-1` left it green while six siblings reddened). The fix
+routes it through `expectSeenAt`, which computes its baseline `at` from `firstAwaitIndex(body)`
+— the SAME function under test — and only THEN guards it with
+`expect(at, '...').toBeGreaterThan(-1)` before using it to build the mutated fixture and compare
+against `firstAwaitIndex(mutated)`. Without that guard the destroyed scan would satisfy
+`expect(firstAwaitIndex(mutated)).toBe(at + mutation.indexOf('await'))` via two equal nonsense
+values (`-1` and `-1 + 0`, since `mutation.indexOf('await')` is `0` for every fixture in the
+file). Mutated `firstAwaitIndex` in place (`return -1; // MUTANT`, via a Node script that slices
+on a literal anchor string rather than a regex, because the file has MIXED line endings within
+itself — a plain multi-line regex/perl replace missed the anchor twice before the slice approach
+worked). `grep -n MUTANT` before and after the run in the same command sequence.
+`npx vitest run functions/src/availableNotify/runNotify.processTitle.test.ts`: 9 of 10 failed,
+survivor named `the guard reads the real declaration...` (the throw-path test, which never calls
+`firstAwaitIndex`) — exactly the claimed count and the claimed survivor. Restored from a
+scratchpad snapshot taken before mutating; `git hash-object` and `git rev-parse :<path>` both
+read `c5a771689c24e25446f504694959406fe4efd75c` before, during-mutant-absent-check impossible by
+construction (mutant was IN the file during the run, confirmed by the bracketing greps), and
+after restore — matching the reported clean-control sha exactly. Clean-control re-run after
+restore: 10/10 green.
+
+**Prior blocking finding 2** (`DIVIDES_AFTER` omitted the closing backtick, so a division after a
+template literal was read as a regex opener — the silent direction). The set is now
+`` /[A-Za-z0-9_$)\]`"/]/ ``. Traced the scanner's own normalization: after a string OR a template
+closes it always records `lastSig = '"'` or `` '`' `` respectively regardless of which quote
+character was actually used, and after a regex closes `lastSig = '/'` — so the three added
+class members line up with the scanner's OWN sentinel alphabet, not the raw source characters.
+Two new fixtures (`` `abc` / 2 `` and `'abc' / 2`, both followed by `await Promise.resolve();`)
+exercise exactly this. Mutated `DIVIDES_AFTER` back to the delimiter-blind form
+(`/[A-Za-z0-9_$)\]]/ // MUTANT`) via the same slice-based Node script (found the anchor on the
+first try this time — the constant declaration itself is LF-only in this CRLF-majority file).
+`grep -n MUTANT` before and after. Result: exactly 2 of 10 failed — the two new template/string
+fixtures, both on `firstAwaitIndex(mutated)` landing at `319` (the fallback regex-reading of the
+`/` right after the delimiter) instead of the expected `292`. Restored; hash matched
+`c5a771689c24e25446f504694959406fe4efd75c` again (worktree AND index); clean-control re-run:
+10/10 green.
+
+**What the fixes introduced — checked, nothing new found.** The reviewer's own earlier attempt
+at the string fixture (per the task brief) had written `'abc'.length / 2`, which has an
+IDENTIFIER token before the slash and would have passed against the pre-fix delimiter-blind
+scanner too — read the current file and confirmed the fixture now reads `'abc' / 2`, closing
+that gap. The docblock's new "WHAT THIS DOES NOT SEE" list names `}` as the one case a
+lexer without a parser genuinely cannot settle (`{…} / 2` after a block vs. after an object
+literal) and says "No such expression exists in `processTitle`" — read the real
+`async function processTitle(` body in `runNotify.ts` (lines 300–360+) and confirmed no
+brace-then-slash expression exists there today, so the claim is currently true. The unicode-
+escape-identifier blind spot (`await` not read as the keyword `await`) is named but not
+separately fixture-tested — informational, not blocking, since it is a pre-existing, unrelated-
+to-this-fix blind spot the docblock is honest about rather than concealing.
+
+**Not independently re-run this pass** (accepted the reported evidence without live
+verification, given the two above already match reported counts exactly and this pass's budget):
+interpolation-blindness (kills 1), no-regex-handling+quote-runaway (kills 1), and
+every-slash-opens-a-regex (kills 3). All three are pre-existing fixes from the BIN-1069 round,
+not part of THIS round's two findings, and their claimed kill counts were not contradicted by
+anything found while reading the full file.
+
+**Knowledge fold.** The "baseline computed by calling the same (possibly mutated) function under
+test" shape is new — folded into the existing "Empty-collection vacuity" bullet's tautological-
+value clause in `binge-test-reviewer.knowledge.md` rather than opening a new bullet. (That
+bullet is where the clause lives; the "Assert values, not shapes" bullet is the next one and
+carries no tautological-value clause. The archive is the trail a later reviewer follows to
+find a superseded bullet, so the pointer has to name the right one.)
+
+**Verdict:** pass (0 blocking). Both prior blocking findings are fixed on the current staged
+bytes, live-mutation-verified with the exact claimed kill counts, and the fixes did not introduce
+a new gap.
