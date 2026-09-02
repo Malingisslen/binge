@@ -24561,3 +24561,86 @@ comparing the two test bodies. No new bullet opened; this is the same "rename-an
 if a plausible mutation flips it" family, one more shape of it.
 
 **Verdict:** pass (0 blocking).
+
+## 2026-09-02 — BIN-790 ledger re-run (commit 3 of 3): env-read-inside-body defeats an
+injected test parameter, destructively — 0 blocking
+
+**Context.** Re-review after this batch's own prior pass had already found and fixed a real
+defect: `run()` in `scripts/prune-map-flag.mjs` read `process.env.CLAUDE_PROJECT_DIR` INSIDE its
+body (`const root = process.env.CLAUDE_PROJECT_DIR || findRepoRoot(cwd);`), so the two in-process
+counting tests — which inject a scratch repo as `cwd` — had that `cwd` silently overridden
+whenever the ambient variable happened to be set. `root` then resolved to the REAL repo,
+`flagPath` to the live `.claude/state/workflow-map-stale.json`, the stubbed git returned `''` for
+both probes, every trigger read as a ghost, and `unlinkSync` deleted a genuine work order as a
+side effect of `npm test`. The fix moved the read to the parameter default
+(`projectDir = process.env.CLAUDE_PROJECT_DIR` in `run()`'s signature; `const root = projectDir ||
+findRepoRoot(cwd);` in the body) and the two counting tests now pass `projectDir: null`.
+
+**Diff reviewed** (staged, current bytes, `Read` on every file): `scripts/prune-map-flag.mjs`,
+`scripts/prune-map-flag.test.mjs`, `scripts/scripts-self-tests-present.test.mjs`, `lefthook.yml`,
+`docs/org/route.mjs`, `docs/org/route.test.mjs`, `docs/org/metrics/check_review_coverage.mjs`,
+`.claude/shared-plugin.json`, `tasks/todo.md`, `src/lib/tmdb/providers.ts`.
+
+**Reproduced both directions myself, not taken on the ledger's word.** Snapshotted the real flag
+(`b140324de432d79b6d86e62c404eb161edbd5681`) and the staged script
+(`723c8859fa19bc979d2529e25dfaa256c5723dfc`, index and worktree agreeing) to scratchpad first.
+Fixed form, `CLAUDE_PROJECT_DIR=C:/binge npx vitest run scripts/prune-map-flag.test.mjs`: 19/19
+green, flag hash unchanged after. Restored the OLD form (env read inline in the body, mutant
+grepped present before the run) and reran the identical command: 2 failed
+(`kör NOLL git-subprocesser…`, `och kör dem när det FINNS en flagga…`) AND the real flag was
+deleted (`ls`/`git hash-object` both failed — file gone). Restored both files from the scratchpad
+snapshots, hashes re-confirmed identical to the pre-mutation values, a clean control run followed
+(19/19, `git status --porcelain` showing only the ten originally-staged paths). Matches the
+ledger's own claimed numbers exactly.
+
+**Checked `runScript`'s isolation is airtight, per the review brief's question 2.** It always sets
+`env: { ...process.env, CLAUDE_PROJECT_DIR: projectDir }` on the spawned child, which overrides
+whatever the ambient value was regardless — so every `runScript`-based test (including the
+not-a-repo case, where `projectDir` is truthy-but-not-a-repo and short-circuits `findRepoRoot`
+entirely) is safe independent of the reviewer's own shell. The only two direct in-process `run()`
+calls both correctly pass `projectDir: null`.
+
+**Answered the brief's question 3 — is `projectDir: null` the right spelling?** Yes, and it is
+load-bearing rather than stylistic: `null !== undefined`, so an ES6 destructuring default
+(`projectDir = process.env.CLAUDE_PROJECT_DIR`) does NOT fire for `null`, only for a genuinely
+omitted key. A FUTURE test that calls `run()` directly and forgets the `projectDir: null`
+override would pass silently under normal CI (ambient var unset) and reach the real repo the
+moment that var happens to be set in the runtime — the identical bug class, one layer up, with no
+lint or test in this file guarding against it repo-wide. Not blocking today (both current call
+sites are correct and the fact is now stated in-line as a comment), but named as a residual: any
+future direct `run()` invocation in a test needs the same explicit override, not just the two that
+exist now.
+
+**Verified the symmetric bookkeeping, not just the fix.** `TOOLING_CODE_FILES.size` measured `29`
+against `route.test.mjs`'s new `toBeGreaterThanOrEqual(29)` floor (was 27); the scripts
+self-test `found` set measured `4` (`check-knowledge-caps`, `check-public-env`,
+`check-workflow-map`, `prune-map-flag`) against the new `MIN = 4` floor (was 3) — both floors
+track the real measured count, not padded, not stale. `check_review_coverage.mjs`'s comment
+correction (`"pre-commit block with two live commands"` → `"pre-commit block"`) and
+`lefthook.yml`'s two corrections (`"Every command here is glob-gated from the start"` and
+`"unlike the two pre-commit steps"` both struck) are legitimate strike-not-reword fixes: both
+became false the moment `prune-map-flag` landed as a third, deliberately non-glob-gated
+pre-commit command. `src/lib/tmdb/providers.ts` and the `tasks/todo.md` prose deltas in this diff
+are comment/plan-only (date corrections, a struck "and 46–98 ms" wall-clock claim replaced with
+the second real-defect discovery entry), unrelated to the BIN-790 fix itself and not weakenings of
+anything.
+
+**Knowledge fold — deferred, not skipped, and the reason is stated rather than silent.** This
+review teaches a real, reusable pattern belonging in the "Extract-then-test & layering" bullet
+that already covers CLI `main()` testability (`"A CLI's own main()'s exit-code branch is the
+caller-switching class one level up"`): a function whose testability rests on an injectable
+parameter must resolve that parameter ENTIRELY at the signature boundary — reading the SAME
+ambient source again inside the body (`param || process.env.X`, or worse, unconditionally) defeats
+the injection whenever the ambient value happens to be set, and when the defeated path is
+destructive against real gitignored state, the blast radius is severe. The live file
+(`binge-test-reviewer.knowledge.md`) was measured at 82099 chars against its own stated 80k cap
+— already over BEFORE any addition, and the sprint's own `tasks/todo.md` files this exact
+overage as BIN-1075, explicitly recording "which point retires is a content choice, not something
+a build decides under commit pressure." Adding this lesson now without an equally-sized,
+deliberately-chosen cut would compound that same overage under the same kind of time pressure the
+ticket exists to avoid. This entry is the archive half of the required pair; the principles-file
+half — folding the compact form above into the CLI-testability bullet, paid for with a real cut
+identified during the BIN-1075 cleanup pass — is left for that pass rather than done here.
+
+**Verdict:** pass (0 blocking).
+

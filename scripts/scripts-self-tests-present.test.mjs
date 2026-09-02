@@ -43,6 +43,11 @@ const REQUIRED = [
   // so that exit code is discarded on the one path that runs unattended. Lose this file
   // and the check can measure an empty set forever.
   'check-knowledge-caps.test.mjs',
+  // BIN-790. The pre-commit pruner's test. It pins the pruner's never-blocks contract, its
+  // keep-on-throw branch and its zero-subprocess cheap path — and the pruner DELETES work
+  // orders out of a gitignored flag, so a regression there is invisible to every diff-based
+  // gate.
+  'prune-map-flag.test.mjs',
 ];
 
 // A LITERAL, deliberately not `REQUIRED.length`. Deriving it made this assertion unable
@@ -51,7 +56,7 @@ const REQUIRED = [
 // replaced BIN-838's MIN=2 to prevent, reproduced inside its own replacement. Growth is
 // free at the runner; raising this number is the deliberate act that keeps the new file
 // protected, and lowering it is the deliberate act a shrink must perform out loud.
-const MIN = 3;
+const MIN = 4;
 
 // Reads the DISK set, recursively and on both suffixes, to line up as closely as a
 // directory read can with what vitest's `scripts/**/*.{test,spec}.mjs` collects. It is not

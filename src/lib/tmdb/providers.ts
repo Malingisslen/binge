@@ -38,7 +38,7 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
     // 175 = "Netflix Kids", TMDB:s egen variantpost för samma abonnemang — inte en egen
     // tjänst. Utan aliaset renderas en titel TMDB märker med 175 som en okänd leverantör.
     // Id:t kommer ur BIN-1073:s svep av /watch/providers/movie?watch_region=SE 2026-09-02.
-    // Samma endpoint omläst 2026-09-03: 175 svarar `provider_name: "Netflix Kids"`. Det är
+    // Samma endpoint omläst 2026-09-02: 175 svarar `provider_name: "Netflix Kids"`. Det är
     // en omläsning av TMDB mot TMDB — ingen korsverifiering mot extern källa, och den säger
     // inget om huruvida aliaset är rätt sammanslaget, bara att TMDB:s klassning står kvar.
     // Ett fel ALIAS viker tyst in vad 175 än verkligen är i Netflix identitet överallt
@@ -175,7 +175,7 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
   // + isAds, vilket är det som gör att advisor bara föreslår den för den som redan använder
   // reklam-tjänster. `type: 'rent'` hade sett rimligt ut och tyst tagit den ur precis den
   // logiken. Id 538 ur BIN-1073:s SE-svep 2026-09-02; /watch/providers/movie?watch_region=SE
-  // omläst 2026-09-03 svarar `provider_name: "Plex"`. TMDB mot TMDB, ingen extern källa.
+  // omläst 2026-09-02 svarar `provider_name: "Plex"`. TMDB mot TMDB, ingen extern källa.
   // (BIN-1077)
   { id: 538, name: 'Plex', shortName: 'Plex', color: '#E5A00D', type: 'flatrate', defaultMonthlyCost: 0, isAds: true },
   // live-verifierat 2026-07-02 — https://www.triartplay.se — INTE längre fri flatrate-streaming:
@@ -190,7 +190,7 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
   // Blockbuster — svensk hyr/köp-tjänst (Telenor). Samma lucka SF Anytime fyllde i BIN-64:
   // en titel som bara finns där ser "otillgänglig" ut. Som `rent` bär den ingen prisdata att
   // underhålla och räknas aldrig in i någon månadskostnad. Id 423 ur BIN-1073:s SE-svep
-  // 2026-09-02; /watch/providers/movie?watch_region=SE omläst 2026-09-03 svarar
+  // 2026-09-02; /watch/providers/movie?watch_region=SE omläst 2026-09-02 svarar
   // `provider_name: "Blockbuster"`. TMDB mot TMDB, ingen extern källa. (BIN-1077)
   { id: 423, name: 'Blockbuster', shortName: 'Blockbuster', color: '#003399', type: 'rent' },
 ];

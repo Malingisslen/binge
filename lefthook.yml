@@ -4,7 +4,7 @@
 # Ported from Butlery's lefthook.yml (2026-08-08). Butlery learned the hard way
 # that an ungated whole-project check runs on commits that contain no code at
 # all: its analyze step cost 255s on a commit of one JSON and two markdown
-# files. Every command here is glob-gated from the start.
+# files.
 #
 # Manual run: npx lefthook run pre-commit
 # Skip one hung step: LEFTHOOK_EXCLUDE=typecheck (never LEFTHOOK=0).
@@ -38,6 +38,35 @@ pre-commit:
       fail_text: "eslint found problems in the staged files. Fix them, or justify with a scoped inline disable."
       priority: 2
 
+    # BIN-790. Not glob-gated, on purpose: it prunes ghost entries out of
+    # `.claude/state/workflow-map-stale.json`, and a ghost is by definition unrelated to
+    # what is staged — a batch withdrawn last week leaves a work order that this week's
+    # docs-only commit is the first chance to clear. Gating it on `*.ts` would mean the
+    # ghost survives until someone happens to commit code, which is the behaviour the
+    # ticket was filed about (four sprints, four manual cleanups).
+    #
+    # What pays for the missing glob is the script's own early return: no flag file → no
+    # subprocess at all. That is the case on most commits. It is also why the script resolves
+    # the repo root by walking up for `.git` rather than asking git: a `rev-parse` there
+    # would run BEFORE the flag check, on every commit, and the first version of this entry
+    # claimed zero subprocesses while doing exactly that — the cost measurement had set
+    # CLAUDE_PROJECT_DIR, which lefthook does not, so the number was taken on a path real
+    # commits never walk.
+    #
+    # With no flag it is node's own startup and nothing else. That property is pinned by a
+    # test that COUNTS the git subprocesses through an injected runner. No wall-clock number
+    # is written here on purpose: repeated measurements of this path disagreed with each
+    # other, and a count does not.
+    #
+    # It can never fail a commit. There is no `fail_text` because there is no failure: the
+    # script exits 0 on a corrupt flag, a missing flag and a git call that throws. That is
+    # what keeps it a cleanup rather than a new blocking obligation on shared commit
+    # machinery — the shape `freshness.mjs`'s dated deviation block declines to build for
+    # the separate git-apply gap (BIN-969).
+    prune-map-flag:
+      run: node scripts/prune-map-flag.mjs
+      priority: 3
+
 # BIN-917's criterion 4, and the reason it lives here rather than nowhere.
 #
 # The ticket asks that a batch not reach the COMMITTER without a stakeholder-review row in
@@ -54,7 +83,7 @@ pre-commit:
 #
 commit-msg:
   commands:
-    # NOT glob-gated, unlike the two pre-commit steps, and deliberately: this check reads the
+    # NOT glob-gated, and deliberately: this check reads the
     # SUBJECT, not the staged files, and a code-changing commit that touches no `.ts` is
     # exactly the case that escaped on 2026-08-16 (049f21b is a test-file commit). It costs
     # one node process and one file read — no toolchain, no compile. Measured well under a

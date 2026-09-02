@@ -156,6 +156,19 @@ export const TOOLING_CODE_FILES = new Set([
   // fit, loosening the glob, lowering the file floor — must not be a change nobody reviews.
   'scripts/check-knowledge-caps.mjs',
   'scripts/check-knowledge-caps.test.mjs',
+  // BIN-790. The pre-commit pruner that DELETES entries out of the workflow-map staleness
+  // flag. It belongs here for the same reason `.claude/hooks/freshness.mjs` does, one step
+  // further along the same pipe: that file decides what the next session is TOLD to
+  // re-trace, and this one decides what it is no longer told. Weakening it — widening the
+  // DROP branch, dropping the keep-on-throw, quietly removing the lefthook entry — must
+  // not be a change nobody reviews, because the loss is invisible by construction: the
+  // flag is gitignored, so no diff-based gate can see a work order disappear.
+  //
+  // Added in the SAME commit as its `reviewGates` pattern, per BIN-830 — one list advises,
+  // the other blocks, and widening one has never widened the other. Both names were
+  // nominated by route.test.mjs's BIN-874 block the moment the files existed.
+  'scripts/prune-map-flag.mjs',
+  'scripts/prune-map-flag.test.mjs',
   // BIN-1009. The PostToolUse hook that stamps the workflow-map staleness flag, and its
   // first test. The hook was already in the blocking gate's pattern; it enters the
   // ADVISING list now because it finally has a test inside vitest's include globs, which

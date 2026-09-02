@@ -1,4 +1,4 @@
-# Sprint 2026-09-03 — tre byggbuntar + en mätning utan diff
+# Sprint 2026-09-02b — tre byggbuntar + en mätning utan diff
 
 Föregående sprintplan arkiverad under `---` längst ned.
 
@@ -44,7 +44,7 @@ node docs/org/route.mjs src/lib/tmdb/providers.ts
 
 ### Mätningen är gjord, och den står här före bygget
 
-`GET /watch/providers/movie?watch_region=SE` mot skarp nyckel, 2026-09-03, 67 poster:
+`GET /watch/providers/movie?watch_region=SE` mot skarp nyckel, 2026-09-02, 67 poster:
 
 | id | `provider_name` i SE-katalogen | katalogens antagande | utfall |
 | -- | -- | -- | -- |
@@ -75,7 +75,7 @@ gjordes. Villkoren ar bindande acceptanskriterier 2 och 3.
 1. Klausulen "ej oberoende omverifierat i den commit som lade in det" finns inte kvar på
    någon av de tre platserna. *(kind: diff)*
 2. **#11 villkor 1.** Den text som star kvar innehaller inte ordet "oberoende", och den
-   namnger endpointen, datumet 2026-09-03 och vad som faktiskt kontrollerades
+   namnger endpointen, datumet 2026-09-02 och vad som faktiskt kontrollerades
    (`provider_name` ur TMDB:s SE-katalog) — inte att aliaset som sadant ar validerat.
    *(kind: diff)*
 3. **#11 villkor 2.** Diffen ror bara kommentarstext pa de tre stallena: inget `id`,
@@ -140,8 +140,15 @@ antas ocksa: rensningen skriver EN rad nar den faktiskt slapper en trigger, och 
 3. **#25 villkor 2.** Vanliga fallet ar gratis: saknas flaggfilen gor skriptet NOLL
    git-subprocesser, och det bevisas genom att RAKNA dem via en injicerad git-korare — inte
    genom att skanna kallan, som inte kan se ett anrop i rot-upplosningen ett steg upp.
-   Roten loses darfor upp genom en fs-uppgang efter `.git`. Den nya `lefthook.yml`-posten
-   bar en matt kostnadskommentar, matt UTAN `CLAUDE_PROJECT_DIR`. *(kind: diff)*
+   Roten loses darfor upp genom en fs-uppgang efter `.git`. *(kind: diff)*
+
+   **Villkorets andra halva ar MEDVETET inte uppfylld, 2026-09-02.** #25 bad ocksa om en
+   MATT kostnadskommentar i `lefthook.yml`-posten. En sadan skrevs, och togs sedan bort:
+   tre matningar av samma vag under den har commiten gav tre olika spann, sa talet beskrev
+   tillfallet och inte egenskapen. Posten sager nu i stallet att inget wall-clock-tal star
+   dar, och VARFOR — och egenskapen den skulle bevisa (noll git-subprocesser utan flagga)
+   ar pinnad av ett test som RAKNAR anropen. Villkorets andra halva star alltsa oatgardad
+   och namngiven har i stallet for struken.
 4. Testfilen körs av `npm test` — dess namn ska synas i den fulla körningens fillista
    (BIN-802:s andra vägg). *(kind: diff)*
 5. **#25 villkor 3.** `lefthook.yml` forklarar pa plats varfor det har steget INTE ar
@@ -228,7 +235,10 @@ riktig avvikelsesignal, inte brus. Villkoren ar acceptanskriterier 2, 3, 4 och 5
 9. `selectionResolve.test.ts` matchar radbundet i stället för på delsträng, så `45 → 450`
    fäller. *(kind: diff)*
 10. `REFRESH_DERIVE_TIMEOUT_MS` är oförändrad. *(kind: diff, negativt villkor)*
-11. `npm run typecheck` och `npm test` gröna. *(kind: diff)*
+11. **Testgranskarens villkor.** `evicted` har ett ICKE-VAKUOST test: en fixtur som driver en VERKLIG evakuering genom taket och
+    pinnar `evakuerade N` med N > 0. Alla ovriga fixturer ligger under taket, sa `evakuerade
+    0` uppfylls dar aven om berakningen ar trasig. *(kind: diff)*
+12. `npm run typecheck` och `npm test` gröna. *(kind: diff)*
 
 ---
 
@@ -237,7 +247,7 @@ riktig avvikelsesignal, inte brus. Villkoren ar acceptanskriterier 2, 3, 4 och 5
 Disposition: **build**, men utfallet är en mätning. Malins beslut 2026-08-06 är "vänta";
 kommentaren 2026-08-29 gjorde biljetten till bevakningen och namngav exakt två kommandon.
 
-Körda 2026-09-03:
+Körda 2026-09-02:
 
 ```
 npm view eslint-plugin-react@latest peerDependencies
@@ -297,7 +307,14 @@ avsnitt finns för att "ingen diff" annars är omöjlig att skilja från "aldrig
   ett anrop ett steg upp. Ersatt med en RÄKNING genom en injicerad git-körare, plus ett
   kontrollprov som visar att anropen blir fler än noll när en flagga finns (annars uppfylls
   "noll" lika gärna av en rensning som inte gör något — BIN-1069:s frånvaro-fälla).
-  Kostnadskommentaren i `lefthook.yml` är ommätt utan variabeln: 46–98 ms.
+- [discovery] BIN-790, ETT ANDRA AKTA FEL i koden, hittat av helhetsgranskningen i det
+  sista varvet: `run()` laste `CLAUDE_PROJECT_DIR` inne i kroppen, sa en injicerad `cwd`
+  var tyst verkningslos nar variabeln rakade vara satt. De tva raknande testen hade da last
+  det RIKTIGA repots flagga, sluppit varje trigger mot en stubbad git, och `unlinkSync`:at
+  en akta arbetsorder som sidoeffekt av `npm test`. Flaggan ar gitignorerad, sa ingenting
+  hade visat det. Provat: med den gamla formen och variabeln satt fol 2 test OCH flaggan
+  raderades; efter fixen 19/19 grona och flaggans hash oforandrad. Roten tas nu som ett
+  uttryckligt argument (`projectDir`), med samma foretrade som i produktion.
 - [discovery] BIN-1077, hittat av kodgranskaren: min egen `log_event.mjs --help` hade
   skrivit en skräprad `{"type":"--help"}` i `events.jsonl`. Skriptet har ingen `--help`;
   det tar `argv[2]` ordagrant som `type`. Raden borttagen ur det stageade innehållet.
@@ -329,10 +346,10 @@ avsnitt finns för att "ingen diff" annars är omöjlig att skilja från "aldrig
   org-designval: `check-public-env.mjs` är #4 Säkerhetsarkitektens yta, inte #25:s, och att
   lägga den under släppansvarig för att slippa ett granskningsvarv är precis fel skäl.
   KONSERVATIVT VAL: doc-redigeringen backad, de två nya filerna lämnas oägda som sina sex
-  syskon, luckorna kvar på 298. Filat som följdbiljett. ALDRIG `--update-gaps` (BIN-1013).
+  syskon, luckorna kvar på 298. Filat som BIN-1080. ALDRIG `--update-gaps` (BIN-1013).
 - [discovery] BIN-790: flaggan i trädet vid sprintens slut namnger
   `src/app/titleParams.watchdog.test.ts` (nod `static-passive-pages`, token `src/app`) och är
-  en ÄKTA trigger, inte ett spöke — redigeringen ligger kvar i arbetsträdet, och den nya
+  en ÄKTA trigger, inte ett spöke, och den nya
   rensningen behåller den korrekt. Flödet spårades om: ändringen stryker en falsk kommentar i
   en testfil, alltså ingen beteende- eller flödesändring, så kartans prosa behöver inte röras.
   `node scripts/check-workflow-map.mjs` grön (100 noder, 31 flöden, täckning 76/76). Flaggan
@@ -353,6 +370,9 @@ filen inte ingår i någon bunt och en samtidig session delar trädet.
 | sänkt live-rad + citat i kommentar (strängkopia) | — | samma: gamla överlever, nya faller |
 | lefthook-posten ersatt med ett `echo` | `lefthook.yml` | 1 test fällt |
 | keep-on-throw → drop-on-throw | `prune-map-flag.mjs` | 2 test fällda |
+| `after` satt till `before` (evakuering rapporteras alltid som 0) | `selectionManifest.ts` | forst ÖVERLEVDE hela filen gron — testgranskarens fynd. Efter att evakueringstestet lagts till: 1 test fallt | <!-- claim-lint:ok muteringsutfall vid namngivna bytes, inte en repo-rakning; kan bara reproduceras genom att kora om muteringen -->
+| `run()` laser `CLAUDE_PROJECT_DIR` i kroppen i stallet for att ta den som argument (den FORSTA formen) | `prune-map-flag.mjs` | med variabeln satt: 2 test fallda OCH den riktiga flaggan RADERAD. Efter fixen: 19/19 grona och flaggans hash oforandrad | <!-- claim-lint:ok muteringsutfall vid namngivna bytes, inte en repo-rakning; kan bara reproduceras genom att kora om muteringen -->
+| `if (dropped.length > 1) return;` (rensningen tystnar sa snart TVA spoken ligger i samma flagga) | `prune-map-flag.mjs` | forst ÖVERLEVDE 18/18 — testgranskarens fynd. Efter att flerspokstestet lagts till: 1 test fallt | <!-- claim-lint:ok muteringsutfall vid namngivna bytes, inte en repo-rakning; kan bara reproduceras genom att kora om muteringen -->
 | `JSON.parse` utan inre try/catch | `prune-map-flag.mjs` | **ÖVERLEVDE** — och den är EKVIVALENT för kontraktet: entry-pointens yttre catch ger ändå avslutskod 0, och en flagga som inte gick att parsa lämnas orörd i båda fallen. Prövad, inte bortförklarad; den inre vakten är bälte-och-hängslen i en fail-open-fil, inte bärande. |
 
 Kontrollprov: den orörda deploy.yml passerar BÅDA formerna, så den nya regexen är inte

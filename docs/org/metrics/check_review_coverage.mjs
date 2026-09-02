@@ -21,7 +21,7 @@
 // impossible: "there is no commit-time mechanism in this repo — `ls .husky` is empty and
 // package.json declares no `husky`/`precommit` hook". Both probes were true. The conclusion
 // was false. `lefthook.yml` has been tracked in this repo since 2026-08-08, carries a
-// `pre-commit` block with two live commands, `lefthook` is a devDependency, and
+// `pre-commit` block, `lefthook` is a devDependency, and
 // `.git/hooks/pre-commit` is installed. The integration review found it in one grep.
 //
 // Leaving that on the record on purpose: a search that looks for ONE tool's spelling and

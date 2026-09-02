@@ -460,7 +460,7 @@ describe('the router and the gate scripts cannot clear themselves (BIN-805)', ()
     // biconditional reads false === false, and gate-symmetry's A1 is keyed on isCodePath,
     // which the removal switches off. Re-measure with the command above; never copy this
     // number forward without running it.
-    expect(GATE_SCRIPTS.length).toBeGreaterThanOrEqual(27);
+    expect(GATE_SCRIPTS.length).toBeGreaterThanOrEqual(29);
   });
 
   it('names every one of those scripts in the BLOCKING list too (BIN-864/873)', () => {
