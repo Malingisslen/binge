@@ -2,6 +2,7 @@
 Append-only historical record. Entries are verbatim, original order.
 
 
+
 ## Relocated 2026-07-04 — consolidation batch (entries 2026-06-14 → 2026-06-26; durable lessons distilled into the active file's principles section)
 
 ### 2026-06-14 — BIN-35: extract-then-test closes a Firestore-write gap without touching Firebase
@@ -24644,3 +24645,76 @@ identified during the BIN-1075 cleanup pass — is left for that pass rather tha
 
 **Verdict:** pass (0 blocking).
 
+## 2026-09-03 — BIN-790 follow-up: `toContain(FLAG_REL)` matched the comment, not the constant
+
+**Diff reviewed** (staged, sprint 2026-09-02b follow-up commit): `scripts/prune-map-flag.mjs`,
+`scripts/prune-map-flag.test.mjs`, `tasks/todo.md`, `docs/org/metrics/events.jsonl`. Four
+changes: (1) a new test in `prune-map-flag.test.mjs` pinning that `.claude/hooks/freshness.mjs`
+and the pruner agree on the literal `.claude/state/workflow-map-stale.json`; (2) a comment
+strike in `prune-map-flag.mjs` removing "reverted" from a list of withdrawal spellings (a
+revert IS a commit touching the file, so `hasCommitSince` keeps the trigger — verified by
+reading `pruneTriggers`); (3) "its two outside dependencies injectable" → "`gitRunner` and
+`out` injectable" (the function also takes `cwd`/`projectDir`, and a third true external — the
+filesystem via `node:fs` — is NOT injectable, so "two" as a total-dependency-count was false);
+(4) `tasks/todo.md`'s Bunt B section corrected to say the two new scripts' ownership is filed
+as BIN-1080, replacing a sentence claiming an owner assignment that was backed out per the
+plan's own later `[needs-human]` entry. `events.jsonl` gained one `review` row,
+`ticket:"BIN-790"`, `panel:[14]`, `must_haves:1` — #14 Software Architect's critique of this
+follow-up, seated as the unmapped-code fallback since both `scripts/` files are still owned by
+nobody (BIN-1080).
+
+**The author's own claim, checked, not inherited.** v1 of the new test read
+`expect(stamper).toContain(FLAG_REL)`. The author reported mutation-testing it themselves:
+renaming `FLAG_REL`'s VALUE in `freshness.mjs` (keeping the identifier) survived 20/20 green,
+because `freshness.mjs`'s own header comment (line 13, "stamp
+`.claude/state/workflow-map-stale.json` with the trigger path") still contains the bare old
+path string, and a plain substring `toContain` cannot distinguish a comment from the live
+assignment. v2 changed the anchor to
+`` expect(stamper).toContain(`const FLAG_REL = '${FLAG_REL}';`) ``.
+
+**Reproduced independently, not taken on trust.**
+```
+git hash-object .claude/hooks/freshness.mjs   → d9e32e18950a284a2d1ff51cc8d746061f4dcceb
+git rev-parse HEAD:.claude/hooks/freshness.mjs → d9e32e18950a284a2d1ff51cc8d746061f4dcceb   (clean, safe to mutate)
+```
+Snapshotted to scratchpad, hash-verified. Mutated line 40 in place:
+`const FLAG_REL = '.claude/state/workflow-map-stale.json';` →
+`const FLAG_REL = '.claude/state/map-stale.json';` (value only, identifier unchanged — the
+exact drift class the ticket describes: "rename the constant on the stamper side").
+```
+npx vitest run scripts/prune-map-flag.test.mjs --reporter=verbose
+```
+Result: **1 failed | 19 passed (20)**, the sole failure at
+`scripts/prune-map-flag.test.mjs:371` — the new `flaggans sökväg är samma sträng som
+stämplarens` test, and no other. Re-`grep`ped the mutant present in the same breath as the
+run (before AND after, per the house method), then restored from the scratchpad snapshot and
+re-hashed: `d9e32e18950a284a2d1ff51cc8d746061f4dcceb`, `git status --porcelain` empty. Ran
+`npx vitest run scripts` clean-control afterward: 6 files, 130 tests, all green.
+
+**What v2 still cannot catch, assessed rather than assumed equivalent-or-not by eye.** Traced
+whether the OTHER divergence direction — `scripts/prune-map-flag.mjs`'s OWN `FLAG_REL` (line
+48, not exported, so this new test cannot read it at all) drifting away from both the stamper
+and the test file's copy — is covered by anything. It is: `FLAG_REL` is private, so any change
+to it changes which path `run()` calls `existsSync` on, while the file's EXISTING integration
+tests (`runScript()` spawning the real script against a flag written at the TEST FILE's
+`FLAG_REL`) already fail the moment the two disagree — confirmed by inspection of
+`writeFlag`/`runScript`, not asserted. So the new test and the pre-existing integration tests
+together cover both divergence directions; neither alone would. Also checked: a pure
+reformat of the stamper's assignment line (quote style, whitespace around `=`) breaks v2's
+exact-syntax anchor — that failure is the SAFE direction (loud, forces a fix), matches the
+existing BIN-1038 bullet's "DRY nit, not a coverage gap" class, and is non-blocking. And
+#14's rejection of a shared-constant module (moves the coupling to import-evaluation time,
+before the try/catch that keeps this script fail-open) checked against Node's ES-module
+semantics — import statements are linked/evaluated before any module body code runs, so a
+broken shared import is genuinely uncatchable by this file's own try/catch, unlike a runtime
+constant mismatch. Agreed, not disputed.
+
+**Cross-checks:** grepped for stray copies of both corrected phrases ("outside dependencies",
+"stashed, reverted") elsewhere in the tree — none found, so both strikes are the only copy.
+Read `.claude/rules/accepted-deviations.md` in full; nothing in this diff matches an already-
+decided deviation.
+
+**Verdict: pass, 0 blocking.** The mutation-testing claim in the diff's own comment is real
+and reproduced live; the remaining brittleness is documented, non-blocking, and the correct
+failure direction. No assertion was weakened, no test skipped, no false claim left standing in
+the four staged files.

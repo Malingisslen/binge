@@ -353,3 +353,21 @@ describe('den billiga vägen är verkligen billig', () => {
     expect(lefthook.slice(Math.max(0, idx - 2000), idx)).toMatch(/not glob-gated/i);
   });
 });
+
+describe('flaggans sökväg är samma sträng som stämplarens', () => {
+  it('finns ordagrant i .claude/hooks/freshness.mjs', () => {
+    // Sökvägen är ett eget literal i stämplaren, i rensningen och i den här filen. Döps den
+    // om på stämplarsidan blir rensningen en PERMANENT tyst no-op — `existsSync` faller,
+    // tidig retur, avslutskod 0 — med hela sviten grön, eftersom testerna här bygger sin
+    // egen flagga ur sitt eget literal. Det är precis den klass av tystnad BIN-790 finns
+    // för att stänga, ett steg bort. Hittad av push-grinden.
+    //
+    // Pinnas på KONSTANTEN, inte på strängen var som helst i filen: sökvägen står också i
+    // stämplarens egen huvudkommentar, så en `toContain(FLAG_REL)` matchar den och överlever
+    // en omdöpning. Den formen skrevs först här och muteringsprövades — den lämnade sviten
+    // grön. Det är fällan att pinna kommentaren bredvid symbolen i stället för symbolen.
+    const stamper = readFileSync(join(REPO_ROOT, '.claude', 'hooks', 'freshness.mjs'), 'utf8');
+
+    expect(stamper).toContain(`const FLAG_REL = '${FLAG_REL}';`);
+  });
+});

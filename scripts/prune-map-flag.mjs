@@ -6,8 +6,8 @@
 // lists as a node path. CLAUDE.md then tells the next session to re-trace those flows.
 //
 // THE DEFECT THIS CLOSES (BIN-790, filed after the flag survived four sprints and was
-// cleaned by hand four times). A batch that gets WITHDRAWN — stashed, reverted, pulled from
-// the sprint — leaves its triggers behind. The edit never reached any commit and is no
+// cleaned by hand four times). A batch that gets WITHDRAWN — stashed, pulled from the
+// sprint — leaves its triggers behind. The edit never reached any commit and is no
 // longer in the tree, so the next session is sent to re-trace a file nobody changed. The
 // flag is gitignored, so no diff-based gate can see it: "ghost work order" and "real work
 // order" are the same bytes.
@@ -129,7 +129,7 @@ export function pruneTriggers(root, flag, deps = {}) {
 }
 
 /**
- * The whole job, with its two outside dependencies injectable.
+ * The whole job, with `gitRunner` and `out` injectable.
  *
  * `gitRunner` is a parameter rather than a hardcoded call so a test can COUNT the
  * subprocesses instead of asserting about them from the source text. The first version of

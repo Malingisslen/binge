@@ -100,8 +100,8 @@ node docs/org/route.mjs .claude/hooks/freshness.mjs .claude/hooks/freshness.test
   lefthook.yml scripts/prune-map-flag.mjs scripts/prune-map-flag.test.mjs
 ```
 → `tier: medium`, `reasonCode: owned`, `panel: [25]` (#25 Engineering Manager / Release
-Manager). `unmapped`: de två nya `scripts/`-filerna — de får en ägare i
-`docs/role-responsibilities.md` och kartan regenereras (aldrig `--update-gaps`).
+Manager). `unmapped`: de två nya `scripts/`-filerna. Deras ägarskap är filat som BIN-1080;
+aldrig `--update-gaps`.
 
 ### Mekanismen, och varför den formen
 
