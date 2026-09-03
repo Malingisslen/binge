@@ -1255,17 +1255,10 @@ hash oförändrad. Gitignorerat tillstånd har ingen diff som kan visa förluste
 symbolen i stället för att räkna den, peka på biljetten i stället för att påstå var något står.
 Och räkna med att rättelsen själv blir nästa varvs fynd tills du slutar formulera om.
 
-**Exempel:** sprinten tog fyra granskningsvarv per bunt. TRE gånger bar min egen rättelse ett nytt
+**Exempel:** TRE gånger bar min egen rättelse ett nytt
 falskt påstående: jag pekade ut fel tal som svaret på "hur länge räcker andrummet" och skrev sedan
-i rättelsen att `refreshed` är komplementet till `evicted` (det är `retained`; `refreshed` är en
-äkta delmängd av den); jag strök ett wall-clock-tal ur `lefthook.yml` och lämnade en pekare i en
+i rättelsen att `refreshed` är komplementet till `evicted` (det är `retained`); jag strök ett wall-clock-tal ur `lefthook.yml` och lämnade en pekare i en
 annan fil som pekade på talet som inte längre fanns; och jag strök ett påstående om ägarskap och
 ersatte det med "utfallet står i avvikelseloggen", där `grep -c BIN-1080
 .claude/rules/accepted-deviations.md` ger 0. Den formen som höll varje gång var densamma: peka på
 biljetten, namnge parametrarna, ta bort kvantifikatorn.
-
-**Och det push-grinden gjorde som ingen per-bunt kunde:** den läser HELA intervallet, så den ser
-en mening i en TIDIGARE commit som en SENARE commit gjorde falsk. Här blev
-`check_review_coverage.mjs`s "a `pre-commit` block with two live commands" falsk i samma stund
-som bunten lade till ett tredje kommando i `lefthook.yml` — två filer, två commitar, ingen
-per-bunts-granskning kunde se båda.
