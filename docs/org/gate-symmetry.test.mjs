@@ -120,14 +120,15 @@
 //      that is a real list of paths — the hand-copied thing this file exists to avoid —
 //      so it is deliberately not attempted here.
 //   3. `blockingGates()` is a MODEL of the blocking hook, not the hook. It re-implements
-//      the hook's matching by hand — `exact` ∪ `patterns`, minus `exclude` — inside the
-//      one file whose entire purpose is that two lists must not drift apart. It is
+//      the hook's matching by hand, inside the one file whose entire purpose is that two
+//      lists must not drift apart. It is
 //      faithful today. It is not pinned to anything, so a change to the hook's semantics
 //      leaves this file certifying symmetry against a copy that no longer describes what
-//      blocks a commit. Three shapes would do it silently: an `exclude` that also applies
-//      to `exact`, anchoring, and case-sensitivity.
+//      blocks a commit. Shapes that would do it silently: an `exclude` that also applies
+//      to `exact`, anchoring, case-sensitivity, and a matcher type this model does not
+//      know.
 //
-//      One of those three is partly covered — the case named "the gate-matching helper
+//      The exclude-over-patterns shape is partly covered — the case named "the gate-matching helper
 //      subtracts excludes, like the real hook does" pins exclude-over-patterns. The
 //      `exact`+`exclude` combination is not exercised by anything, including the live
 //      config; derive that rather than trusting this sentence:
@@ -166,9 +167,20 @@ const CONFIG = JSON.parse(readFileSync(join(REPO_ROOT, '.claude', 'shared-plugin
 const GATES = CONFIG.reviewGates;
 
 // Which blocking reviewers does the real commit gate demand for this path? Mirrors
-// require-review-before-commit.mjs: `exact` OR a pattern match, then MINUS `exclude`.
+// require-review-before-commit.mjs: a `keyed` rule OWNS its path and decides alone;
+// otherwise `exact` OR a pattern match, then MINUS `exclude`.
+//
+// The `keyed` arm is BIN-990/2026-09-03. Leaving it out made this checker say "blocking
+// gate: none" for a path the real gate does stop — and the fix for that is NOT an
+// ACCEPTED_ASYMMETRIES entry, which would write a false statement into the checker.
+// Note what this mirror deliberately does NOT do: the real matcher compares the key's
+// value between HEAD and the index, which is a property of a particular commit. This
+// checker asks the static question — "can this gate ever block this path" — so a keyed
+// rule counts as covering its path. The two answers differ only for a commit that leaves
+// the key untouched, which is exactly the case the rule exists to let through.
 function blockingGates(file) {
   return GATES.filter((gate) => {
+    if ((gate.keyed || []).some((k) => k && k.path === file)) return true;
     const hit =
       (gate.exact || []).includes(file) || (gate.patterns || []).some((p) => new RegExp(p).test(file));
     return hit && !(gate.exclude || []).some((p) => new RegExp(p).test(file));
@@ -248,7 +260,7 @@ describe('the gate config has the shape this check reads (BIN-880)', () => {
       expect(typeof gate.agent, `a reviewGates entry has no agent: ${JSON.stringify(gate)}`).toBe('string');
       expect(typeof gate.marker, `${gate.agent}: no marker file`).toBe('string');
       expect(
-        (gate.patterns || []).length + (gate.exact || []).length,
+        (gate.patterns || []).length + (gate.exact || []).length + (gate.keyed || []).length,
         `${gate.agent}: gate matches nothing at all — it can never block`,
       ).toBeGreaterThan(0);
     }

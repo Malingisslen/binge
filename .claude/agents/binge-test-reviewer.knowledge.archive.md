@@ -24718,3 +24718,181 @@ decided deviation.
 and reproduced live; the remaining brittleness is documented, non-blocking, and the correct
 failure direction. No assertion was weakened, no test skipped, no false claim left standing in
 the four staged files.
+
+
+## 2026-09-03 — BIN-990 follow-up: the strike-rule fix for the enumeration re-broke the neighbour it rephrased
+
+**Scope.** Re-review of a re-staged batch (`.claude/shared-plugin.json`, `docs/org/gate-symmetry.test.mjs`,
+`docs/org/ownership-map.json`, `docs/org/route.test.mjs`, `docs/role-responsibilities.md`) after a
+prior pass of mine had flagged one blocking finding: both `blockingGates()`'s header comment in
+`gate-symmetry.test.mjs` and `gateMatches()`'s header comment in `route.test.mjs` enumerated the
+matcher as "`exact` union `patterns`, minus `exclude`" — three mechanisms — while the same commit added
+a fourth, `keyed` (BIN-990, letting `.claude/shared-plugin.json`'s `simplify-done.marker` gate own
+`.claude/settings.json`'s `hooks` key alone). The stated fix, applied by the author before this
+round: strike the enumerating sentence in both files rather than reword it to name four mechanisms.
+
+**What I read, with the Read tool, in full:** `.claude/agents/binge-test-reviewer.knowledge.md`,
+`.claude/rules/accepted-deviations.md`, `.claude/shared-plugin.json`, `docs/org/gate-symmetry.test.mjs`,
+`docs/org/route.test.mjs`, `docs/org/ownership-map.json` (role 25's pattern block, header), and
+`docs/role-responsibilities.md` (the new BIN-990 bullet under section 25). Also read (not staged, sanity
+check only): `.claude/settings.json`.
+
+**gate-symmetry.test.mjs verdict: the strike is clean.**
+
+The diff struck the dash-clause "the hook's matching by hand -- exact union patterns, minus exclude --"
+down to "the hook's matching by hand,". "It is faithful today." two lines later stayed grammatically
+intact (subject is `blockingGates()`, introduced two sentences earlier, not orphaned). The count word
+"Three shapes" was struck to plain "Shapes that would do it silently", listing a fourth item
+("a matcher type this model does not know") rather than being bumped to "Four" — correct, since a new
+(`keyed`) shape was added to the same list in the same commit, and a hardcoded "Four" would go stale
+the moment a fifth arrives. "One of those three is partly covered" became "The exclude-over-patterns
+shape is partly covered" — again dropping the quantifier rather than updating it. No false claim
+survives. Verified the two live facts this comment leans on:
+`node -e "console.log(require('./.claude/shared-plugin.json').reviewGates.filter(x=>(x.exact||[]).length).length)"`
+returned `0` (the exact+exclude combo is still latent, as claimed), and the file's own code
+(`blockingGates()`) does check `keyed` first, matching what the neighbouring code-comment above the
+function says.
+
+**route.test.mjs verdict: the strike is incomplete -- a false claim survives in the neighbour it rephrased.**
+
+Diff:
+```
+-// Mirrors the real hook's decision rather than just its pattern list:
+-// require-review-before-commit.mjs takes `exact` OR a pattern match, then SUBTRACTS
+-// `exclude`. This gate carries no excludes today, so the two are equivalent -- but a later
+-// `exclude` would disarm the gate while a patterns-only helper stayed green, which is the
+-// exact silent disarming these tests exist to prevent. Reads the live config, not a
++// Mirrors the real hook's decision rather than just its pattern list. This gate carries no
++// excludes today, so a patterns-only helper would answer the same -- but a later `exclude`
++// would disarm the gate while that helper stayed green, which is the exact silent
++// disarming these tests exist to prevent. Reads the live config, not a
+ // fixture: the point is to catch the config drifting away from the router.
+ function gateMatches(agent, file) {
+```
+
+The struck clause (exact OR a pattern match, then SUBTRACTS exclude) is the same class of fix as
+the sibling file -- good. But the CONCLUSION built on top of it, "so the two are equivalent" / "so
+a patterns-only helper would answer the same", was kept rather than struck, and it is now false.
+Proved live rather than assumed, run via the Bash tool as ONE command so the mutant (here: the live
+config's `keyed` entry) and the assertion are captured together:
+
+```
+node -e "
+const cfg = require('./.claude/shared-plugin.json');
+const gate = cfg.reviewGates.find(g => g.marker === 'simplify-done.marker');
+const file = '.claude/settings.json';
+const patternsOnly = (gate.patterns||[]).some(p => new RegExp(p).test(file));
+const keyedMatch = (gate.keyed||[]).some(k => k && k.path === file);
+console.log('patterns-only match:', patternsOnly);
+console.log('keyed match:', keyedMatch);
+console.log('gate.exclude present?', 'exclude' in gate, gate.exclude);
+"
+```
+
+Output:
+```
+patterns-only match: false
+keyed match: true
+gate.exclude present? false undefined
+```
+
+So: `exclude` really is absent from this gate (the half of the claim the task brief pointed at is
+true), but the SAME commit that added the enumeration this comment describes also added `keyed` as
+a THIRD live mechanism this exact gate uses -- and a "patterns-only helper" (one that checks only
+`gate.patterns`, which is what the surrounding sentence "rather than just its pattern list"
+establishes as the comparison baseline) misses it entirely. The claim was true only while `keyed`
+did not exist for this gate; it stopped being true in the same diff that introduced it. This is not
+a "later exclude might disarm it" hypothetical any more -- the divergence is present-tense and real
+for `.claude/settings.json` today. The function `gateMatches()` five lines below is itself correct
+(it checks `gate.keyed` first, exactly like `blockingGates()`); only the prose describing it is
+wrong. This is a textbook instance of "a rewrite carries a new claim nobody measured" -- the
+antecedent-loss ("the two" needing a named subject) was real and the rewrite fixed THAT, but in
+doing so kept an equivalence conclusion nobody re-checked against the new `keyed` mechanism the
+same commit shipped.
+
+**Verified this is comment-only.** `npx vitest run docs/org/gate-symmetry.test.mjs docs/org/route.test.mjs`
+returned `Test Files 2 passed (2)`, `Tests 914 passed (914)` -- matches the task brief's "914/914"
+claim. No assertion in either file was touched by anything findable; the `keyed`-arm code and its
+dedicated `expect(integrationGateMatches('.claude/settings.json')).toBe(true)` pin both predate this
+round (part of the earlier BIN-990 batch already passed). `ownership-map.json` (role 25's pattern
+list includes `.claude/settings.json`, `patternCount` bumped 216 to 217) and
+`docs/role-responsibilities.md`'s new section-25 bullet (".claude/settings.json (key hooks only)")
+are both internally consistent with `.claude/settings.json`'s real top-level keys (`permissions` and
+`hooks`, confirmed by reading the file directly) and with each other.
+
+**Finding filed:** `docs/org/route.test.mjs` lines 38-41 -- the comment above `gateMatches()`
+asserts "a patterns-only helper would answer the same" as the full matcher for this gate; false as
+of this commit for `.claude/settings.json`, because the gate's `keyed` entry (added in the same
+batch) is a live third mechanism a patterns-only check cannot see. Remedy: strike the equivalence
+conclusion along with the enumeration it was built on (matching what `gate-symmetry.test.mjs`
+correctly did), rather than keep asserting a comparison that is no longer true -- e.g. state only
+that `gateMatches` mirrors the full keyed/exact/patterns/exclude precedence, which is directly
+readable from the function body five lines below and needs no measured claim about what a
+simplified version would do.
+
+**Knowledge-file update.** Folded into the "Review protocol and scope discipline" bullet about
+comment-only strike fixes (originally BIN-879/arkiv-02 lineage): striking an enumerating clause can
+leave a neighbouring EQUIVALENCE/COMPARISON conclusion built on it standing and now false, even
+when the rewrite is grammatically clean and the antecedent-loss it fixes is real -- probe the
+conclusion live against the current mechanism list rather than trusting that a locally-consistent
+rewrite is globally true. Also trimmed several other bullets to stay under the 80k cap after the
+addition -- no lesson content was lost, only compressed narrative detail already summarized by
+the bullet's own thesis sentence. Verbatim text of everything trimmed:
+
+> "A handed-down SUITE COUNT is a claim about the SPEAKER'S machine": a test coupled to a
+> GITIGNORED build artifact is green in CI and red on a dev box (BIN-823's
+> `titleParams.watchdog.test.ts` vs `.tmdb-cache/selection-*.json`), so any diff adding a
+> persisted artifact owes an explicit `TMDB_CACHE_DIR` temp dir plus the regime env per test
+> file -- and confirm the runner picked the file up (`--reporter=verbose`).
+
+> "A SOURCE-SCANNING guard test owes one probe PER IDIOM, and its docstring's absolutes are the
+> claim to attack"; when such a scan is retired for a config-wired AST lint rule (BIN-931), demand
+> ONE fixture path OUTSIDE the guard's home directory to pin `eslint.config.mjs`'s `files:` scope,
+> and grep `.claude/shared-plugin.json`'s `patterns` for the wiring file.
+
+> "A mutation-count/exit-code claim tied to a DATA FILE the diff regenerates is state-dependent" --
+> BIN-852's "exit=0 to 1" held only pre-regeneration; the same mutation against the diff's own
+> `--update-baseline` commit stays exit=0. Re-run against the file state that ships -- the same
+> plan's "2 of 54 failed" for that mutation was also wrong (re-run: 1).
+
+> "A test harness's own comment can misdescribe its SUITE'S coverage, not production's": BIN-1023's
+> `listUserUids` port comment claimed a structurally-unproducible case (Admin's `listDocuments()`
+> sees a uid whose doc is gone but subcollections survive; a client-SDK query cannot) "is driven by
+> overriding this method in the one test that needs it" while grep found no such override --
+> reported as an unmet promise, not a documented residual, on the first pass. The remedy is the
+> general one, not specific to that ticket: grep the literal override the comment names, every
+> round the comment or its surrounding fixture is touched, rather than crediting the
+> self-description. The BIN-1023 case itself closed same-day when the promised ghost-uid override
+> was built and the comment re-verified true.
+
+> "Looks fully duplicated by a stricter sibling" (a local sample deep-equal beside a whole-map
+> deep-equal in a SEPARATE file) can be pinning a DIFFERENT axis -- the FUNCTION's own behaviour vs
+> the DATA's freshness -- and eyeballing the two assertion bodies cannot tell them apart. Check by
+> mutating the function itself (not the data) with the candidate test deleted:
+> `availableNotify/logic.test.ts`'s "maps sampled aliases" test looks subsumed by
+> `providerAliasParity.test.ts`'s `toEqual(expected)` on the same `ALIAS_TO_CANONICAL` object, but
+> that sibling only imports the CONSTANT, never calls `canonicalProviderId()` -- so with the sample
+> test deleted, mutating the function to `return id` (ignore the map entirely) left all 16
+> remaining tests in the file green. Retitling (its old name claimed "full map pinned" over a map
+> that had in fact been missing entries, 531 then 175, silently) was the right remedy, not
+> deletion; an integration reviewer's "delete it, that's the honest fix" is a plausible-sounding
+> call that this mutation directly contradicts (BIN-1073).
+
+> A comment/string blanker that treats a template literal as ONE opaque span (open backtick to
+> close backtick) blanks its interpolations too, which are executable code, not string content --
+> an `await`-detecting guard (BIN-1060's `processTitle.test.ts`) is blind to a real `await` written
+> inside an interpolation above the anchor call: proven live by feeding a template with an
+> interpolated await followed by a real await through the guard's own exported `firstAwaitIndex`
+> and watching it skip straight to the fetch.
+
+> Same discipline for a rejected-Error fixture feeding a message-sniffing branch
+> (`err.message.includes(CODE)`): grep the fixture's string back to the line that actually THROWS
+> it, not to the constant's declaration -- BIN-777's thrower emits BOTH codes in one message on
+> purpose, so a fixture carrying only the narrow code is reachable under EITHER branch order and
+> the swap mutant survives; rebuild the fixture as the literal template string the thrower emits.
+
+**Verdict: fail, 1 blocking.** `docs/org/route.test.mjs` lines 38-41 -- the rephrased comment above
+`gateMatches()` makes a comparison claim ("a patterns-only helper would answer the same") that is
+false today for `.claude/settings.json`, proved live against the staged config. Strike the claim
+rather than reword it again; do not merely swap "would answer the same" for a hedge, since that
+would be a second unmeasured rewrite of the same sentence.

@@ -35,12 +35,9 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const posix = (p) => p.replace(/\\/g, '/');
 
 // Would the repo's BLOCKING commit gate demand binge-integration-reviewer for this path?
-// Mirrors the real hook's decision rather than just its pattern list:
-// require-review-before-commit.mjs takes `exact` OR a pattern match, then SUBTRACTS
-// `exclude`. This gate carries no excludes today, so the two are equivalent — but a later
-// `exclude` would disarm the gate while a patterns-only helper stayed green, which is the
-// exact silent disarming these tests exist to prevent. Reads the live config, not a
-// fixture: the point is to catch the config drifting away from the router.
+// Mirrors the real hook's decision rather than just its pattern list; the precedence is in
+// the function below. Reads the live config, not a fixture: the point is to catch the
+// config drifting away from the router.
 function gateMatches(agent, file) {
   const cfg = JSON.parse(
     readFileSync(
@@ -53,6 +50,9 @@ function gateMatches(agent, file) {
   // up on the next property read and redden ~800 cases with a message about `undefined`,
   // pointing at this file instead of at the config that changed.
   if (!gate) throw new Error(`.claude/shared-plugin.json → reviewGates has no entry for ${agent}`);
+  // A `keyed` rule OWNS its path and decides alone, same precedence as the real hook and
+  // as blockingGates() in gate-symmetry.test.mjs.
+  if ((gate.keyed || []).some((k) => k && k.path === file)) return true;
   const exact = new Set(gate.exact || []);
   return (
     (exact.has(file) || (gate.patterns || []).some((p) => new RegExp(p).test(file))) &&
@@ -508,6 +508,9 @@ describe('the file that decides who reviews everything else (BIN-851)', () => {
     // assertions above green and still reopen the hole.
     expect(integrationGateMatches('.claude/shared-plugin.json')).toBe(true);
     expect(integrationGateMatches('.claude/rules/accepted-deviations.md')).toBe(true);
+    // Reached by a `keyed` rule, not a pattern (BIN-990). Without this the keyed arm in
+    // gateMatches() is pinned by nothing in this file.
+    expect(integrationGateMatches('.claude/settings.json')).toBe(true);
     // Deliberately NOT all of .claude/rules/: lessons-digest.md is appended by every
     // sprint close-out, and gating routine bookkeeping on a review was the rejected
     // alternative (Malin's narrow-over-broad call, same as BIN-830).

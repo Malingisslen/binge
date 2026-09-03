@@ -498,6 +498,15 @@ Owns the process.
   a seat of last resort for code nobody claimed, not an answer for a file that decides how
   everything else is reviewed.
   → `docs/org/metrics/check_staged_routing.mjs`, `docs/org/metrics/check_staged_routing.test.mjs`
+- **The file that ARMS the review hooks** (BIN-990). `.claude/settings.json` is what registers
+  the PostToolUse freshness stamper and the PreToolUse preview gate. Emptying its `hooks`
+  block disarms both while
+  every gated file stays byte-identical — the same "a gate that can be disarmed unwitnessed"
+  shape this role already owns one file out, and until 2026-09-03 it reached no reviewer at
+  all. Only the `hooks` KEY is gated, not the path: the file's other top-level key is
+  `permissions`, and gating the whole path would bill a reviewer run on edits that never
+  touch `hooks`. Malin's decision, against the recommendation.
+  → `.claude/settings.json` (key `hooks` only)
 - **The dependency manifest those upgrades land in** (BIN-919). `package.json` carries the
   framework pins, the npm scripts every gate and workflow invokes, and the test/lint
   wiring — so it decides how the repo builds and how it is checked. It was the one tracked
