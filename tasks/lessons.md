@@ -1297,3 +1297,35 @@ Samma runda: `String.replace(a, b)` expanderar `$'` inne i `b` till "allt efter 
 at slutet av ett regex -- anvand en funktionsersattare. Och ett radbrytningsescape skrivet
 via en heredoc kollapsade till ett riktigt styrtecken FJARDE gangen; `String.fromCharCode(10)`
 ar den enda form som haller.
+
+### [Workflow] En rattelse som RAKNAR UPP en konfigs nycklar ar samma defekt en nyckel langre in (2026-09-03, BIN-1085)
+
+**Trigger:** ett fynd som lyder "meningen namner bara X, men mangden ar X plus Y".
+
+**Regel:** stryk upprakningen och peka pa konfigposten -- skriv aldrig ut den vidgade
+listan. `binge-integration-reviewer.md` sa att grindens fillista bor i `patterns`; jag
+rattade till "`patterns` plus `keyed`", och integrationsgranskningen underkande det pa
+saklig grund: grinden laser fler matchningsnycklar an sa, och nasta nyckeltyp gor den nya
+meningen falsk pa exakt samma satt som den gamla. Den enda lydelse som haller ar en som
+inte namner nagon nyckel alls.
+
+**Generellt:** en mening om en MANGD som nagon annan fil ager gar inte att halla farsk.
+Peka pa agaren och sag att listan harleds darifran. Samma familj som strykregeln, men den
+har formen ser ut som en korrekt rattelse och slipper darfor igenom.
+
+### [Testing] `git stash show` sager ingenting om filer en bunt SKAPADE (2026-09-03, BIN-1082)
+
+**Trigger:** kod som fragar git vad som ligger i en stash, for att avgora om arbete halls
+for senare.
+
+**Regel:** `git stash show <ref>` listar bara SPARADE filer. En bunt stashad med
+`git stash push -u` bar sina nyskapade filer i stashen men rapporterar dem inte utan
+`--include-untracked`. En hall-detektor byggd pa standardformen tappar alltsa exakt den
+bunt som LADE TILL en fil -- i den riktning som forlorar en arbetsorder, inte den som
+behaller ett spoke. Testet maste driva en NYSKAPAD fil, inte bara en andrad.
+
+**Samma runda, om en datumgrind:** en katalog med sparat arbete vaxer, och den innehaller
+poster fran manader tillbaka. En "finns i katalogen" -fraga utan datumgrind haller darfor
+sina sokvagar vid liv for alltid och gor sparren verkningslos, tyst. Datera mot postens
+egen tidpunkt, och prova BADA riktningarna med bokstavliga datum -- den riktning som bara
+behaller for mycket ar den som ingen mater.
