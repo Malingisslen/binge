@@ -243,13 +243,26 @@ function stampMap(payload, repoRoot, rel) {
   try { if (!existsSync(stateDir)) mkdirSync(stateDir, { recursive: true }); } catch { return; }
 
   const now = new Date().toISOString();
-  let flag = { map: MAP_REL, triggers: [], firstStampedAt: now, lastStampedAt: now };
+  let flag = { map: MAP_REL, triggers: [], triggerStampedAt: {}, firstStampedAt: now, lastStampedAt: now };
   if (existsSync(flagPath)) {
     try { flag = { ...flag, ...JSON.parse(readFileSync(flagPath, 'utf8')) }; } catch { /* keep default */ }
   }
   const set = new Set(flag.triggers || []);
   set.add(rel);
   flag.triggers = [...set].sort();
+
+  // Per-entry stamp time (BIN-1081). `firstStampedAt` is one date for the WHOLE flag, so a
+  // trigger added days later inherits the flag oldest window and a genuine ghost on that path
+  // is harder to recognise. This records when each path was first stamped, and
+  // scripts/prune-map-flag.mjs dates that path search window against it.
+  //
+  // FIRST stamp wins, never the latest: re-stamping an existing path must not push its
+  // deadline forward, or the window moves as fast as the clock and nothing ever matures
+  // (BIN-1023). The `triggers` array shape and sorting are unchanged - it is what CLAUDE.md
+  // and the pruner read - and its order says nothing about stamp order.
+  const stampedAt = { ...(flag.triggerStampedAt || {}) };
+  if (!stampedAt[rel]) stampedAt[rel] = now;
+  flag.triggerStampedAt = stampedAt;
   flag.lastStampedAt = now;
   if (!flag.firstStampedAt) flag.firstStampedAt = now;
   try { writeFileSync(flagPath, JSON.stringify(flag, null, 2) + '\n'); } catch { /* fail open */ }

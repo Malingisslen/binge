@@ -135,11 +135,12 @@ If a command you need fails, say so and stop. A blocked gate is the correct outc
 
 **You also own the PUSH gate.** A sprint now commits one batch at a time, so every commit gate only
 ever saw one batch — a defect spanning two of them is invisible to all of them. A push is refused
-until ONE run of this agent has read every file in the range matching this gate's patterns, at the
-bytes being pushed. N per-batch reviews deliberately do not add up to it.
+until ONE run of this agent has read every file in the range this gate matches, at the bytes being
+pushed. N per-batch reviews deliberately do not add up to it.
 
-Your gate's file patterns live in `reviewGates` → `binge-integration-reviewer` → `patterns` in
-`.claude/shared-plugin.json`, and nothing here duplicates them any more. The old marker command
+Your gate's file set lives in `reviewGates` → `binge-integration-reviewer` in
+`.claude/shared-plugin.json`. Derive it from that entry's own matcher keys — never from a sentence
+about them, here or anywhere. Nothing here duplicates them any more. The old marker command
 carried a hand-maintained `grep -E` copy that had to be widened in the same edit as the config, or
 a config-only widening blocked the commit with no honest way to clear it. Widen the config alone.
 

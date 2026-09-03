@@ -24896,3 +24896,81 @@ the bullet's own thesis sentence. Verbatim text of everything trimmed:
 false today for `.claude/settings.json`, proved live against the staged config. Strike the claim
 rather than reword it again; do not merely swap "would answer the same" for a hedge, since that
 would be a second unmeasured rewrite of the same sentence.
+
+## 2026-09-03 — BIN-1081 + BIN-1082 + BIN-1085: per-trigger stamp + held-batch KEEP branch
+
+**Diff reviewed.** `.claude/hooks/freshness.mjs` (`stampMap`) gained `triggerStampedAt`, a
+per-path first-stamp-wins map, alongside the pre-existing flag-wide `firstStampedAt`.
+`scripts/prune-map-flag.mjs`'s `pruneTriggers` now dates each trigger against its own
+entry (falling back to `flag.firstStampedAt`, then to "no date at all ⇒ keep"), and gained
+a third KEEP branch, `isHeldSince`, asking whether the path is named in a stash or a
+parked patch file under `.claude/state/sprint-patches/` created AFTER that stamp.
+`.claude/hooks/freshness.test.mjs` and `scripts/prune-map-flag.test.mjs` were the two
+files this gate covers (`\.test\.mjs$` in `reviewGates`); confirmed by deriving the gate
+list from `.claude/shared-plugin.json` directly rather than trusting the brief. Both
+diffs were purely additive against `git diff --cached` — no assertion removed, no
+`.skip`, no loosened matcher.
+
+**Mutations run, each in the real file, isolated worktree not needed (shared checkout,
+sequential, restored from a scratchpad copy between each, `git hash-object` verified
+before/after every run):**
+
+1. `isHeldSince`'s date gate removed (`held.some(h => h.rel === rel)`, no `stampedAt`
+   comparison) → killed the two "older than stamp" tests alone (`SLÄPPER ändå när
+   patchfilen/stashen är äldre än stämplingen`), 2 failed / 28 passed.
+2. The held branch replaced by `false` in the `live = ... || isHeldSince(...)` chain →
+   killed 4 tests (both "BEHÅLLER … stash gjord EFTER", the no-rewrite-on-KEEP case, and
+   the single-stash-list-call count), 4 failed / 26 passed.
+3. The `heldOnce` memoization removed (call `heldFiles` fresh every trigger instead of
+   caching) → killed exactly the O(1)-call test (`frågar efter hållet arbete EN gång`),
+   1 failed / 29 passed, `stashListCalls.length` went 3 instead of 1 for 3 triggers.
+4. `pruneTriggers`'s per-entry window replaced by `flag.firstStampedAt` (dropping the
+   `triggerStampedAt` lookup) → killed exactly the dedicated BIN-1081 test (`daterar mot
+   postens EGEN tid, inte mot flaggans äldsta`), 1 failed / 29 passed.
+5. The dropped-stamp cleanup on write-back disabled (`next.triggerStampedAt` filter
+   removed from `run()`) → killed exactly `tar bort ett SLÄPPT spökes stämplingstid ur
+   flaggan`, 1 failed / 29 passed.
+
+All five matched the brief's claim exactly — no under- or over-count. Restored and
+re-verified `git hash-object` == index sha after each, full two-file suite green
+(66/66) before, after each mutation-restore cycle, and at the end.
+
+**One additional gap found, not in the brief:** `isHeldSince`'s `h.at >= stampedAt`
+(prune-map-flag.mjs:207) is the exact-boundary form the house knowledge file already
+names as "the most-repeated regression" — mutating `>=` to `>` left all 30 tests in
+`prune-map-flag.test.mjs` green, because every stash/patch fixture in the file is an
+hour before or after the stamp, never at it. Folded into the existing knowledge bullet
+rather than a new one. Severity: LOW — the collision window is one millisecond between
+an ISO-8601 stamp and a stash-commit date or patch-file mtime, and the direction that
+matters (old patches never resurrecting stale triggers) is well covered by two dedicated
+tests. Reported as a non-blocking finding, not filed as a ticket.
+
+**Also checked and clean:** no vacuous absence-only oracles (BIN-1069 class) — every KEEP
+test asserts the surviving trigger by name, every DROP test asserts the dropped one by
+name and the flag content, and the "runs zero git subprocesses when no flag" test has its
+own non-vacuity control (`och kör dem när det FINNS en flagga`). The `freshness.mjs`
+first-stamp-wins guard (`if (!stampedAt[rel]) stampedAt[rel] = now`) was independently
+mutated (guard removed) and killed the dedicated `flyttar INTE en posts tid` test alone.
+`accepted-deviations.md`'s BIN-969 entry (the git-apply gap) was read and not re-flagged;
+BIN-1082 is explicitly the mitigation for one shape of that gap (a held batch that used to
+look like a ghost), not a reopening of it.
+
+**Verdict:** pass (0 blocking).
+
+## Relocated 2026-09-03 — cap trim, paired with the BIN-1081/1082/1085 review entry above
+
+Moved verbatim out of the active file to pay for that review's new boundary-gate bullet
+(the file was at 80,414 chars against the 80,000 cap). Both are narrow, single-ticket
+lessons; neither is struck, both remain true, just no longer worth the space in the
+always-loaded file.
+
+### Relocated — rules test / writeBatch pairing (was in "Firestore rules testing")
+
+A rules test hand-building a batched write proves the RULE denies it, not that the fn
+stays un-batched — pair with a unit assert it never calls `writeBatch`/`commit` (BIN-556).
+
+### Relocated — ordered dispatch / no-explicit-any (was in "Parsers, regex, dispatch, lookup tables & SEO")
+
+Ordered dispatch: the ordering test uses a path matching an early branch correctly, a
+later one incorrectly (BIN-345). `as Record<string, any>` trips `no-explicit-any` — cast
+the narrowest slice; `npx eslint` new test files.

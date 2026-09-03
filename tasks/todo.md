@@ -1,3 +1,153 @@
+# Sprint 2026-09-03b
+
+Föregående sprintplan arkiverad under `---` längst ned.
+
+## Urval
+
+Backloggen hade 20 öppna biljetter; noll låg i Todo eller In Progress vid urvalet.
+Tre valdes. Skälen som dominerar bortvalet:
+
+* **Uttrycklig handbroms i biljettexten** — BIN-1084 ("Kräver Malins beslut", att vidga
+  grindlistan är hennes call), BIN-1080 ("beslutet är inte mitt" — sätet för åtta filer i
+  `scripts/` är ett org-designval), BIN-871 (väntar på hennes takt), BIN-1075 (vilken punkt
+  som pensioneras är ett innehållsval), BIN-939, BIN-1063, BIN-559 (eget designpass).
+* **`neverBuildLabels`** — `idea` (BIN-189, BIN-521, BIN-170).
+* **Bor i `C:/claude-plugins`** och kräver en egen session i det repot (BIN-959).
+* **Ops-blockerad eller uppströmsblockerad** — BIN-454/BIN-402 (pinnade till ~nov, rör den
+  förbjudna `mutateEnabled`), BIN-824 (byggs uttryckligen inte förrän spärrhakens luft är
+  förbrukad), BIN-624 halva 2 (förutsätter en nollräkning på skarp data som aldrig kördes),
+  BIN-658 (`eslint-plugin-react` publicerar ingen version som stöder eslint 10 — biljetten
+  är bevakningen, inte arbetet).
+* **Vald bort på budget, inte på disposition** — BIN-613 (bundle-baslinjen). Den är
+  `build`, men den ändrar `deploy.yml`, alltså kedjan som släpper sajten, och den förtjänar
+  en egen bunt med eget granskningsvarv i stället för att åka med på slutet av den här.
+
+Push-grinden budgeteras som ett eget granskningsvarv med samma vikt som en bunt
+(lärdomen 2026-09-01, BIN-1059).
+
+## Bunt A — BIN-1081 + BIN-1082 + BIN-1085 [Tier A]
+
+De tre rör samma yta: kartans färskhetsflagga och den grind som beskriver den. De byggs
+och committas som EN bunt.
+
+Routning av buntens faktiska filunion:
+
+```
+node docs/org/route.mjs --md .claude/agents/binge-integration-reviewer.md .claude/hooks/freshness.mjs .claude/hooks/freshness.test.mjs scripts/prune-map-flag.mjs scripts/prune-map-flag.test.mjs
+```
+→ Tier **medium** · #25 Engineering Manager / Release Manager · varning om två ägarlösa
+kodsökvägar (`scripts/prune-map-flag*`), vilket är exakt BIN-1080 och rörs INTE här.
+
+Routningen körs OM på `git diff --cached --name-only` omedelbart före commit.
+
+### BIN-1081 — stämplingstid per trigger
+
+Disposition: **build**. Ingen produktfråga; biljetten beskriver mekaniken och åtgärden.
+
+I dag bär `.claude/state/workflow-map-stale.json` EN `firstStampedAt` för hela flaggan.
+`prune-map-flag.mjs` daterar sitt sökfönster mot det fältet, så en trigger som stämplas
+långt senare ärver flaggans ursprungliga fönster och blir svårare att känna igen som spöke.
+
+Åtgärd: `stampMap` i `.claude/hooks/freshness.mjs` skriver ett fält som bär tid per post
+vid sidan av `triggers`-arrayen (arrayen är det CLAUDE.md och rensningen läser, och den rörs
+inte). `pruneTriggers` daterar fönstret mot postens egen tid, med fallback till
+`firstStampedAt` och därefter till "ingen tid ⇒ behåll" — samma konservativa gren som i dag.
+
+Acceptanskriterier:
+1. `diff` — en trigger som stämplas EFTER en tidigare rensning daterar sitt fönster mot sin
+   EGEN tid, inte mot flaggans äldsta. Pinnat av ett test som fäller utan ändringen.
+2. `diff` — en flagga i den GAMLA formen (ingen tid per post) behåller sina triggers; ingen
+   migrering krävs.
+3. `diff` — `triggers`-arrayens form och sortering är oförändrad.
+
+### BIN-1082 — en HÅLLEN bunt får inte städas bort som spöke
+
+Disposition: **build**. Biljetten räknar upp fyra vägar; väg 1 och 2 (se stashen, se
+patchfilerna) är de billiga och byggs båda. Väg 3 rör BIN-969:s daterade beslutsblock och
+väg 4 är att ge upp — ingen av dem tas.
+
+Rensningen släpper en trigger när filen är oförändrad mot HEAD OCH ingen commit sedan
+stämplingen rört den. En bunt som stashas eller läggs undan som patchfil uppfyller båda,
+så dess arbetsorder försvinner i stället för att överleva.
+
+Åtgärd: en tredje BEHÅLL-gren — filen nämns i en stash eller i en patchfil under
+`.claude/state/sprint-patches/`.
+
+**Datumgrind, och den är inte valfri.** Katalogen innehåller patchfiler från augusti som
+för länge sedan landat. Utan grind skulle varje sådan gammal fil hålla en trigger vid liv
+för evigt och BIN-790:s fix vore verkningslös. Därför räknas bara en stash eller en
+patchfil vars egen tidpunkt är SENARE än triggerns stämpling — en bunt som drogs undan
+måste ha dragits undan efter att redigeringen stämplades.
+
+`freshness.mjs`s beslutsblock om git-apply-luckan (BIN-969) rörs inte.
+
+Acceptanskriterier:
+1. `diff` — en trigger vars fil nämns i en patchfil daterad EFTER triggerns stämpling
+   behålls.
+2. `diff` — en trigger vars fil bara nämns i en patchfil daterad FÖRE stämplingen släpps
+   ändå. Pinnat med ett eget test; det är hela poängen med datumgrinden.
+3. `diff` — samma två utfall för en stash.
+4. `diff` — inga nya subprocesser när flaggan saknas; den tidiga returen står kvar först.
+
+### BIN-1085 — granskarens fillista nämner bara `patterns`
+
+Disposition: **build**. Rättelse på plats, lydelsen är direkt läsbar ur konfigen.
+
+`.claude/agents/binge-integration-reviewer.md` säger på två ställen att grindens fillista
+bor i `reviewGates → binge-integration-reviewer → patterns`. Efter BIN-990 är den matchade
+mängden `patterns` PLUS `keyed`, och `keyed`s sökväg (`.claude/settings.json`) står inte i
+`patterns`. En granskare som härleder sin skyldiga fillista ur meningen hoppar över en
+stagead `.claude/settings.json` och underkänns av grinden.
+
+Acceptanskriterier (skärpta av integrationsgranskningen — se avvikelseloggen):
+1. `diff` — ingen av de två meningarna räknar upp eller räknar grindens matchningsnycklar.
+   De pekar på konfigposten och säger att listan härleds därifrån.
+2. `diff` — ingen ny uppräkning av sökvägar i agentfilen; den pekar på konfigen, som förr.
+
+## Rollkritik #25 — bindande villkor (kördes före bygget, 2026-09-03)
+
+En blind kritik från #25 Engineering Manager / Release Manager över buntens hela filunion.
+Utfall: **pass-with-conditions**, sju must-haves. De är acceptanskriterier nu.
+
+1. En posts stämplingstid får inte skrivas om av en annan posts stämpling eller av en
+   rensning som inget släpper. (BIN-1023:s klass: en spärr som skriver om sitt eget minne
+   vid varje kontroll mognar aldrig.) Test: A stämplad, B stämplad senare i samma flagga →
+   A:s tid oförändrad; en rensning utan släpp rör ingen tid.
+2. HÅLL-grenen prövas i BÅDA riktningarna med bokstavliga datum, och "nämns i patchen"
+   härleds ur patchens INNEHÅLL (`+++ b/<sökväg>`) eller `git stash show --name-only` —
+   aldrig ur patchfilens NAMN. Namnen i katalogen har tre olika format.
+3. Vilken klocka en patchfil dateras mot ska stå i en kommentar vid mekanismen, inte bara i
+   biljetten, och jämförelsen ska vara UTC-säker.
+4. Kostnaden ska vara O(1) git-anrop per körning, inte O(triggers) — stashlistan hämtas en
+   gång och återanvänds. Pinnat med ett räknande test.
+5. En HÅLL får inte skriva tillbaka något till flaggan.
+6. En flagga i den GAMLA formen faller genom kedjan egen tid → `firstStampedAt` → behåll,
+   utan att kasta.
+7. BÅDA meningarna i granskaragenten rättas, inte bara den ena — grep båda.
+   (Integrationsgranskningen skärpte detta: att skriva ut `keyed` bredvid `patterns` är
+   samma defekt en nyckel längre in, eftersom grinden läser fler matchningsnycklar än så.
+   Uppräkningen är struken i stället för utvidgad.)
+
+Utanför bunten, filas: `.claude/state/sprint-patches/` har ingen gallringspolicy och
+växer obegränsat. Den här ändringen gör katalogens tidsstämplar till indata, och ingen
+äger den.
+
+
+## Deviation log
+
+- [deviation] BIN-1085: planen sa "namnge `keyed` vid sidan av `patterns`" → integrations-
+  granskningen visade att grinden läser fler matchningsnycklar än de två → uppräkningen är
+  STRUKEN i stället för utvidgad, och meningen pekar nu på konfigposten. Att skriva ut två
+  nycklar hade varit samma defekt en nyckel längre in.
+- [discovery] BIN-1082: `git stash show` rapporterar inget om filer som stashats som
+  OSPÅRADE. Utan `--include-untracked` hade en utdragen bunt som SKAPADE en fil ändå
+  släppts som spöke. Flaggan tillagd, med ett eget test som fäller utan den.
+- [discovery] `.claude/state/sprint-patches/` har ingen gallringspolicy, och den här
+  ändringen gör katalogens tidsstämplar till indata. Filad som BIN-1086, inte byggd.
+
+
+---
+
 # Sprint 2026-09-02b
 
 Föregående sprintplan arkiverad under `---` längst ned.

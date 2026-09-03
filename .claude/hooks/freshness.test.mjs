@@ -279,6 +279,70 @@ describe('stampDossier end-to-end — the half that was covered by nothing', () 
     }
   });
 
+it('ger varje trigger en EGEN stämplingstid, och en ny post rör inte den gamlas', () => {
+    // BIN-1081. `firstStampedAt` is one date for the whole flag, so a path stamped days
+    // later inherited the oldest window and a genuine ghost there was harder to recognise.
+    // The pruner now dates each path's window against its own entry here.
+    //
+    // The second half is the one with history: a clock that is rewritten on every write
+    // moves its own deadline as fast as it ticks and nothing ever matures (BIN-1023).
+    const dir = makeFixture({ nodePath: 'src/contexts/WatchlistContext.tsx,src/lib/diary.ts' });
+    try {
+      runHook(
+        JSON.stringify({
+          tool_name: 'Edit',
+          tool_input: { file_path: 'src/contexts/WatchlistContext.tsx' },
+        }),
+        dir,
+      );
+      const first = JSON.parse(readFileSync(flagIn(dir), 'utf8'));
+      const firstStamp = first.triggerStampedAt['src/contexts/WatchlistContext.tsx'];
+      expect(typeof firstStamp).toBe('string');
+
+      runHook(
+        JSON.stringify({ tool_name: 'Edit', tool_input: { file_path: 'src/lib/diary.ts' } }),
+        dir,
+      );
+      const second = JSON.parse(readFileSync(flagIn(dir), 'utf8'));
+
+      // The newcomer has its own time…
+      expect(typeof second.triggerStampedAt['src/lib/diary.ts']).toBe('string');
+      // …and the earlier path still carries the time it was actually stamped at.
+      expect(second.triggerStampedAt['src/contexts/WatchlistContext.tsx']).toBe(firstStamp);
+      // Every trigger has one: a path in the array with no entry falls back to the
+      // flag-wide date, which is the pre-BIN-1081 behaviour this replaces.
+      expect(Object.keys(second.triggerStampedAt).sort()).toEqual(second.triggers);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('flyttar INTE en posts tid när samma fil stämplas igen', () => {
+    // FIRST stamp wins. Re-stamping the same path must not push its window forward — that
+    // is the ratchet-resets-its-own-memory failure, and it would make the per-entry time
+    // strictly worse than the flag-wide one it replaces.
+    const dir = makeFixture({ nodePath: 'src/lib/diary.ts' });
+    try {
+      const payload = JSON.stringify({
+        tool_name: 'Edit',
+        tool_input: { file_path: 'src/lib/diary.ts' },
+      });
+      runHook(payload, dir);
+      const before = JSON.parse(readFileSync(flagIn(dir), 'utf8'));
+      runHook(payload, dir);
+      const after = JSON.parse(readFileSync(flagIn(dir), 'utf8'));
+
+      expect(after.triggerStampedAt['src/lib/diary.ts'])
+        .toBe(before.triggerStampedAt['src/lib/diary.ts']);
+      // The control: the flag DID get written a second time, so the assertion above is
+      // about preservation and not about a hook that silently did nothing.
+      expect(after.lastStampedAt).not.toBe(before.lastStampedAt);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+
   it('does not duplicate a trigger stamped twice', () => {
     // `triggers` is a Set before it is written. Without that, a file edited ten times
     // appears ten times and the next session reads a work order that looks bigger than

@@ -15,11 +15,11 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync, realpathSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync, realpathSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { pruneTriggers, hasCommitSince, hasWorkingTreeChange, findRepoRoot, run } from './prune-map-flag.mjs';
+import { pruneTriggers, hasCommitSince, hasWorkingTreeChange, findRepoRoot, run, patchPaths, isHeldSince } from './prune-map-flag.mjs';
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const FLAG_REL = '.claude/state/workflow-map-stale.json';
@@ -77,7 +77,7 @@ function runScript(projectDir) {
 beforeEach(() => { dir = makeRepo(); });
 afterEach(() => { rmSync(dir, { recursive: true, force: true }); });
 
-describe('pruneTriggers — de tre grenarna', () => {
+describe('pruneTriggers — grenarna', () => {
   it('SLÄPPER en trigger som varken syns i trädet eller i någon commit sedan stämplingen', () => {
     const { kept, dropped } = pruneTriggers('/irrelevant', {
       firstStampedAt: '2026-09-01T00:00:00Z',
@@ -291,6 +291,228 @@ describe('skriptet som lefthook faktiskt kör', () => {
   });
 });
 
+describe('per trigger-fönstret (BIN-1081)', () => {
+  it('daterar mot postens EGEN tid, inte mot flaggans äldsta', () => {
+    // The defect: one `firstStampedAt` for the whole flag means a path stamped days later
+    // inherits the oldest window, and a genuine ghost there is less likely to be seen as one.
+    const seen = [];
+    pruneTriggers('/irrelevant', {
+      firstStampedAt: '2026-09-01T00:00:00Z',
+      triggerStampedAt: { 'src/sen.tsx': '2026-09-03T00:00:00Z' },
+      triggers: ['src/sen.tsx'],
+    }, {
+      workingTreeChange: () => false,
+      commitSince: (_root, _rel, since) => { seen.push(since); return false; },
+      heldFiles: () => [],
+    });
+
+    expect(seen).toEqual(['2026-09-03T00:00:00Z']);
+  });
+
+  it('faller tillbaka på firstStampedAt för en flagga skriven före fältet fanns', () => {
+    // The flag is gitignored and re-created per run, so there is no migration — but one
+    // written by yesterday's hook can be sitting there when this lands, and it must behave
+    // exactly as it did before rather than throw or silently keep everything.
+    const seen = [];
+    const { dropped } = pruneTriggers('/irrelevant', {
+      firstStampedAt: '2026-09-01T00:00:00Z',
+      triggers: ['src/gammal.tsx'],
+    }, {
+      workingTreeChange: () => false,
+      commitSince: (_root, _rel, since) => { seen.push(since); return false; },
+      heldFiles: () => [],
+    });
+
+    expect(seen).toEqual(['2026-09-01T00:00:00Z']);
+    expect(dropped).toEqual(['src/gammal.tsx']);
+  });
+});
+
+describe('patchPaths — sökvägarna läses ur INNEHÅLLET', () => {
+  it('tar sökvägarna ur +++-raderna och hoppar över /dev/null', () => {
+    // Never from the patch file's NAME: the names under sprint-patches/ come in at least
+    // three formats, and a name-based guess would be a second, unaudited path detector.
+    const patch = [
+      'diff --git a/src/en.tsx b/src/en.tsx',
+      '--- a/src/en.tsx',
+      '+++ b/src/en.tsx',
+      '@@ -1 +1 @@',
+      '-x',
+      '+y',
+      'diff --git a/src/raderad.tsx b/src/raderad.tsx',
+      '--- a/src/raderad.tsx',
+      '+++ /dev/null',
+    ].join('\n');
+
+    expect(patchPaths(patch)).toEqual(['src/en.tsx']);
+  });
+});
+
+describe('isHeldSince — gränsen', () => {
+  it('BEHÅLLER ett håll som ligger på exakt samma millisekund som stämplingen', () => {
+    // The boundary itself, because `>=` mutated to `>` leaves every other case in this
+    // file green: they are all an hour to either side. A same-millisecond collision means
+    // the hold was created no earlier than the stamp, which is the held case, not the ghost.
+    const stamp = '2026-09-01T12:00:00.000Z';
+    const held = [{ rel: 'src/grans.tsx', at: Date.parse(stamp) }];
+
+    expect(isHeldSince(held, 'src/grans.tsx', stamp)).toBe(true);
+    // The control: one millisecond earlier is a different hold and must NOT count.
+    expect(isHeldSince([{ rel: 'src/grans.tsx', at: Date.parse(stamp) - 1 }], 'src/grans.tsx', stamp))
+      .toBe(false);
+  });
+});
+
+describe('en HÅLLEN bunt är inget spöke (BIN-1082)', () => {
+  function writePatchFile(root, name, paths, mtimeIso) {
+    const pdir = join(root, '.claude', 'state', 'sprint-patches');
+    mkdirSync(pdir, { recursive: true });
+    const file = join(pdir, name);
+    writeFileSync(file, paths.map((p) => [
+      `diff --git a/${p} b/${p}`, `--- a/${p}`, `+++ b/${p}`, '@@ -1 +1 @@', '-x', '+y', '',
+    ].join('\n')).join(''));
+    const t = new Date(mtimeIso);
+    utimesSync(file, t, t);
+    return file;
+  }
+
+  function stashEdit(root, rel, whenIso) {
+    writeFileSync(join(root, rel), 'håller för senare');
+    execFileSync('git', ['stash', 'push', '-q', '-m', 'held', '--', rel], {
+      cwd: root,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, GIT_AUTHOR_DATE: whenIso, GIT_COMMITTER_DATE: whenIso },
+    });
+  }
+
+  function flagFor(rel) {
+    return {
+      map: 'docs/workflow-map.html',
+      triggers: [rel],
+      triggerStampedAt: { [rel]: '2026-09-01T12:00:00Z' },
+      firstStampedAt: '2026-09-01T12:00:00Z',
+      lastStampedAt: '2026-09-01T12:00:00Z',
+    };
+  }
+
+  it('BEHÅLLER en trigger som ligger i en patchfil skriven EFTER stämplingen', () => {
+    commitFile(dir, 'src/hallen.tsx', 'x', '2026-09-01T10:00:00+0000');
+    writeFlag(dir, flagFor('src/hallen.tsx'));
+    writePatchFile(dir, 'batch-7.patch', ['src/hallen.tsx'], '2026-09-01T13:00:00Z');
+
+    expect(runScript(dir)).toBe('');
+    const flag = JSON.parse(readFileSync(join(dir, FLAG_REL), 'utf8'));
+    expect(flag.triggers).toEqual(['src/hallen.tsx']);
+  });
+
+  it('SLÄPPER ändå när patchfilen är äldre än stämplingen — datumgrinden är hela poängen', () => {
+    // Without it, the patch files sitting in that directory since August would keep their
+    // paths alive forever and BIN-790's prune would be inert. This is the direction that
+    // fails silently, so it gets its own case with literal dates.
+    commitFile(dir, 'src/spoke.tsx', 'x', '2026-09-01T10:00:00+0000');
+    writeFlag(dir, flagFor('src/spoke.tsx'));
+    writePatchFile(dir, 'batch-gammal.patch', ['src/spoke.tsx'], '2026-09-01T11:00:00Z');
+
+    expect(runScript(dir)).toContain('släppte 1 spöktrigger');
+    expect(existsSync(join(dir, FLAG_REL))).toBe(false);
+  });
+
+  it('BEHÅLLER en trigger som ligger i en stash gjord EFTER stämplingen', () => {
+    commitFile(dir, 'src/stashad.tsx', 'x', '2026-09-01T10:00:00+0000');
+    stashEdit(dir, 'src/stashad.tsx', '2026-09-01T13:00:00+0000');
+    writeFlag(dir, flagFor('src/stashad.tsx'));
+
+    expect(runScript(dir)).toBe('');
+    const flag = JSON.parse(readFileSync(join(dir, FLAG_REL), 'utf8'));
+    expect(flag.triggers).toEqual(['src/stashad.tsx']);
+  });
+
+  it('BEHÅLLER en trigger vars fil bara SKAPADES i en stash (-u)', () => {
+    // `git stash show` reports nothing about untracked files unless it is asked to. Without
+    // `--include-untracked` a withdrawn batch that ADDED a file under a mapped directory is
+    // still dropped as a ghost — the direction that loses a work order, and the one this whole
+    // script exists to avoid. The file is untracked AND stashed away, so neither of the two
+    // cheap questions can keep it: only the hold can.
+    mkdirSync(join(dir, 'src'), { recursive: true });
+    writeFileSync(join(dir, 'src', 'nyskapad.tsx'), 'ny fil, hålls för senare');
+    execFileSync('git', ['stash', 'push', '-q', '-u', '-m', 'held-new', '--', 'src/nyskapad.tsx'], {
+      cwd: dir,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, GIT_AUTHOR_DATE: '2026-09-01T13:00:00+0000', GIT_COMMITTER_DATE: '2026-09-01T13:00:00+0000' },
+    });
+    writeFlag(dir, flagFor('src/nyskapad.tsx'));
+
+    expect(runScript(dir)).toBe('');
+    const flag = JSON.parse(readFileSync(join(dir, FLAG_REL), 'utf8'));
+    expect(flag.triggers).toEqual(['src/nyskapad.tsx']);
+  });
+  it('SLÄPPER ändå när stashen är äldre än stämplingen', () => {
+    commitFile(dir, 'src/gammal-stash.tsx', 'x', '2026-09-01T10:00:00+0000');
+    stashEdit(dir, 'src/gammal-stash.tsx', '2026-09-01T11:00:00+0000');
+    writeFlag(dir, flagFor('src/gammal-stash.tsx'));
+
+    expect(runScript(dir)).toContain('släppte 1 spöktrigger');
+  });
+
+  it('skriver INGENTING tillbaka till flaggan när hållet är det som räddar den', () => {
+    // A KEEP that quietly re-stamped would be the clock-resets-itself failure wearing this
+    // ticket's clothes: the window would move forward every commit and never run out.
+    commitFile(dir, 'src/orord.tsx', 'x', '2026-09-01T10:00:00+0000');
+    writeFlag(dir, flagFor('src/orord.tsx'));
+    writePatchFile(dir, 'batch-9.patch', ['src/orord.tsx'], '2026-09-01T13:00:00Z');
+    const before = readFileSync(join(dir, FLAG_REL), 'utf8');
+
+    runScript(dir);
+
+    expect(readFileSync(join(dir, FLAG_REL), 'utf8')).toBe(before);
+  });
+
+  it('tar bort ett SLÄPPT spökes stämplingstid ur flaggan', () => {
+    // Left behind, it would hand a later stamp of the same path the old, wider window back.
+    commitFile(dir, 'src/spoke.tsx', 'x', '2026-09-01T10:00:00+0000');
+    commitFile(dir, 'src/levande.tsx', 'x', '2026-09-01T10:00:00+0000');
+    writeFileSync(join(dir, 'src/levande.tsx'), 'redigerad, inte committad');
+    writeFlag(dir, {
+      map: 'docs/workflow-map.html',
+      triggers: ['src/levande.tsx', 'src/spoke.tsx'],
+      triggerStampedAt: {
+        'src/levande.tsx': '2026-09-01T12:00:00Z',
+        'src/spoke.tsx': '2026-09-01T12:00:00Z',
+      },
+      firstStampedAt: '2026-09-01T12:00:00Z',
+    });
+
+    runScript(dir);
+
+    const flag = JSON.parse(readFileSync(join(dir, FLAG_REL), 'utf8'));
+    expect(flag.triggers).toEqual(['src/levande.tsx']);
+    expect(Object.keys(flag.triggerStampedAt)).toEqual(['src/levande.tsx']);
+  });
+
+  it('frågar efter hållet arbete EN gång, inte en gång per trigger', () => {
+    // The stash list and the patch directory give the same answer for every trigger. Asking
+    // per trigger is O(triggers × stashes), and this repo has held 55 stashes at once.
+    // Counted, not read out of the source — the lesson one describe block down.
+    commitFile(dir, 'src/a.tsx', 'x', '2026-09-01T10:00:00+0000');
+    commitFile(dir, 'src/b.tsx', 'x', '2026-09-01T10:00:00+0000');
+    commitFile(dir, 'src/c.tsx', 'x', '2026-09-01T10:00:00+0000');
+    writeFlag(dir, {
+      triggers: ['src/a.tsx', 'src/b.tsx', 'src/c.tsx'],
+      firstStampedAt: '2026-09-01T12:00:00Z',
+    });
+
+    const stashListCalls = [];
+    const counting = (_root, args) => {
+      if (args[0] === 'stash' && args[1] === 'list') stashListCalls.push(args.join(' '));
+      return '';
+    };
+
+    run({ cwd: dir, projectDir: null, gitRunner: counting, out: { write: () => {} } });
+
+    expect(stashListCalls.length).toBe(1);
+  });
+});
+
 describe('den billiga vägen är verkligen billig', () => {
   it('kör NOLL git-subprocesser när flaggan saknas — RÄKNADE, inte lästa ur källan', () => {
     // Den tidiga returen är vad som ersätter glob-gaten, så den är värd ett test: en
@@ -369,5 +591,15 @@ describe('flaggans sökväg är samma sträng som stämplarens', () => {
     const stamper = readFileSync(join(REPO_ROOT, '.claude', 'hooks', 'freshness.mjs'), 'utf8');
 
     expect(stamper).toContain(`const FLAG_REL = '${FLAG_REL}';`);
+  });
+
+  it('och triggerStampedAt-fältet heter samma sak på båda sidor', () => {
+    // The pruner reads this key; the stamper writes it. Both are bare literals, and a rename
+    // carried out consistently on the stamper side leaves `pruneTriggers` reading a dead key and
+    // falling back to the flag-wide date — BIN-1081 silently reverted, whole suite green, and no
+    // diff to show it because the flag is gitignored. Same class as FLAG_REL one test up.
+    const stamper = readFileSync(join(REPO_ROOT, '.claude', 'hooks', 'freshness.mjs'), 'utf8');
+
+    expect(stamper).toContain('flag.triggerStampedAt = stampedAt;');
   });
 });

@@ -23,11 +23,18 @@
 //
 // A bare HEAD comparison fires between 2 and 3 — exactly when the note is needed most.
 //
-// THE RULE, therefore, asks both questions rather than one. Per trigger:
+// THE RULE, therefore, asks more than one question. Per trigger, in this order:
 //
-//   • the file differs from HEAD in the working tree      → KEEP (the edit is still live)
-//   • no commit since `firstStampedAt` touched the file   → DROP (ghost: it was withdrawn)
-//   • otherwise                                            → KEEP (committed, map lagging)
+//   • the file differs from HEAD in the working tree       → KEEP (the edit is still live)
+//   • a commit since the trigger's stamp touched the file  → KEEP (committed, map lagging)
+//   • a stash or a parked patch file, created AFTER that
+//     stamp, names the file                                → KEEP (held to land later)
+//   • none of those                                        → DROP (ghost: it was withdrawn)
+//
+// The third question is BIN-1082: a batch that is stashed or parked as a patch file under
+// `.claude/state/sprint-patches/` satisfies neither of the first two, so it looked exactly
+// like a ghost and its work order was deleted — and the later landing stamps nothing,
+// because `freshness.mjs` is a PostToolUse hook and sees no git operation (BIN-969).
 //
 // NEVER BLOCKS. This exits 0 unconditionally — on a corrupt flag, a missing flag, a failing
 // git call, anything. It is a cleanup, not a gate, and that is what keeps it outside the
@@ -40,12 +47,13 @@
 // flags at the moment it is pulled. That lives in the sprint engine under
 // `C:/claude-plugins` and is point 2 of BIN-790.
 
-import { readFileSync, writeFileSync, unlinkSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, unlinkSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const FLAG_REL = '.claude/state/workflow-map-stale.json';
+const PATCH_DIR_REL = '.claude/state/sprint-patches';
 
 /**
  * The repo root, resolved WITHOUT spawning anything.
@@ -98,7 +106,114 @@ export function hasCommitSince(root, rel, since, run = git) {
 }
 
 /**
- * Which triggers survive. Pure, so the three branches are testable without a repo.
+ * Every path named INSIDE a unified diff, from its `+++ b/<path>` lines.
+ *
+ * Read from the CONTENT, never from the patch file's NAME. The names under
+ * `.claude/state/sprint-patches/` come in at least three formats
+ * (`2026-08-01-batch-1.patch`, `batch-0-20260804-212000.patch`,
+ * `batch-1-2026-08-03-onboarding-continuity.patch`), so a name-based guess would be a
+ * second, unaudited path detector sitting next to this one.
+ *
+ * `/dev/null` is what git writes on the plus side of a deletion; it is not a path.
+ */
+export function patchPaths(text) {
+  const paths = new Set();
+  for (const line of String(text).split(/\r?\n/)) {
+    if (!line.startsWith('+++ ')) continue;
+    let p = line.slice(4).trim().replace(/\t.*$/, '');
+    if (p === '/dev/null') continue;
+    p = p.replace(/^b\//, '');
+    if (p) paths.add(p);
+  }
+  return [...paths];
+}
+
+/**
+ * Files that are being HELD for later — sitting in a stash, or parked as a patch file
+ * under `.claude/state/sprint-patches/` — each with the time that hold was created.
+ *
+ * WHY THIS EXISTS (BIN-1082). The two questions above cannot tell "withdrawn for good"
+ * from "held to land later": a stashed or parked batch is unchanged vs HEAD and has no
+ * commit since the stamp, so it looks exactly like a ghost and its work order is deleted.
+ * The landing itself stamps nothing — `freshness.mjs` is a PostToolUse hook and sees no
+ * git operation, which is BIN-969's accepted gap — so once dropped, nothing brings it back.
+ *
+ * WHICH CLOCK. A patch file is dated by its FILESYSTEM MTIME, and a stash by its own commit
+ * date. Both are compared as epoch milliseconds against `Date.parse` of the trigger's
+ * ISO-8601 stamp, so no local-offset string compare is involved (the BIN-1050 footgun
+ * `hasCommitSince` documents one function up). A date embedded in a patch FILENAME is a
+ * different clock and is deliberately not read.
+ *
+ * Returns [] on any failure — a hold we could not enumerate must not silently become a
+ * KEEP for everything, and the caller's other two questions still stand.
+ */
+export function collectHeld(root, deps = {}) {
+  const {
+    gitRunner = git,
+    readDir = readdirSync,
+    readFile = readFileSync,
+    statFile = statSync,
+  } = deps;
+  const held = [];
+
+  // Stashes. `%gd` is the ref (stash@{0}), `%cI` its ISO-8601 date with an explicit offset.
+  try {
+    const list = gitRunner(root, ['stash', 'list', '--format=%gd%x09%cI']).trim();
+    for (const line of list ? list.split(/\r?\n/) : []) {
+      const [ref, iso] = line.split('\t');
+      if (!ref || !iso) continue;
+      const at = Date.parse(iso);
+      if (Number.isNaN(at)) continue;
+      let names = '';
+      // `--include-untracked` is not optional: without it a batch stashed with `git stash push -u`
+      // reports none of the files it CREATED, and a withdrawn batch that added a file under a
+      // mapped directory would still be dropped as a ghost — the direction that loses a work order.
+      try {
+        names = gitRunner(root, ['stash', 'show', '--include-untracked', '--name-only', '--format=', ref]);
+      } catch { continue; }
+      for (const rel of names.split(/\r?\n/).map((n) => n.trim()).filter(Boolean)) {
+        held.push({ rel, at });
+      }
+    }
+  } catch { /* no stashes, or git could not answer */ }
+
+  // Parked patch files.
+  try {
+    const dir = join(root, PATCH_DIR_REL);
+    for (const name of readDir(dir)) {
+      if (!name.endsWith('.patch')) continue;
+      const file = join(dir, name);
+      let at;
+      try { at = statFile(file).mtimeMs; } catch { continue; }
+      let text = '';
+      try { text = readFile(file, 'utf8'); } catch { continue; }
+      for (const rel of patchPaths(text)) held.push({ rel, at });
+    }
+  } catch { /* the directory may not exist */ }
+
+  return held;
+}
+
+/**
+ * Is this path held by something created AFTER it was stamped?
+ *
+ * The date gate is not optional. `.claude/state/sprint-patches/` keeps patch files going
+ * back months, and every one of them names paths that landed long ago. Without the gate a
+ * single old file would keep its paths' triggers alive forever, and BIN-790's prune would
+ * be inert — which is the opposite failure, and a silent one.
+ *
+ * The direction is the one the timeline gives: the hook stamps when the edit is made, and a
+ * batch can only be withdrawn afterwards. So a hold older than the stamp describes different
+ * work on the same path, and says nothing about this trigger.
+ */
+export function isHeldSince(held, rel, since) {
+  const stampedAt = Date.parse(since);
+  if (Number.isNaN(stampedAt)) return false;
+  return held.some((h) => h.rel === rel && h.at >= stampedAt);
+}
+
+/**
+ * Which triggers survive. Every probe is injectable, so each branch is testable without a repo.
  *
  * Anything that throws while probing a single trigger KEEPS that trigger: a git call we
  * could not answer must never be read as "the edit was withdrawn".
@@ -107,18 +222,36 @@ export function pruneTriggers(root, flag, deps = {}) {
   const {
     workingTreeChange = hasWorkingTreeChange,
     commitSince = hasCommitSince,
+    heldFiles = collectHeld,
     gitRunner = git,
   } = deps;
-  const since = flag.firstStampedAt;
   const kept = [];
   const dropped = [];
+
+  // Enumerated at most ONCE per run, and only once a trigger has already failed the two
+  // cheap questions: the stash list and the patch directory give the same answer for every
+  // trigger, so asking per trigger would cost O(triggers × stashes) on a repo that has held
+  // 55 stashes at once. `null` means "not asked yet".
+  let held = null;
+  const heldOnce = () => {
+    if (held === null) {
+      try { held = heldFiles(root, { gitRunner }); } catch { held = []; }
+    }
+    return held;
+  };
+
   for (const rel of flag.triggers ?? []) {
+    // This path's OWN stamp (BIN-1081), falling back to the flag-wide one for a flag written
+    // before that field existed. No date at all means we cannot tell a ghost from a
+    // committed edit, so we keep it.
+    const since = (flag.triggerStampedAt || {})[rel] || flag.firstStampedAt;
     let live = true;
     try {
-      // No `firstStampedAt` means we cannot date the search window, so we cannot tell a
-      // ghost from a committed edit. Keep it.
       if (since) {
-        live = workingTreeChange(root, rel, gitRunner) || commitSince(root, rel, since, gitRunner);
+        live =
+          workingTreeChange(root, rel, gitRunner) ||
+          commitSince(root, rel, since, gitRunner) ||
+          isHeldSince(heldOnce(), rel, since);
       }
     } catch {
       live = true;
@@ -173,7 +306,7 @@ export function run({
   // invisibility the flag itself keeps producing.
   out.write(
     `[map-flag] släppte ${dropped.length} spöktrigger (oförändrad mot HEAD, ingen commit ` +
-      `sedan ${flag.firstStampedAt}): ${dropped.join(', ')}\n`,
+      `sedan stämplingen, inte hållen i stash eller patchfil): ${dropped.join(', ')}\n`,
   );
 
   try {
@@ -181,7 +314,16 @@ export function run({
       unlinkSync(flagPath);
       out.write('[map-flag] inga triggers kvar — flaggan raderad.\n');
     } else {
-      writeFileSync(flagPath, JSON.stringify({ ...flag, triggers: kept }, null, 2) + '\n');
+      // A dropped path's stamp goes with it. Leaving it behind would hand a LATER stamp of
+      // the same path the old, wider window back — which is the whole defect BIN-1081 closes.
+      const next = { ...flag, triggers: kept };
+      if (flag.triggerStampedAt && typeof flag.triggerStampedAt === 'object') {
+        next.triggerStampedAt = Object.fromEntries(
+          kept.filter((k) => flag.triggerStampedAt[k] !== undefined)
+            .map((k) => [k, flag.triggerStampedAt[k]]),
+        );
+      }
+      writeFileSync(flagPath, JSON.stringify(next, null, 2) + '\n');
     }
   } catch { /* fail open */ }
 }
