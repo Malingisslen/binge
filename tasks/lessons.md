@@ -1262,3 +1262,38 @@ annan fil som pekade på talet som inte längre fanns; och jag strök ett påst�
 ersatte det med "utfallet står i avvikelseloggen", där `grep -c BIN-1080
 .claude/rules/accepted-deviations.md` ger 0. Den formen som höll varje gång var densamma: peka på
 biljetten, namnge parametrarna, ta bort kvantifikatorn.
+
+### [Design] Nar bada de arliga svaren pa "ska filen granskas?" ar fel, granska en NYCKEL (2026-09-03, BIN-990)
+
+**Trigger:** en fil som slar pa ett skydd, men som ocksa andras av skal som inte ror skyddet.
+
+**Regel:** grinda nyckeln, inte sokvagen -- och bygg armen i VARJE grind som laser samma
+konfig, inte bara den som fallde. `.claude/settings.json` registrerar granskningshookarna
+och har tva toppnycklar, `permissions` och `hooks`. Att grinda hela sokvagen kostar en
+granskarkorning per behorighetsandring; att lata bli lamnar hookarna avvapningsbara utan
+vittne. `keyed` faller bara nar vardet vid en namngiven toppnyckel skiljer sig mellan de
+tva sidor grinden jamfor.
+
+**Fallan:** de tva sidorna ar OLIKA i olika grindar. Commit-grinden jamfor HEAD mot indexet;
+push-grinden maste jamfora intervallets bas mot HEAD, sa commit-versionen gar inte att
+ateranvanda ordagrant. Jag byggde bara commit-halvan; rollkritiken (#25) gjorde port till
+push-grinden till ett villkor for att slappa den forsta. En ny matchartyp ar dessutom en
+fjarde form av tyst drift for varje HANDKOPIERAD modell av hooken -- har tva test-mirrors -
+och de uppraknande meningarna intill dem blir falska i samma commit.
+
+**Bevis som holl:** stang av matcharen och rakna vilka fixturer som faller; tvinga den till
+sant och rakna igen. Ny fil, raderad fil och oparsbar JSON ska ALLA falla.
+
+### [Workflow] En fil kan ha BLANDADE radslut, sa ett ankare med radslut i sig matchar noll (2026-09-03, BIN-990)
+
+**Trigger:** ett flerradigt sok-och-ersatt mot en fil du inte skrev sjalv.
+
+**Regel:** normalisera bada sidor fore jamforelsen och skriv tillbaka filens egna radslut,
+eller ankra pa EN rad utan radslut. `test/run-fixtures.mjs` har `
+` pa en rad och `
+` pa
+nasta; ett fyrradigt ankare gav "0 traffar" tre forsok i rad medan `grep` visade raden.
+Samma runda: `String.replace(a, b)` expanderar `$'` inne i `b` till "allt efter traffen" och
+at slutet av ett regex -- anvand en funktionsersattare. Och ett radbrytningsescape skrivet
+via en heredoc kollapsade till ett riktigt styrtecken FJARDE gangen; `String.fromCharCode(10)`
+ar den enda form som haller.
