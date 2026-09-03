@@ -1,12 +1,10 @@
-# Sprint 2026-09-02b — tre byggbuntar + en mätning utan diff
+# Sprint 2026-09-02b
 
 Föregående sprintplan arkiverad under `---` längst ned.
 
 ## Urval
 
 Backloggen hade 23 öppna biljetter; noll låg i Todo eller In Progress vid urvalet.
-Tre byggs, en avgörs med en mätning som inte producerar någon diff, resten står under
-"Inte valda" med ett skäl per grupp.
 
 Skälen som dominerar bortvalet är fyra:
 
@@ -17,8 +15,8 @@ Skälen som dominerar bortvalet är fyra:
 * **Bor i `C:/claude-plugins`** och kräver en egen session i det repot (BIN-1052,
   BIN-1013, BIN-1035, BIN-959). Lärdomen 2026-08-03: en session som rör delad infra och
   sedan startar subagenter förgiftar dem — och den här sessionen startar granskare.
-* **Ops-blockerad eller uttryckligen framskjuten** (BIN-1071 kräver en människa med
-  webbläsare; BIN-454/BIN-402 är pinnade till ~nov och rör den förbjudna `mutateEnabled`;
+* **Ops-blockerad eller uttryckligen framskjuten** (BIN-454/BIN-402 är pinnade till ~nov
+  och rör den förbjudna `mutateEnabled`;
   BIN-824 byggs uttryckligen inte förrän spärrhakens luft är förbrukad; BIN-624 halva 2
   förutsätter en nollräkning på skarp data som aldrig kördes; BIN-613 väljer mellan tre
   alternativ i deploy-kedjan och är nästa naturliga bunt när budget finns).
@@ -274,7 +272,6 @@ avsnitt finns för att "ingen diff" annars är omöjlig att skilja från "aldrig
 | BIN-990, BIN-939, BIN-1075 | Biljetterna säger själva att valet är Malins. |
 | BIN-624 | Halva 2 förutsätter en nollräkning på skarp data som #4 mätte aldrig kördes. |
 | BIN-1052, BIN-1013, BIN-1035, BIN-959 | Bor i `C:/claude-plugins`; kräver egen session i det repot. |
-| BIN-1071 | Tier D — tre prissidor kräver en människa med vanlig webbläsare. |
 | BIN-454, BIN-402 | Pinnade till ~nov; rör `mutateEnabled`, som en sprint aldrig får flippa. |
 | BIN-824 | Byggs uttryckligen inte förrän spärrhakens luft är förbrukad, och då med GSC-data. |
 | BIN-613 | Väljer mellan tre alternativ i deploy-kedjan; nästa naturliga bunt när budget finns. |
@@ -282,19 +279,66 @@ avsnitt finns för att "ingen diff" annars är omöjlig att skilja från "aldrig
 
 ## Behöver dig (Tier D)
 
-* **BIN-1071** — Crunchyroll, YouTube Premium och SkyShowtimes reklamnivå gick inte att
-  läsa maskinellt. Öppna de tre sidorna i en vanlig webbläsare och skriv priserna i
-  biljetten, så tar nästa körning in dem.
+Inget kvar.
 
 ## Efter sprinten
 
 1. `npm run lint`, `npm run typecheck`, hela `npm test`.
 2. Följdbiljetter filas FÖRE commit.
 3. Routningen körs om på `git diff --cached --name-only` per commit; buntarna committas
-   splittat så att varje commits filuppsättning routar till en kritik som faktiskt kördes
-   (A → [11], B → [25], C → [15]).
+   splittat så att varje commits filuppsättning routar till en kritik som faktiskt kördes.
 4. Push (= deploy), invänta grön körning, purga Cloudflare.
 5. Linear-transitioner PARVIS med varje commit (BIN-754).
+
+## Bunt E — BIN-1071: de tre prissidorna som krävde en människa [Tier A]
+
+Tillkom EFTER urvalet. Biljetten låg som Tier D — den automatiska prisagenten kom inte åt
+tre svenska storefronts 2026-09-02 (Crunchyroll svarade felsida, YouTube Premium
+samtyckesvägg, SkyShowtimes flik "Med reklam" gick inte att klicka). Malin öppnade dem i
+vanlig webbläsare och skickade skärmbilder, vilket lyfter ops-blockeringen: det som var
+omätbart är nu mätt, av en människa, förstahands.
+
+```
+node docs/org/route.mjs src/lib/tmdb/providers.ts
+```
+→ `tier: medium`, `reasonCode: owned`, `panel: [11]` (#11 Localization / i18n).
+`dropped`: 3, 5, 10, 13, 15, 24. Samma säte som bunt A, och kritiken kördes före bygget.
+
+### Vad storefronterna visade
+
+| tjänst | katalogen före | storefronten 2026-09-03 |
+| -- | -- | -- |
+| Crunchyroll Fan / Mega Fan | 85 / 99 | 85 / 99 — oförändrat |
+| YouTube Enskild / Familj / Student | 149 / 279 / 95 | 169 / 309 / 109 |
+| SkyShowtime reklam | 59 | 69 |
+
+Biljettens sekundärkällor förutsade YouTubes 169 och 309 men uppgav Student som OFÖRÄNDRAD
+på 95. Storefronten säger 109, så de hade fel, och höjningen har slagit igenom tidigare än
+den oktober de angav. Crunchyrolls befarade höjning har inte nått Sverige.
+
+### Acceptanskriterier — #11:s sex bindande villkor
+
+1. Diffen rör bara `cost`/`defaultMonthlyCost` på YouTube- och SkyShowtime-posterna plus
+   kommentarer; noll värdebytes i Crunchyrolls `id: 323`-objekt. *(kind: diff)*
+2. YouTube slutar på exakt `student: 109`, `solo: 169`, `family: 309`,
+   `defaultMonthlyCost: 169`. *(kind: diff)*
+3. SkyShowtime slutar på exakt `ads: 69`, med `standard: 109`, `premium: 159` och
+   `defaultMonthlyCost: 109` orörda. *(kind: diff)*
+4. Varje ändring bär en `// live-verifierat 2026-09-03 — <url>`-kommentar i
+   `docs/price-agent-runbook.md`:s form, och INGEN kommentar övertolkar skärmbilden som
+   fullständig. *(kind: diff, negativt villkor)*
+5. SkyShowtimes 2026-07-02-notering står kvar och den nya läggs TILL — inte i stället för.
+   Det är samma villkor #11 loggade på den här filen dagen före (BIN-1070), och första
+   utkastet bröt mot det. *(kind: diff)*
+6. `npm run lint`, `npm run typecheck` och hela `npm test` gröna. *(kind: diff)*
+
+### Vad som INTE byggs
+
+Årspriserna och bindningspriserna som skärmbilderna också visade (Crunchyroll 850/990 per år,
+SkyShowtime 6 och 12 månader). Katalogen bär ett månadstal per nivå och har aldrig burit en
+andra faktureringsdimension; att införa en är en egen ändring. En eventuell tredje
+Crunchyroll-nivå eller YouTubes Premium Lite syntes inte i skärmbilderna, och en ny nivå
+klassas för hand enligt driftboken — aldrig av ett svep.
 
 ## Deviation log
 

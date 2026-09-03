@@ -127,6 +127,12 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
     // live-verifierat 2026-07-05 — https://www.crunchyroll.com/premium (SE, VAT-inkl.):
     // Fan 85 / Mega Fan 99. Var 89/119 (för högt); den påstådda 199 kr var fel — SE har
     // bara två nivåer och de ligger LÄGRE än katalogen tidigare visade (BIN-406).
+    // live-verifierat 2026-09-03 — https://www.crunchyroll.com/sv-se/premium — Malin läste
+    // storefronten i vanlig webbläsare; agenten fick en felsida på varje URL (BIN-1071).
+    // Fan 85 och Mega Fan 99 står kvar oförändrade: den prishöjning biljettens sekundärkällor
+    // varnade för har inte nått Sverige. Skärmbilden visade två nivåer; fanns en tredje under
+    // vikningen syntes den inte, och en ny nivå klassas för hand.
+    // Katalogen modellerar inte årspriserna (850 respektive 990).
     id: 323, name: 'Crunchyroll', shortName: 'CR', color: '#F47521', type: 'flatrate', defaultMonthlyCost: 85,
     // 1968 = "Crunchyroll Amazon Channel" (live-verifierat SE-id 2026-06-10).
     // 283 = TMDB:s nuvarande bas-id för Crunchyroll på titel-nivå (live-verifierat
@@ -140,25 +146,35 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
   },
   {
     // live-verifierat 2026-07-02 — https://www.skyshowtime.com/se (höjning bekräftad feb 2026)
+    // live-verifierat 2026-09-03 — https://www.skyshowtime.com/se — Malin läste storefronten
+    // i vanlig webbläsare; den automatiska agenten kom aldrig åt fliken "Med reklam" (BIN-1071).
+    // Reklam-nivån var 59 och är 69. Standard 109 och Premium 159 lästes om och står kvar.
+    // Skärmbilden visade också bindningspriser (6 och 12 mån) som katalogen inte modellerar.
     id: 431, name: 'SkyShowtime', shortName: 'Sky', color: '#0D1D40', type: 'flatrate', defaultMonthlyCost: 109,
     // 1773 = TMDB:s nuvarande SE-id för SkyShowtime (katalog-endpoint 2026-06-20). (BIN-64)
     // 531 = nedlagda Paramount+ (SE-nedläggning 2022-10-01, uppgick i SkyShowtime — BIN-404);
     // aliasa hit så gammal sparad Paramount+-data + ev. TMDB-titlar mappar till efterträdaren.
     aliases: [1773, 531],
     tiers: [
-      { id: 'ads', name: 'Standard med annonser', cost: 59 },
+      { id: 'ads', name: 'Standard med annonser', cost: 69 },
       { id: 'standard', name: 'Standard', cost: 109 },
       { id: 'premium', name: 'Premium', cost: 159 },
     ],
   },
   {
-    id: 335, name: 'YouTube Premium', shortName: 'YT', color: '#FF0000', type: 'flatrate', defaultMonthlyCost: 149,
+    // live-verifierat 2026-09-03 — https://www.youtube.com/premium — Malin läste storefronten
+    // i vanlig webbläsare; agenten fastnade på samtyckesväggen (BIN-1071). Höjningen har
+    // alltså slagit igenom, tidigare än den oktober biljettens sekundärkällor angav — och de
+    // hade dessutom fel om Student, som de uppgav vara oförändrad på 95. Storefronten: 109.
+    // Skärmbilden visade tre kort (Enskild, Familj, Student); om Premium Lite finns i SE syntes
+    // den inte, och en ny nivå läggs aldrig till utan att klassas för hand.
+    id: 335, name: 'YouTube Premium', shortName: 'YT', color: '#FF0000', type: 'flatrate', defaultMonthlyCost: 169,
     // 188 = TMDB:s nuvarande SE-id för YouTube Premium (katalog-endpoint 2026-06-20). (BIN-64)
     aliases: [188],
     tiers: [
-      { id: 'student', name: 'Student', cost: 95 },
-      { id: 'solo', name: 'Enskild', cost: 149 },
-      { id: 'family', name: 'Familj', cost: 279 },
+      { id: 'student', name: 'Student', cost: 109 },
+      { id: 'solo', name: 'Enskild', cost: 169 },
+      { id: 'family', name: 'Familj', cost: 309 },
     ],
   },
   // 497 / 517 = TMDB:s nuvarande SE-id:n för Tele2 Play / TriArt Play
