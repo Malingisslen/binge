@@ -36,6 +36,16 @@ as a finding is noise, not diligence — a genuinely new deviation gets appended
   collector: a new user-owned subcollection MUST be added here or deletion leaks data).
 - Auth surfaces: `AuthContext`, `passwordStrength`, email verification, App Check.
 - Anything reading/writing another user's data (blocking, following, groups, sessions).
+- `package.json` — the dependency manifest, added to your gate by BIN-939. Three things,
+  and only these three: (a) a new or changed `scripts` entry that runs at install time
+  (`preinstall`, `install`, `postinstall`, `prepare`) — that is code executing on every
+  machine that installs, the classic supply-chain vector; (b) a package added to
+  `dependencies` rather than `devDependencies`. Where that lands depends on which manifest
+  you are looking at: the root one belongs to a client-side SPA, so a production dependency
+  reaches every visitor's browser, while `functions/package.json` — which this gate also
+  matches — reaches Cloud Functions. (c) A package name shaped like a typosquat of a real
+  one. You are NOT asked to audit versions for known CVEs — `npm audit` does that,
+  deliberately advisory (BIN-344).
 
 ## What to check
 1. `git diff --cached` for the scoped paths.

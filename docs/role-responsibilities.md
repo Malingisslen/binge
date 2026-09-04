@@ -526,8 +526,13 @@ Owns the process.
 - **The commit-gate roster itself** — which reviewer agent blocks which staged path
   (`reviewGates`), and the decided-deviations ledger that tells a reviewer what it may
   NOT flag. Removing a pattern from either quietly disarms a gate, so the file that
-  decides who reviews everything else needs an owner of its own (BIN-851).
-  → `.claude/shared-plugin.json`, `.claude/rules/accepted-deviations.md`
+  decides who reviews everything else needs an owner of its own (BIN-851). The strike rule
+  joined this bullet in BIN-1084: the rule that a wrong sentence is DELETED rather than
+  reworded, with its three carve-outs, lives in `.claude/rules/code-style.md`, and BIN-959
+  made the commit gate POINT at that file. That moved the authority to a file no gate
+  here stopped. lessons-digest.md is deliberately not
+  owned.
+  → `.claude/shared-plugin.json`, `.claude/rules/accepted-deviations.md`, `.claude/rules/code-style.md`
 - **The reviewers' own instruction files and the hooks that stamp their state**
   (BIN-869). Editing what a reviewer is told to look for disarms a gate exactly as
   effectively as deleting its pattern, and until now both routed `skip` and matched

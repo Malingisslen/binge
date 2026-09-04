@@ -1,3 +1,134 @@
+# Sprint 2026-09-03c
+
+Föregående sprintplan arkiverad under `---` längst ned.
+
+## Urval
+
+Två biljetter, båda avblockerade av Malins beslutsrunda 2026-09-03 (svaren står som
+kommentarer på biljetterna och är bindande). Hon bad uttryckligen om att de två minsta
+togs direkt.
+
+Routning, körd före kritiken:
+
+```
+node docs/org/route.mjs --md .claude/shared-plugin.json
+```
+→ Tier **medium** · #25 Engineering Manager / Release Manager.
+
+Routningen körs OM på `git diff --cached --name-only` omedelbart före commit — buntens
+filuppsättning växer med ägarkartan och rolldokumentet, och en krympt eller vidgad union
+kan flytta panelen (BIN-1052/1050/938).
+
+## BIN-1084 — kodstilsfilen får en granskare [Tier A]
+
+Malins beslut: **alternativ 2**, grinda bara `.claude/rules/code-style.md`, inte katalogen.
+
+### #25:s blinda kritik före bygget — pass-with-conditions, fem must-haves
+
+Kritikens huvudfynd: planen gjorde bara HALVA fixen. `.claude/rules/code-style.md` har
+ingen ägare i `docs/role-responsibilities.md`, och det är DÄRFÖR den routar `skip`. Att
+lägga till ett grindmönster utan att ge filen en ägare fäller `gate-symmetry.test.mjs`
+regel B — "inget som grinden blockerar får routa `skip` på den rådgivande sidan" —
+deterministiskt. Samma tvålistefel som nio tidigare biljetter stängt.
+
+Bindande acceptanskriterier:
+
+1. `diff` — mönstret läggs i `binge-integration-reviewer`s `patterns` som ett ankrat
+   regex, INTE i `exact` och inte som `keyed`. Skälet: `exact` används av noll levande
+   grindar, och `keyed` är till för filer där bara en JSON-nyckel ska grindas — en
+   Markdown-fil har ingen sådan nyckel. Daterat `_note` enligt filens konvention.
+2. `diff` — SAMMA COMMIT ger filen en ägare under `docs/role-responsibilities.md` §25 och
+   regenererar `docs/org/ownership-map.json` med `node docs/org/gen-ownership-map.mjs`.
+   Aldrig handredigera JSON:en, aldrig `--update-gaps`.
+3. `diff` — hela `npm test` grön, särskilt `gate-symmetry.test.mjs` (alla tre regler),
+   `route.test.mjs` och `gen-ownership-map.test.mjs`.
+4. `diff` — grinden bevisas i BÅDA riktningarna på BÅDA grindskripten: stagea en ändring
+   som bara rör `code-style.md`, kontrollera att commit-grinden och push-grinden kräver
+   integrationsgranskarens bevis, ta sedan bort mönstret och kontrollera att samma
+   stageade diff går rent. Det är mönstret som ska bevisas, inte något annat.
+5. `diff` — JSON:en parsas separat FÖRE något annat körs. Ett trasigt escape i den här
+   filen tog `docs/org`-sviten från grön till 149 fällda 2026-08-25, med symptom i filer
+   utan koppling till ändringen.
+
+Sätet: **binge-integration-reviewer**, av samma skäl som `CLAUDE.md` och
+`accepted-deviations.md` sitter där. Kritiken avvisade uttryckligen ett andra säte:
+`_note2`:s dubbelgrindning gäller en agents EGNA spawn-instruktioner, och de fyra
+granskarfilerna bär var sin egen kopia av strykregeln — `code-style.md` är en
+referensfil för dem, inte deras driftinstruktion.
+
+## BIN-939 — ska säkerhetsgranskaren läsa `package.json`? [Tier A]
+
+Malins beslut: **hon tar inte beslutet.** En blind kritik från #4 Säkerhetsarkitekt avgör,
+och svaret skrivs som ett daterat `_note` på grinden OAVSETT utfall. Frågan täcker även
+BIN-934 (låsfilerna).
+
+### #4:s utfall: JA för manifestet, NEJ för låsfilerna
+
+**Rot-`package.json` läggs till i `binge-security-reviewer`s `patterns`**, vid sidan av
+integrationsgranskaren som står kvar. **Låsfilerna läggs INTE till.**
+
+Rollens skäl, i korthet:
+
+* Det integrationsgranskaren har mandat att leta efter — kontraktsdrift mellan filer — får
+  den aldrig att titta på ett nytt install-tidsskript, eller på om ett paket hamnade i
+  `dependencies` (går ut i varje besökares webbläsare i en klient-SPA) i stället för i
+  `devDependencies`. Det är en kort, konkret checklista, inte en vag riskformulering.
+* En låsfil är en maskinlöst upplöst graf utan läsbar avsikt. Den enda fyndklass den bär —
+  en känd sårbar version — är redan `npm audit`s jobb, medvetet rådgivande sedan BIN-344.
+  Att grinda den blockerande med en språkmodell vore att rangordna om ett verktyg byggt
+  för exakt den datatypen.
+* `keyed` passar inte: den säkerhetsrelevanta ytan spänner över `dependencies`,
+  `devDependencies` OCH `scripts`, och matcharen tar FÖRSTA `{path,key}` för en sökväg — en
+  andra post för samma fil är onåbar. En `keyed`-post hade täckt en av tre och tyst missat två.
+
+### Kritikens mekaniska fynd, som ändrade kostnadssidan
+
+Uppdraget till rollen påstod att Dependabots veckovisa PR:er gör grinden till en
+återkommande kostnad. Rollen mätte i stället, och jag kontrollerade om det:
+
+```
+git log --format='%h|%an|%cn|%s' | grep dependabot
+```
+
+Varje sådan commit bär `dependabot[bot]` som författare och **`GitHub` som committer** — de
+landar via GitHubs serversidiga merge-knapp och rör aldrig ett lokalt `git commit`. Grinden
+är en PreToolUse-hook på just ett lokalt commit, så den kan strukturellt inte fyra på dem.
+Det som når den är en handdriven ändring: ett manuellt tillagt beroende, eller en av de
+majorer `.github/dependabot.yml` är inställd på att hoppa över. Alltså det sällsynta,
+avsiktliga fallet — inte det rutinmässiga.
+
+Acceptanskriterier:
+1. `diff` — `^package\.json$` i säkerhetsgrindens `patterns`; låsfilerna orörda.
+2. `diff` — beslutet står som ett daterat `_note` på grinden, med både ja-delen och
+   nej-delen. Det skulle skrivas oavsett utfall.
+3. `diff` — granskaragentens egen `Scope` får en manifestpunkt i SAMMA commit. Utan den
+   öppnar det tillagda passet en fil vars instruktioner inte säger vad den ska leta efter,
+   och då är grinden en grind som inte vaktar. Rollen ville fila det separat; jag viker in
+   det, eftersom en overksam grind är sämre än ingen.
+
+### Utanför bunten, filas
+
+* Dependabots veckomerge går förbi VARJE lokal granskningsgrind i repot, inte bara den här.
+  Det som faktiskt körs på dem är `pr-checks.yml`. Vill man ha granskning på den vägen är
+  `reviewGates` fel spak — det är en fråga om `pr-checks.yml` och branch protection, och den
+  är Malins.
+
+## Deviation log
+
+- [deviation] BIN-939: rollen ville fila granskaragentens `Scope`-punkt som en egen biljett.
+  Jag vek in den i samma commit i stället. Skälet: en grind som fyrar på en fil vars
+  granskare saknar checklista för den filen är en grind som inte vaktar, och att shippa den
+  halvan ensam är precis "bygg den och parkera den".
+- [discovery] BIN-1084: planen som gick in i kritiken gjorde bara halva fixen. Utan en
+  ägande roll i `docs/role-responsibilities.md` faller `gate-symmetry.test.mjs` regel B av
+  konstruktion — ett grindat spår får inte routa `skip`. Fyndet kom från kritiken FÖRE
+  bygget, inte från ett rött test efteråt.
+- [discovery] BIN-939: Dependabots commits har `GitHub` som committer. Hela
+  kostnadsargumentet mot en extra granskare på `package.json` byggde på att de fyrar
+  grinden. Det gör de inte.
+
+---
+
 # Sprint 2026-09-03b
 
 Föregående sprintplan arkiverad under `---` längst ned.

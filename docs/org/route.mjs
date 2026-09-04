@@ -305,12 +305,11 @@ export const TOOLING_CODE_FILES = new Set([
 //
 // Applied to BOTH, and the blocking gate moved in the same commit (the BIN-830 rule):
 // `.claude/shared-plugin.json` now matches both lockfiles for binge-integration-reviewer.
-// That is the same reviewer class BIN-919 chose for `package.json`, deliberately, so the
-// manifest and its lockfile answer the same way. ONE difference remains and is stated
-// rather than shipped silent: `functions/package-lock.json` ALSO reaches
-// binge-security-reviewer, via that gate's blanket `^functions/` prefix — incidentally,
-// exactly as `functions/package.json` does, and for the same reason. Nobody chose a
-// supply-chain policy for the functions tree; the prefix is broad on purpose and
+// That is the same reviewer class BIN-919 chose for `package.json`, deliberately.
+// `functions/package-lock.json` ALSO reaches binge-security-reviewer, via that gate's
+// blanket `^functions/` prefix — incidentally, exactly as `functions/package.json` does,
+// and for the same reason. Nobody chose a supply-chain policy for the functions tree;
+// the prefix is broad on purpose and
 // narrowing it to buy symmetry would trade a real guard for a cosmetic one.
 //
 // The cost, stated: a lockfile-only commit now routes `medium` and is stopped by a

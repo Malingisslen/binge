@@ -201,8 +201,7 @@ describe('root-level files outside src/ that are still code', () => {
 
       // The BIN-830 rule, asserted rather than promised: widening the ADVISING list has
       // never widened the BLOCKING one on its own. Both lockfiles reach the reviewer
-      // class BIN-919 chose for `package.json`, so a manifest and its lockfile answer
-      // the same way.
+      // class BIN-919 chose for `package.json`.
       expect(integrationGateMatches(path)).toBe(true);
     },
   );
@@ -224,13 +223,14 @@ describe('root-level files outside src/ that are still code', () => {
     expect(integrationGateMatches('package.json')).toBe(true);
     expect(integrationGateMatches('package-lock.json')).toBe(true);
 
-    // The one difference that survives, pinned so it stays a documented choice rather
-    // than a fact nobody re-reads: everything under functions/ ALSO reaches the security
-    // reviewer, via that gate's blanket prefix. Incidental, unchanged by BIN-934, and the
-    // reason the root lockfile was seated with the integration reviewer rather than
-    // matched into the security gate to force a symmetry nobody decided.
+    // The reasoning for which of these reach the security gate lives in reviewGates' own
+    // _note9/_note10/_note19 rather than in a copy here.
     expect(gateMatches('binge-security-reviewer', 'functions/package-lock.json')).toBe(true);
     expect(gateMatches('binge-security-reviewer', 'package-lock.json')).toBe(false);
+    // BIN-939: the manifest reaches the security gate through its OWN pattern, so deleting
+    // that pattern must redden something. Rule A1 would not — package.json still reaches the
+    // integration gate, so its reviewer count stays above zero.
+    expect(gateMatches('binge-security-reviewer', 'package.json')).toBe(true);
   });
 
   // BIN-967. A lint rule and the file that switches it on are one guard, not two.
