@@ -8621,3 +8621,125 @@ silently skipped. BIN-1050 (the named follow-up ticket for a `functions/` typech
 tracker tool available here; a process claim, not a code-security one.
 
 **Verdict: pass (0 blocking).**
+
+### 2026-09-05 — BIN-1088 r3: fail-open read fixed and mutation-proved; struck claim survives in a sibling file
+
+Re-review of BIN-1088 (the dependency-diff check on Dependabot's PR path, `scripts/check-dependency-diff.mjs`
++ `.github/workflows/pr-checks.yml`). Prior round (r2, not run by me) ended `fail` on two blocking findings:
+(1) `readManifest` decided presence by catching a failed `git show`, which collapses "no such path" and "the
+read broke" into the same green answer on the head side — exactly the fail-open the check exists to prevent;
+(2) the script's own header and `tasks/todo.md`'s twin asserted "Dependabot cannot touch workflow files",
+which is false — `.github/dependabot.yml` runs a `github-actions` ecosystem block (monthly, `directory: "/"`)
+that opens PRs bumping `uses:` pins in workflow files.
+
+**Finding 1, verified fixed by mutation.** `readManifest` now decides presence by `git ls-tree --name-only`
+(empty output = genuinely absent, anything else = throw) and reads via `git show` with nothing caught. Two
+new tests: one drives the exact reproduction (ls-tree says present, `git show` throws, assert exit 1 and no
+"OK" in the output), one drives the presence branch through `readManifel` itself. I applied the mutation
+`const listed = git([...]).trim()` → `const listed = path;` (presence always true) on the staged blob
+(worktree hash `bbde4e21eed0ccd2eef30890da3e0d2db3d5d49c`, matched `git rev-parse :scripts/check-dependency-diff.mjs`
+before mutating). Result: `19/19` → `1 failed | 18 passed (19)`, the single failure being
+`readManifest reports absent for a path the ref does not hold` — the new presence-branch test, exactly as
+claimed. Restored from a scratchpad snapshot; `git hash-object` back to `bbde4e2...`, `grep -c MUTANT` → 0.
+`npx vitest run scripts/check-dependency-diff.test.mjs --no-cache` re-run clean at 19/19 after restore.
+
+**Finding 2, only PARTIALLY fixed — new blocking finding.** `tasks/todo.md`'s "Vad checken inte gör" section
+was corrected: it now says the `github-actions` bumps "kommer in via samma serversidiga merge, och den här
+checken tittar inte på dem. Det som begränsar dem idag är att jobbet håller `contents: read` och inga
+hemligheter, inte en granskning" — verified true against `.github/dependabot.yml` (the ecosystem block exists)
+and `.github/workflows/pr-checks.yml` (`permissions: contents: read` at the job level, no other permissions,
+no secrets referenced in any step). But the IDENTICAL false sentence from r1/r2 — "Dependabot cannot touch
+workflow files, so reaching that bypass takes exactly the hand-driven commit the local gates already cover."
+— is still live in `scripts/check-dependency-diff.mjs` lines 26–28, inside the file's own header JSDoc, in
+the second "WHAT IT DOES NOT DEFEND AGAINST" bullet (the one about a PR editing both the check and the
+manifest in one commit). A single-line `grep -rn "Dependabot cannot touch workflow"` across the repo found
+NOTHING, because the sentence wraps across three comment lines in the script and across a different line
+break in `tasks/todo.md` — only a multiline-aware search (`grep -P` with `\n?\s*\*?` between the words, or
+just reading the file) surfaces it. This is the exact copy-drift class the lessons digest names repeatedly
+(BIN-1040/1002/1038: "en strykning i en commit lämnar kopian i nästa commit stående") — here it crossed a
+ROUND boundary, not a commit boundary: the plan doc was corrected, the shipped file's own comment describing
+itself was not. Fix is to STRIKE, not reword — delete "Dependabot cannot touch workflow files, so reaching
+that bypass takes exactly the hand-driven commit the local gates already cover." from the script header, and
+either leave the bullet ending at "it is not new here" or fold in the same honest residual `tasks/todo.md`
+now carries (contents:read + no secrets, not review, is what limits a hand-driven bypass PR).
+
+**Also verified this round:** dead `DEP_BLOCKS` constant is gone from both `.mjs` files (grep, zero hits).
+`npm test` → 276 files / 4644 passed / 4 skipped, matching the claimed state exactly. `npm run lint` → 0
+errors (55 pre-existing unrelated `no-unused-vars` warnings). `node scripts/check-dependency-diff.mjs HEAD~1
+HEAD` → exit 0, "OK" message, against real repo history. `docs/org/ownership-map.json` regenerated via
+`node docs/org/gen-ownership-map.mjs` and diffed byte-identical against the staged copy (patternCount 544
+confirmed, not transcribed). The new §4 Security Architect bullet in `docs/role-responsibilities.md` sits
+under the correct numbered section (verified via `awk` header scan, not assumed from position). BIN-1080's
+lesson about backtick-harvested directory tokens was correctly applied: the corrected §25 bullet no longer
+lists `check-dependency-diff.*` by name in a bullet that doesn't own it, replacing the enumeration with a
+pointer to §4 instead — avoids re-creating the exact backtick-ownership bug BIN-1080 was filed to fix.
+`scripts/scripts-self-tests-present.test.mjs`'s `REQUIRED` gained `check-dependency-diff.test.mjs` and `MIN`
+moved 4→5 in the same commit; `docs/org/route.mjs`'s `TOOLING_CODE_FILES` gained both new files in the same
+commit as their `reviewGates` pattern (BIN-830 pairing, verified via `git diff` on both files together).
+
+**reviewGates scope note, stated so it isn't re-litigated:** none of the ten staged paths in this batch
+match `binge-security-reviewer`'s own `patterns` array in `.claude/shared-plugin.json` — the diff to that
+array (adding `check-dependency-diff` to the tooling alternation) only touches `binge-integration-reviewer`'s
+list, per `_note20`'s own design decision (seat chosen was integration + test, not security, for the
+mechanical gate). This review is the supplementary security judgment `_note20` records as having already run
+pre-build (`#4 Säkerhetsarkitekts blinda kritik`, event row ticket BIN-1088, panel `[4]`), not a re-run of a
+gate this batch's files trigger.
+
+**Verdict: fail (1 blocking) — the surviving "Dependabot cannot touch workflow files" sentence in
+`scripts/check-dependency-diff.mjs` lines 26–28.**
+
+### 2026-09-05 — BIN-1088 r4: the r3 finding is fixed; a mid-round restore had briefly re-broken it
+
+Re-review of the same 12 staged paths (`git diff --cached --name-only`, run before starting). Cause of the
+gap between r3's fail and this pass, as relayed by the orchestrating session: the `tasks/todo.md` strike and
+the `scripts/check-dependency-diff.mjs` strike were both applied, but a `cp` restore mid-round — taken from a
+snapshot of the file from BEFORE either strike — silently reintroduced both, and only the `tasks/todo.md` half
+was noticed and reapplied. So the finding was fixed twice, not once, and the loss was a self-inflicted restore
+clobbering uncommitted work, not a missed grep. Folded into the knowledge file's Shared-checkout-hazard bullet
+above, since the mechanism (a stale snapshot restore reverting a later edit with no error) generalizes beyond
+this ticket.
+
+**Verified fixed, read not trusted.** `scripts/check-dependency-diff.mjs` lines 17–32 (`Read` in full) no
+longer contain "Dependabot cannot touch workflow files" in either English wording; the third
+"WHAT IT DOES NOT DEFEND AGAINST" bullet now ends with the same residual `tasks/todo.md` carries — "What
+limits that today is this job holding `contents: read` and no secrets, not a review" — verified true against
+the staged `.github/workflows/pr-checks.yml` (`permissions: contents: read` at job level, no other permission
+key, no `secrets.` reference in any step, `Read` in full) and the staged `.github/dependabot.yml` (`Read` in
+full: the `github-actions` ecosystem block exists, `directory: "/"`, `interval: "monthly"`).
+
+**Repo-wide sweep, whitespace-collapsed and multiline, per r3's own lesson:**
+`git ls-files -z | xargs -0 -I{} sh -c 'tr -d "\r\n" < "{}" | grep -o "Dependabot cannot touch workflow
+files[^\"]\{0,140\}"'` returns matches in exactly two files: `.claude/agents/binge-security-reviewer.knowledge.md`
+and `.claude/agents/binge-security-reviewer.knowledge.archive.md` — both are this file and its sibling quoting
+the struck sentence AS THE FINDING, in the r3 entry directly above and the paired principles bullet, which is
+the correct place for a retired false claim to live (the strike-rule's own carve-out for `*.knowledge.md` /
+`*.knowledge.archive.md`, never a bare delete). A second grep for a Swedish or reordered phrasing
+(`dependabot.{0,80}(inte|cannot|never).{0,80}(workflow|arbetsflöde)`, both directions) returned nothing outside
+those two files either. No live copy of the false claim remains anywhere in the tracked tree.
+
+**Finding 1 (fail-open `readManifest`) re-mutation-proved, not re-grepped, per the re-review rule.** Snapshotted
+the current worktree bytes to scratchpad immediately before mutating (hash `c99b489b9a2cb455070c06702b6ae145974e6d2f`,
+matching `git hash-object scripts/check-dependency-diff.mjs` before the mutation). Applied the same mutation r3
+used — `const listed = git([...]).trim();` → `const listed = path;` (presence branch always true) — and ran
+`npx vitest run scripts/check-dependency-diff.test.mjs --no-cache` in the same step: `1 failed | 18 passed
+(19)`, the failure being `readManifest reports absent for a path the ref does not hold`, matching r3's
+reproduction exactly. Restored from the scratchpad snapshot; `grep -c MUTANT` → 0, `git hash-object` back to
+`c99b489b...`, `git diff` against both the index and the worktree empty.
+
+**Also verified this round, each by running the command rather than transcribing the prior entry:**
+`npx vitest run scripts/check-dependency-diff.test.mjs` (post-restore) → `19/19` passed. Full `npm test` →
+`276` files passed, `4644` tests passed, `4` skipped — matches r3's count exactly, re-run rather than assumed
+stable. `node docs/org/gen-ownership-map.mjs --check` → exit 0, "ownership gaps: 0". Role ownership of the two
+new files confirmed by loading `docs/org/ownership-map.json` and searching every role object, not just the
+role r3 named: role `4` (Security Architect) is the only match for both `scripts/check-dependency-diff.mjs`
+and its test. `docs/role-responsibilities.md`'s new bullet sits under `## 4. Security Architect` (`awk` header
+scan, reproducing r3's method independently rather than trusting its stated result).
+
+**Scope note repeated from r3, unchanged:** none of this batch's 12 staged paths match
+`binge-security-reviewer`'s own `patterns` in `.claude/shared-plugin.json`; this review is the supplementary
+judgment `_note20` records as already run pre-build, not a mechanical-gate re-run.
+
+**No new finding.** The knowledge-file self-reference in the two `*.knowledge*.md` files is the correct
+carve-out (quoting a retired claim as evidence, not restating it live) and is not itself flagged.
+
+**Verdict: pass (0 blocking).**

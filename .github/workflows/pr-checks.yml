@@ -31,8 +31,8 @@ name: PR checks
 #   · No build, and therefore NO SECRETS. `preview.yml`s build referenced
 #     `secrets.NEXT_PUBLIC_FIREBASE_*` and its deploy step published a live
 #     channel; #4 Security Architect named that as a reason its removal was a net
-#     gain rather than a loss. This job installs, lints, typechecks and tests —
-#     none of which needs a key — so a PR can never reach one.
+#     gain rather than a loss. No step in this job needs a key, so a PR can never
+#     reach one.
 #
 # The job is named `quality` on purpose: that is the status check the branch
 # protection rule on main requires, and since `ci.yml` was its only producer the
@@ -65,6 +65,28 @@ jobs:
         with:
           node-version: 22
           cache: npm
+
+      # BIN-1088. Dependabot merges with GitHub's server-side button, so its bump
+      # never runs a local `git commit` and passes none of the reviewGates reviewers
+      # and never touches the push gate. It reads the two manifests at the base and at
+      # the head and goes red
+      # on a new install-time script, a promotion out of devDependencies, or a package
+      # declared in neither block before. A routine version bump never trips it.
+      #
+      # BEFORE `npm ci` ON PURPOSE: npm runs preinstall/install/postinstall/prepare
+      # itself, so a smuggled one would already have executed on this runner by the
+      # time a later step could report it.
+      #
+      # The fetch must stay bare. This step exists to fail, and a `|| true`, a
+      # `continue-on-error: true`, or a wrapper that swallows the exit code turns it
+      # into a green light on the one path nothing else watches. The script itself
+      # refuses to report a clean diff against a baseline it could not read, but that
+      # only helps while its exit code still reaches the job.
+      - name: Fetch base branch
+        run: git fetch --depth=1 origin "$GITHUB_BASE_REF"
+
+      - name: Check dependency diff
+        run: node scripts/check-dependency-diff.mjs "origin/$GITHUB_BASE_REF" HEAD
 
       - name: Install deps
         run: npm ci

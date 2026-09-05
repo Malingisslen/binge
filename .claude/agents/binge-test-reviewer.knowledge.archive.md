@@ -25034,3 +25034,104 @@ diff.
 **Verdict:** pass (0 blocking). Knowledge-file consequence: folded the ledger-anchored
 diff idiom into the "Verify, never inherit, claims" bullet, paying for it by condensing the
 already-archived (arkiv 33/57) `mainMessage`/`stagedEventsLog` bullet down to a pointer.
+
+## 2026-09-05 — BIN-1088: check-dependency-diff self-tests, and arkiv 64 relocation
+
+**Diff reviewed (staged):** `scripts/check-dependency-diff.mjs` (new), `scripts/check-dependency-diff.test.mjs`
+(new, 19 tests), `scripts/scripts-self-tests-present.test.mjs` (`REQUIRED` +1 name, `MIN` 4→5).
+Also staged in the same batch but outside this agent's `reviewGates` obligation (`.claude/shared-plugin.json`
+patterns `\.test\.(ts|tsx)$`, `\.test\.mjs$`, `^src/.*/__tests__/`, `vitest.*\.config\.ts$`): the
+`.github/workflows/pr-checks.yml` wiring, the `binge-security-reviewer` knowledge pair, `docs/org/route.mjs`,
+`docs/org/ownership-map.json`, `docs/role-responsibilities.md`, `docs/org/metrics/events.jsonl`,
+`tasks/todo.md`. Confirmed the pr-checks.yml call site (`node scripts/check-dependency-diff.mjs
+"origin/$GITHUB_BASE_REF" HEAD`) always supplies both args — read-only, not this agent's gate.
+
+**Mutations run, each preceded by `git hash-object` == `git rev-parse :<path>` and followed by the
+same check plus a full green restore run:**
+
+1. `readManifest`'s `git(['ls-tree', ...]).trim()` → `path` (bypasses the presence listing entirely,
+   the exact mutation the prompt handed down). First attempt used Python text-mode `open(path, 'w')`,
+   which silently flipped the whole file from LF-only to uniform CRLF on write — `git hash-object`
+   still reported the ORIGINAL blob sha (c99b489…) because `core.autocrlf=true` applies the clean
+   filter before hashing, so a sha match proved nothing about the actual bytes on disk. That alone
+   broke the import with `RolldownError: Invalid Character '!'` at the shebang line — confirmed by
+   converting the untouched original to CRLF with NO content change and reproducing the identical
+   parse failure. Re-did every mutation with binary-safe `open(path, 'rb'/'wb')` byte replacement
+   after that. Result once redone correctly: 1 failed / 18 passed — reproduces the prompt's own
+   figure exactly. The reddened test was `readManifest reports absent for a path the ref does not
+   hold`, which is the direct, non-vacuous test of the mechanism.
+2. `assertRefReachable`: `catch { return; throw new Error(...) }` (swallow every unresolvable ref).
+   Reddened `an unresolvable base ref throws...` and `an unresolvable HEAD throws too` — 2 failed / 17
+   passed. Confirms the two "cannot resolve" fail-closed cases are live, not vacuous.
+3. `readManifest`'s bare `JSON.parse(git(['show', ...]))` wrapped in `try { … } catch { return {
+   present: true, json: {} } }` (swallow BOTH a parse failure and a corrupt-object read). Reddened
+   `a manifest that will not parse exits 1...` AND `a read that fails on a path the ref DOES hold
+   exits 1, not clean` together — 2 failed / 17 passed. These two named cases in the prompt share one
+   guard (the bare, uncaught `git show` + `JSON.parse`), so they rise and fall together; neither is
+   independently provable from the other, which the file's own docstring already states ("Nothing
+   here is caught").
+4. `main()`'s `const [base, head = 'HEAD'] = argv; if (!base) { err(...); return 1; }` →
+   `const [base = 'HEAD', head = 'HEAD'] = argv; if (false) { … }` (delete the missing-base guard,
+   default it instead). Full suite stayed 19/19 GREEN. Root cause: the existing test — `a missing
+   base argument exits 1`, `main([], { git: fakeGit({}), … })` — happens to still return 1 under this
+   mutant, because the fixture's `fakeGit({})` has no `'HEAD'` entry, so the defaulted ref fails
+   `assertRefReachable` and `main`'s outer `catch` returns 1 for an UNRELATED reason. Built a live
+   probe (`node --input-type=module -e "import('./check-dependency-diff.mjs')…"` from inside
+   `scripts/`, using a fakeGit where `'HEAD'` DOES resolve — the realistic case, since HEAD always
+   resolves in any real checkout) and ran it against the mutant: `main([], { git: fakeGit({ HEAD: {
+   'package.json': '{"dependencies":{}}' } }) })` → exit code **0**, `dependency-diff: OK — no new
+   install-time script, promotion or dependency in HEAD..HEAD.` That is the fail-open this whole file
+   exists to prevent, invisible to the shipped test. Not currently reachable in production (the sole
+   caller, `pr-checks.yml`, always passes both args explicitly), but the ticket names "a missing
+   argv" as one of the five fail-closed guarantees this suite is supposed to prove, and as written it
+   does not prove that one — it proves something else that happens to share an exit code. Filed as a
+   test-quality finding, not a security finding, in the review reply.
+5. `INSTALL_TIME_SCRIPTS` shrunk to `['postinstall']` → reddened `every name in INSTALL_TIME_SCRIPTS
+   is actually detected` alone (`expected 1 to be greater than or equal to 4`) — 1 failed / 18 passed.
+6. `MANIFESTS` shrunk to `['package.json']` → reddened `a postinstall smuggled into functions/...`
+   AND `both manifests are read, not just the first` together — 2 failed / 17 passed. Both directions
+   of the roster claim are real.
+7. `scripts-self-tests-present.test.mjs`: removed `'check-knowledge-caps.test.mjs'` from `REQUIRED`
+   AND deleted the real `scripts/check-knowledge-caps.test.mjs` file (the actual regression this floor
+   exists for — a name and its backing file both disappearing in the same breath). With `MIN = 5`
+   (the file as staged): `the script self-test set never shrinks below its floor` reddened
+   (`only 4 script self-test(s) collected, expected at least 5`) — 1 failed / 1 passed. Then, to prove
+   the comment's own claim about the rejected alternative, set `MIN = REQUIRED.length` (4, since
+   `REQUIRED` had just lost a name) and re-ran the identical double-deletion: 2/2 GREEN. Confirms the
+   file's own rationale for a hardcoded literal over a derived floor, live rather than assumed. All
+   three touched files (`check-dependency-diff.mjs`, `scripts-self-tests-present.test.mjs`,
+   `check-knowledge-caps.test.mjs`) restored from scratchpad snapshots and re-verified via
+   `git rev-parse :<path>` == `git hash-object <path>` MATCH for all four staged/related paths before
+   writing the verdict. Broader `npx vitest run scripts/ docs/org/` re-run afterward: 15 files,
+   1214 tests, all green.
+
+**fakeGit fidelity, checked rather than assumed:** its `rev-parse` branch strips `^{commit}` to
+recover the ref and throws exactly when the ref is absent from `trees` — matches `execFileSync`
+throwing on a non-zero `git rev-parse --verify --quiet` exit. Its `ls-tree` branch returns
+`path + '\n'` when present, `''` when absent, throws only on a wholly-unresolvable ref — real
+`git ls-tree` never throws for a valid ref plus a nonexistent path (empty stdout, exit 0), and in
+production `ls-tree` is only ever called after `assertRefReachable` already validated the ref, so the
+fake's throw branch is unreachable in practice, same as the real contract. Its `show` branch splits
+on the FIRST colon (`/:(.*)/s`), correctly separating `ref:path` for every ref/path pair used here
+(none contain a colon). The "read that fails on a path the ref DOES hold" test wraps the fake with an
+outer function that lets `ls-tree` succeed (path listed) but makes `show` throw — this is the one
+test that specifically reproduces the shape the security reviewer found (list says present, read
+still throws), and mutation 3 above confirms it is live. No fidelity gap found that would let a test
+pass for a reason the real git contract couldn't produce.
+
+**Verdict:** pass (0 blocking) — reported as a non-blocking finding (mutation 4 / the missing-argv
+test) rather than blocking, because the gap is in test PRECISION (the fixture doesn't isolate the
+guard it names) rather than in a live, reachable production hole: the sole caller always supplies two
+args. Recommended fix given in the review reply rather than filed as a fresh gap, since it is a
+one-line fixture change on a file already under this review.
+
+**Relocated to arkiv 64 (verbatim, cut from the Admin-SDK orchestrator bullet in the live file to pay
+for the addition above; live file now points here instead of restating it):**
+
+Source-scan blind spots to name: a chained-call regex misses a VARIABLE-BOUND ref; `[^;\n]` misses a
+chain broken across lines; a single-quoted literal misses `db.collection("streamingOffers")` — build
+every scan from one shared quote-agnostic fragment. **A comment/string blanker that treats a template
+literal as ONE opaque span blanks its `${…}` interpolations too, which are executable code** — an
+`await`-detecting guard (BIN-1060) is blind to a real `await` inside `` `${await x()}` ``, proven via
+the guard's own `firstAwaitIndex`. Non-blocking while no such interpolation exists; require the
+docstring to say so the day one is added.

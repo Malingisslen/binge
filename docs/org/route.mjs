@@ -140,6 +140,13 @@ export const TOOLING_CODE_FILES = new Set([
   'docs/org/rules-id-client-symmetry.test.mjs',
   'docs/org/gen-ownership-map.mjs',
   'docs/org/gen-ownership-map.test.mjs',
+  // BIN-1088. The dependency-diff check on the pull_request path. Dependabot merges
+  // server-side, so that path reaches no reviewGates reviewer and no push gate. Added
+  // here in the SAME commit as
+  // its `reviewGates` pattern, per BIN-830 — one list advises, the other blocks, and
+  // widening one has never widened the other.
+  'scripts/check-dependency-diff.mjs',
+  'scripts/check-dependency-diff.test.mjs',
   'scripts/check-workflow-map.mjs',
   'scripts/check-workflow-map.test.mjs',
   'scripts/check-public-env.mjs',

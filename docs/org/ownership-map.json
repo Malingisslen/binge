@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 542,
+  "patternCount": 544,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -59,6 +59,8 @@
         ".github/workflows/secret-scan.yml",
         "firebase.json",
         "firestore.rules",
+        "scripts/check-dependency-diff.mjs",
+        "scripts/check-dependency-diff.test.mjs",
         "scripts/check-public-env.mjs",
         "scripts/check-public-env.test.mjs",
         "src/hooks/useAuth.ts",

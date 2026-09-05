@@ -1,3 +1,85 @@
+# Sprint 2026-09-05c
+
+## BIN-1088 — Dependabots väg in i main får en mekanisk beroendekontroll [Tier B]
+
+Malins beslut 2026-09-03: väg 2 av tre. Inte branch protection, inte en mänsklig
+granskning varje vecka — en check i `pr-checks.yml` som läser beroendediffen.
+
+Routning. Kommandot härleder filuppsättningen i stället för att räkna upp den — en
+uppräkning i en plan är falsk i samma commit den ligger i, så fort en fil till stageas:
+
+```
+node docs/org/route.mjs $(git diff --cached --name-only)
+```
+
+### Vad problemet är
+
+Varje granskare i `reviewGates` drivs av en PreToolUse-hook på ett LOKALT `git commit`.
+Dependabots veckomerge sker med GitHubs serversidiga knapp och kör aldrig ett sådant, så
+den passerar ingen granskningsgrind och rör aldrig push-grinden. Det är inte en lucka i
+grindlistan; mekanismen sitter på fel sida. Inget som kör på den vägen tittade på vad
+höjningen gjorde med manifesten.
+
+### Vad checken fäller på
+
+- Ett nytt installationstidsskript (`preinstall`, `install`, `postinstall`, `prepare`).
+- En flytt ut ur `devDependencies` in i `dependencies`.
+- Ett paket som inte stod i något av blocken förut.
+
+En vanlig versionhöjning — vilket i praktiken är varje Dependabot-PR — fäller aldrig.
+
+### Bindande acceptanskriterier från #4 Säkerhetsarkitekts blinda kritik
+
+Kritiken kördes FÖRE bygget, på planen. Verdict: pass-with-conditions, sex villkor.
+
+1. **Fail closed.** En onåbar bas-ref, ett manifest som inte parsar och varje annan
+   kastad throw ger exit skild från noll. "Jag kunde inte titta" och "jag tittade och
+   hittade inget" får aldrig dela utgångskod. Varje gren drivs av ett test som gör felet
+   och kräver rött.
+2. **Fetch-stegets utgångskod får aldrig sväljas** — inget `|| true`, ingen
+   `continue-on-error`. Skrivet som ett stående villkor i steget självt, inte bara sant
+   av en händelse idag.
+3. **`check-dependency-diff` läggs till i `binge-integration-reviewer`s mönster i SAMMA
+   commit som skriptet skapas.** Utan det når checkens logik main utan granskare medan
+   dess testfil har en — den självrensande luckan som `_note`-raderna i den filen
+   upprepade gånger bokfört.
+4. **Filen får en ägande roll och kartan regenereras i samma commit.** #4, av samma skäl
+   som vakten över miljövariablerna: sätet följer vad filen är till för.
+5. **`scripts/scripts-self-tests-present.test.mjs` uppdateras** — namnet i `REQUIRED`,
+   golvet från 4 till 5.
+6. **Commit-texten säger vad checken INTE skyddar mot**, i stället för att låta den läsas
+   som ett skydd mot en riktad attack.
+
+Utöver kritikens sex lade bygget till en sjunde, av samma BIN-830-skäl som villkor 3:
+skriptet står i `TOOLING_CODE_FILES` i `docs/org/route.mjs` i samma commit. Den ena listan
+råder, den andra blockerar, och att vidga den ena har aldrig vidgat den andra.
+
+### Vad checken inte gör, öppet skrivet i stället för underförstått
+
+- **Ett `postinstall` i ett transitivt paket** bor i låsfilen, inte i manifestet. BIN-939
+  uteslöt låsfiler från granskning med mätt skäl och BIN-344 håller `npm audit`
+  rådgivande. #4 prövade om väg 2 förtjänar sin plats utan låsfilstäckning och svarade ja:
+  att öppna den frågan här vore att göra om ett avgjort beslut på samma ämne.
+- **En PR som ändrar BÅDE checken och manifestet i samma commit** passerar sin egen grind:
+  `pull_request` kör arbetsflödesdefinitionen ur merge-commiten. Det gäller redan lint,
+  typecheck och test.
+- **Versionshöjningarna av `uses:`-pinnarna** som `.github/dependabot.yml`s
+  `github-actions`-ekosystem öppnar. De ändrar arbetsflödesfiler och kommer in via samma
+  serversidiga merge, och den här checken tittar inte på dem. Det som begränsar dem idag
+  är att jobbet håller `contents: read` och inga hemligheter, inte en granskning.
+
+Checken körs FÖRE `npm ci`, eftersom npm kör installationsskripten själv — ett insmugglat
+sådant hade redan exekverat på runnern om steget låg efter.
+
+### Uppföljning, inte byggd här
+
+#4 föreslog att också fälla på en ny `overrides`/`resolutions`-nyckel. Ingen av manifesten
+har en idag, så signalen är äkta — men Dependabot lägger själv ibland till `overrides` när
+den åtgärdar en sårbarhet, så en hård fällning där har en känd falsklarmskostnad. Det är
+Malins val om den ska in, inte något bygget avgör tyst. Filad som BIN-1094.
+
+---
+
 # Sprint 2026-09-05b
 
 Föregående sprintplan arkiverad under `---` längst ned.
@@ -5,7 +87,7 @@ Föregående sprintplan arkiverad under `---` längst ned.
 ## BIN-1080 — de åtta kodfilerna i scripts/ får en ansvarig roll [Tier C]
 
 Följer BIN-871 i strikt följd, som biljetten föreskriver. Malins seating 2026-09-03:
-hemlighetsskannern till #4 Säkerhetsarkitekt, de andra sex till #25 — säkerhetsytan får
+vakten över de publika miljövariablernas inkoppling till #4 Säkerhetsarkitekt, de andra sex till #25 — säkerhetsytan får
 inte sättas hos släppansvarig för att spara ett granskningsvarv.
 
 ```

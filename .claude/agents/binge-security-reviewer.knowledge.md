@@ -285,7 +285,12 @@ Cap: 80k chars — pay for an addition with a cut, and move what you cut verbati
   note, a policy doc or your own last marker. A false safety comment is WORSE than none: it says the audit
   happened (BIN-523's "the scan filters mediaType"). **A REDESIGN orphans comments** — grep the REMOVED
   mechanism's name across the diff's files. **A "line-endings only" claim needs BYTE ACCOUNTING:**
-  `--ignore-cr-at-eol` ignores a TRAILING CR but not a LONE one (content).
+  `--ignore-cr-at-eol` ignores a TRAILING CR but not a LONE one (content). **A struck false claim can survive
+  in a SIBLING file the same commit never touched for it** — BIN-1088 r2 corrected "Dependabot cannot touch
+  workflow files" in `tasks/todo.md` (the plan) but left the identical sentence live in
+  `scripts/check-dependency-diff.mjs`'s own header comment, the shipped file the claim is actually about. A
+  single-line `grep` missed it because the sentence wraps across lines differently in the two files — grep
+  the claim's distinctive words MULTILINE across the whole repo, not just the file the ticket names as fixed.
 - **A mutation-justification comment ("without this line the FILE/BLOCK/SUITE pins no X") has TWO measurable
   halves — the ABSENCE premise and the consequent's SCOPE — and correcting one mints the next falsehood; STRIKE
   it.** BIN-797 r1: "the file carries no one-digit id" was falsified by the twin block's `tv_1`, same commit.
@@ -316,6 +321,10 @@ Cap: 80k chars — pay for an addition with a cut, and move what you cut verbati
 - **Shared-checkout hazard: a sibling's mutation loop can land INSIDE your window** — 4× now — so a clean
   `git status` is NOT proof; re-`Read`/re-run twice, identical required. **Review target is the STAGED blob**
   — `Read` serves the worktree; align `git show :<path> | md5sum` with `md5sum <path>` first (BIN-856 r2).
+  **The same hazard self-inflicted: a restore-from-snapshot taken BEFORE a later edit landed silently reverts
+  that edit when `cp`'d back mid-round, no error** — BIN-1088 lost a struck false claim this way between r3 and
+  r4. Snapshot the WORKTREE bytes immediately before mutating, never reuse an earlier copy, and after any
+  restore diff against what the file should currently say, not only against the pre-mutation hash.
 - **Reviewing a FORWARD-REVERT:** prove exactness (`git diff <base> -- <files>` EMPTY); baseline = DEPLOYED.
 
 ## Archive

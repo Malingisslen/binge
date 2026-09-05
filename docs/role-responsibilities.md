@@ -181,6 +181,14 @@ is the real boundary.
   hemlighet som är tom eller fel passerar. Det stänger BIN-849, där en variabel saknades i
   bygget i tre månader med både CI och deploy gröna.
   → `scripts/check-public-env.mjs`, `scripts/check-public-env.test.mjs`
+- **Beroendediffen på Dependabots väg in** (BIN-1088). Skriptet läser båda
+  paketmanifesten vid basen och vid huvudet och fäller på ett nytt installationsskript,
+  en flytt ut ur devDependencies, eller ett paket som inte var deklarerat förut. Det
+  sitter här och inte hos #25 av samma skäl som vakten ovan: sätet följer vad filen är
+  till för, och den läser en väg in i main som ingen granskningsgrind och ingen
+  push-grind når. Den läser manifesten, inte låsfilerna —
+  BIN-939 och BIN-344 avgjorde den avgränsningen.
+  → `scripts/check-dependency-diff.mjs`, `scripts/check-dependency-diff.test.mjs`
 
 - **Filer som saknade en ägande roll** (BIN-871). Lösenordsstyrkan, auth-felen, push-token och utloggningsomdirigeringen.
   → `src/hooks/useAuth.ts`, `src/hooks/useFcmToken.ts`, `src/hooks/useSignedOutRedirect.ts`, `src/lib/authErrors.ts`, `src/lib/firebase/db.test.ts`, `src/lib/firebase/groups.test.ts`, `src/lib/firebase/utils.test.ts`, `src/lib/passwordStrength.test.ts`, `src/lib/passwordStrength.ts`
@@ -606,8 +614,9 @@ Owns the process.
   → `.claude/agents/binge-code-reviewer.md`, `.claude/agents/binge-security-reviewer.md`, `.claude/agents/binge-integration-reviewer.md`, `.claude/agents/binge-test-reviewer.md`, `.claude/hooks/freshness.mjs`, `.claude/hooks/freshness.test.mjs`, `.claude/hooks/preview-gate.mjs`, `.claude/hooks/preview-gate.test.mjs`
 - **The remaining check scripts under scripts/** (BIN-1080). Same class as `lefthook.yml`
   and the staged-routing gate above: they decide how the repo is checked, and
-  check-workflow-map.mjs gates the deploy. check-public-env.mjs is deliberately NOT here —
-  it sits with #4. Both are written without backticks for
+  check-workflow-map.mjs gates the deploy. A script under scripts/ whose concern is a
+  security control sits with #4 instead, and §4’s own bullets are where those are named;
+  no list of them is kept here. File names in this bullet are written without backticks for
   the same reason the lockfile is: the generator harvests backtick-quoted tracked paths, so
   naming a file in a sentence that declines to own it would own it.
   → `scripts/check-workflow-map.mjs`, `scripts/check-workflow-map.test.mjs`, `scripts/check-knowledge-caps.mjs`, `scripts/check-knowledge-caps.test.mjs`, `scripts/prune-map-flag.mjs`, `scripts/prune-map-flag.test.mjs`
