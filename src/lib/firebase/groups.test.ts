@@ -101,6 +101,10 @@ function groupsQueryConstraints() {
   return call?.slice(1) as unknown[] | undefined;
 }
 
+// Per-test dokumentfixturer, nyckel = ref._path. Töms av beforeEach.
+const docFixtures = new Map<string, unknown>();
+function seedDoc(path: string, snap: unknown) { docFixtures.set(path, snap); }
+
 beforeEach(() => {
   setMock.mockClear();
   writeBatchMock.mockClear();
@@ -113,6 +117,19 @@ beforeEach(() => {
   deleteDocMock.mockImplementation(async () => {});
   addDocMock.mockClear();
   getDocMock.mockReset();
+  // BIN-1063 steg 1: writeMemberDoc läser medlemsdokumentet innan det skriver,
+  // så getDoc träffas nu på TVÅ olika sökvägar per anrop. Svara på sökväg i
+  // stället för på anropsordning — annars avgör ordningen vilken läsning en
+  // stub besvarar, och testet blir grönt av fel skäl.
+  docFixtures.clear();
+  getDocMock.mockImplementation(async (ref: unknown) => {
+    const path = (ref as { _path: string })._path;
+    if (docFixtures.has(path)) return docFixtures.get(path);
+    // Ett medlemsdokument finns inte som standard: förstagångs-accept är
+    // normalfallet, och ett test som menar något annat säger det uttryckligen.
+    if (/\/members\//.test(path)) return { exists: () => false, data: () => undefined };
+    return { exists: () => true, data: () => ({ memberUids: [] }) };
+  });
   getDocsMock.mockReset();
   queryMock.mockClear();
   limitMock.mockClear();
@@ -411,6 +428,8 @@ describe('joinGroupViaToken / acceptGroupInvite — rollback on partial write fa
   it('acceptGroupInvite rullar tillbaka memberUids-tillägget om member-doc-writen failar', async () => {
     setDocMock.mockRejectedValueOnce(new Error('network error'));
 
+    // acceptGroupInvite läser gruppdoc:et (already_member-spärren) och därefter
+    // medlemsdokumentet. Båda besvaras av sökvägsdefaulten ovan; ingen stub behövs.
     await expect(acceptGroupInvite({
       groupId: 'g2',
       uid: 'user-accept',
@@ -547,6 +566,8 @@ describe('joinGroupViaToken / acceptGroupInvite — no batch + clean happy path 
   });
 
   it('acceptGroupInvite skriver SEKVENTIELLA writes, aldrig en batch', async () => {
+    // acceptGroupInvite läser gruppdoc:et (already_member-spärren) och därefter
+    // medlemsdokumentet. Båda besvaras av sökvägsdefaulten ovan; ingen stub behövs.
     await acceptGroupInvite({
       groupId: 'g-nb2',
       uid: 'user-nb2',
@@ -561,6 +582,8 @@ describe('joinGroupViaToken / acceptGroupInvite — no batch + clean happy path 
   });
 
   it('acceptGroupInvite rullar INTE tillbaka memberUids när member-doc-writen lyckas, och raderar inbjudan', async () => {
+    // acceptGroupInvite läser gruppdoc:et (already_member-spärren) och därefter
+    // medlemsdokumentet. Båda besvaras av sökvägsdefaulten ovan; ingen stub behövs.
     await acceptGroupInvite({
       groupId: 'g-happy2',
       uid: 'user-happy2',
@@ -584,5 +607,204 @@ describe('joinGroupViaToken / acceptGroupInvite — no batch + clean happy path 
     expect(deleteDocMock).toHaveBeenCalledWith(
       expect.objectContaining({ _path: 'users/user-happy2/groupInvites/g-happy2' }),
     );
+  });
+});
+
+
+// BIN-1063 steg 1. acceptGroupInvite saknade den already_member-spärr
+// joinGroupViaToken alltid haft. Ett andra accept är nåbart när inbjudan sist i
+// flödet inte hann raderas.
+//
+// Båda riktningarna drivs: spärren fäller omförsöket OCH släpper igenom en äkta
+// förstagångs-accept. Utan den positiva tvillingen passerar en mutant som
+// kortsluter varje accept.
+describe('acceptGroupInvite — already_member-spärren (BIN-1063 steg 1)', () => {
+  it('ett andra accept skriver INTE om member-doc:et och rör INTE memberUids', async () => {
+    seedDoc('groups/g-again', {
+      exists: () => true,
+      data: () => ({ memberUids: ['someone-else', 'user-again'] }),
+    });
+    // Medlemsdokumentet FINNS — det är detta som skiljer ett avslutat medlemskap
+    // från en spöke-medlem, och bara det förra får kortslutas.
+    seedDoc('groups/g-again/members/user-again', { exists: () => true, data: () => ({ uid: 'user-again' }) });
+
+    await acceptGroupInvite({
+      groupId: 'g-again',
+      uid: 'user-again',
+      displayName: 'Malin',
+      username: 'malin',
+      photoURL: null,
+      providers: [8],
+    });
+
+    // Ingen member-doc-write: den hade blivit en UPDATE och nekats av reglerna.
+    expect(setDocMock.mock.calls.find(([ref]) =>
+      (ref as { _path: string })._path === 'groups/g-again/members/user-again')).toBeUndefined();
+
+    // Och framför allt: ingen arrayUnion, alltså heller ingen rollback som
+    // arrayRemove:ar en medlem som redan är med.
+    expect(updateDocMock.mock.calls.filter(([ref]) =>
+      (ref as { _path: string })._path === 'groups/g-again')).toHaveLength(0);
+
+    // Den inaktuella inbjudan städas ändå bort — det är hela skälet att ett
+    // andra accept ens kunde ske.
+    expect(deleteDocMock).toHaveBeenCalledWith(
+      expect.objectContaining({ _path: 'users/user-again/groupInvites/g-again' }),
+    );
+  });
+
+  it('ett förstagångs-accept går igenom spärren och skriver member-doc:et', async () => {
+    seedDoc('groups/g-first', {
+      exists: () => true,
+      data: () => ({ memberUids: ['someone-else'] }),
+    });
+
+    await acceptGroupInvite({
+      groupId: 'g-first',
+      uid: 'user-first',
+      displayName: 'Malin',
+      username: 'malin',
+      photoURL: null,
+      providers: [8],
+    });
+
+    expect(setDocMock.mock.calls.find(([ref]) =>
+      (ref as { _path: string })._path === 'groups/g-first/members/user-first')).toBeDefined();
+    expect(updateDocMock.mock.calls.filter(([ref]) =>
+      (ref as { _path: string })._path === 'groups/g-first')).toHaveLength(1);
+  });
+});
+
+// BIN-1063 steg 1, andra halvan. Att pinna joinedAt vid create gör en OVILLKORLIG
+// setDoc utan merge farlig: träffar den ett dokument som redan finns är den en
+// rules-update med ett nytt joinedAt, nekas, och anroparens catch rullar tillbaka
+// medlemskapet.
+//
+// De fyra tillstånden en accept kan möta:
+//   uid i memberUids + dokument finns   → avslutat medlemskap, kortslut
+//   uid i memberUids + dokument saknas  → spöke-medlem
+//   uid saknas + dokument finns         → omvänt föräldralöst, ska läkas UTAN joinedAt
+//   uid saknas + dokument saknas        → vanlig förstagångs-accept
+describe('accept/join — medlemsdokumentet skrivs som create eller merge efter tillstånd (BIN-1063 steg 1)', () => {
+  function writeTo(path: string) {
+    return setDocMock.mock.calls.find(([ref]) => (ref as { _path: string })._path === path);
+  }
+
+  // VAD DE HÄR TESTERNA INTE VISAR, sagt rakt ut: firebase/firestore är mockat i
+  // den här filen, så varje write resolvar och inga säkerhetsregler utvärderas.
+  // De pinnar klientens GRENVAL, aldrig att en skrivning skulle gå igenom skarpt.
+  // Vad reglerna faktiskt gör med de här tillstånden pinnas av emulatorsviten.
+  it('spöke-medlem (uid i memberUids, dokument saknas) kortsluts INTE', async () => {
+    seedDoc('groups/g-ghost', {
+      exists: () => true,
+      data: () => ({ memberUids: ['someone-else', 'user-ghost'] }),
+    });
+    seedDoc('groups/g-ghost/members/user-ghost', { exists: () => false, data: () => undefined });
+
+    await acceptGroupInvite({
+      groupId: 'g-ghost',
+      uid: 'user-ghost',
+      displayName: 'Malin',
+      username: 'malin',
+      photoURL: null,
+      providers: [8],
+    }).catch(() => {});
+
+    // Grenvalet, och bara det: spärren kortslöt INTE, så flödet gick vidare till
+    // gruppuppdateringen. Vad reglerna gör med den vägen är emulatorsvitens att pinna.
+    expect(updateDocMock.mock.calls.filter(([ref]) =>
+      (ref as { _path: string })._path === 'groups/g-ghost')).toHaveLength(1);
+  });
+
+  it('omvänt föräldralöst (dokument finns, uid saknas i memberUids) skrivs som merge UTAN joinedAt', async () => {
+    seedDoc('groups/g-orphan', {
+      exists: () => true,
+      data: () => ({ memberUids: ['someone-else'] }),
+    });
+    seedDoc('groups/g-orphan/members/user-orphan', { exists: () => true, data: () => ({ uid: 'user-orphan' }) });
+
+    await acceptGroupInvite({
+      groupId: 'g-orphan',
+      uid: 'user-orphan',
+      displayName: 'Malin',
+      username: 'malin',
+      photoURL: null,
+      providers: [8],
+    });
+
+    const write = writeTo('groups/g-orphan/members/user-orphan');
+    expect(write).toBeDefined();
+    // Uppdatering: joinedAt utelämnas HELT, annars nekar regeln och rollbacken
+    // kastar ut en medlem som just lades tillbaka.
+    expect(write?.[1]).not.toHaveProperty('joinedAt');
+    expect(write?.[2]).toEqual({ merge: true });
+  });
+
+  it('joinGroupViaToken skriver också merge UTAN joinedAt mot ett dokument som redan finns', async () => {
+    seedDoc('groups/g-jorphan', {
+      exists: () => true,
+      data: () => ({ memberUids: ['someone-else'], inviteTokenHash: 'hash-abc' }),
+    });
+    seedDoc('groups/g-jorphan/members/user-jorphan', { exists: () => true, data: () => ({ uid: 'user-jorphan' }) });
+
+    const result = await joinGroupViaToken({
+      groupId: 'g-jorphan',
+      token: 'plaintext-token',
+      uid: 'user-jorphan',
+      displayName: 'Malin',
+      username: 'malin',
+      photoURL: null,
+      providers: [8],
+    });
+
+    expect(result).toEqual({ ok: true });
+    const write = writeTo('groups/g-jorphan/members/user-jorphan');
+    expect(write).toBeDefined();
+    expect(write?.[1]).not.toHaveProperty('joinedAt');
+    expect(write?.[2]).toEqual({ merge: true });
+  });
+
+  // Spärren tittar på memberUids ensamt — den läser inte medlemsdokumentet. Ett
+  // spöke får därför också already_member. Varför ett spöke inte går att reparera
+  // härifrån alls: BIN-1097, och emulatorsviten pinnar mekanismen.
+  it('joinGroupViaToken svarar already_member när uid redan står i memberUids', async () => {
+    seedDoc('groups/g-jmember', {
+      exists: () => true,
+      data: () => ({ memberUids: ['user-jmember'], inviteTokenHash: 'hash-abc' }),
+    });
+
+    const result = await joinGroupViaToken({
+      groupId: 'g-jmember',
+      token: 'plaintext-token',
+      uid: 'user-jmember',
+      displayName: 'Malin',
+      username: 'malin',
+      photoURL: null,
+      providers: [8],
+    });
+
+    expect(result).toEqual({ ok: false, reason: 'already_member' });
+    expect(writeTo('groups/g-jmember/members/user-jmember')).toBeUndefined();
+  });
+
+  it('vanlig förstagångs-accept skriver ett create med joinedAt och ingen merge', async () => {
+    seedDoc('groups/g-plain', {
+      exists: () => true,
+      data: () => ({ memberUids: ['someone-else'] }),
+    });
+
+    await acceptGroupInvite({
+      groupId: 'g-plain',
+      uid: 'user-plain',
+      displayName: 'Malin',
+      username: 'malin',
+      photoURL: null,
+      providers: [8],
+    });
+
+    const write = writeTo('groups/g-plain/members/user-plain');
+    expect(write).toBeDefined();
+    expect(write?.[1]).toHaveProperty('joinedAt');
+    expect(write?.[2]).toBeUndefined();
   });
 });

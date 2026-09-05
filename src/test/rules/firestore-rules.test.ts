@@ -2190,6 +2190,216 @@ describe('groups members/{memberUid} create — batch vs sequential (BIN-532/BIN
   });
 });
 
+
+// BIN-1063 steg 1. joinedAt blir tilldelningsnyckeln när en ägarlös grupp lämnas
+// över till den medlem som varit med längst, så fältet måste vara serverns tid och
+// oföränderligt efteråt. Varje villkor drivs i BÅDA riktningar: den skärpta regeln
+// fäller det förfalskade fallet, och den lagliga vägen står kvar grön — ett test som
+// bara pinnar nekandet är också uppfyllt av en mätning som aldrig nådde regeln.
+//
+// Muteringar som ska fälla den här sviten. Vilket fall som tar vilken mutering
+// står i fallets egen titel, inte som en uppräkning här — och kör muteringen
+// hellre än att lita på meningen:
+//   (a) create-pinningen försvagas: request.time byts mot något som ett
+//       klientvalt värde också uppfyller;
+//   (b) update-jämförelsen tas bort;
+//   (c) update slår upp fältet bart i stället för med default, så ett
+//       medlemsdokument utan fältet inte längre går att uppdatera.
+// Ingen describe.each här: fallen är handuppräknade, så inget rosterkrav behövs.
+describe('groups members/{memberUid} joinedAt — pinnad vid create, oföränderlig vid update (BIN-1063 steg 1)', () => {
+  const BACKDATED = Timestamp.fromMillis(0);
+  const FUTURE = Timestamp.fromMillis(Date.now() + 86_400_000);
+
+  function memberPayload(uid: string, over: Record<string, unknown> = {}) {
+    return { uid, role: 'member', notifications: true, joinedAt: serverTimestamp(), ...over };
+  }
+
+  // Seedat med reglerna AVSTÄNGDA, så create-regeln under prövning aldrig är det
+  // som avgör om ett update-fall passerar.
+  async function seedMemberDoc(uid: string, data: Record<string, unknown>) {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'groups', GROUP, 'members', uid), data);
+    });
+  }
+
+  // ---- CREATE, medlemmens egen gren ----
+
+  it('en medlem KAN skapa sitt eget member-doc med serverTimestamp()', async () => {
+    await seedGroup({ memberUids: [OWNER, 'other_uid'] });
+    await assertSucceeds(setDoc(
+      doc(otherDb(), 'groups', GROUP, 'members', 'other_uid'),
+      memberPayload('other_uid'),
+    ));
+  });
+
+  it('en medlem KAN INTE skapa sitt eget member-doc med ett bakåtdaterat joinedAt', async () => {
+    await seedGroup({ memberUids: [OWNER, 'other_uid'] });
+    await assertFails(setDoc(
+      doc(otherDb(), 'groups', GROUP, 'members', 'other_uid'),
+      memberPayload('other_uid', { joinedAt: BACKDATED }),
+    ));
+  });
+
+  it('en medlem KAN INTE skapa sitt eget member-doc med ett framtida joinedAt', async () => {
+    await seedGroup({ memberUids: [OWNER, 'other_uid'] });
+    await assertFails(setDoc(
+      doc(otherDb(), 'groups', GROUP, 'members', 'other_uid'),
+      memberPayload('other_uid', { joinedAt: FUTURE }),
+    ));
+  });
+
+  // ---- CREATE, ägarens gren. Regeln har två oberoende lagliga vägar (|| i
+// selfOrOwner).
+
+  it('ägaren KAN skapa ett annat medlems-doc med serverTimestamp()', async () => {
+    await seedGroup({ memberUids: [OWNER, 'm2'] });
+    await assertSucceeds(setDoc(
+      doc(ownerDb(), 'groups', GROUP, 'members', 'm2'),
+      memberPayload('m2'),
+    ));
+  });
+
+  it('ägaren KAN INTE skapa ett annat medlems-doc med ett bakåtdaterat joinedAt', async () => {
+    await seedGroup({ memberUids: [OWNER, 'm2'] });
+    await assertFails(setDoc(
+      doc(ownerDb(), 'groups', GROUP, 'members', 'm2'),
+      memberPayload('m2', { joinedAt: BACKDATED }),
+    ));
+  });
+
+  // ---- UPDATE ----
+
+  it('en medlem KAN INTE ändra joinedAt på sitt eget befintliga member-doc', async () => {
+    await seedGroup({ memberUids: [OWNER, 'other_uid'] });
+    await seedMemberDoc('other_uid', {
+      uid: 'other_uid', role: 'member', notifications: true,
+      joinedAt: Timestamp.fromMillis(1_700_000_000_000),
+    });
+    await assertFails(updateDoc(
+      doc(otherDb(), 'groups', GROUP, 'members', 'other_uid'),
+      { joinedAt: BACKDATED },
+    ));
+  });
+
+  // Den positiva tvillingen. Utan den passerar en mutant som blockerar VARJE
+  // uppdatering av ett medlems-doc — och det är formen updateMemberProviders har.
+  it('en medlem KAN uppdatera providers utan att röra joinedAt (updateMemberProviders form)', async () => {
+    await seedGroup({ memberUids: [OWNER, 'other_uid'] });
+    await seedMemberDoc('other_uid', {
+      uid: 'other_uid', role: 'member', notifications: true, providers: [8],
+      joinedAt: Timestamp.fromMillis(1_700_000_000_000),
+    });
+    await assertSucceeds(updateDoc(
+      doc(otherDb(), 'groups', GROUP, 'members', 'other_uid'),
+      { providers: [8, 119] },
+    ));
+  });
+
+  it('ägaren KAN INTE ändra joinedAt på ett annat medlems-doc', async () => {
+    await seedGroup({ memberUids: [OWNER, 'm2'] });
+    await seedMemberDoc('m2', {
+      uid: 'm2', role: 'member', notifications: true,
+      joinedAt: Timestamp.fromMillis(1_700_000_000_000),
+    });
+    await assertFails(updateDoc(
+      doc(ownerDb(), 'groups', GROUP, 'members', 'm2'),
+      { joinedAt: BACKDATED },
+    ));
+  });
+
+  it('ägaren KAN uppdatera ett annat medlems-doc utan att röra joinedAt', async () => {
+    await seedGroup({ memberUids: [OWNER, 'm2'] });
+    await seedMemberDoc('m2', {
+      uid: 'm2', role: 'member', notifications: true,
+      joinedAt: Timestamp.fromMillis(1_700_000_000_000),
+    });
+    await assertSucceeds(updateDoc(
+      doc(ownerDb(), 'groups', GROUP, 'members', 'm2'),
+      { notifications: false },
+    ));
+  });
+
+  // Det bärande fallet. Ett medlems-doc utan joinedAt — skrivet utanför appen —
+  // skulle med en bar fältuppslagning aldrig gå att uppdatera igen, och det är en
+  // levande utelåsning som ingen av testerna ovan kan se.
+  it('ett member-doc som SAKNAR joinedAt går fortfarande att uppdatera', async () => {
+    await seedGroup({ memberUids: [OWNER, 'other_uid'] });
+    await seedMemberDoc('other_uid', { uid: 'other_uid', role: 'member', providers: [8] });
+    await assertSucceeds(updateDoc(
+      doc(otherDb(), 'groups', GROUP, 'members', 'other_uid'),
+      { providers: [8, 119] },
+    ));
+  });
+
+  // ---- DELETE: oförändrad. Uppdelningen i tre allow-rader får inte ha gett
+  // delete någon referens till joinedAt — en delete bär ingen request.resource,
+  // och ett medlems-doc som inte går att radera bryter raderingskaskaden. ----
+
+  it('en medlem kan fortfarande radera sitt eget member-doc', async () => {
+    await seedGroup({ memberUids: [OWNER, 'other_uid'] });
+    await seedMemberDoc('other_uid', {
+      uid: 'other_uid', role: 'member', notifications: true,
+      joinedAt: Timestamp.fromMillis(1_700_000_000_000),
+    });
+    await assertSucceeds(deleteDoc(
+      doc(otherDb(), 'groups', GROUP, 'members', 'other_uid'),
+    ));
+  });
+
+  it('ägaren kan fortfarande radera ett annat medlems-doc', async () => {
+    await seedGroup({ memberUids: [OWNER, 'm2'] });
+    await seedMemberDoc('m2', {
+      uid: 'm2', role: 'member', notifications: true,
+      joinedAt: Timestamp.fromMillis(1_700_000_000_000),
+    });
+    await assertSucceeds(deleteDoc(
+      doc(ownerDb(), 'groups', GROUP, 'members', 'm2'),
+    ));
+  });
+
+  it('ett member-doc utan joinedAt går fortfarande att radera', async () => {
+    await seedGroup({ memberUids: [OWNER, 'other_uid'] });
+    await seedMemberDoc('other_uid', { uid: 'other_uid', role: 'member' });
+    await assertSucceeds(deleteDoc(
+      doc(otherDb(), 'groups', GROUP, 'members', 'other_uid'),
+    ));
+  });
+});
+
+
+
+// Varför en icke-ägande medlem som redan står i memberUids inte kan läggas till
+// en gång till — vilket är den skrivning båda join-flödena inleder med.
+//
+// Det är INTE joinedAt-pinningen som stoppar den — det är gruppdokumentets egen
+// update-regel, som funnits sedan tidigare: både token-join-grenen och
+// invite-accept-grenen kräver uttryckligen att uid INTE redan står i memberUids.
+// En ny arrayUnion av ett uid som redan är med når därför inte den vägen.
+//
+// groups.test.ts mockar hela firebase/firestore, så varje write resolvar där och
+// inga regler utvärderas — ett test som påstod att spöket självläker var grönt av
+// fel skäl.
+describe('groups memberUids — en icke-ägande medlem kan inte läggas till igen (BIN-1063 steg 1)', () => {
+  it('en icke-ägande medlem KAN INTE arrayUnion:a sitt eget uid en gång till, ens med ett giltigt joinAttempt', async () => {
+    await seedGroup({ memberUids: [OWNER, 'other_uid'] });
+    await sealJoinAttempt('other_uid');
+    // Exakt den write ett reparationsförsök skulle göra: samma medlemsuppsättning,
+    // uid:et redan med.
+    await assertFails(updateDoc(doc(otherDb(), 'groups', GROUP), {
+      memberUids: [OWNER, 'other_uid'],
+    }));
+  });
+
+  it('kontrollen åt andra hållet: samma write går igenom när uid ännu INTE är medlem', async () => {
+    await seedGroup({ memberUids: [OWNER] });
+    await sealJoinAttempt('other_uid');
+    await assertSucceeds(updateDoc(doc(otherDb(), 'groups', GROUP), {
+      memberUids: [OWNER, 'other_uid'],
+    }));
+  });
+});
+
+
 describe('groups sessionHistory pickedByUid anti-forge', () => {
   const validPick = {
     sessionId: 's1', pickedByUid: 'other_uid', pickedTmdbId: 603, mediaType: 'movie',

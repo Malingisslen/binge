@@ -14,8 +14,18 @@ Cap: 80k chars — pay for an addition with a cut, and move what you cut verbati
 ## How to prove a finding
 - **Rules-trace = hypothesis — write a live PoC.** Throwaway `src/test/rules/_poc-*.test.ts` on the real
   `initializeTestEnvironment`/`withSecurityRulesDisabled` harness, `npm run test:rules`, delete before
-  finishing; prove closure inverted. Port taken → `FIRESTORE_EMULATOR_HOST=localhost:8080 npx vitest run
-  --config vitest.rules.config.ts`. Blocked = DERIVED.
+  finishing; prove closure inverted. Port taken → custom `firebase.json`-alike passed via `--config` with
+  a free port (8080 often held by a sibling session), or `FIRESTORE_EMULATOR_HOST=localhost:<port> npx
+  vitest run --config vitest.rules.config.ts`. Blocked = DERIVED. **This applies to a "self-heals across
+  the rules boundary" claim too, not only a denial hypothesis:** a mock-SDK unit test (`groups.test.ts`
+  style, `vi.fn()` stand-ins for `setDoc`/`updateDoc`) proves the CALL SHAPE only and enforces nothing —
+  BIN-1063's "ghost member (uid in memberUids, no member doc) heals on retry" passed a mocked
+  `expect(result).toEqual({ok:true})` while live `firestore.rules` denies the underlying
+  `updateDoc(group, {memberUids: arrayUnion(existingUid)})` for every non-owner already-a-member uid
+  — PoC'd both bare and with a live `joinAttempts` doc, both `assertFails`. Net
+  effect was not exploitable (fails closed).
+  Any JS-level fall-through/retry claim that crosses into Firestore write semantics
+  needs the SAME live-PoC treatment as a denial hypothesis, not just a mocked assertion.
 - **Mutation-proof any fix whose test could pass for an unrelated reason:** neutralize ONLY the new clause,
   re-run — exactly the target test must fail; restore byte-identical (verify by hash). A `<= 1` range check
   once masked a broken ratchet (BIN-540). Tooling-blocked → restore anyway, label DERIVED. **A stale

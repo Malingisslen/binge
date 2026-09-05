@@ -10,7 +10,7 @@ import {
   assertFails,
 } from '@firebase/rules-unit-testing';
 import {
-  doc, setDoc, updateDoc, deleteDoc, collection, getDoc,
+  doc, setDoc, updateDoc, deleteDoc, collection, getDoc, serverTimestamp,
 } from 'firebase/firestore';
 
 const PROJECT_ID = 'binge-nu-rulestest';
@@ -157,13 +157,13 @@ await seedGroup(['alice', 'bob']); // ownerUid: alice
 // En icke-medlem kan inte injicera en självmedlemskaps-doc i en grupp.
 await check('icke-medlem kan inte self-adda member-doc',
   assertFails(setDoc(doc(mallory, 'groups', GID, 'members', 'mallory'), {
-    uid: 'mallory', joinedAt: 1,
+    uid: 'mallory', joinedAt: serverTimestamp(),
   })));
 
 // En faktisk medlem kan skriva sin egen member-doc.
 await check('medlem kan skriva egen member-doc',
   assertSucceeds(setDoc(doc(bob, 'groups', GID, 'members', 'bob'), {
-    uid: 'bob', joinedAt: 1,
+    uid: 'bob', joinedAt: serverTimestamp(),
   })));
 
 console.log('\n[M5/L4] Recensions-identitet + bio-validering');

@@ -1,4 +1,4 @@
-import { fsdb, lazySubscribe } from './db';
+import { fsdb, lazySubscribe, type FirestoreKit } from './db';
 import { toDate, generateSecureToken, sha256Hex } from './utils';
 import { isPermissionDenied } from './errorCodes';
 import { mediaTypeDocId, resolveTmdbId } from '@/lib/mediaTypeDocId';
@@ -19,7 +19,7 @@ import type {
 } from '@/types';
 
 // BIN-510/536: cap på "mina grupper"-queries (array-contains på memberUids).
-// OBS: firestore.rules:983/1000 begränsar memberUids.size() <= 100 PER GRUPP
+// OBS: firestore.rules begränsar memberUids.size() <= 100 PER GRUPP
 // (max antal MEDLEMMAR i en grupp) — den säger inget om hur många OLIKA
 // grupper en enskild uid kan vara med i. Det finns ingen regel som sätter
 // tak på det. 100 är ett produktval (rimligt antal grupper per användare vid
@@ -230,6 +230,10 @@ export async function joinGroupViaToken(params: {
   if (!snap.exists()) return { ok: false, reason: 'not_found' };
   const data = snap.data();
   const memberUids: string[] = data.memberUids ?? [];
+  // Gruppregelns token-join-gren kräver att uid INTE redan står i memberUids,
+  // så den vägen är stängd för den som redan är medlem. Spöke-medlemmen
+  // (memberUids satt, medlemsdokument saknas) är ett olöst tillstånd, med sitt
+  // omfång mätt i BIN-1097.
   if (memberUids.includes(params.uid)) return { ok: false, reason: 'already_member' };
   if (!data.inviteTokenHash) return { ok: false, reason: 'invalid_token' };
 
@@ -267,21 +271,23 @@ export async function joinGroupViaToken(params: {
   // Code review (2026-07-18, high-effort pass): member-doc:et i ett EGET
   // try/catch, inte samma block som memberUids-updateDoc:en ovan. Om DEN
   // här writen faller (nätverksfel/tab-close mellan de två awaits) måste
-  // memberUids-tillägget rullas tillbaka — annars blir uid:et en permanent
+  // memberUids-tillägget rullas tillbaka — annars blir uid:et en
   // "spöke-medlem" (full läsbehörighet till gruppen via memberUids, men
   // ingen member-doc) OCH funktionens egen already_member-guard (ovan) låser
-  // ute varje framtida retry-försök, för alltid.
+  // ute varje framtida retry-försök. Rollbacken är det som håller det sällsynt.
   try {
-    await setDoc(doc(db, 'groups', params.groupId, 'members', params.uid), {
-      uid: params.uid,
-      displayName: params.displayName,
-      username: params.username,
-      photoURL: params.photoURL,
-      providers: params.providers,
-      role: 'member',
-      notifications: true,
-      joinedAt: serverTimestamp(),
-    });
+    await writeMemberDoc(
+      { db, doc, getDoc, setDoc, serverTimestamp },
+      params.groupId,
+      params.uid,
+      {
+        displayName: params.displayName,
+        username: params.username,
+        photoURL: params.photoURL,
+        providers: params.providers,
+        role: 'member',
+      },
+    );
   } catch (err) {
     console.error('member doc write failed after memberUids update — rolling back to allow retry', err);
     await updateDoc(ref, { memberUids: arrayRemove(params.uid), updatedAt: serverTimestamp() }).catch(rollbackErr => {
@@ -326,6 +332,52 @@ export async function inviteMemberByUid(params: {
   });
 }
 
+/**
+ * Skriv medlemsdokumentet på det sätt reglerna tillåter för det tillstånd som
+ * faktiskt råder (BIN-1063 steg 1).
+ *
+ * joinedAt får bara sättas när dokumentet SKAPAS. En ovillkorlig setDoc utan
+ * merge mot ett dokument som redan finns är en rules-UPDATE med ett nytt
+ * joinedAt, och den nekas — vilket fäller anroparens catch och rullar tillbaka
+ * ett medlemskap som var giltigt. Före pinningen lyckades samma överskrivning
+ * tyst.
+ *
+ * Läsningen är laglig: den sker EFTER att uid ligger i
+ * memberUids, vilket är precis vad members-läsregeln kräver.
+ */
+async function writeMemberDoc(
+  kit: Pick<FirestoreKit, 'db' | 'doc' | 'getDoc' | 'setDoc' | 'serverTimestamp'>,
+  groupId: string,
+  uid: string,
+  profile: {
+    displayName: string;
+    username: string | null;
+    photoURL: string | null;
+    providers: number[];
+    role: string;
+  },
+): Promise<void> {
+  const { db, doc, getDoc, setDoc, serverTimestamp } = kit;
+  const ref = doc(db, 'groups', groupId, 'members', uid);
+  const fields = {
+    uid,
+    displayName: profile.displayName,
+    username: profile.username,
+    photoURL: profile.photoURL,
+    providers: profile.providers,
+    role: profile.role,
+    notifications: true,
+  };
+  const existing = await getDoc(ref);
+  if (existing.exists()) {
+    // Uppdatering: joinedAt utelämnas helt, så oföränderligheten är trivialt
+    // uppfylld och det ursprungliga datumet står kvar.
+    await setDoc(ref, fields, { merge: true });
+    return;
+  }
+  await setDoc(ref, { ...fields, joinedAt: serverTimestamp() });
+}
+
 // Mål-användaren accepterar en inbjudan: lägger till sig själv i memberUids,
 // skriver därefter sin member-doc, raderar sist inbjudan — tre separata
 // awaitade writes, INTE en batch. (Reverterad 2026-07-18, samma orsak som
@@ -347,8 +399,39 @@ export async function acceptGroupInvite(params: {
   photoURL: string | null;
   providers: number[];
 }): Promise<void> {
-  const { db, doc, setDoc, updateDoc, deleteDoc, arrayUnion, arrayRemove, serverTimestamp } = await fsdb();
+  const { db, doc, getDoc, setDoc, updateDoc, deleteDoc, arrayUnion, arrayRemove, serverTimestamp } = await fsdb();
   const groupRef = doc(db, 'groups', params.groupId);
+
+  // BIN-1063 steg 1: den already_member-spärr joinGroupViaToken har haft hela tiden.
+  // Ett ANDRA accept är nåbart när inbjudan sist i flödet inte hann raderas, och det
+  // nekas av gruppregelns accept-gren, som kräver att uid INTE redan står i
+  // memberUids. Spärren gör det till ett rent no-op som dessutom städar bort den
+  // inaktuella inbjudan. Mekanismen är pinnad i
+  // src/test/rules/firestore-rules.test.ts.
+  //
+  // Utkastningen — att en rollback tar bort en giltig medlem — hör till ett ANNAT
+  // tillstånd, det där medlemsdokumentet finns men uid saknas i memberUids. Där
+  // lyckas arrayUnion, och det är writeMemberDoc som håller den skrivningen laglig.
+  //
+  // Samma enda läsning av gruppdoc:et som joinGroupViaToken redan gör.
+  const groupSnap = await getDoc(groupRef);
+  const existingMemberUids: string[] = groupSnap.data()?.memberUids ?? [];
+  if (existingMemberUids.includes(params.uid)) {
+    // Är uid redan medlem finns två olika tillstånd, och bara ett av dem är
+    // ett avslutat medlemskap. Saknas medlemsdokumentet är detta en
+    // spöke-medlem (memberUids satt, dokumentet aldrig skrivet). Att kortsluta
+    // där hade raderat inbjudan, och att behålla den är strikt bättre än att
+    // kasta den. Omfånget för spöke-tillståndet är mätt i BIN-1097.
+    // Läsningen är laglig: uid ligger i memberUids.
+    const existingMember = await getDoc(doc(db, 'groups', params.groupId, 'members', params.uid));
+    if (existingMember.exists()) {
+      invalidateMyGroupsCache(params.uid);
+      await deleteDoc(doc(db, 'users', params.uid, 'groupInvites', params.groupId));
+      return;
+    }
+    // Spöke — fall igenom, precis som före den här spärren fanns.
+  }
+
   await updateDoc(groupRef, {
     memberUids: arrayUnion(params.uid),
     updatedAt: serverTimestamp(),
@@ -358,21 +441,21 @@ export async function acceptGroupInvite(params: {
   // motivering som joinGroupViaToken — om DEN här writen faller (nätverksfel
   // mellan de två awaits) måste memberUids-tillägget rullas tillbaka, annars
   // blir uid:et en spöke-medlem (full läsbehörighet via memberUids, ingen
-  // member-doc). Till skillnad från joinGroupViaToken har acceptGroupInvite
-  // ingen egen "already_member"-guard som skulle permanent-låsa en retry —
-  // groupInvites-doc:et står kvar (raderas sist) så ett nytt accept-försök
-  // fungerar — men utan rollback är gruppen ändå trasig tills dess.
+  // member-doc). groupInvites-doc:et står kvar (raderas sist) så ett nytt
+  // accept-försök fungerar — men utan rollback är gruppen ändå trasig tills dess.
   try {
-    await setDoc(doc(db, 'groups', params.groupId, 'members', params.uid), {
-      uid: params.uid,
-      displayName: params.displayName,
-      username: params.username,
-      photoURL: params.photoURL,
-      providers: params.providers,
-      role: 'member',
-      notifications: true,
-      joinedAt: serverTimestamp(),
-    });
+    await writeMemberDoc(
+      { db, doc, getDoc, setDoc, serverTimestamp },
+      params.groupId,
+      params.uid,
+      {
+        displayName: params.displayName,
+        username: params.username,
+        photoURL: params.photoURL,
+        providers: params.providers,
+        role: 'member',
+      },
+    );
   } catch (err) {
     console.error('member doc write failed after memberUids update — rolling back to allow retry', err);
     await updateDoc(groupRef, { memberUids: arrayRemove(params.uid), updatedAt: serverTimestamp() }).catch(rollbackErr => {
@@ -508,8 +591,8 @@ export async function setMemberRating(params: {
 // setDoc skrev alltid memberRatings:{} — så ett race mellan två medlemmar,
 // eller ett remove+re-add, nollställde tyst redan satta betyg. watchlist-
 // DocToObject defaultar redan saknat memberRatings till {} vid läsning
-// (rad ~630), så att utelämna fältet här är korrekt för BÅDE förstagångs-
-// tillägg (fältet finns inte alls — samma effekt som {}) och re-add
+// så att utelämna fältet här är korrekt för BÅDE förstagångstillägg (fältet
+// finns inte alls — samma effekt som {}) och re-add
 // (merge rör inte ett befintligt memberRatings-fält).
 export async function addToGroupWatchlist(params: {
   groupId: string;

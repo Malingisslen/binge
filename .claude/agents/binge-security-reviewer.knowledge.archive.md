@@ -8743,3 +8743,175 @@ judgment `_note20` records as already run pre-build, not a mechanical-gate re-ru
 carve-out (quoting a retired claim as evidence, not restating it live) and is not itself flagged.
 
 **Verdict: pass (0 blocking).**
+
+### 2026-09-05 — BIN-1063 step 1 re-review: ghost-member self-heal claim is false for non-owner ghosts
+
+**Trigger:** re-review of `firestore.rules`, `src/lib/firebase/groups.ts`, `src/lib/firebase/groups.test.ts`
+after the push gate found the joinedAt pin (BIN-1063 step 1) breaks the two self-healing mid-states
+(ghost member, reverse orphan) in both `joinGroupViaToken` and `acceptGroupInvite`. The fix under review
+adds a shared `writeMemberDoc` (create with `joinedAt` when the member doc is absent, `{merge:true}`
+omitting `joinedAt` when present) plus explicit ghost/reverse-orphan fall-through branches in both
+callers, driven by four states: (uid∈memberUids, doc exists) finished→short-circuit; (uid∈memberUids, doc
+absent) ghost→heal; (uid∉memberUids, doc exists) reverse orphan→heal via merge w/o joinedAt; (neither)
+plain first accept.
+
+**What held.** The rules half (`groups/{groupId}/members/{memberUid}`'s split create/update/delete with
+`selfOrOwner()` + `joinedAt == request.time` on create + `get('joinedAt',null)` pinned unchanged on
+update) is unchanged behaviourally from the prior pass — only a comment (a false quantifier replaced by a
+derivation command) changed. `writeMemberDoc` is only ever called with `uid = params.uid` (the caller's
+own authenticated uid) at both call sites, role hardcoded to `'member'` — no path lets it write or demote
+another member. The merge branch omits `joinedAt` entirely, and Firestore's rules evaluate
+`request.resource.data` for a merge as the full POST-merge doc, so the omitted field round-trips to its
+existing value — `get('joinedAt',null) == get('joinedAt',null)` holds trivially; no forgery route to
+backdate. The reverse-orphan and first-accept states genuinely work, confirmed by the emulator-backed
+`firestore-rules.test.ts` additions (create/update/delete × owner/self × valid/backdated/future
+`joinedAt`, 12 cases, both directions driven) and by re-deriving the update rule by hand.
+
+**What did not hold — verified with a throwaway live PoC, not just a rules-trace.** For a GHOST member
+(uid already in `memberUids`, member doc absent) who is NOT the group owner, both functions' "fall
+through and let the write heal it" branch reaches
+`updateDoc(groupRef, {memberUids: arrayUnion(existingUid), ...})` before ever calling `writeMemberDoc`.
+Wrote `src/test/rules/_poc-ghost-arrayunion.test.ts` against the real `firestore.rules` (a temp
+`firebase.json`-alike on port 8199 since 8080 was held by a sibling session — the digest's remedy for
+that), seeded a group with `memberUids: [OWNER, 'other_uid']` and no `members/other_uid` doc, and called
+`updateDoc` as `other_uid` with `arrayUnion('other_uid')`: **`assertFails`**, both with and without a
+live `joinAttempts` doc present (control for the token-verified case). All four OR-branches of the
+`groups/{groupId}` update rule require either `ownerUid == auth.uid` or a negative
+`!(auth.uid in resource.data.memberUids)` — a ghost is already in that array, so none matches. Only an
+OWNER-ghost heals (the owner branch has no such negative precondition). Deleted the PoC file and the
+temp config before finishing, per the fold-in-place convention.
+
+**Severity call.** Not exploitable — nothing new is granted, the write fails closed exactly as a stock
+permission-denied. Not a regression in access control. It IS a false, unverified, security-adjacent
+attestation, now baked into: the JSDoc above `writeMemberDoc` and the inline comments in both call sites
+("Fall igenom och låt skrivningen läka det", the four-state table), AND a mocked unit test in
+`groups.test.ts` (`expect(result).toEqual({ok:true})` for the ghost case) that can never catch this
+because `vi.mock('firebase/firestore', ...)` stubs `updateDoc`/`setDoc` to always resolve — it asserts
+call SHAPE, never rules outcome. Concretely: `joinGroupViaToken`'s reported reason for a ghost with a
+genuinely valid token silently changed from the old, accurate `'already_member'` (immediate, no writes)
+to the new, misleading `'invalid_token'` (after writing a throwaway `joinAttempts` doc) or `'transient'`
+— worse UX, not worse security. `acceptGroupInvite`'s ghost behaviour is UNCHANGED end-to-end (same
+uncaught throw at the same `updateDoc` call, before and after this diff) — the new already-member branch
+never actually reaches a non-owner ghost; only the finished-membership short-circuit and the
+reverse-orphan heal are real fixes. Rated blocking for THIS gate because the false claim is written into
+comments and a positive test that future work (BIN-1063 step 3, the ownerless-group handover keyed on
+`joinedAt`) will read as "ghost members always end up with a proper member doc" — they do not, for the
+common non-owner case.
+
+**Fix options given, not chosen for the reviewer to pick:** (a) strike the "heals"/"läks" claims in the
+JSDoc, the inline comments, and the four-state table for the ghost row, and correct the mocked test's
+expectation to match reality (or gate it behind an owner-uid fixture, which DOES heal) — cheapest, ships
+the accurate part of the fix as-is; (b) actually close the gap by loosening the join/accept branches of
+the `groups/{groupId}` update rule to also permit a true no-op `arrayUnion` (uid already present, array
+otherwise identical) for the caller's own uid — a rules change, needs its own review before deploy, and
+widens what "self or owner" can already-be-a-member-and-still-write, so should not be done without
+tracing every other branch that leans on the current negative precondition.
+
+**Not a re-flag of the accepted 2026-07-19 deviation** ("groups.ts membership-add rollback can strand a
+late compensating write... self-locking, same-account-only, do not file without new facts"). That entry
+covers a TOCTOU race on the rollback timing. This is a STRUCTURAL rule mismatch, independent of timing —
+the ghost-heal branch is unreachable for non-owners on every attempt, not just a raced one. New class,
+correctly not blocked by that entry.
+
+### 2026-09-05 — BIN-1063 step 1 re-review #2: the fix for the over-claim above shipped an under-claim, now struck; re-review confirms the fix and finds no third
+
+**Trigger:** re-review of the same three files after fix option (a) above landed. Between the previous
+entry and this one, a DIFFERENT false attestation was found and fixed inside the very fix for the first
+one: the surviving test title `joinGroupViaToken svarar already_member bara när medlemsdokumentet FINNS`
+claimed the `already_member` reply was conditional on the member doc's existence. The guard it describes
+(`if (memberUids.includes(params.uid)) return {ok:false, reason:'already_member'}`) never reads the
+member doc at all — a ghost (uid in `memberUids`, doc absent) gets `already_member` too. This is the
+UNDER-stating mirror of the prior entry's OVER-claim (that state said a ghost "heals"; this one implied a
+ghost does NOT get flagged already_member) — same root cause, opposite direction, in the same commit's
+fix. Confirms this file's existing principle ("a mutation-justification comment has two measurable
+halves... correcting one mints the next falsehood") generalizes to test TITLES, not only inline comments.
+
+**Fix verified in place, not just claimed.** The exclusivity clause was STRUCK (not reworded): title is
+now `joinGroupViaToken svarar already_member när uid redan står i memberUids`, directly readable from the
+one-line guard. The member-doc seed that the old title's premise needed was removed from that test (it
+seeded nothing but the group doc — correct, since the guard never reads the member doc). A comment above
+states the true scope: the guard looks at `memberUids` alone, a ghost gets `already_member` too, that is
+truer than the `invalid_token` a fall-through produced, and BIN-1097 + the emulator suite carry why a
+ghost can't be repaired from the client at all.
+
+**Re-verified this round, don't just re-read:**
+- `npx vitest run src/lib/firebase/groups.test.ts` → 28/28, matches the brief's evidence.
+- The rules-half of BIN-1063 step 1 (the `members/{memberUid}` create/update/delete split, the
+  `joinedAt == request.time` create pin, the `get('joinedAt',null)` update-immutability with defaults on
+  BOTH sides) is unchanged from the prior review — confirmed by re-reading, not by SHA equality, since a
+  neighbour edit could have falsified a comment about it without touching its own lines. It doesn't grant
+  any authorization the old monolithic `allow create, update, delete` line didn't; the extracted
+  `selfOrOwner()` function body is byte-identical to that old line (diffed by hand).
+- Mutation-proofed the create pin LIVE against the real rules file (temp `firebase.json`-alike, port
+  8199 — 8080 held by a sibling session): stripped `&& request.resource.data.joinedAt == request.time`
+  from the create rule, reran `-t BIN-1063` → exactly 3 of 15 red (both directions on the member's own
+  branch, one on the owner's), the other 12 (owner path, update-immutability, delete-untouched, the two
+  ghost/memberUids-reachability cases) stayed green. Restored via `git show :firestore.rules`, verified
+  byte-identical by `git hash-object` (not by `git status`/`git diff`, which reported a stale `MM`/warning
+  under `core.autocrlf=true` despite matching content — hash is the only check that doesn't lie here).
+- Ran the two ghost/reverse-orphan emulator tests (`groups memberUids — ett uid som redan är medlem kan
+  inte läggas till igen`) inside the same `-t BIN-1063` pass: both still assert what they name — a
+  non-owning member's own `arrayUnion` of their already-present uid `assertFails`, and the same write
+  `assertSucceeds` as a control when the uid is genuinely absent yet.
+- grep confirmed no `functions/**` writer touches `groups/{id}/members/**` (Admin SDK bypass is not in
+  play here) and no other `joinedAt` writer exists outside `createGroup`/`writeMemberDoc` (both via
+  `serverTimestamp()`, never a client literal).
+
+**No third false claim found**, in either direction, across all three gated files at these bytes.
+
+**Verdict: pass (0 blocking).**
+
+### 2026-09-05/06 — BIN-1063 step 1 re-review #3: both remaining cuts checked against history, both clean
+
+**Trigger:** re-review after two more cuts since the last pass — `groups.test.ts`'s last surviving copy
+of "falling through gave a misleading `invalid_token`" (the claim r2's entry already tracked being struck
+from the JSDoc, the inline comments and the first test title) and, in this file's own r1 entry, the
+clause "but the shipped comments and test asserted a false self-heal, silently regressing the reported
+reason from a clear `'already_member'` to a misleading `'invalid_token'`".
+
+**Checked the second cut against history, not just against the dispatching prompt's word.** `git show
+HEAD:src/lib/firebase/groups.test.ts` — HEAD never carried the self-heal wording; the whole BIN-1063 step
+1 diff (rules split, `writeMemberDoc`, both ghost/reverse-orphan branches, all of `groups.test.ts`'s new
+`describe` blocks) is new in this working tree, never shipped. `git log --all -S"regressing the reported
+reason" --oneline` and the same for "silently changed from" and "heals on retry" — no commit, on any
+branch, ever introduced or carried that wording. `joinGroupViaToken`'s `already_member` guard
+(`if (memberUids.includes(params.uid)) return {ok:false, reason:'already_member'}`) is present verbatim
+in `git show HEAD:src/lib/firebase/groups.ts` — it did not arrive with this diff and was never touched by
+it. So the struck clause described a defect that existed only in THIS batch's own uncommitted working
+tree, under review, and never reached `main` — cutting it removes an unmeasured claim about the repo's
+history, not a record of shipped behaviour. Correct to strike, nothing true lost.
+
+**Grepped the whole tracked tree for the claim's distinctive phrases** (`already_member.{0,80}invalid_token`,
+`regressing the reported reason`, `silently changed from`, case-insensitive) — the only remaining hit is
+this file's own r1 entry, which is the correct carve-out (a knowledge/archive file quoting a retired claim
+as the finding, not restating it live). `git diff firestore.rules` (unstaged vs. index) is empty aside
+from the CRLF-normalization warning `core.autocrlf=true` always prints — the `MM` status is not a live
+second edit.
+
+**Re-verified the four mechanical claims for this pass, each independently:**
+- `selfOrOwner()`'s body is the pre-split shared line character-for-character (diffed the two texts by
+  hand from `git diff --cached`, not from memory of the prior round) — grants exactly what the old
+  `allow create, update, delete` condition granted, nothing wider.
+- The create pin (`joinedAt == request.time`) rejects any client-chosen value, including omission
+  (accessing a missing `.joinedAt` errors the whole `&&` chain to `false`) — a client cannot backdate on
+  create by any route, not just the one `writeMemberDoc` takes.
+- The update pin (`get('joinedAt',null) == get('joinedAt',null)`, defaulted on both sides) rejects any
+  change to the field's value on update — a client cannot backdate via update either. Together the two
+  rules are what block backdating; nothing about `writeMemberDoc` choosing the merge branch is load-
+  bearing to that guarantee, since a client could hit `update` directly with any payload and still be
+  pinned. Accepting the integration gate's refined framing: it is airtight for any write mediated by
+  `firestore.rules` (client SDK, any caller) — the only exception is Admin SDK, which bypasses rules
+  entirely and is a separate question already closed (`grep -rn "'members'" functions/src` → no hit;
+  confirmed again this round against `groups/{id}/members` specifically, not just `'members'`).
+  `delete` carries no reference to `joinedAt` (unchanged from the pre-split line, which also had none) —
+  correct, since `delete` has no `request.resource`.
+- Article 17: this diff does not touch `accountDeletion.ts`, `removeMember`, or `deleteGroup` — the
+  member-doc delete those paths rely on is `selfOrOwner()`'s self-branch, unchanged in substance from the
+  pre-split rule. `accountDeletion.ts`'s per-group leave path (`groups/{gid}/members/{myUid}` self-delete,
+  read against pre-batch `memberUids` via `get()`) is unaffected by the split.
+
+**No new finding.** Both cuts described in the dispatching prompt are verified correct against `git log`/
+`git show`, not just accepted on the prompt's say-so. No fourth copy of either claim exists anywhere in
+the tracked tree outside this file's own archive record.
+
+**Verdict: pass (0 blocking).**

@@ -1256,13 +1256,46 @@ service cloud.firestore {
         // Sig själv (men bara om man faktiskt är medlem i gruppen — L1) eller
         // ägaren kan skriva. Utan medlemskaps-villkoret kunde vem som helst
         // skriva en självmedlemskaps-doc i en godtycklig grupp.
-        allow create, update, delete: if isSignedIn() && (
-          (
-            request.auth.uid == memberUid
-            && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids
-          )
-          || get(/databases/$(database)/documents/groups/$(groupId)).data.ownerUid == request.auth.uid
-        );
+        //
+        // BIN-1063 steg 1 delade den tidigare gemensamma create/update/delete-raden
+        // i tre. Uttrycket nedan ÄR den raden, oförändrat och bara namngivet — inget
+        // villkor tillkom. Delningen behövs för att create och update ska kunna bära
+        // olika joinedAt-krav utan att delete får någon referens till fältet alls:
+        // en delete bär ingen request.resource, så ett gemensamt villkor som rörde
+        // fältet hade nekat varje borttagning och gjort medlemsdokumentet oraderbart.
+        function selfOrOwner() {
+          return isSignedIn() && (
+            (
+              request.auth.uid == memberUid
+              && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids
+            )
+            || get(/databases/$(database)/documents/groups/$(groupId)).data.ownerUid == request.auth.uid
+          );
+        }
+
+        // joinedAt pinnas till serverns commit-tid, samma mönster som joinAttempts
+        // createdAt (BIN-480) och household updatedAt. Fältet blir tilldelningsnyckeln
+        // när en ägarlös grupp lämnas över till den medlem som varit med längst
+        // (BIN-1063 steg 3). Klientskrivet var det godtyckligt: vilken medlem som helst
+        // kunde sätta sitt eget till 1970 och vinna varje framtida överlämning i varje
+        // grupp den är med i. Varje skrivväg som sätter fältet gör det med
+        // serverTimestamp(), som löser ut till exakt request.time — även inne i en
+        // batch, där hela commiten delar en request.time. Härled vägarna i stället
+        // för att lita på den här meningen:
+        //   grep -n "'members'" src/lib/firebase/groups.ts
+        allow create: if selfOrOwner()
+          && request.resource.data.joinedAt == request.time;
+
+        // Oföränderligt efteråt. Uppslag med default på BÅDA sidor, aldrig ett bart
+        // fältuppslag: ett medlemsdokument utan fältet — skrivet utanför appen, t.ex.
+        // för hand i konsolen — skulle med bar uppslagning aldrig gå att uppdatera
+        // igen, och updateMemberProviders låstes ute tills doc:et reparerats manuellt.
+        // Saknas fältet på båda sidor jämförs null mot null och en uppdatering av
+        // något ANNAT fält går igenom.
+        allow update: if selfOrOwner()
+          && request.resource.data.get('joinedAt', null) == resource.data.get('joinedAt', null);
+
+        allow delete: if selfOrOwner();
       }
 
       // Session-historik: avtryck av Tillsammans-sessioner som gruppen
