@@ -1395,8 +1395,7 @@ arbetsflödeskommentaren i samma varv — så granskaren underkände den igen.
 
 **Priset:** tio granskningsvarv på bunten, fem blockerande fynd, ETT i koden.
 
-### [Workflow] Samma mening granskas av olika grindar, och varje grind ser bara sina
-egna filer (2026-09-05, BIN-1063)
+### [Workflow] Samma mening granskas av olika grindar, och varje grind ser bara sina egna filer (2026-09-05, BIN-1063)
 
 **Trigger:** en granskare underkänner ett påstående om vad en regel eller en kodväg
 ALLTID gör.
@@ -1404,14 +1403,13 @@ ALLTID gör.
 **Regel:** rätta det inte bara där du fick det underkänt. Meningen bor i flera filer,
 de granskas av olika grindar, och den överlever i den fil grinden inte öppnade. Skriv
 heller ingen omskrivning med annan avgränsning — det är ett nytt omätt påstående.
-Undantaget är `*.knowledge.md`: den ersätts på plats enligt sin arkivkonvention, den
-stryks inte.
+`*.knowledge.md` ersätts på plats enligt sin arkivkonvention, den stryks inte.
 
 **Vad som hände:** påståendet att gruppregeln nekar en ny `arrayUnion` för ett uid som
 redan är medlem bodde i koden, i testfilen, i regeltestets rubrik och i granskarens
 kunskapsfil. Varje grind öppnade sin egen delmängd, så åtgärden tog flera varv fast
 ingen enskild strykning var svår. Påståendet var dessutom falskt: gruppregelns
-ÄGARgren kräver bara `hasAll`, som en oförändrad medlemslista uppfyller.
+ÄGARgren kräver `hasAll`, som en oförändrad medlemslista uppfyller.
 
 **Kontrollen:** sök påståendet i hela trädet innan du rättar det, inte bara i de filer
 grinden namngav.
