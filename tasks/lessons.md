@@ -1395,28 +1395,26 @@ arbetsflödeskommentaren i samma varv — så granskaren underkände den igen.
 
 **Priset:** tio granskningsvarv på bunten, fem blockerande fynd, ETT i koden.
 
-### [Workflow] En rättelse av ett unikhetspåstående flyttar det, den tar inte bort det (2026-09-05, BIN-1063)
+### [Workflow] Samma mening granskas av olika grindar, och varje grind ser bara sina
+egna filer (2026-09-05, BIN-1063)
 
 **Trigger:** en granskare underkänner ett påstående om vad en regel eller en kodväg
-ALLTID gör, och du rättar det på stället du fick det underkänt på.
+ALLTID gör.
 
-**Regel:** samma mening bor i flera filer som granskas av OLIKA grindar, och varje grind
-ser bara sina egna. Stryk den i alla filer samtidigt, inte bara i den grinden råkade
-öppna. Och skriv ingen omskrivning: en mening som säger samma sak med annan avgränsning
-är ett NYTT omätt påstående, som nästa varv underkänner igen.
+**Regel:** rätta det inte bara där du fick det underkänt. Meningen bor i flera filer,
+de granskas av olika grindar, och den överlever i den fil grinden inte öppnade. Skriv
+heller ingen omskrivning med annan avgränsning — det är ett nytt omätt påstående.
+Undantaget är `*.knowledge.md`: den ersätts på plats enligt sin arkivkonvention, den
+stryks inte.
 
 **Vad som hände:** påståendet att gruppregeln nekar en ny `arrayUnion` för ett uid som
-redan är medlem ströks fyra gånger, ur fyra olika filer — koden, testfilen, regeltestets
-rubrik och granskarens kunskapsfil. Varje strykning öppnades av en annan grind, och varje
-gång överlevde meningen i en fil den grinden inte läste. Påståendet var dessutom falskt:
-gruppregelns ÄGARgren kräver bara `hasAll`, som en oförändrad medlemslista uppfyller, så
-för en ägare passerar skrivningen. Det mättes först när en granskare körde en riktig
-emulator i stället för att läsa reglerna.
+redan är medlem bodde i koden, i testfilen, i regeltestets rubrik och i granskarens
+kunskapsfil. Varje grind öppnade sin egen delmängd, så åtgärden tog flera varv fast
+ingen enskild strykning var svår. Påståendet var dessutom falskt: gruppregelns
+ÄGARgren kräver bara `hasAll`, som en oförändrad medlemslista uppfyller.
 
-**Priset:** tolv granskningsvarv på bunten. TVÅ fynd i koden, båda i min egen första fix.
-Resten i prosan, varav flera infördes av rättelsen av ett tidigare fynd. Det som till
-slut fick den att konvergera var att STRYKA meningarna, inte att formulera om dem — ytan
-krympte för varje varv i stället för att bytas ut.
+**Kontrollen:** sök påståendet i hela trädet innan du rättar det, inte bara i de filer
+grinden namngav.
 
 ### [Testing] Ett mockat test bevisar anropets FORM, det utvärderar inga regler (2026-09-05, BIN-1063)
 
