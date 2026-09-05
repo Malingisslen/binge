@@ -173,6 +173,15 @@ is the real boundary.
   is advisory on the surviving path by BIN-344's decision. Cite the workflow whose
   trigger matches the event, never "CI".
   → `.github/workflows/deploy.yml`, `.github/workflows/pr-checks.yml`, `.github/workflows/secret-scan.yml`
+- **Vakten över de publika miljövariablernas inkoppling** (BIN-1080). scripts/ hade ingen
+  ägande roll alls. Katalogen skrivs utan backticks: generatorn skördar backtick-citerade
+  spårade sökvägar, och ett token med avslutande snedstreck ger rollen HELA katalogen.
+  Skriptets eget filhuvud säger vad det gör: varje `NEXT_PUBLIC_*` klienten läser måste
+  lämnas till produktionsbygget, och det är INKOPPLINGEN som prövas, inte värdet — en
+  hemlighet som är tom eller fel passerar. Det stänger BIN-849, där en variabel saknades i
+  bygget i tre månader med både CI och deploy gröna.
+  → `scripts/check-public-env.mjs`, `scripts/check-public-env.test.mjs`
+
 - **Filer som saknade en ägande roll** (BIN-871). Lösenordsstyrkan, auth-felen, push-token och utloggningsomdirigeringen.
   → `src/hooks/useAuth.ts`, `src/hooks/useFcmToken.ts`, `src/hooks/useSignedOutRedirect.ts`, `src/lib/authErrors.ts`, `src/lib/firebase/db.test.ts`, `src/lib/firebase/groups.test.ts`, `src/lib/firebase/utils.test.ts`, `src/lib/passwordStrength.test.ts`, `src/lib/passwordStrength.ts`
 
@@ -595,6 +604,14 @@ Owns the process.
   gating them would put routine bookkeeping behind a review (the same call Malin
   made for `lessons-digest.md` in BIN-851).
   → `.claude/agents/binge-code-reviewer.md`, `.claude/agents/binge-security-reviewer.md`, `.claude/agents/binge-integration-reviewer.md`, `.claude/agents/binge-test-reviewer.md`, `.claude/hooks/freshness.mjs`, `.claude/hooks/freshness.test.mjs`, `.claude/hooks/preview-gate.mjs`, `.claude/hooks/preview-gate.test.mjs`
+- **The remaining check scripts under scripts/** (BIN-1080). Same class as `lefthook.yml`
+  and the staged-routing gate above: they decide how the repo is checked, and
+  check-workflow-map.mjs gates the deploy. check-public-env.mjs is deliberately NOT here —
+  it sits with #4. Both are written without backticks for
+  the same reason the lockfile is: the generator harvests backtick-quoted tracked paths, so
+  naming a file in a sentence that declines to own it would own it.
+  → `scripts/check-workflow-map.mjs`, `scripts/check-workflow-map.test.mjs`, `scripts/check-knowledge-caps.mjs`, `scripts/check-knowledge-caps.test.mjs`, `scripts/prune-map-flag.mjs`, `scripts/prune-map-flag.test.mjs`
+
 - **The risk router and the ownership map it reads** (BIN-834, BIN-869). `route.mjs`
   decides which roles a change is shown to; `gen-ownership-map.mjs` computes the map
   it decides from. Both are code by BIN-805's own ruling, and both routed as
@@ -602,11 +619,7 @@ Owns the process.
   about itself, an instruction nobody was assigned to follow. Owned here rather than
   left to the permanent #14 fallback, because the fallback is a seat of last resort
   for code nobody claimed, not an answer for the two files that decide who reviews
-  everything else. The check scripts under scripts/ stay deliberately UNOWNED — still the #14
-  fallback seat, and `docs/org/route.test.mjs` depends on that being true. (Written
-  without backticks on purpose: the generator harvests every backtick-quoted tracked
-  path in a section, so naming one here would silently seat #25 on it and flip those
-  pins red.)
+  everything else.
   Owning these paths buys a REVIEWER, not a re-audit: `freshness.mjs`
   returns early for everything under the .claude and docs/org trees (de-backticked on
   purpose — a backticked DIRECTORY prefix is harvested too, and would have seated #25

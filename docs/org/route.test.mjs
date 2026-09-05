@@ -165,9 +165,8 @@ describe('root-level files outside src/ that are still code', () => {
   // `not skip` rather than an exact tier/reasonCode ON PURPOSE: neither file has an owning
   // role today, so both answer `medium`/`unmapped-code`, and NAMING an owner for either is
   // an intended improvement that flips the reasonCode to `owned`. A case pinning it would
-  // report that improvement as a failure — the same reasoning route.mjs's golden case for
-  // `scripts/check-public-env.mjs` carries, in the same words: what must never change is
-  // that it stops being `skip`.
+  // report that improvement as a failure. What must never change is that they stop being
+  // `skip`.
   it.each(['vitest.rules.config.ts', 'vitest.setup.ts'])(
     '%s is code and does not route skip (BIN-923)',
     (path) => {
@@ -350,16 +349,31 @@ describe('the router and the gate scripts cannot clear themselves (BIN-805)', ()
     expect(r.panel).not.toContain(21); // and it is never the Technical Writer alone
   });
 
-  it('seats the unmapped-code fallback while a gate script has no named owner', () => {
-    // The specifics, isolated to ONE case so that naming an owner later flips exactly
-    // this test — a signal to update it — instead of scattered ones. That is what
-    // happened: BIN-834 gave docs/org/route.mjs a real owner, so the example moved to a
-    // script that is still unowned. The fallback itself is still the thing being pinned.
-    const r = route(['scripts/check-workflow-map.mjs']);
 
-    expect(r.reasonCode).toBe('unmapped-code');
-    expect(r.panel).toEqual([14]);
-    expect(r.unownedCode).toEqual(['scripts/check-workflow-map.mjs']);
+  it('the gate scripts have a real owner now, not the fallback seat (BIN-1080)', () => {
+    // Every code file under scripts/ was unowned until BIN-1080: the router answered
+    // `unmapped-code` about the repo's own check machinery and printed advice nobody was
+    // assigned to follow. One file sits with #4 and the rest with #25, which owns how the
+    // repo is checked. What decided the first seat is recorded on BIN-1080, not here.
+    const sec = route(['scripts/check-public-env.mjs']);
+    expect(sec.reasonCode).toBe('owned');
+    expect(sec.panel).toEqual([4]);
+    expect(sec.unownedCode).toEqual([]);
+
+    const em = route(['scripts/check-workflow-map.mjs']);
+    expect(em.reasonCode).toBe('owned');
+    expect(em.panel).toEqual([25]);
+    expect(em.unownedCode).toEqual([]);
+
+    // Seated by their own named entries, not by a neighbour: a directory token would own
+    // every file in scripts/, including the dev server and the icon generator, and would
+    // put a reviewer on both. That is the widening Malin refused, and it is how the first
+    // draft of this change went wrong — the role doc named the directory in backticks.
+    for (const r of [sec, em]) {
+      expect(r.roles.find((role) => role.num === r.panel[0]).inherited).toEqual([]);
+    }
+    expect(route(['scripts/serve-spa.mjs']).tier).toBe('skip');
+    expect(route(['scripts/gen-app-icons.mjs']).tier).toBe('skip');
   });
 
   it('route.mjs has a real owner now, not the fallback seat (BIN-834)', () => {

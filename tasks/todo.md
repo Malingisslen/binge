@@ -1,3 +1,74 @@
+# Sprint 2026-09-05b
+
+Föregående sprintplan arkiverad under `---` längst ned.
+
+## BIN-1080 — de åtta kodfilerna i scripts/ får en ansvarig roll [Tier C]
+
+Följer BIN-871 i strikt följd, som biljetten föreskriver. Malins seating 2026-09-03:
+hemlighetsskannern till #4 Säkerhetsarkitekt, de andra sex till #25 — säkerhetsytan får
+inte sättas hos släppansvarig för att spara ett granskningsvarv.
+
+```
+node docs/org/route.mjs --md docs/role-responsibilities.md docs/org/ownership-map.json docs/org/route.mjs docs/org/route.test.mjs
+```
+
+### Den vassa kanten var min egen backtick, inte katalogärvningen
+
+Första utkastet gav BÅDA rollerna hela `scripts/`, så dev-servern och ikongeneratorn
+routade till Säkerhetsarkitekten. Jag läste det som katalogärvning och frågade Malin, som
+valde att lära routern att inte ärva i den katalogen.
+
+Innan jag byggde det mätte jag orsaken, och den var en annan: rolldokumentets bullettext
+nämnde katalogen inom backticks, och generatorn skördar ett token med avslutande
+snedstreck som HELA katalogen. Det är samma fälla som posten om låsfilen i §25 redan
+varnar för. Backticken borttagen ⇒ bara de åtta namngivna filerna ägs.
+
+Routerändringen byggdes, mättes mot HEAD:s router och rullades
+tillbaka. `route.mjs` ligger i den här commiten, men bara med ändrade självtestfixturer —
+ingen routningslogik är rörd. Malin är informerad om att hennes beslut vilade på en
+felaktig diagnos från mig.
+
+### Följden för routningen, mätt
+
+```
+node -e "const {route}=require('./docs/org/route.mjs'); for (const f of ['scripts/check-public-env.mjs','scripts/check-workflow-map.mjs','scripts/serve-spa.mjs']) { const r=route([f]); console.log(f, r.tier, r.reasonCode, JSON.stringify(r.panel)); }"
+```
+
+De åtta namngivna filerna routar `owned` till sin egen roll. Katalogens övriga filer är
+inte kodsökvägar för routern och routar `skip`, precis som före ändringen.
+
+### Två pinnar i routern gällde ett läge den här ändringen tar bort
+
+Både `route.test.mjs` och routerns eget självtest pinnade att ett grindskript saknar ägare
+och seatar reservsätet #14. Det är precis det biljetten lagar. I `route.test.mjs` är fallet
+BORTTAGET; i självtestet är samma rad omskriven till `owned`/#25. Ingen av dem fick en
+påhittad fixtur: en sökväg räknas som kod här bara genom att stå i `TOOLING_CODE_FILES`,
+och en hypotetisk `scripts/`-fil är ingen kodsökväg alls och routar `skip`. Reservsätets
+gren pinnas fortfarande av `src/lib/no-such-dir/brandNew.ts`-fallen i båda filerna, som
+ingen roll kan seata bort.
+
+I stället tillkommer ett fall som pinnar det NYA: de två seatingarna, att ingen av dem är
+ärvd, och att dev-servern och ikongeneratorn fortfarande routar `skip` — den sista raden är
+vad som fäller om katalogtokenet någonsin kommer tillbaka.
+
+Acceptanskriterier:
+1. `diff` — de åtta filerna ägs var för sig; hemlighetsskannern av #4, de andra sex av #25.
+2. `diff` — ingen roll äger katalogen. Ett test fäller om dev-servern slutar routa `skip`.
+3. `diff` — routningslogiken är oförändrad mot HEAD; bara självtestets fixturer rörs.
+4. `diff` — hela `npm test` grön, och routerns självtest avslutar 0.
+
+## Deviation log
+
+- [deviation] Jag ställde en fråga till Malin på fel diagnos. Hon valde en routerändring
+  för ett problem som inte satt i routern. Ändringen är byggd, mätt och tillbakarullad, och
+  hon är informerad — beslutet står kvar på biljetten om ärvningen någon gång blir det
+  verkliga problemet.
+- [discovery] Backtick-fällan slog till två gånger i samma bunt: först på en fil jag sa att
+  #25 INTE skulle äga, sedan på katalogen. Fällan gäller ett token med avslutande
+  snedstreck lika mycket som ett filnamn.
+
+---
+
 # Sprint 2026-09-05
 
 Föregående sprintplan arkiverad under `---` längst ned.

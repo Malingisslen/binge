@@ -597,11 +597,13 @@ function selftest() {
     // BIN-834 gave the router and the map generator a real owner (#25) — they decide who
     // reviews everything else, and until then the router permanently printed "add the path
     // and regenerate the map" about ITSELF, an instruction nobody was assigned to follow.
-    // These two pins moved with that change; `check-workflow-map.mjs` is still unowned and
-    // still pins the fallback, so both branches stay covered.
+    // These two pins moved with that change, and BIN-1080 moved the third: the gate scripts
+    // under scripts/ have named owners now. The fallback branch is pinned by the
+    // src/lib/no-such-dir/brandNew.ts case above, which stays unownable because no role
+    // names that directory.
     { paths: ['docs/org/route.mjs'], tier: 'medium', mustSeat: 25, reasonCode: 'owned' },
     { paths: ['docs/org/route.test.mjs'], tier: 'medium', mustSeat: 25, reasonCode: 'owned' },
-    { paths: ['scripts/check-workflow-map.mjs'], tier: 'medium', mustSeat: 14, reasonCode: 'unmapped-code' },
+    { paths: ['scripts/check-workflow-map.mjs'], tier: 'medium', mustSeat: 25, reasonCode: 'owned' },
 
     // ── BIN-864 / BIN-873 ────────────────────────────────────────────────────────────
     // Same class, two more files — and as of BIN-869 they no longer answer the same way,
@@ -614,12 +616,6 @@ function selftest() {
     // already asserts `owned` / `[25]` for this exact path, and a golden case that stayed
     // vague while the gating test was specific is how one file ends up with two answers.
     //
-    // `check-public-env.mjs` is still unowned, so ITS case keeps only `tier`. That is the
-    // original BIN-864/873 reasoning and it still applies to this one file: naming an
-    // owner in docs/role-responsibilities.md is an INTENDED improvement, and a case that
-    // pinned `unmapped-code` would report that improvement as a failure. What must never
-    // change is that it stops being `skip`.
-    //
     // No breakdown of TOOLING_CODE_FILES is written here. Derive it from the set instead of
     // reading a number here.
     //
@@ -630,7 +626,7 @@ function selftest() {
     // .test.mjs spawns this exact command and fails if it exits non-zero, and `npm test`
     // gates deploy.yml. A red case here now stops a release.
     { paths: ['docs/org/gen-ownership-map.mjs'], tier: 'medium', mustSeat: 25, reasonCode: 'owned' },
-    { paths: ['scripts/check-public-env.mjs'], tier: 'medium' },
+    { paths: ['scripts/check-public-env.mjs'], tier: 'medium', mustSeat: 4, reasonCode: 'owned' },
     // A high-stakes path outranks everything, even when nothing else in the set is owned.
     { paths: ['firestore.rules', 'src/lib/no-such-dir/brandNew.ts'], tier: 'top', mustSeat: 4 },
   ];
