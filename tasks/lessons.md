@@ -1360,3 +1360,37 @@ satt i min egen bullettext. Andringen rullades tillbaka och hennes beslut var sp
 **Provet som hade rackt fore fragan:** ta bort den misstankta mekanismen och mat om. Har:
 kor routern med och utan andringen pa samma sokvagar. Tva minuter, och fragan hade aldrig
 stallts.
+
+### [Workflow] En återställning mitt i granskningsrundan tar bort en fix du redan gjort (2026-09-05, BIN-1088)
+
+**Trigger:** du muterar en fil för att pröva ett test, och återställer den efteråt.
+
+**Regel:** ta ögonblicksbilden av ARBETSTRÄDETS bytes, inte av indexet. `git show :<fil>`
+och `git stash` ger indexversionen, som kan vara äldre än de rättelser du gjort sedan
+senaste `git add`. Skriv till scratchpad och verifiera med `git hash-object` efteråt.
+
+**Vad som hände:** granskningsvarv 2 gav två fynd; jag lagade båda i samma redigering.
+Varv 3 muterade jag koden för att pröva ett test och återställde från en kopia tagen ur
+INDEXET, som låg före båda rättelserna. Jag märkte att den ena var borta och lade tillbaka
+den. Den andra — en struken falsk mening — stod kvar borttagen-och-återinförd i två varv
+till, tills granskaren hittade den igen och kunde peka på att det inte var ett missat
+sök utan en återställning.
+
+**Kontrollen:** efter varje återställning, `git diff` mot det du TRODDE du hade. Inte bara
+mot indexet.
+
+### [Workflow] Ett falskt "det enda" bor på fler ställen än du skrev det (2026-09-05, BIN-1088)
+
+**Trigger:** en granskare underkänner ett unikhetspåstående i din prosa.
+
+**Regel:** stryk det på VARJE ställe i samma redigering, och sök flerradigt och
+blanksteg-normaliserat — samma mening radbryts olika i olika filer, så en enkelradig grep
+hittar en av tre. Skriv inte en mildare version: "det enda", "alla", "den enda vägen" är
+samma påstående i nya ord.
+
+**Vad som hände:** meningen att `pr-checks.yml` är det enda som kör på Dependabots väg
+bodde på sju ställen. Filens EGET huvud sextio rader upp sade motsatsen. Jag strök den
+första kopian i ett varv och skrev in en ny formulering av samma påstående i
+arbetsflödeskommentaren i samma varv — så granskaren underkände den igen.
+
+**Priset:** tio granskningsvarv på bunten, fem blockerande fynd, ETT i koden.
