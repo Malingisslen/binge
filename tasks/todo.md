@@ -1,3 +1,156 @@
+# Sprint 2026-09-05d
+
+Vald ur Backlog. Fem biljetter byggs i tre buntar; en mättes och byggs inte.
+
+Routningen är kommandots utdata, inte en mening om den. Kör om per bunt strax
+före kritiken och strax före commit, på buntens FAKTISKA union:
+
+```
+node docs/org/route.mjs $(git diff --cached --name-only)
+```
+
+---
+
+## Bunt 1 — strykbunten [Tier A]
+
+Tre biljetter, samma regel: en uppräkning som ingen håller sann stryks, den
+formuleras inte om. Ingen ny mening bär ett nytt tal.
+
+Routning vid urvalet (union av de sex filerna nedan):
+`tier: medium`, `reasonCode: owned`, `panel: [25]`.
+
+### BIN-1093 — gate-symmetry.test.mjs BIN-919-stycket
+
+- [ ] Stryk offender-talen och filuppräkningen i `docs/org/gate-symmetry.test.mjs`
+      (BIN-919-stycket). Meningen om KLASSEN står kvar; talen och namnlistan går.
+- [ ] Stryk även kvantifikatorn om tidigare grindvidgningar i samma stycke — samma
+      form, samma omätta historik.
+- [ ] Efterlämna inget stycke utan subjekt.
+
+Acceptanskriterier
+1. `{text: "Ingen mening i BIN-919-stycket påstår ett antal offenders eller räknar upp filnamn", kind: diff}`
+2. `{text: "Meningen om vad omnycklingen köper (KLASSEN) står kvar och har kvar sitt subjekt", kind: diff}`
+3. `{text: "Ingen ny sifferuppgift införs i stycket", kind: diff}`
+4. `{text: "npm test grön", kind: diff}`
+
+### BIN-1095 — deployment.md + RUNBOOK.md räknar upp pr-checks.yml
+
+- [ ] `.claude/rules/deployment.md`: stryk uppräkningen av vad `pr-checks.yml` kör.
+      Filen har redan mönstret som håller ("Härled listan i stället för att lita på
+      den här meningen: `ls .github/workflows/`") — följ det.
+- [ ] `docs/RUNBOOK.md` §6a: stryk BÅDA uppräkningarna i stycket — den om
+      `pr-checks.yml` OCH den om `deploy.yml`. Mätt: `deploy.yml` kör betydligt
+      fler steg än de tre som står där, så samma påstående är falskt två gånger i
+      samma stycke. Härled: `grep -n "name:" .github/workflows/deploy.yml`.
+
+Acceptanskriterier
+1. `{text: "Ingen av de två filerna räknar upp vad pr-checks.yml kör", kind: diff}`
+2. `{text: "RUNBOOK §6a räknar inte heller upp vad deploy.yml kör", kind: diff}`
+3. `{text: "Båda ställena pekar på arbetsflödesfilen i stället, utan att namnge stegen", kind: diff}`
+4. `{text: "Felsökningsvärdet i §6a överlever — läsaren får fortfarande veta vilken workflow som är vilken", kind: diff}`
+
+### BIN-1096 — listan över installationstidsskript i prosa
+
+Källan är `INSTALL_TIME_SCRIPTS` i `scripts/check-dependency-diff.mjs`.
+
+- [ ] `.github/workflows/pr-checks.yml`: stryk den parentetiska uppräkningen,
+      namnge konstanten. Kommentarens poäng är stegens ORDNING — den överlever.
+- [ ] `.claude/agents/binge-security-reviewer.md`: samma strykning.
+- [ ] `tasks/todo.md`: samma strykning i BIN-1088-avsnittet (nu arkiverat nedan).
+- [ ] Skriv ingen mening om hur många kopior som finns.
+
+Acceptanskriterier
+1. `{text: "Ingen av de tre filerna räknar upp skriptnamnen; alla tre namnger konstanten", kind: diff}`
+2. `{text: "Yml-kommentarens poäng om ordningen (checken FÖRE npm ci) står kvar", kind: diff}`
+3. `{text: "Ingen mening påstår ett antal kopior", kind: diff}`
+
+---
+
+## Bunt 2 — BIN-1092 ägarparet för useServiceValue [Tier A]
+
+Routning vid urvalet: `tier: skip`, `reasonCode: doc-only`, `panel: []`.
+Ingen kritik skyldig.
+
+Mätt läge:
+```
+node -e "const m=require('./docs/org/ownership-map.json'); for(const [n,d] of Object.entries(m.roles)) for(const p of d.patterns||[]) if(p.startsWith('src/hooks/useServiceValue')) console.log('#'+n, p)"
+```
+Modulen → #24, testet → #26.
+
+Vald ägare: **#24 Monetization / Partnerships Lead, för båda.** Läst modulen:
+den rullar ihop månadsvärde per tjänst ur egna abonnemangspriser
+(`resolveEffectiveMonthlyCost`, `rollupServiceValue`). Det är #24:s domän, och
+testet prövar just den beräkningen. Väg 2 (båda till #26) faller på att hooken
+inte är en vy-hook.
+
+- [ ] Flytta `src/hooks/useServiceValue.test.ts` från #26:s lista till #24:s i
+      `docs/role-responsibilities.md`.
+- [ ] `node docs/org/gen-ownership-map.mjs` — aldrig `--update-gaps`.
+- [ ] Kör om mätkommandot: båda ska svara #24.
+
+Acceptanskriterier
+1. `{text: "Båda sökvägarna svarar #24 i den regenererade ownership-map.json", kind: diff}`
+2. `{text: "ownership-map.json är regenererad av generatorn, inte handredigerad, och ingen lucka är dold med --update-gaps", kind: diff}`
+3. `{text: "npm test grön — inklusive gen-ownership-map.test.mjs som läser baslinjen som indata", kind: diff}`
+
+---
+
+## Bunt 3 — BIN-1063 steg 1: lås joinedAt i firestore.rules [Tier C]
+
+Malins beslut 2026-09-05, punkt 1. Biljetten är tre ändringar i strikt ordning;
+det här är den FÖRSTA, och de två andra får inte byggas före den.
+
+Routning vid urvalet: `tier: top`, `reasonCode: high-stakes`,
+`panel: [6, 4, 27, 21]`. Full panel FÖRE bygget. Routas om på den faktiska
+unionen (som också bär `src/test/rules/firestore-rules.test.ts`).
+
+### Vad som byggs
+
+`firestore.rules`, `match /groups/{groupId}/members/{memberUid}`: `joinedAt`
+pinnas till `request.time` vid create och görs oföränderligt vid update. Idag är
+fältet klientskrivet och godtyckligt, vilket gör "längst medlem ärver gruppen"
+till en förfalskningsbar tilldelningsregel.
+
+### Vad som INTE byggs här
+
+- Steg 2 (spegelmigreringen) — schemamigrering på skarp data, kräver egen plan
+  och eget go-ahead per arbetsöverenskommelsen.
+- Steg 3 (själva överlämningen i `accountDeletion.ts` + svepet).
+- Inget andra tak, ingen andra frånvarokoll.
+
+Acceptanskriterier
+1. `{text: "En create som sätter joinedAt till något annat än request.time NEKAS av reglerna", kind: diff}`
+2. `{text: "En update som ändrar joinedAt NEKAS, medan en update som lämnar fältet orört tillåts", kind: diff}`
+3. `{text: "Emulatortest driver båda riktningarna per villkor — den skärpta regeln fäller, och den lagliga vägen står grön", kind: diff}`
+4. `{text: "Reglerna är deployade manuellt (deploy.yml gör det inte)", kind: run}`
+
+---
+
+## Mätt, byggs inte
+
+### BIN-1086 — gallringspolicy för sprint-patches/
+
+Vägen som skulle skydda MEKANISMEN (åldersgolv) finns redan. `isHeldSince` i
+`scripts/prune-map-flag.mjs` kräver att hållets tidpunkt är `>=` triggerns egen
+stämpling, så en gammal patchfil kan inte hålla en nyare trigger vid liv. Det
+som står kvar är hushållning (arkivering, janitor-städning) i en gitignorerad
+katalog — utanför varje diffbaserad grind. Mätningen kommenteras på biljetten;
+den byggs inte blint.
+
+## Needs you (Tier D / produktval)
+
+- **BIN-1063 steg 1 kräver manuell regeldeploy** efter commit:
+  `firebase deploy --only firestore:rules`. `deploy.yml` gör bara hosting.
+- **BIN-454 / BIN-402** — `tmdbFieldsSweep` mutateEnabled är din konsolåtgärd och
+  står under stående "gör aldrig detta". Rörs inte.
+- **BIN-189, BIN-521, BIN-170** — bär `idea`-etiketten: produktval som är dina.
+  Byggs inte, kommenteras.
+
+## Deviation log
+
+
+---
+
 # Sprint 2026-09-05c
 
 ## BIN-1088 — Dependabots väg in i main får en mekanisk beroendekontroll [Tier B]
@@ -22,7 +175,7 @@ höjningen gjorde med manifesten.
 
 ### Vad checken fäller på
 
-- Ett nytt installationstidsskript (`preinstall`, `install`, `postinstall`, `prepare`).
+- Ett nytt installationstidsskript.
 - En flytt ut ur `devDependencies` in i `dependencies`.
 - Ett paket som inte stod i något av blocken förut.
 

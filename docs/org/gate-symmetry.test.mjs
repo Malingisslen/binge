@@ -50,25 +50,17 @@
 //       while the router demanded a critique (BIN-919). Keying on the tier asks the
 //       question the rule actually means — "did the router decline to clear this path?" —
 //       instead of re-deriving it from an enumeration that has now been wrong twice.
-//       Measured before the change: of 859 code paths, 556 `owned`, 294 `unmapped-code`,
-//       9 `high-stakes`; 293 of the 294 already reached a gate, so the rekey surfaced
-//       exactly one new offender — the file the ticket was about.
 //
 //       SAY THE NEXT PART PRECISELY, because the obvious summary of this commit is wrong.
 //       The rekey is NOT what closes `package.json`. That file also gained an owner in the
 //       same commit, which makes it answer `owned`, which the OLD keying already saw —
 //       probed by deleting the new gate pattern and re-grading: both keyings then report
 //       it. The ownership half alone would have closed that one file. What the rekey buys
-//       is the CLASS, and that was probed too: strip the tooling alternation from the
-//       integration gate and the old keying reports 2 offenders (route.mjs and
-//       gen-ownership-map.mjs, the two that happen to be owned) while this rule reports 7
-//       — adding check_events.mjs, log_event.mjs, check_review_coverage.mjs,
-//       check-public-env.mjs and check-workflow-map.mjs, every one of them code nobody
-//       owns. FIVE files' worth of blindness, on the exact gate whose five previous
-//       widenings were each found by a human. That is the measurement that justifies the
-//       rekey; "it catches package.json" is not. (It read 6/four for one round — measured
-//       before this same commit added check_review_coverage.mjs, which the integration
-//       review caught. The argument gets stronger, which is why it is worth being right.)
+//       is the CLASS — paths whose reasonCode is `unmapped-code`, which the old
+//       enumeration could not see at all. That is what justifies the rekey; "it catches
+//       package.json" is not. The class claim is pinned mechanically below, in the A1
+//       case that feeds the rule an UNOWNED code path with no gate — synthetic verdicts,
+//       so it holds however the tree is seated today.
 //
 //       The cost is real and forward-looking: a NEW root-level config file (a .nvmrc, a
 //       renovate.json) that nobody owns and no gate matches now fails `npm test`, and

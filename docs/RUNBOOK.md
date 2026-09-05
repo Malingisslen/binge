@@ -380,10 +380,11 @@ någon som just bett att få lämna.
 
 ### 6a. Lint/typecheck fel
 
-Vanligt, fix lokalt. `.github/workflows/deploy.yml` kör lint, typecheck, test
-och sitt eget `rules-tests`-jobb på varje push till main. Faller något där blir
-sajten inte uppdaterad; besökare får kvar förra bygget. `pr-checks.yml` kör lint,
-typecheck och test på pull requests — hamnar du här från en röd PR är det den.
+Vanligt, fix lokalt. `.github/workflows/deploy.yml` grindar varje push till main.
+Faller något där blir sajten inte uppdaterad; besökare får kvar förra bygget.
+`pr-checks.yml` grindar pull requests — hamnar du här från en röd PR är det den.
+Vilka steg respektive workflow kör står i workflow-filen, inte här:
+`grep -n "name:" .github/workflows/deploy.yml .github/workflows/pr-checks.yml`.
 
 ### 6b. Build-fel
 

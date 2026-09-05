@@ -62,7 +62,7 @@ git rev-list --count HEAD..origin/main
 git push origin main
 ```
 
-Push till `main` triggar `.github/workflows/deploy.yml` som kör lint + typecheck + test + build + Firebase deploy. Du behöver alltså inte deploya lokalt.
+Push till `main` triggar `.github/workflows/deploy.yml`. Du behöver alltså inte deploya lokalt.
 
 ### 5. Vänta in GitHub Actions-deployen
 

@@ -546,8 +546,8 @@ Owns the process.
   first" governance rule** (route → convene the stakeholder panel → fold conditions
   into acceptance criteria, for ad-hoc work as well as sprints); the deploy
   drift-guard (rules/functions never auto-ship); the quality gates that run on the
-  push-to-main path — `deploy.yml` carries Lint, Typecheck, Test and its own
-  `rules-tests` job; it downgrades `npm audit` to advisory by BIN-344's decision; BIN-* issue
+  push-to-main path;
+  `deploy.yml` downgrades `npm audit` to advisory by BIN-344's decision; BIN-* issue
   taxonomy + sprint cadence; Dependabot grouping + framework upgrades (React 19 /
   Next 16 landed); the "explain in product terms" communication norm.
   → `CLAUDE.md` (working agreement + cast-the-panel rule), `.github/workflows/deploy.yml`, `.github/dependabot.yml`

@@ -38,8 +38,9 @@ as a finding is noise, not diligence — a genuinely new deviation gets appended
 - Anything reading/writing another user's data (blocking, following, groups, sessions).
 - `package.json` — the dependency manifest, added to your gate by BIN-939. Three things,
   and only these three: (a) a new or changed `scripts` entry that runs at install time
-  (`preinstall`, `install`, `postinstall`, `prepare`) — that is code executing on every
-  machine that installs, the classic supply-chain vector; (b) a package added to
+  (the set is `INSTALL_TIME_SCRIPTS` in `scripts/check-dependency-diff.mjs` — read it
+  there) — that is code executing on every machine that installs, the classic
+  supply-chain vector; (b) a package added to
   `dependencies` rather than `devDependencies`. Where that lands depends on which manifest
   you are looking at: the root one belongs to a client-side SPA, so a production dependency
   reaches every visitor's browser, while `functions/package.json` — which this gate also
