@@ -1,3 +1,101 @@
+# Sprint 2026-09-05
+
+Föregående sprintplan arkiverad under `---` längst ned.
+
+## BIN-871 — varje spårad kodfil har en ägande roll [Tier C]
+
+Malins beslut 2026-09-03: **allt på en gång, i ett eget pass**, inte en klunga per sprint.
+Säkerhetsyta till säkerhetsrollen även här.
+
+BIN-1080 (de åtta skripten i `scripts/`) ligger INTE i den här commiten. Att seata dem
+drar in fler filer via katalogärvning och gör test som pinnar det gamla läget röda; hur
+många beror på vilken delmängd som seatas och mäts när den bunten byggs. Den får en egen
+commit, i strikt följd.
+
+```
+node docs/org/route.mjs --md docs/role-responsibilities.md docs/org/ownership-map.json docs/org/ownership-gaps.json docs/org/route.mjs docs/org/route.test.mjs docs/org/gen-ownership-map.test.mjs
+```
+→ Tier **medium** · #25 Engineering Manager / Release Manager.
+
+### Baslinjen före ändringen
+
+Talet togs FÖRE, med kommandot biljetten namnger, och står här ordagrant:
+
+```
+node -e "console.log(require('./docs/org/ownership-gaps.json').accepted.length)"
+→ 298
+```
+
+### Tilldelningen vilar på två regler
+
+1. **Ett testfil ärver ägaren till filen den prövar.** Mekaniskt, och det tog en stor del.
+2. **Resten sattes per domän**, mot det varje rolls dossier redan namnger. Några exempel,
+   inte hela seatingen: TMDB-integrationen till #13, klientens datalager till #27,
+   rekommendationsmotorn till #28, sidkompositionen och appskalet till #26.
+   Vilka roller som fick en bullet härleds ur rolldokumentet, inte ur den här meningen.
+
+Ägarkartan är REGENERERAD med `node docs/org/gen-ownership-map.mjs`, aldrig handredigerad.
+
+### `--update-gaps` kördes, en gång, med Malins uttryckliga godkännande
+
+Regeln mot flaggan finns för att den annars används för att baslinjera BORT filer som
+borde ha en ägare. Här är det tvärtom: varje post i listan fick en ägare först, så det
+som skrivs är ett äkta tomt läge. Spärrhaken mäter riktning, inte likhet.
+
+### Rollkritik #25 — bindande villkor (kördes efter bygget, före commit)
+
+Utfall: **pass-with-conditions**, fem must-haves. Kritiken byggde ett eget skript som
+jämförde varje nyägd testfil mot ägaren till modulen den importerar, och hittade tre
+felsatta. Jag byggde om kontrollen och körde den själv; den hittade en fjärde.
+
+1. `src/lib/watchStatus.migration.test.ts` satt på #9/#11/#17 — ägarna till
+   grannfilen `watchStatus.ts` — för att min stam-matchning läste `watchStatus.migration`
+   som `watchStatus`. Den prövar schemamigreringen. Omsatt till #14 och #27.
+2. `src/lib/tmdb/selectionResolve.test.ts` importerar `selectionManifest.ts`, som #15
+   äger — liksom dess två systertester, satta där av den här ändringen. Omsatt till #15.
+3. `useSubscriptionAdvisor.helpers.ts` och dess tester låg på två roller inom samma
+   ändring. #28 ägde redan förälderhooken, så helpers följer den.
+4. Kontrollen körs om efter varje omsättning tills bara en träff står kvar:
+   `useServiceValue.test.ts` på #26 mot en modul #24 äger. Testets seating fanns före
+   ändringen, men modulen var utan ägare, så PARET är skapat här. Det är alltså inte ett
+   tidigare beslut jag låter vara — det är öppet arbete jag skjuter upp, filat som BIN-1092.
+5. `route.mjs`s eget självtest bar samma inaktuella fixtur som `route.test.mjs`, och gick
+   grönt ändå eftersom det bara prövar `tier` och `reasonCode`. Bytt till samma
+   hypotetiska syskonsökväg.
+
+### Två test drivs nu av en egen fixtur i stället för repots dagsform
+
+Båda gick sönder för att BIN-871 tog bort det läge de läste ur det levande repot:
+
+* Ärvningsfallet i `route.test.mjs` använde en VERKLIG olistad fil som fixtur. Den fick
+  en ägare, så grenen gick inte längre att nå. Nu en avsiktligt obefintlig sökväg —
+  `route()` matchar på strängen och frågar aldrig filsystemet.
+* `gen-ownership-map.test.mjs`s sorteringsfall körde `findGaps` mot det levande repot och
+  krävde att listan var icke-tom. Det golvet var det som föll när högen nådde noll. Nu en
+  spårad mängd med två avsiktliga luckor, i omvänd bokstavsordning, så sorteringen mäts.
+
+Acceptanskriterier:
+1. `diff` — noll luckor kvar, och `node docs/org/gen-ownership-map.mjs --check` avslutar 0.
+2. `diff` — ägarkartan är regenererad, inte handredigerad; testet som jämför den mot
+   rolldokumentet är grönt.
+3. `diff` — ingen testfil den här ändringen rör ägs av en annan roll än modulen den
+   prövar. Kontrollen finns och kördes.
+4. `diff` — hela `npm test` grön.
+
+## Deviation log
+
+- [deviation] BIN-1080 lyftes ur den här commiten. Att ge `scripts/` en ägare gör hela
+  katalogen ärvd, vilket drar in fler filer och fäller test som
+  pinnar det gamla läget. Beslutet om seatingen står på BIN-1080; det blir en egen commit
+  i strikt följd.
+- [discovery] Min stam-matchning för testsyskon läste `X.Y.test.ts` som ett test av `X`,
+  inte av `X.Y`. Det satte migreringstestet på fel roller. Hittat av rollkritiken.
+- [discovery] `src/lib/firebase/accountDeletion.applyPlan.test.ts` satt fel utan att
+  kritiken namngav den; den hittades av samma kontroll när jag byggde om den. Den femte
+  träffen är bokförd i punkt 4 ovan.
+
+---
+
 # Sprint 2026-09-03c
 
 Föregående sprintplan arkiverad under `---` längst ned.

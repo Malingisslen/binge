@@ -578,7 +578,11 @@ function selftest() {
     { paths: ['src/lib/mediaTypeDocId.ts'], tier: 'medium', mustSeat: 27, reasonCode: 'owned' },
     { paths: ['src/lib/watchlist/addedAt.ts'], tier: 'medium', mustSeat: 27, reasonCode: 'owned' },
     // A file NOT in the map, in a directory whose siblings are owned → inherited, not skip.
-    { paths: ['src/lib/tmdb/prefetch.ts'], tier: 'medium', reasonCode: 'owned' },
+    // The path is deliberately one that does not exist: BIN-871 gave an owner to the real
+    // file this case used to name, which took the inheritance branch away while the case
+    // stayed green — it asserts tier and reasonCode, which a directly-owned file also
+    // satisfies. route() matches on the string and never asks the filesystem.
+    { paths: ['src/lib/tmdb/__unlisted-sibling.ts'], tier: 'medium', reasonCode: 'owned' },
     { paths: ['src/components/pages/MoviePageClient.tsx'], tier: 'medium', mustSeat: 26, reasonCode: 'owned' },
     // Code nobody owns at all is an UNKNOWN blast radius, not a cleared one.
     { paths: ['src/lib/no-such-dir/brandNew.ts'], tier: 'medium', mustSeat: 14, reasonCode: 'unmapped-code' },

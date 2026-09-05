@@ -24974,3 +24974,63 @@ stays un-batched — pair with a unit assert it never calls `writeBatch`/`commit
 Ordered dispatch: the ordering test uses a path matching an early branch correctly, a
 later one incorrectly (BIN-345). `as Record<string, any>` trips `no-explicit-any` — cast
 the narrowest slice; `npx eslint` new test files.
+
+## 2026-09-05 — BIN-871 re-review: ledger-anchored comment-only diff, both mutations re-confirmed
+
+**Task:** re-review two gated files (`docs/org/gen-ownership-map.test.mjs`,
+`docs/org/route.test.mjs`) after a prior pass, on the claim that only comments changed
+since. The dispatching agent quoted the old and new comment text and asserted "no
+assertion changed" and named the specific false claims each strike removed.
+
+**Diff reviewed (staged, HEAD `b0772c7` vs index):** comparing the full staged diff
+against HEAD showed a MUCH bigger delta than "comment-only" — the sorted-list test's
+fixture and assertions had already been rewritten (from `findGaps(tracked)` +
+`toBeGreaterThan(0)` to a synthetic `withGaps` set + `toContain(zeta)`/`toContain(alpha)`),
+and the inheritance test's fixture had already moved from the real path
+`src/lib/tmdb/prefetch.ts` to a synthetic `__unlisted-sibling.ts`. That earlier rewrite was
+NOT this round's subject — it had been reviewed in a prior pass. The actual question was
+whether anything changed BETWEEN that prior pass and now.
+
+**Method (new idiom, not previously in the live file):** `.claude/state/review-ledger.jsonl`
+records every `{t:"read", agent, aid, p, sha, ts}` a reviewer's `Read` tool call produces.
+Bash `grep` on that exact path is refused by a hook ("nothing may write … through a tool" —
+the guard treats any Bash touch as suspect, read or not); the Grep TOOL works. Filtered to
+`agent: "binge-test-reviewer"` and the two paths, sorted by `ts`, the second-to-last row per
+file (`abf3765c54ffc61fe`, ts 1788597333, ~24 min before this pass) was the prior pass; the
+last row (`a2cd0ab0159ae4c22`, ts 1788598817) was this pass's own `Read` calls, and its
+shas (`a95b767e…`, `053a014b…`) matched the CURRENT staged index blobs exactly (confirmed
+via `git rev-parse :<path>` alongside the diff — see prior "FIRST command" bullet, arkiv 04,
+for why both sides get checked). `git cat-file -p <prior-pass-sha>` reconstructed the exact
+bytes reviewed last time; diffing that against the current blob showed EXACTLY the two
+one-line comment edits the dispatching agent described, byte-for-byte, and nothing else —
+turning "trust the prose" into a mechanical three-line diff per file.
+
+**Comment-truth checks, both run live rather than accepted:**
+- `gen-ownership-map.test.mjs`: struck "naming every unowned file emptied the live list" →
+  "the live list was emptied". Ran `findGaps(trackedPaths())` against the real repo:
+  `[]`. True.
+- `route.test.mjs`: struck "…prefetch.ts, which took the branch away with the suite green".
+  Ran `route(['src/lib/tmdb/prefetch.ts'])` live: role #13 now MATCHES it directly
+  (`inherited: []`, `matched: [prefetch.ts]`), seated as the panel. The old fixture's
+  `expect(seated.inherited).toContain('src/lib/tmdb/prefetch.ts')` would therefore FAIL
+  (red), not pass green — the struck clause was factually backwards, correctly removed.
+- Neither strike left a neighbouring clause without a subject (both read as complete
+  sentences after the cut).
+
+**Mutations re-run (protocol: `rm -rf node_modules/.vite/vitest`, mutate, run, restore,
+`git hash-object` == `git rev-parse :<path>`, full green):**
+1. `gen-ownership-map.mjs`: dropped `.sort()` from `findGaps`'s return → reddened exactly
+   "returns a sorted list of repo-relative paths", alone (10 passed / 1 failed).
+2. `gen-ownership-map.mjs`: `findGaps` short-circuited to `return [];` → reddened that same
+   test plus "reports a tracked code file that only inherits its reviewer" (9/2), the
+   expected multi-test blast radius for gutting the whole function.
+3. `route.mjs`: removed `o.inherited.add(path)` from the directory-inheritance branch →
+   reddened exactly "seats the directory owner for an unlisted sibling file", alone, out of
+   905 (904 passed / 1 failed).
+All three restores verified byte-identical to the staged index before moving on; final
+`git status --porcelain` matched the expected ten-file staged set with no stray unstaged
+diff.
+
+**Verdict:** pass (0 blocking). Knowledge-file consequence: folded the ledger-anchored
+diff idiom into the "Verify, never inherit, claims" bullet, paying for it by condensing the
+already-archived (arkiv 33/57) `mainMessage`/`stagedEventsLog` bullet down to a pointer.

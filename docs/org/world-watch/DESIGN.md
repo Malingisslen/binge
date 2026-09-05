@@ -277,8 +277,8 @@ only moves the failure later.
 **Contract.** The hook only ever writes documentation-freshness markers — never touches
 app code, never blocks, fails open. It skips the docs that *define* the system
 (`.claude/`, `docs/org/`, the role doc itself) so the loop can't self-trigger. The
-ownership map is **generated from `docs/role-responsibilities.md`** (28 roles, 149 path
-patterns) so it stays honest to source; FS-validation drops non-paths (e.g. a
+ownership map is **generated from `docs/role-responsibilities.md`** (28 roles; the map
+itself carries the pattern count) so it stays honest to source; FS-validation drops non-paths (e.g. a
 `/`-containing timezone like `Europe/Stockholm`). `/refresh-dossiers` re-audits **only**
 the flagged roles — never all 28 — which is what keeps it cheap and interactive.
 

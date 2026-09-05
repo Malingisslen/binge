@@ -80,10 +80,14 @@ describe('the gates this file interrogates exist (BIN-906)', () => {
 
 describe('folder-ownership inheritance (BIN-788)', () => {
   it('seats the directory owner for an unlisted sibling file', () => {
-    // prefetch.ts is NOT in the ownership map; its siblings in src/lib/tmdb/ are.
+    // The fixture is deliberately a path that does not exist: the branch under test is
+    // "a file the map does not list, in a directory it does", and any REAL such file can
+    // be given an owner later — BIN-871 did exactly that to this case's previous fixture,
+    // src/lib/tmdb/prefetch.ts.
     // Before BIN-788 this matched nothing and routed `skip` — an unreviewed change
     // in a heavily-owned directory.
-    const r = route(['src/lib/tmdb/prefetch.ts']);
+    const unlisted = 'src/lib/tmdb/__unlisted-sibling.ts';
+    const r = route([unlisted]);
 
     expect(r.tier).toBe('medium');
     expect(r.reasonCode).toBe('owned');
@@ -92,7 +96,7 @@ describe('folder-ownership inheritance (BIN-788)', () => {
     // The seat must be a role that inherited it from the directory — not the
     // #14 unmapped fallback, which would mean inheritance never fired.
     const seated = r.roles.find((role) => role.num === r.panel[0]);
-    expect(seated.inherited).toContain('src/lib/tmdb/prefetch.ts');
+    expect(seated.inherited).toContain(unlisted);
     expect(r.panel).not.toContain(14);
     expect(r.unownedCode).toEqual([]);
   });

@@ -127,11 +127,24 @@ describe('an owned folder that gains an unowned sibling is detected (BIN-788/803
   });
 
   it('returns a sorted list of repo-relative paths', () => {
-    const gaps = findGaps(tracked);
+    // Driven by a tracked set with deliberate gaps rather than by the repo, for the
+    // reason BIN-871 demonstrated: the live list was emptied, and
+    // a case that needs the repo to have a gap fails on the day someone fixes them all.
+    // Two siblings, out of alphabetical order, so the sort is measured rather than
+    // accidentally satisfied by one element.
+    const zeta = 'src/lib/tmdb/__zeta-sibling.ts';
+    const alpha = 'src/lib/tmdb/__alpha-sibling.ts';
+    const withGaps = {
+      files: new Set([...tracked.files, zeta, alpha]),
+      dirs: new Set(tracked.dirs),
+    };
 
-    expect(gaps.length).toBeGreaterThan(0);
+    const gaps = findGaps(withGaps);
+
+    expect(gaps).toContain(zeta);
+    expect(gaps).toContain(alpha);
     expect([...gaps].sort()).toEqual(gaps);
-    for (const g of gaps) expect(tracked.files.has(g)).toBe(true);
+    for (const g of gaps) expect(withGaps.files.has(g)).toBe(true);
   });
 });
 
