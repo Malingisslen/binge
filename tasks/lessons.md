@@ -1329,3 +1329,34 @@ poster fran manader tillbaka. En "finns i katalogen" -fraga utan datumgrind hall
 sina sokvagar vid liv for alltid och gor sparren verkningslos, tyst. Datera mot postens
 egen tidpunkt, och prova BADA riktningarna med bokstavliga datum -- den riktning som bara
 behaller for mycket ar den som ingen mater.
+
+### [Workflow] Ett backtick-citerat KATALOGTOKEN ger rollen hela katalogen (2026-09-05, BIN-1080)
+
+**Trigger:** en mening i `docs/role-responsibilities.md` som NAMNGER en sokvag den inte vill
+ge rollen -- ett skal, en avgransning, ett "den har hor inte hit".
+
+**Regel:** generatorn skordar varje backtick-citerat SPARAT sokvagstoken i sektionen, inte
+bara det som star efter pilen. Ett token med avslutande snedstreck ger rollen HELA
+katalogen. Skriv sadana omnamnanden utan backticks. Posten om lasfilen i Sec 25 varnar for
+exakt det med ett FILNAMN; katalogformen ar samma falla ett snedstreck langre in.
+
+**Den bet TRE ganger pa tva dagar:** en fil jag skrev att #25 INTE skulle aga, och sedan
+`scripts/` i tva bullets samtidigt -- vilket gav bade #4 och #25 varenda fil i katalogen, sa
+dev-servern och ikongeneratorn routade till Sakerhetsarkitekten.
+
+**Kontrollen som avslojar det:** kor generatorn och las rollens monsterlista, aldrig
+bullettexten. Ett `scripts/`-token syns dar som en egen rad.
+
+### [Workflow] Mat ORSAKEN innan du lagger en fraga framfor Malin (2026-09-05, BIN-1080)
+
+**Trigger:** ett ovantat utfall du kan forklara med en rimlig mekanism.
+
+**Regel:** en fraga till henne ar ett beslut hon far ansvara for, sa diagnosen maste vara
+matt fore fragan -- inte rimlig. Jag laste katalogtokenet ovan som DIREKTORIEARVNING,
+presenterade fyra alternativ, och hon valde att lara routern att inte arva i `scripts/`.
+Jag byggde den andringen, matte den mot HEAD:s router och fick IDENTISKT utfall: orsaken
+satt i min egen bullettext. Andringen rullades tillbaka och hennes beslut var spillt.
+
+**Provet som hade rackt fore fragan:** ta bort den misstankta mekanismen och mat om. Har:
+kor routern med och utan andringen pa samma sokvagar. Tva minuter, och fragan hade aldrig
+stallts.
