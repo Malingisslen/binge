@@ -1512,14 +1512,14 @@
         {
           "from": "group-page-client",
           "to": "firestore",
-          "payload": "joinGroupViaToken (via ?invite= link) — step 1: set groups/{id}/joinAttempts/{uid} {token} (rule hashes+compares server-side); step 2 on success: batch update groups/{id}.memberUids arrayUnion(uid) + set groups/{id}/members/{uid}",
+          "payload": "joinGroupViaToken (via ?invite= link) — step 1: set groups/{id}/joinAttempts/{uid} {token} (rule hashes+compares server-side); step 2 on success: SEPARATE awaited writes, never a batch (BIN-532: a rule get() cannot see a sibling write queued in the same batch) — update groups/{id}.memberUids arrayUnion(uid), then writeMemberDoc reads groups/{id}/members/{uid} and creates it with joinedAt: serverTimestamp() when absent, or merges the profile fields WITHOUT joinedAt when present (BIN-1063: joinedAt is pinned to request.time on create and immutable on update)",
           "transport": "Firestore write (rule-verified)",
           "verified": true
         },
         {
           "from": "group-members-panel",
           "to": "firestore",
-          "payload": "inviteMemberByUid (search by @handle) — set users/{targetUid}/groupInvites/{groupId} {fromUid,groupName}; target later runs acceptGroupInvite — batch memberUids arrayUnion + members/{uid} + delete the invite doc",
+          "payload": "inviteMemberByUid (search by @handle) — set users/{targetUid}/groupInvites/{groupId} {fromUid,groupName}; target later runs acceptGroupInvite — reads the group doc first and short-circuits to retiring the stale invite when the caller is already a member with a member doc (BIN-1063); otherwise SEPARATE awaited writes, never a batch: memberUids arrayUnion, then writeMemberDoc (create with joinedAt / merge without it), then delete the invite doc",
           "transport": "Firestore write",
           "verified": true
         },
