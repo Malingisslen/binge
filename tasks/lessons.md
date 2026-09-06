@@ -1432,3 +1432,42 @@ det. Säkerhetsgranskaren hittade det genom att skriva en engångs-PoC mot rikti
 **Kontrollen:** testet ströks, och mekanismen pinnades i stället i emulatorsviten, med
 omfånget i testets NAMN — inte bara i en kommentar, så att en läsare som citerar
 identifieraren motsägs direkt om hen generaliserar det.
+
+### [Testing] En matning byggd mot ett filnamn ramverket inte skriver ar en permanent tyst no-op (2026-09-06, BIN-613)
+
+**Trigger:** ny kod ska lasa ett artefaktnamn ur ett ramverk — ett manifest, en rapportfil,
+ett byggutfall — och du kanner igen namnet.
+
+**Regel:** kontrollera att kallan EXISTERAR innan du bygger pa den, i den installerade
+versionen och inte i minnet. En lasare som inte hittar sin fil returnerar "inget att mata"
+och ser exakt likadan ut som en frisk korning som inte hade nagot att rapportera. Alla
+enhetstest kan vara grona, for de matar sin egen fixtur.
+
+**Vad som hande:** `scripts/bundle-report.mjs` last `.next/app-build-manifest.json`. Nexts
+egen konstantmodul deklarerar `BUILD_MANIFEST`, `APP_PATHS_MANIFEST` och
+`APP_PATH_ROUTES_MANIFEST` — ingenting som heter `APP_BUILD_MANIFEST`. Hela rapporten hade
+tigit vid varje deploy for alltid, och biljetten handlade om just ett kriterium som
+aldrig gick att betygsatta.
+
+**Kontrollen:** kor den nya koden mot repots RIKTIGA byggutfall en gang innan den
+granskas. Och lat "korde och hittade inget" skriva en synlig rad — annars ar den
+oskiljbar fran "korde aldrig". Omskriven att lasa den exporterade HTML:en, som ar vad
+webblasaren faktiskt hamtar och inte beror pa vilka manifest en framtida version skriver.
+
+### [Workflow] Agarskap harlett ur en KATALOG ar inte agarskap (2026-09-06, BIN-613)
+
+**Trigger:** en ny fil ska fa en agande roll i `docs/role-responsibilities.md`.
+
+**Regel:** satet foljer vilken STORHET filen handlar om, inte var dess data rakar ligga.
+Ett skal som borjar "den skriver till samma katalog som ..." ar narhet, och narhet ar
+inte mandat. Skriv skalet forst; gar det inte att skriva utan att namna en sokvag ar
+rollen fel.
+
+**Vad som hande:** jag satte `bundle-report.mjs` hos #3 Financial Controller for att
+baslinjen ligger i `.tmdb-cache/`, samma minne som TMDB-budgeten anvander. #25:s blinda
+kritik underkande det: rollens mandat ar 25 SEK/man-taket, och sidvikt ror det inte.
+Omflyttad till #10 Performance Engineer — responsivitet ar storheten. Flytten andrade
+ocksa routningen, sa en roll som aldrig kritiserat bunten blev plotsligt den agande.
+
+**Kontrollen:** kor routern igen efter en omflyttning. Ett byte av sate ar en
+omfangsandring precis som ett tillagg av en fil.
