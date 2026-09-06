@@ -31,21 +31,35 @@
 // 2026-09-06.
 //
 // Kors fran functions/, dar firebase-admin gar att resolva:
-//   cd functions && node scripts/backfill-mirror-uid.mjs --dry-run
-//   cd functions && node scripts/backfill-mirror-uid.mjs --apply
+//   cd functions && node scripts/backfill-mirror-uid.mjs --project binge-nu --dry-run
+//   cd functions && node scripts/backfill-mirror-uid.mjs --project binge-nu --apply
 
 import { initializeApp, applicationDefault, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { fileURLToPath } from 'node:url';
 
-import { COLLECTIONS, candidates, patchFor } from './backfill-mirror-uid.helpers.mjs';
+import {
+  COLLECTIONS,
+  candidates,
+  patchFor,
+  projectFrom,
+  refusalFor,
+  stampText,
+} from './backfill-mirror-uid.helpers.mjs';
 
 const PAGE_SIZE = 300;
 
 
-async function run({ apply }) {
-  if (!getApps().length) initializeApp({ credential: applicationDefault() });
+
+async function run({ apply, projectId }) {
+  // The project is NAMED, never inferred. Application Default Credentials carry
+  // whatever quota project the machine was last set up for — on 2026-09-06 the
+  // first dry run of this script read a DIFFERENT project's database, succeeded,
+  // and printed `0 scanned`, which is indistinguishable from a healthy no-op.
+  // A whole-population writer must not decide for itself whose data it opens.
+  if (!getApps().length) initializeApp({ credential: applicationDefault(), projectId });
   const db = getFirestore();
+  console.log(`${apply ? 'APPLY' : 'dry run'} against project ${projectId}`);
 
   let touched = 0;
   let scanned = 0;
@@ -68,7 +82,7 @@ async function run({ apply }) {
         // line is the operator's record of what the row held going in.
         const stamp = collectionId === 'friends' ? 'since' : 'sentAt';
         console.log(
-          `${apply ? 'WRITE' : 'would write'} ${doc.path}  uid=${patch.uid}  ${stamp}(before)=${String(doc.data[stamp])}`
+          `${apply ? 'WRITE' : 'would write'} ${doc.path}  uid=${patch.uid}  ${stamp}(before)=${stampText(doc.data[stamp])}`
         );
         if (apply) {
           try {
@@ -104,12 +118,14 @@ async function run({ apply }) {
 }
 
 export async function main(argv = process.argv.slice(2)) {
-  const apply = argv.includes('--apply');
-  if (!apply && !argv.includes('--dry-run')) {
-    console.log('refusing to guess: pass --dry-run or --apply');
+  // The refusals live in the helpers, where a test can CALL them. A source scan
+  // over this function can only see that a branch is written, not that it fires.
+  const refusal = refusalFor(argv);
+  if (refusal) {
+    console.log(refusal);
     return 1;
   }
-  return run({ apply });
+  return run({ apply: argv.includes('--apply'), projectId: projectFrom(argv) });
 }
 
 // The CLI runs ONLY as the entry point: imported by its test, this module must

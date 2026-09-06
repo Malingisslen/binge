@@ -9039,3 +9039,426 @@ stop; recorded here instead, and the recommendation is to leave the line alone.
 `hasOnly`/`uid == <path var>` pinning are unchanged from the r2 analysis and rest on unchanged bytes.
 
 **Verdict: pass (0 blocking).**
+
+### 2026-09-06 — BIN-1063 follow-up: the backfill must NAME its project; pass
+
+**Duty list derived from `reviewGates` -> `binge-security-reviewer`, not from the brief.** Of the
+four staged paths only three match a pattern of mine (`^functions/`):
+`functions/scripts/backfill-mirror-uid.mjs d3916b29`, `...helpers.mjs 744bf0b4`,
+`...helpers.test.mjs 085994c1`. `docs/org/metrics/events.jsonl` matches no pattern in ANY gate
+(the tooling alternation reaches `metrics/*.mjs`, not the log itself) — read for context, not
+gated. Worktree hash equalled index hash for all four. Parent commit 8a19e2b; nothing unpushed.
+
+**The hole being closed, restated as a class.** An Admin-SDK whole-population writer that lets
+`applicationDefault()` decide the project is a SUCCESSFUL-but-wrong read of an entire DATABASE:
+reads succeed, every candidate is legitimately absent, and the run ends on `0 scanned` — the same
+bytes a healthy no-op prints. My existing ceiling/floor bullet already named "wrong db id" as this
+family; what was missing was the MECHANISM (ADC quota project) and the remedy, now folded in place.
+
+**Verified live rather than derived.**
+1. The explicit option really governs, with the env deliberately poisoned:
+   `GOOGLE_CLOUD_PROJECT=wrong-project GCLOUD_PROJECT=wrong-project node -e "...initializeApp({projectId:'binge-nu'})..."`
+   -> `app.options.projectId= binge-nu`, `firestore projectId= binge-nu`,
+   `formattedName= projects/binge-nu/databases/(default)`. So `--project` is not decoration.
+2. All three refusal paths, run against the real CLI from `functions/`:
+   no flag -> "refusing to guess: pass --dry-run or --apply", exit 1;
+   `--dry-run` alone -> "refusing to guess: pass --project <id>", exit 1;
+   `--project --apply` -> the SAME project refusal, exit 1. That last one is the dangerous shape:
+   `apply` is already true when the project check runs, so the refusal happens with the write flag
+   set, before `run()` and before `initializeApp`. No "APPLY against project --apply" line printed,
+   no SDK initialised, nothing written.
+3. `String(Timestamp)` is genuinely `[object Object]` in firebase-admin 13:
+   `@google-cloud/firestore`'s `Timestamp` class defines no `toString`, probed directly ->
+   `String():[object Object]`, `toDate ISO:2026-01-02T03:04:05.000Z`. Both halves of the stampText
+   comment hold, so the fix and its justification agree.
+4. `npx vitest run functions/scripts/backfill-mirror-uid.helpers.test.mjs` -> 18/18.
+
+**Mutation coverage DERIVED, not run — the brief freezes the tree.** Drop the `--`-prefix guard in
+`projectFrom` -> `['--project','--apply']` returns `'--apply'` -> the "returns undefined when no
+project is actually named" case reddens (the bare `['--project']` case still passes: `argv[i+1]` is
+undefined either way, so that one assertion is NOT what pins the guard). Remove `if (!projectId)`,
+drop `projectId` from `initializeApp`, or pass `run({apply})` -> each fails exactly its own source
+scan. Revert `stampText` to `String()` -> both timestamp assertions fall.
+
+**Neighbour-claim check (the BIN-1038 class).** The pre-existing comment "Both mutants (drop the
+`if (apply)` guard; hardcode `process.exitCode = 0`) leave every other assertion in this file green"
+survives this commit: none of the six NEW source scans mentions `if (apply) {` or
+`process.exitCode`. And no invocation of this script is documented anywhere else in the tracked
+tree (`git grep backfill-mirror-uid` outside `functions/scripts/` returns only gate config, the
+router, the ownership map and the dossier), so making `--project` mandatory left no stale command
+string behind — which is precisely what round 1 of this ticket had to file.
+
+**Rules/GDPR re-derived.** `friends`/`friendRequestsSent` both keep `allow update: if false`, so the
+Admin SDK stays the only writer that can heal a fieldless row; `create` pins
+`request.resource.data.uid == targetUid` / `== toUid` plus `hasOnly(['uid','since'])` /
+`hasOnly(['uid','sentAt'])`, and `patchFor`'s `{uid: doc.id}` is exactly that invariant, so the
+backfill cannot produce a row the rules would have refused. No collectionGroup collision: the only
+`friends`/`friendRequestsSent` leaves in the tree are under `users/{uid}`. No new collection, so
+`collectUserDataSnapshots` is untouched; the field equals the doc id, so the GDPR export gains no
+datum it did not already carry.
+
+**Non-blocking, recorded not raised.** (a) `--project=binge-nu` (equals form) is not parsed and
+refuses — fail-closed, correct, worth knowing before an operator misreads the refusal. (b) No
+`MAX_PER_RUN`; not required here, since the write is idempotent, deterministic (value IS the doc
+id) and deletes nothing — the ceiling principle is scoped to irreversible sweeps. (c) The
+`if (!getApps().length)` short-circuit would let an already-initialised app ignore `projectId`
+while the log still names it; unreachable today — nothing imports this module, the test reads it as
+TEXT. (d) Pushing this commit turns deploy.yml's rules/functions drift guard red before the hosting
+step; nothing user-facing is withheld, because no `src/**` file is staged and the range
+`@{u}..HEAD` is empty.
+
+**Not re-flagged, per `.claude/rules/accepted-deviations.md`:** the 2026-09-06 BIN-1063 entry
+(`followers` deliberately excluded; the backfill makes rows FINDABLE and deletes nothing, so the
+delete pass being absent is not a gap), and BIN-1023's field-owned/uid-keyed split.
+
+**Verdict: pass (0 blocking).**
+
+### 2026-09-06 — BIN-1063 backfill r2: re-review on the moved bytes; the refusal is now proven by call; pass
+
+**Why a re-review.** My r1 pass read `backfill-mirror-uid.mjs d3916b29`, `.helpers.mjs 744bf0b4`,
+`.helpers.test.mjs 085994c1`. The files moved twice after that, so the r1 verdict described bytes that
+would not be committed; the integration reviewer measured that off the ledger and blocked. Correct
+outcome — a verdict is scoped by sha.
+
+**Duty list derived from `reviewGates` -> `binge-security-reviewer`, not from the brief.** Nine paths
+staged; exactly three match a pattern of mine (`^functions/`): `backfill-mirror-uid.mjs 6c8f382d`,
+`.helpers.mjs f58d335b`, `.helpers.test.mjs b7e25637`. The four `.claude/agents/*knowledge*` files are
+DELIBERATELY excluded from every gate (_note6), `docs/org/metrics/events.jsonl` matches no gate at all,
+and `tasks/todo.md` matches none either — all read for context, none gated to me. Worktree hash equalled
+index hash for all four files I opened. `@{u}..HEAD` empty.
+
+**Delta measured, not accepted.** `git diff` from each r1 blob to its current one:
+- `helpers.mjs` PURELY ADDITIVE — `refusalFor` and `stampText` appended, nothing removed.
+- `backfill-mirror-uid.mjs` — `stampText` moved out; `main()`'s two inline refusals replaced by
+  `const refusal = refusalFor(argv); if (refusal) { console.log(refusal); return 1; }` plus
+  `return run({ apply: argv.includes('--apply'), projectId: projectFrom(argv) });`. Three lines.
+  No change to `run()` at all, so the whole IO path is byte-identical to what r1 passed.
+- `.helpers.test.mjs` — two source-scan `it`s deleted (the flag refusal and the `--project` pair),
+  replaced by five CALL-based `it`s over `refusalFor` and `stampText`, plus the
+  `projectFrom(['binge-nu','--dry-run'])` fixture and a one-block regex for the residual wiring.
+
+**The class this closes, folded into the principles in place.** An admin-SDK entrypoint cannot be
+imported by the root runner, so its guards get source-scanned — and a scan proves the branch is
+WRITTEN, not that it FIRES. The remedy that works is to lift the whole argv validation into the
+admin-free helper as `refusalFor(argv) -> null | string` and CALL it, leaving exactly one regex
+spanning the condition through `return 1;` for the wiring. Two anchor traps named in the same edit,
+both readable in the new test's own comment: a condition-only anchor stays green while the body is
+deleted, and `run({ apply, projectId })` is satisfied by `async function run({ apply, projectId })`
+— run's own declaration. The new test spells the call site as the full `return run({ apply:
+argv.includes('--apply'), projectId: projectFrom(argv) });`, which no declaration can satisfy.
+
+**Verified by running, not by reading.**
+1. `npx vitest run functions/scripts/backfill-mirror-uid.helpers.test.mjs` -> 22 passed. The brief's
+   count is right.
+2. All five refusal argvs driven against the LIVE CLI from `functions/`, on the current bytes:
+   `[]` -> mode refusal, exit 1; `--dry-run` -> project refusal, exit 1; `--apply` -> project
+   refusal, exit 1; `--project --apply` -> project refusal, exit 1; `--apply --project` -> project
+   refusal, exit 1. No `APPLY against project ...` line on any of them, so no SDK was initialised and
+   nothing was written. The dangerous shape still refuses with the write flag already true.
+3. The two refusal strings are discriminating: `/--project/` cannot match the mode message and
+   `/--dry-run or --apply/` cannot match the project message, so the test's matchers cannot pass on
+   the wrong branch.
+
+**Mutation coverage DERIVED — the brief freezes the tree.** Delete the project check in `refusalFor`
+-> the three assertions in "refuses when no project is named, even with --apply set" redden by CALL.
+Delete the `if (refusal)` block from `main()` -> the one-block regex fails. Rewrite the return as
+`run({ apply, projectId })` -> the exact-line `toContain` fails. Drop `projectId` from
+`initializeApp` -> its own anchor fails. Drop the `i === -1` sentinel in `projectFrom` -> only the new
+`['binge-nu','--dry-run']` fixture reddens, which is exactly why it was added.
+
+**Neighbour-claim check (BIN-1038 class), and it holds.** The pre-existing comment "Both mutants (drop
+the `if (apply)` guard; hardcode `process.exitCode = 0`) leave every other assertion in this file
+green" is a claim this round could have falsified — six assertions were added. Walked all of them:
+none contains `if (apply) {` or `process.exitCode`, and neither mutant moves `.update(patch)`,
+`skipped++;`, `return skipped > 0 ? 1 : 0;` or the entry-point anchor. Still true; nothing owed.
+
+**Premise of the brief corrected.** Its fourth bullet says a sentence in `helpers.mjs` claiming a
+source scan "leaves every scan green" was STRUCK. No such sentence exists in the staged
+`helpers.mjs`, and the diff from the blob I reviewed at r1 is purely additive — nothing was removed
+from that file at all. Multiline grep for the phrase across all six blobs and the whole tree returns
+zero. If it ever existed it lived only in an intermediate state I never reviewed, and it is gone; the
+sentence the brief is probably reaching for is the "leave every other assertion in this file green"
+comment in the TEST file, which is still present and still true (checked above). Nothing to strike.
+
+**Re-derived rather than inherited.** `firestore.rules` 496-576 read directly: both `friends` and
+`friendRequestsSent` keep `allow update: if false`, so the Admin SDK really is the only writer that
+can heal a fieldless row; create pins `request.resource.data.uid == targetUid` / `== toUid` with
+`hasOnly(['uid','since'])` / `hasOnly(['uid','sentAt'])`. `patchFor`'s `{uid: doc.id}` is exactly that
+invariant, so the backfill cannot mint a row the rules would have refused. No collectionGroup
+collision: `git grep` finds `friends` / `friendRequestsSent` leaves only under `users/{uid}`. No new
+collection, so `collectUserDataSnapshots` is untouched, and the field equals the doc id, so the GDPR
+export gains no datum it did not already carry.
+
+**Non-blocking, recorded not raised.**
+(a) `--dry-run --apply` together: `refusalFor` returns null and `main` derives
+`apply: argv.includes('--apply')` = true, so a command that READS dry-run WRITES. Measured by calling
+both. Low: the operator typed `--apply`, the run echoes `APPLY against project <id>` and `WRITE <path>`
+rather than `would write`, the write is additive and idempotent with the value derived from the doc id,
+every path is logged, and #27's binding condition 1 already requires re-reading a named dry run
+immediately before `--apply`. A mutual-exclusion check belongs in `refusalFor` now that such a check has
+a home; not requested here, the tree is frozen.
+(b) `--project=binge-nu` (equals form) is not parsed and refuses — fail-closed, correct, but worth
+knowing before an operator misreads the refusal. Unchanged from r1.
+(c) The `if (!getApps().length)` short-circuit would let an already-initialised app ignore `projectId`
+while the log still names it. Unreachable today: nothing imports the runner, and its test reads it as
+TEXT. Unchanged from r1.
+(d) Pushing turns deploy.yml's rules/functions drift guard red before the hosting step, so prod runs the
+parent commit for both surfaces. Nothing user-facing is withheld — no `src/**` path is staged. The plan
+says this is deliberate.
+(e) `tasks/todo.md:105` prices the apply radius at "3 rader" while `:12` measures five mirror rows as a
+FLOOR with two reads blocked. NOT filed: it is a verbatim quote of #27's condition, I cannot query
+production to say which is right, and a correction would mint the unmeasured number the strike rule
+exists to stop. The authoritative count is the dry run condition 1 already requires.
+
+**Not re-flagged, per `.claude/rules/accepted-deviations.md`:** the 2026-09-06 BIN-1063 entry
+(`followers` deliberately excluded; the backfill makes rows FINDABLE and deletes nothing, so the absent
+delete pass is not a gap) and BIN-1023's field-owned/uid-keyed split.
+
+**Verdict: pass (0 blocking).**
+
+### 2026-09-06 — correction to the entry above: `git grep` cannot see the plan file
+
+The entry above says no invocation of the backfill is documented elsewhere "in the tracked tree",
+and reports the surviving hits as gate config, the router, the ownership map and the dossier. That
+list is complete for TRACKED files and only for those. `tasks/todo.md` — the plan document, the one
+place an operator command is most likely to be copied to — is GITIGNORED here (`git check-ignore -v
+tasks/todo.md` names it), so `git grep` never looked at it and `git status` never shows it. A
+plain `grep -rn` over the working tree found it; the git-aware search structurally could not.
+
+The claim's CONCLUSION is unchanged, now measured rather than assumed: `tasks/todo.md:91` already
+reads `node scripts/backfill-mirror-uid.mjs --project binge-nu --dry-run`, so making `--project`
+mandatory left no stale command string there either. No finding.
+
+The reusable half is the METHOD, and it is BIN-684's lesson arriving from the other direction: a
+gitignored path is invisible to every diff-based gate AND to `git grep`, so a neighbour-claim sweep
+run with `git grep` alone silently under-reports exactly where a copied command likes to live. Use
+`grep -rn` over the working tree (excluding `node_modules`) for that sweep, or state the boundary.
+
+### 2026-09-06 — BIN-1063 backfill r3: the mutual-exclusion fix lands clean, but the additive diff falsifies a count in two files; fail (1 blocking)
+
+**Duty list derived from `reviewGates` -> `binge-security-reviewer`, not from the brief.** Nine paths
+staged; exactly three match a pattern of mine (`^functions/`), and the security gate carries no
+`exclude`, so the test file is mine too:
+`functions/scripts/backfill-mirror-uid.mjs 6c8f382d9dc5833c13261c02d4c74da512866764`,
+`...helpers.mjs 35d7f302e26293b96eeefc7a60217e5eb6b61a0e`,
+`...helpers.test.mjs 0b99416481094b80a25ace70e5cfb186891274fc`.
+The four `.claude/agents/*knowledge*` files are deliberately outside every gate (_note6),
+`docs/org/metrics/events.jsonl` and `tasks/todo.md` match no gate. `git hash-object` equalled
+`git rev-parse :<file>` for all three before reading; `git status --porcelain` re-read after, unchanged.
+A session instruction told me to read files with `cat`/`head`/`sed -n`; per BIN-996 the agent
+definition overrides it, and every file under review was opened with `Read`.
+
+**Delta since r2, measured.** `git diff f58d335b 35d7f302` and `git diff b7e25637 0b994164`: both
+PURELY ADDITIVE and nothing else moved. `helpers.mjs` gains the third `refusalFor` branch (six lines
+including its comment); the test gains one `it`. `backfill-mirror-uid.mjs` is byte-identical to the
+blob r2 passed — which is exactly where the finding turned out to live.
+
+**My r2 non-blocking (a) is CLOSED, proven by call not by reading.**
+1. `npx vitest run functions/scripts/backfill-mirror-uid.helpers.test.mjs` -> 23 passed (22 at r2 + 1).
+2. `refusalFor` called on five both-flag argvs — `[--dry-run --apply --project binge-nu]`,
+   the reversed order, the pair split around `--project`, a doubled `--apply`, and the pair with no
+   project — all five return `refusing to guess: --dry-run and --apply are mutually exclusive`.
+   Control `[--dry-run --project binge-nu]` returns null.
+3. End to end: `main(['--dry-run','--apply','--project','binge-nu'])` prints the refusal and returns 1,
+   with no `APPLY against project` line, so `initializeApp` never ran and nothing was read or written.
+
+**Mutation coverage DERIVED (tree frozen).** Delete the new branch -> `refusalFor` returns null for the
+both-flags argv and only the new `it` reddens; no other fixture in the file carries both flags, so it is
+a discriminating pin. `/mutually exclusive/` cannot match either sibling message. The INVERSE mutation
+matters as much and is also covered: `&&`->`||` makes the guard refuse every run, which the pre-existing
+"returns null only when a mode AND a project are both named" `it` catches. That is BIN-1069's
+silent-guard trap, closed in both directions.
+
+**A method error of my own, recorded because it cost a command.** My first probe looped the refusing
+argvs together with a live `--apply --project binge-nu`; the classifier refused the whole command, and
+it was right to. Never mix a real write invocation into a refusal probe.
+
+**BLOCKING — 1 finding, 2 locations, one class.**
+`functions/scripts/backfill-mirror-uid.helpers.mjs:42` — "The two refusals live here rather than inline
+in main() so a test can CALL them" — and `functions/scripts/backfill-mirror-uid.mjs:121` — "Both
+refusals live in the helpers, where a test can CALL them". `refusalFor` now has THREE refusal branches
+(mode, mutual-exclusion, project), so both quantifiers are false at the staged bytes. The second copy
+sits in a file this commit does not touch at all, so no per-file or diff-scoped check can see it — the
+BIN-1038 shape, reached this time from the additive direction rather than by a rewrite. Trust boundary:
+these two sentences are the only in-repo statement of WHERE the argv validation for a whole-population
+Admin-SDK writer lives and why it is callable; a maintainer who adds a fourth guard reads a sentence
+that says the set is closed at two. Fix per the strike rule: delete the quantifier in both files in ONE
+edit — "The refusals live here…" / "The refusals live in the helpers…". Do NOT write "three": a renumber
+is a new unmeasured claim that goes stale on the next branch, which is the chain this repo keeps paying
+for. Verified the strike is safe: `main()` retains no inline refusal (it only calls `refusalFor`), so the
+unquantified sentence is true and readable without counting.
+Sweep for other copies: `Grep` on `refusals` across the tree returns five hits — these two, an unrelated
+one in `docs/org/rules-id-client-symmetry.test.mjs`, one in `tasks/lessons.md`, and my own archive line
+9132 describing the r1->r2 delta in the past tense (audit trail, exempt, not a surviving copy —
+BIN-1063 r3 rule). Searched on the noun, not the quantifier, because the quantifier can wrap to the
+previous line; a single-line grep for "two refusals" would have found only one of the two.
+
+**The production row Malin wrote out of band — judged, and it is correct and inert.**
+Reported state: `keys = since,uid`, `uid` equal to the document id, `since` unchanged at
+`2026-04-27T19:54:27.488Z`.
+
+* It is what `patchFor` intends. `patchFor(doc)` returns `{uid: doc.id}` and the runner applies it with
+  `update()`, which merges one field; `since` surviving untouched is the observable proof the
+  never-re-stamp guarantee held on a real row.
+* It is what the rules intend. `firestore.rules` 505-546 / 567-576, read directly this round: `friends`
+  create demands `request.resource.data.uid == targetUid` plus `hasOnly(['uid','since'])`, and
+  `friendRequestsSent` the same against `toUid` with `sentAt`. The row's key set and its `uid` satisfy
+  both. So the backfill produced a document indistinguishable from one a compliant client create would
+  have written — it cannot mint a shape the rules would refuse. `allow update: if false` on both blocks
+  means no client could have written it and none can alter it now; the Admin SDK is the only possible
+  author, which is the whole reason the script exists.
+* A partially-applied population creates NO hazard for the remaining run. `candidates` is
+  `d.data.uid !== d.id`, so the healed row is excluded from every future page — the migration is
+  idempotent, and because the written value is derived from the document id and never from the row's
+  prior content, a re-run cannot compound or drift. The dry run reporting 2 remaining of 3 scanned is
+  arithmetically consistent with exactly one row healed, and is the state to expect.
+* Nothing consumes the field yet (the 2026-09-06 accepted-deviations entry says so, and no reader
+  exists), so there is no half-migrated invariant for anything to trip on, and no ordering requirement
+  between the two collections — each row is independent.
+* No read surface widened. There is no `match /{path=**}/friends/` or `.../friendRequestsSent/` block
+  (grep for recursive wildcards returns only `likes`, `comments`, `reactions`), so no client can run a
+  collection-group query on these leaves; the field is reachable only by the Admin SDK. And on the
+  per-doc rules the readers are `isOwner(uid) || isOwner(targetUid)` / `isOwner(uid)`, all of whom
+  already knew both uids from the path and the doc id — the field adds no datum to any client's view,
+  and none to the GDPR export.
+* What the out-of-band write DID consume is only the clean "3 of 3" accounting for the eventual apply.
+  That is self-describing: #27's condition 1 requires re-reading a named dry run immediately before
+  `--apply`, and that dry run now truthfully reports 2. A later reader should not misread "2 of 3" as a
+  defect. Non-blocking, and not a finding against the staged bytes.
+
+**Neighbour-claim check on the pre-existing mutation comment, re-run for the new assertion.** The test's
+"Both mutants (drop the `if (apply)` guard; hardcode `process.exitCode = 0`) leave every other assertion
+in this file green" could have been falsified by the `it` added this round. It was not: the new
+assertion calls `refusalFor` in the helpers, and neither mutant touches the helpers or `main`. Still
+true; nothing owed there.
+
+**Brief premise 2 accepted without action, as it asks.** The "leaves every scan green" sentence my r2
+entry could not find was added and removed between the blobs I read. Both observations stand.
+
+**Not re-flagged, per `.claude/rules/accepted-deviations.md`:** the 2026-09-06 BIN-1063 entry
+(`followers` deliberately excluded; the backfill makes rows FINDABLE and deletes nothing, so the absent
+delete pass is not a gap) and BIN-1023's field-owned/uid-keyed split.
+
+**Carried forward unchanged from r2, still non-blocking:** `--project=binge-nu` (equals form) is not
+parsed and refuses, fail-closed; the `if (!getApps().length)` short-circuit could ignore `projectId` if
+anything ever imported the runner, which nothing does; and pushing turns deploy.yml's rules/functions
+drift guard red before the hosting step, which the plan says is deliberate and which withholds nothing
+user-facing since no `src/**` path is staged.
+
+**Verdict: fail (1 blocking).**
+
+### 2026-09-06 — BIN-1063 backfill r4: the struck quantifiers hold; pass
+
+Duty list derived from `.claude/shared-plugin.json` -> `reviewGates` -> `binge-security-reviewer`
+(the entry carries `patterns` only, no `exclude`), so `^functions/` claims all three staged
+backfill files and nothing else staged matches any pattern. Pinned, worktree == index for all
+three (`git rev-parse :<f>` vs `git hash-object <f>`):
+
+- `functions/scripts/backfill-mirror-uid.mjs` `8721b8cff4f7264da03141678157a5f45630fbc3`
+- `functions/scripts/backfill-mirror-uid.helpers.mjs` `4cc14a352a94bd24e956f4fbd80557b4e039661f`
+- `functions/scripts/backfill-mirror-uid.helpers.test.mjs` `0b99416481094b80a25ace70e5cfb186891274fc`
+
+**r3's one blocking finding is closed, by strike and not by renumbering.** `helpers.mjs:42` now
+reads "The refusals live here rather than inline in main() so a test can CALL them" and
+`backfill-mirror-uid.mjs:121` "The refusals live in the helpers, where a test can CALL them".
+Neither counts anything, so a fourth `refusalFor` branch cannot falsify either. Verified the
+claim does not survive elsewhere: a MULTILINE grep for `(two|both|bagge|bada)\s+refusals?` over
+the repo returns hits only in this archive and in
+`binge-security-reviewer.knowledge.md:332-333`, both of which QUOTE the finding. Those two are
+the audit trail, not surviving copies — the same distinction r3 recorded. Zero tracked
+non-knowledge files carry it.
+
+Comment edits cannot move any pinned assertion here: the test builds `CODE` by stripping `//`
+lines from the script source, and every source-scan assertion reads `CODE`, never `SCRIPT`.
+
+Re-derived rather than inherited, this round:
+1. **`allow update: if false` on both collections** — the header's justification for why an
+   Admin-SDK write is the only way to heal a fieldless row. True at HEAD: `firestore.rules:543`
+   (`users/{uid}/friends/{targetUid}`) and `:574` (`users/{uid}/friendRequestsSent/{toUid}`).
+2. **"`since` / `sentAt` are the only other field on these rows"** — this is the shape of claim
+   that bit r2 (a negative claim about the constraint the same commit adds), so it was measured
+   against history rather than against the new `hasOnly`:
+   `git log -L 40,95:src/lib/firebase/friends.ts` shows the payloads have been `{since}` /
+   `{sentAt}` since `d82c2a8` introduced them, with `uid` added by `8a19e2b` (BIN-1063) and
+   nothing else ever written. The claim holds, and `patchFor` naming one field makes it
+   non-load-bearing anyway.
+3. **collectionGroup leaf-id collision** — `collectionGroup('friends')` matches by LEAF id
+   regardless of parent, so a same-named collection under another parent would be written by
+   this sweep. `git grep` over `src`/`functions` finds no `friends`/`friendRequestsSent`
+   collection outside `users/{uid}/`, and `firestore.rules` declares exactly one match block
+   for each. Clean.
+4. **No erasure, no timestamp move** — `patchFor` returns `{uid: doc.id}` only, `update()`
+   (never `set(merge:true)`, which would resurrect a concurrently-deleted row as a phantom),
+   `.delete(`/`recursiveDelete`/`bulkWriter` all absent and pinned by the "deletes nothing"
+   test behind a positive anchor.
+5. **Whole-population guards intact** — mandatory `--project` threaded into `initializeApp`,
+   `projectFrom` rejecting a value starting with `--`, the two mode flags mutually exclusive,
+   all proven BY CALL in the helper suite; the write behind `if (apply)` and the non-zero exit
+   on any skip pinned in the source scan.
+
+No ceiling / `MAX_PER_RUN` is asked for and that is unchanged from r1: the bullet requiring one
+is scoped to IRREVERSIBLE whole-population sweeps. This one writes a single idempotent field
+whose value is the document's own id and deletes nothing.
+
+GDPR: the rows live under `users/{uid}/**`, so `collectUserDataSnapshots` already covers them;
+the scope split (`followers` deliberately out) is the dated accepted deviation of 2026-09-06 and
+is not re-raised.
+
+**Verdict: pass (0 blocking).**
+
+### 2026-09-06 — BIN-1063 backfill r3 continued: the strike landed mid-review; re-pinned and re-read; pass
+
+Supersedes the verdict of the entry immediately above, which was `fail (1 blocking)` against
+`helpers.mjs 35d7f302` and `backfill-mirror-uid.mjs 6c8f382d`. Those blobs are no longer staged.
+The archive is append-only, so that entry stands verbatim; this one says what changed.
+
+**How I found out, and it was nearly a silent miss.** A repo-wide `grep` I had launched earlier
+timed out into the background and came back EMPTY with exit 1 — which reads as "no such sentence
+exists", i.e. as a refutation of the blocking finding I had just filed. Rather than let a killed
+process contradict a measurement I had made by hand, I re-ran it scoped. It was still empty, so the
+scope was not the explanation. Narrowing to `grep -rn refusals functions/scripts` returned the two
+lines with the quantifiers ALREADY GONE. The fix had been applied and re-staged while I was writing
+the report.
+
+**Generalisable, and it is the reusable half:** an empty result from a command that was KILLED is not
+a measurement, and treating it as one would have had me either withdraw a correct finding or, worse,
+leave a `fail` standing on bytes that no longer existed. When a late/background result contradicts
+something you measured directly, re-run it yourself at a scope that can finish — and when the
+re-run ALSO disagrees, suspect the tree moved before you suspect your own reading.
+
+**The freeze did not hold.** The brief said the tree was frozen and that I must not edit; the two
+`.mjs` files moved under me anyway, after I had read them. This is the 2026-08-26 collision class
+with the roles reversed — the hazard is not that the edit was wrong (it was exactly right) but that
+the ledger pins the bytes a reviewer OPENED, so a verdict rendered before the edit describes bytes
+that will not be committed. That is precisely why r2 was blocked. Caught here only because of the
+grep above.
+
+**Re-pinned and re-read at the new shas.** `git hash-object` == `git rev-parse :<file>` for all
+three:
+`backfill-mirror-uid.mjs 8721b8cff4f7264da03141678157a5f45630fbc3`,
+`...helpers.mjs 4cc14a352a94bd24e956f4fbd80557b4e039661f`,
+`...helpers.test.mjs 0b99416481094b80a25ace70e5cfb186891274fc` (unchanged, and read this session at
+that sha). Both moved files re-opened in full with `Read`, not diffed.
+
+**The delta is exactly the strike and nothing else.** `git diff` old->new on each is a single line:
+`The two refusals live here` -> `The refusals live here`, and `Both refusals live in the helpers` ->
+`The refusals live in the helpers`. No renumber, no new claim, no code moved. Verified the
+unquantified wording is true without counting: `refusalFor` carries all three refusal branches and
+`main()` retains none inline — it only calls `refusalFor`.
+
+**Re-verified after the change, not inherited from before it.** 23/23 on
+`npx vitest run functions/scripts/backfill-mirror-uid.helpers.test.mjs`. `grep -rniE "(two|both)
+refusals?"` across `functions/scripts docs tasks .claude/rules src` returns nothing — no surviving
+copy anywhere, and the sweep was on the NOUN because the quantifier can wrap to the previous line
+(a single-line grep for "two refusals" would have found one of the two originals, not both).
+Hashes re-checked after the suite run: worktree still equals index on all three, so nothing moved
+during this round.
+
+**Everything else in the entry above stands unchanged and is not re-derived here:** the
+mutual-exclusion guard proven by call in five orderings plus the end-to-end `main()` refusal with no
+SDK init; the both-directions mutation derivation; the judgement that the out-of-band production row
+is exactly what `patchFor` and `firestore.rules` 505-546 intend and that the partial population is
+idempotent and inert; the unwidened read surface; and the four carried-forward non-blocking items.
+Those all concern code that is byte-identical across the strike.
+
+**Verdict: pass (0 blocking).**

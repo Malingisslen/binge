@@ -248,8 +248,28 @@ Cap: 80k chars — pay for an addition with a cut, and move what you cut verbati
   check the merged payload is unchanged (BIN-727).
 - **An IRREVERSIBLE whole-population sweep needs a CEILING, the ceiling needs a FLOOR, and the REFUSAL needs
   an operator path.** 'A failed check means could-not-check' (BIN-848/816) covers ERRORS only; a
-  SUCCESSFUL-but-wrong read (renamed collection, wrong db id, inverted predicate) makes every candidate
-  legitimately absent and one run eats the population. Demand `MAX_PER_RUN` that deletes NOTHING when
+  SUCCESSFUL-but-wrong read (renamed collection, inverted predicate, or a WHOLE DATABASE opened by
+  inference) makes every candidate
+  legitimately absent and one run eats the population.
+  **`initializeApp({credential: applicationDefault()})` with NO `projectId` opens whatever quota project
+  the machine was last set up for:** BIN-1063's first dry run read a DIFFERENT project, succeeded, and
+  printed `0 scanned` — a log line nobody can tell apart from a healthy no-op. Require a MANDATORY
+  `--project <id>` threaded into `initializeApp` and echoed before the first query; the explicit option
+  DOES beat `GOOGLE_CLOUD_PROJECT`/`GCLOUD_PROJECT` (probe it — `db._settings.projectId` and
+  `formattedName` = `projects/<named>/databases/(default)`), and the flag parser must reject a value
+  starting with `--` or `--project --apply` aims the run at a project literally named `--apply`; drive
+  THAT argv against the live CLI, not only the missing-flag one. **The refusal itself must be proven BY
+  CALL, not by a source scan of the entrypoint** — an admin-SDK runner cannot be imported under the root
+  test runner, so lift the whole argv validation into the admin-free helper as one
+  `refusalFor(argv) -> null | string` and call it; keep only ONE regex spanning the condition through
+  `return 1;` for the residual wiring, since an anchor on the condition alone stays green while the body
+  is deleted and an anchor on `run({ a, b })` is satisfied by run's own DECLARATION. Check the MODE flags
+  are mutually exclusive too: `--dry-run --apply` where apply simply wins is a command that reads dry and
+  writes. Pin the branch that closes it in BOTH directions — one `it` on the both-flags argv, and the
+  existing null-return `it` on a lone mode flag; an `&&`→`||` slip refuses every run and only the second
+  one moves. Drive every ORDERING of the pair, and never put a live `--apply --project` argv in the same
+  loop as the refusing shapes — the classifier refuses the whole command, correctly.
+  Demand `MAX_PER_RUN` that deletes NOTHING when
   exceeded. A purely PROPORTIONAL bound (`> 0.25*checked`) LATCHES — candidates shrink only by deletion (under
   50 users ONE orphan of three trips it); require `> max(FLOOR, fraction*checked)` and pin the decisive SMALL
   case. **The floor BOUNDS the latch, it does not remove it** — above it the wedge is permanent and cheap to
@@ -307,6 +327,15 @@ Cap: 80k chars — pay for an addition with a cut, and move what you cut verbati
   `scripts/check-dependency-diff.mjs`'s own header comment, the shipped file the claim is actually about. A
   single-line `grep` missed it because the sentence wraps across lines differently in the two files — grep
   the claim's distinctive words MULTILINE across the whole repo, not just the file the ticket names as fixed.
+  **The same class arrives from the PURELY ADDITIVE direction, and that disguise is why it survives a
+  round:** a diff that only ADDS a guard branch falsifies the QUANTIFIER in the doc comment naming the
+  guarded set — BIN-1063 r3 added a third `refusalFor` branch, making "The two refusals live here"
+  (`helpers.mjs`) and "Both refusals live in the helpers" (`backfill-mirror-uid.mjs`) false, the second in
+  a file whose blob the commit never changed. An additive diff reads as safe and a byte-identical sibling
+  is invisible to every per-file check, so ask at every guard addition which sentence COUNTS the set, and
+  grep the word (`refusals`) rather than the quantifier — the quantifier can wrap onto the line above.
+  Strike the quantifier, never renumber it: "The refusals live here" needs no counting and cannot go stale
+  on the fourth branch. Hits in your own two knowledge files are the audit trail, not surviving copies.
 - **A mutation-justification comment ("without this line the FILE/BLOCK/SUITE pins no X") has TWO measurable
   halves — the ABSENCE premise and the consequent's SCOPE — and correcting one mints the next falsehood; STRIKE
   it.** BIN-797 r1: "the file carries no one-digit id" was falsified by the twin block's `tv_1`, same commit.
@@ -348,6 +377,13 @@ Cap: 80k chars — pay for an addition with a cut, and move what you cut verbati
 - **Shared-checkout hazard: a sibling's mutation loop can land INSIDE your window** — 4× now — so a clean
   `git status` is NOT proof; re-`Read`/re-run twice, identical required. **Review target is the STAGED blob**
   — `Read` serves the worktree; align `git show :<path> | md5sum` with `md5sum <path>` first (BIN-856 r2).
+  **A brief that says "the tree is FROZEN" is a claim about someone else's behaviour, so re-pin at the END
+  too:** BIN-1063 r3's two files were fixed and re-staged WHILE I wrote the report, so the `fail` I had just
+  rendered described blobs that would never be committed — r2 was blocked for exactly that. Re-run
+  `git hash-object` vs `git rev-parse :<file>` after the write-up, not only before reading. What surfaced it
+  was a KILLED background grep returning empty, which reads as a refutation of your own finding: an empty
+  result from a command that timed out is not a measurement, so re-run it scoped, and when the re-run also
+  disagrees suspect the TREE MOVED before you suspect your reading.
   **The same hazard self-inflicted: a restore-from-snapshot taken BEFORE a later edit landed silently reverts
   that edit when `cp`'d back mid-round, no error** — BIN-1088 lost a struck false claim this way between r3 and
   r4. Snapshot the WORKTREE bytes immediately before mutating, never reuse an earlier copy, and after any

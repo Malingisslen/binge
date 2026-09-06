@@ -2,7 +2,14 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { COLLECTIONS, candidates, patchFor } from './backfill-mirror-uid.helpers.mjs';
+import {
+  COLLECTIONS,
+  candidates,
+  patchFor,
+  projectFrom,
+  refusalFor,
+  stampText,
+} from './backfill-mirror-uid.helpers.mjs';
 
 const HERE = join(fileURLToPath(import.meta.url), '..');
 // Two files, two jobs. HELPERS is the pure logic this suite can import and call;
@@ -82,6 +89,45 @@ describe('patchFor — the write must name exactly one field', () => {
   });
 });
 
+describe('refusalFor — why the run must not start', () => {
+  it('refuses when neither mode flag is given', () => {
+    expect(refusalFor([])).toMatch(/--dry-run or --apply/);
+    expect(refusalFor(['--project', 'binge-nu'])).toMatch(/--dry-run or --apply/);
+  });
+
+  // The dangerous shape: --apply is set, so the write flag is already true when the
+  // project check runs. It must still refuse, before any SDK is initialised.
+  it('refuses when no project is named, even with --apply set', () => {
+    expect(refusalFor(['--apply'])).toMatch(/--project/);
+    expect(refusalFor(['--dry-run'])).toMatch(/--project/);
+    expect(refusalFor(['--apply', '--project'])).toMatch(/--project/);
+  });
+
+  // Without this branch `apply` is read on its own, so the run WRITES while the
+  // command says dry-run.
+  it('refuses when both mode flags are given at once', () => {
+    expect(refusalFor(['--dry-run', '--apply', '--project', 'binge-nu']))
+      .toMatch(/mutually exclusive/);
+  });
+
+  it('returns null only when a mode AND a project are both named', () => {
+    expect(refusalFor(['--dry-run', '--project', 'binge-nu'])).toBeNull();
+    expect(refusalFor(['--apply', '--project', 'binge-nu'])).toBeNull();
+  });
+});
+
+describe('stampText — the before-value must be readable', () => {
+  it('renders a Firestore Timestamp as ISO', () => {
+    const stamp = { toDate: () => new Date('2026-01-02T03:04:05Z') };
+    expect(stampText(stamp)).toBe('2026-01-02T03:04:05.000Z');
+  });
+
+  it('falls back to String for anything without toDate', () => {
+    expect(stampText(undefined)).toBe('undefined');
+    expect(stampText('2026-01-02')).toBe('2026-01-02');
+  });
+});
+
 describe('the instrument itself', () => {
   // update() fails safely when a row was deleted between read and write;
   // set(merge:true) would RESURRECT it carrying only uid and no timestamp —
@@ -91,16 +137,6 @@ describe('the instrument itself', () => {
     expect(CODE).toContain('.update(patch)');
     expect(CODE).not.toContain('merge');
     expect(CODE).not.toContain('.set(');
-  });
-
-  // The runner cannot be IMPORTED here — firebase-admin is a functions/
-  // dependency and the root runner has no such module — so this is a source scan,
-  // and it is weaker than a call: it proves the branch is written, not that it
-  // fires. Say so rather than let the green read as more than it is. What it does
-  // pin is that the script never defaults to writing when handed no flag.
-  it('refuses to run without an explicit flag', () => {
-    expect(CODE).toContain("if (!apply && !argv.includes('--dry-run'))");
-    expect(CODE).toContain('return 1;');
   });
 
   // "The guard exists" and "the guard runs" are different claims. Without the
@@ -120,6 +156,45 @@ describe('the instrument itself', () => {
     expect(CODE).toContain('skipped++;');
     expect(CODE).toContain('return skipped > 0 ? 1 : 0;');
     expect(CODE).toContain('${skipped} skipped');
+  });
+});
+
+describe('projectFrom — the run must name whose data it opens', () => {
+  it('reads the id after --project', () => {
+    expect(projectFrom(['--project', 'binge-nu', '--dry-run'])).toBe('binge-nu');
+    expect(projectFrom(['--dry-run', '--project', 'binge-nu'])).toBe('binge-nu');
+  });
+
+  // Undefined is the REFUSAL signal, so every shape that does not actually name a
+  // project has to reach it. `--project --apply` is the dangerous one: a flag read
+  // as a value would send the run at a project called "--apply".
+  it('returns undefined when no project is actually named', () => {
+    expect(projectFrom(['--dry-run'])).toBeUndefined();
+    expect(projectFrom(['--project'])).toBeUndefined();
+    expect(projectFrom(['--project', '--apply'])).toBeUndefined();
+    expect(projectFrom([])).toBeUndefined();
+    // Without the i === -1 sentinel this one returns 'binge-nu' from argv[0].
+    expect(projectFrom(['binge-nu', '--dry-run'])).toBeUndefined();
+  });
+});
+
+describe('the instrument itself, continued', () => {
+  // main()'s body is source-scanned, so pin it as ONE block including the return —
+  // an anchor on the condition alone is satisfied while the body is deleted, and an
+  // anchor on `run({ apply, projectId })` is satisfied by run's own declaration.
+  it('refuses on refusalFor and forwards the parsed project to the SDK', () => {
+    expect(CODE).toMatch(
+      /const refusal = refusalFor\(argv\);\s*if \(refusal\)\s*{\s*console\.log\(refusal\);\s*return 1;/
+    );
+    expect(CODE).toContain(
+      "return run({ apply: argv.includes('--apply'), projectId: projectFrom(argv) });"
+    );
+    expect(CODE).toContain('initializeApp({ credential: applicationDefault(), projectId })');
+  });
+
+  // stampText is proven by call above; this pins that the LOG LINE uses it.
+  it('runs the before-value through stampText', () => {
+    expect(CODE).toContain('${stamp}(before)=${stampText(doc.data[stamp])}');
   });
 
   // --dry-run is only safe while the write sits behind the flag, and the

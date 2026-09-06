@@ -25285,3 +25285,239 @@ independently rather than transcribed. New test file confirmed inside vitest's i
 (`functions/scripts/**/*.{test,spec}.mjs`), BIN-802's silent-skip class checked rather than assumed.
 
 **Verdict: pass (0 blocking).**
+
+## Relocated 2026-09-06 — cap trim, paired with the BIN-1063 steg 2 review entry below
+
+Entry 67 is the new bullet added this pass (folded into the "wired into main()" bullet in the
+live file). To pay for it under the 80k cap, the bullet below was moved here VERBATIM and
+replaced in the live file by a condensed line pointing at `[arkiv 67-latch]`. Nothing was
+dropped; the operative instruction ("never accept 'I couldn't force a second effect run'") is
+what stayed live.
+
+### 67-latch — the "runs once per mount" latch bullet, verbatim as it stood at this trim
+
+- **A "runs once per mount" latch (`redirectedRef`) IS drivable under vitest — never accept "I couldn't force a second effect run".** Two triggers (BIN-645): a mock hook returning a FRESH object per call puts a new identity in the dep list; or assign a fresh state object (`auth.user = { ...returning }`) before the second `rerender`. StrictMode double-invoke is a dev-only red herring, and the first trigger is INCIDENTAL — with a stable mock and the latch deleted the case goes vacuous, so require the explicit fresh-value assignment. Standing two-step diagnostic on the TEST file (restore after), RE-RUN whenever the dep array or the mock changes: swap the mock to the stable form and delete the latch — still RED means the fresh-value line carries it; then blank that line — GREEN confirms which line is load-bearing. **The fresh-object trigger can fire from a component's OWN bootstrap effect, with no explicit `rerender()`** (`AuthGuard.tsx`'s `useEffect(() => setMounted(true), [])`): instrument a module-level counter before crediting a "proves the re-run" test. **A same-family case needs no trigger at all when the guard's ref-latch has no memory of render COUNT** — BIN-748's late-mount case fails in LOCKSTEP with its sibling, so it is LOW/redundant-documentation, not a gap. [arkiv 26]
+
+### 67-cancel — the async-cancellation-guard bullet, verbatim as it stood at this same trim
+
+- **An async cancellation guard (`let cancelled=false; …; return () => { cancelled = true }`) inside a re-running effect is provably dead unless a test drives TWO OVERLAPPING runs with the stale one resolving last — a single held-then-released promise never triggers a second effect run, so it never reaches the guard** (BIN-849: deleting `if (!cancelled)` left the whole file green, including the test named "a slow read cannot blank a working box"). Diagnose by asking whether any test changes the effect's OWN dep-array terms while a PRIOR run's promise is still unresolved. Fix: hold two distinct promises on the mocked async read, trigger the effect a second time via its real dep, resolve the OLDER call LAST with the opposite answer, and assert the NEWER run's answer is on screen. **When a test author explains "I asserted on X instead of Y because Z also changed", check that X is a value only the guarded state controls and Y is not.** [arkiv 28]
+
+## 2026-09-06 — BIN-1063 steg 2, `--project` mandatory on backfill-mirror-uid (staged review)
+
+**Diff reviewed.** Staged: `functions/scripts/backfill-mirror-uid.{mjs,helpers.mjs,helpers.test.mjs}`,
+`docs/org/metrics/events.jsonl`, the security reviewer's two knowledge files. My gate
+(`binge-test-reviewer` patterns in `.claude/shared-plugin.json`: `\.test\.(ts|tsx)$`,
+`\.test\.mjs$`, `^src/.*/__tests__/`, `vitest.*\.config\.ts$`) matches exactly ONE staged path:
+`functions/scripts/backfill-mirror-uid.helpers.test.mjs`.
+
+Index vs worktree hashed for all six staged paths, printed for every path (not only mismatches):
+all six identical. Re-checked at the end, unchanged. `git status --porcelain` shows only the two
+pre-existing untracked dirs (`.agents/skills/recap/`, `.codex/`).
+
+Test-file diff is PURELY ADDITIVE — one import widened to include `projectFrom`, one new
+`projectFrom` describe (2 its), one new `the instrument itself, continued` describe. No assertion
+weakened, deleted, `.skip`ped or rewritten. Confirmed the file is inside vitest's include globs
+(`functions/scripts/**/*.{test,spec}.mjs`, vitest.config.ts:30) — BIN-802's silent-skip class
+checked, not assumed. `npx vitest run functions/scripts/backfill-mirror-uid.helpers.test.mjs` →
+**1 file, 18 passed**, matching the coordinator's number.
+
+**Mutations run.** The tree was frozen for this pass, so every mutant was applied IN MEMORY: a
+node script reads the real `backfill-mirror-uid.mjs`, applies the mutation to the string, strips
+`//` lines exactly as the test's `CODE` does, and evaluates all 15 positive `toContain` anchors
+plus the 5 negative ones. Control (unmutated) = all anchors satisfied, and a whole-block deletion
+control goes RED, so the harness discriminates. Output:
+
+```
+control (unmutated):                                    GREEN (all anchors hold)
+M1 drop `return 1` from the !projectId guard:           GREEN (mutant survives)
+M2 neuter guard to `if (false && !projectId) {`:        RED  -> projGuard
+M3 call site `run({ apply, projectId: undefined })`:    GREEN (mutant survives)
+M4 `.toISOString()` -> `.toString()`:                   GREEN (mutant survives)
+M5 `if (false && typeof value.toDate === 'function')`:  GREEN (mutant survives)
+M6 delete the whole !projectId block (control):         RED  -> parse,projGuard
+```
+
+Second probe, occurrence counting + real execution of `projectFrom` variants:
+
+```
+occurrences of the anchor `run({ apply, projectId })`: 2
+   ...async function run({ apply, projectId }) {        <- the DECLARATION
+   ...  return run({ apply, projectId });               <- the call site
+projectFrom control          : ok ok ok ok ok ok
+projectFrom drop `i === -1`  : ok ok ok ok ok ok  (all six fixtures pass)
+  real-world divergence: noSentinel(['binge-nu','--dry-run']) === 'binge-nu', control === undefined
+```
+
+**Findings.**
+
+1. BLOCKING — `backfill-mirror-uid.helpers.test.mjs:149-154`. The test titled *"refuses to run
+   without an explicit --project, and passes it to the SDK"* pins NEITHER half. (a) M1: deleting
+   `return 1;` from the `if (!projectId)` block turns the guard warn-only, `main()` proceeds, and
+   `initializeApp({ credential: applicationDefault(), projectId: undefined })` falls back to the
+   machine's ADC quota project — the exact 2026-09-06 incident this diff exists to close — with all
+   18 green, because the `return 1;` anchor is already satisfied by the FLAG guard's occurrence at
+   line 103. (b) M3: `run({ apply, projectId })` occurs TWICE, the first being `async function
+   run({ apply, projectId }) {`, so the declaration alone satisfies the anchor and the call site
+   can drop the parsed id. The comment at 147-148 asserting *"Both halves are pinned"* is a false
+   claim about a measured property, and its own sibling scan at 96-100 states the opposite and
+   correct thing about itself. Remedy asked for: extract the argv validation into
+   `backfill-mirror-uid.helpers.mjs` (a `refusalFor(argv)` returning `null | string`) exactly as
+   this diff already did for `projectFrom`, and CALL it; strike the "Both halves are pinned"
+   sentence rather than reword it.
+2. NON-BLOCKING — 159-162, *"renders the timestamp readably rather than as [object Object]"*: M5
+   neuters the `toDate` branch so `[object Object]` prints again, and M4 drops ISO, both green.
+   `stampText` is pure and admin-free — same shape as `projectFrom` — so it should move to the
+   helpers and be called.
+3. NON-BLOCKING (low) — `projectFrom`'s `i === -1` sentinel survives all six fixtures; one fixture
+   (`projectFrom(['binge-nu','--dry-run'])` → undefined) closes it.
+
+Correct by construction and worth recording: `patchFor`'s whole-object `toEqual` (an added key
+fails, where `toHaveProperty` would not), the `deletes nothing` test's positive anchor placed
+BEFORE its negatives, and `COLLECTIONS` anchored on the full declaration rather than the value
+(the BIN-790 idiom applied right).
+
+`.claude/rules/accepted-deviations.md` read first; the 2026-09-06 BIN-1063 steg 2 entry scopes the
+migration and says nothing that would retire any of the above. tmdbTosSweep's mode-dependent gate
+is not implicated.
+
+**Verdict: fail (1 blocking).**
+
+### 67-binding — the cross-component text-binding bullet, verbatim as it stood at this same trim
+
+- A cross-component text binding built on `getByRole(role, { name: LITERAL })` is non-vacuous in both directions (query-miss throws; content-miss reddens the `toContain`) even though it still embeds the literal — judge the binding, not its self-description, and treat a "no longer hardcoded" comment as a nit, never a coverage gap. [arkiv 65]
+
+## 2026-09-06 — BIN-1063 steg 2, round 2: the `--project` guard closed by extraction, proven by call
+
+**Diff reviewed** (staged, index == worktree for all three):
+`functions/scripts/backfill-mirror-uid.mjs` (6c8f382d9dc5833c13261c02d4c74da512866764),
+`functions/scripts/backfill-mirror-uid.helpers.mjs` (3f18b194b6338eb22abbcfc6869fe4e0980128da),
+`functions/scripts/backfill-mirror-uid.helpers.test.mjs` (b7e256374c67cf45f64f3d7f1aade3592fa876d5).
+Round 1's verdict was fail (1 blocking) + 2 non-blocking: the `--project` guard was pinned only by
+a `toContain` on the CONDITION plus a bare `return 1;` already present elsewhere in the file, and by
+an anchor `run({ apply, projectId })` that `run`'s own declaration satisfies.
+
+**What round 2 did.** The argv validation moved into `refusalFor(argv) -> null | string` in the
+helpers and is proven by CALL (3 `it`s); `stampText` likewise, both branches; `main()` is three
+lines. The two residual source scans were rebuilt: one regex spanning
+`const refusal = refusalFor(argv)` through `return 1;` as ONE block, and the run call spelled as the
+full line `return run({ apply: argv.includes('--apply'), projectId: projectFrom(argv) });`. The old
+`refuses to run without an explicit flag` scan was deleted — its anchor string
+(`if (!apply && !argv.includes('--dry-run'))`) no longer exists anywhere in the tree, so it could
+not fail alone against any restored copy; that is a legitimate cleanup, not a weakening.
+
+**Verification run this round (read-only; the tree was frozen and never mutated).**
+Source-scan side, simulated in a scratchpad `node` probe over the file's own comment-stripping:
+delete `return 1;` -> regex FAILS (1 test); `return 1;` -> `return 0;` -> regex FAILS; delete the
+whole `if (refusal)` block -> regex FAILS; `projectId: projectFrom(argv)` -> `projectId: undefined`
+-> call anchor FAILS; drop the `projectId` key entirely -> call anchor FAILS; drop `stampText` from
+the log line -> log anchor FAILS; drop `projectId` from `initializeApp(...)` -> init anchor FAILS.
+Control unmutated: all anchors OK. Call side, mutated COPIES of the helpers imported from the
+scratchpad and the file's own assertions replayed: `stampText` guard -> `if (false)` = 1 fail;
+`projectFrom` drops the `i === -1` sentinel = 1 fail; drop the project check = 1 fail; drop the mode
+check = 1 fail; `candidates` narrowed to absent-only = 2 fails; `patchFor` gains a timestamp = 2
+fails. Control green.
+
+**The finding worth keeping, and the reason the round-2 fixture set is right.** The plausible WEAK
+rewrite of the new guard is `if (!argv.includes('--project'))` instead of `if (!projectFrom(argv))`
+— it looks equivalent and lets `--apply --project` (flag consumed as the value) through to the SDK
+with `projectId: undefined`, i.e. exactly the whole-population-write-against-a-stranger's-project
+failure the guard exists for. Only the flag-as-value fixture kills it: measured, `refusalFor(['--apply','--project'])`
+is the assertion that reddens, and it is present. Same shape one function down:
+`projectFrom(['binge-nu','--dry-run'])` is what pins the `i === -1` sentinel.
+
+**Suites.** `npx vitest run functions/scripts/backfill-mirror-uid.helpers.test.mjs` = 22 passed.
+Full `npx vitest run` = 278 files, 4724 passed, 4 skipped — the handed-down counts reproduced here,
+not inherited. Shas re-read after the runs: unchanged.
+
+**Residual, non-blocking and precedent-consistent, filed as neither gap nor finding:** `run()`'s
+paging loop, its broad `catch`/`skipped++` and the exit-code composition remain source-scanned only,
+because `firebase-admin` does not resolve under the root runner. The test file states that limit in
+its own header, which is the documented-blind-spot form this repo already accepts for admin-SDK
+entrypoints.
+
+**Cap payment.** The principles file was at 79982 chars. The BIN-1063 bullet under
+"Vacuous / non-discriminating oracles" was rewritten in place to carry the closing form; to pay for
+it the cross-component `getByRole(role, { name: LITERAL })` binding bullet was cut from the
+principles file. It stands verbatim in this archive under "67-binding" and is unchanged by that cut.
+
+**Verdict: pass (0 blocking).**
+
+## 2026-09-06 — BIN-1063 steg 2, round 3: the third refusal branch and two struck count words
+
+**Duty list derived from `reviewGates` in `.claude/shared-plugin.json`** (binge-test-reviewer:
+`\.test\.(ts|tsx)$`, `\.test\.mjs$`, `^src/.*/__tests__/`, `vitest.*\.config\.ts$`). Of the nine
+staged paths only `functions/scripts/backfill-mirror-uid.helpers.test.mjs` matches; the helpers and
+the runner were read as the article the test is about.
+
+**Shas read (index == worktree for all nine staged paths, verified first and last):**
+- `functions/scripts/backfill-mirror-uid.mjs` `8721b8cff4f7264da03141678157a5f45630fbc3`
+- `functions/scripts/backfill-mirror-uid.helpers.mjs` `4cc14a352a94bd24e956f4fbd80557b4e039661f`
+- `functions/scripts/backfill-mirror-uid.helpers.test.mjs` `0b99416481094b80a25ace70e5cfb186891274fc`
+
+**The delta since round 2, reconstructed rather than taken from the brief.** Grepped this agent's
+own prior `read` rows out of the review ledger under `.claude/state/` (Grep tool — a hook refuses
+Bash reads of it), `git cat-file -p` on each pinned sha, diffed against the staged blobs. Exactly
+three hunks: the new `if (argv.includes('--apply') && argv.includes('--dry-run'))` branch in
+`refusalFor`, the new `it('refuses when both mode flags are given at once')`, and two struck
+count words ("The **two** refusals" in the helpers, "**Both** refusals" in the runner). Nothing
+else moved in any of the three files.
+
+**Mutation rig.** The tree was frozen for this pass, so the three files were copied into
+`node_modules/.mutrev-bin1063/` (gitignored, and inside `node_modules` so `vitest` still resolves)
+with a two-line config, and every mutant was applied to the COPY from a pristine snapshot. The
+staged files were md5-checked before and after every run and never differed. Control on the copy:
+23 passed, matching the handed-down number.
+
+**Mutants run, each asserted landed in the same command as its run:**
+- M1 delete the exclusivity branch → **1 failed of 23**, and it is the new `it` — red ALONE.
+- M2 `&&` → `||` (the silent-guard slip: refuses every run rather than none) → **2 failed**,
+  `refuses when no project is named, even with --apply set` and `returns null only when a mode AND
+  a project are both named`.
+- M3 drop the `--apply` term / M4 drop the `--dry-run` term → **2 failed** each, same pair.
+- M5 delete `if (apply) {` → 1 failed. M6 `process.exitCode = 0` → 1 failed. Both are the same
+  `it`, which is exactly what that test's own comment claims ("Both mutants … leave every other
+  assertion in this file green") — measured, not credited.
+- M7 `update(patch)` → `set(patch, { merge: true })` → 2 failed (`uses update(), never set with
+  merge`, `deletes nothing`). M8 drop the entry-point guard → 1 failed.
+- M9 delete `return 1;` under `if (refusal)` → **1 failed**, the `main()`-regex test, ALONE.
+
+**Both directions are pinned, but not by one `it`, and that is the right division.** The new `it`
+pins the branch's EXISTENCE (deletion red-alone); the over-refusal direction — the `&&`→`||` slip
+that refuses every run — is pinned by the sibling `returns null only when a mode AND a project are
+both named`, a complementary oracle rather than a subset. Attribution is clean: the new fixture
+`['--dry-run','--apply','--project','binge-nu']` satisfies every OTHER guard, so its refusal can
+only come from the branch under test.
+
+**The lesson this round added, folded into the "audit what the strike leaves behind" bullet in
+place.** The helpers' strike removed more than the count word: it also dropped "A source scan over
+main() can only see that a branch is WRITTEN; deleting the `return 1;` under it leaves every scan
+green while the guard becomes a warning." That sentence was a WARNING, so it looked like collateral
+damage — but M9 shows it was false at these bytes: the round-2 regex spans the body through the
+return, so deleting `return 1;` reddens that test alone. The strike removed a false claim and wrote
+no truer version — correct under the strike rule. The reviewable act is the MUTATION, not the
+reading: a deleted warning is graded by probing it, exactly as a surviving count is.
+
+**Production probe row (disclosed in the brief): no fixture is owed.** One `friends` row was
+written by an aborted `--apply | head -1` run before this commit; it carries `uid == doc id`, so
+`candidates` (`d.data.uid !== d.id`) excludes it, and `it('leaves an already-correct row alone')`
+already pins that shape. No test in this file asserts a population count, so the dry run's
+"2 of 3" falsifies nothing here.
+
+**Suites.** Isolated copy: 23 passed. Full `npx vitest run` at these bytes: **278 files, 4725
+passed, 4 skipped** — the handed-down counts reproduced on this machine, not inherited. All three
+files exist at HEAD (staged `M`, not `A`), so no `gen-ownership-map` baseline event is in play.
+
+**Residual, unchanged from round 2 and still not a finding:** `run()`'s paging loop, its broad
+`catch`/`skipped++` and the exit-code composition are source-scanned only, because `firebase-admin`
+does not resolve under the root runner. The test file states that limit in its own header, which is
+the documented-blind-spot form this repo accepts for admin-SDK entrypoints.
+
+**Observed, non-blocking, outside my gate:** the security reviewer's two knowledge files are `MM`
+(worktree ahead of index) — that agent's own re-stage, not mine. My three duty files were
+index-identical at the start and end of this pass.
+
+**Cap payment.** The principles file stands at 79733 chars (cap 80000, `check-knowledge-caps` green):
+the neighbouring `route.test.mjs`/`gate-symmetry.test.mjs` clauses in the same bullet were compressed
+to pay for the addition, and stand verbatim in the entries above.
+
+**Verdict: pass (0 blocking).**

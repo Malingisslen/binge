@@ -85,10 +85,47 @@ hall i den forsta planen:
   manuella stegen, plus PWA- och Cloudflare-cachens svans.
 Sa: push (deployen blir rod med flit) -> hosting via `workflow_dispatch` ->
 `firebase deploy --only firestore:rules,firestore:indexes` -> verifiera att
-indexen star Enabled -> backfill --dry-run -> backfill --apply.
+indexen star Enabled -> backfillen.
+
+Backfillen kors fran `functions/` och MASTE namnge sitt projekt:
+`node scripts/backfill-mirror-uid.mjs --project binge-nu --dry-run`, sedan samma
+kommando med `--apply` i STALLET for `--dry-run`. Utan `--project` vagrar den,
+och med bada lagesflaggorna samtidigt ocksa.
+
+#27:s fyra bindande villkor for sjalva `--apply`-korningen, ordagrant ur
+kritiken:
+1. Kor den NAMNGIVNA torrkorningen en gang till omedelbart fore `--apply`, i
+   samma terminalsession, och jamfor dess rad mot det du ar pa vag att skriva -
+   korningen far bara rora `uid`-faltet, inget annat.
+2. Bekrafta att identiteten bakom `applicationDefault()` fortfarande loser upp
+   till `binge-nu` vid apply-tillfallet, pa samma satt som vid torrkorningen -
+   anta inte att fixen haller over en ominloggning eller en `gcloud config`-
+   andring pa maskinen; felet var just "sag frisk ut, var det inte".
+3. PITR och schemalagda backuper ar INTE pa i projektet, och skrivningen gar
+   forbi `allow update: if false` via Admin SDK - det finns ingen
+   aterstallningsvag om `--apply` beter sig fel. Radien ar liten - ett falt, och
+   ingen tidsstampel ror sig - och manuellt reversibel. Antalet rader kommer ur
+   torrkorningen i villkor 1, ingen annanstans ifran. Generalisera inte
+   skriptets form till en storre backfill innan den luckan ar stangd.
+4. Spara `--apply`-korningens hela utdata (touched/skipped/scanned plus
+   projektraden) nagonstans varaktigt innan terminalen stangs - det ar enda
+   beviset att skrivningen gick till ratt projekt och rorde ratt antal rader.
 Inga funktioner andras i denna commit; `functions/**` i diffen ar bara
 engangsskriptet, som aldrig deployas.
-En commit, inte flera - en krympt filunion kan routa om panelen.
+
+## Deviation log - BIN-1063 steg 2
+
+- [deviation] 2026-09-06: EN produktionsrad skrevs av misstag, fore denna commit
+  och utanfor villkor 1, 2 och 4. Jag korde `--apply --project binge-nu` som ett
+  prov av den nya vagran och pipade till `head -1`; en skrivning hann landa innan
+  SIGPIPE. Raden ar inspekterad direkt:
+  `users/Nm4IdVYWYzMZAGF0x7izbKIhwYJ2/friends/XYXoYI6au5V2kVPIsrANT2aiAJL2`,
+  `keys = since,uid`, `uid` lika med dokumentets id, `since` orord pa
+  2026-04-27T19:54:27.488Z. Det ar exakt migreringens avsedda slutlage, och
+  `candidates()` hoppar over raden i varje kommande svep - ingen rollback ags.
+  Foljden att kanna till: torrkorningen sager nu ett lagre tal an planen gjorde,
+  och det ar vantat, inte ett matfel. Villkor 4:s bevis finns inte for just den
+  raden; denna post ar det narmaste som finns.
 
 ### Dokumentation (#5, #6)
 - `.claude/rules/accepted-deviations.md` far en DATERAD EFTERFOLJARE som
