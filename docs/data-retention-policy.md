@@ -335,8 +335,7 @@ Det är en känd, oavslutad punkt — inte något den här texten påstår är l
 medlemsutträdesfasen kan användarens uid ligga kvar i `memberUids` på andra
 användares grupper och i `editors` på delade listor. Ett omförsök städar det
 (uppdateringarna byggs om från Firestore), men den som aldrig återvänder lämnar
-dem kvar — `reclaimOrphanFollows` täcker bara följare och vänner. Ingen sopning
-täcker den här luckan i dag.
+dem kvar. Ingen sopning täcker den här luckan i dag.
 
 ### Skrivvägar som vägrar under en pågående radering (BIN-1025, 2026-08-27)
 

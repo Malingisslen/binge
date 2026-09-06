@@ -145,6 +145,14 @@ export const TOOLING_CODE_FILES = new Set([
   // blocks, and widening one has never widened the other.
   'scripts/bundle-report.mjs',
   'scripts/bundle-report.test.mjs',
+  // BIN-1063 steg 2. Engangs-backfillen som skriver motpartens uid som ett falt
+  // pa friends/friendRequestsSent. Den kor med Admin SDK och forbigar darmed
+  // firestore.rules helt — den ar det enda som kan skriva de raderna, eftersom
+  // bada samlingarna har `allow update: if false`. Tillagd har i SAMMA commit som
+  // sitt `reviewGates`-monster, per BIN-830.
+  'functions/scripts/backfill-mirror-uid.mjs',
+  'functions/scripts/backfill-mirror-uid.helpers.mjs',
+  'functions/scripts/backfill-mirror-uid.helpers.test.mjs',
   'docs/org/gen-ownership-map.mjs',
   'docs/org/gen-ownership-map.test.mjs',
   // BIN-1088. The dependency-diff check on the pull_request path. Dependabot merges

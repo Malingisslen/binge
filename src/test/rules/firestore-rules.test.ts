@@ -993,7 +993,7 @@ describe('users/{uid}/friends/{targetUid} — forged-friendship guard', () => {
     // No pending request from VICTIM → ATTACKER exists.
     await assertFails(setDoc(
       doc(attackerDb(), 'users', VICTIM, 'friends', ATTACKER),
-      { since: serverTimestamp() },
+      { uid: ATTACKER, since: serverTimestamp() },
     ));
   });
 
@@ -1006,7 +1006,7 @@ describe('users/{uid}/friends/{targetUid} — forged-friendship guard', () => {
     // Owner-branch deny: attacker owns uid but no request from VICTIM exists.
     await assertFails(setDoc(
       doc(attackerDb(), 'users', ATTACKER, 'friends', VICTIM),
-      { since: serverTimestamp() },
+      { uid: VICTIM, since: serverTimestamp() },
     ));
   });
 
@@ -1018,7 +1018,7 @@ describe('users/{uid}/friends/{targetUid} — forged-friendship guard', () => {
     await seedRequest(VICTIM, ATTACKER);
     await assertFails(setDoc(
       doc(attackerDb(), 'users', VICTIM, 'friends', ATTACKER),
-      { since: serverTimestamp() },
+      { uid: ATTACKER, since: serverTimestamp() },
     ));
   });
 
@@ -1029,12 +1029,95 @@ describe('users/{uid}/friends/{targetUid} — forged-friendship guard', () => {
     // Owner-side write: acceptor (VICTIM) writes their own friends/{requester}.
     await assertSucceeds(setDoc(
       doc(victimDb(), 'users', VICTIM, 'friends', ATTACKER),
-      { since: serverTimestamp() },
+      { uid: ATTACKER, since: serverTimestamp() },
     ));
     // Mirror write: acceptor (VICTIM) writes requester's friends/{acceptor}.
     await assertSucceeds(setDoc(
       doc(victimDb(), 'users', ATTACKER, 'friends', VICTIM),
+      { uid: VICTIM, since: serverTimestamp() },
+    ));
+  });
+
+  // BIN-1063 steg 2. `uid` speglar dokumentets eget id så en collection-group-
+  // fråga kan hitta raden när motparten raderas: documentId() går inte att
+  // filtrera på mot ett bart id, så utan fältet går raden inte att fråga efter.
+  //
+  // Pinningen prövas på BÅDA grenarna av create-regelns OR. Det är hela skälet
+  // att OR:et är omslutet: `&&` binder hårdare än `||`, så ett tillägg utan
+  // parentes hade gett `ägargren || (spegelgren && pin)` och släppt ägargrenen
+  // förbi kontrollen helt. Faller bara ETT av de två nedan är det den buggen.
+  it('friends: a missing uid is denied on the OWNER branch', async () => {
+    await seedRequest(VICTIM, ATTACKER);
+    await assertFails(setDoc(
+      doc(victimDb(), 'users', VICTIM, 'friends', ATTACKER),
       { since: serverTimestamp() },
+    ));
+  });
+
+  it('friends: a missing uid is denied on the MIRROR branch', async () => {
+    await seedRequest(VICTIM, ATTACKER);
+    await assertFails(setDoc(
+      doc(victimDb(), 'users', ATTACKER, 'friends', VICTIM),
+      { since: serverTimestamp() },
+    ));
+  });
+
+  // Det farliga tillståndet är inte ett SAKNAT fält utan ett som PEKAR FEL: en
+  // framtida radering följer fältet, så ett värde som säger någon annans uid
+  // hade fått en levande användares rad att städas bort som kollateral.
+  it('friends: a uid that disagrees with the document id is denied', async () => {
+    await seedRequest(VICTIM, ATTACKER);
+    await assertFails(setDoc(
+      doc(victimDb(), 'users', VICTIM, 'friends', ATTACKER),
+      { uid: VICTIM, since: serverTimestamp() },
+    ));
+  });
+
+  it('friendRequestsSent: the sender writes their own row with the recipient as uid', async () => {
+    await assertSucceeds(setDoc(
+      doc(attackerDb(), 'users', ATTACKER, 'friendRequestsSent', VICTIM),
+      { uid: VICTIM, sentAt: serverTimestamp() },
+    ));
+  });
+
+  it('friendRequestsSent: a missing uid is denied', async () => {
+    await assertFails(setDoc(
+      doc(attackerDb(), 'users', ATTACKER, 'friendRequestsSent', VICTIM),
+      { sentAt: serverTimestamp() },
+    ));
+  });
+
+  it('friendRequestsSent: a uid that disagrees with the document id is denied', async () => {
+    await assertFails(setDoc(
+      doc(attackerDb(), 'users', ATTACKER, 'friendRequestsSent', VICTIM),
+      { uid: ATTACKER, sentAt: serverTimestamp() },
+    ));
+  });
+
+  // #4:s villkor i BIN-1063:s panel. Spegel-grenen låter acceptorn skapa ett
+  // dokument under MOTPARTENS träd. Utan nyckelbegränsning kan den fyllas med
+  // vad som helst upp till dokumentgränsen — på motpartens lagring, och rakt in
+  // i motpartens GDPR-export, som kopierar varje fält ordagrant.
+  it('friends: an extra key is denied on the MIRROR branch', async () => {
+    await seedRequest(VICTIM, ATTACKER);
+    await assertFails(setDoc(
+      doc(victimDb(), 'users', ATTACKER, 'friends', VICTIM),
+      { uid: VICTIM, since: serverTimestamp(), payload: 'x'.repeat(1000) },
+    ));
+  });
+
+  it('friends: an extra key is denied on the OWNER branch', async () => {
+    await seedRequest(VICTIM, ATTACKER);
+    await assertFails(setDoc(
+      doc(victimDb(), 'users', VICTIM, 'friends', ATTACKER),
+      { uid: ATTACKER, since: serverTimestamp(), payload: 'x' },
+    ));
+  });
+
+  it('friendRequestsSent: an extra key is denied', async () => {
+    await assertFails(setDoc(
+      doc(attackerDb(), 'users', ATTACKER, 'friendRequestsSent', VICTIM),
+      { uid: VICTIM, sentAt: serverTimestamp(), payload: 'x' },
     ));
   });
 });

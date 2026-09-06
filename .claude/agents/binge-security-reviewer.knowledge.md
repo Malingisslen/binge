@@ -37,6 +37,12 @@ Cap: 80k chars — pay for an addition with a cut, and move what you cut verbati
   binge's 6 `src/test/rules/*` files boot an INLINE `OPEN_RULES` instead and are immune to any rules mutant),
   then scan only those for the fixture shape the mutant moves.** BIN-797's `*`→`+` looked like a dozen reds;
   all but two of those fixtures sit in an OPEN_RULES suite, so the reported 2 was right.
+  **When the brief FREEZES the tree (a re-review whose marker is the gate) you cannot mutate — so
+  DERIVE the count rather than accept or waive it:** walk every fixture in the affected `describe`
+  and ask which VERDICT the mutant moves, `assertSucceeds` and `assertFails` alike. BIN-1063 r2's
+  "`== targetUid` → `== request.auth.uid` fails 2" reproduced this way, and the two are not the pair
+  a reader guesses — one is the disagreeing-uid DENY, the other the legit accept's OWNER-side write,
+  which the substitution flips into a denial. A count unreachable by that walk is itself the finding.
 - **A test title is not coverage** — an `it()` naming "rejects 0 → 1" actually asserted `5`. A mock with FEWER
   FIELDS than the real hook can't exercise what the missing one gates (a `useAuth` mock lacking `user` encodes
   ABSENT, not null). Deny tests whose rule `get()`s the writer's own profile must seed via
@@ -312,9 +318,20 @@ Cap: 80k chars — pay for an addition with a cut, and move what you cut verbati
   that is the shape of the right fix: when a parenthetical ENUMERATES a subset of what a guard excludes
   ("KANONISKA siffror (ingen inledande nolla)" after `_0` was also dropped), delete the parenthetical — the
   surviving superset term is then true with nothing new to measure.** Re-listing the widened subset is what
-  restarts the chain. Verify a strike two ways: the main clause still holds WITHOUT the qualifier, and the
+  restarts the chain. **On a rules-TIGHTENING commit the commonest instance is a NEGATIVE claim
+  about the very constraint being added, or a field list of the doc being changed — "none of these
+  collections has ever had a `hasOnly` allowlist", "`friends/{targetUid}`: `{ since }`" — sitting in
+  a helper, its test and the module header while that same commit adds the allowlist and the field.
+  Grep the constraint keyword AND the new field name across every file the commit touches, including
+  the ones that only DESCRIBE the data (BIN-1063 r2: three copies, three files).** Verify a strike two ways: the main clause still holds WITHOUT the qualifier, and the
   struck fact is not the repo's only copy (grep it — BIN-797's struck `Art. 15` left 8 consistent `Art. 20`
-  framings incl. both policy docs, so nothing legal was lost).
+  framings incl. both policy docs, so nothing legal was lost). **On the NEXT round that grep hits your own
+  two knowledge files, because the finding QUOTED the false sentence — those two hits are the audit trail
+  working, never a surviving copy; count only tracked non-knowledge files (BIN-1063 r3).** The pair also
+  shows which half converges in one round: a claim needing measurement gets STRUCK, a field list a rule
+  now pins is read straight off the writer and corrected IN PLACE — both landed clean, no new claim minted.
+  Leave a NEIGHBOURING stale enumeration the commit did not falsify alone (`friendRequests`' header line,
+  whose create rule carries no `hasOnly`): re-listing it is how one finding becomes a chain.
 - **Challenge a dispatching prompt's premise, and scope a RE-review by SHA.** "NEVER had a security review",
   "everything else is as you last saw it" and "only file X moved" have each been false; the brief's file list
   is a hint, never the boundary. **Sha equality proves the BYTES held, not that their CLAIMS do** — a

@@ -514,11 +514,30 @@ service cloud.firestore {
       // state där requesten fortfarande finns, så den legitima accepten passerar.
       // - ägar-grenen (uid=acceptor): users/$(uid)/friendRequests/$(targetUid)
       // - spegel-grenen (targetUid=acceptor): users/$(targetUid)/friendRequests/$(uid)
+      // BIN-1063 steg 2: `uid` maste vara dokumentets EGET id (targetUid).
+      // Pinnas mot SOKVAGSVARIABELN, inte mot request.auth.uid — grannregeln
+      // friendRequests jamfor mot request.auth.uid och det fungerar dar, men
+      // samma monster spricker har: acceptFriendRequest skriver spegelsidan
+      // users/{fromUid}/friends/{myUid} som ACCEPTOR, alltsa inte som
+      // sokvagens agare. En sadan kopiering hade nekat varje legitim accept.
+      //
+      // Hela OR:et ar omslutet med flit. `&&` binder hardare an `||`, sa
+      // `gren1 || gren2 && koll` hade latit agar-grenen skriva vilket uid som
+      // helst — och det ar just det vardet en framtida radering foljer.
       allow create: if
-        (isOwner(uid)
-          && exists(/databases/$(database)/documents/users/$(uid)/friendRequests/$(targetUid)))
-        || (isOwner(targetUid)
-          && exists(/databases/$(database)/documents/users/$(targetUid)/friendRequests/$(uid)));
+        (
+          (isOwner(uid)
+            && exists(/databases/$(database)/documents/users/$(uid)/friendRequests/$(targetUid)))
+          || (isOwner(targetUid)
+            && exists(/databases/$(database)/documents/users/$(targetUid)/friendRequests/$(uid)))
+        )
+        && request.resource.data.uid == targetUid
+        // #4:s villkor i panelen for BIN-1063 steg 2. Spegel-grenen later
+        // acceptorn skapa ett dokument under MOTPARTENS trad; utan en
+        // nyckelbegransning kan den fylla det med vad som helst upp till
+        // dokumentgransen, pa motpartens lagring och rakt in i motpartens
+        // GDPR-export. friends.ts skriver exakt dessa tva falt.
+        && request.resource.data.keys().hasOnly(['uid', 'since']);
       // Update: aldrig (since-fältet är immutable). Använd delete + create
       // om man vill resetta.
       allow update: if false;
@@ -547,7 +566,11 @@ service cloud.firestore {
     // "Förfrågan skickad" utan att läsa annans privata data.
     match /users/{uid}/friendRequestsSent/{toUid} {
       allow read: if isOwner(uid);
-      allow create: if isOwner(uid);
+      // BIN-1063 steg 2: samma pinning som friends ovan. `update` ar redan
+      // false harunder, sa faltet ar oforanderligt utan extra villkor.
+      allow create: if isOwner(uid)
+        && request.resource.data.uid == toUid
+        && request.resource.data.keys().hasOnly(['uid', 'sentAt']);
       allow update: if false;
       allow delete: if isOwner(uid) || isOwner(toUid);
     }

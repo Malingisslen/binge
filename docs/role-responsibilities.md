@@ -762,6 +762,18 @@ findings here too.
   without touching any title; reads fall back, but nothing detects the divergence.
 - 🟡 `collectUserDataSnapshots` reads 25 collections in parallel and **swallows
   errors without re-throwing** — a partial export/deletion could fail silently.
+- **Engångsmigreringar på skarp data** (BIN-1063 steg 2). Backfillen som skriver
+  motpartens uid som ett fält på `friends` och `friendRequestsSent`. Den sitter här
+  därför att den är ett schemainstrument: den ändrar formen på befintliga rader så
+  att de går att fråga efter, och den kör med Admin SDK — det är den enda vägen som
+  KAN skriva dem, eftersom båda samlingarna har `allow update: if false`. Sätet följer
+  vad skriptet gör mot datalagret, inte var filen ligger. Den deployas aldrig; den körs
+  för hand, en gång.
+  → `functions/scripts/backfill-mirror-uid.mjs`, `functions/scripts/backfill-mirror-uid.helpers.mjs`, `functions/scripts/backfill-mirror-uid.helpers.test.mjs`
+- **Admin-SDK-skrivarna mot recap-cachen** (BIN-1013-sätet). Skripten som skriver och
+  inventerar dokumenten i `recaps/`. Samma skäl som backfillen ovan: de kör med Admin SDK
+  mot en samling klienten bara får läsa, så det är datalagrets skrivväg som avgör sätet.
+  → `functions/scripts/recap-upload.mjs`, `functions/scripts/recap-upload.helpers.mjs`, `functions/scripts/recap-upload.helpers.test.mjs`, `functions/scripts/recap-coverage-manifest.mjs`
 - **Filer som saknade en ägande roll** (BIN-871). Datalagret i klienten: firebase-modulerna, dokument-id, skrivvägarna och regeltesterna.
   → `src/contexts/AuthContext.test.tsx`, `src/contexts/WatchlistContext.test.tsx`, `src/hooks/usePublicProfile.test.ts`, `src/lib/firebase/accountDeletion.ts`, `src/lib/firebase/config.ts`, `src/lib/firebase/episodeProgress.test.ts`, `src/lib/firebase/episodeProgress.ts`, `src/lib/firebase/messaging.livetoken.test.ts`, `src/lib/firebase/messaging.ts`, `src/lib/firebase/publicProfile.test.ts`, `src/lib/firebase/publicProfile.ts`, `src/lib/firebase/reports.ts`, `src/lib/firebase/sessions.joinPayload.test.ts`, `src/lib/firebase/sessions.joinPayload.ts`, `src/lib/firebase/sessions.ts`, `src/lib/firebase/userData.subcollections.test.ts`, `src/lib/firebase/userSearch.test.ts`, `src/lib/firebase/userSearch.ts`, `src/lib/firebase/username.test.ts`, `src/lib/firebase/username.ts`, `src/lib/mediaTypeDocId.parity.test.ts`, `src/lib/mediaTypeDocId.test.ts`, `src/lib/watchlistWrites.addWrite.test.ts`, `src/lib/watchlistWrites.test.ts`, `src/lib/watchlistWrites.ts`, `src/test/rules/account-deletion.test.ts`, `src/test/rules/tmdb-sweep-orchestrator.test.ts`, `src/lib/watchStatus.migration.test.ts`
 

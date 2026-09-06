@@ -8915,3 +8915,127 @@ second edit.
 the tracked tree outside this file's own archive record.
 
 **Verdict: pass (0 blocking).**
+
+### 2026-09-06 — BIN-1063 steg 2, round 2: the tightening commit falsified its own "no allowlist" comments
+
+**Staged bytes reviewed** (duty list derived from `reviewGates` → `binge-security-reviewer`):
+`firestore.rules c0887334d49791f8cfcff80867109aef562f0a2b`,
+`firestore.indexes.json f2eefce9`, `functions/scripts/backfill-mirror-uid.mjs 24edf0e1`,
+`…helpers.mjs c9d911c5`, `…helpers.test.mjs 06e62001`, `src/lib/firebase/dataExport.ts a2523c9a`,
+`src/lib/firebase/friends.ts a0fd969a`, `src/lib/firebase/friends.test.ts 84b0eefa`.
+Worktree hash equalled index hash for all eight.
+
+**Round 1's three blocking findings verified closed.** (a) The false `--verify` clause in the
+backfill header is STRUCK, not reworded; the surviving "The write below names exactly one field"
+is true against `patchFor` (`return { uid: doc.id }`) and pinned by a whole-object `toEqual`.
+(b) The usage lines now read `cd functions && node scripts/backfill-mirror-uid.mjs …`, which is
+the only form that resolves `firebase-admin`. (c) Both create rules carry
+`hasOnly(['uid','since'])` / `hasOnly(['uid','sentAt'])`, and three new emulator fixtures cover
+extra-key denial on the friends OWNER branch, the friends MIRROR branch and `friendRequestsSent`.
+
+**Author's mutation counts, re-derived rather than re-run** (the brief froze the tree for the
+gate, so mutating `firestore.rules` was not available). All three reproduce analytically:
+* strip both `hasOnly` → exactly the three new extra-key fixtures flip → 3 red. No other fixture
+  in the file writes a third key to either collection.
+* `== targetUid` → `== request.auth.uid` on the friends branch → 2 red, and NOT the obvious pair:
+  the disagreeing-uid DENY (`uid: VICTIM` at `users/VICTIM/friends/ATTACKER` written by VICTIM
+  becomes ALLOWED) and the legit-accept OWNER-side write (`uid: ATTACKER` written by VICTIM
+  becomes DENIED). The two missing-uid fixtures stay red either way — an absent key errors the
+  comparison and denies under both spellings.
+* remove the three `uid:` fields from `friends.ts` → `friends.test.ts`'s
+  `toMatchObject({ uid: … })` in sendFriendRequest (1) and acceptFriendRequest (2) → 2 red.
+
+**No code-level defect found.** Checked: no CG READ rule exists for `friends` /
+`friendRequestsSent` / `friendRequests`, so the new `COLLECTION_GROUP` fieldOverrides add an index
+but no client-reachable read surface (the deletion pass that consumes them must be Admin SDK).
+`hasOnly` is create-only on both, `allow update: if false` stands, so legacy fieldless rows stay
+readable and deletable and the Admin-SDK backfill (which bypasses rules) is the only healer.
+`friends.ts` is the sole client writer of either collection — `accountDeletion.ts` only deletes —
+and it writes exactly the two whitelisted keys on all three writes. GDPR: no new collection;
+`userData.ts` already collects both; `SCHEMA_VERSION` is `'2.1'` with a matching additive note.
+
+**Two blocking findings, both the BIN-797 class — a claim the SAME COMMIT falsifies.**
+1. `functions/scripts/backfill-mirror-uid.helpers.mjs:13-15` and its verbatim twin at
+   `backfill-mirror-uid.helpers.test.mjs:46`: "none of these collections has ever had a `hasOnly`
+   allowlist, so a stray value could predate this change". Confirmed false at the committed bytes
+   — `git show HEAD:firestore.rules` has no `hasOnly` on either create rule, and this commit adds
+   one to both. Fix: strike the clause; "a stray value could predate this change" stands alone and
+   needs no counting.
+2. `src/lib/firebase/friends.ts:9-10`, the module's own data-model header, still enumerates
+   `friends/{targetUid}: { since: Timestamp }` and `friendRequestsSent/{toUid}: { sentAt }`.
+   That field list is now exactly what `hasOnly` pins, minus the field this commit made MANDATORY.
+   A future writer following the header emits a payload the rules deny. Fix: name `uid` in both
+   lines (directly readable from lines 54-91, no measuring), or strike the field lists.
+
+**Rejected as a finding:** `tasks/todo.md`'s "`functions/**` i diffen ar bara engangsskriptet, som
+aldrig deployas". `firebase.json`'s functions `ignore` list does not exclude `functions/scripts/`,
+so the file WOULD ride along in a `--only functions` upload — but it exports no trigger and nothing
+imports it, the sentence's load-bearing half ("no function is deployed by this commit") is true
+(no `functions/src/**` staged; `deploy.yml` is hosting-only), and filing the ambiguity would mint
+exactly the correction chain the strike rule exists to stop. Recorded here, not raised.
+
+**Deploy order re-checked and endorsed.** Hosting FIRST is correct for this direction: the new
+client under old rules writes an extra `uid` that the unconstrained old create accepts, while the
+old client under new rules sends no `uid` and is denied on both send and accept. The plan names
+the two manual commands separately and accounts for `deploy.yml` going red on a `functions/**`
+commit. The accept-batch denial is atomic, so no half-state is reachable in the cache tail.
+
+**Verdict:** fail (2 blocking).
+
+### 2026-09-06 — BIN-1063 steg 2, round 3: both r2 findings closed by pure strikes; pass
+
+**Staged bytes reviewed** (duty list derived from `reviewGates` -> `binge-security-reviewer`:
+`^firestore\.rules$`, `^firestore\.indexes\.json$`, `^functions/`, `^src/lib/firebase/`; the other
+patterns matched nothing staged). Worktree hash equalled index hash for all eight:
+`firestore.rules c0887334`, `firestore.indexes.json f2eefce9`,
+`functions/scripts/backfill-mirror-uid.mjs 24edf0e1`, `...helpers.mjs ceeceb46`,
+`...helpers.test.mjs 138c5be1`, `src/lib/firebase/dataExport.ts a2523c9a`,
+`src/lib/firebase/friends.ts 3accb038`, `src/lib/firebase/friends.test.ts 84b0eefa`.
+
+**Delta since r2, derived not accepted.** Exactly three blobs moved, and they are the two fixes:
+`helpers.mjs c9d911c5 -> ceeceb46`, `helpers.test.mjs 06e62001 -> 138c5be1`,
+`friends.ts a0fd969a -> 3accb038`. The other five are byte-identical to the shas this archive
+recorded at r2 (line 8922 ff.), so the brief's claim that the 382/382 emulator run and both rules
+mutations still describe the staged `firestore.rules` is CORRECT — verified by sha equality against
+my own prior record, not by taking the sentence. I do not disagree.
+
+**Finding 1 closed — struck, not reworded.** `git diff c9d911c5 ceeceb46` is a three-line comment
+hunk: "none of these collections has ever had a `hasOnly` allowlist, so" is gone; the surviving
+"the second case matters because a stray value could predate this change. Normalising to the
+document id is always correct: the id IS the uid" holds without it and is directly readable from
+`candidates` (`d.data.uid !== d.id`). The verbatim twin in `helpers.test.mjs:46` is struck the same
+way and rewrapped, nothing else in either file moved.
+
+**Finding 2 closed — corrected in place, which is the right form here.** `friends.ts:8,10` now read
+`friends/{targetUid}: { uid: targetUid, since: Timestamp }` and
+`friendRequestsSent/{toUid}: { uid: toUid, sentAt }`. Checked against the writers rather than the
+sentence: `acceptFriendRequest` writes `{uid: fromUid, since}` at `users/{myUid}/friends/{fromUid}`
+and `{uid: myUid, since}` at `users/{fromUid}/friends/{myUid}` — in both the value equals the path's
+`targetUid`, which is what `request.resource.data.uid == targetUid` pins; `sendFriendRequest` writes
+`{uid: toUid, sentAt}`. Both lists now equal the `hasOnly` key sets exactly. No measurement was
+required to write either line, which is why in-place was allowed instead of a strike.
+
+**Surviving-copy sweep.** Multiline grep for the struck clause across the tree returns two hits:
+`binge-security-reviewer.knowledge.md:323` and this archive's own r2 entry — both QUOTE it as the
+finding. That is the audit trail, not a live copy; no tracked non-knowledge file carries it. Same
+for the old `friends/{targetUid}: { since: Timestamp }` field list.
+
+**Re-verified this round rather than inherited.** The accepted-deviations entry justifying the
+`followers` exclusion: `functions/src/reclaimOrphanFollows/index.ts` is `onSchedule('every 168
+hours')`, scans the `following`/`followers` collection groups in pages, and derives both endpoints
+from the PATH (owner = parent doc, other = doc id) against an alive-uid set — so it genuinely needs
+no `uid` field and a second field-driven deletion path would be the unreconciled duplicate Malin's
+scope decision refuses. The plan names both manual deploys in the endorsed order (hosting via
+`workflow_dispatch`, then `firebase deploy --only firestore:rules,firestore:indexes`).
+
+**Considered and deliberately NOT filed.** `friends.ts:9`'s unchanged line
+`friendRequests/{fromUid}: { sentAt, fromDisplayName, fromPhotoURL? }` omits `fromUid` and
+`fromUsername`, which `sendFriendRequest` also writes. It was equally incomplete at HEAD, this
+commit changes no `friendRequests` write, and that create rule carries no `hasOnly`, so no writer
+following the header is denied. Raising it would mint the correction chain the strike rule exists to
+stop; recorded here instead, and the recommendation is to leave the line alone.
+
+**No new blocking finding.** Ownership, public-read surface, GDPR completeness and the create-only
+`hasOnly`/`uid == <path var>` pinning are unchanged from the r2 analysis and rest on unchanged bytes.
+
+**Verdict: pass (0 blocking).**

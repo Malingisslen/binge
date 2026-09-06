@@ -1,3 +1,316 @@
+# BIN-1063 steg 2 - spegelmigreringen
+
+Routning: harleds med
+`node docs/org/route.mjs $(git diff --cached --name-only)` omedelbart fore commit.
+Rubrikerna i villkorsblocken namnger de roller som SKREV respektive villkor.
+De kritiserade blint fore bygget. Filunionen rorde sig sedan, sa routningen
+strax fore commit namner en roll som inte var med da; den kritiserade efterat
+och dess villkor star i sitt eget block. Inga blockerande invandningar.
+
+## Mätt i skarp data 2026-09-06 - detta andrar omfanget
+
+1. **Fyra konton finns i produktion.** Fem spegelrader hittade, var och en med
+   bara sin tidsstampel. Tva lasningar blockerades av behorighetsspärren, sa
+   fem ar ett GOLV, inte en summa.
+2. **`followers` sopas redan.** `reclaimOrphanFollows` (BIN-21) kor varje vecka,
+   gor en full collection-group-scan pa `following` och `followers`, och
+   raderar rader vars agare eller motpart saknar `users`-dokument. Den behover
+   inget uid-falt: den laser bada andpunkterna ur SOKVAGEN.
+   Funnet oberoende av mig, #5, #6 och #27.
+3. **Kostnadsskalet mot en full scan ar delvis motsagt.** Den scan som valdes
+   bort kors redan varje vecka, och modulens eget huvud kostnadssatter den:
+   "a few hundred ops/week at binge's size - well under the free tier".
+   #27 skarper: beslutet gallde den ATERKOMMANDE detektionsfragan, inte
+   engangsbackfillens egen enumerering.
+4. **`friendRequests` bar redan `fromUid`**, och reglerna pinnar det redan.
+   Men det finns INGET collection-group-index pa faltet - nabart i teorin,
+   inte i praktiken.
+5. **Den verkliga luckan ar smalare an biljetten sa:** `friends` och
+   `friendRequestsSent`, och bara for ett konto som raderats i KONSOLEN.
+   Sjalvbetjanad radering (`collectDeletionRefs`) tar redan bada halvorna av
+   bade `friends` och `friendRequests*` via direkt doc-id-adressering.
+
+## Bindande villkor ur panelen
+
+### Regler (#4, #5, #6, #27 - alla fyra oberoende)
+- Pinna det nya faltet mot SOKVAGSVARIABELN, inte mot `request.auth.uid`.
+  `friendRequests` create-regel anvander `request.auth.uid` och
+  fungerar dar, men samma monster pa `friends` SPRICKER: `acceptFriendRequest`
+  skriver spegelsidan `users/{fromUid}/friends/{myUid}` som acceptor, alltsa
+  inte som sokvagens agare. #27 skulle blockera just den kopieringen.
+- `friends`-regelns create ar `(gren1) || (gren2)`. `&&` binder hardare an
+  `||`, sa ett tillagg utan omslutande parentes ger `gren1 || (gren2 && koll)`
+  och gren1 slipper pinningen helt. Maste skrivas `(gren1 || gren2) && koll`.
+- `followers` tillater UPDATE (de tva andra har `allow update: if false`), sa
+  faltet maste vara oforanderligt dar for att pinningen ska halla.
+- Ingen av de tre har `hasOnly` i dag. #4 vill lagga till det i samma andring;
+  #27 kallar det en befintlig lucka som dubblar regeldiffen utan att kopa
+  korrekthet har. AVGJORT I BYGGET till #4:s sida: spegel-grenen later acceptorn
+  skapa ett dokument under motpartens trad, sa utan nyckelbegransning kan
+  acceptorn fylla motpartens lagring och motpartens GDPR-export med vad som helst.
+  `hasOnly(['uid','since'])` och `hasOnly(['uid','sentAt'])` ar tillagda pa de tva
+  create-reglerna. `followers` ligger utanfor omfanget efter Malins beslut.
+
+### Backfill (#27, #6, #25)
+- Admin SDK. Reglerna nekar `update` pa `friends` och `friendRequestsSent`,
+  sa en befintlig radlos rad kan aldrig sjalvlaka via appen.
+- `update()`, ALDRIG `set(..., {merge:true})`: en rad kan raderas mellan
+  lasning och skrivning, och merge skulle da ateruppliva ett spokdokument med
+  bara det nya faltet och ingen tidsstampel.
+- Far INTE rora den befintliga tidsstampeln. Skriptet garanterar det genom att
+  `patchFor` namnger exakt ett falt, vilket dess test pinnar; skriptet loggar
+  dessutom tidsstampelns FORE-varde per rad. Nagon efter-lasning gor skriptet
+  inte - den halvan tas for hand i konsolen om du vill se den.
+- Enumerera de verkliga collection-grupperna, inte de fem rader jag hittade for
+  hand - talet ar ett golv och tva lasningar var blockerade.
+- Logga varje sokvag och varde. Ingen rollback behovs: det korrekta vardet ar
+  alltid dokumentets eget id, sa en omkorning konvergerar.
+
+### Index (#27, #25)
+- En `fieldOverrides`-post per samling, `queryScope: COLLECTION_GROUP`, samma
+  form som befintliga `comments.uid` / `likes.uid` / `reactions.uid`.
+  Det svarar pa biljettens eget villkor 4.
+- `firebase deploy --only firestore:indexes` returnerar nar deployen ar
+  MOTTAGEN, inte nar indexet ar BYGGT. En fraga mot ett index som byggs kastar
+  `FAILED_PRECONDITION`. Kontrollera att det star "Enabled" fore funktionen.
+
+### Ordning (#25, #27, omvand av #4 vid commit-grinden)
+HOSTING FORST, sedan regler + index. Riktningen ar avgorande och gick at fel
+hall i den forsta planen:
+- Ny klient under GAMLA regler skriver ett extra `uid`-falt. Gamla regeln har
+  ingen nyckelbegransning, sa det gar igenom. Ofarligt.
+- Gammal klient under NYA regler skriver inget `uid`, och den nya pinningen
+  nekar. Bade skicka och acceptera vanforfragan slutar fungera for varje
+  session som annu kor det gamla bygget - hela fonstret mellan de tva
+  manuella stegen, plus PWA- och Cloudflare-cachens svans.
+Sa: push (deployen blir rod med flit) -> hosting via `workflow_dispatch` ->
+`firebase deploy --only firestore:rules,firestore:indexes` -> verifiera att
+indexen star Enabled -> backfill --dry-run -> backfill --apply.
+Inga funktioner andras i denna commit; `functions/**` i diffen ar bara
+engangsskriptet, som aldrig deployas.
+En commit, inte flera - en krympt filunion kan routa om panelen.
+
+### Dokumentation (#5, #6)
+- `.claude/rules/accepted-deviations.md` far en DATERAD EFTERFOLJARE som
+  smalnar den accepterade luckan. Posten fran 2026-08-30 redigeras inte -
+  filen ar append-only.
+- `SCHEMA_VERSION` bumpas och `docs/data-export-format.md` far en
+  changelog-rad: `toExportDocs` sprider `d.data()` ordagrant, sa faltet hamnar
+  i exporten utan kodandring.
+- `docs/data-retention-policy.md:338` pastar att `reclaimOrphanFollows`
+  "tacker bara foljare och vanner". Modulen namner inte `friends` en enda
+  gang. Meningen ar falsk i dag, aldre an den har biljetten, och STRYKS.
+
+### Test (#7, kritiserade efter att filunionen rort sig)
+- `friends.test.ts` pinnade bara SOKVAGARNA pa de tre skrivningarna, aldrig
+  nyttolasten. Ett framtida bygge som tappar `uid`-raderna hade lamnat sviten
+  helt gron medan varje skarp accept nekades. Nyttolasten pinnas nu, och
+  muteringen som tar bort de tre falten faller tva test.
+
+## Vad steg 2 INTE gor
+
+Sjalva raderingen. Steg 2 gor raderna hittbara; ingen kod som konsumerar
+faltet finns eller byggs har. "Spegelmigreringen shippad" far inte lasas som
+"restsparen ar stangda".
+
+## Den enda fragan till Malin
+
+Se rapporten. Omfanget ar en produktfraga eftersom matningen andrade den.
+
+---
+# Sprint 2026-09-06
+
+Fyra biljetter valda ur en tunn backlog (12 öppna). Tre mättes bort — se
+"Mätta bort" nedan. Routningen är kommandots utdata, inte en mening om den;
+kör om per bunt strax före kritiken och strax före commit:
+
+```
+node docs/org/route.mjs $(git diff --cached --name-only)
+```
+
+---
+
+## Bunt 1 — BIN-1101 [Tier A]
+
+Medlemsdokumentets fältuppsättning har inget test som pinnar VILKA fält den bär.
+
+Routning vid urvalet (`src/lib/firebase/groups.test.ts`):
+`tier: medium`, `reasonCode: owned`, `panel: [4]`.
+
+- [ ] Byt `expect(ownerKeys.length).toBeGreaterThan(5)` mot en bokstavlig,
+      sorterad nyckellista i `src/lib/firebase/groups.test.ts`.
+- [ ] Härled listan ur `memberFields()` genom att köra testet, inte ur läsning.
+- [ ] Pröva muteringen: ta bort ett fält ur `memberFields()` → testet ska falla.
+
+Acceptanskriterier
+1. `{text: "Testet jämför ownerKeys mot en bokstavlig lista, inte mot ett antal", kind: diff}`
+2. `{text: "Ett borttaget fält ur memberFields() fäller testet — mutering körd och redovisad", kind: diff}`
+3. `{text: "toBeGreaterThan-golvet finns inte kvar", kind: diff}`
+4. `{text: "npm test grön", kind: diff}`
+
+## Bunt 2 — BIN-1102 [Tier A]
+
+Kartans färskhetsflagga kan inte fyra för gruppflödena.
+
+Routning vid urvalet (`.claude/hooks/freshness.mjs`, `docs/workflow-map.html`):
+`tier: medium`, `reasonCode: owned`, `panel: [25]`.
+
+- [ ] `stampMap` kommasplittar `node.path` så en nod kan bära flera sökvägar.
+- [ ] Lägg `src/lib/firebase/groups.ts` till gruppnodens path i kartan.
+- [ ] Testa båda riktningarna: enkel path fungerar som förut; kommalistan
+      stämplar på var och en av sina sökvägar.
+- [ ] MÄT den bredare frågan innan något byggs på den: hur många flöden
+      beskriver en fil ingen nods path bär? Skriv talet och kommandot i
+      biljetten. Bygg INTE ett svep på en gissning.
+
+Acceptanskriterier
+1. `{text: "En redigering av src/lib/firebase/groups.ts stämplar kartflaggan — prövat, inte resonerat", kind: diff}`
+2. `{text: "En nod med EN sökväg beter sig oförändrat — pinnat av ett test", kind: diff}`
+3. `{text: "Täckningslintern (node scripts/check-workflow-map.mjs) grön", kind: diff}`
+4. `{text: "Den bredare frågans svar är MÄTT och skrivet i biljetten, inte uppskattat", kind: diff}`
+
+Kartändringen committas för sig — aldrig buntad med kodändring (lärdomen 2026-07-10).
+
+## Bunt 3 — BIN-658 [Tier A]
+
+npm audit: High-CVE:er i eslint-kedjan, bara dev.
+
+Routning vid urvalet (`package.json`, `package-lock.json`):
+`tier: medium`, `reasonCode: owned`, `panel: [25]`, `unownedCode: [package-lock.json]`.
+
+Premisskontroll vid urvalet: biljetten säger "tio nya High-CVE:er". `npm audit`
+vid HEAD ger 5 totalt (3 high). Talet i rubriken är alltså inaktuellt — det
+STRYKS ur biljetten, det formuleras inte om. `eslint@10.10.0` finns och
+`eslint-config-next@16.3.3` deklarerar `eslint: >=9.0.0`, så uppgraderingen är
+peer-tillåten.
+
+- [ ] Bumpa `eslint` till `^10` i `package.json`, kör `npm install`.
+- [ ] `npm run lint` måste vara grön utan att någon regel luckras upp.
+- [ ] `npm audit` efter: redovisa talen före och efter, mätta.
+- [ ] Kvarstår CVE:er efter bumpen: skriv vilka och varför, stäng inte biljetten.
+
+Acceptanskriterier
+1. `{text: "eslint är på 10.x i package.json OCH package-lock.json", kind: diff}`
+2. `{text: "npm run lint grön utan att en regel avaktiverats eller mildrats", kind: diff}`
+3. `{text: "npm audit-talen före och efter står i biljetten, körda", kind: diff}`
+4. `{text: "npm test grön", kind: diff}`
+
+## Bunt 4 — BIN-613 [Tier C]
+
+Deployen mäter sidornas laddningsstorlek och jämför mot föregående körning.
+Malins beslut 2026-09-03: alternativ 2, RAPPORTERANDE, aldrig blockerande.
+
+Routning vid urvalet (`.github/workflows/deploy.yml`, `scripts/bundle-report.mjs`):
+`tier: medium`, `reasonCode: owned`, `panel: [3]`, `unmapped: [scripts/bundle-report.mjs]`.
+Malins kommentar namnger #4 Säkerhetsarkitekt; routern vid HEAD ger `[3]` med
+#4 i `dropped`. Kritiken körs på routerns utdata — och #4 läggs till, eftersom
+hon uttryckligen bad om den.
+
+Bindande villkor ur Malins beslut:
+- Mätningen får ALDRIG fälla bygget. Rapporterar, blockerar inte.
+- Minnet mellan körningar tar samma form som urvalsmanifestet, som ligger i
+  `.tmdb-cache/` och överlever via `actions/cache`.
+- `npm run test:rules` viks INTE in i samma ändring. (Den körs redan i ett eget
+  jobb i `deploy.yml` — mätt, se biljettkommentaren.)
+
+- [ ] `scripts/bundle-report.mjs`: läs `.next`-manifesten efter bygget, räkna
+      First Load JS per rutt, jämför mot en baslinje i byggcachen, skriv en
+      tabell till `$GITHUB_STEP_SUMMARY`.
+- [ ] Skriptet avslutar ALLTID 0. Ingen baslinje = "första körningen, baslinje
+      skriven", inte ett fel.
+- [ ] Steget i `deploy.yml` läggs efter Build och bär `continue-on-error` ELLER
+      ett skript som inte kan falla — välj en och motivera valet i skriptets huvud.
+- [ ] Enhetstest för skriptet: ingen baslinje, oförändrad, ökning, minskning,
+      trasig baslinjefil. CLI:n bakom en entry-point-kontroll (lärdomen BIN-802).
+
+Acceptanskriterier
+1. `{text: "Skriptet kan inte fälla deployen — pinnat av ett test som ger det trasig indata och kräver exit 0", kind: diff}`
+2. `{text: "Baslinjen persisteras i byggcachen, inte i repot, och en saknad baslinje är ett normalt utfall", kind: diff}`
+3. `{text: "npm run test:rules rörs inte av den här ändringen", kind: diff}`
+4. `{text: "Rapporten syns i en riktig deploy-körnings sammanfattning", kind: run}`
+
+---
+
+## Mätta bort vid urvalet — ingen kod
+
+- **BIN-959** — delarna 2 och 3 är pluginarbete och bokade till en egen session i
+  `C:/claude-plugins` (Malins beslut 2026-09-03). Del 4 (granskarens kunskapsfil
+  över sitt tak): filen mäter 79 774 tecken, under den delade varningsgränsen på
+  80 000 — biljettens "285 469" är inaktuellt. Del 5 (ett "alone" som koden inte
+  har): premissen är BORTA. Meningen på `src/contexts/WatchlistContext.test.tsx`
+  namnger båda termerna korrekt (`current || listenerFailed`), och ingen sökning
+  i trädet hittar påståendet. Inget att bygga i binge den här körningen.
+- **BIN-1097** — mätt 2026-09-06: det finns inga grupper i produktion, alltså
+  noll drabbade. Rekommendationen på biljetten är att låta den ligga öppen.
+- **BIN-559** — Malins handbroms är lyft, men den routar `top` och panelen har
+  BYTT sammansättning sedan kritiken 2026-08-30: den kördes på `[5, 27, 2, 14]`,
+  routern vid HEAD ger `[27, 5, 14, 19, 26]` för buntens faktiska filunion.
+  Två roller har alltså aldrig kritiserat den. En ny full panel plus ~15
+  bindande villkor plus emulatortest är ett eget pass, inte en fjärdedel av det
+  här. Väljs inte — med skriven orsak på biljetten.
+
+## Needs you (Tier D)
+
+- Inget nytt den här körningen. `BIN-454` (tmdbTosSweep `mutateEnabled`) står
+  kvar som din konsolåtgärd och rörs aldrig av en sprint.
+
+## Deviation log
+- [needs-human] BIN-613 ar BYGGD, GRON och STAGEAD men INTE committad. Commit-grinden
+  kraver att binge-test-reviewer och binge-integration-reviewer laser de stageade bytes.
+  Fem granskaragenter i rad hangde i den har sessionen utan att avsluta; en av dem hann
+  avsluta en gang, med tre icke-blockerande fynd som ar atgardade. Grinden rundades inte.
+  Koden ligger stagead OCH arkiverad som patch i scratchpad:
+  batch-BIN-613-2026-09-06.patch, 35823 byte,
+  77e885cb86baf15f710539076e1be3430b4a79cb. Bygg inte om den.
+- [discovery] BIN-613: nio muteringar korda totalt, alla fallda, ren kontroll gron.
+  Tre av dem provade de tre assertions som lades till efter testgranskarens fynd.
+- [discovery] BIN-613: forsta versionen av `scripts/bundle-report.mjs` laste
+  `.next/app-build-manifest.json`. **Den filen finns inte.** Nexts egen konstantmodul
+  (`node_modules/next/dist/shared/lib/constants.js`) deklarerar `BUILD_MANIFEST`,
+  `APP_PATHS_MANIFEST` och `APP_PATH_ROUTES_MANIFEST`, och ingenting som heter
+  `APP_BUILD_MANIFEST`. `measure()` hade alltsa returnerat null vid varje verklig
+  korning och hela rapporten hade varit en permanent no-op. Omskriven att lasa den
+  EXPORTERADE HTML:en i stallet -- `output: 'export'` skriver de `<script>`-taggar
+  webblasaren faktiskt hamtar, och de beror inte pa vilka manifest en framtida
+  Next-version rakar skriva. Provkord mot repots riktiga `out/`: 30 rutter, exit 0.
+- [deviation] BIN-613: bunten VIDGADES av en egen spärr. `docs/org/route.test.mjs`
+  kraver att ett nytt verktygsskript med test star bade i `TOOLING_CODE_FILES` i
+  `docs/org/route.mjs` (den radgivande listan) och i integrationsgranskarens monster i
+  `.claude/shared-plugin.json` (den blockerande). Bada andrade i samma commit, per
+  BIN-830. Vidgningen ror granskningsmaskineriet, sa rollkritik #25 konvenerades trots
+  att routern lagger den i `dropped` -- BIN-917:s lardom.
+- [deviation] BIN-613: steget ligger FORE cache-sparandet, inte efter Build och fore
+  deploy som bada kritikerna skrev. Baslinjen skrivs till `.tmdb-cache/`, och det ar
+  nasta steg som packar den katalogen; efterat hade minnet tappats varje korning och
+  varje rad statt som "ny" for alltid.
+
+- [discovery] BIN-1102: atgard (a) i biljetten -- "kommasplitta `node.path`" -- ar REDAN
+  SKEPPAD. `mapTokens()` i `.claude/hooks/freshness.mjs` och `checkableTokens()` i
+  `scripts/check-workflow-map.mjs` gor bada `.split(',')` pa faltet; landade i `4393344`
+  (BIN-989). Verifierat genom att lasa bada funktionerna och kora
+  `git log -S"split(',')" -- .claude/hooks/freshness.mjs`. Konservativt val: bygg den
+  inte igen, ratta biljetten. Bunten blir en ren kartandring och routar `skip`.
+- [deviation] BIN-1102: rollkritiken (#25) visade att "lagg till pa gruppnodens path"
+  under-tacker. Harledningen -- varje nod vars flodessteg namnger en export ur
+  `src/lib/firebase/groups.ts` -- ger nio noder over tre floden (`flow-groups`,
+  `flow-tillsammans`, `flow-gdpr`), inte en. `firestore`-noden utelamnas: dess path
+  namnger den fil noden AR, `firestore.rules`.
+- [discovery] BIN-1102 (c), den bredare fragan, MATT: atta av kartans floden namnger en
+  sparad kallfil som ingen nods path bar. Talet ar ett GOLV, inte en summa -- matningen
+  ser bara floden som skriver ut en sokvag, och BIN-1099:s eget fall (en beskrivning av
+  `groups.ts` som aldrig namnger filen) syns darfor inte i det.
+- [needs-human] BIN-658: premissen ar dubbelt inaktuell. "Tio High-CVE:er" och "kraver
+  eslint 9-10" ar bada falska vid HEAD. `npm audit` ger 5 (3 high), och
+  `.github/dependabot.yml` bar sedan 2026-08-29 en daterad post som sager att eslint 10
+  ar blockerad UPPSTROMS. Postens egna tva avblockeringskommandon kordes om i dag och
+  ger samma svar som da: `eslint-plugin-react@latest` deklarerar `eslint: ^3 || ... ||
+  ^9.7`, och `eslint-config-next@latest` levererar den fortfarande.
+  `npm audit --omit=dev --audit-level=high` ger 0 fynd -- inget nar en besokare.
+
+---
+
+# ARKIV
+
 # Sprint 2026-09-05d
 
 Vald ur Backlog. Fem biljetter byggs i tre buntar; en mättes och byggs inte.

@@ -102,7 +102,7 @@
         "\\.(ts|tsx)$",
         "^\\.github/(workflows|actions)/",
         "^\\.github/dependabot\\.yml$",
-        "^(docs/org/(route|gen-ownership-map|gate-symmetry|rules-doc-id-symmetry|rules-id-client-symmetry|metrics/(check_events|log_event|check_review_coverage|check_staged_routing))|scripts/(check-workflow-map|check-public-env|check-knowledge-caps|prune-map-flag|check-dependency-diff|bundle-report))(\\.test)?\\.mjs$",
+        "^(docs/org/(route|gen-ownership-map|gate-symmetry|rules-doc-id-symmetry|rules-id-client-symmetry|metrics/(check_events|log_event|check_review_coverage|check_staged_routing))|scripts/(check-workflow-map|check-public-env|check-knowledge-caps|prune-map-flag|check-dependency-diff|bundle-report)|functions/scripts/backfill-mirror-uid(\\.helpers)?)(\\.test)?\\.mjs$",
         "^eslint-rules/no-bare-streaming-offers-id(\\.test)?\\.mjs$",
         "^eslint\\.config\\.mjs$",
         "^\\.claude/shared-plugin\\.json$",

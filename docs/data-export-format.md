@@ -7,7 +7,7 @@ Filen är en JSON med följande top-level-struktur (se
 
 ```jsonc
 {
-  "schemaVersion": "2.0",
+  "schemaVersion": "2.1",
   "exportedAt": "2026-04-24T10:30:00.000Z",
   "userId": "firebase-uid",
   "readme": "…",
@@ -141,3 +141,10 @@ Dokumentera ändringar i CHANGELOG.md-sektionen nedan.
   tolkade `id` som ett tal måste nu dela på första `_` (eller läsa `tmdbId`/
   `mediaType`-fälten i doc-kroppen). Major-bump 1.3 → 2.0 så gamla parsers
   failar högljutt i stället för att tyst mis-matcha en film mot en samnumrerad serie.
+- **2.1 (2026-09-06, BIN-1063 steg 2)** — `friends` och `friendRequestsSent` bär
+  nu motpartens uid som ett FÄLT (`uid`), inte bara som dokument-id. Fältet
+  följer med i exporten automatiskt: `toExportDocs` sprider `data()` ordagrant.
+  Det är inte ny personuppgift till dig — samma uid exporteras redan som radens
+  `id` — men det är ett nytt fält, alltså minor-bump 2.0 → 2.1. Syftet är att en
+  serversidig städning ska kunna HITTA raderna när motparten raderar sitt konto;
+  utan fältet går de inte att fråga efter.

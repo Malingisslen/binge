@@ -25135,3 +25135,153 @@ literal as ONE opaque span blanks its `${…}` interpolations too, which are exe
 `await`-detecting guard (BIN-1060) is blind to a real `await` inside `` `${await x()}` ``, proven via
 the guard's own `firstAwaitIndex`. Non-blocking while no such interpolation exists; require the
 docstring to say so the day one is added.
+
+## 2026-09-06 — BIN-1063 steg 2: `uid` som fält på `friends`/`friendRequestsSent` (test review)
+
+**Diff reviewed (staged, index == worktree for all 22 paths, verified by `git rev-parse :<f>` vs
+`git hash-object <f>` printed for EVERY path, not only mismatches).** Duty list derived from
+`reviewGates` in `.claude/shared-plugin.json` (`binge-test-reviewer` patterns: `\.test\.(ts|tsx)$`,
+`\.test\.mjs$`, `^src/.*/__tests__/`, `vitest.*\.config\.ts$`) — three files matched:
+
+- `src/test/rules/firestore-rules.test.ts` (9 new emulator cases + 5 existing fixtures given the new field)
+- `src/lib/firebase/friends.test.ts` (payload assertions added to the send and accept tests)
+- `functions/scripts/backfill-mirror-uid.helpers.test.mjs` (new, 13 tests)
+
+No `vitest*.config.ts` change was staged and none is owed: `functions/scripts/**/*.{test,spec}.mjs`
+has been in `vitest.config.ts`'s include since recap-upload, so the new `.mjs` test really is run by
+`npm test` (BIN-802's second half checked, not assumed).
+
+**Runs (control only — the tree was frozen by the brief, so no mutant was applied to a staged file).**
+`npx vitest run functions/scripts/backfill-mirror-uid.helpers.test.mjs src/lib/firebase/friends.test.ts`
+=> 2 files, 28 tests passed. `npm run test:rules` HARD-FAILED with zero tests run ("Port 8080 is not
+open ... could not start Firestore Emulator") because a concurrent session held 8080 — exactly the
+failure mode the knowledge file warns reads as a red suite. Re-run against a scratchpad
+`firebase.rulesprobe.json` on port 8091 with `--project demo-binge-rules2`, from `C:/binge` so
+`vitest.rules.config.ts` still resolved: 6 files, 382 tests passed. `git hash-object firestore.rules`
+was `c0887334d49791f8cfcff80867109aef562f0a2b` immediately before AND immediately after that run, and
+`git status --porcelain` was unchanged afterwards (the emulator's `firestore-debug.log` is gitignored).
+
+**The four handed-down mutation counts, re-derived.** Three are decidable by construction and all
+three matched; none was taken on faith:
+
+1. `return skipped > 0 ? 1 : 0;` -> `return 0;` => 1 test. The string appears in exactly one
+   assertion (`counts skipped writes and exits non-zero on any of them`); its two siblings
+   (`skipped++;`, `${skipped} skipped`) survive, so the `it` fails once. Confirmed.
+2. Removing the three `uid:` fields from `friends.ts` => 2 tests, one per `it`
+   (`sendFriendRequest`'s and `acceptFriendRequest`'s). No rules test imports `friends.ts`.
+3. `request.resource.data.uid == targetUid` -> `== request.auth.uid` (friends block only) => 2.
+   Walked every case in the block: `legit accept (both sides)` fails on its OWNER-side write
+   (uid field = ATTACKER, auth = VICTIM), and `friends: a uid that disagrees with the document id
+   is denied` starts SUCCEEDING (uid = VICTIM = auth) so its `assertFails` fails. The three
+   forged-friendship denials still deny on the branch predicate; the missing-uid pair still denies.
+4. Stripping both `hasOnly` clauses => 3, one per extra-key case. Each of those three fixtures
+   satisfies every OTHER condition (request seeded, correct branch owner, `uid` equal to the path
+   variable), so the denial is attributable to `hasOnly` alone. Confirmed by reading, not run.
+
+**Attribution check on the new denials, which is what makes them non-vacuous:** with `uid` absent,
+`keys().hasOnly(['uid','since'])` still PASSES (a subset), so the two missing-uid cases can only be
+denied by the uid pin. Both branches of the create OR are exercised separately, which is what pins
+the deliberate parenthesisation — the unparenthesised mutant `gren1 || (gren2 && pin)` is caught by
+three owner-branch cases.
+
+**Finding, blocking (1).** `src/lib/firebase/friends.test.ts:70,99-100`. The batch adds
+`hasOnly(['uid','since'])` / `hasOnly(['uid','sentAt'])` to two create rules, and NOTHING binds the
+shipped client payload's key set to those allowlists. The new client assertions are `toMatchObject`,
+a subset matcher, and the rules fixtures are hand-typed. Two plausible regressions therefore leave
+the whole suite green while Firestore rejects every friend request and every accept in production:
+adding a field to either `batch.set` payload, or renaming `since`/`sentAt`. `vitest.rules.config.ts`'s
+own BIN-655 comment names this class ("a hand-typed shape can only prove that the shape somebody
+typed is legal, which is exactly the check that missed `notes`"). Remedy given: an exact key-set
+assertion per write site, `expect(Object.keys(setMock.mock.calls[N][1]).sort()).toEqual([...])`,
+keeping the value checks; or the BIN-655 shape, driving the rules test with the payload the client
+builds.
+
+**Findings, non-blocking (2).** (a) `backfill-mirror-uid.helpers.test.mjs:85-129` source-scans five
+properties of the runner but not the two that make the safe mode safe and the exit code real:
+`if (apply) {` around the write (dropping it makes `--dry-run` WRITE to production) and
+`process.exitCode = code;` at the entry point (hardcoding `0` makes the `it` title
+"exits non-zero on any of them" false). Both mutants leave 13/13 green; two more `toContain` anchors
+close them. (b) The `deletes nothing` case is all-negative and would pass on a destroyed `CODE`;
+siblings in the same describe keep it honest today, but one positive anchor inside the `it` makes it
+self-contained.
+
+**Not filed.** `followers` staying out of `COLLECTIONS` is the decided scope in
+`.claude/rules/accepted-deviations.md`'s 2026-09-06 entry. The `withSecurityRulesDisabled` seeds at
+`firestore-rules.test.ts:698,744` and the `{ toUid: ... }` fixtures in `account-deletion.test.ts`
+bypass rules and pin only document existence, so no update is owed there. `SCHEMA_VERSION` 2.0 -> 2.1
+is pinned by no test literal, so no assertion was weakened. `friends.ts` is the only writer of either
+collection in `src/` and `functions/src/` (grepped), so no writer was missed.
+
+**Verdict:** fail (1 blocking).
+
+**Relocated to arkiv 65 (verbatim, cut from the live file to pay for the `hasOnly`/client-key-set
+addition above; the live bullet now points here instead of restating it):**
+
+**`screen.getByRole(role, { name: LITERAL })` used to bind two components' texts together (BIN-936: `DeleteAccountSection`'s toast copy must name `DeletionLimbo`'s real button) still embeds the literal — the query's own `name` filter — so a comment claiming this avoids "hardcoding the string a fourth time" is not literally true.** It is still a real, non-vacuous binding in BOTH directions: renaming the limbo button makes the query itself throw, and wording the phrase away from the toast constant reddens the `toContain` assertions on the other side. The mechanism is "query-miss throws" + "content-miss reddens a `toContain`", not "the literal disappeared from the file" — judge the binding's non-vacuity, not its self-description, and flag the "reads the real value" framing as a comment-accuracy nit only, not a coverage gap. [arkiv 49]
+
+**Relocated to arkiv 66 (verbatim, cut from the live file to pay for the BIN-1063 steg 2
+rules-OR/scope addition; the live bullets now point here instead of restating them):**
+
+Size caps: 99→100 allowed + 100→101 denied. Public-read/no-write: anon read succeeds after a
+disabled-rules seed; both writes fail (BIN-180).
+
+**"Point of no return" ordering (a device-local cleanup that must run AFTER the irreversible
+server-side delete) needs its own `invocationCallOrder` assertion PER sibling call, not one for
+the pair** — BIN-844's `clearLocalPushTokenId(id)` had none, so moving it before
+`await deleteUser(...)` survived the whole file.
+
+## 2026-09-06 — BIN-1063 steg 2, round 2: the key-set pin verified, and the rules OR proved by its parentheses
+
+**Diff reviewed** (staged, index == worktree on every path, re-checked at start and end):
+`src/lib/firebase/friends.test.ts` (+13, 0 deletions), `src/test/rules/firestore-rules.test.ts`
+(+91/-4 — the 4 deletions are existing `{ since: … }` fixtures gaining `uid`, which makes an
+assertFails attributable to the request-existence guard rather than to the new pin: the correct
+direction, not a weakening), and the new `functions/scripts/backfill-mirror-uid.helpers.test.mjs`.
+Production read for context: `friends.ts`, `backfill-mirror-uid.mjs`, `.helpers.mjs`,
+`firestore.rules`.
+
+**Round 1's blocking finding** was that the `hasOnly(['uid','sentAt'])` / `hasOnly(['uid','since'])`
+allowlists were pinned nowhere on the CLIENT side — `toMatchObject({ uid })` is a subset matcher, so
+an added or renamed key would have denied every live friend request while the suite stayed green.
+Closed with `expect(Object.keys(setMock.mock.calls[i][1]).sort()).toEqual([...])` at all three write
+sites.
+
+**Mutations run this round** (each asserted present by grep BEFORE and AFTER its suite run in one
+command, restored from a scratchpad worktree snapshot, hash re-verified against the index sha):
+
+1. `nickname: 'MUTANT'` added to `friendRequestsSent` payload in `friends.ts` → 1 failed / 14 passed,
+   failing line is `friends.test.ts:74`, the new key-set assertion. Restored to 8dfb5516.
+2. `extra: 'MUTANT2'` added to the accept MIRROR write (`uid: myUid`) → 1 failed, caret on line 108.
+3. `extra3: 'MUTANT3'` added to the accept OWNER write (`uid: fromUid`) → 1 failed, caret on line 107.
+   So lines 107 and 108 are each individually load-bearing, not one covering both.
+4. `if (apply) {` → `if (true) {` in `backfill-mirror-uid.mjs` → 1 failed / 13 passed, the new
+   "keeps the write behind --apply and forwards the exit code" test, at its first assertion.
+5. `process.exitCode = code;` → `= 0;` → 1 failed, same test, at its second assertion.
+   Restored to f790aece.
+
+**Rules run, live, on an isolated emulator** (8080 was held by a sibling session): own
+`firebase.json` in the scratchpad with an ABSOLUTE `C:/binge/firestore.rules` and port 8093,
+`firebase -c … emulators:exec --only firestore`. Clean control: 290 passed. `md5sum firestore.rules`
+identical before and after every run — the real file was never mutated.
+
+Two rules mutants, both built on a scratchpad COPY with a throwaway repointed test
+(`src/test/rules/zz-mutant-probe-DELETEME.test.ts`, distinct PROJECT_ID, deleted immediately after
+and the tree re-verified):
+
+* **Delete the parentheses wrapping the friends create OR.** This is the exact bug the rule's own
+  comment claims the parentheses prevent (`&&` binds tighter than `||`, so the owner branch would
+  escape every new conjunct). Result: 3 failed / 287 passed, and they are precisely the three
+  OWNER-branch cases — missing uid, mismatched uid, extra key — with every MIRROR case still green.
+  The comment's claim is measured, not merely plausible.
+* **Drop `&& request.resource.data.keys().hasOnly(['uid','since'])`.** Result: 2 failed / 288 passed,
+  exactly the two extra-key tests (mirror and owner). The `hasOnly` conjunct is pinned alone.
+
+**Scope note worth keeping:** `friendRequests` (incoming) has NO `hasOnly` in its create rule, so its
+`toMatchObject` in `friends.test.ts` is correct and pinning its key set would be a finding invented
+from a neighbour's rule rather than from this one. Grep the rule before asking for the pin.
+
+**Full suite:** 278 files, 4716 passed, 4 skipped — matching the coordinator's claim exactly, run
+independently rather than transcribed. New test file confirmed inside vitest's include globs
+(`functions/scripts/**/*.{test,spec}.mjs`), BIN-802's silent-skip class checked rather than assumed.
+
+**Verdict: pass (0 blocking).**

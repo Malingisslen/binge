@@ -5,9 +5,9 @@ import { getPublicProfileCards } from './publicProfile';
 // Vänner får läsa privata watchlist-items (visibility='friends').
 //
 // Datamodell (alla under users/{uid}/...):
-// - friends/{targetUid}: { since: Timestamp } — bekräftade vänner, speglas
+// - friends/{targetUid}: { uid: targetUid, since: Timestamp } — bekräftade vänner, speglas
 // - friendRequests/{fromUid}: { sentAt, fromDisplayName, fromPhotoURL? } — incoming
-// - friendRequestsSent/{toUid}: { sentAt } — outgoing-tracking för UI
+// - friendRequestsSent/{toUid}: { uid: toUid, sentAt } — outgoing-tracking för UI
 //
 // Doc-id = uid på den andre. Gör existens-checks i Firestore-regler triviala.
 
@@ -33,8 +33,7 @@ export interface FriendRequest {
 // 1. users/{toUid}/friendRequests/{myUid}      — mottagaren ser pending
 // 2. users/{myUid}/friendRequestsSent/{toUid}  — egen tracking för UI
 //
-// Atomisk batch så ingen halv-state kan lämnas. Idempotent — om request
-// redan finns blir det merge.
+// Atomisk batch så ingen halv-state kan lämnas.
 export async function sendFriendRequest(
   myUid: string,
   myDisplayName: string,
@@ -53,6 +52,10 @@ export async function sendFriendRequest(
     sentAt: serverTimestamp(),
   });
   batch.set(doc(db, 'users', myUid, 'friendRequestsSent', toUid), {
+    // BIN-1063 steg 2. Samma uid som dokumentets id, fast som ett FÄLT. En
+    // collection-group-fråga kan inte filtrera på documentId() mot ett bart
+    // id, så utan fältet går raden inte att fråga efter.
+    uid: toUid,
     sentAt: serverTimestamp(),
   });
   await batch.commit();
@@ -75,9 +78,14 @@ export async function acceptFriendRequest(myUid: string, fromUid: string): Promi
   const batch = writeBatch(db);
   // Mutuell friends-relation (båda håll).
   batch.set(doc(db, 'users', myUid, 'friends', fromUid), {
+    // BIN-1063 steg 2, se friendRequestsSent ovan. Värdet är dokumentets eget
+    // id — alltså MOTPARTEN, inte den vars träd raden ligger i. Det är den
+    // riktningen som gör raden hittbar när motparten försvinner.
+    uid: fromUid,
     since: serverTimestamp(),
   });
   batch.set(doc(db, 'users', fromUid, 'friends', myUid), {
+    uid: myUid,
     since: serverTimestamp(),
   });
   // Rensa request-spår.

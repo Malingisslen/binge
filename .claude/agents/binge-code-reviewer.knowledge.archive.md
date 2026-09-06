@@ -7894,3 +7894,117 @@ checked and NOT filed: branch A's ordinary write already has this exact shape pr
 this file's error handling, not a regression this diff introduces.
 
 REVIEW-VERDICT: pass (0 blocking)
+
+### 2026-09-06 — "invisible" is not "unqueryable": the batch's own sweep is the counterexample (BIN-1063 steg 2, round 2)
+
+Round 2 of BIN-1063 step 2. All four round-1 blocking findings verified fixed (survival clause
+struck in `friends.ts`; the "confirm by eye" claim struck in `backfill-mirror-uid.mjs` and the
+plan's matching condition corrected to say no after-read exists; `skipped` counter + non-zero
+exit + source-scan test; dead re-export removed). One NEW blocking finding, in the fix round's
+own prose, and it is the interesting one.
+
+`src/lib/firebase/friends.ts:55-57`:
+
+    // BIN-1063 steg 2. Samma uid som dokumentets id, fast som ett FÄLT. En
+    // collection-group-fråga kan inte filtrera på documentId() mot ett bart
+    // id — utan fältet är raden osynlig för varje serversidig städning.
+
+Twin at `src/test/rules/firestore-rules.test.ts:1041-1043` ("utan fältet är den osynlig,
+eftersom documentId() inte går att filtrera på mot ett bart id").
+
+The first clause is true: a collection-group query cannot filter `documentId()` against a bare
+id (Firestore requires a full document path there). The clause after the em dash does not
+follow, and three things in the tree contradict it:
+
+1. `functions/src/reclaimOrphanFollows/index.ts` — `collectOrphans()` runs
+   `db.collectionGroup(kind).select('followedAt').orderBy('__name__').limit(PAGE_SIZE)` with NO
+   field filter and reads `ownerUid = d.ref.parent.parent?.id`, `otherUid = d.id`. It reclaims
+   fieldless `following`/`followers` rows weekly. A structurally identical sweep over
+   `friends`/`friendRequestsSent` would see every fieldless row.
+2. The commit's OWN `functions/scripts/backfill-mirror-uid.mjs` does exactly that
+   (`db.collectionGroup(collectionId).orderBy('__name__')`) and finds every row that lacks the
+   field. The script that exists because the rows are "invisible" enumerates them without it.
+3. `.claude/rules/accepted-deviations.md`'s new 2026-09-06 entry and `tasks/todo.md` item 2 both
+   state the path-derived sweep as the REASON `followers` was left out of scope. The comment
+   argues against the scope decision shipping beside it.
+
+The correct wording was already in the batch: `docs/data-export-format.md`'s 2.1 changelog says
+"utan fältet går de inte att fråga efter" — queryability, not visibility. And the true half is
+already in the comment's own first clause, so the remedy is a strike of the absolute, not a
+rewrite (no new unmeasured claim needed).
+
+Why it matters beyond pedantry: step 2 ships findability only, and the delete pass is future
+work. A future implementer reading "invisible without the field" concludes a path-based sweep is
+impossible for these collections and builds a field-filtered one — which then silently misses
+every row the backfill did not reach (rows written by a client that predates the deploy, or any
+row whose write was refused). The accepted-deviations entry deliberately keeps ONE cleanup path
+per collection; this comment teaches the opposite of the decision it sits next to.
+
+Method notes worth keeping: the claim lived in two files under one spelling, and a grep across
+`osynlig|hittbar|findable|ofrågbar` separated the two ABSOLUTES from three benign purpose
+statements (`friends.ts:83`, `backfill-mirror-uid.mjs:8,25`, `todo.md:112`) that say what the
+field buys without asserting what its absence forbids — those must NOT be swept up in the fix, or
+the next round files the over-strike. `dataExport.ts:29-30` ("so a collection-group query can
+find the row, which the id alone cannot answer") is scoped to the QUERY and is the one phrasing
+that should be left exactly as it stands.
+
+Verification: index == worktree on all seven files read (friends.ts
+8c90ff74104bf95e4a6783b7cb482d20fbed1e89, dataExport.ts
+a2523c9a5aeecbfba9fb059b5a2e2e76a8260cec, firestore-rules.test.ts
+e9dbc3fb0b6ffcf6dbae71aff1e9274c60a5796d, backfill-mirror-uid.mjs
+f790aece808a6ee656f87b069bf794e70beb07e2, helpers.mjs
+ceeceb46448e0081d4ab8ebe9f833480e9668d38, helpers.test.mjs
+61d7c569b598593bb9e508da183353c52080f3bb, todo.md
+df26009aa65ef10aa0023e597d93f63958e4bbeb). `npx vitest run src/lib/firebase/friends.test.ts
+functions/scripts/backfill-mirror-uid.helpers.test.mjs` → 2 files, 28 passed. Router on the
+staged union re-run myself rather than taken from the brief: tier top, reasonCode high-stakes,
+panel [27, 5, 6, 4, 7] — which is what makes todo.md's "en roll som inte var med då" (#7, the
+only panel member with no pre-build condition block) check out.
+
+Rules half read for call-site agreement, not re-derived (security reviewer owns it): the two
+create rules now require `uid == <path var>` plus `hasOnly(['uid','since'])` /
+`hasOnly(['uid','sentAt'])`, and `friends.ts` writes exactly those key sets on all three
+writes — a mismatch there would have denied every accept and every request in production.
+`accountDeletion.ts` only deletes these paths; no other client writer exists.
+
+REVIEW-VERDICT: fail (1 blocking)
+
+### 2026-09-06 — BIN-1063 steg 2, round 3: the version literal the bump left behind
+
+Round 2 failed this batch on the false absolute "utan fältet är raden osynlig för varje
+serversidig städning" in `src/lib/firebase/friends.ts` and its twin in
+`src/test/rules/firestore-rules.test.ts`. Round 3 confirms both are struck and replaced with
+the filterability-only wording round 2's own finding endorsed:
+
+  friends.ts:55-57  "En collection-group-fråga kan inte filtrera på documentId() mot ett bart
+                     id, så utan fältet går raden inte att fråga efter."
+  firestore-rules.test.ts:1043  same clause.
+
+Grepped `osynlig|invisible|inte synlig` and `hittbar|findable|fråga efter|queryable` across
+src, functions, docs, tasks, .claude/rules and firestore.rules: no surviving copy of the
+absolute. `friends.ts:83`, the two purpose statements in
+`functions/scripts/backfill-mirror-uid.mjs`, `tasks/todo.md:112` and
+`docs/data-export-format.md:125` are all filterability/findability statements, not
+invisibility claims — correctly left alone.
+
+THE ROUND-3 FINDING is in the other half of the same commit. `src/lib/firebase/dataExport.ts`
+bumped `SCHEMA_VERSION` '2.0' → '2.1'. `docs/data-export-format.md` line 10 still shows
+`"schemaVersion": "2.0"` in the canonical example block, while the changelog entry this same
+commit ADDS to that very file (line 123) says "minor-bump 2.0 → 2.1". One file, two answers,
+introduced by this commit. Nothing catches it: `dataExport.coverage.test.ts` names
+`schemaVersion` only in `EXPORT_METADATA_KEYS` (a key-name set), so the value is unpinned, and
+the doc is outside binge-code-reviewer's `^src/.*\.(ts|tsx)$` gate — it reaches me only as a
+cross-file consequence of a file that IS in it.
+
+Why correct-in-place rather than strike: that literal has been maintained across bumps (it
+reads 2.0, and 2.0 landed 2026-07-22), and the true value is directly readable from
+`SCHEMA_VERSION` with nothing to count. That is the strike rule's own carve-out.
+
+Code itself: clean. `friends.ts` writes exactly `{uid, since}` / `{uid, sentAt}`, matching
+`firestore.rules`' new `hasOnly` allowlists on both create branches; the mirror branch's
+`uid == targetUid` pinning against the PATH variable (not `request.auth.uid`) is what lets
+`acceptFriendRequest`'s counterparty-side write pass. `friends.ts` is the sole writer of both
+collections (grepped src + functions/src). Readers still key on `d.id`, so un-backfilled docs
+are unaffected. The struck "Idempotent — om request redan finns blir det merge" was false
+twice over (`batch.set` without merge, and `allow update: if false`) — striking it was right.
+Targeted suite 22/22, worktree == index on all four staged src paths.

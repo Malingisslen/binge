@@ -24,7 +24,11 @@ import type { QuerySnapshot } from 'firebase/firestore';
 //     first "_" to recover mediaType + tmdbId (or read the `tmdbId`/`mediaType` fields in
 //     the doc body, which carry them explicitly). Bumped MAJOR so old parsers fail loudly
 //     rather than silently mis-key a movie as a same-numbered show.
-export const SCHEMA_VERSION = '2.0' as const;
+// 2.1 (BIN-1063, 2026-09-06): additive — `friends` and `friendRequestsSent` docs now
+//     carry a `uid` field holding the counterparty's uid. It duplicates the doc `id`;
+//     it exists so a collection-group query can find the row, which the id alone
+//     cannot answer. No field changed meaning.
+export const SCHEMA_VERSION = '2.1' as const;
 
 export interface ExportDoc {
   id: string;

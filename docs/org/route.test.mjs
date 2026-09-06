@@ -456,7 +456,8 @@ describe('the router and the gate scripts cannot clear themselves (BIN-805)', ()
     // retired `expect(isCodePath(path)).toBe(true)` from the `it.each` above; the
     // dedup line on GATE_FILES further down is kept, because that list is two
     // independent `readdirSync` calls concatenated, not a Set being spread.
-    // Raised to the list's measured length on 2026-08-25 (BIN-979), because a floor that
+    // Raised to the list's measured length on 2026-08-25 (BIN-979) and again on
+    // 2026-09-06 (BIN-1063, +3 backfill entries), because a floor that
     // does not follow its list is a guard that never fires. No claim is made here about
     // how many widenings it fell behind by — measure the list instead, with the command
     // that set this number:
@@ -478,7 +479,7 @@ describe('the router and the gate scripts cannot clear themselves (BIN-805)', ()
     // biconditional reads false === false, and gate-symmetry's A1 is keyed on isCodePath,
     // which the removal switches off. Re-measure with the command above; never copy this
     // number forward without running it.
-    expect(GATE_SCRIPTS.length).toBeGreaterThanOrEqual(29);
+    expect(GATE_SCRIPTS.length).toBeGreaterThanOrEqual(36);
   });
 
   it('names every one of those scripts in the BLOCKING list too (BIN-864/873)', () => {

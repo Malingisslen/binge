@@ -66,6 +66,12 @@ describe('sendFriendRequest', () => {
       fromUsername: 'malin',
     });
     expect(setMock.mock.calls[1][0]._path).toBe('users/me/friendRequestsSent/jonatan');
+    // BIN-1063 steg 2: fältet uid måste stämma med dokument-id:t, annars nekar regeln
+    // skrivningen. Nyckel-MÄNGDEN pinnas exakt, inte som delmängd: regelns
+    // hasOnly(['uid','sentAt']) nekar varje extra fält, så ett tillägg här hade
+    // stoppat varje skarp vänförfrågan medan en toMatchObject stod grön.
+    expect(setMock.mock.calls[1][1]).toMatchObject({ uid: 'jonatan' });
+    expect(Object.keys(setMock.mock.calls[1][1]).sort()).toEqual(['sentAt', 'uid']);
   });
 
   it('vägrar self-request', async () => {
@@ -93,6 +99,13 @@ describe('acceptFriendRequest', () => {
     // Båda håll av friends-relationen.
     expect(setMock.mock.calls[0][0]._path).toBe('users/me/friends/jonatan');
     expect(setMock.mock.calls[1][0]._path).toBe('users/jonatan/friends/me');
+    // BIN-1063 steg 2: båda speglingarna bär motpartens uid som fält, och
+    // nyckel-mängden pinnas exakt — regelns hasOnly(['uid','since']) nekar varje
+    // extra fält, så ett tillägg här hade stoppat varje skarp accept.
+    expect(setMock.mock.calls[0][1]).toMatchObject({ uid: 'jonatan' });
+    expect(setMock.mock.calls[1][1]).toMatchObject({ uid: 'me' });
+    expect(Object.keys(setMock.mock.calls[0][1]).sort()).toEqual(['since', 'uid']);
+    expect(Object.keys(setMock.mock.calls[1][1]).sort()).toEqual(['since', 'uid']);
     // Request-rensning.
     expect(deleteMock.mock.calls[0][0]._path).toBe('users/me/friendRequests/jonatan');
     expect(deleteMock.mock.calls[1][0]._path).toBe('users/jonatan/friendRequestsSent/me');

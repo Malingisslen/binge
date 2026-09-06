@@ -702,3 +702,44 @@ inifrån appen. Malin läste Firebase-konsolens Authentication-lista och **inga 
 det fönstret**. Accepten täcker därför bara framtida kringgåenden, inte en kvarvarande
 population — vilket den inte hade gjort om svaret varit ett annat. Mätningen går inte att
 göra om ur repot; svarar någon på frågan igen måste den komma från konsolen.
+
+---
+
+## BIN-1063 steg 2: `friends` och `friendRequestsSent` är inte längre ofrågbara — 2026-09-06
+
+Smalnar BIN-1023-posten ovan. Den posten är append-only och står kvar ordagrant;
+den här säger vad som inte längre gäller i den.
+
+BIN-1023-posten räknar `followers`, `friends` och `friendRequests*` bland de
+speglingar svepet inte når. **Två av dem bär nu motpartens uid som ett FÄLT**
+(`uid`, samma värde som dokumentets id), pinnat i `firestore.rules` mot
+sökvägsvariabeln och indexerat med `COLLECTION_GROUP`-scope. De går alltså att
+fråga efter.
+
+**Vad som INTE följde med, och varför — mätt, inte antaget:**
+
+* **`followers` lämnades utanför med flit.** `reclaimOrphanFollows` (BIN-21) kör
+  varje vecka, gör en full collection-group-scan på `following` och `followers`
+  och raderar rader vars ägare eller motpart saknar `users`-dokument. Den läser
+  båda ändpunkterna ur SÖKVÄGEN och behöver inget fält. Malins omfångsbeslut
+  2026-09-06: att lägga fältet där också hade gett två oavstämda raderingsvägar
+  över samma rader, vilket är två svar på frågan när något faktiskt är borta.
+  Fila inte "followers saknar uid-fältet" — det är avgjort, inte förbisett.
+* **`friendRequests` (inkommande) rördes inte i koden.** Den bar redan `fromUid`
+  och reglerna pinnade det redan. Det som saknades var index-scopet, och det är
+  tillagt här. Härled hellre än att lita på meningen:
+  `grep -n "fromUid" firestore.rules`
+
+**Vad den här ändringen INTE gör:** den raderar ingenting. Den gör raderna
+HITTBARA. Ingen kod som konsumerar fältet finns ännu. "Spegelmigreringen är
+shippad" får aldrig läsas som "restspåren är stängda" — själva raderingspasset
+är kvarvarande arbete.
+
+**Fortfarande accepterat ur BIN-1023-posten, oförändrat:** `reviews` (och deras
+`likes`/`comments`), `lists`, hostade `sessions`, ägda `groups` och
+avsnittsreaktionerna. Härled mängden ur `collectUserDataSnapshots`, aldrig ur en
+uppräkning.
+
+**Re-open when:** raderingspasset som konsumerar fältet byggs, eller en rapport
+visar en kvarliggande `friends`- eller `friendRequestsSent`-rad för ett konto som
+raderats i konsolen efter att backfillen körts.
