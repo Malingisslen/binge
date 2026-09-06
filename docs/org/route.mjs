@@ -138,6 +138,13 @@ export const TOOLING_CODE_FILES = new Set([
   // rules admit shapes the app cannot read back — BIN-797's shape. Added here in the SAME
   // commit as its `reviewGates` pattern, per BIN-830.
   'docs/org/rules-id-client-symmetry.test.mjs',
+  // BIN-613. The First Load JS report that `deploy.yml` runs after the build. It is not
+  // a gate — it reports and can never fail the deploy — but it RUNS on the only path to
+  // production, so weakening it must not be a change nobody reviews. Added here in the
+  // SAME commit as its `reviewGates` pattern, per BIN-830: one list advises, the other
+  // blocks, and widening one has never widened the other.
+  'scripts/bundle-report.mjs',
+  'scripts/bundle-report.test.mjs',
   'docs/org/gen-ownership-map.mjs',
   'docs/org/gen-ownership-map.test.mjs',
   // BIN-1088. The dependency-diff check on the pull_request path. Dependabot merges

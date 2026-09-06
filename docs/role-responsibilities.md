@@ -318,6 +318,16 @@ Owns caching and responsiveness.
 - localStorage persist budget; per-show `useQueries` fan-out fix; CLS-safe images;
   3s persist throttle.
   → `src/lib/queryClient.ts`, `src/hooks/useCalendar.ts`, `src/components/Providers.tsx`
+- **Vikten som skickas till en besökare, mätt vid varje deploy** (BIN-613). Regeln
+  "ingen First Load JS-regression mot baslinjen" stod i hygienkontrollerna utan att
+  någon baslinje fanns, alltså utan att kunna betygsättas. Rapporten jämför mot förra
+  bygget och skriver en tabell i körningens sammanfattning; den RAPPORTERAR, eftersom
+  `deploy.yml` är enda vägen till produktion (Malins beslut 2026-09-03). Sätet är här
+  därför att storheten den mäter är hur mycket JavaScript en sida drar in innan den
+  svarar — samma responsivitet som resten av den här sektionen. Ett tidigare
+  utkast satte den hos #3 med baslinjens KATALOG som skäl; ägarskap härlett ur närhet är
+  inte ägarskap, och #25:s blinda kritik underkände det.
+  → `scripts/bundle-report.mjs`, `scripts/bundle-report.test.mjs`
 - **Filer som saknade en ägande roll** (BIN-871). Cachelagrets tester och de hookar som styr hämtningstakten.
   → `src/hooks/useCalendar.test.ts`, `src/lib/queryClient.persist.test.ts`, `src/lib/queryClient.retry.test.ts`, `src/lib/tmdb/client.network.test.ts`, `src/lib/tmdb/client.test.ts`
 

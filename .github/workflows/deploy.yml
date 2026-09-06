@@ -233,6 +233,33 @@ jobs:
           # (264 → 117 indexerade sidor på fem veckor).
           TMDB_SELECTION_REFRESH: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_refresh)) && '1' || '' }}
 
+      # BIN-613. Sidornas laddningsstorlek mäts här och jämförs med föregående BYGGE.
+      # Steget ligger före utrullningen, så ett bygge som aldrig nådde produktion har
+      # ändå skrivit sin baslinje.
+      # Malins beslut 2026-09-03: den RAPPORTERAR, den blockerar aldrig. Kriteriet "ingen
+      # First Load JS-regression mot baslinjen" fanns i hygienreglerna utan att någon
+      # baslinje existerade, alltså utan att kunna betygsättas.
+      #
+      # STEGET LIGGER FÖRE cache-sparandet med flit: baslinjen skrivs till .tmdb-cache/,
+      # och det är nästa steg som packar den katalogen. Efteråt skulle mätningen köra,
+      # rapportera, och tappa sitt minne varje gång — en tabell där varje rad står som
+      # "ny" för alltid.
+      #
+      # Inget `if:`. Standardsemantiken hoppar över steget när bygget fällde, vilket är
+      # rätt.
+      #
+      # Inget `env:`. Deploy-hemligheterna är stegbundna i den här filen, och den
+      # isoleringen är vad som håller ett fel i ett orelaterat steg borta från
+      # produktionsuppgifterna. Skriptet behöver ingen av dem.
+      #
+      # `continue-on-error` OCH skriptets egen try/catch, båda: catchen stänger ett kast,
+      # flaggan är skyddet för det catchen inte ser — slut på minne, en Node-abort, eller
+      # taket nedan. `timeout-minutes` behövs separat: "fäller aldrig" täcker inte en
+      # HÄNGNING, och det finns inget jobbnivå-tak i det här jobbet.
+      - name: First Load JS-rapport (rapporterar, fäller aldrig)
+        continue-on-error: true
+        timeout-minutes: 2
+        run: node scripts/bundle-report.mjs
       # Spara TMDB-cachen ÄVEN när bygget fällde (BIN-815) — se kommentaren vid
       # restore-steget för vad detta bevisligen täcker och vad som är obekräftat.
       # `continue-on-error` för att ett misslyckat cache-sparande aldrig får bli

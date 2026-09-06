@@ -52,6 +52,11 @@ const REQUIRED = [
   // reviewGates reviewer and no push gate reaches — the server-side merge of a
   // dependency bump — so nothing else would notice it going quiet.
   'check-dependency-diff.test.mjs',
+  // BIN-613. The First Load JS report's test. The script is not a gate — it reports and
+  // can never fail the deploy — but it RUNS on the only path to production, and its
+  // never-fails contract is the thing its tests pin. Lose the file and a report that
+  // silently measures nothing looks exactly like a report that had nothing to say.
+  'bundle-report.test.mjs',
 ];
 
 // A LITERAL, deliberately not `REQUIRED.length`. Deriving it made this assertion unable
@@ -60,7 +65,7 @@ const REQUIRED = [
 // replaced BIN-838's MIN=2 to prevent, reproduced inside its own replacement. Growth is
 // free at the runner; raising this number is the deliberate act that keeps the new file
 // protected, and lowering it is the deliberate act a shrink must perform out loud.
-const MIN = 5;
+const MIN = 6;
 
 // Reads the DISK set, recursively and on both suffixes, to line up as closely as a
 // directory read can with what vitest's `scripts/**/*.{test,spec}.mjs` collects. It is not

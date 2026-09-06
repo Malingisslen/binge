@@ -102,7 +102,7 @@
         "\\.(ts|tsx)$",
         "^\\.github/(workflows|actions)/",
         "^\\.github/dependabot\\.yml$",
-        "^(docs/org/(route|gen-ownership-map|gate-symmetry|rules-doc-id-symmetry|rules-id-client-symmetry|metrics/(check_events|log_event|check_review_coverage|check_staged_routing))|scripts/(check-workflow-map|check-public-env|check-knowledge-caps|prune-map-flag|check-dependency-diff))(\\.test)?\\.mjs$",
+        "^(docs/org/(route|gen-ownership-map|gate-symmetry|rules-doc-id-symmetry|rules-id-client-symmetry|metrics/(check_events|log_event|check_review_coverage|check_staged_routing))|scripts/(check-workflow-map|check-public-env|check-knowledge-caps|prune-map-flag|check-dependency-diff|bundle-report))(\\.test)?\\.mjs$",
         "^eslint-rules/no-bare-streaming-offers-id(\\.test)?\\.mjs$",
         "^eslint\\.config\\.mjs$",
         "^\\.claude/shared-plugin\\.json$",
@@ -281,9 +281,10 @@
           "flagWhen": "High/Critical CVE; prod dep >=1 major behind"
         },
         {
+          "_note": "BIN-613, 2026-09-06: this entry named a baseline that did not exist, so nobody could grade it either way -- that ungradeable criterion IS the ticket. It is corrected rather than deleted: an acceptance record is one of the strike rule carve-outs. The measurement now lives in the deploy itself, in the step named below. `npm run analyze` was never the thing that compared anything -- it is ANALYZE=true next build, a treemap. The step REPORTS and can never fail a build (Malin 2026-09-03), so this check is read by a human looking at a run summary, not enforced by a gate.",
           "check": "bundle",
-          "command": "npm run analyze",
-          "flagWhen": "First Load JS regression vs tracked baseline"
+          "command": "read the First Load JS-rapport step table in the deploy run summary (.github/workflows/deploy.yml)",
+          "flagWhen": "a route grew and the growth was not intended"
         }
       ]
     },

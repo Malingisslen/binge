@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 544,
+  "patternCount": 546,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -166,6 +166,8 @@
       "title": "Performance Engineer",
       "slug": "performance-engineer",
       "patterns": [
+        "scripts/bundle-report.mjs",
+        "scripts/bundle-report.test.mjs",
         "src/components/Providers.tsx",
         "src/hooks/useCalendar.test.ts",
         "src/hooks/useCalendar.ts",
