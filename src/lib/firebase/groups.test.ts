@@ -852,9 +852,16 @@ describe('medlemsdokumentets fältuppsättning är delad mellan createGroup och 
     const joinerKeys = keysWrittenTo('groups/g-fields/members/user-fields');
 
     expect(ownerKeys).toEqual(joinerKeys);
-    // Och att de faktiskt bär fälten, så testet inte är grönt på två tomma listor.
-    expect(ownerKeys).toContain('joinedAt');
-    expect(ownerKeys).toContain('displayName');
-    expect(ownerKeys.length).toBeGreaterThan(5);
+    // BIN-1101
+    expect(ownerKeys).toEqual([
+      'displayName',
+      'joinedAt',
+      'notifications',
+      'photoURL',
+      'providers',
+      'role',
+      'uid',
+      'username',
+    ]);
   });
 });
