@@ -808,3 +808,53 @@ describe('accept/join — medlemsdokumentet skrivs som create eller merge efter 
     expect(write?.[2]).toBeUndefined();
   });
 });
+
+// BIN-1100. createGroup skriver medlemsdokumentet med en bar create — gruppen
+// skapades med addDoc raden innan, så dokumentet kan inte finnas, och läsningen
+// writeMemberDoc gör vore ett svar vi redan känner. Båda vägarna bygger ändå sin
+// payload ur samma memberFields(), och DET är vad som hindrar dem från att glida
+// isär. Utan ett test på det är delningen bara en konvention.
+//
+// Testet jämför NYCKLAR, inte värden: role skiljer sig med flit (owner mot
+// member), och joinedAt sätts av båda men på olika villkor.
+describe('medlemsdokumentets fältuppsättning är delad mellan createGroup och join-flödena (BIN-1100)', () => {
+  function keysWrittenTo(path: string) {
+    const call = setDocMock.mock.calls.find(([ref]) => (ref as { _path: string })._path === path);
+    expect(call).toBeDefined();
+    return Object.keys(call![1] as Record<string, unknown>).sort();
+  }
+
+  it('createGroup och ett förstagångs-accept skriver samma fältnycklar', async () => {
+    const created = await createGroup({
+      name: 'Filmklubben',
+      ownerUid: 'owner-fields',
+      ownerDisplayName: 'Malin',
+      ownerUsername: 'malin',
+      ownerPhotoURL: null,
+      ownerProviders: [8],
+      defaults: { providerMode: 'intersect', aggregation: 'least_misery', mediaType: 'both' },
+    });
+    const ownerKeys = keysWrittenTo('groups/' + created.groupId + '/members/owner-fields');
+
+    setDocMock.mockClear();
+    seedDoc('groups/g-fields', {
+      exists: () => true,
+      data: () => ({ memberUids: ['someone-else'] }),
+    });
+    await acceptGroupInvite({
+      groupId: 'g-fields',
+      uid: 'user-fields',
+      displayName: 'Malin',
+      username: 'malin',
+      photoURL: null,
+      providers: [8],
+    });
+    const joinerKeys = keysWrittenTo('groups/g-fields/members/user-fields');
+
+    expect(ownerKeys).toEqual(joinerKeys);
+    // Och att de faktiskt bär fälten, så testet inte är grönt på två tomma listor.
+    expect(ownerKeys).toContain('joinedAt');
+    expect(ownerKeys).toContain('displayName');
+    expect(ownerKeys.length).toBeGreaterThan(5);
+  });
+});

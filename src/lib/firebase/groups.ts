@@ -120,14 +120,21 @@ export async function createGroup(params: {
   // deleteDoc, inte deleteGroup(): gruppen kan omöjligt ha hunnit få
   // subkollektioner, och deleteGroup:s städning kostar läsningar i onödan.
   try {
+    // Bar create, med flit: gruppen skapades med addDoc raden ovan, så id:t är
+    // nytt och medlemsdokumentet kan omöjligt redan finnas. Läsningen
+    // writeMemberDoc gör vore därför alltid ett svar vi redan känner, och den
+    // kostar mot 25 kr/mån-taket. Fältuppsättningen delas ändå (BIN-1100).
+    //
+    // Byt hit till writeMemberDoc den dag create-regeln för members/{memberUid}
+    // pinnar ett fält till — då blir handdubbleringen en fälla värd läsningen.
     await setDoc(doc(db, 'groups', groupRef.id, 'members', params.ownerUid), {
-      uid: params.ownerUid,
-      displayName: params.ownerDisplayName,
-      username: params.ownerUsername,
-      photoURL: params.ownerPhotoURL,
-      providers: params.ownerProviders,
-      role: 'owner',
-      notifications: true,
+      ...memberFields(params.ownerUid, {
+        displayName: params.ownerDisplayName,
+        username: params.ownerUsername,
+        photoURL: params.ownerPhotoURL,
+        providers: params.ownerProviders,
+        role: 'owner',
+      }),
       joinedAt: serverTimestamp(),
     });
   } catch (err) {
@@ -333,6 +340,33 @@ export async function inviteMemberByUid(params: {
 }
 
 /**
+ * Fältuppsättningen ett medlemsdokument bär, definierad på ETT ställe (BIN-1100).
+ *
+ * `joinedAt` ingår medvetet inte. Det får bara sättas när dokumentet SKAPAS, och de
+ * två skrivvägarna når det ögonblicket olika: `createGroup` vet statiskt att det är en
+ * create, `writeMemberDoc` måste läsa efter för att veta.
+ */
+type MemberProfileFields = {
+  displayName: string;
+  username: string | null;
+  photoURL: string | null;
+  providers: number[];
+  role: string;
+};
+
+function memberFields(uid: string, profile: MemberProfileFields) {
+  return {
+    uid,
+    displayName: profile.displayName,
+    username: profile.username,
+    photoURL: profile.photoURL,
+    providers: profile.providers,
+    role: profile.role,
+    notifications: true,
+  };
+}
+
+/**
  * Skriv medlemsdokumentet på det sätt reglerna tillåter för det tillstånd som
  * faktiskt råder (BIN-1063 steg 1).
  *
@@ -349,25 +383,11 @@ async function writeMemberDoc(
   kit: Pick<FirestoreKit, 'db' | 'doc' | 'getDoc' | 'setDoc' | 'serverTimestamp'>,
   groupId: string,
   uid: string,
-  profile: {
-    displayName: string;
-    username: string | null;
-    photoURL: string | null;
-    providers: number[];
-    role: string;
-  },
+  profile: MemberProfileFields,
 ): Promise<void> {
   const { db, doc, getDoc, setDoc, serverTimestamp } = kit;
   const ref = doc(db, 'groups', groupId, 'members', uid);
-  const fields = {
-    uid,
-    displayName: profile.displayName,
-    username: profile.username,
-    photoURL: profile.photoURL,
-    providers: profile.providers,
-    role: profile.role,
-    notifications: true,
-  };
+  const fields = memberFields(uid, profile);
   const existing = await getDoc(ref);
   if (existing.exists()) {
     // Uppdatering: joinedAt utelämnas helt, så oföränderligheten är trivialt
