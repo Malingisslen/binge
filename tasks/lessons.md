@@ -1471,3 +1471,44 @@ ocksa routningen, sa en roll som aldrig kritiserat bunten blev plotsligt den aga
 
 **Kontrollen:** kor routern igen efter en omflyttning. Ett byte av sate ar en
 omfangsandring precis som ett tillagg av en fil.
+
+### [Workflow] Ett Admin-SDK-skript som inte NAMNGER sitt projekt kan lasa nagon annans databas och rapportera en frisk nolla (2026-09-06, BIN-1063)
+
+**Trigger:** ett skript som kor med `initializeApp({ credential: applicationDefault() })`.
+
+**Regel:** projektet ska namnges av anroparen och skrivas ut fore forsta lasningen.
+Application Default Credentials bar vilket kvotprojekt maskinen rakar vara uppsatt for,
+och det behover inte vara ditt. Utfallet ar inte ett fel: lasningarna LYCKAS mot fel
+databas, och `0 scanned, 0 rows` ar oskiljbart fran en frisk korning som inte hade nagot
+att gora. Ett explicit `projectId` slar bade ADC och miljovariablerna.
+
+**Vad som hande:** backfillens forsta torrkorning sa `0 scanned`. Riktig siffra: tre.
+ADC pekade pa ett helt orelaterat projekt. Ingen enhetstest kunde se det - de matar sin
+egen fixtur.
+
+**Foljdregeln, och den ar den som biter:** lagesflaggorna maste vara omsesidigt
+uteslutande. `--dry-run --apply` dar `apply` helt enkelt vinner ar ett kommando som SAGER
+torrkorning och SKRIVER, mot varje anvandares data. Rakna upp bada felriktningarna.
+
+**Och:** lagg vagran i en admin-fri syskonmodul sa ett test kan ANROPA den.
+En kallkodsskanning over `main()` ser bara att en gren ar SKRIVEN - muteringen som tog
+bort `return 1;` under vagran overlevde hela sviten gron, eftersom ankaret `toContain
+('return 1;')` traffade en systergren. Se aven posten om `describe.each([])`.
+
+### [Workflow] Ett prov mot skarp data ar en skarp korning (2026-09-06, BIN-1063)
+
+**Trigger:** du vill prova att en ny sparr fungerar, och kommandot du provar med ar det
+riktiga kommandot.
+
+**Regel:** prova vagran med argv som VAGRAS, aldrig med den som slapper igenom. Och
+pipa aldrig ett skrivande kommando till `head` - SIGPIPE avbryter det MITT I, sa det
+skriver en delmangd och rapporterar ingenting.
+
+**Vad som hande:** jag korde `--apply --project binge-nu | head -1` for att se att
+projektraden skrevs ut. En produktionsrad hann skrivas innan SIGPIPE, utanfor tre av de
+fyra bindande villkor rollkritiken hade satt for just den korningen. Raden blev korrekt,
+vilket ar tur, inte ett resultat av kontrollen.
+
+**Kontrollen:** en avvikelse mot skarp data STRYKS inte och formuleras inte om - den
+skrivs ned, daterad, med vad som hande och varfor ingen rollback ags. Det ar den enda
+formen som overlever att villkorets eget bevis (den sparade utdatan) inte finns.
