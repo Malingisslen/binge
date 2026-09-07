@@ -82,7 +82,7 @@ import { logger } from 'firebase-functions/v2';
 import type { Query } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import { runRetentionCleanup, type CleanupIo, type ScanKind } from './runCleanup';
-import type { CategoryFindings } from './fieldOwned';
+import { handoverEstimate, type CategoryFindings } from './fieldOwned';
 import { isEmptyExcept } from '../groupHandover/logic';
 import { runGroupHandover } from '../groupHandover/runHandover';
 import { adminHandoverIo } from '../groupHandover/adminIo';
@@ -322,7 +322,7 @@ const adminIo: CleanupIo = {
       // Handed over. The group document and the departing member's own rows —
       // counted, not written. See `CleanupSummary.fieldOwnedDocs` for what this
       // estimate leaves out.
-      handoverDocs += 1 + paths.filter((path) => path.endsWith(`/${uid}`)).length;
+      handoverDocs += handoverEstimate(paths, uid);
     }
     return { toDelete, handoverDocs };
   },

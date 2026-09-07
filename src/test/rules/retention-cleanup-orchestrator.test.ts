@@ -12,6 +12,7 @@ import { isEmptyExcept } from '../../../functions/src/groupHandover/logic';
 import {
   FIELD_OWNED_CATEGORIES,
   FIELD_OWNED_MAX_DOCS_PER_UID,
+  handoverEstimate,
 } from '../../../functions/src/retentionCleanup/fieldOwned';
 
 import {
@@ -345,7 +346,7 @@ function makeIo(db: Firestore, auth: FakeAuth, overrides: Partial<CleanupIo> = {
           toDelete.push(...paths, g.ref.path);
           continue;
         }
-        handoverDocs += 1 + paths.filter((path) => path.endsWith('/' + uid)).length;
+        handoverDocs += handoverEstimate(paths, uid);
       }
       return { toDelete, handoverDocs };
     },

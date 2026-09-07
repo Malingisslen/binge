@@ -5,6 +5,7 @@ import {
   FIELD_OWNED_MAX_DOCS_PER_UID,
   NO_FINDINGS,
   findingsSize,
+  handoverEstimate,
   withinDocumentBudget,
   type CategoryFindings,
 } from './fieldOwned';
@@ -33,6 +34,35 @@ describe('findingsSize', () => {
   it('counts a document once whether it is deleted or stripped', () => {
     expect(findingsSize(found(3, 2))).toBe(5);
     expect(findingsSize(NO_FINDINGS)).toBe(0);
+  });
+});
+
+describe('handoverEstimate', () => {
+  // Both the Admin port and the emulator harness call this, so the budget the
+  // emulator test proves is the budget production computes.
+  it('counts the group document plus the leaver’s own rows under it', () => {
+    expect(handoverEstimate([
+      'groups/g/members/gone',
+      'groups/g/members/keeper',
+      'groups/g/watchlist/movie_1',
+      'groups/g/watchlist/movie_1/progress/gone',
+    ], 'gone')).toBe(3);
+  });
+
+  // A ghost owner — in `memberUids` with no member row — costs the group
+  // document alone. The floor, and the case the estimate is smallest on.
+  it('counts the group document even when the leaver owns no rows', () => {
+    expect(handoverEstimate(['groups/g/members/keeper'], 'gone')).toBe(1);
+    expect(handoverEstimate([], 'gone')).toBe(1);
+  });
+
+  // Two ways a neighbouring uid can look like the leaver, and they catch
+  // different mutations. `notgone` catches dropping the `/` from the needle (a
+  // bare `endsWith('gone')` would match it); `gone-other` catches `endsWith`
+  // becoming `includes` (the path contains `/gone` but does not end with it).
+  it('does not count a row belonging to a different uid', () => {
+    expect(handoverEstimate(['groups/g/members/notgone'], 'gone')).toBe(1);
+    expect(handoverEstimate(['groups/g/members/gone-other'], 'gone')).toBe(1);
   });
 });
 

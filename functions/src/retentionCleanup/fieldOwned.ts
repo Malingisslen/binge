@@ -79,6 +79,19 @@ export function findingsSize(findings: CategoryFindings): number {
 }
 
 /**
+ * What ONE handed-over group is estimated to cost the document budget.
+ *
+ * The group document plus the departing member's own rows under it. Both the
+ * Admin port and the emulator harness call this, so the budget the test proves
+ * is the budget production computes.
+ *
+ * It is an UNDERCOUNT, deliberately — see `CleanupSummary.fieldOwnedDocs`.
+ */
+export function handoverEstimate(subtreePaths: readonly string[], leavingUid: string): number {
+  return 1 + subtreePaths.filter((path) => path.endsWith(`/${leavingUid}`)).length;
+}
+
+/**
  * Whether this uid's whole field-owned erasure fits under the document budget,
  * and what it costs.
  *

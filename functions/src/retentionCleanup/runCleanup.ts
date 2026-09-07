@@ -287,8 +287,7 @@ export interface CleanupSummary {
    * `plan.handoverDocs`, an ESTIMATE: it does not count the name-field edits
    * `eraseMemberTraces` makes, and it does not subtract a group that raced or
    * no-op'd. A handover that throws part-way credits one per group it attempted
-   * instead, which is far below the estimate but never zero. Read the number as
-   * an order of magnitude, not as a receipt.
+   * instead. Read the number as an order of magnitude, not as a receipt.
    *
    * Three numbers, not one, for the reason every other −1 in this summary
    * exists: a run that erased nothing because there was nothing, a run that
