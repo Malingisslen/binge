@@ -83,7 +83,8 @@ Så vid radering:
 - `*/reactions/{reactionId}` (avsnitts-reaktioner, BIN-95) där `uid == me` →
   **delete** (collection-group). Ingen TTL-sweep — reaktioner behandlas som
   innehåll (likt reviews) och raderas bara vid kontoradering, inte på ålder.
-  Se Console-bypass nedan för konton som raderas utanför app-cascaden.
+  Se §"Data vars ägar-uid inte längre finns i Auth" nedan, stycket om det
+  fältägda innehållet, för konton som raderas utanför app-cascaden.
 - `lists/{listId}` där `uid == me` → **delete**
 - `sessions/{sessionId}` där `hostUid == me` → **delete**
 
@@ -514,7 +515,7 @@ spårat som följdticket.
 **Console-bypass (känd begränsning):** `deleteAccount`-cascaden körs bara vid
 självservice-radering i appen. Raderar en admin ett konto direkt i Firebase
 Auth Console körs INGEN klient-cascade (det finns ingen Auth-`onDelete`-trigger),
-så cascade-bara-data (avsnitts-reaktioner m.fl.) blir kvar. För den
+så cascade-bara-data blir kvar. För den
 **säkerhetskänsliga** delen — plaintext-invite-tokenet i `joinAttempts` (BIN-329)
 — är detta nu täppt: den schemalagda `retentionCleanup`-sweepen raderar varje
 joinAttempt äldre än 1 timme oavsett hur kontot försvann (admin SDK kringgår
@@ -524,6 +525,11 @@ sedan BIN-848, se §"Push-tokens för konton Auth inte längre erkänner" nedan.
 **Sedan BIN-1023 är luckans uid-nycklade del också täppt** — se §"Data vars
 ägar-uid inte längre finns i Auth" nedan för exakt vad svepet raderar, vilken
 klocka fönstret mäts mot, och vad som fortfarande står kvar.
+
+**BIN-1063 steg 3 tar också en del av det fältägda innehållet** — se
+§"Data vars ägar-uid inte längre finns i Auth" nedan, stycket om det fältägda
+innehållet, för vilka kategorier svepet tar, vad det medvetet lämnar, och vad
+dokumentbudgeten gör när ett konto är för stort.
 
 ## Retention-policy för icke-raderad data
 
@@ -700,14 +706,59 @@ en fallerad batch bidrar med noll kandidater och ett `disabled: true`-konto — 
 moderering stänger av någon — räknas aldrig som borta. Det delade taket
 (`withinOrphanCeiling`) vägrar hela körningen om kandidatmängden är orimlig.
 
-**Vad som INTE täcks, och det är avsiktligt.** Innehåll som ägs via ett FÄLT i
-stället för via uid:t i sökvägen: `reviews` (med `likes`/`comments`), `lists`,
-hostade `sessions`, ägda `groups`, och speglingarna på andra användares dokument
-(`followers`, `friends`, `friendRequests*`), och avsnittsreaktionerna i
-`episodeReactions/*/reactions/*`, som ligger utanför `users/*` och ägs av ett
-`uid`-fält. Den delen kräver en fråga per samling och bär ett eget produktval — en ägd grupp med kvarvarande medlemmar ska
-antingen raderas eller lämnas över, och det avgörs inte inuti ett svep. Filad som
-egen biljett och bokförd i `.claude/rules/accepted-deviations.md`.
+**Det fältägda innehållet (BIN-1063 steg 3, 2026-09-07).** Innehåll som ägs via
+ett FÄLT i stället för via uid:t i sökvägen sveps numera också, i denna ordning:
+`reviews` med sina `likes` och `comments`; den avgångnes egna likes och
+kommentarer var de än ligger; avsnittsreaktionerna i
+`episodeReactions/*/reactions/*`; `lists`; hostade `sessions` med sina
+`participants` och `swipes`; och till sist grupperna.
+
+**När en recension raderas följer ANDRAS likes och kommentarer under den med.**
+Frågan filtrerar inte på uid — den listar allt under recensionen. Det är
+TILLÅTET, inte krävt: en like eller kommentar under en recension som inte längre
+finns har ingenting att hänga på, och att behålla den hade bevarat en fristående
+post om en text ingen kan läsa. Står det här för att en framtida granskare inte
+ska läsa en försvunnen like som omfångsglidning — #5 Legal, villkor på den här
+bunten. Klientkaskaden gör samma sak — se steg 3 i `collectDeletionRefs`
+(`src/lib/firebase/accountDeletion.ts`), som listar hela `likes`- och
+`comments`-undermängden utan uid-filter; svepet följer den.
+
+Ordningen är inte tillfällig, och grupperna ligger SIST.
+
+Detta raderas INTE, och det är beslut:
+
+* **En samredigerad lista** som någon annan äger behåller bara sitt liv — uid:t
+  stryks ur `editors`. Att radera den hade förstört tredje parts data på grund av
+  någon annans radering.
+* **En ägd grupp med kvarvarande medlemmar lämnas över** till den som varit
+  medlem längst (Malins beslut 2026-09-06), genom exakt samma `runGroupHandover`
+  som raderaknappen driver — aldrig ett andra val. Finns ingen annan medlem kvar
+  raderas gruppen.
+* **En grupp kontot bara var MEDLEM i rörs inte alls.** Svepet frågar på
+  `ownerUid`, inte på `memberUids`, så uid:t står kvar i medlemslistan och
+  `groups/{g}/members/{uid}` behåller sitt denormaliserade `displayName` och
+  `photoURL` för gruppens övriga medlemmar — permanent, eftersom uid:t inte
+  återkommer i `listUserUids()` efter att samma körning raderat `users/{uid}`.
+  Klientkaskaden når dem; svepet gör det inte.
+
+**Dokumentbudget.** Kontotaket ovan räknar PERSONER. Den här halvan behöver ett
+tak till, för utflakningen av ett KORREKT val är obegränsad i dokument: ett konto
+kan äga tusentals reaktioner. `FIELD_OWNED_MAX_DOCS_PER_UID` gäller per
+uid och är allt-eller-inget — en radering som stannade mitt i hade lämnat en
+godtycklig halva av någons publika innehåll kvar utan spår av vilken halva. En
+vägran sker FÖRE varje skrivning: planeringssteget räknar, och först när
+budgeten släppt igenom skrivs något. Den raderar alltså ingenting för det uid:t, loggar högljutt
+och behåller bevakningsposten, så nästa körning försöker igen.
+
+Ett FEL mitt i skrivningen är en annan sak, och den skillnaden bär: då är
+tidigare kategorier redan raderade. Det som håller är att uid:t står kvar på
+böckerna — den privata halvan (`users/{uid}`-trädet) är orörd, bevakningsposten
+lever, och varje skrivning är idempotent — så omkörningen konvergerar.
+
+**Speglingarna** (`followers`, `friends`, `friendRequests*`) täcks inte här. De
+har egna vägar: `reclaimOrphanFollows` sveper följarna varje vecka, och steg 2
+gjorde vänskapsraderna frågebara — själva raderingspasset för dem är kvarvarande
+arbete, bokfört i `.claude/rules/accepted-deviations.md`.
 
 **Berör inte** det separat dokumenterade läget "delvis kaskaderad, Auth
 fortfarande vid liv" (ADR 0022) — andra förutsättningar, annat svep.

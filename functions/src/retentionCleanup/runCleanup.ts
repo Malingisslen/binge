@@ -44,6 +44,12 @@ import {
   type UserLookupResult,
 } from './logic';
 import {
+  FIELD_OWNED_CATEGORIES,
+  withinDocumentBudget,
+  type CategoryFindings,
+  type FieldOwnedCategory,
+} from './fieldOwned';
+import {
   absentUidsFromLookup,
   isOrphanCandidate,
   orphanedReservations,
@@ -153,6 +159,71 @@ export interface CleanupIo {
   deleteUserTree(uid: string): Promise<void>;
   /** Record `firstSeenAt = nowMs` for each uid, in ONE commit. Never more than deleteBatchSize. */
   stampOrphanWatch(uids: readonly string[], nowMs: number): Promise<void>;
+
+  /**
+   * BIN-1063 steg 3 — what `uid` owns through a FIELD rather than through the
+   * uid in the path, for one category.
+   *
+   * One query per call and no decision: which categories exist and in what order
+   * they are erased is `FIELD_OWNED_CATEGORIES`, and the caller walks it.
+   *
+   * The caller never asks this method for `groups`. A group with other members
+   * is HANDED OVER, not deleted (Malin, 2026-09-06), and that decision belongs
+   * to the shared `runGroupHandover` both doors drive, reached here through
+   * `planGroupHandover` (read) and `commitGroupHandover` (write).
+   */
+  findFieldOwned(category: FieldOwnedCategory, uid: string): Promise<CategoryFindings>;
+
+  /** Remove `uid` from the named array field on this document. */
+  stripFromArray(path: string, field: string, uid: string): Promise<void>;
+
+  /**
+   * READ-ONLY: what a handover of `uid`'s groups would touch.
+   *
+   * Split from the write half so the document budget can see it. A handover that
+   * ran before the budget check would already have moved ownership and erased
+   * rows by the time a refusal claimed nothing was erased — and it would do it
+   * FIRST, which is the opposite end of the order the categories are erased in.
+   *
+   * `toDelete` is the paths under groups with nobody left, which this sweep
+   * deletes outright. `handoverDocs` is an ESTIMATE of the handover's own cost —
+   * see `CleanupSummary.fieldOwnedDocs` for what it leaves out.
+   */
+  planGroupHandover(uid: string): Promise<{
+    toDelete: readonly string[];
+    handoverDocs: number;
+  }>;
+
+  /**
+   * WRITE: hand over `uid`'s groups, through the SAME `runGroupHandover` the
+   * account-delete callable drives — never a second election.
+   *
+   * Runs in the write phase, in `FIELD_OWNED_CATEGORIES` order, after the budget
+   * has allowed the whole uid. Returns how many groups failed.
+   */
+  commitGroupHandover(uid: string): Promise<{
+    failed: number;
+    /**
+     * The groups that resolved to `delete` at COMMIT time.
+     *
+     * `planGroupHandover` decided which groups were empty before any category
+     * was written. A group that loses its last other member in between is not in
+     * that plan, and `runGroupHandover` deliberately does not delete anything —
+     * so without these ids it would stand forever, owned by a uid this same run
+     * is about to erase from Auth and from `listUserUids()`.
+     */
+    toDeleteIds: readonly string[];
+  }>;
+
+  /**
+   * Is this group still empty of everyone but `uid`?
+   *
+   * Asked immediately before deleting it. Between the plan and the write a member
+   * can join, and the paths being deleted then include a LIVE third party's
+   * household and progress rows — the worst outcome available to this sweep, and
+   * one nothing else guards.
+   */
+  isStillEmptyGroup(groupId: string, uid: string): Promise<boolean>;
 }
 
 /** Uids per `deleteUsers` call — the Admin API's own ceiling. */
@@ -191,6 +262,30 @@ export interface CleanupSummary {
   watchedOrphanDataUids: number;
   clearedOrphanDataWatches: number;
   orphanDataSkippedAuthBatches: number;
+  /**
+   * BIN-1063 steg 3 — the field-owned half, per uid rather than per document.
+   *
+   * `fieldOwnedUids` is how many uids reached it at all; `fieldOwnedRefused` is
+   * how many refused. No list of the refusal causes here: they are the
+   * `FIELD_OWNED_REFUSED` throws in `eraseFieldOwned`, and an enumeration beside
+   * them goes stale the next time one is added.
+   *
+   * `fieldOwnedDocs` counts the deletes and array-strips that COMMITTED, and it
+   * survives a run that then threw — that is what separates a run which wrote
+   * nothing from one which wrote and then failed. The group handover's share is
+   * `plan.handoverDocs`, an ESTIMATE credited once the handover returns: it does
+   * not count the name-field edits `eraseMemberTraces` makes, and it does not
+   * subtract a group that raced or no-op'd. Read it as an order of magnitude,
+   * not as a receipt.
+   *
+   * Three numbers, not one, for the reason every other −1 in this summary
+   * exists: a run that erased nothing because there was nothing, a run that
+   * refused everything, and a run that never reached this half must not print
+   * the same line.
+   */
+  fieldOwnedUids: number;
+  fieldOwnedDocs: number;
+  fieldOwnedRefused: number;
 }
 
 /**
@@ -515,13 +610,170 @@ async function collectOrphanedUserData(io: CleanupIo, nowMs: number): Promise<{
   return { ...parts, checkedUserRoots: uids.length, skippedAuthBatches };
 }
 
+/** Prefix that tells a refusal apart from an IO failure in the shared catch. */
+const FIELD_OWNED_REFUSED = 'field-owned refused:';
+
+/**
+ * Delete these paths, and THROW if any commit fails.
+ *
+ * `deleteInBatches` swallows a failed chunk and continues, which is right for the
+ * TTL sweeps: leave the residue for tomorrow. It is wrong here. This erasure is
+ * all-or-nothing per uid, and a swallowed failure would let the caller go on to
+ * delete `users/{uid}` and the watch record — after which the uid never appears
+ * in `listUserUids()` again and the surviving documents are unreachable by any
+ * later run, while the summary reports the uid as erased.
+ */
+async function deleteAllOrThrow(
+  io: CleanupIo,
+  paths: readonly string[],
+  /**
+   * Credited per COMMITTED chunk, not once at the end.
+   *
+   * A later chunk can fail after an earlier one landed. A count returned only on
+   * the normal path would be lost to the throw, and the caller would report `0`
+   * for a run that deleted documents — the same ambiguity `progress` exists to
+   * remove one level up.
+   */
+  progress: { written: number },
+): Promise<void> {
+  for (let i = 0; i < paths.length; i += io.deleteBatchSize) {
+    const chunk = paths.slice(i, i + io.deleteBatchSize);
+    await io.deleteDocs(chunk);
+    progress.written += chunk.length;
+  }
+}
+
+/** The group id in `groups/{gid}/...`, so a re-verify can name the group. */
+function groupIdOf(path: string): string {
+  return path.split('/')[1] ?? '';
+}
+
+/**
+ * BIN-1063 steg 3 — erase what `uid` owns through a FIELD, and hand over the
+ * groups it owns.
+ *
+ * Everything is FOUND before anything is written, because the document budget is
+ * all-or-nothing per uid: a partial erasure driven by a budget would leave an
+ * arbitrary half of a person's public content standing with no record of which
+ * half. Throws on refusal so the caller's catch keeps the watch record and the
+ * next run retries.
+ *
+ * A group with other members is handed over rather than deleted, and that
+ * decision is `runGroupHandover`'s — the same function the account-delete door
+ * drives.
+ */
+async function eraseFieldOwned(
+  io: CleanupIo,
+  uid: string,
+  /**
+   * Written-so-far, carried by the CALLER.
+   *
+   * Groups are last, so a failure there throws with the earlier categories
+   * already deleted. A count returned only on success would report that run as `0` —
+   * byte-identical to a run that wrote nothing — and the two are the opposite of
+   * each other for anyone reading the log. Same reason `HandoverSummary` counts
+   * `attempted` before the first write rather than after the last.
+   */
+  progress: { written: number },
+): Promise<number> {
+  // FIND everything first, groups included, and write nothing yet. The budget is
+  // all-or-nothing per uid, so a category that wrote before the check could make a
+  // refusal's "erased nothing" false — and the handover is the one that would,
+  // because it moves ownership and erases rows rather than only reading.
+  const plan = await io.planGroupHandover(uid);
+  const findings: CategoryFindings[] = [];
+  for (const category of FIELD_OWNED_CATEGORIES) {
+    if (category === 'groups') {
+      // Two things under one category: the groups with nobody left, which this
+      // sweep deletes, and the handover's own writes, which it only counts here.
+      findings.push({ deletePaths: plan.toDelete, arrayStrips: [] });
+      continue;
+    }
+    findings.push(await io.findFieldOwned(category, uid));
+  }
+
+  const handoverCost: CategoryFindings = {
+    // The handover's writes count against the budget even though they are not
+    // paths this loop deletes. They are writes this uid's erasure causes.
+    deletePaths: Array.from({ length: plan.handoverDocs }, (_, i) => `handover-write/${i}`),
+    arrayStrips: [],
+  };
+  const { allowed, documents } = withinDocumentBudget([...findings, handoverCost]);
+  if (!allowed) {
+    io.log.error('retentionCleanup: field-owned erasure exceeded its document budget — erasing NOTHING for this uid', {
+      uid,
+      documents,
+      hint: 'the account-level ceiling cannot see this: it counts people, and one person can own thousands of documents',
+    });
+    throw new Error(`${FIELD_OWNED_REFUSED} erasure for ${uid} would touch ${documents} documents`);
+  }
+
+  // WRITE, in category order.
+  for (let i = 0; i < FIELD_OWNED_CATEGORIES.length; i += 1) {
+    const found = findings[i];
+
+    if (FIELD_OWNED_CATEGORIES[i] === 'groups') {
+      const handover = await io.commitGroupHandover(uid);
+      if (handover.failed > 0) {
+        throw new Error(`${FIELD_OWNED_REFUSED} group handover failed for ${handover.failed} group(s)`);
+      }
+      // A group can EMPTY between the plan and here — its last other member
+      // left — and then it is a group this run must delete but never budgeted
+      // or resolved paths for. Stop rather than delete it unbudgeted: the watch
+      // record survives, `users/{uid}` is untouched, and the next run plans it
+      // as empty from the start. One extra run, and it converges.
+      const planned = new Set(found.deletePaths.map(groupIdOf));
+      const late = handover.toDeleteIds.filter((groupId) => !planned.has(groupId));
+      if (late.length > 0) {
+        io.log.error('retentionCleanup: a group emptied between the plan and the write — stopping so the next run plans it', {
+          uid,
+          groupIds: late,
+        });
+        throw new Error(`${FIELD_OWNED_REFUSED} ${late.length} group(s) emptied after the plan for ${uid}`);
+      }
+
+      // Credited only now. A group that emptied late writes NOTHING — the
+      // `delete` outcome only records the id — so crediting the estimate before
+      // the check above would have reported writes that did not happen, on the
+      // one path where the count is read by a caller that failed.
+      progress.written += plan.handoverDocs;
+
+      // Re-verify each group is STILL empty. Between the plan and here a member
+      // can have joined, and these paths would then include a live third party's
+      // household and progress rows.
+      const stillEmpty = new Set<string>();
+      for (const groupId of new Set(found.deletePaths.map(groupIdOf))) {
+        if (await io.isStillEmptyGroup(groupId, uid)) stillEmpty.add(groupId);
+        else io.log.info('retentionCleanup: group gained a member since the plan — not deleting', { uid, groupId });
+      }
+      await deleteAllOrThrow(io, found.deletePaths.filter((path) => stillEmpty.has(groupIdOf(path))), progress);
+      continue;
+    }
+
+    await deleteAllOrThrow(io, found.deletePaths, progress);
+    for (const strip of found.arrayStrips) {
+      await io.stripFromArray(strip.path, strip.field, uid);
+      progress.written += 1;
+    }
+  }
+  return progress.written;
+}
+
+/** What one uid's erasure did, so the summary can count it rather than infer it. */
+interface EraseOutcome {
+  readonly erased: boolean;
+  readonly fieldOwnedDocs: number;
+  /** The field-owned half refused — see the `FIELD_OWNED_REFUSED` throws in `eraseFieldOwned`. */
+  readonly fieldOwnedRefused: boolean;
+}
+
 /**
  * Erase one orphaned owner's data; never throw.
  *
- * Order is load-bearing. `publicProfiles/{uid}` goes FIRST because it lives
- * outside the `users/{uid}` path tree: once the tree is gone the uid stops
- * appearing in `listUserUids`, and a projection left behind would be
- * unreachable by any later run — publicly readable, and permanently.
+ * Order is load-bearing. `publicProfiles/{uid}` is deleted BEFORE the tree,
+ * because it lives outside the `users/{uid}` path tree: once the tree is gone
+ * the uid stops appearing in `listUserUids`, and a projection left behind would
+ * be unreachable by any later run — publicly readable, and permanently.
  *
  * The watch record goes LAST, and only after both succeeded. A failure while
  * ERASING leaves the record in place with its original `firstSeenAt`, and the
@@ -529,13 +781,26 @@ async function collectOrphanedUserData(io: CleanupIo, nowMs: number): Promise<{
  * restarting a three-day clock. A failure deleting the RECORD itself is a
  * different case with a different outcome — see that catch block.
  */
-async function eraseOrphanedUserData(io: CleanupIo, uid: string): Promise<boolean> {
+async function eraseOrphanedUserData(io: CleanupIo, uid: string): Promise<EraseOutcome> {
+  const progress = { written: 0 };
+  let fieldOwnedRefused = false;
   try {
+    // The field-owned half goes FIRST, and inside this try. It is the half that
+    // is publicly attributable — reviews and comments carry the author's name in
+    // a feed anyone can read — and a failure here must keep the watch record so
+    // the next run retries, rather than erasing the private half and reporting
+    // done.
+    await eraseFieldOwned(io, uid, progress);
     await io.deleteDocs([`publicProfiles/${uid}`]);
     await io.deleteUserTree(uid);
   } catch (err) {
     io.log.error('retentionCleanup: orphan data erase failed, watch record kept for retry', { uid, err });
-    return false;
+    // A refusal and an IO failure both land here, and they are different events:
+    // the first is a decision this run made, the second is a thing that broke.
+    fieldOwnedRefused = err instanceof Error && err.message.startsWith(FIELD_OWNED_REFUSED);
+    // `progress.written` is what LANDED before the throw, not zero — groups are
+    // last, so a failure there leaves the earlier categories already deleted.
+    return { erased: false, fieldOwnedDocs: progress.written, fieldOwnedRefused };
   }
   try {
     await io.deleteDocs([`orphanWatch/${uid}`]);
@@ -547,7 +812,7 @@ async function eraseOrphanedUserData(io: CleanupIo, uid: string): Promise<boolea
     // failure, holding nothing but a timestamp.
     io.log.error('retentionCleanup: orphan data erased but watch record survived', { uid, err });
   }
-  return true;
+  return { erased: true, fieldOwnedDocs: progress.written, fieldOwnedRefused };
 }
 
 /**
@@ -752,8 +1017,13 @@ export async function runRetentionCleanup(io: CleanupIo): Promise<CleanupSummary
     });
   }
   let erasedOrphanDataUids = 0;
+  let fieldOwnedDocs = 0;
+  let fieldOwnedRefused = 0;
   for (const uid of erasableUids) {
-    if (await eraseOrphanedUserData(io, uid)) erasedOrphanDataUids += 1;
+    const outcome = await eraseOrphanedUserData(io, uid);
+    if (outcome.erased) erasedOrphanDataUids += 1;
+    fieldOwnedDocs += outcome.fieldOwnedDocs;
+    if (outcome.fieldOwnedRefused) fieldOwnedRefused += 1;
   }
   // Stamping and clearing run whether or not the ceiling refused: both are
   // non-destructive bookkeeping, and a refused run that also skipped them would
@@ -813,6 +1083,9 @@ export async function runRetentionCleanup(io: CleanupIo): Promise<CleanupSummary
     // orphanDataSkippedAuthBatches is 0; otherwise it means "we do not know".
     orphanDataUids: orphanData.erase.length,
     erasedOrphanDataUids,
+    fieldOwnedUids: erasableUids.length,
+    fieldOwnedDocs,
+    fieldOwnedRefused,
     checkedUserRoots: orphanData.checkedUserRoots,
     // Absent uids seen for the FIRST time this run: recorded, deliberately not
     // erased. A non-zero here with a zero above is the healthy steady state on

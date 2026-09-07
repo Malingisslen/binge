@@ -7,8 +7,8 @@
  * against a real Firestore emulator is to drive it through a port the test can
  * implement with the client SDK.
  *
- * Both doors run THIS function. The callable passes an Admin-SDK port; the
- * retention sweep will pass its own. Neither re-derives who inherits.
+ * Both doors run THIS function, through the one Admin-SDK port in
+ * `adminIo.ts`. Neither re-derives who inherits.
  */
 
 import { buildHandoverUpdate, clearsAddedBy, type MemberRow } from './logic';
@@ -127,6 +127,16 @@ export interface HandoverSummary {
   ownedGroups: number;
   handedOver: number;
   toDelete: number;
+  /**
+   * WHICH groups resolved to `delete`, not just how many.
+   *
+   * The retention sweep plans its deletions before this runs, so a group that
+   * loses its last other member in between is not in that plan and would be
+   * left standing forever: its owner's Auth account and `users/{uid}` tree are
+   * erased in the same run, after which the uid never appears in
+   * `listUserUids()` again. The ids let the caller notice.
+   */
+  toDeleteIds: string[];
   noop: number;
   raced: number;
   failed: number;
@@ -161,6 +171,7 @@ export async function runGroupHandover(
     ownedGroups: groupIds.length,
     handedOver: 0,
     toDelete: 0,
+    toDeleteIds: [],
     noop: 0,
     raced: 0,
     failed: 0,
@@ -175,7 +186,11 @@ export async function runGroupHandover(
       const members = await io.readMembers(groupId);
       const outcome = buildHandoverUpdate(group.ownerUid, leavingUid, members, group.memberUids);
       if (outcome.kind === 'noop') { summary.noop += 1; continue; }
-      if (outcome.kind === 'delete') { summary.toDelete += 1; continue; }
+      if (outcome.kind === 'delete') {
+        summary.toDelete += 1;
+        summary.toDeleteIds.push(groupId);
+        continue;
+      }
 
       // The erasure runs BEFORE the swap, and the order is load-bearing in the
       // failing direction. Both doors find a group by `ownerUid` or by

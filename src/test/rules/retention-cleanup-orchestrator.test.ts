@@ -2,9 +2,16 @@ import { afterAll, beforeAll, beforeEach, describe, it, expect } from 'vitest';
 import { initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
 import {
   collection, collectionGroup, deleteDoc, doc, documentId, getDoc, getDocs,
-  limit, orderBy, query, setDoc, startAfter, Timestamp, writeBatch,
+  limit, orderBy, query, setDoc, startAfter, updateDoc, where, arrayRemove,
+  deleteField, serverTimestamp, Timestamp, writeBatch,
   type Firestore, type Query,
 } from 'firebase/firestore';
+
+import { runGroupHandover, type HandoverIo } from '../../../functions/src/groupHandover/runHandover';
+import {
+  FIELD_OWNED_CATEGORIES,
+  FIELD_OWNED_MAX_DOCS_PER_UID,
+} from '../../../functions/src/retentionCleanup/fieldOwned';
 
 import {
   runRetentionCleanup,
@@ -267,8 +274,179 @@ function makeIo(db: Firestore, auth: FakeAuth, overrides: Partial<CleanupIo> = {
       await batch.commit();
     },
 
+    // BIN-1063 steg 3 — the field-owned half. One query per category, mirroring
+    // the Admin port. `groups` is not asked for here; the handover owns it.
+    findFieldOwned: async (category, uid) => {
+      const pathsOf = async (q: Query) => (await getDocs(q)).docs.map((d) => d.ref.path);
+      switch (category) {
+        case 'reviews': {
+          const own = await getDocs(query(collection(db, 'reviews'), where('uid', '==', uid)));
+          const nested: string[] = [];
+          for (const d of own.docs) {
+            for (const sub of ['likes', 'comments']) {
+              nested.push(...(await getDocs(collection(d.ref, sub))).docs.map((x) => x.ref.path));
+            }
+          }
+          return { deletePaths: [...nested, ...own.docs.map((d) => d.ref.path)], arrayStrips: [] };
+        }
+        case 'foreignReviewUgc':
+          return {
+            deletePaths: [
+              ...await pathsOf(query(collectionGroup(db, 'likes'), where('uid', '==', uid))),
+              ...await pathsOf(query(collectionGroup(db, 'comments'), where('uid', '==', uid))),
+            ],
+            arrayStrips: [],
+          };
+        case 'reactions':
+          return {
+            deletePaths: await pathsOf(query(collectionGroup(db, 'reactions'), where('uid', '==', uid))),
+            arrayStrips: [],
+          };
+        case 'lists': {
+          const edited = await getDocs(query(collection(db, 'lists'), where('editors', 'array-contains', uid)));
+          return {
+            deletePaths: await pathsOf(query(collection(db, 'lists'), where('uid', '==', uid))),
+            arrayStrips: edited.docs
+              .filter((d) => d.data().uid !== uid)
+              .map((d) => ({ path: d.ref.path, field: 'editors' })),
+          };
+        }
+        case 'sessions': {
+          const hosted = await getDocs(query(collection(db, 'sessions'), where('hostUid', '==', uid)));
+          const nested: string[] = [];
+          for (const d of hosted.docs) {
+            for (const sub of ['participants', 'swipes']) {
+              nested.push(...(await getDocs(collection(d.ref, sub))).docs.map((x) => x.ref.path));
+            }
+          }
+          return { deletePaths: [...nested, ...hosted.docs.map((d) => d.ref.path)], arrayStrips: [] };
+        }
+        case 'groups':
+          return { deletePaths: [], arrayStrips: [] };
+      }
+    },
+
+    stripFromArray: async (path, field, uid) => {
+      await updateDoc(doc(db, path), { [field]: arrayRemove(uid) });
+    },
+
+    // Split READ from WRITE, so the document budget sees the handover's cost
+    // before anything moves. Drives the SAME `runGroupHandover` both production
+    // doors drive — no second election here.
+    planGroupHandover: async (uid) => {
+      const owned = await getDocs(query(collection(db, 'groups'), where('ownerUid', '==', uid)));
+      const toDelete: string[] = [];
+      let handoverDocs = 0;
+      for (const g of owned.docs) {
+        const memberUids = (g.data().memberUids as string[] | undefined) ?? [];
+        const paths = await groupSubtreePaths(db, g.ref);
+        if (memberUids.filter((m) => m !== uid).length === 0) {
+          toDelete.push(...paths, g.ref.path);
+          continue;
+        }
+        handoverDocs += 1 + paths.filter((path) => path.endsWith('/' + uid)).length;
+      }
+      return { toDelete, handoverDocs };
+    },
+
+    commitGroupHandover: async (uid) => {
+      const summary = await runGroupHandover(handoverIo(db), uid);
+      return { failed: summary.failed, toDeleteIds: summary.toDeleteIds };
+    },
+
+    isStillEmptyGroup: async (groupId, uid) => {
+      const snap = await getDoc(doc(db, 'groups', groupId));
+      if (!snap.exists()) return false;
+      const memberUids = (snap.data().memberUids as string[] | undefined) ?? [];
+      return memberUids.every((m) => m === uid);
+    },
+
     ...overrides,
   };
+}
+
+/**
+ * The handover port, client-SDK. Deliberately a second implementation of the
+ * PORT and not of the decision: `runGroupHandover` is the same function both
+ * production doors drive, so no election is re-derived here.
+ */
+function handoverIo(db: Firestore): HandoverIo {
+  return {
+    log: { info: () => {}, error: () => {} },
+    ownedGroupIds: async (uid) =>
+      (await getDocs(query(collection(db, 'groups'), where('ownerUid', '==', uid)))).docs.map((d) => d.id),
+    readGroup: async (groupId) => {
+      const snap = await getDoc(doc(db, 'groups', groupId));
+      if (!snap.exists()) return null;
+      return {
+        ownerUid: (snap.data().ownerUid as string | undefined) ?? '',
+        memberUids: (snap.data().memberUids as string[] | undefined) ?? [],
+      };
+    },
+    readMembers: async (groupId) =>
+      (await getDocs(collection(db, 'groups', groupId, 'members'))).docs.map((x) => {
+        const raw = x.data().joinedAt;
+        return { uid: x.id, joinedAtMs: raw instanceof Timestamp ? raw.toMillis() : null };
+      }),
+    readWatchlist: async (groupId) =>
+      (await getDocs(collection(db, 'groups', groupId, 'watchlist'))).docs
+        .map((x) => ({ id: x.id, addedBy: x.data().addedBy })),
+    readSessionHistory: async (groupId) =>
+      (await getDocs(collection(db, 'groups', groupId, 'sessionHistory'))).docs.map((x) => ({
+        id: x.id,
+        pickedByUid: x.data().pickedByUid,
+        participantUids: (x.data().participantUids as string[] | undefined) ?? [],
+      })),
+    claimOwnership: async (groupId, expectedOwnerUid, write) => {
+      const ref = doc(db, 'groups', groupId);
+      const fresh = await getDoc(ref);
+      if (!fresh.exists() || fresh.data().ownerUid !== expectedOwnerUid) return false;
+      await updateDoc(ref, {
+        ownerUid: write.ownerUid,
+        memberUids: write.memberUids,
+        updatedAt: serverTimestamp(),
+      });
+      return true;
+    },
+    eraseMemberTraces: async (groupId, leavingUid, erasure) => {
+      const batch = writeBatch(db);
+      batch.delete(doc(db, 'groups', groupId, 'members', leavingUid));
+      batch.delete(doc(db, 'groups', groupId, 'household', leavingUid));
+      batch.delete(doc(db, 'groups', groupId, 'joinAttempts', leavingUid));
+      for (const itemId of erasure.itemIds) {
+        batch.delete(doc(db, 'groups', groupId, 'watchlist', itemId, 'progress', leavingUid));
+      }
+      for (const itemId of erasure.clearAddedByIds) {
+        batch.update(doc(db, 'groups', groupId, 'watchlist', itemId), { addedBy: deleteField() });
+      }
+      for (const rowId of erasure.clearPickedByIds) {
+        batch.update(doc(db, 'groups', groupId, 'sessionHistory', rowId), { pickedByUid: deleteField() });
+      }
+      for (const rowId of erasure.dropParticipantIds) {
+        batch.update(doc(db, 'groups', groupId, 'sessionHistory', rowId), {
+          participantUids: arrayRemove(leavingUid),
+        });
+      }
+      await batch.commit();
+    },
+  };
+}
+
+/** Every document under one group, excluding the group document itself. */
+async function groupSubtreePaths(
+  db: Firestore,
+  groupRef: ReturnType<typeof doc>,
+): Promise<string[]> {
+  const paths: string[] = [];
+  for (const sub of ['members', 'household', 'sessionHistory', 'joinAttempts']) {
+    paths.push(...(await getDocs(collection(groupRef, sub))).docs.map((d) => d.ref.path));
+  }
+  const items = await getDocs(collection(groupRef, 'watchlist'));
+  for (const item of items.docs) {
+    paths.push(...(await getDocs(collection(item.ref, 'progress'))).docs.map((d) => d.ref.path));
+  }
+  paths.push(...items.docs.map((d) => d.ref.path));
+  return paths;
 }
 
 async function exists(db: Firestore, path: string): Promise<boolean> {
@@ -720,7 +898,354 @@ async function seedOrphanData(db: Firestore): Promise<void> {
   }
 }
 
+/**
+ * BIN-1063 steg 3 — the FIELD-owned half, seeded for `consoled` (absent from
+ * Auth) AND for `keeper` (live).
+ *
+ * The live sibling in every category is the point. A test that only checks the
+ * target is gone cannot tell "filtered by uid" from "wiped the collection", and
+ * the sweep runs on the Admin SDK where no rule would stop the second.
+ */
+async function seedFieldOwned(db: Firestore): Promise<void> {
+  for (const uid of ['consoled', 'keeper']) {
+    await setDoc(doc(db, 'reviews', `rev-${uid}`), { uid, text: 'min recension' });
+    await setDoc(doc(db, 'reviews', `rev-${uid}`, 'likes', 'someone'), { uid: 'someone' });
+    await setDoc(doc(db, 'reviews', `rev-${uid}`, 'comments', 'c1'), { uid: 'someone' });
+    // UGC on SOMEBODY ELSE'S review: owned by the field, not by the path.
+    await setDoc(doc(db, 'reviews', 'rev-stranger', 'likes', uid), { uid });
+    await setDoc(doc(db, 'reviews', 'rev-stranger', 'comments', `c-${uid}`), { uid });
+    await setDoc(doc(db, 'episodeReactions', 'tv_1399_1_2', 'reactions', `r-${uid}`), { uid });
+    await setDoc(doc(db, 'lists', `list-${uid}`), { uid, editors: [uid] });
+    await setDoc(doc(db, 'sessions', `sess-${uid}`), { hostUid: uid });
+    await setDoc(doc(db, 'sessions', `sess-${uid}`, 'participants', uid), { uid });
+    await setDoc(doc(db, 'sessions', `sess-${uid}`, 'swipes', 'movie_42'), { votes: {} });
+  }
+  await setDoc(doc(db, 'reviews', 'rev-stranger'), { uid: 'stranger', text: 'annans' });
+  // A list a stranger OWNS and the departing account merely co-edits. Deleting it
+  // would destroy a third party's data over somebody else's erasure.
+  await setDoc(doc(db, 'lists', 'coedited'), { uid: 'stranger', editors: ['stranger', 'consoled'] });
+  // A group with a remaining member: HANDED OVER, never deleted (Malin,
+  // 2026-09-06). And one with nobody left, which is this sweep's to delete.
+  await setDoc(doc(db, 'groups', 'shared'), { ownerUid: 'consoled', memberUids: ['consoled', 'keeper'] });
+  await setDoc(doc(db, 'groups', 'shared', 'members', 'consoled'), { uid: 'consoled', joinedAt: ts(NOW - 2000) });
+  await setDoc(doc(db, 'groups', 'shared', 'members', 'keeper'), { uid: 'keeper', joinedAt: ts(NOW - 1000) });
+  await setDoc(doc(db, 'groups', 'shared', 'watchlist', 'movie_7'), { addedBy: 'consoled' });
+  await setDoc(doc(db, 'groups', 'solo'), { ownerUid: 'consoled', memberUids: ['consoled'] });
+  await setDoc(doc(db, 'groups', 'solo', 'members', 'consoled'), { uid: 'consoled', joinedAt: ts(NOW - 2000) });
+}
+
 const ONE_DAY = 24 * 60 * 60 * 1000;
+
+describe('retentionCleanup orchestrator — the FIELD-owned half (BIN-1063 steg 3)', () => {
+  /** Run twice: the first observes, the second erases once the floor has elapsed. */
+  async function sweepPastTheFloor(db: Firestore) {
+    const auth = makeAuth(ORPHAN_DATA_ACCOUNTS);
+    await seedOrphanData(db);
+    await seedFieldOwned(db);
+    await runRetentionCleanup(makeIo(db, auth));
+    const later = NOW + ORPHAN_DATA_MIN_OBSERVED_MS + ONE_DAY;
+    return runRetentionCleanup(makeIo(db, auth, { now: () => later }));
+  }
+
+  // Each row asserts the departed account's document is gone AND the live
+  // account's sibling in the SAME collection is untouched. That pair is what
+  // separates "filtered by uid" from "wiped the collection" — and the sweep runs
+  // on the Admin SDK, where no rule would stop the second.
+  it.each([
+    ['reviews', 'reviews/rev-consoled', 'reviews/rev-keeper'],
+    ['a review own likes', 'reviews/rev-consoled/likes/someone', 'reviews/rev-keeper/likes/someone'],
+    ['likes on a stranger review', 'reviews/rev-stranger/likes/consoled', 'reviews/rev-stranger/likes/keeper'],
+    ['comments on a stranger review', 'reviews/rev-stranger/comments/c-consoled', 'reviews/rev-stranger/comments/c-keeper'],
+    ['episode reactions', 'episodeReactions/tv_1399_1_2/reactions/r-consoled', 'episodeReactions/tv_1399_1_2/reactions/r-keeper'],
+    ['owned lists', 'lists/list-consoled', 'lists/list-keeper'],
+    ['hosted sessions', 'sessions/sess-consoled', 'sessions/sess-keeper'],
+    ['session participants', 'sessions/sess-consoled/participants/consoled', 'sessions/sess-keeper/participants/keeper'],
+  ])('erases %s for the departed account and leaves the live one alone', async (_label, gone, kept) => {
+    const db = adminLikeDb();
+    await sweepPastTheFloor(db);
+
+    expect(await exists(db, gone), gone + ' should be erased').toBe(false);
+    expect(await exists(db, kept), kept + ' belongs to a LIVE account').toBe(true);
+  });
+
+  // A roster requirement OUTSIDE the table: the rows above are hand-written, so
+  // a category added to the run with no row here would be invisible. This ties
+  // the set to the exported list the run actually walks. `groups` has its own
+  // two cases below — handover and delete are different outcomes and one row
+  // could not express both.
+  it('the table is checked against the list the run walks', () => {
+    expect([...FIELD_OWNED_CATEGORIES]).toEqual([
+      'reviews', 'foreignReviewUgc', 'reactions', 'lists', 'sessions', 'groups',
+    ]);
+  });
+
+  it('strips the departed uid from a list a stranger owns, and keeps the list', async () => {
+    const db = adminLikeDb();
+    await sweepPastTheFloor(db);
+
+    const coedited = await getDoc(doc(db, 'lists', 'coedited'));
+    expect(coedited.exists(), 'a third party list must survive').toBe(true);
+    expect(coedited.data()?.editors).toEqual(['stranger']);
+  });
+
+  it('hands over a group with a remaining member instead of deleting it', async () => {
+    const db = adminLikeDb();
+    await sweepPastTheFloor(db);
+
+    const shared = await getDoc(doc(db, 'groups', 'shared'));
+    expect(shared.exists(), 'the group must survive for the member still in it').toBe(true);
+    expect(shared.data()?.ownerUid).toBe('keeper');
+    expect(await exists(db, 'groups/shared/members/consoled')).toBe(false);
+    expect(await exists(db, 'groups/shared/members/keeper')).toBe(true);
+    // The shared list survives; only the note about who added it goes.
+    const item = await getDoc(doc(db, 'groups', 'shared', 'watchlist', 'movie_7'));
+    expect(item.exists()).toBe(true);
+    expect('addedBy' in (item.data() ?? {})).toBe(false);
+  });
+
+  it('deletes a group with nobody left, because a successor cannot be invented', async () => {
+    const db = adminLikeDb();
+    await sweepPastTheFloor(db);
+
+    expect(await exists(db, 'groups/solo')).toBe(false);
+    expect(await exists(db, 'groups/solo/members/consoled')).toBe(false);
+  });
+
+  // The re-verify, driven for real: `solo` is empty when the plan is made, and
+  // somebody joins before the write. Without the re-check this run would delete
+  // a LIVE third party's group — the worst outcome available to the sweep, and
+  // the only one nothing else guards.
+  it('spares a group that gained a member between the plan and the write', async () => {
+    const db = adminLikeDb();
+    const auth = makeAuth(ORPHAN_DATA_ACCOUNTS);
+    await seedOrphanData(db);
+    await seedFieldOwned(db);
+    await runRetentionCleanup(makeIo(db, auth));
+    const later = NOW + ORPHAN_DATA_MIN_OBSERVED_MS + ONE_DAY;
+
+    // The join lands in the real window: after the plan read the group, before
+    // the write phase asks whether it is still empty.
+    const io = makeIo(db, auth, { now: () => later });
+    const summary = await runRetentionCleanup({
+      ...io,
+      commitGroupHandover: async (uid) => {
+        await setDoc(doc(db, 'groups', 'solo'), { ownerUid: 'consoled', memberUids: ['consoled', 'latecomer'] });
+        await setDoc(doc(db, 'groups', 'solo', 'members', 'latecomer'), { uid: 'latecomer', joinedAt: ts(later) });
+        return io.commitGroupHandover(uid);
+      },
+    });
+
+    // Not refused — the run finishes; it just leaves that one group standing.
+    expect(summary.fieldOwnedRefused).toBe(0);
+    expect(await exists(db, 'groups/solo')).toBe(true);
+    expect(await exists(db, 'groups/solo/members/latecomer')).toBe(true);
+  });
+
+  it('counts what it did, so a zero cannot mean three things', async () => {
+    const db = adminLikeDb();
+    const summary = await sweepPastTheFloor(db);
+
+    expect(summary.fieldOwnedUids).toBe(1);
+    expect(summary.fieldOwnedDocs).toBeGreaterThan(0);
+    expect(summary.fieldOwnedRefused).toBe(0);
+  });
+
+  // The account-level ceiling counts PEOPLE. This budget counts DOCUMENTS, which
+  // is the blast radius of a CORRECT pick — one account can own thousands of
+  // reactions. All-or-nothing per uid: a partial erasure driven by a budget would
+  // leave an arbitrary half standing with no record of which half.
+  it('refuses the whole uid when the document budget is exceeded, and keeps the watch record', async () => {
+    const db = adminLikeDb();
+    const auth = makeAuth(ORPHAN_DATA_ACCOUNTS);
+    await seedOrphanData(db);
+    await seedFieldOwned(db);
+    await runRetentionCleanup(makeIo(db, auth));
+    const later = NOW + ORPHAN_DATA_MIN_OBSERVED_MS + ONE_DAY;
+
+    const summary = await runRetentionCleanup(makeIo(db, auth, {
+      now: () => later,
+      findFieldOwned: async () => ({
+        deletePaths: Array.from({ length: FIELD_OWNED_MAX_DOCS_PER_UID + 1 }, (_, i) => 'reviews/x' + i),
+        arrayStrips: [],
+      }),
+    }));
+
+    expect(summary.fieldOwnedRefused).toBe(1);
+    expect(summary.erasedOrphanDataUids).toBe(0);
+    // Nothing was erased, in EITHER half — and the watch record survives, so the
+    // next run retries rather than restarting the observation clock.
+    expect(await exists(db, 'reviews/rev-consoled')).toBe(true);
+    expect(await exists(db, 'users/consoled')).toBe(true);
+    expect(await exists(db, 'orphanWatch/consoled')).toBe(true);
+  });
+
+  // The erasure is all-or-nothing per uid, so a failed chunk must THROW here.
+  // `deleteInBatches` — right for the TTL sweeps, which leave the residue for
+  // tomorrow — would swallow it and let this run go on to delete `users/{uid}`
+  // and the watch record, after which the uid never appears in `listUserUids()`
+  // again and the surviving documents are unreachable by any later run.
+  it('aborts the whole uid when a delete chunk fails, rather than swallowing it', async () => {
+    const db = adminLikeDb();
+    const auth = makeAuth(ORPHAN_DATA_ACCOUNTS);
+    await seedOrphanData(db);
+    await seedFieldOwned(db);
+    await runRetentionCleanup(makeIo(db, auth));
+    const later = NOW + ORPHAN_DATA_MIN_OBSERVED_MS + ONE_DAY;
+
+    // `reviews` is FIRST in the category order, so this fires before anything
+    // else has been written.
+    const base = makeIo(db, auth, { now: () => later });
+    const summary = await runRetentionCleanup({
+      ...base,
+      deleteDocs: async (paths) => {
+        if (paths.some((path) => path.startsWith('reviews/rev-consoled'))) {
+          throw new Error('chunk commit failed');
+        }
+        return base.deleteDocs(paths);
+      },
+    });
+
+    // An IO failure, not a decision this run made — so NOT counted as refused.
+    expect(summary.fieldOwnedRefused).toBe(0);
+    expect(summary.erasedOrphanDataUids).toBe(0);
+    // The uid stays on the books: private half untouched, watch record alive,
+    // so the next run picks it up again.
+    expect(await exists(db, 'users/consoled')).toBe(true);
+    expect(await exists(db, 'orphanWatch/consoled')).toBe(true);
+  });
+
+  // A LATER chunk can fail after an earlier one committed. A count returned only
+  // on the normal path is lost to the throw, and the run reports zero documents
+  // for an erasure that deleted some — the ambiguity the whole counter exists to
+  // remove.
+  it('counts the chunks that landed before a later chunk failed', async () => {
+    const db = adminLikeDb();
+    const auth = makeAuth(ORPHAN_DATA_ACCOUNTS);
+    await seedOrphanData(db);
+    await seedFieldOwned(db);
+    await runRetentionCleanup(makeIo(db, auth));
+    const later = NOW + ORPHAN_DATA_MIN_OBSERVED_MS + ONE_DAY;
+
+    await setDoc(doc(db, 'reviews', 'chunk-a'), { uid: 'consoled' });
+    await setDoc(doc(db, 'reviews', 'chunk-b'), { uid: 'consoled' });
+    const base = makeIo(db, auth, { now: () => later, deleteBatchSize: 1 });
+    let seen = 0;
+    const summary = await runRetentionCleanup({
+      ...base,
+      // One document per chunk, so the second call is a chunk that follows a
+      // COMMITTED one — not the first-chunk case the sibling test drives.
+      findFieldOwned: async (category) =>
+        category === 'reviews'
+          ? { deletePaths: ['reviews/chunk-a', 'reviews/chunk-b'], arrayStrips: [] }
+          : { deletePaths: [], arrayStrips: [] },
+      deleteDocs: async (paths) => {
+        if (paths[0]?.startsWith('reviews/chunk-')) {
+          seen += 1;
+          if (seen === 2) throw new Error('second chunk failed');
+          return base.deleteDocs(paths);
+        }
+        return base.deleteDocs(paths);
+      },
+    });
+
+    // One landed, one did not. Neither 0 nor 2.
+    expect(summary.fieldOwnedDocs).toBe(1);
+    expect(await exists(db, 'reviews/chunk-a')).toBe(false);
+    expect(await exists(db, 'reviews/chunk-b')).toBe(true);
+    expect(await exists(db, 'users/consoled')).toBe(true);
+    expect(await exists(db, 'orphanWatch/consoled')).toBe(true);
+  });
+
+  // Groups are LAST in the order, so by the time a handover fails the earlier
+  // categories are already written. The property that holds is not "nothing was
+  // erased" — it is that the uid stays ON THE BOOKS: the private half is not
+  // touched, the watch record survives, and every write is idempotent, so the
+  // retry converges instead of stranding what is left.
+  it('keeps the uid retryable when the group handover fails', async () => {
+    const db = adminLikeDb();
+    const auth = makeAuth(ORPHAN_DATA_ACCOUNTS);
+    await seedOrphanData(db);
+    await seedFieldOwned(db);
+    await runRetentionCleanup(makeIo(db, auth));
+    const later = NOW + ORPHAN_DATA_MIN_OBSERVED_MS + ONE_DAY;
+
+    const summary = await runRetentionCleanup(makeIo(db, auth, {
+      now: () => later,
+      commitGroupHandover: async () => ({ failed: 1, toDeleteIds: [] }),
+    }));
+
+    expect(summary.erasedOrphanDataUids).toBe(0);
+    // The private half is untouched and the watch record survives, which is what
+    // brings the uid back on the next run.
+    expect(await exists(db, 'users/consoled')).toBe(true);
+    expect(await exists(db, 'users/consoled/watchlist/movie_42')).toBe(true);
+    expect(await exists(db, 'orphanWatch/consoled')).toBe(true);
+    // And the group itself is untouched: the failure is reported before anything
+    // under it is deleted.
+    expect(await exists(db, 'groups/shared')).toBe(true);
+    // But the earlier categories ARE gone, and the count says so. A zero here
+    // would read exactly like a run that wrote nothing, which is the opposite
+    // of what happened.
+    expect(summary.fieldOwnedDocs).toBeGreaterThan(0);
+    expect(await exists(db, 'reviews/rev-consoled')).toBe(false);
+  });
+
+  // The mirror of the re-verify. The plan snapshots which groups are empty; a
+  // group that loses its last OTHER member after that is not in the plan, and
+  // `runGroupHandover` deliberately deletes nothing. Without the stop it would
+  // stand forever: this same run erases `users/{uid}` moments later, and the uid
+  // never appears in `listUserUids()` again.
+  it('stops when a group empties between the plan and the write', async () => {
+    const db = adminLikeDb();
+    const auth = makeAuth(ORPHAN_DATA_ACCOUNTS);
+    await seedOrphanData(db);
+    await seedFieldOwned(db);
+    await runRetentionCleanup(makeIo(db, auth));
+    const later = NOW + ORPHAN_DATA_MIN_OBSERVED_MS + ONE_DAY;
+
+    // `shared` HAS a survivor at plan time, so it is not in `plan.toDelete`.
+    // Commit time reports it as a delete: the survivor left in between.
+    const summary = await runRetentionCleanup(makeIo(db, auth, {
+      now: () => later,
+      // Silence every other category, so the ONLY thing that could show up in
+      // `fieldOwnedDocs` is the handover's estimate. A group that empties late
+      // writes nothing — the `delete` outcome only records the id — so crediting
+      // the estimate here would report writes that never happened.
+      findFieldOwned: async () => ({ deletePaths: [], arrayStrips: [] }),
+      commitGroupHandover: async () => ({ failed: 0, toDeleteIds: ['shared'] }),
+    }));
+
+    expect(summary.fieldOwnedDocs).toBe(0);
+    expect(summary.fieldOwnedRefused).toBe(1);
+    expect(summary.erasedOrphanDataUids).toBe(0);
+    // Untouched and retryable: the next run plans `shared` as empty from the
+    // start, budgets it, and deletes it with the re-verify in place.
+    expect(await exists(db, 'groups/shared')).toBe(true);
+    expect(await exists(db, 'users/consoled')).toBe(true);
+    expect(await exists(db, 'orphanWatch/consoled')).toBe(true);
+  });
+
+  // The negative side of the same check: an id the plan ALREADY carries is the
+  // ordinary empty-group case and must not trip the stop.
+  it('does not stop when the commit only repeats a group the plan already had', async () => {
+    const db = adminLikeDb();
+    const auth = makeAuth(ORPHAN_DATA_ACCOUNTS);
+    await seedOrphanData(db);
+    await seedFieldOwned(db);
+    // `solo` is seeded with nobody but the departing owner, so it is empty at
+    // PLAN time and the commit is only repeating what the plan already said.
+    await runRetentionCleanup(makeIo(db, auth));
+    const later = NOW + ORPHAN_DATA_MIN_OBSERVED_MS + ONE_DAY;
+
+    const summary = await runRetentionCleanup(makeIo(db, auth, {
+      now: () => later,
+      commitGroupHandover: async () => ({ failed: 0, toDeleteIds: ['solo'] }),
+    }));
+
+    expect(summary.fieldOwnedRefused).toBe(0);
+    expect(await exists(db, 'groups/solo')).toBe(false);
+  });
+});
 
 describe('retentionCleanup orchestrator — data whose owner is gone from Auth (BIN-1023)', () => {
   it('records a first observation and erases NOTHING on that run', async () => {

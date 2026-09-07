@@ -23,8 +23,8 @@ import { runGroupHandover, type HandoverIo } from '../../../functions/src/groupH
  * against the emulator. The loop under test is the real one.
  *
  * The emulator runs with permissive rules on purpose — in production this runs
- * inside a callable on the Admin SDK, which bypasses rules entirely. What the
- * RULES permit a client to do is `firestore-rules.test.ts`'s job, and the point
+ * on the Admin SDK, which bypasses rules entirely. What the RULES permit a
+ * client to do is `firestore-rules.test.ts`'s job, and the point
  * of the callable is precisely that the client may not do this write at all.
  *
  * NOT proven here: the transactional half of `claimOwnership`. The port's

@@ -304,7 +304,7 @@ describe('refusalForHandover — the caller must not fall through', () => {
   it('takes the uid from request.auth and refuses without it', () => {
     expect(ENTRY).toContain('const uid = request.auth?.uid;');
     expect(ENTRY).toMatch(/if \(!uid\) throw new HttpsError\('unauthenticated'/);
-    expect(ENTRY).toContain('runGroupHandover(adminIo(), uid)');
+    expect(ENTRY).toContain('runGroupHandover(adminHandoverIo(getFirestore(), logger), uid)');
   });
 });
 

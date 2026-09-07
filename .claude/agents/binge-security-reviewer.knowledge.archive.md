@@ -10599,3 +10599,81 @@ unerased on a surviving group; the erasure unreachable after the claim) and one 
 violation (map files staged with the feature). Rounds 4-6 found prose only, all non-blocking,
 all taken voluntarily. Both code defects were the same question — "after this write, what still
 finds this thing?" — and neither was visible from any single file.
+
+## 2026-09-07 — BIN-1063 steg 3 bunt 3 (field-owned retention sweep + group handover's third door): one unguarded transition direction in the plan/commit split
+
+Reviewed staged diff: `functions/src/retentionCleanup/{fieldOwned.ts,fieldOwned.test.ts,
+runCleanup.ts,index.ts}`, `functions/src/groupHandover/{adminIo.ts,index.ts,logic.test.ts}`,
+`src/test/rules/retention-cleanup-orchestrator.test.ts`, `docs/data-retention-policy.md`,
+`.claude/rules/accepted-deviations.md`, `docs/role-responsibilities.md`,
+`docs/org/ownership-map.json`. Not staged: `docs/workflow-map.html` +
+`docs/workflow-map-content-baseline.json` (modified, unstaged — out of scope for this review).
+
+**Finding (blocking).** `eraseFieldOwned` (`runCleanup.ts:647-711`) reads
+`planGroupHandover(uid)` ONCE at the top (empty groups → `plan.toDelete`; groups with
+survivors → an estimated `handoverDocs` cost), runs four-to-five other categories' worth of
+queries and batched deletes, and only THEN calls `commitGroupHandover(uid)`
+(`runCleanup.ts:686`), which drives a FRESH `runGroupHandover` that re-reads every owned
+group and recomputes `buildHandoverUpdate` from current state — deliberately, so a group that
+GAINED a survivor in the window is handed over correctly instead of being deleted from the
+stale plan. That direction is doubly guarded: `commitGroupHandover`'s fresh recompute AND a
+second `isStillEmptyGroup` re-check immediately before `deleteAllOrThrow` on the stale
+`toDelete` list (`runCleanup.ts:692-700`). The MIRROR direction has no guard at all: a group
+that HAD survivors at plan-time (so it was never added to `plan.toDelete`, only counted into
+`handoverDocs`) but LOSES its last other member before commit-time recomputes, inside the
+fresh `runGroupHandover`, to `buildHandoverUpdate`'s `{kind:'delete'}` outcome
+(`functions/src/groupHandover/logic.ts:111-125`) — and for that outcome
+`runGroupHandover`'s loop (`functions/src/groupHandover/runHandover.ts:170-178`) does
+`if (outcome.kind === 'delete') { summary.toDelete += 1; continue; }`: no owner swap, no
+erase, and no actual Firestore delete (deleting is deliberately the CALLER's job elsewhere in
+this codebase — see the callable's own header comment about the account cascade's owner
+branch). `eraseFieldOwned`'s caller only reads `commitGroupHandover`'s `{failed}` (not
+`toDelete`), and only ever deletes paths belonging to groups already in the STALE
+`plan.toDelete` snapshot — which this newly-empty group is not part of. Net effect: the group
+document survives forever with `ownerUid` pointing at a uid whose `users/{uid}` tree and Auth
+account are deleted moments later in the same run (`eraseOrphanedUserData`, `runCleanup.ts:
+721-751`), and which therefore never reappears in `listUserUids()` — this uid is never a
+candidate for any future retentionCleanup run again. The group (its own `members/{uid}`,
+`household/{uid}`, any watchlist/progress rows) is a permanently unreachable orphan.
+
+**Severity/impact.** Not a live-third-party leak — by construction nobody else remains a
+member when this triggers (that's exactly what makes the fresh recompute choose `'delete'`
+over `'handover'`). It is a GDPR Art. 17 completion gap: the departing user's OWN data (the
+group they created, their own household/progress rows in it) is never erased, with no
+retry path and no re-open trigger, unlike every OTHER residual in this ticket's own
+accepted-deviations entries which explicitly name their re-open condition. Requires a real
+concurrent race (another member leaving that specific group during the multi-await window
+between `planGroupHandover` and `commitGroupHandover` — on the order of several Firestore
+round-trips for the other four-to-five categories) — plausible, not contrived, and structurally
+identical in shape to the direction that WAS fixed.
+
+**Why it wasn't already covered by an accepted-deviation.** The BIN-1063 steg 3 bunt 3 entry
+in `accepted-deviations.md` documents "En grupp som far en ny medlem mellan planen och
+skrivningen raderas inte" (gains-a-member case) as the accepted/guarded residual. It says
+nothing about the loses-its-last-member case — that direction was apparently never
+considered, not decided-and-accepted.
+
+**Not re-flagged (already an accepted deviation, verified against the code):** the same
+accepted-deviations entry's claim that `handoverDocs` deliberately excludes the
+`clearAddedByIds`/`clearPickedByIds`/`dropParticipantIds` UPDATE-writes ("inte namnfälten som
+bara redigeras — de senare är få och taket är grovt") checks out — `planGroupHandover`
+(`functions/src/retentionCleanup/index.ts:308-329`) only counts paths ending `/${uid}`, which
+structurally cannot match a `watchlist/{itemId}` or `sessionHistory/{rowId}` doc id. Verified
+the undercount is real, then found it's the exact thing the entry already prices in. Do not
+re-file it.
+
+**Verified true (not just trusted):** the "SAME `runGroupHandover`, no second election"
+prose in both `docs/data-retention-policy.md` and `accepted-deviations.md` — `git diff
+--cached -- functions/src/groupHandover/index.ts` shows the callable's own hand-rolled
+`adminIo()` port deleted wholesale and replaced with `adminHandoverIo(getFirestore(),
+logger)` from the new shared `adminIo.ts`, the same constructor `retentionCleanup/index.ts`'s
+`commitGroupHandover` calls. One implementation, two callers, confirmed by diff rather than
+by the header comment saying so.
+
+No other blocking findings. Reviewed all `foreignReviewUgc`/`reviews`/`reactions`/`lists`/
+`sessions` category queries for third-party exposure: `lists`' array-strip vs. delete split
+correctly excludes the departing uid's own docs from the strip path (`d.get('uid') !== uid`
+filter) so a co-edited list is never both stripped and deleted; hosted-session deletion
+removes only sessions the departing uid HOSTED, matching the existing TTL sweep's own
+subcollection-reap shape, not a new exposure class. No `firestore.rules` changes in this diff
+(pure Admin-SDK sweep, correctly documented as bypassing rules).

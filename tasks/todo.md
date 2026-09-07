@@ -1925,7 +1925,6 @@ går genom skanningen alls.
 **Produktval som är Malins (needs-approval — kommenteras, byggs inte):**
 - BIN-1072 (TV4 Play: tre nya sportnivåer) — biljetten ställer tre frågor rakt ut, och `id`-strängarna fryses så fort de landat.
 - BIN-1073 (fyra saknade tjänster i katalogen) — vilka som ska in, och hur Cineasterna och BritBox klassas; varje tillägg är dessutom en färgtoken och ett kortnamn som väljs för hand.
-- BIN-1063 (orphan-svepets fältägda halva) — biljetten säger uttryckligen att gruppfrågan (radera vs lämna över) måste besvaras innan något byggs.
 - BIN-990 (`.claude/settings.json` når noll granskare) — öppen fråga: vidga, låt vara, eller bygg nyckelgranskningen.
 - BIN-939 (ska #4 också grinda `package.json`?) — en fråga #4 själv ska svara på.
 - BIN-189, BIN-521, BIN-170 — bär etiketten `idea`, som aldrig går in i en bunt.

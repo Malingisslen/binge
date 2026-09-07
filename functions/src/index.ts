@@ -190,13 +190,9 @@ export { communityRatingMaintain } from './communityRatings';
 export { reclaimOrphanFollows } from './reclaimOrphanFollows';
 
 // ── Retention cleanup (BIN-65) ───────────────────────────────────────────────
-// retentionCleanup: daglig scan, SJU svep → utgångna Tillsammans-sessioner (past
-// expiresAt, recursiveDelete inkl. participants/swipes), notiser >90 dagar,
-// joinAttempts >1h, släppmarkörer >30d, push-tokens vars Auth-konto är raderat
-// eller spärrat (BIN-848 — Console-bypassens enda städväg), och sedan BIN-816/875
-// två svep till som kör EFTER de fem och i ordning: Auth-konton äldre än 7 dagar
-// utan users/{uid} (en avbruten radering), och användarnamnen de lämnade efter sig.
-// Stod "FEM" här till 2026-08-16, två svep efter att de sjunde tillkom.
+// retentionCleanup: daglig scan. Vilka svep den kör, i vilken ordning, står i
+// runCleanup.ts. Ingen uppräkning här: den här meningen bar ett antal som gick
+// inaktuellt två gånger, och en tredje siffra hade gått samma väg.
 // Trösklar från docs/data-retention-policy.md. Bounded/paginerad (BIN-50-mönster).
 // Orkestreringen ligger bakom en injicerad port sedan BIN-727 (runCleanup.ts).
 export { retentionCleanup } from './retentionCleanup';

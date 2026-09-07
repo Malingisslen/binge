@@ -26230,3 +26230,177 @@ where the first finding gets re-litigated.
 
 Final state: staged `functions/src/groupHandover/logic.test.ts` = `f09126c…` (index == worktree),
 29 passed, `functions` tsc exit 0. Verdict: pass (0 blocking).
+
+## 2026-09-07 — BIN-1063 steg 3, bunt 3: retentionCleanup field-owned erasure + group handover tests
+
+Reviewed staged: `functions/src/retentionCleanup/fieldOwned.ts` (new) + its test (new, 8
+cases), `functions/src/retentionCleanup/{index,runCleanup}.ts` (the field-owned erasure
+loop `eraseFieldOwned` folded into `runCleanup.ts`, admin port additions in `index.ts`),
+`functions/src/groupHandover/{adminIo.ts (new), index.ts, runHandover.ts}`, and
+`functions/src/groupHandover/logic.test.ts` (one-line mechanical update tracking the
+`adminIo()` → `adminHandoverIo(getFirestore(), logger)` extraction — verified via
+`git diff --cached`, 2 lines changed, no assertion touched). Main new test surface:
+`src/test/rules/retention-cleanup-orchestrator.test.ts` grew from ~23 to 42 cases; the
+diff (`git diff --cached --stat`) showed only 2 deleted lines total across the whole
+staged set (an import reformat), so nothing pre-existing was weakened.
+
+Read `.claude/rules/accepted-deviations.md` in full, including the two 2026-09-07 entries
+for BIN-1063 steg 3 buntar 2 and 3 (group handover door; sweep door). Confirmed the
+"document budget is all-or-nothing", "a failed handover stops the run", "a group that
+gains/loses a member between plan and write" points are ALL listed as decided design, not
+gaps — so none of those get filed even though they're exactly what I mutation-tested.
+
+**Ticket named three guards explicitly.** I mutation-tested all three against the LIVE
+Firestore emulator (`FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=demo-binge-rules
+npx vitest run --config vitest.rules.config.ts src/test/rules/retention-cleanup-orchestrator.test.ts`),
+using `functions/src/retentionCleanup/runCleanup.ts` snapshotted to scratchpad first
+(`git hash-object` = `9ad0adf9…`, index and worktree matched before I touched anything):
+
+1. **Budget refuses before any write, group handover cost folded in.** Verified by the
+   task's own pre-run (I did not re-run this one — the existing test
+   "refuses the whole uid when the document budget is exceeded, and keeps the watch
+   record" directly overrides `findFieldOwned` to return `FIELD_OWNED_MAX_DOCS_PER_UID + 1`
+   deletePaths and asserts `fieldOwnedRefused: 1`, nothing erased, watch record kept — a
+   correct, targeted fixture).
+
+2. **`deleteAllOrThrow` vs `deleteInBatches` — a failed chunk must not be swallowed.**
+   I mutated `deleteAllOrThrow` (not exported, only reachable via the live orchestrator)
+   to catch-and-log instead of throw, mirroring `deleteInBatches`'s swallow behaviour:
+   ```
+   target: 'await io.deleteDocs(chunk);\r\n    deleted += chunk.length;'
+   →       'try { await io.deleteDocs(chunk); deleted += chunk.length; }
+            catch (err) { io.log.error("MUTANT swallowed", err); }'
+   ```
+   (CRLF-exact splice — this file is CRLF throughout, confirmed via `JSON.stringify` on
+   the raw bytes before writing the mutation, per the repo's own CRLF-vs-LF lesson.)
+   Ran the full 42-case orchestrator suite with the mutant grep-confirmed present
+   immediately before the run: **42/42 passed.** No test in the new field-owned describe
+   block, nor anywhere else in the file, ever makes `deleteDocs` throw while a field-owned
+   uid's erasure is in flight — the two `deleteDocs`-throwing overrides that DO exist in
+   the file (line 850, `deleteInBatches`'s own test; line 1376, the pre-existing
+   `publicProfiles`-before-tree test) are both outside `eraseFieldOwned`'s call graph.
+   **Verdict: BLOCKING gap.** Restored from scratchpad snapshot,
+   `git hash-object` = `9ad0adf9…` again, `git status --porcelain` showed `M ` (staged
+   clean, worktree == index) — confirmed the restore, not just assumed it.
+
+3. **Plan/commit race, both directions.**
+   - "A group EMPTIES between plan and write" (`late.length > 0` check): mutated the
+     literal condition to `if (false) {` (same CRLF-splice method), ran the suite live.
+     **Result: exactly 1 failure** — `stops when a group empties between the plan and
+     the write`, `expected +0 to be 1` on `summary.fieldOwnedRefused`. Matches the task's
+     claim exactly. Restored, hash re-verified `9ad0adf9…`.
+   - "A group GAINS a member between plan and write" (`isStillEmptyGroup(...)` → `true`):
+     hand-traced rather than re-run live (budget spent on the two above) — walked the
+     test `spares a group that gained a member between the plan and the write` line by
+     line against `eraseFieldOwned`'s actual control flow: the override injects
+     `latecomer` into `groups/solo` BEFORE calling the real `commitGroupHandover`, which
+     means `runGroupHandover` (inside `commitGroupHandover`) itself resolves `solo` to
+     `'handover'` (not `'delete'`) and writes `ownerUid: 'latecomer'` — so by the time
+     `isStillEmptyGroup('solo', 'consoled')` runs, the real implementation reads the
+     ALREADY-REHOMED document and correctly returns false. Under the `→ true` mutant,
+     `stillEmpty.add('solo')` fires unconditionally and `deleteAllOrThrow` deletes
+     `groups/solo` outright — flips `expect(await exists(db, 'groups/solo')).toBe(true)`
+     to fail. This is the ONE assertion in the test that the mutation can flip (the
+     `latecomer` member-doc assertion survives either way, since that doc was never in
+     the original delete plan). Did not run this one live; flagged as hand-traced, per
+     the archive's own rule that a hand-traced count must be corrected the moment the
+     emulator is next reached for this file — logging here so a future round re-runs it
+     rather than re-deriving from scratch.
+   - Negative twin ("does not stop when the commit only repeats a group the plan already
+     had") read and reasoned through — correctly isolates the non-triggering case by
+     having `commitGroupHandover` return an id that IS in `planned`.
+
+**Also checked and NOT filed:** the "8 fail" claim for skipping the field-owned half
+entirely (mechanically obvious from the `it.each` table's 8 rows, each asserting the
+departed-uid path is gone — didn't re-run, no reason to doubt it); whether
+`FIELD_OWNED_CATEGORIES` being hand-typed in two test files instead of imported and
+compared is a "two lists must agree" gap — it's not: `fieldOwned.test.ts`'s copy pins the
+export's OWN contents (the correct, necessary hardcode per the `describe.each([])`
+lesson), and the orchestrator's copy ties the `it.each` ROWS to that same list for a
+DIFFERENT reason (stated in its own comment) — two legitimate independent pins, not an
+un-hoisted duplicate.
+
+**Root-vitest control run** (no emulator): `npx vitest run functions/src/retentionCleanup/
+fieldOwned.test.ts functions/src/groupHandover/logic.test.ts` → 2 files, 37 tests, all
+green, clean tree.
+
+Filed the `deleteAllOrThrow` gap as the sole blocking finding. Folded into the active
+knowledge file's "Admin-SDK orchestrator" bullet (Extract-then-test & layering section):
+a ticket naming N guards needs N dedicated failure-injection fixtures, and a green run
+that only exercises N-1 via the happy path plus siblings' OWN overrides proves nothing
+about the Nth.
+
+Verdict: **fail (1 blocking)**.
+
+## 2026-09-07 — BIN-1063 steg 3, bunt 3 re-review: `deleteAllOrThrow` gap closed
+
+Re-review of the fix for the finding above. Diff (`git diff --cached -- src/test/rules/
+retention-cleanup-orchestrator.test.ts`): one new test added to the FIELD-owned describe
+block, `'aborts the whole uid when a delete chunk fails, rather than swallowing it'`.
+Seeds `seedOrphanData` + `seedFieldOwned`, runs the sweep once to pass the observation
+floor, then runs it again with a `deleteDocs` override that throws when a chunk contains
+a path starting with `reviews/rev-consoled` — `reviews` is first in `FIELD_OWNED_CATEGORIES`
+so this is the very first chunk written. Asserts `fieldOwnedRefused === 0` (an IO failure,
+not a decision), `erasedOrphanDataUids === 0`, and that `users/consoled` and
+`orphanWatch/consoled` both survive.
+
+Also read in full with the Read tool: `functions/src/retentionCleanup/runCleanup.ts` (1063
+lines, the whole file — `deleteAllOrThrow`, `eraseFieldOwned`, `eraseOrphanedUserData`,
+`runRetentionCleanup`), `functions/src/retentionCleanup/fieldOwned.ts`,
+`functions/src/retentionCleanup/fieldOwned.test.ts`, `functions/src/retentionCleanup/
+index.ts` (the Admin-SDK port), `functions/src/groupHandover/adminIo.ts` (new file, the
+extracted Admin-SDK `HandoverIo`), `functions/src/groupHandover/index.ts`,
+`functions/src/groupHandover/runHandover.ts`, `functions/src/groupHandover/logic.test.ts`
+(diff only: a source-scan assertion updated to match the `adminIo.ts` extraction,
+`runGroupHandover(adminIo(), uid)` → `runGroupHandover(adminHandoverIo(getFirestore(),
+logger), uid)` — legitimate, matches `index.ts` verbatim), and the full staged diff plus a
+line-by-line Read pass over `src/test/rules/retention-cleanup-orchestrator.test.ts`
+(imports, the `makeIo`/`handoverIo` additions, `seedFieldOwned`, the whole new describe
+block).
+
+**Hash discipline first** (index vs worktree, both files):
+`git hash-object`/`git rev-parse :<f>` agreed for both `runCleanup.ts`
+(`9ad0adf94f2b5542cca5e464a476a9a9ffaf91a0`) and the test file
+(`6d563684bc78bdbb25bd1c0539feafb7e698e29c`) before touching anything.
+
+**Baseline run** (emulator already listening on 8080, not restarted):
+`FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=demo-binge-rules npx vitest run
+--config vitest.rules.config.ts src/test/rules/retention-cleanup-orchestrator.test.ts` →
+**43/43 green**, 22.14s.
+
+**Mutation**: snapshotted `runCleanup.ts` to scratchpad first, confirmed the snapshot
+hashed to the same clean sha as above. `deleteAllOrThrow`'s
+`await io.deleteDocs(chunk); deleted += chunk.length;` → wrapped the await in
+`try { … } catch (err) { io.log.error('MUTANT swallow', err); }` (mirroring
+`deleteInBatches`'s swallow-and-continue), via a byte-level Python replace respecting the
+file's CRLF line endings (a naive `\n`-based replace matches zero occurrences on this
+repo's CRLF files — confirmed the failure mode directly before fixing it). Grepped
+`MUTANT swallow` present in the file, hash changed to `2bd1056f…`.
+
+**Mutant run**: same command → **1 failed, 42 passed**. The ONE failure was exactly
+`'aborts the whole uid when a delete chunk fails, rather than swallowing it'`, on
+`expect(summary.erasedOrphanDataUids).toBe(0)` (received `1`) — matching the predicted
+mechanism exactly: swallowing the `reviews` chunk failure lets `eraseFieldOwned` finish
+without throwing, so `eraseOrphanedUserData`'s try block proceeds to delete
+`publicProfiles/consoled` and the whole `users/consoled` tree, reporting the uid erased.
+Re-grepped `MUTANT swallow` present immediately after the run (no concurrent restore).
+
+**Restore**: copied the scratchpad snapshot back, `git hash-object` matched
+`9ad0adf9…` again, `git status --porcelain` showed `M ` only (staged, no worktree
+delta) — clean.
+
+**Race-direction and budget tests, re-verified in the same clean 43/43 runs (not
+hand-traced separately)**: `'spares a group that gained a member between the plan and
+the write'`, `'stops when a group empties between the plan and the write'` (plus its
+negative twin, `'does not stop when the commit only repeats a group the plan already
+had'`), and `'refuses the whole uid when the document budget is exceeded, and keeps the
+watch record'` all passed in both the baseline run and the mutant run — confirming they
+exercise a different code path (`commitGroupHandover`/`findFieldOwned` overrides, not
+`deleteDocs`) and were not accidentally weakened or made to depend on the new test.
+
+Folded the "Closed, bunt 3" note into the active knowledge file's BIN-1063 worked example
+(Admin-SDK orchestrator bullet, Extract-then-test & layering section) in place, replacing
+the now-stale "left all 42 green" as current-tense — the general principle (N guards need
+N dedicated fixtures) stands and is kept verbatim.
+
+Verdict: **pass (0 blocking)**.

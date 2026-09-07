@@ -289,6 +289,20 @@ Cap: 80k chars — pay for an addition with a cut, and move what you cut verbati
   timed-out function with no `finally`, so a kill between claim and release sticks the flag for the cycle —
   bound the window under the platform timeout, or give the claim a LEASE timestamp. Transactions retry the
   callback, so `.add()` duplicates; use idempotent `.doc(id).set()`.
+- **A plan/commit split for a BINARY outcome (delete vs. hand-over) needs the re-verify guard in BOTH
+  transition directions, not just the one whose failure mode is "destroys a live third party's data".**
+  FOUND IN REVIEW, BIN-1063 steg 3 bunt 3 (r1, fixed before it shipped — full finding in the archive, dated
+  2026-09-07): `eraseFieldOwned` guarded the GAINED-a-survivor direction twice (`commitGroupHandover`'s fresh
+  recompute, `isStillEmptyGroup` right before delete) and left the LOST-its-last-survivor direction
+  unguarded — a group empty only by commit-time resolves inside `runGroupHandover` to a `'delete'` outcome
+  that performs no actual delete, and the caller only ever deleted paths from the stale plan-time list, so the
+  group would have stood forever, owned by a uid the same run erases from Auth. The shipped fix diffs
+  `commitGroupHandover`'s returned `toDeleteIds` against the plan-time set and THROWS on any id the plan
+  didn't carry, rather than silently leaving it standing — the watch record survives and the next run re-plans
+  the group as empty from the start. General lesson: when a plan/commit split recomputes a decision at
+  write-time, audit EVERY outcome branch the recomputation can newly reach, not only the one the existing
+  guard targets — a binary decision has two failure directions and a guard built for one says nothing about
+  the other.
 - **"Every write is idempotent" is not "a retry REACHES this unit" — check whether the claim write mutates the
   field the CANDIDATE QUERY selects on.** FOUND IN REVIEW, BIN-1063 steg 3 bunt 2 (r1, fixed before it
   shipped — full finding in the archive, dated 2026-09-07; the shipped `runHandover.ts` calls

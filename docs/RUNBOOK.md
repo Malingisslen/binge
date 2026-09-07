@@ -266,13 +266,29 @@ Console, i den här ordningen:
   klockan nollställdes. Ett konto som kom tillbaka, eller ett uppslag som var fel.
   Återkommande utan att någon återskapat ett konto är värt att titta på.
 - Står `erasedOrphanDataUids: 0` medan `orphanDataUids` är >0 efter att fönstret
-  passerat: låt LOGGRADEN avgöra vilket av två lägen det är, gissa inte.
+  passerat: låt LOGGRADEN avgöra vilket läge det är, gissa inte.
   `orphan data sweep exceeded its ceiling` betyder att taket vägrade och att
   INGENTING raderades — höj det inte, reglerna gäller inte för Admin-SDK:n, så
   taket är sista spärren mot ett uppslag som lyckades och hade fel.
-  `orphan data erase failed, watch record kept for retry` betyder i stället att
-  själva raderingen föll för ett enskilt uid; stämpeln är kvar med sin
-  ursprungliga tid, så nästa körning försöker igen direkt.
+  `orphan data erase failed, watch record kept for retry` skrivs för varje avbrott
+  i raderingen för ett enskilt uid — också när körningen själv sa nej; läs
+  felmeddelandet, se nästa punkt. Stämpeln är kvar med sin ursprungliga tid, så
+  nästa körning försöker igen direkt.
+- `fieldOwnedUids` / `fieldOwnedDocs` / `fieldOwnedRefused` (BIN-1063 steg 3) är
+  den fältägda halvan. Vilka kategorier den täcker står i
+  `FIELD_OWNED_CATEGORIES` (`functions/src/retentionCleanup/fieldOwned.ts`), och
+  vad `fieldOwnedDocs` räknar står i `CleanupSummary` — läs dem där, ingen
+  uppräkning här. Talet överlever en körning som föll halvvägs, så det är inte
+  noll bara för att körningen misslyckades.
+- `fieldOwnedRefused` >0 betyder att körningen själv sa nej för ett uid.
+  LOGGRADEN säger vilket skäl — gå till felmeddelandet med
+  prefixet `field-owned refused:` och läs det, gissa inte. Är det
+  `field-owned refused: erasure for <uid> would touch N documents`: ETT konto äger fler
+  dokument än taket, och ingenting raderades för det uid:t — medvetet
+  allt-eller-inget, så en halv radering aldrig lämnas utan spår av vilken halva.
+  Höj inte taket i förbigående: det är re-open-utlösaren för posten i
+  `.claude/rules/accepted-deviations.md`. Bevakningsposten är kvar oavsett skäl,
+  så ingenting går förlorat medan den ligger.
 - **Saknas raden `retentionCleanup done` helt** men `retentionCleanup: scheduled
   sweeps done` finns: körningen dog i en av de sopningar som kör EFTER den
   raden, inom 300 s-budgeten. De som kör före gick igenom — det är just därför

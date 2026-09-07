@@ -32,7 +32,8 @@
  *     what makes the surviving account a documented DELAY under Art. 12(3)
  *     rather than an unfinished Art. 17 request — Malin's decision 2026-08-11,
  *     conditional on this running. See docs/data-retention-policy.md.
- *   - users/{uid} — the WHOLE tree, plus publicProfiles/{uid} — for uids Auth
+ *   - users/{uid} — the WHOLE tree, plus publicProfiles/{uid}, plus everything
+ *     owned through a FIELD (the roster is FIELD_OWNED_CATEGORIES) — for uids Auth
  *     does not know at all, observed absent since an earlier run (BIN-1023):
  *     an account deleted from the Firebase Console runs no client cascade, so
  *     every document survives an erasure its owner can no longer retry (they
@@ -75,12 +76,15 @@
  * `checkedAuthAccounts` counters in the summary exist to expose.
  */
 
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { logger } from 'firebase-functions/v2';
 import type { Query } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import { runRetentionCleanup, type CleanupIo, type ScanKind } from './runCleanup';
+import type { CategoryFindings } from './fieldOwned';
+import { runGroupHandover } from '../groupHandover/runHandover';
+import { adminHandoverIo } from '../groupHandover/adminIo';
 
 /** Firestore's per-commit write ceiling is 500; leave headroom like the client. */
 const BATCH_SIZE = 450;
@@ -128,6 +132,23 @@ function baseQuery(kind: ScanKind): Query {
     case 'orphanWatch':
       return db.collection('orphanWatch').select('firstSeenAt');
   }
+}
+
+/** Every document under one group, excluding the group document itself. */
+async function groupSubtreePaths(
+  db: FirebaseFirestore.Firestore,
+  groupRef: FirebaseFirestore.DocumentReference,
+): Promise<string[]> {
+  const paths: string[] = [];
+  for (const sub of ['members', 'household', 'sessionHistory', 'joinAttempts']) {
+    paths.push(...(await groupRef.collection(sub).select().get()).docs.map((d) => d.ref.path));
+  }
+  const items = await groupRef.collection('watchlist').select().get();
+  for (const item of items.docs) {
+    paths.push(...(await item.ref.collection('progress').select().get()).docs.map((d) => d.ref.path));
+  }
+  paths.push(...items.docs.map((d) => d.ref.path));
+  return paths;
 }
 
 /** The production port: one Admin-SDK operation per method, no decisions. */
@@ -216,6 +237,106 @@ const adminIo: CleanupIo = {
       failureCount: res.failureCount,
       errors: res.errors.map((e) => ({ message: e.error.message })),
     };
+  },
+
+  // BIN-1063 steg 3 — one query per category, no decision.
+  findFieldOwned: async (category, uid) => {
+    const db = getFirestore();
+    const paths = async (q: Query) => (await q.select().get()).docs.map((d) => d.ref.path);
+
+    switch (category) {
+      case 'reviews':
+        // The review's own `likes` and `comments` go with it: `deleteUserTree`'s
+        // recursive delete does not reach here, so each subcollection is listed.
+        return {
+          deletePaths: await (async () => {
+            const own = await db.collection('reviews').where('uid', '==', uid).select().get();
+            const nested = await Promise.all(own.docs.map(async (d) => [
+              ...(await d.ref.collection('likes').select().get()).docs.map((x) => x.ref.path),
+              ...(await d.ref.collection('comments').select().get()).docs.map((x) => x.ref.path),
+            ]));
+            return [...nested.flat(), ...own.docs.map((d) => d.ref.path)];
+          })(),
+          arrayStrips: [],
+        };
+      case 'foreignReviewUgc':
+        return {
+          deletePaths: [
+            ...await paths(db.collectionGroup('likes').where('uid', '==', uid)),
+            ...await paths(db.collectionGroup('comments').where('uid', '==', uid)),
+          ],
+          arrayStrips: [],
+        };
+      case 'reactions':
+        return { deletePaths: await paths(db.collectionGroup('reactions').where('uid', '==', uid)), arrayStrips: [] };
+      case 'lists':
+        // Owned list: deleted. Co-edited list: the uid leaves `editors` and the
+        // list survives — it belongs to someone else, and deleting it would
+        // destroy a third party's data over this person's erasure.
+        return {
+          deletePaths: await paths(db.collection('lists').where('uid', '==', uid)),
+          arrayStrips: (await db.collection('lists').where('editors', 'array-contains', uid).select('uid').get())
+            .docs.filter((d) => d.get('uid') !== uid)
+            .map((d) => ({ path: d.ref.path, field: 'editors' })),
+        };
+      case 'sessions':
+        return {
+          deletePaths: await (async () => {
+            const hosted = await db.collection('sessions').where('hostUid', '==', uid).select().get();
+            const nested = await Promise.all(hosted.docs.map(async (d) => [
+              ...(await d.ref.collection('participants').select().get()).docs.map((x) => x.ref.path),
+              ...(await d.ref.collection('swipes').select().get()).docs.map((x) => x.ref.path),
+            ]));
+            return [...nested.flat(), ...hosted.docs.map((d) => d.ref.path)];
+          })(),
+          arrayStrips: [],
+        };
+      case 'groups':
+        // Handled by `commitGroupHandover`; the loop never asks for this.
+        return { deletePaths: [], arrayStrips: [] } satisfies CategoryFindings;
+    }
+  },
+
+  stripFromArray: async (path, field, uid) => {
+    await getFirestore().doc(path).update({ [field]: FieldValue.arrayRemove(uid) });
+  },
+
+  // BIN-1063 steg 3 — the group half, split into a READ and a WRITE so the
+  // document budget can see the handover's cost before anything moves.
+  planGroupHandover: async (uid) => {
+    const db = getFirestore();
+    const owned = await db.collection('groups').where('ownerUid', '==', uid).get();
+
+    const toDelete: string[] = [];
+    let handoverDocs = 0;
+    for (const group of owned.docs) {
+      const memberUids = (group.get('memberUids') as string[] | undefined) ?? [];
+      const survivors = memberUids.filter((m) => m !== uid);
+      const paths = await groupSubtreePaths(db, group.ref);
+
+      if (survivors.length === 0) {
+        // Nobody left: a successor cannot be invented, so this sweep deletes it.
+        toDelete.push(...paths, group.ref.path);
+        continue;
+      }
+      // Handed over. The group document and the departing member's own rows —
+      // counted, not written. See `CleanupSummary.fieldOwnedDocs` for what this
+      // estimate leaves out.
+      handoverDocs += 1 + paths.filter((path) => path.endsWith(`/${uid}`)).length;
+    }
+    return { toDelete, handoverDocs };
+  },
+
+  commitGroupHandover: async (uid) => {
+    const summary = await runGroupHandover(adminHandoverIo(getFirestore(), logger), uid);
+    return { failed: summary.failed, toDeleteIds: summary.toDeleteIds };
+  },
+
+  isStillEmptyGroup: async (groupId, uid) => {
+    const snap = await getFirestore().doc(`groups/${groupId}`).get();
+    if (!snap.exists) return false;
+    const memberUids = (snap.get('memberUids') as string[] | undefined) ?? [];
+    return memberUids.every((m) => m === uid);
   },
 };
 

@@ -820,3 +820,76 @@ avvisade den formen oberoende av varandra.
 
 **Re-open when:** bunt 3 byggs, eller en rapport visar en grupp vars `ownerUid`
 pekar på ett konto som inte längre finns i Auth.
+
+---
+
+## 2026-09-07 — BIN-1063 steg 3, bunt 3: svepets dorr ar byggd
+
+Efterfoljare till TRE poster, som alla raknar det faltagda innehallet som
+oatkomligt for svepet: BIN-1023-posten (2026-08-30), BIN-1063 steg 2-posten
+(2026-09-06) och BIN-1063 steg 3 bunt 2-posten (2026-09-07) ovan.
+De ar append-only och redigeras inte; det ar den har posten som beskriver
+koden.
+
+`retentionCleanup` sveper numera ocksa det faltagda innehallet for ett uid som
+bekraftats borta ur Auth: recensioner med sina likes och kommentarer, den
+avgangnes UGC pa andras recensioner, avsnittsreaktionerna, listor, hostade
+sessioner, och grupperna. Grupperna gar genom SAMMA `runGroupHandover` som
+raderaknappen — aldrig ett andra val.
+
+**Vad som fortfarande INTE tacks, och det ar avsiktligt:**
+
+* **Speglingarna.** `followers` sveps av `reclaimOrphanFollows` varje vecka.
+  `friends` och `friendRequestsSent` gjordes fragebara av steg 2, men
+  raderingspasset for dem ar inte byggt — steg 2:s egen post sager det, och den
+  meningen star kvar.
+* **En samredigerad lista raderas inte**, uid:t stryks bara ur `editors`. Att
+  radera den hade forstort tredje parts data pa grund av nagon annans radering.
+* **Dokumentbudgeten ar allt-eller-inget per uid.** Ett konto som ager fler an
+  `FIELD_OWNED_MAX_DOCS_PER_UID` dokument far ingenting raderat alls, korning
+  efter korning, tills nagon tittar. Det ar avsiktligt: en radering som stannade
+  mitt i hade lamnat en godtycklig halva kvar utan spar av vilken. Vagran loggar
+  hogljutt och behaller bevakningsposten.
+* **En misslyckad gruppoverlamning stoppar korningen dar den star.** Grupperna
+  ar SIST i ordningen, sa tidigare kategorier ar redan raderade nar den fallerar
+  — utfallet ar inte att ingenting rors, utan att uid:t star kvar pa bockerna:
+  den privata halvan (`users/{uid}`-tradet) ar orord, bevakningsposten lever, och
+  varje skrivning ar idempotent sa omkorningen konvergerar.
+* **Overlamningen kostar mot dokumentbudgeten men raknas som en uppskattning.**
+  Planeringssteget laser vad den SKULLE rora och budgeten ser det; sjalva
+  skrivningen sker forst efter att budgeten slappt igenom. Talet ar gruppens eget
+  dokument plus den avgangnes egna rader under den, inte namnfalten som bara
+  redigeras. Taket ar grovt: de oraknade skrivningarna vaxer med gruppens
+  watchlist och sessionshistorik, som `eraseMemberTraces` visar.
+* **En grupp som far en ny medlem mellan planen och skrivningen raderas inte.**
+  Fonstret ar litet men malet ar en LEVANDE tredje parts data, sa varje tom grupp
+  kontrolleras om precis fore raderingen och hoppas over om nagon hunnit ga med.
+  Samma omkontroll svarar nej ocksa nar gruppDOKUMENTET ar borta, sa dess redan
+  planerade undertrad hoppas over och blir kvar utan agare. Kanda foljden av att
+  lata omkontrollen vara det som avgor; en rapport om foraldralosa gruppRADER
+  utan gruppdokument ar en re-open.
+* **Inbjudan fran den avgangne agaren overlever, aven har.** Bunt 2-posten
+  parkerade `users/{target}/groupInvites/{groupId}` med "tas i bunt 3 eller nar
+  nagon rapporterar det". Bunt 3 tar den inte: `findFieldOwned` har ingen
+  `groupInvites`-gren, och `deleteUserTree` nar bara den avgangnes EGNA
+  inkommande inbjudningar. Kvarhallning, inte ett trasigt flode — gruppen finns
+  och gar att ga med i, listan faller tillbaka pa det denormaliserade namnet.
+  Kvar som oppet arbete, inte som accepterat for gott.
+* **En grupp som TOMS mellan planen och skrivningen stoppar korningen.** Spegeln
+  av punkten ovan: den sista andra medlemmen gar ur, sa gruppen ar inte med i
+  planen och ingen budget har prisat den. Att radera den anda hade varit en
+  obudgeterad radering; att lata den sta hade lamnat den for alltid, eftersom
+  samma korning raderar agarens `users/{uid}` och uid:t sedan aldrig kommer
+  tillbaka i `listUserUids()`. Korningen stannar i stallet: bevakningsposten
+  lever, och nasta korning planerar gruppen som tom fran borjan.
+* **En grupp kontot bara var MEDLEM i ror svepet inte alls.** Fragan stalls pa
+  `ownerUid`, aldrig pa `memberUids`, sa uid:t star kvar i medlemslistan och
+  `groups/{g}/members/{uid}` behaller sitt denormaliserade `displayName` och
+  `photoURL` for gruppens ovriga medlemmar. Permanent, eftersom uid:t inte
+  aterkommer i `listUserUids()` efter att samma korning raderat `users/{uid}`.
+  Klientkaskaden nar dem; svepet gor det inte. Det ar samma omfangsval som
+  BIN-1023-posten gor for de ovriga faltagda samlingarna.
+
+**Re-open when:** speglingarnas raderingspass byggs, eller en korning loggar en
+budgetvagran — den betyder att ett verkligt konto ar storre an taket och att
+talet behover ett beslut, inte en hojning i forbigaende.
