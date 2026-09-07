@@ -26124,3 +26124,109 @@ inherited. One condition requested for the remaining work (`account-deletion.tes
 three items dropped or downgraded to follow-ups.
 
 VERDICT: pass (0 blocking).
+
+## 2026-09-07 — BIN-1063 steg 3 bunt 2 follow-up: `import.meta` removed from `functions/src/groupHandover/logic.test.ts`
+
+**Diff reviewed** (1 staged file, index == worktree, sha `dc6600305ec4dce348941d22dddba78081a1eff9`):
+`functions/src/groupHandover/logic.test.ts`. Removes `import { fileURLToPath } from 'node:url'`,
+replaces `const HERE = join(fileURLToPath(import.meta.url), '..')` with
+`const HERE = join(process.cwd(), 'functions', 'src', 'groupHandover')` + `const REPO = process.cwd();`,
+and rewrites the three `join(HERE, '..','..','..')` call sites to `join(REPO, ...)`. Adds a 5-line
+comment. No assertion touched: `it(` count 29 → 29, no `.skip`/`.only`, a diff filtered of the
+path/comment lines is EMPTY.
+
+**Duty list derived from `reviewGates`** (not from the brief): a node one-liner over
+`.claude/shared-plugin.json` matching the staged path against each gate's `patterns`/`exclude`
+gave `binge-test-reviewer -> ["functions/src/groupHandover/logic.test.ts"]` — exactly one file,
+opened with `Read`. (`binge-code-reviewer` matched nothing, its `exclude` carries `\.test\.(ts|tsx)$`.)
+
+### Measurements
+
+1. `process.cwd()` under root vitest — probe test asserting the value into a failure message:
+   `Received: "C:\binge | rules=true | entry=true"`. Repo root, all three read targets resolve.
+   `functions/` has no runner of its own (no `test` script in `functions/package.json`;
+   `vitest.config.ts`'s own comment says so), so there is no second cwd.
+2. **Wrong-root mutation** (`join(process.cwd(),'MUTANT',...)` for both HERE and REPO):
+   `Error: ENOENT ... 'C:\binge\MUTANT\functions\src\groupHandover\index.ts'`,
+   `Test Files 1 failed (1) / Tests no tests`. LOUD, not a green subset. The comment's
+   "A wrong root throws on `readFileSync` rather than silently reading nothing" is TRUE as
+   measured, and needs no extra assertion. Mutant grepped before AND after the run.
+3. **The scans still reach the real files through the new derivation.** Mutated two production
+   files at once — `runHandover.ts`: `clearsAddedBy(row.pickedByUid, leavingUid)` → `false`;
+   `index.ts`: `const uid = request.auth?.uid;` → `request.data?.uid`. Result:
+   `Tests 2 failed | 27 passed (29)`, exactly `each declared handler is actually in the loop`
+   and `takes the uid from request.auth and refuses without it`. Both mutants grepped before
+   and after; both restored from scratchpad `.WT` snapshots taken from the WORKTREE, `grep -c
+   MUTANT` = 0 after, `git status --porcelain` back to the single staged file.
+4. **The comment's "only place it shows" clause, measured.** Re-introduced `import.meta.url`
+   into the file and ran each candidate:
+   - `cd functions && npx tsc --noEmit` → `error TS1343: The 'import.meta' meta-property is
+     only allowed when the '--module' option is 'es2020' ...`  ← SHOWS IT
+   - `cd functions && npm run build` (the `predeploy` in `firebase.json`) → same TS1343  ← SHOWS IT
+   - root `npx tsc --noEmit` → `grep -c groupHandover` = 0  ← does not show it
+   - `.github/workflows/pr-checks.yml` step **"Typecheck functions"** (`working-directory:
+     functions`, `run: npx tsc --noEmit`, added by BIN-1050 for exactly this class after
+     BIN-1051) is command #1  ← SHOWS IT
+   So the clause "the deploy is the only place it shows" is FALSE at the staged bytes. The
+   brief itself records the author seeing it in command #1 and filtering it out of a grep.
+5. `functions/tsconfig.json` verified: `"module": "commonjs"`, `"include": ["src"]`, no
+   `exclude` — the comment's premise is true. `@types/node` present transitively under
+   `functions/node_modules/@types/node`; `cd functions && npx tsc --noEmit` exit 0 at the
+   staged bytes.
+6. Control: `npx vitest run functions/src/groupHandover/logic.test.ts` → 29 passed, before and
+   after every mutation, with `node_modules/.vite/vitest` removed each time.
+7. `accepted-deviations.md` read first. Nothing here is a listed accept; the 2026-09-07 bunt-2
+   entry covers handover scope decisions, not test path derivation.
+
+### Verdict
+
+**fail (1 blocking).** `functions/src/groupHandover/logic.test.ts:17-18` — the clause
+"and the deploy is the only place it shows" is a false measured claim, contradicted by three
+commands above, one of them a CI step built for this class. Remedy: STRIKE the clause (keep
+"because vitest transpiles it happily", which is true). Not a reword — an enumeration of where
+it shows is the stale-count shape BIN-1085 refused.
+
+Everything else passes: no weakening, no silent-skip risk introduced, floors unaffected, both
+source scans proved live.
+
+### Relocated 73 (paid for the new bullet in the principles file, verbatim)
+
+> **Extracting the URL/payload-construction half does not extract the FETCH RESPONSE-HANDLING half** (status-code branches, body-read, interleaved `logger.warn`/`logger.error`) — it stays inside the admin-importing wrapper and stays untested, same family every time (`streamingOffers/motn.ts`, `leavingRollup/motnChanges.ts`). Accepted precedent-matching residual, but name it LOW-MED each time.
+
+> **Two anchor defects recur in the plain-`toContain` form of the same test, and both survive at full green: (a) an anchor on a GUARD'S CONDITION without its BODY leaves a warn-only guard passing, because the `return 1;` half is already satisfied by a SIBLING guard's occurrence earlier in the file — `toContain` cares only that the string exists SOMEWHERE; (b) an anchor of the form `fn({ a, b })` is satisfied by the FUNCTION'S OWN DECLARATION (`async function fn({ a, b }) {`), so the CALL SITE can drop the argument (`fn({ a, b: undefined })`) untouched.** COUNT each anchor's occurrences in the stripped source before crediting it, anchor the whole block including its `return`, spell the call site distinctly, and when the entrypoint is admin-SDK-bound extract the admin-free argv/formatter half into `*.helpers.mjs` and CALL it [arkiv 71].
+
+> **The BIN-917/1040/935 `mainMessage`/`stagedEventsLog` seam kept producing false absolutes across three separate "resolved" rounds** (a fallback-reachability claim, a stale test count, a `REPO_ROOT`-vs-`DEFAULT_EVENTS_REL` mutation-cascade miscount). Idiom that finally held: export the composing constants and assert the join DIRECTLY, never through the git-dependent function; full trace [arkiv 33, 57].
+
+> `gate-symmetry.test.mjs`'s identical strike dropped the count, not a conclusion — that's the fix.
+
+Also corrected in place in the principles file (a moved path, directly readable): the
+"grep `ci.yml` for a `functions/`-scoped `npm ci`" instruction now names
+`.github/workflows/pr-checks.yml` — `ci.yml` was deleted in BIN-1028.
+
+### 2026-09-07 — round 2, re-review at `f09126c5f675d26e9ada3158b7a72ba8410833a7`
+
+The blocking clause was STRUCK, not reworded. Verified rather than taken: reconstructed the
+bytes of round 1 and diffed them against the new blob —
+`git diff dc6600305ec4dce348941d22dddba78081a1eff9 f09126c5f675d26e9ada3158b7a72ba8410833a7`
+returns ONE hunk, three comment lines, no code line touched. So every mutation verdict from
+round 1 transfers unchanged; I did not re-derive them, and the coordinator did not ask me to.
+
+Surviving sentence: "…so `import.meta` here is a compile error that breaks `firebase deploy
+--only functions`, while vitest transpiles it happily. A wrong root throws on `readFileSync`
+rather than silently reading nothing." It names no place, carries no count word and no "only".
+
+Closed the one clause I had INFERRED rather than measured in round 1 — "while vitest
+transpiles it happily". Round 1 only ran the `import.meta` mutant through `tsc`; the vitest
+half rested on the pre-fix commit having been green, which is a handed-down claim. Ran it:
+with `const MUT = import.meta.url;` in the file, `npx vitest run` is `Tests 29 passed (29)`,
+while that same state fails `cd functions && npx tsc --noEmit` with TS1343. Both halves of
+the sentence are now measured on the same bytes. Restored to `f09126c…`, hash verified.
+
+Lesson worth keeping: **when a fix is comment-only, the cheap and correct move is to diff the
+old blob against the new one and say the code verdicts transfer — but audit the surviving
+sentence for the clause you never actually ran.** Round 1 filed the false half and let a
+true-but-unmeasured half stand beside it; the second round is where that gets closed, not
+where the first finding gets re-litigated.
+
+Final state: staged `functions/src/groupHandover/logic.test.ts` = `f09126c…` (index == worktree),
+29 passed, `functions` tsc exit 0. Verdict: pass (0 blocking).

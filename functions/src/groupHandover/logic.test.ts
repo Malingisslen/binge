@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import {
   pickGroupSuccessor,
@@ -13,12 +12,18 @@ import {
   type MemberRow,
 } from './logic';
 
-const HERE = join(fileURLToPath(import.meta.url), '..');
+// Paths from the repo root, not from `import.meta.url`. `functions/tsconfig.json`
+// compiles `src` as CommonJS and includes test files, so `import.meta` here is a
+// compile error that breaks `firebase deploy --only functions`, while vitest
+// transpiles it happily. A wrong root throws on `readFileSync` rather than
+// silently reading nothing.
+const HERE = join(process.cwd(), 'functions', 'src', 'groupHandover');
+const REPO = process.cwd();
 /** The callable, with `//` comments stripped, so a scan reads code not prose. */
 const ENTRY = readFileSync(join(HERE, 'index.ts'), 'utf8').replace(/^\s*\/\/.*$/gm, '');
 /** The loop, same treatment — it declares the erasure's field set. */
 const LOOP = readFileSync(join(HERE, 'runHandover.ts'), 'utf8').replace(/^\s*\/\/.*$/gm, '');
-const RULES = readFileSync(join(HERE, '..', '..', '..', 'firestore.rules'), 'utf8');
+const RULES = readFileSync(join(REPO, 'firestore.rules'), 'utf8');
 
 const member = (uid: string, joinedAtMs: number | null): MemberRow => ({ uid, joinedAtMs });
 
@@ -250,7 +255,7 @@ describe('refusalForHandover — the caller must not fall through', () => {
   // toast the promise that nothing was deleted.
   it('the client declares the same marker', () => {
     const client = readFileSync(
-      join(HERE, '..', '..', '..', 'src', 'lib', 'firebase', 'groupHandover.ts'),
+      join(REPO, 'src', 'lib', 'firebase', 'groupHandover.ts'),
       'utf8',
     );
     expect(client).toContain(`export const HANDOVER_PARTIAL = '${HANDOVER_PARTIAL}';`);
@@ -267,7 +272,7 @@ describe('refusalForHandover — the caller must not fall through', () => {
     // form would otherwise be matched first and satisfy this without the call
     // site setting anything.
     const client = readFileSync(
-      join(HERE, '..', '..', '..', 'src', 'lib', 'firebase', 'groupHandover.ts'),
+      join(REPO, 'src', 'lib', 'firebase', 'groupHandover.ts'),
       'utf8',
     ).replace(/^\s*\/\/.*$/gm, '');
     const clientMs = Number(/timeout:\s*([\d_]+)/.exec(client)?.[1].replace(/_/g, ''));
