@@ -1512,3 +1512,54 @@ vilket ar tur, inte ett resultat av kontrollen.
 **Kontrollen:** en avvikelse mot skarp data STRYKS inte och formuleras inte om - den
 skrivs ned, daterad, med vad som hande och varfor ingen rollback ags. Det ar den enda
 formen som overlever att villkorets eget bevis (den sparade utdatan) inte finns.
+
+### [Workflow] Push-grindens helhetslasning hittar defekter INGEN per-commit-grind kan se (2026-09-07, BIN-1063)
+
+**Trigger:** en bunt splittas i flera commitar, var och en med rena grindar.
+
+**Regel:** budgetera push-grinden som flera egna varv, inte som ett `git push`. Den ar
+inte en formalitet ovanpa gronа commitar - den ar det enda passet som laser producent
+och konsument i samma andetag.
+
+**Vad som hande:** fyra helhetsvarv over 3-5 commitar. De hittade TRE av buntens fyra
+akta koddefekter, och varje enskild var osynlig for varje per-commit-granskare:
+
+1. En grupp som TOMDES mellan planen och skrivningen raderades aldrig. Planen lag i en
+   commit, konsumenten i samma commit, testerna i en tredje fil - och det enda testet
+   som natt grenen stubbade porten.
+2. `fieldOwnedDocs` rapporterade noll for en korning som redan flyttat ett
+   gruppagarskap. Producenten (`attempted` i `runHandover.ts`), konsumenten
+   (`runCleanup.ts`) och de tva prosameningar som pastod att det inte kunde handa lag i
+   tre filer, och varje fil last ensam ar konsistent.
+3. Tva produktionsrader gick att radera med HELA sviten gron: `toDeleteIds.push()` och
+   klarvagens patopp av budgetuppskattningen. Producent, konsument och tva testsviter -
+   fyra filer over tva commitar.
+
+**Kontrollen:** vid varje bunt, fraga inte bara "vilken fil beskriver det jag andrade"
+utan "vilken rad PRODUCERAR signalen jag just borjade konsumera, och finns det ett test
+som nar den utan att stubba porten". Mutera producenten, inte bara konsumenten.
+
+### [Workflow] Ett omatt tal i prosa overlever inte trettio granskningsvarv (2026-09-07, BIN-1063)
+
+**Trigger:** en bunt vars leverans till halften ar dokumentation och beslutsprotokoll.
+
+**Regel:** stryk hellre an formulera om, och sok pastaendet i HELA tradet innan du
+rattar - inte bara i filen granskaren namngav.
+
+**Vad som hande:** trettio varv. Fyra defekter i koden, resten falska pastaenden jag
+sjalv skrivit. De atervandande formerna:
+
+* **Samma mening pa fyra stallen.** "En misslyckad overlamning stoppar korningen for att
+  falla igenom hade raderat en grupp andra ar med i" - sant om raderaknappens dorr,
+  falskt om svepets, som bara nagonsin raderar en grupp den redan sett tom. Den bodde i
+  koden, i tva dokument OCH i flodeskartan, som lag i NASTA commit.
+* **Uppraekningar som blir korta.** En kategorilista med fem av sex; en refusal-orsak av
+  tre; "de tva fasta raderingarna" om tre.
+* **Superlativ och "det enda".** "Det enda steg som kan stoppa korningen" - varje
+  kategori kan kasta. "Den storsta resten den har bunten lamnar" - ingenting matte det.
+* **En hanvisning till en rubrik som inte finns.** Tva `§"..."`-pekare till ett fetstilt
+  styckehuvud, i den enda paragraf som skrevs for att en framtida granskare SKA hitta den.
+
+**Kontrollen:** dar en mening maste sta, skriv ett KOMMANDO som harleder den - och kor
+kommandot fore du skriver meningen. Och nar en rattelse namner ett tal: talet ar det
+nasta granskningsvarvets fynd.
