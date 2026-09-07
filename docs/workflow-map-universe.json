@@ -12,6 +12,7 @@
     "reclaimOrphanFollows",
     "retentionCleanup",
     "submitReport",
+    "handOverOwnedGroups",
     "recordAskBinge",
     "askBingeParse",
     "titleRatings",

@@ -690,6 +690,18 @@
       "path": "src/lib/firebase/accountDeletion.ts"
     },
     {
+      "id": "group-handover-lib",
+      "label": "groupHandover.ts (handOverOwnedGroups)",
+      "context": "web-app",
+      "path": "src/lib/firebase/groupHandover.ts"
+    },
+    {
+      "id": "cf-handOverOwnedGroups",
+      "label": "handOverOwnedGroups callable",
+      "context": "backend-api",
+      "path": "functions/src/groupHandover/index.ts"
+    },
+    {
       "id": "email-verification-banner",
       "label": "EmailVerificationBanner",
       "context": "web-app",
@@ -2544,7 +2556,8 @@
         "/settings",
         "DataExportSection",
         "DeleteAccountSection",
-        "EmailVerificationBanner"
+        "EmailVerificationBanner",
+        "handOverOwnedGroups"
       ],
       "steps": [
         {
@@ -2576,6 +2589,41 @@
           "verified": true
         },
         {
+          "from": "auth-context",
+          "to": "group-handover-lib",
+          "payload": "BIN-1063 steg 3 (Malin 2026-09-06): handOverOwnedGroups() runs FIRST, before the snapshots the cascade plans from. An owned group with remaining members is handed to the longest-standing member, never deleted. The order is the guarantee — a handed-over group stops naming this uid in memberUids, so it drops out of the array-contains query that fills the snapshots and the cascade's owner branch (which deletes the WHOLE group, other members' household data included) never sees it. The failure is NOT swallowed: falling through would delete a group other people are still in, and the whole handover is idempotent so stopping costs a retry",
+          "transport": "function call",
+          "verified": true
+        },
+        {
+          "from": "group-handover-lib",
+          "to": "cf-handOverOwnedGroups",
+          "payload": "httpsCallable handOverOwnedGroups() — no payload; the uid comes from request.auth, so a caller can only hand over their OWN groups",
+          "transport": "https-callable",
+          "verified": true
+        },
+        {
+          "from": "cf-handOverOwnedGroups",
+          "to": "firestore",
+          "payload": "query groups where ownerUid == uid; per group read members (joinedAt), watchlist and sessionHistory. The ballot is the group doc's memberUids and the member rows only supply joinedAt: a row can outlive the membership it stands for, and electing from the rows would hand the group to someone firestore.rules no longer counts as a member",
+          "transport": "firestore-query",
+          "verified": true
+        },
+        {
+          "from": "cf-handOverOwnedGroups",
+          "to": "firestore",
+          "payload": "claimOwnership — runTransaction re-reads ownerUid and writes ownerUid + memberUids only if it has not moved. The re-read is the idempotency guard: a retry must find its own earlier handover done rather than hold a second election naming a different member. The erasure is deliberately outside it, because a group's watchlist is unbounded and a transaction that grew with it would fail the one write that must not",
+          "transport": "firestore-transaction-write",
+          "verified": true
+        },
+        {
+          "from": "cf-handOverOwnedGroups",
+          "to": "firestore",
+          "payload": "eraseMemberTraces — batched (≤450 ops): delete members/{uid}, household/{uid}, joinAttempts/{uid} (plaintext invite token, BIN-329) and every watchlist/*/progress/{uid}; remove watchlist.addedBy and sessionHistory.pickedByUid where they name the departing member. Handing the group over must not become an exemption from the erasure a plain member-leave already performs (#5's binding condition)",
+          "transport": "firestore-batch-write",
+          "verified": true
+        },
+        {
           "from": "delete-account-section",
           "to": "account-deletion-lib",
           "payload": "deleteAccount() → getIdTokenResult(currentUser) freshness gate (BIN-748, 2 min, fail-closed) → markDeletionStarted(uid) → collectUserDataSnapshots(id) then collectDeletionRefs(kit, id, snaps) builds DeletionPlan. BIN-875 REMOVED the username argument: the reservation is now found by querying usernames on uid, because the profile doc and React state both die in the same accident (an interrupted first attempt), which is exactly when a retry needs it. The marker goes down before the first read but the limbo render flag only on failure — conflating them showed the half-deleted screen during normal successful deletions",
@@ -2592,7 +2640,7 @@
         {
           "from": "account-deletion-lib",
           "to": "firestore",
-          "payload": "BIN-184: household refs queued alongside — for a group I OWN, the whole groups/{gid}/household subcollection (deleting my account cascades the whole group, everyone's shared cost docs included); for a group I'm just a member of, only my own groups/{gid}/household/{myUid} doc",
+          "payload": "BIN-184: household refs queued alongside. For a group I'm a member of, my own groups/{gid}/household/{myUid} doc. BIN-1063 steg 3 narrowed the owner case: a group with other members is handed over by the callable BEFORE this runs and no longer names me in memberUids, so it never reaches this branch; what still arrives as owned is a group with nobody else in it, where the whole household subcollection is mine",
           "transport": "firestore-batch-write",
           "verified": true
         },
