@@ -1048,7 +1048,12 @@ describe('retentionCleanup orchestrator — the FIELD-owned half (BIN-1063 steg 
     const summary = await sweepPastTheFloor(db);
 
     expect(summary.fieldOwnedUids).toBe(1);
-    expect(summary.fieldOwnedDocs).toBeGreaterThan(0);
+    // An EXACT count, not just non-zero: the clean path tops the handover's
+    // estimate up on top of the attempted-group credit, and a `toBeGreaterThan(0)`
+    // is satisfied by the other five categories alone, so the top-up could be
+    // deleted green. Re-derive with the probe rather than trusting the number:
+    // set it to -1 and read what the failure reports.
+    expect(summary.fieldOwnedDocs).toBe(15);
     expect(summary.fieldOwnedRefused).toBe(0);
   });
 

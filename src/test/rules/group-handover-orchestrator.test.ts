@@ -242,6 +242,11 @@ describe('runGroupHandover — the loop', () => {
     const summary = await runGroupHandover(clientIo(), 'owner');
 
     expect(summary).toMatchObject({ handedOver: 0, toDelete: 1 });
+    // The IDS, not just the count. They are the only signal the retention sweep
+    // has that a group emptied after its plan was made, and every test on the
+    // consuming side stubs this port — so without this assertion the `push` that
+    // produces them can be deleted with the whole suite green.
+    expect(summary.toDeleteIds).toEqual(['solo']);
     const group = await getDoc(doc(db(), 'groups', 'solo'));
     expect(group.data()?.ownerUid).toBe('owner');
     expect(group.data()?.memberUids).toEqual(['owner']);
