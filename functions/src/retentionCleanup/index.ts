@@ -83,6 +83,7 @@ import type { Query } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import { runRetentionCleanup, type CleanupIo, type ScanKind } from './runCleanup';
 import type { CategoryFindings } from './fieldOwned';
+import { isEmptyExcept } from '../groupHandover/logic';
 import { runGroupHandover } from '../groupHandover/runHandover';
 import { adminHandoverIo } from '../groupHandover/adminIo';
 
@@ -311,10 +312,9 @@ const adminIo: CleanupIo = {
     let handoverDocs = 0;
     for (const group of owned.docs) {
       const memberUids = (group.get('memberUids') as string[] | undefined) ?? [];
-      const survivors = memberUids.filter((m) => m !== uid);
       const paths = await groupSubtreePaths(db, group.ref);
 
-      if (survivors.length === 0) {
+      if (isEmptyExcept(memberUids, uid)) {
         // Nobody left: a successor cannot be invented, so this sweep deletes it.
         toDelete.push(...paths, group.ref.path);
         continue;
@@ -329,14 +329,14 @@ const adminIo: CleanupIo = {
 
   commitGroupHandover: async (uid) => {
     const summary = await runGroupHandover(adminHandoverIo(getFirestore(), logger), uid);
-    return { failed: summary.failed, toDeleteIds: summary.toDeleteIds };
+    return { failed: summary.failed, toDeleteIds: summary.toDeleteIds, attempted: summary.attempted };
   },
 
   isStillEmptyGroup: async (groupId, uid) => {
     const snap = await getFirestore().doc(`groups/${groupId}`).get();
     if (!snap.exists) return false;
     const memberUids = (snap.get('memberUids') as string[] | undefined) ?? [];
-    return memberUids.every((m) => m === uid);
+    return isEmptyExcept(memberUids, uid);
   },
 };
 

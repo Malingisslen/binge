@@ -102,6 +102,18 @@ export function pickGroupSuccessor(
 }
 
 /**
+ * Is this group empty of everyone but `leavingUid`?
+ *
+ * The retention sweep asks this twice — once when it PLANS which groups it may
+ * delete, and once immediately before deleting each one. Two spellings of the
+ * same question is how one of them drifts, and the two answers decide whether a
+ * live third party's group is deleted or an empty one is kept forever.
+ */
+export function isEmptyExcept(memberUids: readonly string[], leavingUid: string): boolean {
+  return memberUids.every((uid) => uid === leavingUid);
+}
+
+/**
  * What to do with this group, decided once for both doors.
  *
  * `noop` comes first and is the idempotency guard: a retried run must hold no

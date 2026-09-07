@@ -7,6 +7,7 @@ import {
   pickGroupSuccessor,
   buildHandoverUpdate,
   clearsAddedBy,
+  isEmptyExcept,
   refusalForHandover,
   HANDOVER_PARTIAL,
   type MemberRow,
@@ -213,6 +214,31 @@ describe('buildHandoverUpdate — the write, and when there must not be one', ()
   it('hands over to a ghost rather than deleting the group', () => {
     expect(buildHandoverUpdate('owner', 'owner', members, ['owner', 'ghost']))
       .toEqual({ kind: 'handover', ownerUid: 'ghost', memberUids: ['ghost'] });
+  });
+});
+
+describe('isEmptyExcept — the one spelling of "nobody but them is left"', () => {
+  // The sweep asks this twice: once when it PLANS which groups it may delete,
+  // once immediately before deleting each one. Two spellings is how one drifts,
+  // and the two answers decide whether a live third party's group is deleted or
+  // an empty one is kept forever.
+  it('is true when only the leaver is listed', () => {
+    expect(isEmptyExcept(['gone'], 'gone')).toBe(true);
+  });
+
+  it('is true for an empty list, which is the shape a missing field leaves', () => {
+    expect(isEmptyExcept([], 'gone')).toBe(true);
+  });
+
+  it('is false as soon as anybody else is listed', () => {
+    expect(isEmptyExcept(['gone', 'keeper'], 'gone')).toBe(false);
+    expect(isEmptyExcept(['keeper'], 'gone')).toBe(false);
+  });
+
+  // A duplicate entry must not read as a survivor — a group whose list carries
+  // the leaver twice is still empty of everyone else.
+  it('is true when the leaver appears more than once', () => {
+    expect(isEmptyExcept(['gone', 'gone'], 'gone')).toBe(true);
   });
 });
 

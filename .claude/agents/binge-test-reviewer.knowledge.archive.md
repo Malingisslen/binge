@@ -26404,3 +26404,162 @@ the now-stale "left all 42 green" as current-tense — the general principle (N 
 N dedicated fixtures) stands and is kept verbatim.
 
 Verdict: **pass (0 blocking)**.
+
+## 2026-09-07 — BIN-1063 steg 3 bunt 3, `attempted` credited before either throw
+
+**Diff reviewed** (staged, not yet committed — follow-up to c92e076/d236c88):
+`functions/src/groupHandover/logic.ts` (+`isEmptyExcept`), `logic.test.ts` (+4 cases),
+`functions/src/retentionCleanup/index.ts` (both `memberUids.filter(...).length===0` call
+sites consolidated onto `isEmptyExcept`; `commitGroupHandover` forwards the new
+`attempted` field), `functions/src/retentionCleanup/runCleanup.ts` (`CleanupIo.
+commitGroupHandover` gains `attempted: number`; `eraseFieldOwned` credits
+`progress.written += handover.attempted` BEFORE either `FIELD_OWNED_REFUSED` throw, and
+the clean-path top-up changes from `progress.written += plan.handoverDocs` to
+`Math.max(0, plan.handoverDocs - handover.attempted)`), and
+`src/test/rules/retention-cleanup-orchestrator.test.ts` (+1 new test, 3 existing
+`commitGroupHandover` stubs gained `attempted: 0` to satisfy the widened interface).
+
+**The bug being fixed**: `fieldOwnedDocs` reported `0` for a run that had already moved a
+group's ownership — reachable when a uid's only field-owned content is groups, so the
+counter is still 0 entering the groups branch, and a handover that hands over group 1 then
+fails on group 2 fires `FIELD_OWNED_REFUSED` before the old code ever credited the
+estimate.
+
+**Mutation run** (isolated, root repo — no worktree needed, single-developer session):
+snapshotted `functions/src/retentionCleanup/runCleanup.ts` to scratchpad
+(`git hash-object` `c6a306a9…`, matched `git rev-parse :<path>` — no drift entering the
+review), deleted the line `progress.written += handover.attempted;` (line 733, replaced
+with a comment via `sed -i`, byte-verified via `sed -n`), ran the new test alone:
+
+```
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=demo-binge-rules npx vitest run \
+  --config vitest.rules.config.ts src/test/rules/retention-cleanup-orchestrator.test.ts \
+  -t "counts the groups a failed handover already wrote to"
+```
+
+Result: **1 failed** — `expected +0 to be 1` at the `summary.fieldOwnedDocs` assertion,
+exactly as predicted. Ran the FULL file under the same mutant: **1 failed, 44 passed** —
+uniquely diagnostic, no other test in the 45-test file depends on that line. Restored from
+the scratchpad snapshot, `git hash-object` matched `c6a306a9…` again, `git status
+--porcelain` showed `M ` only (staged, no worktree delta).
+
+Separately mutation-tested `isEmptyExcept` (`functions/src/groupHandover/logic.ts`,
+snapshotted `b702c644…`, matched both hashes before starting): `.every`→`.some` killed by
+2 of 4 rows (the empty-list case and the "anybody else listed" case); `===`→`!==` killed
+by 3 of 4 rows (all but the empty-list case, which is vacuously true either way for a
+negated predicate on an empty array... no — verified live, not reasoned: `!==` on `[]`
+still passes `.every` trivially, so the empty-list row does NOT catch this mutant, but the
+other three do). Restored, hashes matched again (`b702c644…` both sides).
+
+**On the specific question asked** ("does stubbing `attempted` at the `CleanupIo`
+boundary rather than driving a real two-group failure make the new test prove only the
+port's shape?"): yes, narrowly true, and NOT a blocking gap. The stubbed test proves
+`runCleanup.ts`'s NEW crediting line (the actual fix surface); the underlying mechanism —
+`HandoverSummary.attempted` incrementing correctly when a group's erasure fails — has its
+own dedicated case in `src/test/rules/group-handover-orchestrator.test.ts` ("leaves the
+group findable when the erasure fails, so a retry can finish it", asserting
+`{ handedOver: 0, failed: 1, attempted: 1 }" on a REAL single-group failure through the
+real port). Every other `commitGroupHandover` override in this same test file is also a
+literal-value stub, by the file's own established convention (`CleanupIo` is documented as
+a port that must not re-derive a decision already tested elsewhere). No test anywhere
+drives a REAL two-owned-groups run where the first group hands over successfully and the
+SECOND fails, asserting `attempted: 2` — that is a genuine, narrow residual gap, but it
+lives in `runHandover.ts`, which is UNCHANGED by this diff, so it is a pre-existing gap,
+not one this diff introduces or weakens. Noted as non-blocking / a follow-up candidate,
+not filed as blocking against these bytes.
+
+**Also verified**: `functions`-project `tsc --noEmit` clean and root `tsc --noEmit` clean
+(the widened `CleanupIo.commitGroupHandover` return type reaches both the Admin port in
+`index.ts` and the emulator harness — no caller left unmigrated). Diffed
+`functions/src/retentionCleanup/index.ts` and confirmed BOTH `memberUids.filter(m => m
+!== uid).length === 0` / `memberUids.every(m => m === uid)` call sites were consolidated
+onto the new `isEmptyExcept`, matching the two call sites fixed in the test harness — no
+third copy left behind. Read every staged file with `Read`, hashed worktree vs index for
+all five at the start and again immediately before this entry (all matched, tree stayed
+clean throughout — no concurrent mutation).
+
+**Verdict: pass (0 blocking).**
+
+---
+
+## Relocated 2026-09-07 — knowledge-cap trim (BIN-1063 bunt-3 addition pushed the live
+file to 80,664 chars against the 80,000 cap; oldest/most-condensable clauses cut, moved
+here verbatim)
+
+Each entry is the COMPLETE original clause, byte-for-byte, as it stood in
+`binge-test-reviewer.knowledge.md` before this trim. The live file keeps a condensed form
+plus an `[arkiv NN]` pointer to the entry here. Nothing was deleted outright.
+
+### 74 — the PREFIX clause (Legitimate update vs cover-up)
+
+**The fixture is not the only place an old assertion can be kept alive — the PREFIX is the
+other**: `account-deletion.test.ts`'s retry case builds its "interrupted attempt" by
+calling the cascade halves directly, skipping the new `runGroupHandover` door, so its
+pre-existing `'owned group erased'` line still passes while its sibling test asserts the
+group SURVIVES. Not weakened (it is true of the state the test builds) but
+production-unreachable; ask for the door in the prefix, or that line rewritten like its
+sibling.
+
+### 75 — "consequence class, not the trigger" (Review protocol & scope discipline)
+
+**"Consequence class, not the trigger" is NOT a defence that saves a false "the one
+case"** — I waved one through twice while `logic.ts`'s own `noop` arm names TWO causes,
+both destroying a live group if read as `delete`; the code reviewer filed it blocking and
+was right. Re-derive the branch's OWN doc-comment cause list first. A TRUE claim is never
+a finding, however much it resembles the one you struck.
+
+### 76 — TraceErasure's missed field (GDPR, PII, deletion & money guards)
+
+**A hand-enumerated uid-bearing FIELD set for an erasure owes a roster derived from the
+source, not a `grep` written in a comment** — `TraceErasure`'s four fields shipped with
+`sessionHistory.participantUids` missing, caught by a reviewer and not by any test, and
+nothing goes red when a fifth appears. The repo's own shape is
+`src/lib/firebase/userData.subcollections.test.ts`: derive from `firestore.rules`,
+set-equality BOTH directions, non-emptiness floor.
+
+### 77 — deliberate src/functions parity divergence (Extract-then-test & layering)
+
+**A DELIBERATE divergence between the `src/` and `functions/src/shared/` copies of a
+mirrored helper is a comment-only invariant** until the copy that did NOT change pins the
+behavior it keeps; the closed pattern is a same-directory `*.parity.test.ts` importing
+BOTH real copies and mutating BOTH drift directions independently (BIN-636
+`mediaTypeDocId`, and rules-vs-client BIN-1002).
+
+### 78 — faithful-copy logic.ts check (Admin-SDK orchestrator bullet)
+
+A `functions/src/**/logic.ts` "faithful copy" of a `src/**` pure fn needs EVERY copy
+checked (BIN-523/589).
+
+### 79 — audit what a strike takes away (Review protocol & scope discipline)
+
+**Audit what a strike TAKES AWAY too — a claim deleted beside the count may have been a
+live warning, so MUTATE it before crediting the strike**: BIN-1063's helpers dropped
+"deleting the `return 1;` under it leaves every scan green" together with "the two
+refusals", and deleting `return 1;` reddens the `main()`-regex test ALONE — the sentence
+was false at those bytes, so the strike was right and no truer version was owed.
+
+### 80 — striking an enumerating clause (Review protocol & scope discipline)
+
+**Striking an ENUMERATING clause can leave a neighbouring EQUIVALENCE conclusion built on
+it standing and now false** — probe it live (BIN-990: `route.test.mjs` struck its
+3-mechanism list for a 4th but kept "a patterns-only helper would answer the same", false
+for `.claude/settings.json`).
+
+### 81 — comment-only causal-chain fix (Review protocol & scope discipline)
+
+**A comment-only fix that swaps a retracted claim for a new causal chain needs the chain
+walked through the files it names, and an asymmetry it describes needs BOTH directions
+checked for which is pinned** (BIN-879).
+
+### 82 — precedent-consistent sibling signal (Review protocol & scope discipline)
+
+Full original sentence: "grep the same file/loop for an equivalent-risk SIBLING signal
+shipped untested with no incident (BIN-856), report it precedent-consistent, NAME that
+sibling, and don't demand extraction unless the sibling is fixed in the same diff."
+
+### 83 — signature-widening boundary check (Review protocol & scope discipline)
+
+Full original sentence, deleted with no live-file pointer (folded into the general
+"Verify, never inherit, claims" bullet's surrounding prose, which already covers the same
+territory): "On a signature-widening test update, judge weakening by mutating the NEW
+composing step and requiring the PRE-EXISTING boundary tests to redden."

@@ -213,6 +213,17 @@ export interface CleanupIo {
      * is about to erase from Auth and from `listUserUids()`.
      */
     toDeleteIds: readonly string[];
+    /**
+     * How many groups a write was ATTEMPTED on — counted before the first one,
+     * not after the last.
+     *
+     * A handover that fails on its second group has already moved the first
+     * group's ownership and erased rows under it. Without this the caller would
+     * credit nothing for that run, and the summary line would be identical to a
+     * run that wrote nothing at all. `HandoverSummary.attempted` exists for
+     * exactly this and the callable door already reads it.
+     */
+    attempted: number;
   }>;
 
   /**
@@ -273,10 +284,11 @@ export interface CleanupSummary {
    * `fieldOwnedDocs` counts the deletes and array-strips that COMMITTED, and it
    * survives a run that then threw — that is what separates a run which wrote
    * nothing from one which wrote and then failed. The group handover's share is
-   * `plan.handoverDocs`, an ESTIMATE credited once the handover returns: it does
-   * not count the name-field edits `eraseMemberTraces` makes, and it does not
-   * subtract a group that raced or no-op'd. Read it as an order of magnitude,
-   * not as a receipt.
+   * `plan.handoverDocs`, an ESTIMATE: it does not count the name-field edits
+   * `eraseMemberTraces` makes, and it does not subtract a group that raced or
+   * no-op'd. A handover that throws part-way credits one per group it attempted
+   * instead, which is far below the estimate but never zero. Read the number as
+   * an order of magnitude, not as a receipt.
    *
    * Three numbers, not one, for the reason every other −1 in this summary
    * exists: a run that erased nothing because there was nothing, a run that
@@ -714,6 +726,12 @@ async function eraseFieldOwned(
 
     if (FIELD_OWNED_CATEGORIES[i] === 'groups') {
       const handover = await io.commitGroupHandover(uid);
+      // Credit the attempted groups BEFORE either throw below. Both of them can
+      // fire after `runGroupHandover` has already moved ownership and erased
+      // rows, and a zero here would be indistinguishable from a run that wrote
+      // nothing — the one thing this counter exists to tell apart.
+      progress.written += handover.attempted;
+
       if (handover.failed > 0) {
         throw new Error(`${FIELD_OWNED_REFUSED} group handover failed for ${handover.failed} group(s)`);
       }
@@ -732,11 +750,12 @@ async function eraseFieldOwned(
         throw new Error(`${FIELD_OWNED_REFUSED} ${late.length} group(s) emptied after the plan for ${uid}`);
       }
 
-      // Credited only now. A group that emptied late writes NOTHING — the
-      // `delete` outcome only records the id — so crediting the estimate before
-      // the check above would have reported writes that did not happen, on the
-      // one path where the count is read by a caller that failed.
-      progress.written += plan.handoverDocs;
+      // Topped up to the estimate only now, on the clean path. A group that
+      // emptied late writes NOTHING — the `delete` outcome only records the id —
+      // so crediting the estimate before the check above would have reported
+      // writes that did not happen. `attempted` is already in, hence the
+      // subtraction; the floor guards an estimate smaller than the group count.
+      progress.written += Math.max(0, plan.handoverDocs - handover.attempted);
 
       // Re-verify each group is STILL empty. Between the plan and here a member
       // can have joined, and these paths would then include a live third party's

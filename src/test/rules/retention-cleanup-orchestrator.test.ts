@@ -8,6 +8,7 @@ import {
 } from 'firebase/firestore';
 
 import { runGroupHandover, type HandoverIo } from '../../../functions/src/groupHandover/runHandover';
+import { isEmptyExcept } from '../../../functions/src/groupHandover/logic';
 import {
   FIELD_OWNED_CATEGORIES,
   FIELD_OWNED_MAX_DOCS_PER_UID,
@@ -340,7 +341,7 @@ function makeIo(db: Firestore, auth: FakeAuth, overrides: Partial<CleanupIo> = {
       for (const g of owned.docs) {
         const memberUids = (g.data().memberUids as string[] | undefined) ?? [];
         const paths = await groupSubtreePaths(db, g.ref);
-        if (memberUids.filter((m) => m !== uid).length === 0) {
+        if (isEmptyExcept(memberUids, uid)) {
           toDelete.push(...paths, g.ref.path);
           continue;
         }
@@ -351,14 +352,14 @@ function makeIo(db: Firestore, auth: FakeAuth, overrides: Partial<CleanupIo> = {
 
     commitGroupHandover: async (uid) => {
       const summary = await runGroupHandover(handoverIo(db), uid);
-      return { failed: summary.failed, toDeleteIds: summary.toDeleteIds };
+      return { failed: summary.failed, toDeleteIds: summary.toDeleteIds, attempted: summary.attempted };
     },
 
     isStillEmptyGroup: async (groupId, uid) => {
       const snap = await getDoc(doc(db, 'groups', groupId));
       if (!snap.exists()) return false;
       const memberUids = (snap.data().memberUids as string[] | undefined) ?? [];
-      return memberUids.every((m) => m === uid);
+      return isEmptyExcept(memberUids, uid);
     },
 
     ...overrides,
@@ -1171,7 +1172,7 @@ describe('retentionCleanup orchestrator — the FIELD-owned half (BIN-1063 steg 
 
     const summary = await runRetentionCleanup(makeIo(db, auth, {
       now: () => later,
-      commitGroupHandover: async () => ({ failed: 1, toDeleteIds: [] }),
+      commitGroupHandover: async () => ({ failed: 1, toDeleteIds: [], attempted: 0 }),
     }));
 
     expect(summary.erasedOrphanDataUids).toBe(0);
@@ -1188,6 +1189,35 @@ describe('retentionCleanup orchestrator — the FIELD-owned half (BIN-1063 steg 
     // of what happened.
     expect(summary.fieldOwnedDocs).toBeGreaterThan(0);
     expect(await exists(db, 'reviews/rev-consoled')).toBe(false);
+  });
+
+  // The case no per-file gate can see: a uid whose ONLY field-owned content is
+  // groups. The handover moves the first group's ownership, then fails on the
+  // second. If the credit waited for the clean path the summary would say zero
+  // — byte-identical to a run that wrote nothing, which is the one thing this
+  // counter exists to tell apart.
+  it('counts the groups a failed handover already wrote to', async () => {
+    const db = adminLikeDb();
+    const auth = makeAuth(ORPHAN_DATA_ACCOUNTS);
+    await seedOrphanData(db);
+    await seedFieldOwned(db);
+    await runRetentionCleanup(makeIo(db, auth));
+    const later = NOW + ORPHAN_DATA_MIN_OBSERVED_MS + ONE_DAY;
+
+    const summary = await runRetentionCleanup(makeIo(db, auth, {
+      now: () => later,
+      // Every other category empty, so the group half is the only thing that
+      // can appear in the count.
+      findFieldOwned: async () => ({ deletePaths: [], arrayStrips: [] }),
+      commitGroupHandover: async () => ({ failed: 1, toDeleteIds: [], attempted: 1 }),
+    }));
+
+    expect(summary.fieldOwnedRefused).toBe(1);
+    expect(summary.erasedOrphanDataUids).toBe(0);
+    // One group was written to before the failure. Not zero.
+    expect(summary.fieldOwnedDocs).toBe(1);
+    expect(await exists(db, 'users/consoled')).toBe(true);
+    expect(await exists(db, 'orphanWatch/consoled')).toBe(true);
   });
 
   // The mirror of the re-verify. The plan snapshots which groups are empty; a
@@ -1212,7 +1242,7 @@ describe('retentionCleanup orchestrator — the FIELD-owned half (BIN-1063 steg 
       // writes nothing — the `delete` outcome only records the id — so crediting
       // the estimate here would report writes that never happened.
       findFieldOwned: async () => ({ deletePaths: [], arrayStrips: [] }),
-      commitGroupHandover: async () => ({ failed: 0, toDeleteIds: ['shared'] }),
+      commitGroupHandover: async () => ({ failed: 0, toDeleteIds: ['shared'], attempted: 0 }),
     }));
 
     expect(summary.fieldOwnedDocs).toBe(0);
@@ -1239,7 +1269,7 @@ describe('retentionCleanup orchestrator — the FIELD-owned half (BIN-1063 steg 
 
     const summary = await runRetentionCleanup(makeIo(db, auth, {
       now: () => later,
-      commitGroupHandover: async () => ({ failed: 0, toDeleteIds: ['solo'] }),
+      commitGroupHandover: async () => ({ failed: 0, toDeleteIds: ['solo'], attempted: 0 }),
     }));
 
     expect(summary.fieldOwnedRefused).toBe(0);
