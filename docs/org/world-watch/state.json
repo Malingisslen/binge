@@ -79,16 +79,16 @@
           "note": "How vuln alerts/grouping reach the repo."
         }
       ],
-      "lastScan": "2026-08-31",
+      "lastScan": "2026-09-07",
       "snapshot": {
-        "nextjs-advisories": "2026-08-24: Direct WebFetch worked. No advisories published after 2026-07-21 (same 9-CVE July batch + May 7 middleware-bypass follow-up, already tracked). package-lock.json still resolves next@16.2.12, still patched. No change.",
-        "ghsa-npm": "2026-08-24: Direct WebFetch worked. No advisories for next, react, react-dom, firebase, firebase-admin, firebase-functions, or @firebase/* surfaced among recent entries (JSONata, Keystone, Defuddle, Unleash, NocoBase, node-opcua, logto-tunnel, various MCP servers — all unrelated). No change.",
-        "firebase-js-sdk-releases": "2026-08-24: Direct WebFetch worked. New release since last cycle: firebase@12.18.0 (2026-08-19) — Imagen removal, FunctionsError HTTP-status/URL details, signInWithPopup background-tab fix, App Check token-recognition fix for SQL Connect Realtime, on-device LanguageModel detection fix; no new security content. package-lock.json still resolves firebase@12.12.1, @firebase/firestore@4.14.0, @firebase/util@1.15.0 — still below the ReDoS-patched versions (12.17.0/4.17.0/1.15.2). Issue #47 (opened 2026-08-03) confirmed still OPEN this cycle; not re-filed.",
-        "firestore-rules-relnotes": "2026-08-24: fetch failed, skipped (EGRESS_BLOCKED on firebase.google.com). Not retried this cycle.",
-        "recaptcha-enterprise-relnotes": "2026-08-24: fetch failed, skipped (EGRESS_BLOCKED on docs.cloud.google.com). Not retried this cycle.",
-        "gh-changelog-dependabot": "2026-08-24: fetch failed, skipped (EGRESS_BLOCKED on github.blog). Not retried this cycle."
+        "nextjs-advisories": "2026-09-07: Direct WebFetch worked. TWO NEW critical (CVSS 9.5) unauthenticated-RCE advisories published 2026-08-25: GHSA-2xp9-vwfh-vxw4 (Image Optimization API, AVIF/libheif via sharp, affects <15.5.24 and <16.3.3) and GHSA-p293-qw3h-jr36 (Windows-filesystem-hosted servers only, affects >=13.4<15.5.24 and >=16.0<16.3.3). Both patched in 15.5.24/16.3.3. Checked package-lock.json: binge already resolves next@16.3.3 — the exact patched version. NOT material — already safe, no ticket filed. Confirmed via package-lock, not assumed.",
+        "ghsa-npm": "2026-09-07: Direct WebFetch worked. No advisories for react, react-dom, firebase, firebase-admin, firebase-functions, or @firebase/* surfaced among recent entries (unrelated packages: TypeSpec Spector, CodeWhale, TOML, Orval, Claude Code Templates, SimpleWebAuthn). next.js advisories covered directly above. No change.",
+        "firebase-js-sdk-releases": "2026-09-07: Direct WebFetch worked. Still firebase@12.18.0 (2026-08-19) as latest — no new release since last cycle. App Check token-recognition fix, signInWithPopup fix, Imagen removal (breaking), no new security content beyond what was already recorded. Issue #47 (the ReDoS fix) is now CLOSED — resolved since last cycle.",
+        "firestore-rules-relnotes": "2026-09-07: fetch failed, skipped (EGRESS_BLOCKED on firebase.google.com). Not retried this cycle.",
+        "recaptcha-enterprise-relnotes": "2026-09-07: fetch failed, skipped (EGRESS_BLOCKED on docs.cloud.google.com). Not retried this cycle.",
+        "gh-changelog-dependabot": "2026-09-07: fetch failed, skipped (EGRESS_BLOCKED on github.blog). Not retried this cycle."
       },
-      "_lastScanCoverage": "All 6 sources checked (3 direct WebFetch success: nextjs-advisories, ghsa-npm, firebase-js-sdk-releases; 3 required WebSearch fallback after egress-proxy blocks: firestore-rules-relnotes, recaptcha-enterprise-relnotes, gh-changelog-dependabot); repo cross-checked via package-lock.json resolved-version parse (next@16.2.12, firebase@12.12.1, @firebase/firestore@4.14.0, @firebase/util@1.15.0) and issue #47's still-open state.",
+      "_lastScanCoverage": "3/6 sources reached directly via WebFetch this cycle (nextjs-advisories, ghsa-npm, firebase-js-sdk-releases), the remaining 3 (firestore-rules-relnotes, recaptcha-enterprise-relnotes, gh-changelog-dependabot) egress-blocked with no fallback available in this sandbox — carried forward from 2026-08-31 baseline rather than re-verified; repo cross-checked via package-lock.json (next@16.3.3, patched).",
       "_janitorLeanScans": [
         {
           "date": "2026-08-17",
@@ -99,6 +99,11 @@
           "date": "2026-08-31",
           "via": "weekly-janitor-sweep",
           "note": "Lean WebSearch check. Next.js August 2026 security release disclosed two critical unauthenticated-RCE issues (GHSA-2xp9-vwfh-vxw4 AVIF/libheif optimization RCE; CVE-2026-75604 Windows path traversal, CVSS 9.0), patched in v16.3.3/v15.5.24 — repo's package-lock.json already resolves next@16.3.3 (package.json range is ^16.3.3), so already patched; no action. Firebase JS SDK: no new firestore/util security patch since 12.18.0 (undici bump for an old low-severity CVE-2024-30260, not material). Firestore rules release notes: no hasOnly/field-whitelist-affecting language change (cross-service Storage rules, Rules Playground debugger, raised access-call limits — none apply). Issue #47 (Firebase ReDoS) CLOSED this cycle: package-lock now resolves firebase@12.18.0/firestore@4.17.1/util@1.15.3, all at/above the 12.17.0/4.17.0/1.15.2 patched thresholds. recaptcha-enterprise-relnotes and gh-changelog-dependabot not checked this cycle (lean budget, lower material-risk sources)."
+        },
+        {
+          "date": "2026-09-07",
+          "via": "weekly-janitor-sweep (cloud sandbox, no Linear)",
+          "note": "Direct WebFetch on 3/6 sources; the other 3 egress-blocked with no fallback in this sandbox. Reconfirmed the two critical Next.js RCE advisories from 2026-08-25 (GHSA-2xp9-vwfh-vxw4, GHSA-p293-qw3h-jr36) — package-lock.json still resolves next@16.3.3, still the exact patched version, still not material. No new advisories for next/react/firebase since. No issues filed this cycle."
         }
       ]
     },
