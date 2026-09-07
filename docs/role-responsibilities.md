@@ -770,6 +770,11 @@ findings here too.
   vad skriptet gör mot datalagret, inte var filen ligger. Den deployas aldrig; den körs
   för hand, en gång.
   → `functions/scripts/backfill-mirror-uid.mjs`, `functions/scripts/backfill-mirror-uid.helpers.mjs`, `functions/scripts/backfill-mirror-uid.helpers.test.mjs`
+- **Gruppens arvsordning** (BIN-1063 steg 3). Vem som arver en grupp vars agare
+  raderats, och vad overlamningens skrivning innehaller. Det ar en datalagerfraga:
+  storheten ar ordningen mellan dokumenten i en undersamling och nyttolasten pa
+  gruppdokumentet.
+  → `functions/src/groupHandover/logic.ts`, `functions/src/groupHandover/logic.test.ts`
 - **Admin-SDK-skrivarna mot recap-cachen** (BIN-1013-sätet). Skripten som skriver och
   inventerar dokumenten i `recaps/`. Samma skäl som backfillen ovan: de kör med Admin SDK
   mot en samling klienten bara får läsa, så det är datalagrets skrivväg som avgör sätet.

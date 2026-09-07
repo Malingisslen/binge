@@ -9462,3 +9462,816 @@ idempotent and inert; the unwidened read surface; and the four carried-forward n
 Those all concern code that is byte-identical across the strike.
 
 **Verdict: pass (0 blocking).**
+
+### 2026-09-07 — BIN-1063 steg 3 batch 1: the election roll is not the access list
+
+Staged blobs reviewed: `functions/src/groupHandover/logic.ts` fa498ef08118764392612b4ff3f4e5f4fdc1791f,
+`functions/src/groupHandover/logic.test.ts` 1aa766e8e75b8313dd15b1f70c14355b93421a7e. Duty list derived
+from `reviewGates` in `.claude/shared-plugin.json` (`^functions/` matched both; the other four staged
+files matched no security pattern). Verdict: fail, 1 blocking.
+
+**BLOCKING — a non-member can be elected owner.** `pickGroupSuccessor` is handed the
+`groups/{gid}/members/*` rows; `buildHandoverUpdate` is handed those rows AND `memberUids`, and never
+intersects them. Every access clause in `firestore.rules` keys on `memberUids`; the member subcollection
+is a separate record written by a separate rule branch.
+
+Exploit, no owner cooperation and no privileged branch (DERIVED from the rules text — the brief froze the
+tree, so no live PoC was written; the clauses are quoted by line):
+
+1. Mallory joins group G legitimately. `members/Mallory` is created with `joinedAt == request.time`
+   (rules 1309-1310), earliest among the non-owner rows once later members join.
+2. Mallory leaves by calling `updateDoc(groups/G, { memberUids: arrayRemove('Mallory'), ... })` directly,
+   bypassing the app's `removeMember`. The leave branch (rules 1183-1205) requires only
+   `uid in resource.memberUids`, `!(uid in request.resource.memberUids)`, `hasAll`, `size == old-1` and
+   the identity pins. It says nothing about the member document. `removeMember` in
+   `src/lib/firebase/groups.ts:497-510` does both in one `writeBatch`, so the app path is atomic — the
+   raw SDK path is not, and the rules are the boundary.
+3. Her member doc is now UNDELETABLE by her: `selfOrOwner()`'s self-branch (rules 1289-1296) requires
+   `request.auth.uid in memberUids`. Only the owner can remove it. So the stale roll entry is permanent.
+4. The owner deletes their account. `buildHandoverUpdate('owner','owner', memberRows, memberUids)` calls
+   `pickGroupSuccessor`, which excludes only the departing uid — Mallory has the earliest `joinedAt`
+   among the remainder and is returned. Payload: `{ ownerUid: 'Mallory', memberUids: [others] }`,
+   with Mallory absent from `memberUids`.
+5. As `ownerUid` she gets, with no membership test anywhere in the expression: `groups/{gid}` delete
+   (rules 1244-1245), full `members/*` create/update/delete incl. other people's rows (1289-1296 then
+   1309/1318/1321), `sessionHistory` delete (1358-1360), `household/{anyUid}` delete (1428-1430), and the
+   owner update branch (1154-1168) which may SHRINK `memberUids` to empty. She cannot read the group
+   watchlist (1364-1368 keys on `memberUids`) — she can destroy it.
+
+A second, owner-side variant: the members-subcollection owner branch has no `memberUid in memberUids`
+requirement, so a departing owner can plant `members/{X}` for an account they control. Because
+`joinedAt == request.time` a planted row is always the NEWEST, so it wins only after the owner deletes the
+other member rows (rule 1321 permits that). The BIN-327/H1 comment at rules 1148-1153 says the owner
+"kan INTE längre lägga till godtyckliga uids i memberUids" — sourcing the ballot from the subcollection
+re-opens precisely that, one collection deeper.
+
+Distinct from BIN-1108 (#4's condition, `tasks/todo.md`): that is the owner writing THEMSELF out of
+`memberUids` and freezing the group. Same resulting invariant break (ownerUid not in memberUids),
+different mechanism and different actor. #4's second sentence — "Steg 3 behover samma skrivform for egen
+rakning, sa sparren maste utformas tillsammans med den" — is the condition this batch leaves unmet:
+batch 1 IS steg 3's write-payload builder and it can mint that state itself.
+
+Rejected fixes: (a) enforce it in the callable (batches 2/3) — two callers, and the module's own header
+says both import these functions rather than reimplementing, so the guard would be duplicated and could
+drift; (b) require the caller to pre-filter `members` — invisible to this module's tests and to the next
+reader; (c) delete the group when the successor is not a member — over-deletes when real members remain.
+Accepted shape: intersect inside `buildHandoverUpdate` (or thread the surviving `memberUids` into
+`pickGroupSuccessor`), and return null on an empty intersection so the caller deletes.
+
+Not a re-raise of anything in `.claude/rules/accepted-deviations.md`: the BIN-1023 and BIN-1063-steg-2
+entries put owned groups OUT of the sweep's scope and name the handover as the open product question;
+nothing there accepts a non-member successor. The steg-2 entry's re-open trigger is the deletion pass,
+which is batches 2/3.
+
+**Non-blocking, handed to batch 2's review.** `joinedAtMs: number | null` — the "null when the document
+carries no usable value" contract is prose only. A non-finite value (a corrupt Timestamp conversion, an
+Admin-SDK/Console-written row) enters the `stamped` pool at line 72, and in the reduce at 75-80
+`a !== b && a < b` is false in both directions, so the winner depends on array order and a NaN row can
+beat every real member — the exact "must never sort as earliest" failure the file's own doc comment
+forbids. `Number.isFinite` rather than `!== null` closes it in the decider. Reachability today is nil:
+the create rule's `joinedAt == request.time` rejects any non-Timestamp, and production has zero member
+documents (measured by the author).
+
+**Correction to the dispatching brief's mutation count.** "Dropping the departing-uid exclusion fails 6
+tests" — derived by walking every fixture (tree frozen, so no mutation run): it fails 9. All seven `it`s in
+the `pickGroupSuccessor` describe fail, including `returns null when nobody remains` (candidates become
+one element, so the departing uid is returned instead of null), plus two of the four in the
+`buildHandoverUpdate` describe (`names the successor...` and `refuses when nobody remains`). The two that
+survive are `refuses when ownerUid is no longer the departing uid` (returns null before the pick) and
+`never grows memberUids` (its two assertions still hold with the departing uid as owner). The other two
+counts reproduce exactly: inverting earliest to latest fails 4 (tests 1, 2, 7 and `names the
+successor...`); collapsing the stamped/unstamped split fails 1 (`ranks a member with no joinedAt below
+every member who has one` — and only because that fixture's uids were reordered against the expected
+answer, as its own comment records). The number lives only in the brief, not in any staged file, so it is
+not a committed false claim — but if it is written into `tasks/todo.md` or a commit message it must say 9,
+or better, name the mutation and drop the count.
+
+**Verified clean.** `memberUids` cannot grow through the payload — `.filter` on the caller's array, no
+concatenation, no successor insertion, and `never grows memberUids` pins it. The departing-uid exclusion is
+the first operation on the member list. The idempotency guard (`currentOwnerUid !== leavingUid` returning
+null) is the first statement in `buildHandoverUpdate`, before any election. Ordering contract holds for
+every finite input: stamped outrank unstamped, earliest wins, ties and the all-unstamped pool both fall to
+the lowest uid, and the left fold is order-independent for all three. No firebase-admin import, no secrets,
+no `NEXT_PUBLIC_`; no importer exists at HEAD (`grep -rn groupHandover` outside the directory is empty), so
+nothing is live yet. No new collection and no doc-id scheme change, so `collectUserDataSnapshots` needs no
+edit for this batch; `clearsAddedBy` implements Malin's decision 4 and scrubs only an exact match, leaving
+`undefined`/`null` rows alone.
+
+**Verdict: fail (1 blocking).**
+
+### 2026-09-07 — BIN-1063 steg 3 batch 1, round 2: the intersection landed in the exported decider
+
+Staged blobs reviewed: `functions/src/groupHandover/logic.ts`
+543db22810d16c4b31dad065eefad93e4c539cdc, `functions/src/groupHandover/logic.test.ts`
+4362bdfabfec6f04e97332bcc3742ed0fd18a756. Both re-pinned after the write-up; `git rev-parse :<file>`
+and `git hash-object <file>` agree, so the review describes the bytes that will be committed. Duty
+list re-derived from `reviewGates` in `.claude/shared-plugin.json`: of the eight staged paths only
+these two match a security pattern (`^functions/`); `.claude/agents/binge-security-reviewer.*`,
+`docs/org/metrics/events.jsonl`, `docs/org/ownership-map.json`, `docs/role-responsibilities.md` and
+`tasks/todo.md` match none — note the one `.claude/agents/` pattern this gate carries names the
+INTEGRATION reviewer's file, not its own. Verdict: pass, 0 blocking.
+
+**The r1 blocking finding is closed, and closed in the right place.** `pickGroupSuccessor` now takes
+`eligibleUids` as a required third parameter and filters `m.uid !== leavingUid && eligible.has(m.uid)`.
+That is the accepted shape rather than a wrapper-only fix: the picker is exported, so an intersection
+living only in `buildHandoverUpdate` would leave the next caller electing from the roll — the same
+hole one call site later. The invariant now holds structurally, which is the property worth asserting:
+`successorUid ∈ eligible = survivors`, and the write stores `memberUids: survivors`, so the elected
+owner is by construction an element of the array every `firestore.rules` access clause keys on. The
+r1 exploit chain dies at step 4 — Mallory's stranded, undeletable `members/Mallory` row is no longer a
+candidate, so she is never named `ownerUid` and never reaches the group `delete`, `members/*` write,
+`sessionHistory` delete and `household/{anyUid}` delete that `ownerUid` grants with no membership
+test. The owner-side variant (planting `members/{X}` for a controlled account, BIN-327/H1 one
+collection deeper) dies at the same line, since a planted row cannot be in `memberUids` either.
+
+The same invariant also closes the half of #4's BIN-1108 condition that r1 recorded as unmet by this
+batch — batch 1 can no longer MINT an `ownerUid` outside `memberUids`. The other half of that
+condition (the owner writing themselves out of `memberUids` by a raw array write) is not this
+module's to enforce and remains BIN-1108's.
+
+**Both mutation counts in the brief reproduce exactly.** The tree is frozen, so both were DERIVED by
+walking all 18 fixtures and asking which verdict each mutant moves, not by a mutation run.
+
+Dropping `&& eligible.has(m.uid)` fails 4, and they are the four written for it: `never elects a
+member row that is absent from memberUids` (stranded, joinedAt 200, beats real at 900), `returns null
+when no surviving memberUid has a member row` (returns 'stranded' instead of null), `elects from the
+surviving memberUids, never from the member rows alone` (ownerUid becomes 'stranded'), and `refuses
+when every surviving memberUid lacks a member row` (returns a payload naming 'heir' with
+`memberUids: ['ghost']` — the exact invariant break). The other fourteen are unmoved because their
+eligible list is the full non-leaver set, which is right: they were written for ordering, not
+eligibility.
+
+Reverting `Number.isFinite` to `!== null` fails exactly 1, `treats a non-finite joinedAt as unstamped
+rather than as earliest`. Derivation: NaN passes `!== null`, so `aaa-corrupt` enters the stamped pool
+as the fold's initial best; at `zzz-real` the comparison `9000 !== NaN` is true but `9000 < NaN` is
+false, so the corrupt row is kept and returned. No other fixture carries a non-finite value, and for
+`null`/finite inputs the two predicates agree. The fixture orders the corrupt uid AGAINST the expected
+answer, so the uid tie-break cannot rescue it — the trap that made r1's stamped/unstamped fixture
+green for the wrong reason before it was reordered.
+
+**The equivalence claim checks out.** `buildHandoverUpdate` passing `survivors` rather than
+`memberUids` into the picker is genuinely equivalent, because the picker excludes `leavingUid`
+unconditionally, and the returned `memberUids` is `survivors` either way. Documenting it in the code
+instead of pinning it with a test is the correct call — a test for an equivalent mutant pins nothing.
+18 `it`s in the file, matching the author's 18/18 denominator (`grep -n "  it(" | wc -l`).
+
+**Verified clean, this round.** No import of any kind, so no firebase-admin, no secrets, no
+`NEXT_PUBLIC_`. Still no importer anywhere in the tree (`git grep -n groupHandover` outside the
+directory hits only the ownership map, the role dossier and my own archive), so nothing is live and
+no functions deploy is owed by this batch. No new collection, no doc-id scheme, no rules and no
+indexes touched — `collectUserDataSnapshots` needs no edit, and no manual
+`firebase deploy --only firestore:rules` note is owed. `clearsAddedBy` still scrubs only an exact
+match and leaves `undefined`/`null` rows alone. Nothing here re-raises an entry in
+`.claude/rules/accepted-deviations.md`: BIN-1023 and the BIN-1063 steg 2 entry put owned groups
+outside the sweep and name the handover as the open product question; neither accepts a non-member
+successor.
+
+**Non-blocking, carried from r1 rather than newly found — deliberately not filed as a finding.** The
+module header still says "Both callers import these functions rather than reimplementing them" in the
+present tense, while no caller exists at HEAD or in the index. It is a contract for batches 2/3 more
+than a measurement, r1 read the same sentence and did not file it, and rewriting it would mint a new
+unmeasured claim in a batch whose prose has already converged. If batch 2 lands with only one caller,
+or with a caller that reimplements the ordering, that sentence becomes the finding then — check it
+against the actual importers rather than against this note.
+
+**Verdict: pass (0 blocking).**
+
+### 2026-09-07 — BIN-1063 steg 3, batch 1, round 3: three explanatory claims, none of them measurable as written
+
+Duty list derived from `reviewGates` (`binge-security-reviewer`, pattern `^functions/`, no `exclude`
+key on that entry, so the test file is in scope): `functions/src/groupHandover/logic.ts`
+`efeed0a0d9575d8a21a4328962cbca723e893071`, `functions/src/groupHandover/logic.test.ts`
+`6794bc1159ee3902601f43a7c96b05aacf624c4e`. Staged == worktree at both ends of the round.
+
+Round 2 was voided mechanically: it pinned `543db22…`/`4362bdf…` and the exported return type changed
+afterwards (`HandoverUpdate | null` → the discriminated `HandoverOutcome`). That re-review is the whole
+reason this entry exists — the r2 write-up described blobs that were never going to be committed.
+
+The r3 code is sound. `pickGroupSuccessor`'s required `eligibleUids`, the intersection, the
+unconditional departing-uid exclusion, `Number.isFinite` and the deliberate `survivors` double exclusion
+all hold, and the discriminated union closes the null ambiguity the test reviewer blocked on. All four
+of the brief's mutation counts reproduce by fixture walk (tree frozen, so derived, not run):
+
+* drop `m.uid !== leavingUid` → only the fixture at logic.test.ts:38 passes an eligible list still
+  naming the leaver, so exactly 1 red; every other picker fixture builds its list through `rollOf`,
+  and both `buildHandoverUpdate` paths hand in `survivors`.
+* `noop`→`delete` → 1 (the only fixture reaching `currentOwnerUid !== leavingUid`).
+* `delete`→`noop` → 2.
+* `survivors`→`memberUids.slice()` → 2 — the successor does not move (the picker excludes the leaver
+  anyway), only the RETURNED `memberUids` grows, so the two `handover` fixtures redden and the two
+  `delete` ones stay green.
+
+**Three blocking findings, all false claims in the module's own prose, all struck rather than reworded.**
+
+1. `logic.ts:19-29`, the `joinedAtMs` doc comment: "Null is a real state, not a defensive placeholder:
+   the self-healing write paths in `groups.ts` deliberately omit `joinedAt` when repairing an existing
+   member document…". Measured: `writeMemberDoc` (`src/lib/firebase/groups.ts:382-399`) omits the field
+   on the merge branch and writes `joinedAt: serverTimestamp()` on the create branch; `createGroup`
+   (:130-139) writes it too; `firestore.rules:1309-1310` requires `joinedAt == request.time` on every
+   member create. A `merge` that omits a field PRESERVES it — groups.ts's own comment at :393-394 says
+   exactly that. So the named mechanism cannot produce the state it is offered to explain. The null is
+   real, but only from legacy rows or a row written by hand in the Console, which `firestore.rules`
+   itself contemplates at :1312-1315. Fix: strike the causal sentences and the now-subject-less
+   "Such a document is a legitimate member…" in the same edit; the first sentence needs no measurement.
+2. `logic.ts:5-9`, header: "both doors go through a callable running on the Admin SDK, so `ownerUid` is
+   never client-writable." Zero importers of the module anywhere in the tree, and the only
+   `httpsCallable` in `src/lib/firebase/` is `submitReport` (`reports.ts:113`) — the account-delete door
+   is the client cascade in `accountDeletion.ts`. Future wiring in the present tense, and the sibling of
+   the claim this same round already struck from this same header. The trailing clause is separately
+   loose: `firestore.rules:1140` lets a client set `ownerUid` at CREATE (to itself); what is actually
+   true is that every update branch (:1163/:1178/:1198/:1217/:1234) pins it unchanged. Fix: strike the
+   clause. The caller contract lives in `tasks/todo.md` #7, so nothing is lost.
+3. `logic.ts:150-158`, `clearsAddedBy` doc: "That is what already happens to reviews and comments;
+   leaving a dangling author here would be the one place the cascade kept a name." Measured in
+   `accountDeletion.ts`: reviews are deleted whole (`refs.push(reviewDoc.ref)`, :104-112) and comments
+   likewise (:115). Nothing is name-stripped; the nearest real analogue is `editableLists`, where the
+   uid is removed from `editors[]` and the doc survives (:190-196, `userData.ts:96-99`) — an id, not a
+   name. "the one place" is an unmeasured quantifier on top. Fix: strike the whole comparison; Malin's
+   decision in the sentence before it stands alone.
+
+**Non-blocking, and it is a design question the caller must answer, not a defect here.** The
+"array entry with no roll row yields null" direction — which I required in r2 and which is now pinned by
+`logic.test.ts:82-85` and :188-191 — routes a group whose surviving `memberUids` are all ghosts to
+`{kind:'delete'}`. A ghost (uid in `memberUids`, member doc never written; the non-batch three-write join
+can die between writes, `groups.ts:440-452`, scope measured in BIN-1097) is a full member by every access
+clause in `firestore.rules`, which key on `memberUids`. So the branch destroys shared data for people the
+rules treat as members — the trade this same file calls "the worse of the two failures" when it refuses
+to delete over a missing `joinedAt` (:92-94). Live impact today is nil: `tasks/todo.md` records zero
+groups and zero member documents in binge-nu. Rejected fixes: electing `survivors[0]` inside the picker
+(re-opens the fabricated-successor direction the intersection exists to close), and softening the test
+(the invariant is right). The correct home is the caller that maps `delete` onto a real deletion — batch 2
+must decide it explicitly rather than inherit it, and that is what my knowledge bullet now says.
+
+Not re-raised, per `.claude/rules/accepted-deviations.md`: BIN-1023's field-owned/uid-keyed split and its
+BIN-1063 steg 2 narrowing (owned `groups` are outside the sweep, deliberately — this ticket is that other
+half), the Tillsammans pair, blocking-as-hygiene, create-only reports.
+
+**Verdict: fail (3 blocking).**
+
+### 2026-09-07 — BIN-1063 steg 3 r4: a struck claim class recurs one file away, in the same gate
+
+Duty list derived from `.claude/shared-plugin.json` -> `reviewGates` (agent
+`binge-security-reviewer`, no `exclude` key on that entry): the `^functions/` pattern matched
+exactly the two staged files, `functions/src/groupHandover/logic.ts`
+(`dba5d4e73b7d36bdfed8eb72f734992765a91d91`) and `functions/src/groupHandover/logic.test.ts`
+(`6794bc1159ee3902601f43a7c96b05aacf624c4e`). Index and worktree agreed at both ends of the round.
+
+**r3's three strikes all landed, and all three verified.**
+1. The `joinedAtMs` causal story is gone; what stands is "Null is a real state, not a defensive
+   placeholder" plus a published command. I RAN it —
+   `grep -n "joinedAt" src/lib/firebase/groups.ts firestore.rules` — 12 non-empty lines: the
+   `createGroup` create write (groups.ts:138), the merge-branch comment (393), `writeMemberDoc`'s
+   create write (398), the read mapper (903), and the rules pins (firestore.rules:1310 create
+   `== request.time`, 1319 update `.get('joinedAt', null)` on both sides). A reader running it can
+   derive the answer the struck sentence got wrong, and `firestore.rules:1312-1317` states the real
+   source of a null row outright ("skrivet utanför appen, t.ex. för hand i konsolen").
+2. The Admin-SDK/`ownerUid` wiring claim is gone; the header stops at naming the two doors.
+   `grep -rn groupHandover` over `functions/src` and `src` still returns zero importers, so any
+   present-tense wiring sentence would still be false — none remains.
+3. `clearsAddedBy`'s reviews-and-comments precedent is gone; Malin's decision stands alone.
+
+**FINDING 1 (blocking) — `logic.test.ts:97-100`.** r3's shape (i), the causal story for the
+`joinedAt` null state, survives VERBATIM in the sibling test file: "A member document written by a
+self-healing path carries no joinedAt at all, because the rule pins the field immutable and a write
+that carried it would be denied." Both halves measured false. Every path that CREATES a member row
+writes the field — `createGroup` (`groups.ts:130-139`) and `writeMemberDoc`'s else branch
+(`groups.ts:398`), and `firestore.rules:1310` denies a create that omits it, so a merge onto a
+missing doc cannot produce one either. The self-healing path is `writeMemberDoc`'s
+`existing.exists()` branch (`groups.ts:392-396`), a merge that OMITS `joinedAt` and therefore
+PRESERVES it — `src/lib/firebase/groups.test.ts:719` and `:743` pin exactly that. The update rule
+compares `.get('joinedAt', null)` on both sides, so a write carrying the SAME value is allowed too;
+only a fresh `serverTimestamp()` is denied. The file's own blob was unchanged this round, which is
+why r3 did not see it: an unchanged sha is not an unchanged claim, and this file is inside the same
+gate (`^functions/`, no exclude). Fix: strike lines 97-100 down to the ordering assertion; "Such a
+member is legitimate" loses its subject with it and goes in the same edit.
+
+**FINDING 2 (blocking) — `logic.ts:46-50`, the `noop` doc.** r3's shape (ii), a cited precedent, is
+back as a different precedent in the same header: "their `household/{uid}` and per-title
+`progress/{uid}` are their own contributions — all of it goes on this door too, exactly as the plain
+member-leave path already does it." Measured: `removeMember` (`groups.ts:497-510`, which `leaveGroup`
+delegates to unchanged) is a three-write batch — `arrayRemove` on `memberUids`, delete
+`members/{uid}`, delete `household/{uid}`. It never touches
+`groups/{gid}/watchlist/{titleId}/progress/{uid}`; the only sweeps that do are `deleteGroup`
+(`groups.ts:553-557`) and `collectDeletionRefs`' non-owner branch
+(`accountDeletion.ts:177-179`). So the plain leave path erases two of the three things the sentence
+says it erases, and the miss is in the under-erasing direction: an implementer wiring batch 2 from
+this sentence copies `removeMember`'s three writes and silently leaves per-title progress rows
+attributed to an erased account. Same sentence also says the member row's name and photo were
+"already erased from `users/{uid}`" by "steg 1" — BIN-1063 steg 1 was the joinedAt create/update/
+delete split (`firestore.rules:1283-1288`, `groups.test.ts:678`), which erases nothing, and this
+file's own header is titled steg 3, so the reference reads as that steg. Fix: strike the sentence.
+The outcome's first line ("It says nothing about the departing member's own traces") carries the
+point without any measurement.
+
+**Rejected as findings, measured and true:** the owner-branch claim (`firestore.rules:1157`,
+`resource.data.memberUids.hasAll(request.resource.data.memberUids)` = new subset of old, so an owner
+cannot add uids, while `selfOrOwner()` at 1289-1297 lets the owner plant `members/{x}` — the
+asymmetry the header names is real); the stranded-row escalation (the self branch at 1292-1293
+requires `request.auth.uid in memberUids`, so a member removed from the array can no longer delete
+their own row); `createGroup` writing the owner's member doc before anyone can join; the
+`survivors`/picker redundancy claim (removing either alone still excludes the leaver — checked both
+directions by hand); and the test file's two mutation-justification comments at 102-105 and 115-118,
+both of which I walked against the reduce (dropping the stamped/unstamped split elects
+`aaa-unstamped`; a `!== null` filter admits NaN and elects `aaa-corrupt` — both fixtures do fail
+their mutant).
+
+**Not re-verified, and said so rather than transcribed:** the brief asserts round 3's four mutation
+counts still describe the file. The brief does not restate the counts and the tree is frozen, so
+there was nothing to reproduce; I neither accepted nor disputed them.
+
+Verdict: fail (2 blocking). Both are false claims of measured fact in prose, both strike cleanly,
+neither is a defect in the executable logic — which is the fourth round running on this batch.
+
+### 2026-09-07 — BIN-1063 steg 3, batch 1, round 4: the r3 strikes landed; the claim survived in two other homes
+
+Round 3's `fail (3 blocking)` was rendered against `logic.ts` `efeed0a0…`, re-pinned at the end of the
+write-up, and the file was re-staged as `dba5d4e7…` AFTER that pin — after the verdict line. So r3 joins
+r2 in having judged blobs that were never going to be committed. What surfaced it was not a check I
+planned: a backgrounded `grep` completed and reported `buildHandoverUpdate` at line 131 where `Read` had
+shown 134. A line-number disagreement between `Read` and `git grep` is now the tell I watch for.
+
+`git diff efeed0a0 dba5d4e7` is comment-only, so the derived mutation counts and the executable review
+from r3 stand unchanged. `logic.test.ts` is still `6794bc11…` — untouched by the fix.
+
+**All three r3 findings are closed, and the shape of the fixes is right.** The header clause about a
+callable is gone; the `clearsAddedBy` precedent about reviews and comments is gone; and the `joinedAtMs`
+causal story was replaced by a published command — `grep -n "joinedAt" src/lib/firebase/groups.ts
+firestore.rules` — which I ran: it returns the create-writes-it / merge-omits-it split at groups.ts:138,
+:393, :398 and both rule clauses at firestore.rules:1310, :1319. Informative, not empty, so it survives the
+BIN-929/935/938 "a published command can run and say nothing" test. Replacing a claim with a command that
+derives it remains the only strike shape that has held.
+
+**Two new blocking findings, and they are the SAME false mechanism r3 struck, in homes that round never
+touched.** This is the finding I should have produced in r3 by grepping the mechanism's name instead of the
+sentence:
+
+1. `functions/src/groupHandover/logic.ts:81-83`, ordering rule 1: "A missing value must never sort as
+   'earliest' — that would hand the group to whoever happened to be repaired by a self-healing write."
+   Same file, six lines of strike away, surviving because the claim is a subordinate clause JUSTIFYING a
+   rule rather than a statement of fact — it reads as reasoning, and no grep for the struck wording finds
+   it. Fix: strike the em-dash clause. "Members with a `joinedAt` outrank members without one. A missing
+   value must never sort as 'earliest'." needs no measurement.
+2. `functions/src/groupHandover/logic.test.ts:97-100`: "A member document written by a self-healing path
+   carries no joinedAt at all, because the rule pins the field immutable and a write that carried it would
+   be denied. Such a member is legitimate…" — a STRONGER and flatly false form of the struck claim, in the
+   gated sibling file whose blob the fix never changed. `writeMemberDoc`'s self-healing branch merges into
+   an EXISTING document, which the create rule guarantees carries `joinedAt`; omitting a field in a merge
+   preserves it. Fix: strike the mechanism sentence and the now-subject-less "Such a member is legitimate",
+   in the same edit. The fixture (`aaa-unstamped`, null) is correct and does not move.
+
+The residual I recorded in r3 — an all-ghost group routing to `{kind:'delete'}` — is unchanged and still
+non-blocking, still owed an explicit answer by whichever caller maps `delete` onto a real deletion.
+
+**Verdict: fail (2 blocking).**
+
+### 2026-09-07 — BIN-1063 steg 3 r4, CORRECTION to my own entry above (same round, same reviewer)
+
+Two corrections to my r4 entry, plus one finding it missed. The duty blobs never moved
+(`logic.ts` `dba5d4e7…`, `logic.test.ts` `6794bc11…`, index == worktree throughout), so nothing
+below changes what was reviewed — only what I claimed about it.
+
+**1. A third live copy exists, and I missed it: `functions/src/groupHandover/logic.ts:81-83`.**
+Ordering rule 1 reads "A missing value must never sort as 'earliest' — that would hand the group to
+whoever happened to be repaired by a self-healing write." That em-dash clause is the SAME false
+mechanism as the two I filed: `writeMemberDoc`'s self-healing branch (`groups.ts:392-396`) merges
+into an EXISTING document, and omitting a field in a merge PRESERVES it, so a self-healing write
+cannot produce a member lacking `joinedAt`. It is in the file I read and quoted; the sentence in
+ordering rule 1 is false on the same measurement I had already run for FINDING 1. It survives greps
+for the struck wording because it is a subordinate clause justifying a rule, not a statement of
+fact. Fix: strike the em-dash clause. "Members with a `joinedAt` outrank members without one. A
+missing value must never sort as 'earliest'." needs no measurement and the code does not move.
+
+**Why I missed it, mechanically — this is the transferable part.** I ran
+`grep -rn "self-healing\|joinedAt" --include=*.ts src functions | head -30`. `src/` sorts first and
+filled all 30 lines, so every `functions/` hit — including the file under review — was cut off, and
+the output I read looked like a complete answer. A `head`-capped grep is not a measurement, exactly
+like the timed-out one I correctly refused earlier in the same round. I refused the timed-out
+command and then trusted the truncated one.
+
+**2. Strike from my entry above: "The file's own blob was unchanged this round, which is why r3 did
+not see it."** The first clause is true and checkable; the causal second is a claim about another
+round's process that I did not and cannot measure. It is the exact defect class this whole entry is
+about. The sentence that survives measurement is just: the blob was unchanged this round, and an
+unchanged sha is not an unchanged claim.
+
+**3. Concurrent sibling reviewer — a hazard to report, not to resolve here.** While I was writing,
+another security-reviewer instance appended its own r4 entry to this archive (below mine) and folded
+its own paragraph into `…knowledge.md` beside mine. I merged the two overlapping principle
+paragraphs in place rather than leaving a duplicate. Its findings and mine overlap but are NOT the
+same pair: it filed logic.ts:81-83 + logic.test.ts:97-100; I filed logic.test.ts:97-100 +
+logic.ts:46-50. The union is three distinct false claims, all independently verified here against
+the same frozen blobs. The hazard is the commit gate reading the LAST verdict line while two
+reviewers of the same agent race to write it — flagged to the parent agent rather than papered over.
+
+Corrected verdict for this round: fail (3 blocking) — logic.ts:46-50, logic.ts:81-83,
+logic.test.ts:97-100. All three strike cleanly, none is a defect in the executable logic.
+
+### 2026-09-07 — BIN-1063 steg 3 batch 1, round 5: the two residues a strike leaves behind
+
+Duty list derived from `.claude/shared-plugin.json` → `reviewGates` (`binge-security-reviewer`,
+pattern `^functions/`, no exclude list): exactly
+`functions/src/groupHandover/logic.ts` (89c9d8c57c426d7e33868db4db8f8e6d16b4f6f0) and
+`functions/src/groupHandover/logic.test.ts` (a977e67a7bc85e197b1d3d3a9a7d827b6433e120).
+Both pinned identical at the start and the end of the pass; `git hash-object` on the worktree
+matched `git rev-parse :<file>` both times. The other ten staged files match no pattern of mine.
+
+**What r4's fixes did close, verified independently rather than accepted.**
+`git grep -niE "self-heal|selfheal|repaired by|repairing"` (scoped, not `head`-capped, exit 0)
+returns nothing under `functions/src/groupHandover/`. The `noop` doc's precedent is gone and now
+points at #5's binding condition in `tasks/todo.md`; that pointer resolves and the condition does
+name the three paths (`members/{uid}`, `household/{uid}`, `watchlist/*/progress/{uid}`) and
+explicitly forbids copying `removeMember`. I re-measured `removeMember` myself
+(`src/lib/firebase/groups.ts`): `arrayRemove` on `memberUids`, delete `members/{uid}`, delete
+`household/{uid}` — three writes, `progress/{uid}` untouched. Malin's measurement was right.
+The `MemberRow` doc's published command (`grep -n "joinedAt" src/lib/firebase/groups.ts
+firestore.rules`) was RUN, not read: output is non-empty and on point — `serverTimestamp()` at
+groups.ts:138 and :398, `joinedAt == request.time` on create at rules:1310, pinned unchanged on
+update at rules:1319.
+
+**The security property itself, re-derived at HEAD.** `eligibleUids` is a REQUIRED third
+positional parameter of the exported `pickGroupSuccessor` — no default, so no call site can elect
+from the member rows alone. Rules confirm the escalation direction the doc claims: `members`'
+`selfOrOwner()` self-branch (rules:1289-1297) requires `request.auth.uid in memberUids`, so a
+stranded row cannot be self-deleted; the group `update` owner branch is
+`resource.data.memberUids.hasAll(request.resource.data.memberUids)` (BIN-327/H1), so the owner
+cannot GROW the array — but the owner arm of `selfOrOwner()` carries no membership test, so an
+owner CAN plant a member row for an arbitrary uid. Electing from the rows would therefore re-open
+H1 one collection deeper, exactly as the comment says. `createGroup` writes the owner's own member
+row with `serverTimestamp()` immediately after the group doc and before anyone can join
+(groups.ts:130), so the unconditional departing-uid exclusion is load-bearing on the ORDINARY
+group shape.
+
+**The exclusion's pin, derived rather than mutated (tree frozen).** Walked every fixture in the
+`pickGroupSuccessor` describe: only the "excludes the departing owner even when the eligible list
+still names them" case passes an eligible list containing the leaver (`['owner','early','late']`).
+Every other picker case uses `rollOf(...)` or a hand-written list the leaver is already absent
+from, and both `buildHandoverUpdate` cases reach the picker through `survivors`, which has already
+removed the leaver. So deleting `m.uid !== leavingUid` reddens exactly that one test — the
+comment's claim holds. Same method on the two ordering fixtures: with `!== null` in place of
+`Number.isFinite`, the NaN row (`aaa-corrupt`) wins the uid tie-break and the test reddens; with
+the stamped/unstamped split dropped, `aaa-unstamped` wins and that test reddens. The uids are
+ordered against the expected answer on purpose and that is what makes both mutations visible.
+`npx vitest run functions/src/groupHandover/logic.test.ts` → 18/18. `npx vitest list | grep -c
+groupHandover` → 18, so the file IS inside the root runner's include globs (BIN-802's silent-skip
+class does not apply).
+
+**Two blocking findings, both shape (i) from the principles file, both surviving r4's strike.**
+
+1. `logic.ts:18` — "Null is a real state, not a defensive placeholder". This is the r4 claim with
+   its mechanism amputated: the self-healing story is gone, the reachability assertion stayed.
+   Nothing supports it. The command published on the very next line shows every app write sets
+   `joinedAt` via `serverTimestamp()` and that the rules pin it on create and on update, so no app
+   path yields null; #5's condition in `tasks/todo.md` records the production measurement of
+   2026-09-07 against binge-nu — zero groups, zero member documents — so no legacy row holds it
+   either. A reader who runs the command derives the OPPOSITE of the sentence above it. Fix:
+   strike the clause. "...or null when the document carries no usable value." plus the derive
+   command needs no measurement, and the null branch stays for the reason it should — nothing
+   enforces the field at READ time.
+
+2. `logic.ts:65-66` and `logic.test.ts:87-89` — "ties break on the lowest uid, which is reachable
+   rather than theoretical because server timestamps within one batch share a commit time" /
+   "Server timestamps inside one batch share a single commit time, so a tie is reachable." The
+   named mechanism cannot produce the state. `grep -n "'members'" src/lib/firebase/groups.ts` gives
+   three create paths — `createGroup` (:130, a bare `setDoc` for the owner alone) and
+   `writeMemberDoc` (:286, :467, one `setDoc` per call) — and none of them writes two member
+   documents in one batch; groups.ts:75 records that batching the group doc with the owner's member
+   doc was reverted outright (BIN-532). Two members therefore never share a commit time by that
+   route. A tie is still reachable — two independent commits inside one millisecond, once the
+   caller truncates the Timestamp to `joinedAtMs` — but that is a different reason, and writing it
+   would mint a fresh unmeasured claim. Fix: strike the causal clause in both homes; the test's own
+   name ("breaks a tie on the lowest uid, not on read order") already says everything the test
+   needs, and the determinism guarantee stands on its own.
+
+Both are the failure the round-4 entry warned about, one level further in: r4's rule was "grep the
+MECHANISM's name, never the struck wording". Finding 1 has no mechanism left to grep, and finding
+2 uses a mechanism nobody had grepped because the first one absorbed the round. The generalisation
+folded into the principles file is to re-read the whole file after any strike for the bare
+"X is real/reachable" and for any second "because <mechanism>".
+
+**Non-blocking, recorded not filed.**
+- `logic.ts:28-30` narrates this file's own drafting history ("A single null for `delete` and
+  `noop` was the shape this started as"). Per `code-style.md` process narrative belongs in the
+  sprint plan, not the code, but nothing here is false and striking it is not worth another round.
+- The all-ghost group routing to `{kind:'delete'}` remains open. `tasks/todo.md` carries it under
+  "Oppen fraga som bunt 2 maste svara pa, inte arva", with the production-empty measurement beside
+  it. Correctly deferred to the batch that maps `delete` onto a real `recursiveDelete`; not a
+  batch-1 finding.
+- `node docs/org/route.mjs` on the two staged files returns `tier: medium`, `reasonCode: owned`,
+  `panel: [27]`. The plan routed `top` with `[27,5,6,4,7]` on the full steg-3 file set and all five
+  critiqued blind before the build, so the shrunk union's panel is a SUBSET of what ran — the
+  BIN-1050 hazard in its safe direction. No re-critique owed.
+- No `firestore.rules`, `firestore.indexes.json` or `package.json` in the staged set, so no manual
+  rules-deploy note is owed by this batch. No secrets, no imports at all in either file, no new
+  user-owned subcollection, so `collectUserDataSnapshots` is untouched by batch 1 — the erasure
+  obligation lands on batch 2 via #5's list.
+
+Verdict: fail (2 blocking).
+
+### 2026-09-07 — BIN-1063 steg 3 batch 1, round 6: the strike converged, and the reader is what grounds an edge state
+
+Duty list DERIVED from `.claude/shared-plugin.json` -> `reviewGates` by matching both staged paths
+against every gate's `patterns`/`exclude` (and checking the `keyed` matcher type, whose only entry is
+`.claude/settings.json` -> `hooks`, which no staged path is): `binge-security-reviewer` owes exactly
+`functions/src/groupHandover/logic.ts` and `functions/src/groupHandover/logic.test.ts`. The other ten
+staged files match no pattern of mine. Both read with `Read`, per BIN-996 — this session carried the
+standing "prefer Bash, read files with cat/head/sed -n" instruction, which the agent definition
+overrides for files under review because the ledger credits only the `Read` tool.
+
+Pinned at the START: `git rev-parse :<file>` == `git hash-object <file>` ==
+487d0e8f9e4e3938e8351b1c1183abd032954bbf (logic.ts) and
+aee89f8a4bb34e6cd428dde3a177180e92d7b830 (logic.test.ts). Re-pinned at the END after the write-up:
+all four values identical. The tree did not move under me this round.
+
+**"No executable line changed" was VERIFIED, not accepted**, which the brief explicitly asked for. I
+recovered r5's blobs from my own archive entry (89c9d8c… / a977e67…) and ran `git diff <old> <new>` on
+each. Three hunks in `logic.ts`, one in `logic.test.ts`, every one of them inside a comment or a JSDoc
+block. Zero statements, zero signatures, zero fixtures moved. That also means the derivations r5 did on
+the executable half — the exclusion pin, the two ordering mutations, the rules trace — survive
+untouched, and I re-walked them anyway rather than inherit them.
+
+**All three r5 items landed, each in every home.**
+1. `logic.ts:17-19` no longer asserts "Null is a real state, not a defensive placeholder". It now says
+   nothing enforces the field at READ time, so the null branch is real whatever the write paths do,
+   followed by the same derive command. That is a property of the reader and of what a rule CAN do
+   (`request.resource` only), not a claim about any writer — so the published command no longer argues
+   against the sentence above it, which was the whole defect.
+2. The batch-commit-time causal clause is gone from BOTH homes: `logic.ts:63-66` and
+   `logic.test.ts:87-88`. Neither says why a tie is reachable; both state only the determinism the
+   tie-break buys.
+3. The `HandoverOutcome` drafting-history narration ("was the shape this started as") is replaced by
+   the property stated directly ("One null for both `delete` and `noop` cannot be told apart by any
+   test, because the type cannot"). My r5 non-blocking note is discharged.
+
+**Hunt for surviving homes, the r4/r5 discipline.** `git grep -n -i -E "defensive placeholder|is a
+real state|share a commit time|share a single commit time|within one batch|inside one batch"` across
+every tracked file with the two knowledge files excluded by pathspec (uncapped, no `head`, exit 0).
+One hit, in `.claude/shared-plugin.json`'s `_note8` — "Two answers to one question inside one batch is
+the defect", an unrelated sentence about sprint batches. No survivor of either struck claim anywhere.
+
+**Every remaining "because <mechanism>" in the two files, re-derived at HEAD rather than inherited.**
+- `logic.ts:52-55` / `logic.test.ts:65-72`, the escalation direction: `firestore.rules:1289-1297`
+  `selfOrOwner()` — the self branch requires `request.auth.uid in memberUids`, so a stranded row cannot
+  be self-deleted; the owner arm carries NO membership test on `memberUid`, so an owner CAN plant a row
+  for an arbitrary uid. `firestore.rules:1157` and `:1191`
+  `resource.data.memberUids.hasAll(request.resource.data.memberUids)` — the owner cannot GROW the array
+  (BIN-327/H1). Electing from the rows would re-open H1 one collection deeper. Holds exactly as written.
+- `logic.ts:57-60` / `logic.test.ts:17-22`, the ordinary-shape trap: `createGroup` writes the owner's
+  own member row with `serverTimestamp()` (groups.ts:138) before anyone can join. Hedged ("essentially
+  every group"), not a count.
+- `logic.test.ts:32-37`, the mutation-justification comment, whose two halves I measured MYSELF rather
+  than reproduce r5's number: walked all eleven `pickGroupSuccessor` fixtures plus all five
+  `buildHandoverUpdate` ones. Exactly one — "excludes the departing owner even when the eligible list
+  still names them", `['owner','early','late']` — passes a list containing the leaver; every other
+  picker case uses `rollOf(...)` or a hand-written list already missing it, and both builder paths reach
+  the picker through `survivors`. Deleting `m.uid !== leavingUid` reddens that one test and nothing
+  else, and the "whole suite" half holds because the module has zero importers.
+
+**The published command was RUN, not read** (the r4 rule): `grep -n "joinedAt"
+src/lib/firebase/groups.ts firestore.rules` -> non-empty, exit 0, on point — `serverTimestamp()` at
+groups.ts:138 and :398, the create pin `joinedAt == request.time` at rules:1310, the update pin with
+`.get('joinedAt', null)` on BOTH sides at rules:1319.
+
+**What independently CONFIRMS the new read-time wording, and is the round's one carry-forward.**
+rules:1312-1317 documents in its own comment that a member document written by hand in the Console
+WITHOUT the field must stay updatable — so the rules themselves acknowledge the unstamped shape rather
+than exclude it. And the existing reader of that field, `memberDocToObject` (groups.ts:903), maps it
+through `toDate` (`src/lib/firebase/utils.ts:4`), which returns **`new Date()` for a missing value**.
+The live reader INVENTS a joinedAt of "now" instead of enforcing one. That is the strongest possible
+support for "nothing enforces the field at READ time", and it names a real trap for batch 2: a mapper
+built in that idiom would put an unstamped row into the STAMPED pool. The direction is safe today (a
+fabricated `Date.now()` sorts LAST, so it loses the election) but it silently destroys the
+stamped/unstamped split this module builds deliberately. Not a batch-1 finding — `MemberRow`'s contract
+is `number | null` and there is no importer — but the batch that writes the admin-side mapper owes it.
+
+**The ordering property re-checked from the comparator, since the new comment asserts it.** Inside
+`pool` every element is finite or every element is not: `stamped` holds only finite values, and
+`candidates` is used only when `stamped` is empty. So the fold is a min over a strict total order —
+`(joinedAtMs, uid)` when stamped, `uid` alone otherwise — hence order-independent, which is exactly what
+the new wording claims and what "is stable regardless of the order the members arrive in" pins across
+three shuffles. The mixed pool a reader might fear cannot occur.
+
+`npx vitest run functions/src/groupHandover/logic.test.ts` -> 18/18 green.
+
+**Scope duties, all negative and all derived from the staged set:** no `firestore.rules`, no
+`firestore.indexes.json`, no `package.json` (root or functions) staged, so no manual
+`firebase deploy --only firestore:rules` note is owed by this batch and BIN-939's dependency-manifest
+gate has nothing to look at. No imports at all in either file, so no secret can reach a log and no
+Admin-SDK privilege is added. No new user-owned subcollection, so `collectUserDataSnapshots` in
+`src/lib/firebase/userData.ts` is untouched by batch 1 — the erasure obligation stays on batch 2 via
+#5's binding condition in `tasks/todo.md`.
+
+**Accepted deviations re-read first.** Nothing here re-raises the Tillsammans anon-vote forgery, the
+missing session-expiry gate, blocking-as-hygiene or create-only reports. The all-ghost group routing to
+`{kind:'delete'}` is still correctly deferred to the batch that maps `delete` onto a real
+`recursiveDelete`, recorded in `tasks/todo.md` beside the production-empty measurement — not a batch-1
+finding, and not a new deviation to append.
+
+**Lesson, folded in place into the shape-(i) bullet:** a strike is not the only convergent fix. Where
+the sentence exists to justify a defensive branch, RE-GROUNDING it in the reader ("nothing enforces this
+at read time") converges in one round, because it is checkable without counting, whereas every wording
+about which WRITE produces the state needs a measurement the file's own derive command then contradicts.
+The ordering half converged by dropping reachability and stating the property bought instead. Six
+rounds, seven blocking findings across them, ZERO in the executable code.
+
+Verdict: pass (0 blocking).
+
+### 2026-09-07 — BIN-1063 steg 3 r6b: my OWN knowledge file carried the quantifier I had just passed twice
+
+Routed to me by the coordinator from the test reviewer's round 4. The false sentence was in
+`.claude/agents/binge-security-reviewer.knowledge.md`, inside my gate and not theirs, so they
+correctly reported it rather than editing it. It read:
+
+> `pickGroupSuccessor` elects from `groups/{gid}/members/*` while **every access clause keys on**
+> `groups/{gid}.memberUids`.
+
+**Verified before editing, not inherited.** Three counter-examples in `firestore.rules` at HEAD:
+`match /groups/{groupId}` opens `allow read: if isSignedIn();` (rules:1137) — no membership test at
+all; the group document's `allow delete` is `resource.data.ownerUid == request.auth.uid`
+(rules:1244-1245); `sessionHistory`'s delete is
+`get(...).data.ownerUid == request.auth.uid` (rules:1359-1360). The quantifier is false.
+
+**Superseded IN PLACE** per the `*.knowledge.md` convention — not struck bare, and the archive
+copies below and above stay as written because they are the audit trail. The bullet now says
+`firestore.rules` decides MEMBERSHIP from `memberUids`, and adds why the quantifier form is wrong
+in the direction that matters: the clauses granting the MOST are the `ownerUid` ones, which is
+precisely the escalation the bullet is about. The correction therefore strengthens the argument
+rather than weakening it — the successor becomes `ownerUid`, and `ownerUid` is what the biggest
+grants key on.
+
+**What I got wrong, and it is the sharper lesson of the six rounds.** I passed this sentence in
+`logic.ts` and `logic.test.ts` in r5 AND r6, and re-derived the surrounding mechanism claims
+against the rules both times — `selfOrOwner()`, `hasAll`, the create pin — without ever asking
+what the word "every" ranged over. I verified the clauses the sentence USED and never enumerated
+the clauses it QUANTIFIED OVER. My own principles file already carries the rule that catches this
+("a comment QUANTIFYING over a rules file is measured by listing every `allow` under that match
+block"); it lived in the test reviewer's file, and their gate is what applied it. Two reviewers,
+one sentence, and the one who owned the file was the one who kept missing it.
+
+**The copy in MY knowledge file survived a round the module files did not**, which is the
+BIN-1088 class arriving from a new direction: a reviewer's own knowledge file is a home of the
+claim, it is staged and tracked, and it is invisible to a hunt scoped to "the files under review".
+When a strike lands in the module, grep your own `*.knowledge.md` for it too — the archive hits are
+the trail, the principles hit is a live copy that will be read into the NEXT review as fact.
+
+**Hunt for other homes.** `git grep -n -i -E "every access clause|all access clauses|every group
+access clause"` over every tracked file with `*.knowledge.archive.md` excluded returns exactly two
+hits: my own corrected line (which now quotes the false wording in order to forbid it) and the test
+reviewer's knowledge file, where it is the finding's own subject, correctly worded. No live copy
+survives.
+
+**Module files re-verified rather than taken on the coordinator's word.** Staged bytes moved under
+my r6 verdict to `logic.ts 5b16b0a398101e15002b5143595a8ad14624951f` and
+`logic.test.ts 3e49640f44598db333c40c4238fb236e63db5d50`. `git diff` from my r6 pins shows one hunk
+each, comment-only, carrying exactly the corrected wording ("decides membership from `memberUids`").
+I re-`Read` both at the new bytes — a file I did not open at its CURRENT bytes is unreviewed to the
+ledger no matter what a brief says is owed — re-pinned (`git rev-parse :<file>` ==
+`git hash-object <file>` on both), and re-ran the suite: 18/18. The r6 verdict on the executable
+code stands, and now it stands on bytes I actually read.
+
+Verdict: pass (0 blocking).
+
+### 2026-09-07 — BIN-1063 steg 3 r7: a superlative refuted by the type definition one file away
+
+Re-pin round. The code reviewer struck a false "only" from `logic.test.ts`; I re-read both files at
+the current bytes so my verdict describes what will be committed.
+
+**The strike, verified rather than taken.** `git diff 3e49640f… ea67a3888e…` is ONE hunk, entirely
+inside the comment above `it('reports noop, not delete, when ownerUid has already moved')`. The
+clause after the em dash — "— which is the one case the guard exists for" — is gone; the sentence
+now ends at "a retried sweep that had already succeeded." No executable line, fixture or assertion
+moved. `logic.ts` is unmoved at `5b16b0a398101e15002b5143595a8ad14624951f`.
+
+**The finding was right, and I confirmed it from the source rather than the report.** `logic.ts:36-37`
+— the `noop` arm's own doc — names TWO causes: "either an earlier run already handed it over, or they
+were only a member." Conflating `noop` with `delete` destroys a live group in BOTH, so "the one case"
+was false and understated the guard at the same time. The strike is the right shape: one sufficient
+example never needed to be the only one, so deleting the superlative costs the sentence nothing.
+
+**Residue checks after the strike.** The remaining sentence keeps its subject and quantifies nothing.
+The neighbouring line still calls `noop` "the idempotency guard", which is a role description scoped
+to this fixture (`ownerUid` has already moved), not a count of causes — `logic.ts:96` uses the same
+phrase for the same branch. Re-raising it would be the correction chain the strike rule exists to
+stop, so it is not a finding. `git grep -n -i -E "the one case|the only case the guard"` over
+`functions src firestore.rules tasks docs` returns seven hits, all in unrelated files
+(`route.test.mjs`, `streamingOffers/index.ts`, `login/page.test.tsx`, `WatchlistContext.test.tsx`,
+`useEpisodeProgressWithSync.ts`, `watchlistWrites.addWrite.test.ts`, `watchlistWrites.ts`) and none
+about this guard. No surviving home.
+
+**Pinned** `logic.ts 5b16b0a398101e15002b5143595a8ad14624951f`,
+`logic.test.ts ea67a3888e5066a8f869f4cc4e4a6c0dea4097c3` — `git rev-parse :<file>` ==
+`git hash-object <file>` on both, after the re-read. Suite at these bytes: 18/18.
+
+**Lesson, folded in place into the quantifier bullet.** A SUPERLATIVE ("the one case", "the only
+time") is the counting defect compressed into one word, and it slips past a grep for quantifiers
+because it reads as emphasis rather than as a count. Its refutation is usually the branch's OWN
+definition one file away: here the union arm's doc comment enumerated the two causes while the test
+comment asserted one. So when a comment names "the one case", open the DEFINITION of the thing it
+describes and count the arms — the counter-evidence tends to live in the type, not in the prose.
+
+This is the fourth distinct false claim in this batch's comments across seven rounds, and still ZERO
+defects in the executable code. Every one was prose; every one struck rather than reworded.
+
+Verdict: pass (0 blocking).
+
+### 2026-09-07 — BIN-1063 steg 3 r8: SUCCESSOR to the r6b entry — its "No live copy survives" was false
+
+**This entry supersedes the closing claim of the 2026-09-07 r6b entry above** ("BIN-1063 steg 3 r6b:
+my OWN knowledge file carried the quantifier I had just passed twice"). That entry ends its
+survivor-hunt paragraph with "No live copy survives." That sentence was FALSE when I wrote it. The
+archive is append-only audit trail, so the entry stays exactly as written and this dated successor is
+the correction — a bare strike there would delete the evidence of how the miss happened, which is the
+only reason the entry is worth keeping.
+
+**What survived.** The integration reviewer found the same quantifier alive in Swedish, in
+`tasks/todo.md`:
+
+> `Reglerna behandlar en spokmedlem som fullvardig medlem: varje atkomstvillkor pa gruppen nycklar pa`
+> `memberUids.`
+
+Same claim, same false direction as the English copies — the clauses granting the MOST are the
+`ownerUid` ones (group `delete` at rules:1244-1245, `sessionHistory` delete at rules:1359-1360), and
+the group document's own `read` is `isSignedIn()` alone (rules:1137). Struck by the coordinator; what
+stands is `Reglerna behandlar en spokmedlem som fullvardig medlem.`, which is readable straight off the
+rules — no clause anywhere requires the member DOCUMENT to exist — and it carries the paragraph's
+argument for batch 2's open question intact.
+
+**Why my sweep missed it, precisely.** I grepped `every access clause|all access clauses|every group
+access clause`. Every alternative was English. This repo writes its code comments in English and its
+plans, tickets and lessons in Swedish, so a hunt keyed on the struck WORDING can only ever cover the
+half the strike happened in. My r6b entry even names the right method one paragraph earlier — grep the
+mechanism, not the wording — and I then applied it in one language. The claim's code homes were genuinely
+clean; its PLAN home was not, and `tasks/todo.md` matches no gate's patterns (verified:
+`reviewGates` returns no agent for that path), so no per-file reviewer would ever have opened it.
+
+**Verified at HEAD before writing this.** `tasks/todo.md:170` now reads
+`skrivningarna. Reglerna behandlar en spokmedlem som fullvardig medlem.` — clause gone. A BOTH-language
+sweep (`varje atkomstvillkor|varje åtkomstvillkor|alla atkomstvillkor|alla åtkomstvillkor|nycklar
+pa .memberUids|nycklar på .memberUids|every access clause|all access clauses`, both spellings for the
+å, whole tree, knowledge files excluded) exits 1 — no live copy. A LANGUAGE-INDEPENDENT sweep on the
+identifier itself (`git grep -n "memberUids" -- '*.md'`, knowledge excluded) returns 21 lines and I read
+every one: retention-policy and ADR references that describe the array's role correctly, ADR 0008's
+quoted #27 argument about write-growth branches (a different claim, in a decision record), and four
+`tasks/todo.md` lines that scope rather than quantify. Nothing else asserts the struck claim.
+
+**Module untouched.** `logic.ts 5b16b0a398101e15002b5143595a8ad14624951f`,
+`logic.test.ts ea67a3888e5066a8f869f4cc4e4a6c0dea4097c3`, `git rev-parse :<file>` ==
+`git hash-object <file>` on both. My r7 pass on those bytes stands; only `tasks/todo.md` moved.
+
+**Lesson, folded in place into the multiline-grep clause of the attestation bullet.** A survivor hunt
+scoped to one language is scoped to one half of a bilingual repo. Grep a LANGUAGE-INDEPENDENT token —
+the identifier the claim is about, the path, the symbol — because prose translates and code identifiers
+do not, and that sweep also catches the paraphrase sharing no words with the original. The corollary
+that cost me this round: a claim's CODE homes can all be clean while its PLAN home still asserts it, and
+the plan file is exactly the one no gate opens.
+
+Five distinct false claims in this batch's prose across eight rounds, zero in the executable code — and
+this one is the second where the false sentence was MINE, in my own review record rather than in the
+diff. A reviewer's own output is a home of every claim it repeats.
+
+Verdict: pass (0 blocking).
+
+### 2026-09-07 — BIN-1063 steg 3 r9: a pointer into a DISPOSABLE directory is a scheduled dangle
+
+Final re-pin round. `logic.ts` moved one comment hunk after r8; `logic.test.ts` unmoved.
+
+**The change, verified rather than taken.** `git diff 5b16b0a3… ff8969c5…` is ONE hunk, entirely
+inside the `noop` arm's JSDoc. The pointer to the erasure set changed from "the one #5's binding
+condition names in `tasks/todo.md`" to "the one #5 Legal/GDPR Counsel's binding condition names on
+BIN-1063 steg 3". No executable line, signature or fixture moved; `pickGroupSuccessor` and
+`buildHandoverUpdate` are byte-identical.
+
+**The reasoning checks out on all three legs, measured not assumed.** `.claude/rules/code-style.md:17`
+does say scratch in `tasks/` is disposable — "delete plans once implemented" — so a JSDoc pointing
+there was scheduled to dangle precisely when batches 2 and 3 come to consume it. Role #5 is
+`## 5. Legal / GDPR Counsel` (`docs/role-responsibilities.md:197`), so the new name is right.
+`git grep -n "tasks/" -- functions/src/groupHandover/` exits 1: no pointer into the disposable
+directory survives anywhere in the gated module.
+
+**The generalisation worth keeping.** A cross-reference is only as durable as the LIFECYCLE of what it
+points at, and this repo has a documented class of files whose lifecycle is "deleted on completion".
+A pointer from permanent code into `tasks/` is not wrong today and wrong later — it is wrong the moment
+it is written, because the deletion is already policy. Prefer a durable anchor: the ticket id, the ADR
+number, the role. This is the mirror image of the class I have been striking all batch — those were
+sentences that would become false when the CODE changed; this is a sentence that becomes false when a
+DOC is correctly cleaned up on schedule.
+
+**Two sibling fixes the integration reviewer filed, neither in my gate, both recorded for the trail:**
+a present-tense "both entry points import the same function" in `docs/role-responsibilities.md`,
+struck — same class as the future-wiring claim I struck from this module's own header at r3, and still
+true that the module has zero importers (`git grep "groupHandover"` outside `.claude`/`tasks`/`docs`
+exits 1, re-run at these bytes); and the test reviewer's knowledge file breaching the 80k cap, paid for
+with a verbatim archive cut. Reported as measured clean at 3 of 3 by `check-knowledge-caps`; my own
+file is 49,488 chars, well inside.
+
+**Pinned at the shipping bytes** after re-reading both with `Read`:
+`logic.ts ff8969c5d3908db8ed8fc32a0e5f158d3d4ac45d`,
+`logic.test.ts ea67a3888e5066a8f869f4cc4e4a6c0dea4097c3` — `git rev-parse :<file>` ==
+`git hash-object <file>` on both. Suite at these bytes: 18/18.
+
+**Batch total across nine rounds: six distinct false claims, every one in PROSE, zero in the executable
+code.** The executable half — the required `eligibleUids` parameter, the `Number.isFinite` guard, the
+three-valued outcome, the unconditional leaver exclusion — has been correct since r2 and has not been
+touched since. Two of the six false claims were mine, in my own review record. That ratio is the honest
+summary of this batch: the code was right early, and the cost was entirely in sentences about it.
+
+Verdict: pass (0 blocking).

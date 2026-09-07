@@ -8008,3 +8008,198 @@ collections (grepped src + functions/src). Readers still key on `d.id`, so un-ba
 are unaffected. The struck "Idempotent — om request redan finns blir det merge" was false
 twice over (`batch.set` without merge, and `allow update: if false`) — striking it was right.
 Targeted suite 22/22, worktree == index on all four staged src paths.
+
+### 2026-09-07 — BIN-1063 steg 3 batch 1: a serialized reviewer chain leaves the FIRST reviewer pinning pre-fix bytes
+
+Batch: `functions/src/groupHandover/logic.ts` + `logic.test.ts` (new, no importer anywhere —
+`git grep -n groupHandover` outside the directory hits only `docs/org/ownership-map.json`,
+`docs/role-responsibilities.md` and the reviewer archives), plus the #27 ownership seat, an
+`events.jsonl` review row and the BIN-1063 steg 3 plan block in `tasks/todo.md` (staged hunk
+`@@ -0,0 +1,173 @@`). My own `reviewGates` patterns (`^src/.*\.(ts|tsx)$`, tests excluded)
+matched ZERO staged paths; I reviewed on the merits as briefed and said so.
+
+Staged bytes: `logic.ts` `870a330cbb44898f3db7c19ce8431d9ac56a0a76`, `logic.test.ts`
+`6794bc1159ee3902601f43a7c96b05aacf624c4e`; `git rev-parse :<path>` == `git hash-object <path>`
+for both, `git diff --stat` empty, `git status --porcelain` showed no unstaged row for any
+reviewed path. `cd functions && npx tsc --noEmit` exit 0. `npx vitest run
+functions/src/groupHandover/logic.test.ts docs/org/gen-ownership-map.test.mjs` → 29 passed
+(the ownership-baseline file is run because the batch adds new files under a directory the
+map lists file-by-file — BIN-1013's class).
+
+**The finding worth keeping.** My brief said "the security and test reviewers have both passed
+these bytes after two rounds each" and listed the discriminated `HandoverOutcome` among the
+"settled" ground. The security reviewer's last archive entry
+(`### 2026-09-07 — BIN-1063 steg 3 batch 1, round 2`) ends `Verdict: pass (0 blocking)` and pins
+`543db22810d16c4b31dad065eefad93e4c539cdc` / `4362bdfabfec6f04e97332bcc3742ed0fd18a756`, with the
+reassuring sentence "Both re-pinned after the write-up; `git rev-parse :<file>` and
+`git hash-object <file>` agree, so the review describes the bytes that will be committed." True
+when written. The test reviewer's r1 then landed, and its r2 entry states the delta it graded:
+`logic.ts` `543db22 → 870a330` replaced the exported `HandoverUpdate | null` return with the
+three-armed `HandoverOutcome` union, and `logic.test.ts` `4362bdf → 6794bc1` added the
+`excludes the departing owner even when the eligible list still names them` fixture and rewrote
+the three builder cases. So a `^functions/`-gated production file changed its exported API AFTER
+the security pass, and no security verdict covers the staged sha.
+
+Mechanically: `git diff <oldblobsha> <newblobsha>` works on bare blob shas and is the one command
+that settles it. Generalized into the Markers bullet: a re-pin is a statement about that
+reviewer's own round, never about a later sibling's, and a brief that says "both passed these
+bytes" is a CLAIM (2026-08-19's ledger lesson, one reviewer further out).
+
+**Two prose findings, both mine, both in freshly-authored comments.**
+
+1. `logic.ts:15` — the module header's "Both callers import these functions rather than
+   reimplementing them" is present tense over zero callers. The security reviewer read the same
+   sentence twice and deliberately declined to file it ("a contract for batches 2/3 more than a
+   measurement … rewriting it would mint a new unmeasured claim"). I filed it anyway, and the
+   reason is the one that decides these cases: the strike rule's carve-out protects the record of
+   UNRESOLVED WORK, and that record already exists elsewhere — `tasks/todo.md`'s #7 block binds
+   "Eftertradarvalet och overlamningens nyttolast ar VAR SIN rena funktion som bada ingangarna
+   importerar". With the contract held in the plan, the header sentence carries no information the
+   strike would destroy, so STRIKE beats reword beats keep. Check for the contract's other home
+   before conceding a "it's a contract, not a measurement" defence.
+
+2. `logic.ts:47` — the `noop` variant's doc says "`ownerUid` already moved — an earlier run did
+   this. Touch nothing." The branch is `currentOwnerUid !== leavingUid`, which ALSO fires for a
+   group the leaver was only a MEMBER of. "Touch nothing" then reads as licence to skip the
+   member-leave work #5's condition binds in the same plan (`members/{uid}` — which carries
+   denormalized `displayName`/`username`/`photoURL`/`providers` — `household/{uid}`,
+   `watchlist/*/progress/{uid}`, and the `memberUids` strike). Correct-in-place rather than strike,
+   because the true wording is the condition itself and needs no counting. Same shape as the
+   corpus's "an absolute stated about one cause"; the harm direction is a departed account's PII
+   surviving in someone else's group.
+
+**Verified true, so NOT filed** (each claim in the header cost one command):
+`createGroup` does write the owner's own `members/{ownerUid}` with `joinedAt: serverTimestamp()`
+before anyone can join (`src/lib/firebase/groups.ts:131-138`); the self-healing repair path omits
+`joinedAt` entirely on update (`:393`); `firestore.rules:1309-1319` pins `joinedAt == request.time`
+on create and unchanged on update; `selfOrOwner()`'s self branch requires
+`request.auth.uid in …memberUids` (`:1293`), so a member who leaves through a raw array write
+really is stranded with an undeletable row; the owner update branch can only SHRINK `memberUids`
+(`:1157` `hasAll`) while nothing stops it planting a `members/{x}` row — which is exactly the
+escalation `eligibleUids` closes.
+
+**Not a defect, named so a later round does not file it or "pin it with a test":** the reduce's
+`Number.isFinite(a) && Number.isFinite(b)` conjunction is unreachable-as-a-difference. `pool` is
+either `stamped` (all finite) or, when `stamped.length === 0`, `candidates` (all non-finite); the
+mixed case cannot occur. No comment claims it is load-bearing, and TS needs the narrowing for the
+`as number` casts, so it stays. This is BIN-815 r3's "belt-and-braces call that is unreachable as
+a difference" — the code may stay, but nobody may claim a mutation kills it.
+
+**Two advisories.** `docs/org/metrics/events.jsonl`'s new row carries `must_haves: 28`, while the
+plan's five role blocks hold 32 condition bullets
+(`awk 'NR>=39&&NR<=148' tasks/todo.md | grep -c '^- '`). `docs/org/metrics/README.md:69` defines
+the field as a count of CONSOLIDATED conditions, so 28 can be legitimate and I did not file it —
+but BIN-975's accepted-deviation names "de inte matchar radens `must_haves`" as its own re-open
+trigger, so the derivation belongs beside the number. And `tasks/todo.md:93` (#5) binds a
+measurement owed BEFORE the build — "Mät att inget levande `members/{uid}`-dokument saknar
+`joinedAt`" — which appears nowhere in the plan or its deviation log; batch 1's missing-`joinedAt`
+fallback is safe either way, so it is not blocking here, but it must not ride into batch 2 unmet.
+
+**Seat judged, not inherited from the directory.** `docs/role-responsibilities.md` seats the module
+with #27 Database Administrator. The quantity the file is ABOUT is the ordering between documents
+in a subcollection and the payload written to the group document — a data-layer quantity, which is
+the same argument that seats `retentionCleanup/` and `reclaimOrphanFollows/` there, not proximity
+(2026-09-06's `bundle-report.mjs` lesson). `node docs/org/route.mjs $(git diff --cached
+--name-only)` on the actual staged union returns `tier: medium`, `reasonCode: owned`, `panel: [27]`
+— #27 critiqued before the build, so the full panel that ran is over-coverage, which is harmless.
+
+**Verdict: fail (3 blocking).**
+
+### 2026-09-07 — BIN-1063 steg 3 batch 1, round 2: a test comment's "the one case the guard exists for" contradicted by the batch's own production JSDoc
+
+Staged blobs reviewed: `functions/src/groupHandover/logic.ts`
+5b16b0a398101e15002b5143595a8ad14624951f, `functions/src/groupHandover/logic.test.ts`
+3e49640f44598db333c40c4238fb236e63db5d50. Pre == post == target on both
+(`git rev-parse :<path>` and `git hash-object` agree; `git diff -- functions/src/groupHandover/`
+empty before and after my run). Duty list derived from `reviewGates` in
+`.claude/shared-plugin.json`: my patterns are `^src/.*\.(ts|tsx)$` minus tests, which match
+ZERO staged paths — reviewed on the merits as briefed, not as the blocking gate.
+
+SIBLING COVERAGE CHECKED, and this time it holds. The knowledge bullet added in round 1 (a
+serialized reviewer chain leaves the earlier reviewer pinning bytes a later sibling's fix
+replaced) was the round-1 finding; both siblings now pin exactly the current shas —
+`binge-security-reviewer.knowledge.archive.md:10123-10124` and
+`binge-test-reviewer.knowledge.archive.md:25748-25749` both name 5b16b0a / 3e49640f.
+
+ROUND-1 FINDINGS, all three verified closed against the bytes:
+1. Security coverage — closed, see above.
+2. "Both callers import these functions rather than reimplementing them" — struck; no such
+   sentence survives, and no importer exists (`grep -rn groupHandover` outside the directory
+   hits only the three knowledge/archive files and `docs/org/ownership-map.json`).
+3. The `noop` JSDoc now names both causes and points at #5's condition in `tasks/todo.md`
+   rather than asserting any path's behaviour. Pointer verified: `tasks/todo.md:80-86` names
+   `members/{uid}`, `household/{uid}`, `watchlist/*/progress/{uid}` and says in terms
+   "Kopiera INTE `removeMember` och kalla det tackt … De tre raderna ovan ar listan".
+
+BLOCKING FINDING (1): `functions/src/groupHandover/logic.test.ts:171-173` —
+"A caller that reads 'no handover' as 'delete the group' would destroy a live group on a
+retried sweep that had already succeeded — which is the one case the guard exists for."
+The batch's own `logic.ts:36-43` names TWO causes for that branch: "either an earlier run
+already handed it over, or they were only a member". Both cases are destroyed by the same
+conflation — a mere member leaving a live group is if anything the commoner one — so "the one
+case" is false, and it is falsified by a file in the same commit. Remedy is a STRIKE of the
+clause after the em dash; the sentence's real content (the two refusals must be tellable
+apart, which the `toEqual({kind:'noop'})` fixture pins) stands without it. The test reviewer
+flagged the same line as "ambiguous" in an earlier round and passed it; a comment asserting
+what a PRODUCTION guard exists for is a claim about production code, so it is this gate's too.
+
+CLAIMS MEASURED AND FOUND TRUE — recorded so a later round does not re-derive them:
+- "`firestore.rules` decides membership from `memberUids`" (logic.ts:50-51): the members
+  subcollection rules and every group subcollection clause key on
+  `request.auth.uid in get(groups/$(groupId)).data.memberUids`.
+- "the owner branch cannot add a uid to `memberUids` but nothing stops it planting a member
+  row" (logic.ts:54-55): `firestore.rules:1157` binds the owner update branch with
+  `resource.data.memberUids.hasAll(request.resource.data.memberUids)` — new must be a SUBSET,
+  so growth is impossible; `firestore.rules:1289-1297` `selfOrOwner()` has an owner branch with
+  no membership condition on `memberUid`, and `allow create` at 1309 rests on it.
+- "the self branch of selfOrOwner() requires membership" (logic.test.ts:68-69):
+  `firestore.rules:1292-1293`, `request.auth.uid == memberUid && request.auth.uid in … memberUids`.
+- "`createGroup` writes the owner's own member row before anyone else can join"
+  (logic.ts:58-59): `src/lib/firebase/groups.ts:101-139` — `addDoc` with
+  `memberUids: [params.ownerUid]`, then `setDoc(doc(db,'groups',id,'members',ownerUid), {…,
+  joinedAt: serverTimestamp()})`. Hedged as "essentially every group"; the plan says the same
+  at `tasks/todo.md:31-33` and calls it the ticket's most dangerous trap.
+- The JSDoc's own published command runs and is non-empty:
+  `grep -n "joinedAt" src/lib/firebase/groups.ts firestore.rules` → 12 hits, exit 0.
+- `logic.ts:108-109` "removing either one alone leaves the departing uid ineligible": true in
+  both directions — drop the `survivors` filter and the picker's `m.uid !== leavingUid` still
+  excludes; drop the picker's exclusion and `survivors` does.
+- `logic.test.ts:33-36` "Every other picker case hands in an eligible list the leaver is
+  already missing from": checked all eleven `pickGroupSuccessor` call sites in the file — only
+  the fixture making the claim (line 44) passes `['owner','early','late']`.
+- Malin's decisions 1/2/4 as quoted in the JSDoc match `tasks/todo.md:9-18` verbatim in
+  substance (handover to the longest-standing member, both doors, `addedBy` nulled).
+- Both `logic.ts` unstamped-ordering fixtures are order-traps that really bite: with the
+  stamped/unstamped split removed, `aaa-unstamped`/`zzz-stamped` and `aaa-corrupt`(NaN)/`zzz-real`
+  both elect the wrong uid through the tie-break.
+
+NOT FILED, deliberately, and why — this batch's dominant defect class is unmeasured prose in a
+review finding, so each of these was weighed and dropped:
+- "Malin's decision of 2026-09-06" (logic.ts:4, 119). Unverifiable from the repo — the plan's
+  decision block carries no date — but NOT shown false: steg 2 shipped 2026-09-06 (8a19e2b,
+  19:14 UTC) and the plan sits under that sprint heading. Filing "this date may be
+  unverifiable" would itself be the unmeasured claim.
+- `logic.test.ts:70` "so the row survives with the earliest joinedAt among non-owners" reads as
+  a description of the fixture below it, not a universal; as a universal it would be false.
+  Left alone rather than started as a rewording chain.
+- The mixed finite/non-finite arm of the `reduce` comparator is unreachable given the pool
+  split (pool is all-finite or all-unstamped). Defensive, and the JSDoc's "a usable `joinedAt`
+  outranks none" is implemented by the split, so no claim is falsified.
+- The plan's fixture "en eftertradare som SJALV ar franvarande" (`tasks/todo.md:141`) has no
+  home in batch 1 — `MemberRow` carries no absence notion and the plan puts the callers in
+  batches 2–3. Not an unmet criterion for THIS commit.
+- `must_haves: 28` vs 32 condition bullets and the #5 measurement were my round-1 non-blocking
+  items; the brief answers both (append-only history; measured 2026-09-07 as vacuously empty,
+  `tasks/todo.md:95-99`).
+
+VERIFIED MECHANICALLY, not from the brief: `npx vitest run
+functions/src/groupHandover/logic.test.ts` → 1 file, 18 passed. `npx vitest list | grep -c
+groupHandover/logic.test.ts` → 18, so the new file IS collected by the configured run —
+BIN-802's "outside the include globs, green only by hand" does not apply here.
+`vitest.config.ts:27` includes `functions/src/**/*.{test,spec}.ts`; line 70's "functions/src is
+deliberately NOT included" is about the COVERAGE include at line 74, a different key — read it
+before treating the file's header claim ("testable under the root vitest toolchain") as false.
+`node docs/org/gen-ownership-map.mjs --check` → 0 gaps, so the new directory under
+`functions/src/` did not open the BIN-1013 ownership hole.
+
+VERDICT: fail (1 blocking).

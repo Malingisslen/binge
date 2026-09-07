@@ -1,3 +1,196 @@
+# BIN-1063 steg 3 - det faltagda halvan + gruppoverlamningen
+
+Routning: harleds med `node docs/org/route.mjs $(git diff --cached --name-only)`
+omedelbart fore commit. Vid planeringen gav den `tier: top`, `panel: [27, 5, 6, 4, 7]`.
+Alla fem har kritiserat blint fore bygget.
+
+## Malins beslut - avgjorda, fraga aldrig om dem igen
+
+1. En agd grupp med kvarvarande medlemmar LAMNAS OVER till den som varit medlem
+   langst. Den raderas inte.
+2. Det galler BADA vagarna: svepet (uid borta ur Auth) och knappen (agaren
+   raderar sig sjalv).
+3. Overlamningen gors av en anropbar serverfunktion, inte av klienten. Servern
+   avgor sjalv vem som varit medlem langst, sa garantin ligger dar den gar att
+   halla. Klienten far aldrig skriva `ownerUid`.
+4. `addedBy` pa gruppens watchlist-poster NOLLAS vid overlamning. Titeln star
+   kvar; sparet av vem som lade till den forsvinner, konsekvent med hur
+   recensioner och kommentarer redan hanteras.
+
+## Premisskontroll mot HEAD - tva pastaenden i biljetten ar redan falska
+
+- `joinedAt` ar REDAN pinnat. `firestore.rules` kraver `joinedAt == request.time`
+  pa create och att faltet ar oforandrat pa update, byggt av steg 1 uttryckligen
+  for den har overlamningen. Bygg inte om det.
+- `ownerUid` ar pinnat pa VARJE `groups/{groupId}`-update-gren, sa ingen klient
+  kan andra det i dag. Det ar skalet till att overlamningen maste ga via en
+  serverfunktion - inte en ny regelgren.
+
+## Den farligaste enskilda fallan i hela biljetten
+
+`createGroup` skriver agarens EGET `members/{ownerUid}`-dokument med
+`serverTimestamp()` innan nagon annan hunnit ga med. Agarens `joinedAt` ar
+darfor per konstruktion tidigast i praktiskt taget varje grupp som finns.
+
+En eftertradarvaljare som inte UTTRYCKLIGEN utesluter den avgaende agaren valjer
+agaren sjalv - alltsa ingen overlamning alls, tyst. Fixturen som faller det ar
+den NORMALA formen pa en grupp, inte ett kantfall: agaren ar tidigast.
+
+## Villkor fran #27 Database Administrator
+
+- Ingen ny regelgren for `ownerUid`. (Malins beslut 3 gor detta uppfyllt.)
+- Las HELA `members`-undersamlingen (taket ar 100 medlemmar, sma dokument, en
+  fraga) och valj minsta `joinedAt` bland id:n SKILDA fran den avgaende agaren,
+  i kod. Inte `orderBy('joinedAt').limit(1)`, inte ett `documentId() !=`-filter.
+- Svepets nya lasningar ar per-uid-riktade fragor, INTE nya `ScanKind`-sidor over
+  hela `reviews`/`lists`/`sessions`/`groups`. De befintliga scanningarna
+  sidbladdrar hela samlingar och filtrerar i klienten, vilket ar billigt bara for
+  samlingar som TTL-begransar sig sjalva. Dessa gor inte det.
+- Berakna INTE en andra kandidatmangd av franvarande uid:n. Halvan konsumerar
+  exakt den array `withinOrphanCeiling` returnerade for `orphanData.erase`.
+- Overlamningsskrivningen ligger INNE i `eraseOrphanedUserData`s try/catch, fore
+  raderingen av bevakningsposten - annars gar retry-kontraktet forlorat.
+- Overlamningen ar idempotent mot en omkorning: i en transaktion, kontrollera att
+  `ownerUid` fortfarande ar den franvarande uid:en. Har en tidigare korning redan
+  lamnat over ar det en no-op, aldrig ett nytt val som kan peka pa nagon annan.
+- Inga nya index behovs (`reviews.uid`, `lists.uid`, `comments`/`likes`/
+  `reactions`.uid finns redan; `groups.ownerUid`, `sessions.hostUid` och
+  `lists.editors` tacks av automatisk indexering). Bekrafta med
+  `firebase firestore:indexes` mot skarpt projekt fore merge, inte bara genom att
+  lasa JSON-filen.
+
+## Villkor fran #6 Data Protection Officer
+
+- Taket raknar KONTON; utflakningen ar obegransad i DOKUMENT. Lagg en
+  dokumentbudget per korning, oberoende av kontotaket, med samma
+  fail-closed-beteende: logga och vagra fler raderingar for det uid:t, aldrig en
+  tyst halv radering.
+- Definiera och skriv ned en uttrycklig raderingsORDNING per kategori, med samma
+  resonemang som `eraseOrphanedUserData`s kommentar redan ger: det som ar natbart
+  oberoende av uid-sokvagen (publikt lasbart, indexlistat) gar forst.
+- Varje kategori ar idempotent vid omkorning: radera-om-finns, aldrig anta-finns.
+- Per kategori: `checked`, `erased` och `skipped` i `CleanupSummary`, med samma
+  minus-ett-sentineldisciplin som redan finns. En manniska ska kunna skilja
+  "svepte och hittade inget" fran "nadde aldrig steg 3" pa EN loggrad.
+- Rakna upp ovriga uid-barande falt i `groups/`-undertradet. `addedBy` ar det enda
+  som ar matt; anta inte att det ar det enda som finns.
+
+## Villkor fran #5 Legal / GDPR Counsel
+
+- Overlamningen far inte bli ett undantag fran den radering medlems-utträdet redan
+  gor. Pa SAMMA grupp maste den avgangnes egna spar bort: `members/{uid}` (barer
+  denormaliserat `displayName`, `username`, `photoURL`, `providers`),
+  `household/{uid}`, och `watchlist/*/progress/{uid}`.
+  Kopiera INTE `removeMember` och kalla det tackt: den raderar `members/{uid}`
+  och `household/{uid}` men ror aldrig `progress/{uid}`. De tre raderna ovan ar
+  listan; harled den harifran, inte ur en befintlig kodvag.
+- `lists`: AGD lista raderas; SAMREDIGERAD lista far bara uid:t struket ur
+  `editors`. En fraga som `editors array-contains` och sedan raderar dokumentet
+  forstor en levande agares lista.
+- En kommentar den avgangne skrev pa NAGON ANNANS recension: KRAVS radering,
+  ingen ny fraga - policyn klassar allt publikt UGC som hard radering.
+- Att radera den avgangnes recension tar med sig ANDRAS likes och kommentarer
+  under den. Det ar TILLATET, inte kravt - skriv ut skalet i policyn sa en
+  framtida granskare inte laser en forsvunnen like som omfangsglidning.
+- Mat att inget levande `members/{uid}`-dokument saknar `joinedAt` innan bygget.
+  Ett saknat falt far ALDRIG sortera som "tidigast".
+  MATT 2026-09-07 mot binge-nu: noll grupper, noll medlemsdokument. Mangden ar
+  tom, sa villkoret ar uppfyllt vakuost - inte for att inget dokument saknar
+  faltet, utan for att inga dokument finns. Logiken hanterar fallet anda.
+
+## Villkor fran #4 Security Architect
+
+- Varje ny fraga provas mot emulatorn med ett SYSKONdokument som INTE ska matcha
+  (en levande uid:s recension bredvid den franvarandes) INNAN den kopplas in i
+  den muterande vagen. Ett inverterat predikat plus batch-radering ar det varsta
+  utfall den har biljetten har tillgang till.
+- Ateranvand `withinOrphanCeiling`, `ORPHAN_AUTH_MAX_PER_RUN`, den proportionella
+  granden och `ORPHAN_DATA_MIN_OBSERVED_MS`. Bygg inget andra tak och ingen andra
+  franvarokoll.
+- Re-grep faltnamnen mot tradet vid byggtillfallet. Admin SDK upprätthaller
+  ingenting - en omdopning mellan nu och da inverterar tyst vilken uid svepet
+  litar pa.
+- Skriv ALDRIG "overlamningen sker inom 24h" om svepets vag.
+  `ORPHAN_DATA_MIN_OBSERVED_MS` ar tre dygn, sa svepets fonster ar minst tre dygn.
+  Malins beslut 3 gor knappens vag omedelbar, sa meningen galler bara svepet.
+- Pre-existerande hal, filat som BIN-1108 och medvetet INTE lagat har: agar-grenen
+  kraver inte att agaren finns kvar i `memberUids`, sa en agare kan skriva bort
+  sig och frysa gruppen permanent for alla andra. Steg 3 behover samma skrivform
+  for egen rakning, sa sparren maste utformas tillsammans med den.
+
+## Villkor fran #7 QA / Test Engineer
+
+- Varje ny kategori far ETT EGET absent/live/disabled-test som anvander
+  `absentUidsFromLookup` (existens, inte heder). Den troligaste defekten i hela
+  biljetten ar ett kopierat `revokedUidsInBatches(..., fel predikat)` pa EN av
+  kategorierna - vilket raderar ett moddat men levande kontos innehall.
+- Testet asserterar pa `checked<X>`-raknaren, inte bara pa att dokumentet
+  overlevde. "Hittade inget" och "kunde inte kolla" far inte lasa likadant.
+- Ett rosterkrav UTANFOR varje tabelldriven loop, harlett ur kallan (antalet nya
+  `ScanKind`-medlemmar eller `case`-armar), sa en borttappad kategori faller.
+- De TRE skrivningarna som ror en levande tredje parts dokument -
+  `editors`-strykning, `memberUids`-strykning och agarbytet - grindas av ett tak,
+  inte lamnade ogrindade for att de "bara ar en array-redigering".
+- `src/test/rules/account-deletion.test.ts`s `mygroup`-assertion sager i dag att
+  den agda gruppen RADERAS. Den ar nu fel och skrivs om i samma commit - inte
+  raderad, inte lamnad rod, och fixturen far inte tyst goras medlemslos sa att
+  den gamla assertionen fortsatter passera.
+- Nya fixturer: 0 kvarvarande medlemmar (full radering ar fortfarande ratt - en
+  eftertradare gar inte att uppfinna), 3+ medlemmar med ICKE-sekventiella
+  `joinedAt`, LIKA `joinedAt` (tvingar fram en dokumenterad deterministisk
+  tie-break), och en eftertradare som SJALV ar franvarande.
+- Eftertradarvalet och overlamningens nyttolast ar VAR SIN rena funktion som bada
+  ingangarna importerar - aldrig tva implementationer som ser likvardiga ut.
+- Per kategori: seeda ett LEVANDE syskondokument i samma samling och assertera i
+  SAMMA test att malet ar borta OCH att syskonet ar oforandrat. Ett test som bara
+  kollar att malet ar borta skiljer inte "filtrerade ratt" fran "svepte sidan".
+- Framtvinga en flersidig korning (liten `pageSize`, minst tva sidor) per ny
+  scanning.
+- MANUELL granskningspunkt, ingen automatisk grind kan na den: `index.ts`s
+  `.select()`-projektion per ny `case`. Orkestratorns testharness laser hela
+  dokument via klient-SDK:n, sa ett saknat projicerat falt ar ett tyst
+  produktionsfel. Las det for hand mot predikatets faltbehov.
+
+## Dokumentation som blir FALSK i samma andring
+
+- `docs/data-retention-policy.md` sager i dag att den faltagda halvan INTE tacks,
+  och att gruppen "lamnas agarlos" nar agaren raderar sig. Bada blir falska.
+  STRYK och ersatt, i samma commit.
+- `.claude/rules/accepted-deviations.md`: BIN-1023-posten sager att faltagt
+  innehall inklusive agda grupper ar helt utanfor svepet. Lagg en DATERAD
+  EFTERFOLJARE som smalnar den, som steg 2 gjorde. Redigera inte den gamla.
+- Stycket "Kvarstaende lucka, inte tackt av omforsoket" kan bli falskt som en
+  SIDOEFFEKT. Omformulera det inte pa planens ord - MAT det mot den shippade
+  koden med en fixtur forst.
+
+## Oppen fraga som bunt 2 maste svara pa, inte arva
+
+En SPOKMEDLEM ar ett uid som star i `memberUids` men aldrig fick nagot
+medlemsdokument - den icke-atomiska tre-skrivnings-joinen kan do mellan
+skrivningarna. Reglerna behandlar en spokmedlem som fullvardig medlem.
+
+Eftertradarvaljaren returnerar `null` for en grupp dar ALLA kvarvarande
+`memberUids` ar spoken, vilket blir `{kind:'delete'}`. Den som mappar `delete`
+till en verklig radering forstor da delad data for personer reglerna raknar som
+medlemmar - precis den avvagning den har filen sjalv kallar den samre av tva
+nar den vagrar radera over ett saknat `joinedAt`.
+
+Noll grupper i produktion i dag, sa utfallet ar tomt. Bunt 2 avgor det, med
+skalet skrivet. Arv det inte.
+
+## Ordning
+
+Bygget delas i tre commitar, var och en gron och granskad for sig:
+
+1. Den rena eftertradarlogiken plus overlamningens nyttolast, med sina
+   enhetstester. Ingen anropare an. Detta ar den enda delen dar ett fel ar tyst.
+2. Serverfunktionen och `accountDeletion.ts`s nya gren, med emulatortesterna.
+3. Svepets faltagda halva, kategori for kategori, med raknare och tak.
+
+Manuell deploy kravs: `firebase deploy --only functions` for serverfunktionen.
+Reglerna rors inte av steg 3 - BIN-1108 tar halet i agar-grenen separat.
+
+
 # BIN-1063 steg 2 - spegelmigreringen
 
 Routning: harleds med

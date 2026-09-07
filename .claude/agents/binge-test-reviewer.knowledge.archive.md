@@ -25521,3 +25521,368 @@ the neighbouring `route.test.mjs`/`gate-symmetry.test.mjs` clauses in the same b
 to pay for the addition, and stand verbatim in the entries above.
 
 **Verdict: pass (0 blocking).**
+
+## 2026-09-07 — BIN-1063 steg 3, batch 1: the leaver-exclusion is deletable at 18/18 green
+
+**Diff reviewed** (staged; index == worktree on every path — `git rev-parse :<f>` printed beside
+`git hash-object <f>` for all eight staged paths, not only the mismatches):
+
+- `functions/src/groupHandover/logic.ts` — NEW, blob `543db22810d16c4b31dad065eefad93e4c539cdc`
+- `functions/src/groupHandover/logic.test.ts` — NEW, blob `4362bdfabfec6f04e97332bcc3742ed0fd18a756`
+- Outside this gate's duty list: the security reviewer's two knowledge files,
+  `docs/org/metrics/events.jsonl`, `docs/org/ownership-map.json`, `docs/role-responsibilities.md`,
+  `tasks/todo.md`.
+
+Duty list derived from `.claude/shared-plugin.json` → `reviewGates` → `binge-test-reviewer`
+(`\.test\.(ts|tsx)$`, `\.test\.mjs$`, `^src/.*/__tests__/`, `vitest.*\.config\.ts$`): exactly one
+staged path matches, `functions/src/groupHandover/logic.test.ts`. `logic.ts` was read as the article
+under test. Both opened with `Read` — the session carried a standing "read files with cat/head/sed"
+instruction, and per BIN-996 that is overridden for files under review; obeying it would have
+recorded zero coverage in the ledger.
+
+**Rig.** The tree was frozen, so mutation ran on a throwaway copy at `.claude/state/gh-mutate/`
+(gitignored — confirmed with `git check-ignore -q` — so no gate and no `git status` sees it), with
+its own `vitest.config.mts` (`environment: node`, `include: ['logic.test.ts']`) and `--root` pointed
+there so module resolution still reaches `C:/binge/node_modules`. Two traps worth recording: a config
+placed OUTSIDE the repo cannot load (`ERR_MODULE_NOT_FOUND: Cannot find package 'vitest'`), and
+`--config` is resolved RELATIVE TO `--root`, so passing the full path yields
+`.claude/state/gh-mutate/.claude/state/gh-mutate/vitest.config.mts`. Each mutant was rebuilt from the
+real `logic.ts` by a python helper that REFUSES unless its anchor occurs exactly once, and the
+mutated text was grepped in the rig file before and after every run. The rig was removed at the end
+and both reviewed blobs re-hashed — unchanged, and `git status --porcelain` still shows the same
+eight staged paths.
+
+Control: 18 passed (18).
+
+**Mutations run, one at a time, each rebuilt from the pristine source:**
+
+| # | mutation | result |
+|---|---|---|
+| M1 | `m.uid !== leavingUid && eligible.has(m.uid)` -> `m.uid !== leavingUid` (drop eligibility intersection) | 4 failed / 18 — matches the brief |
+| M2 | `Number.isFinite(m.joinedAtMs)` -> `m.joinedAtMs !== null` | 1 failed / 18 — matches the brief |
+| M3 | same filter -> `eligible.has(m.uid)` (drop the departing-uid exclusion) | **18 PASSED** — brief claimed 9 failures |
+| M4 | `(a as number) < (b as number)` -> `>` (earliest to latest) | 4 failed / 18 — matches the brief |
+| M5 | builder passes `memberUids` instead of `survivors` to the picker | 18 passed — equivalent, as the brief says |
+| M5b | `const survivors = memberUids.filter(...)` -> `memberUids.slice()` | 3 failed, all via the RETURNED array, none via the election |
+| M6 | tie-break `m.uid < best.uid` -> `>` | 2 failed |
+| M7 | delete `if (currentOwnerUid !== leavingUid) return null;` | 1 failed |
+| M8 | `stamped.length > 0 ? stamped : candidates` -> `stamped` | 1 failed |
+| M9 | drop the `a !== b` term from the reduce guard | 1 failed |
+| M10 | return `memberUids` instead of `survivors` in the update | 3 failed |
+| M11 | `addedBy === leavingUid` -> `==` | 18 passed — equivalent for a string `leavingUid`, not a gap |
+
+**M3 re-verified alone** after the loop: `grep -n "const candidates"` printed
+`members.filter((m) => eligible.has(m.uid));` both before and after the suite run, and the suite
+reported 18 passed (18). The claim handed to me — "dropping the departing-uid exclusion fails 9" —
+is false at these bytes.
+
+**Why the guard is dead.** Every picker fixture builds `eligibleUids` either through the test file's
+own `rollOf(members, leavingUid)` helper, which filters the leaver out of the member rows, or as a
+literal array that never names the leaver. So no fixture ever hands `pickGroupSuccessor` a list
+containing the departing uid — which is exactly the list a real caller holds: the group document's
+`memberUids` BEFORE the handover write lands. The redundant second guard in `buildHandoverUpdate`
+(`survivors`) masks it on the builder path; the picker is exported, and batches 2 and 3 are the
+callers that would supply the raw array. M5b shows the builder's own filter is pinned only through
+the RETURNED array, never through who gets elected.
+
+**The decisive fixture, proven in both directions.** Added a `probe.test.ts` to the rig:
+
+    pickGroupSuccessor(
+      [ {uid:'owner',joinedAtMs:1000}, {uid:'early',joinedAtMs:2000}, {uid:'late',joinedAtMs:3000} ],
+      'owner',
+      ['owner', 'early', 'late'],
+    ) === 'early'
+
+Pristine: 19 passed (19). With the exclusion dropped: 1 failed,
+`AssertionError: expected 'owner' to be 'early'`. Red-alone, and the wrong answer is the departing
+owner — the failure the file's own comment calls "the single most important line in this file".
+
+**Second finding, from reading rather than mutating.** `buildHandoverUpdate` returns a bare `null`
+for two conditions its own doc comment says "the caller treats differently": already handed over (do
+nothing) and nobody eligible remains (delete the group). M7 and the "refuses when nobody remains"
+case each go red, but no test can tell the two nulls apart, because the return type cannot. A
+batch-2 caller mapping `null` to delete would destroy a group on a retried sweep that had already
+succeeded, and a caller re-deriving the distinction is the duplicate implementation the file's own
+header warns about.
+
+**Not filed:** `never grows memberUids` is a strict subset of the exact-`toEqual` sibling above it
+(same fixture, same inputs) and cannot fail alone — reported as informational with no edit demanded,
+per the subset and strike rules.
+
+`.claude/rules/accepted-deviations.md` was read first. Nothing here is listed there; the BIN-1063
+steg 2 entry covers the mirror-uid backfill, not succession.
+
+**Cap payment.** The principles file stands at 79944 chars (cap 80000, `check-knowledge-caps` green).
+Paid for by compressing the BIN-941 hand-traced-count clause and the BIN-645 latch bullet, and by
+deleting one clause from the coverage-does-not-transfer bullet, subsumed by the "can it fail ALONE?"
+rule in the vacuous-oracle section. All three stand verbatim here:
+
+> Behavioral equivalence with pre-diff code is the FLOOR of a refactor review, not the verdict — also ask whether the preserved behavior was itself correct ("faithful to the old call-site literals" once approved a live merge-write data-loss bug). If a guard blocks a mutation, hand-trace and report as static-only — never claim a live result you didn't get, and **never carry a hand-traced EXACT COUNT forward as fact once the emulator is reachable**: BIN-941's port-blocked pass archived a hand-traced row count for a zero-padding-regex mutation that a live re-run contradicted, because one listed row was already denied by the prefix check and can never move with that mutation. The qualitative conclusion survived; the count didn't. Re-run a prior pass's hand-traced number the moment the blocker clears, and correct the archive rather than repeating it. [arkiv 45]
+
+> - **A "runs once per mount" latch (`redirectedRef`) IS drivable under vitest — never accept "I couldn't force a second effect run".** Two triggers (BIN-645): a mock hook returning a FRESH object per call, or a fresh state object assigned before the second `rerender` — and the second is the one to require, since with a stable mock the first goes vacuous. The trigger can also fire from the component's OWN bootstrap effect with no `rerender()` at all, so instrument a render counter before crediting a "proves the re-run" test. Full two-step diagnostic and the BIN-748 lockstep case (LOW, not a gap): [arkiv 26, 67-latch]
+
+> Similarly-named "empty" tests aren't automatically redundant (BIN-595).
+
+**Verdict: fail (2 blocking).**
+
+## Relocated 2026-09-07 — cap trim, paired with the BIN-1063 steg 3 batch 1 round-2 entry below (entry 68)
+
+> **"Exact string, `.search` included" must be checked PER SIBLING, not once per pattern**: BIN-668 copied the same `rememberNextPath(window.location.pathname + window.location.search)` handler into TopbarActions AND HomePageClient, but only TopbarActions' fixture set a query, so dropping `+ window.location.search` in the other stayed green. Flag it, don't block, and re-check the moment `/` grows a query-driven view state. [arkiv 52]
+
+> **A "requires a non-empty value" character class (`\S` right after a delimiter) is its own boundary and needs a BARE-KEY fixture, not just a different-value fixture** — `check-public-env.mjs`'s `readAssignedVars` matches `/^\s*(NAME):\s*\S/` so a bare `NEXT_PUBLIC_X:` doesn't count as "assigned", yet every fixture gives the key SOME value, so dropping the trailing `\S` survives. LOW when the bare form is an unrealistic paste, but ask for the fixture whenever a "present vs blank" regex ships a `\S`/`\S+` tail. [arkiv 54]
+
+## 2026-09-07 — BIN-1063 steg 3, batch 1 round 2: both blocking findings closed (entry 68)
+
+Staged bytes reviewed: `functions/src/groupHandover/logic.ts` 870a330cbb44898f3db7c19ce8431d9ac56a0a76,
+`functions/src/groupHandover/logic.test.ts` 6794bc1159ee3902601f43a7c96b05aacf624c4e. Index == worktree for
+all ten staged paths (printed per path, not only mismatches). reviewGates duty for this agent: the test file
+alone; logic.ts read as the article under review.
+
+Round 1 shas were 543db22 / 4362bdf (recovered from my own ledger `read` rows and `git cat-file -p`), so the
+delta IS the claim graded: +15/-15 on the test file, the picker exclusion fixture added, the three builder
+cases rewritten onto the discriminated outcome, and one subset test deleted.
+
+Mutations (grep before AND after each run, restored from a worktree snapshot, verified by `git hash-object`):
+
+1. `m.uid !== leavingUid &&` dropped from `pickGroupSuccessor`s candidate filter → 1 failed / 17 passed, and
+   the failure is exactly the new "excludes the departing owner even when the eligible list still names them"
+   (`expected owner to be early`). Round 1 finding 1 closed: red-alone.
+2. `noop` branch → `{ kind: delete }` → 1 failed, "reports noop, not delete, when ownerUid has already moved".
+3. `delete` branch → `{ kind: noop }` → 2 failed, both "reports delete …" cases. Round 1 finding 2 closed: the
+   two refusals are now tellable apart because the TYPE can tell them apart.
+4. Mine, not the coordinator's: `const survivors = memberUids.filter(...)` → `memberUids.slice()` → 2 failed,
+   the two exact-`toEqual` handover cases. So both halves of the comment's DELIBERATE redundancy are pinned
+   independently — the claim "removing either one alone leaves the departing uid ineligible" is now measured,
+   not asserted.
+
+Control after restore: 18/18 green, worktree hash back to 870a330, index never moved, `grep -c MUTANT` = 0.
+
+Deleted test acquitted WITHOUT a run: "never grows memberUids" called `buildHandoverUpdate` with the same
+arguments as the surviving `toEqual({kind:handover, ownerUid:heir, memberUids:[heir,other]})` case and asserted
+`not.toContain(owner)` + `length === 2`. Strictly weaker on an identical call — no mutation can redden it alone.
+Agreeing with the coordinator here rather than defending my own informational item.
+
+No importer anywhere else: `grep -rn "groupHandover|pickGroupSuccessor|buildHandoverUpdate|clearsAddedBy"` over
+src/functions/docs/scripts returns only the module and its own test — which is also the mechanical proof that
+batches 2 and 3 still owe the call-site wiring, the retried-run no-op at the door, and the `addedBy` write
+itself (`clearsAddedBy` is a predicate; `FieldValue.delete()` vs `null` is unpinned by this batch).
+
+Verdict: pass (0 blocking).
+
+## 2026-09-07 — BIN-1063 steg 3 batch 1, round 3 (re-review of moved bytes)
+
+Staged bytes reviewed: `functions/src/groupHandover/logic.ts` `487d0e8f9e4e3938e8351b1c1183abd032954bbf`,
+`functions/src/groupHandover/logic.test.ts` `aee89f8a4bb34e6cd428dde3a177180e92d7b830`. Index and
+worktree hashes matched for every staged path at start and at end; `git status --porcelain` unchanged
+across the pass. Duty list derived from `.claude/shared-plugin.json` -> `reviewGates`: of the twelve
+staged paths only `functions/src/groupHandover/logic.test.ts` matches this agent's entry.
+
+Round 2 shas, reconstructed from this agent's own prior read rows in the review ledger (aid
+`a49e69d262f034dd0`): `870a330cbb44898f3db7c19ce8431d9ac56a0a76` /
+`6794bc1159ee3902601f43a7c96b05aacf624c4e`. Diffed those blobs against the staged ones. The brief's
+claim that no executable line and no fixture moved was verified mechanically, not taken:
+comment-stripped (block comments removed, `//` tails removed, blank lines dropped) both files compare
+CODE IDENTICAL. Test count unchanged at 18. The file is inside the real runner's globs
+(`vitest.config.ts` include `functions/src/**/*.{test,spec}.ts`; `npx vitest list` names it).
+
+Mutation runs. The tree was frozen by the brief, so the mutation rig was an isolated pair of blobs in
+the gitignored `.claude/state/mutscratch1063/` (verified with `git check-ignore -q`), driven by its own
+vitest config with its own `cacheDir`, wiped before every run; each run brackets the suite with a
+pre- and post-`grep` for the MUTANT marker in the same command, and the rig was deleted afterwards.
+Control: 18 passed.
+
+| mutation | result |
+| --- | --- |
+| picker: drop `m.uid !== leavingUid` | 1 failed — `excludes the departing owner even when the eligible list still names them`, red ALONE (17 others green) |
+| picker: drop `eligible.has(m.uid)` | 4 failed (two picker cases, two builder cases) |
+| picker: `Number.isFinite(m.joinedAtMs)` -> `m.joinedAtMs !== null` | 1 failed — `treats a non-finite joinedAt as unstamped rather than as earliest` |
+| picker: `pool = candidates` (drop stamped/unstamped split) | 2 failed |
+| picker: drop the `m.uid < best.uid` tie-break | 2 failed |
+| builder: `noop` -> `delete` | 1 failed |
+| builder: `delete` -> `noop` | 2 failed |
+| builder: `memberUids: survivors` -> `memberUids` | 2 failed (the two exact-`toEqual` handover cases) |
+| builder: picker CALL argument `survivors` -> `memberUids` | 18 passed — GREEN, and this is what the "deliberate redundancy: removing either one alone leaves the departing uid ineligible" comment predicts. Credited, not filed. |
+| `clearsAddedBy` -> `return true` | 2 failed |
+
+Standing question from round 2 (do the surviving justification comments assert things the code does
+not do?) — each was walked:
+
+* the `createGroup` trap comment: confirmed in `src/lib/firebase/groups.ts`, which `setDoc`s the owner's
+  own member row with `joinedAt: serverTimestamp()` immediately after `addDoc`, with `memberUids:
+  [owner]` — so the owner's stamp is the earliest in a fresh group. TRUE.
+* "Every other picker case hands in an eligible list the leaver is already missing from ... the exclusion
+  could be deleted with the whole suite green": measured — 17 of 18 pass under that mutation. TRUE.
+* the stranded-row comment's rules claims: `selfOrOwner()`'s self branch is
+  `request.auth.uid == memberUid && request.auth.uid in ...memberUids`, and `allow delete` on the member
+  doc is `selfOrOwner()`, so a leaver really cannot delete their own stranded row; group-doc `allow
+  delete` keys on `ownerUid`, so a wrongly elected successor really can delete the group. TRUE.
+* the uid-ordering-trick comments on the unstamped and NaN cases: hand-traced through `reduce` and
+  confirmed by the two mutations above. TRUE.
+* "which is the one case the guard exists for" (line 172): ambiguous. `logic.ts`'s new `noop` doc names
+  two situations that reach the branch (an earlier run already handed over; the leaver was only a
+  member), but the clause plausibly refers to the single CONSEQUENCE class (destroying a live group),
+  which holds for both. Reported non-blocking; not filed as a false claim.
+
+BLOCKING FINDING (1): `functions/src/groupHandover/logic.test.ts:65-66` — "`firestore.rules` keys every
+group access clause on the group document's `memberUids`". Measured against the rules file: `match
+/groups/{groupId}` opens with `allow read: if isSignedIn();` — no membership term at all, and the rules'
+own header says so in words ("Group-doc:et sjalvt ... ar fortfarande lasbart for alla inloggade — det ar
+medvetet 'unlisted link'-modell"); the group doc's `allow delete` and `sessionHistory`'s `allow delete`
+key on `ownerUid`, not `memberUids`. The quantifier is false. It is prose only — the fixture it
+justifies is correct and its mutation is red — so the remedy is a strike of the quantifying clause, not
+a reword. The same sentence lives in three other places found by a whitespace-normalised multi-line
+grep: `functions/src/groupHandover/logic.ts:49-51` (same commit), the security reviewer's staged
+knowledge file at line 183 (superseded in place per its own convention) and that agent's append-only
+archive at lines 9475 and 9580 (never edited).
+
+Verdict: fail (1 blocking).
+
+## 2026-09-07 — BIN-1063 steg 3 batch 1, round 4: the struck quantifier held
+
+DUTY LIST derived from `.claude/shared-plugin.json` reviewGates (binge-test-reviewer patterns
+`\.test\.(ts|tsx)$`, `\.test\.mjs$`, `^src/.*/__tests__/`, `vitest.*\.config\.ts$`; no exclude,
+no keyed): exactly one staged path, `functions/src/groupHandover/logic.test.ts`.
+`functions/src/groupHandover/logic.ts` read alongside it as the article under test.
+
+SHAS (start and end of pass, index == worktree both times):
+  functions/src/groupHandover/logic.ts       5b16b0a398101e15002b5143595a8ad14624951f
+  functions/src/groupHandover/logic.test.ts  3e49640f44598db333c40c4238fb236e63db5d50
+HEAD 3f54931 throughout. All 12 staged paths printed, not only mismatches; none split.
+
+DIFF REVIEWED — reconstructed from my own round-3 ledger rows (`aid ac5bce5e1ba2b75bb`,
+logic.ts 487d0e8f, logic.test.ts aee89f8a) via `git cat-file -p` and diffed against the
+staged blobs. Two hunks, both comment-only, both changed lines prefixed ` * ` or `  // `:
+
+  logic.ts:49-50   - "The two lists diverge, and in the direction that escalates: every
+                   -  group access clause in `firestore.rules` keys on `memberUids`, while"
+                   + "The two lists diverge, and in the direction that escalates:
+                   +  `firestore.rules` decides membership from `memberUids`, while"
+  logic.test.ts:65 - "`firestore.rules` keys every group access clause on the group
+                   -  document's `memberUids`"
+                   + "`firestore.rules` decides membership from the group document's
+                   +  `memberUids`"
+
+No executable line, fixture, assertion or test name moved. Verified, not taken on report.
+
+VERIFICATION OF THE NEW WORDING (read-only, no tree edit). Round 3's three counter-examples
+re-measured against `firestore.rules` at HEAD: `match /groups/{groupId}` opens `allow read: if
+isSignedIn();` (1137), the group doc's `allow delete` keys on `resource.data.ownerUid` (1244-45),
+`selfOrOwner()`'s owner branch likewise (1295). None of them falsifies the new sentence: each
+decides OWNERSHIP or gates nothing, and every clause that decides MEMBERSHIP reads
+`get(.../groups/$(groupId)).data.memberUids` (1277, 1293, 1330, 1340, 1365-68, 1376-78, 1403,
+1411-15). Grepped for any rule deciding membership from `members/*` existence — none. The
+neighbouring test-file sentence "the self branch of selfOrOwner() requires membership" is true
+at 1292-93. The strike TOOK AWAY nothing that was a live warning: the load-bearing point
+(memberUids is the access list, the member rows are not) survives verbatim in both homes, and
+no neighbouring clause lost its subject.
+
+SUITE: `npx vitest run functions/src/groupHandover/logic.test.ts` → 1 file, 18 passed. Same
+count as round 3, as a comment-only change requires.
+
+CROSS-GATE SWEEP (rg, multiline + whitespace-normalized, whole tree): the false quantifier
+survives in `.claude/agents/binge-security-reviewer.knowledge.md:183-184` ("every access clause
+keys on `groups/{gid}.memberUids`"), a live principles file staged in this same commit. Outside
+this gate's duty list and outside my edit permission; reported for the security reviewer to
+supersede in place. The copies in both `*.knowledge.archive.md` files are correct as-is —
+append-only audit trail.
+
+VERDICT: pass (0 blocking). Round-3's single blocking finding is closed. Non-blocking, carried
+forward unchanged from round 3: the `logic.test.ts` comment "which is the one case the guard
+exists for" reads on the consequence class, not the trigger — still not a finding.
+
+## 2026-09-07 — BIN-1063 steg 3 batch 1, round 5: my round-4 non-blocking call was wrong
+
+Supersedes the closing paragraph of the 2026-09-07 round-4 entry above (append-only, so that
+entry stands verbatim). That paragraph carried forward, as "still not a finding", the
+`logic.test.ts` clause "— which is the one case the guard exists for". The code reviewer filed
+it BLOCKING and the coordinator agreed. They were right and I was wrong, twice: I graded it as
+reading on the consequence class rather than the trigger, when `logic.ts`'s `noop` arm names
+TWO causes — an earlier run already handed the group over, or the leaver was only a member —
+and conflating `noop` with `delete` destroys a live group in BOTH. So the clause miscounted
+AND understated the guard it sat on. "Definite article is still a tally" is a rule I already
+held; "consequence class, not the trigger" is how I talked myself out of applying it.
+
+SHAS (start and end of this pass, index == worktree both times, HEAD 3f54931 unmoved):
+  functions/src/groupHandover/logic.ts       5b16b0a398101e15002b5143595a8ad14624951f  (unmoved)
+  functions/src/groupHandover/logic.test.ts  ea67a3888e5066a8f869f4cc4e4a6c0dea4097c3  (was 3e49640f)
+
+DIFF REVIEWED — `git cat-file -p 3e49640f… | diff -u - <staged>`, one hunk, comment-only,
+two comment lines becoming one:
+
+  logic.test.ts:171-173  - "would destroy a live group on a
+                         -  retried sweep that had already succeeded — which is the one case
+                         -  the guard exists for."
+                         + "would destroy a live group on a
+                         +  retried sweep that had already succeeded."
+
+Struck, not reworded — the terminal form. No executable line, fixture, assertion, `it` name or
+`describe` block moved; the surviving sentence keeps its subject and the warning it carries
+("destroy a live group on a retried sweep"), which is what the strike must not take away.
+
+SUITE at the new bytes: `npx vitest run functions/src/groupHandover/logic.test.ts` → 18 passed,
+unchanged across rounds 3, 4 and 5.
+
+STILL OPEN, unchanged and outside this gate's duty list: the same false quantifier survives in
+`.claude/agents/binge-security-reviewer.knowledge.md:183-184` ("every access clause keys on
+`groups/{gid}.memberUids`"), for the security reviewer to supersede in place.
+
+VERDICT: pass (0 blocking).
+
+## Relocated 2026-09-07b — cap trim (entry 69), paid for the rounds 3-5 additions in the BIN-1063 steg 3 batch 1 entries above
+
+`check-knowledge-caps.mjs` read 80896 chars at the staged bytes (cap 80000), silent at 79620 on
+HEAD. Six passages moved here VERBATIM; each left a pointer to `[arkiv 69]` in the live file.
+Nothing deleted, no rule dropped — the durable sentence stayed in place in every case, only the
+worked case moved. Live file after the cut: 79125 chars.
+
+From the fixture-ordering bullet:
+
+> **A "report the N OLDEST + a count" reporter needs THREE probes, and the fixture must break every correlation it can**: reversing the comparator is red-alone, deleting the sort is inert BY CONSTRUCTION when a `Map` keyed by an incrementing token already iterates in ascending order (report equivalence, not a gap), while sorting by the WRONG KEY (`a.label.localeCompare(b.label)`) is a real regression the fixture hides because its labels ascend with age — name the fixture entries so alphabetical order CONTRADICTS age order. [arkiv 29]
+
+Whole bullet, sentinel/merge section:
+
+> - **Legacy→namespaced read-path fallback over a doc holding a MULTI-WRITER map** (`swipes.votes`, BIN-569/608): a doc-level `byKey.get(k)?.votes ?? legacy.get(id)?.votes` lets the first post-cutover write shadow everyone else's votes. Fixtures: DIFFERENT participants per doc; direction pinned by a shared participant with DIFFERENT values. **Doc ids there are attacker-writable** — an ALIAS (`movie_042`) means the same number as a genuine key, so the parser takes only CANONICAL ids (BIN-618): mutate the leading-zero rule, the prefix allowlist AND one term of it, plus the OVER-rejection twin (bare `42` must still parse).
+
+From the UI-confirmation bullet:
+
+> (BIN-641 r4, `useMarkSeen`'s "omtitt räknad" toast — deleting its whole narrowing left the tree green; the divergent case is flag TRUE + a tracked NON-'sedd' title). "It asks the same helper the write asks" is not enough: the caller also HARDCODES arguments the write computes (`rewatchFields('sedd', …)` where the TV branch writes `'mina'`), so **mutate every LITERAL passed into a shared helper, not just the gate**. Watch for a fixture detail that silences the assertion entirely (`rating: 4` — without it `shouldPromptRating` diverts to `showRating` and the toast never fires). [arkiv 51]
+
+From the URL/route-fixture bullet:
+
+> Curated domain id lists get cross-checked against external ground truth AND the enums/label maps they derive from. Sitemap: two-sided enumeration with REAL constants + an auth/noindex-leak scan (BIN-337/305). **Same discipline for a rejected-Error fixture feeding a message-sniffing branch: grep the fixture's string back to the line that THROWS it, not the constant's declaration** — BIN-777's thrower emits both codes in one message, so a narrow-code fixture is reachable under either branch order; rebuild it as the literal thrown string. [arkiv 44, 61]
+
+From the mirrored-helper-parity bullet:
+
+> the closed pattern (BIN-636, `mediaTypeDocId`) is a same-directory `*.parity.test.ts` importing BOTH real copies, with an AGREED set, the diverging alias set each side resolves OPPOSITELY, and a "still agrees on the non-diverged branch" case — mutate BOTH drift directions independently. Same class, rules-vs-client (BIN-1002): regex as TEXT, real fn call, disputed corpus, mutate both sides. [arkiv 31, 56]
+
+From the extracted-helper-wiring bullet, two passages:
+
+> drive TWO invocations and mutate the merge step itself; deleting it (a later edit clobbers an earlier `triggers`/`firstStampedAt`) is the false-negative twin of BIN-790's false positive (BIN-1009, `freshness.mjs`'s `stampMap`).
+
+> BIN-1088's `main([])` case kept exiting 1 after `if (!base)` was deleted, because its fakeGit had no entry for the defaulted `'HEAD'`; a fixture where `HEAD` resolves (true of every live invocation) goes green under the same deletion.
+
+## 2026-09-07 — BIN-1063 steg 3 batch 1, round 6: logic.ts re-read at the shipping bytes
+
+Closes the split index/worktree I reported at the end of round 5. `logic.ts` is staged; both
+files now agree index == worktree.
+
+SHAS (start and end of this pass, HEAD 3f54931 unmoved):
+  functions/src/groupHandover/logic.ts       ff8969c5d3908db8ed8fc32a0e5f158d3d4ac45d  (was 5b16b0a3)
+  functions/src/groupHandover/logic.test.ts  ea67a3888e5066a8f869f4cc4e4a6c0dea4097c3  (unmoved; duty file, pass stands)
+
+DIFF against my last-read logic.ts bytes: one hunk, comment-only, inside the `noop` arm's JSDoc.
+`tasks/todo.md` — disposable under `code-style.md` — replaced by "#5 Legal/GDPR Counsel's binding
+condition names on BIN-1063 steg 3". This is the form the strike rule prescribes: point at the
+TICKET rather than assert where something is written, and it states no count, so nothing in it can
+go stale the way a file path scheduled for deletion does. Executable body byte-identical.
+
+SUITE at the shipping bytes: 18 passed. Unchanged across rounds 3-6.
+
+CAP: `node scripts/check-knowledge-caps.mjs` → 3 files, all within 80000. The live file is 79125
+chars after the entry-69 trim recorded above (was 80896, 79620 at HEAD).
+
+STILL OPEN, outside this gate's duty list: the false quantifier "every access clause keys on
+`groups/{gid}.memberUids`" in `.claude/agents/binge-security-reviewer.knowledge.md:183-184`,
+for its owner to supersede in place.
+
+VERDICT: pass (0 blocking).
