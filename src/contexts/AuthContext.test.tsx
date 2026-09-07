@@ -204,6 +204,12 @@ const deletion = vi.hoisted(() => ({
   collectUserDataSnapshots: vi.fn(async () => ({})),
   collectDeletionRefs: vi.fn(async () => ({})),
   applyDeletionPlan: vi.fn(async () => {}),
+  // BIN-1063 steg 3. Mocked for the same reason as the three above, and pinned
+  // for one more: it must run BEFORE the cascade. Hand the group over after the
+  // plan is built and the plan has already queued the group for deletion.
+  handOverOwnedGroups: vi.fn(async () => ({
+    ownedGroups: 0, handedOver: 0, toDelete: 0, noop: 0, raced: 0, failed: 0,
+  })),
 }));
 vi.mock('@/lib/firebase/userData', () => ({
   collectUserDataSnapshots: deletion.collectUserDataSnapshots,
@@ -211,6 +217,12 @@ vi.mock('@/lib/firebase/userData', () => ({
 vi.mock('@/lib/firebase/accountDeletion', () => ({
   collectDeletionRefs: deletion.collectDeletionRefs,
   applyDeletionPlan: deletion.applyDeletionPlan,
+}));
+vi.mock('@/lib/firebase/groupHandover', () => ({
+  handOverOwnedGroups: deletion.handOverOwnedGroups,
+  // Re-declared, not re-exported: the module is fully mocked here. A test pins
+  // this string against the real one in functions/src/groupHandover/logic.ts.
+  HANDOVER_PARTIAL: 'binge/handover-partial',
 }));
 vi.mock('@/lib/firebase/groups', () => ({
   updateMemberProviders: vi.fn(async () => {}),
@@ -252,6 +264,7 @@ vi.mock('next/navigation', () => ({
 import AuthGuard from '@/components/AuthGuard';
 import { AuthProvider, useAuth } from './AuthContext';
 import { REQUIRES_RECENT_LOGIN, STALE_SESSION_PREFLIGHT, classifyDeletionFailure } from '@/lib/authErrors';
+import { HANDOVER_PARTIAL } from '@/lib/firebase/groupHandover';
 import { CURRENT_TERMS_VERSION } from '@/lib/legal';
 
 // --- Harness -----------------------------------------------------------------
@@ -329,6 +342,12 @@ beforeEach(() => {
   deletion.collectUserDataSnapshots.mockClear();
   deletion.collectDeletionRefs.mockClear();
   deletion.applyDeletionPlan.mockClear();
+  // Cleared like its siblings: without it the calls leak across the whole file
+  // and every ordering assertion on it becomes vacuous.
+  deletion.handOverOwnedGroups.mockClear();
+  deletion.handOverOwnedGroups.mockImplementation(async () => ({
+    ownedGroups: 0, handedOver: 0, toDelete: 0, noop: 0, raced: 0, failed: 0,
+  }));
   publicProfile.clearPublicProfileSignature.mockClear();
   // BIN-816: the projection-sync effect is the second resurrection path, so a
   // test now asserts it was NOT reached. Its sibling above was cleared and this
@@ -1292,6 +1311,83 @@ describe('AuthContext — deleteAccount checks session freshness before erasing'
     const [authDelete] = deleteUserMock.mock.invocationCallOrder;
     expect(gate).toBeLessThan(snapshot); // the gate is a PRE-flight check…
     expect(erase).toBeLessThan(authDelete); // …and the cascade still precedes deleteUser
+  });
+
+  // BIN-1063 steg 3. The order is the whole guarantee and it is invisible from
+  // either file alone: a group the server hands over stops naming this uid in
+  // memberUids, so it drops out of the array-contains query that fills the
+  // snapshots and the cascade's owner branch — which deletes the WHOLE group,
+  // other members' household data included — never sees it. Run the other way
+  // round, the cascade deletes a group other people are still in and the handover
+  // then finds nothing to hand over.
+  it('hands owned groups over BEFORE it reads the snapshots the cascade plans from', async () => {
+    await signedInProvider();
+    authTime.current = minutesAgo(1);
+
+    await act(async () => { await ctx!.deleteAccount(); });
+
+    expect(deletion.handOverOwnedGroups).toHaveBeenCalledTimes(1);
+    const [handover] = deletion.handOverOwnedGroups.mock.invocationCallOrder;
+    const [snapshot] = deletion.collectUserDataSnapshots.mock.invocationCallOrder;
+    expect(handover).toBeLessThan(snapshot);
+  });
+
+  // A failure here must NOT fall through to the cascade. Falling through is the
+  // one outcome worse than stopping: the owner branch would delete a group other
+  // people are still in, and no retry brings it back. The whole handover is
+  // idempotent, so stopping costs a retry and nothing else.
+  it('stops the deletion entirely when the handover fails', async () => {
+    await signedInProvider();
+    authTime.current = minutesAgo(1);
+    deletion.handOverOwnedGroups.mockRejectedValueOnce(new Error('handover failed'));
+
+    await act(async () => { await ctx!.deleteAccount().catch(() => {}); });
+
+    expect(deletion.collectUserDataSnapshots).not.toHaveBeenCalled();
+    expect(deletion.applyDeletionPlan).not.toHaveBeenCalled();
+    expect(deleteUserMock).not.toHaveBeenCalled();
+  });
+
+  // A handover that already WROTE and then failed must not be reported as
+  // "Ingenting har raderats". By then ownership has moved, the uid has left
+  // memberUids and rows are gone, and getting back in needs a fresh invite. The
+  // server marks its refusal; without the mapping here the classifier falls to
+  // `untouched` and the settings screen promises the opposite of what happened.
+  // BIN-876's class, one layer up.
+  it('classifies a handover that already wrote as a PARTIAL deletion, not as untouched', async () => {
+    await signedInProvider();
+    authTime.current = minutesAgo(1);
+    deletion.handOverOwnedGroups.mockRejectedValueOnce(
+      new Error(`${HANDOVER_PARTIAL}: Kunde inte lämna över alla grupper`),
+    );
+
+    let thrown: unknown;
+    await act(async () => { await ctx!.deleteAccount().catch((e: unknown) => { thrown = e; }); });
+
+    expect(classifyDeletionFailure(String((thrown as Error).message))).toBe('partial');
+  });
+
+  // The mock re-declares the marker because the module is fully mocked here, so
+  // the value the tests above drive is a THIRD copy. Pin it to the real one, or
+  // the two classification tests prove only that a string matches itself.
+  it('the mocked marker is the real one', async () => {
+    const real = await vi.importActual<typeof import('@/lib/firebase/groupHandover')>(
+      '@/lib/firebase/groupHandover',
+    );
+    expect(HANDOVER_PARTIAL).toBe(real.HANDOVER_PARTIAL);
+  });
+
+  it('classifies a handover that wrote NOTHING as untouched', async () => {
+    await signedInProvider();
+    authTime.current = minutesAgo(1);
+    deletion.handOverOwnedGroups.mockRejectedValueOnce(
+      new Error('Kunde inte lämna över alla grupper. Försök igen.'),
+    );
+
+    let thrown: unknown;
+    await act(async () => { await ctx!.deleteAccount().catch((e: unknown) => { thrown = e; }); });
+
+    expect(classifyDeletionFailure(String((thrown as Error).message))).toBe('untouched');
   });
 
   it('a token read that FAILS stops the deletion instead of proceeding blind', async () => {

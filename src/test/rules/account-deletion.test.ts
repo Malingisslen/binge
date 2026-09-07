@@ -13,6 +13,7 @@ vi.mock('../../lib/firebase/db', () => ({ fsdb: vi.fn() }));
 
 import { collectUserDataSnapshots, KNOWN_USER_SUBCOLLECTIONS } from '../../lib/firebase/userData';
 import { collectDeletionRefs, applyDeletionPlan } from '../../lib/firebase/accountDeletion';
+import { runGroupHandover, type HandoverIo } from '../../../functions/src/groupHandover/runHandover';
 
 /**
  * BIN-347 Part 2 — the load-bearing erasure proof.
@@ -58,7 +59,98 @@ function meKit() {
 }
 
 /** Run the real extracted deletion cascade as the authenticated owner. */
+/**
+ * The port the callable implements with the Admin SDK, implemented here with
+ * rules disabled — which is what the callable's Admin SDK amounts to.
+ *
+ * It exists so this test drives the SAME `runGroupHandover` the callable drives,
+ * rather than a second implementation that happens to look equivalent.
+ */
+function handoverIo(): HandoverIo {
+  const withDb = async <T>(fn: (db: fsMod.Firestore) => Promise<T>): Promise<T> => {
+    let out!: T;
+    await testEnv.withSecurityRulesDisabled(async ctx => {
+      out = await fn(ctx.firestore() as unknown as fsMod.Firestore);
+    });
+    return out;
+  };
+  return {
+    log: { info: () => {}, error: () => {} },
+    ownedGroupIds: (uid) => withDb(async d => {
+      const snap = await fsMod.getDocs(
+        fsMod.query(fsMod.collection(d, 'groups'), fsMod.where('ownerUid', '==', uid)),
+      );
+      return snap.docs.map(x => x.id);
+    }),
+    readGroup: (groupId) => withDb(async d => {
+      const snap = await fsMod.getDoc(fsMod.doc(d, 'groups', groupId));
+      if (!snap.exists()) return null;
+      return {
+        ownerUid: (snap.data().ownerUid as string | undefined) ?? '',
+        memberUids: (snap.data().memberUids as string[] | undefined) ?? [],
+      };
+    }),
+    readMembers: (groupId) => withDb(async d => {
+      const snap = await fsMod.getDocs(fsMod.collection(d, 'groups', groupId, 'members'));
+      return snap.docs.map(x => {
+        const raw = x.data().joinedAt;
+        return { uid: x.id, joinedAtMs: raw instanceof fsMod.Timestamp ? raw.toMillis() : null };
+      });
+    }),
+    readWatchlist: (groupId) => withDb(async d => {
+      const snap = await fsMod.getDocs(fsMod.collection(d, 'groups', groupId, 'watchlist'));
+      return snap.docs.map(x => ({ id: x.id, addedBy: x.data().addedBy }));
+    }),
+    readSessionHistory: (groupId) => withDb(async d => {
+      const snap = await fsMod.getDocs(fsMod.collection(d, 'groups', groupId, 'sessionHistory'));
+      return snap.docs.map(x => ({
+        id: x.id,
+        pickedByUid: x.data().pickedByUid,
+        participantUids: (x.data().participantUids as string[] | undefined) ?? [],
+      }));
+    }),
+    claimOwnership: (groupId, expectedOwnerUid, write) => withDb(async d => {
+      const ref = fsMod.doc(d, 'groups', groupId);
+      const fresh = await fsMod.getDoc(ref);
+      if (!fresh.exists() || fresh.data().ownerUid !== expectedOwnerUid) return false;
+      await fsMod.updateDoc(ref, { ownerUid: write.ownerUid, memberUids: write.memberUids });
+      return true;
+    }),
+    eraseMemberTraces: (groupId, leavingUid, erasure) => withDb(async d => {
+      const batch = fsMod.writeBatch(d);
+      batch.delete(fsMod.doc(d, 'groups', groupId, 'members', leavingUid));
+      batch.delete(fsMod.doc(d, 'groups', groupId, 'household', leavingUid));
+      batch.delete(fsMod.doc(d, 'groups', groupId, 'joinAttempts', leavingUid));
+      for (const itemId of erasure.itemIds) {
+        batch.delete(fsMod.doc(d, 'groups', groupId, 'watchlist', itemId, 'progress', leavingUid));
+      }
+      for (const itemId of erasure.clearAddedByIds) {
+        batch.update(fsMod.doc(d, 'groups', groupId, 'watchlist', itemId), { addedBy: fsMod.deleteField() });
+      }
+      for (const rowId of erasure.clearPickedByIds) {
+        batch.update(fsMod.doc(d, 'groups', groupId, 'sessionHistory', rowId), { pickedByUid: fsMod.deleteField() });
+      }
+      for (const rowId of erasure.dropParticipantIds) {
+        batch.update(fsMod.doc(d, 'groups', groupId, 'sessionHistory', rowId), {
+          participantUids: fsMod.arrayRemove(leavingUid),
+        });
+      }
+      await batch.commit();
+    }),
+  };
+}
+
+/**
+ * The whole door, in the order `runDeletionCascade` runs it.
+ *
+ * The handover goes FIRST, and the order is the guarantee: a group it hands over
+ * stops naming this uid in `memberUids`, so it drops out of the `array-contains`
+ * query that fills the snapshots and the cascade's owner branch never sees it.
+ * Run the other way round, the cascade would delete a group other people are
+ * still in.
+ */
 async function runDeletion() {
+  await runGroupHandover(handoverIo(), ME);
   const kit = meKit();
   const snaps = await collectUserDataSnapshots(ME, kit);
   const plan = await collectDeletionRefs(kit, ME, snaps);
@@ -84,6 +176,17 @@ async function exists(path: [string, ...string[]]): Promise<boolean> {
 }
 
 /** Count docs in a collection with rules bypassed. */
+/** Who owns a group now, read with rules bypassed. */
+async function ownerOf(groupId: string): Promise<string | undefined> {
+  let owner: string | undefined;
+  await testEnv.withSecurityRulesDisabled(async ctx => {
+    const db = ctx.firestore() as unknown as fsMod.Firestore;
+    const snap = await fsMod.getDoc(fsMod.doc(db, 'groups', groupId));
+    owner = snap.data()?.ownerUid as string | undefined;
+  });
+  return owner;
+}
+
 async function count(path: [string, ...string[]]): Promise<number> {
   let n = 0;
   await testEnv.withSecurityRulesDisabled(async ctx => {
@@ -239,17 +342,22 @@ describe('GDPR account-deletion erasure (BIN-347 Part 2)', () => {
     expect(await count(['sessions', 'mysession', 'participants']), 'session participants erased').toBe(0);
     expect(await count(['sessions', 'mysession', 'swipes']), 'session swipes erased').toBe(0);
 
-    // 8. Group I own fully deleted (incl. ALL its subcollections — Firestore does
-    //    not cascade subcollection deletes, so each must be erased explicitly);
-    //    group I'm a member of survives but I've left.
-    expect(await exists(['groups', 'mygroup']), 'owned group erased').toBe(false);
-    expect(await count(['groups', 'mygroup', 'members']), 'owned-group members erased').toBe(0);
-    expect(await count(['groups', 'mygroup', 'watchlist']), 'owned-group watchlist erased').toBe(0);
-    expect(await exists(['groups', 'mygroup', 'watchlist', 'w1', 'progress', ME]), 'owned-group watchlist progress erased').toBe(false);
-    expect(await exists(['groups', 'mygroup', 'sessionHistory', 'sh1']), 'owned-group sessionHistory erased').toBe(false);
+    // 8. BIN-1063 steg 3, Malins beslut 2026-09-06: en ägd grupp med kvarvarande
+    //    medlemmar LÄMNAS ÖVER, den raderas inte. Fram till dess raderade
+    //    ägar-grenen hela gruppen — inklusive andra medlemmars hushållsdata och
+    //    den delade titellistan. Det som ska bort är MINA egna spår i den.
+    expect(await exists(['groups', 'mygroup']), 'owned group survives the handover').toBe(true);
+    expect(await ownerOf('mygroup'), 'ownership moved to the remaining member').toBe(OTHER);
+    expect(await exists(['groups', 'mygroup', 'members', ME]), 'my member doc erased').toBe(false);
+    expect(await exists(['groups', 'mygroup', 'members', OTHER]), "the successor's member doc survives").toBe(true);
+    expect(await exists(['groups', 'mygroup', 'watchlist', 'w1']), 'the shared watchlist survives').toBe(true);
+    expect(await exists(['groups', 'mygroup', 'watchlist', 'w1', 'progress', ME]), 'my progress erased').toBe(false);
+    expect(await exists(['groups', 'mygroup', 'sessionHistory', 'sh1']), 'the history row survives').toBe(true);
     expect(await exists(['groups', 'mygroup', 'joinAttempts', ME]), 'owned-group joinAttempts erased').toBe(false);
-    // BIN-184: owner-grenen raderar HELA household-collectionen (alla medlemmars bidrag).
-    expect(await count(['groups', 'mygroup', 'household']), 'owned-group household erased (BIN-184)').toBe(0);
+    // BIN-184: MITT hushållsbidrag går; den kvarvarande medlemmens gör det inte.
+    // Ägar-grenen raderade förut hela samlingen, alltså även andras data.
+    expect(await exists(['groups', 'mygroup', 'household', ME]), 'my household contribution erased').toBe(false);
+    expect(await exists(['groups', 'mygroup', 'household', OTHER]), "the successor's household contribution survives").toBe(true);
     expect(await exists(['groups', 'othergroup']), 'member group survives').toBe(true);
     expect(await exists(['groups', 'othergroup', 'members', ME]), 'my member doc removed').toBe(false);
     expect(await exists(['groups', 'othergroup', 'joinAttempts', ME]), 'my joinAttempt erased (BIN-329)').toBe(false);
@@ -346,6 +454,12 @@ describe('GDPR account-deletion erasure (BIN-347 Part 2)', () => {
     // avbrott där omförsöket inte längre kan läsa sitt eget username ur profilen.
     // Ett snitt mitt i listan lämnar profilen kvar och gör hela poängen
     // verkningslös (integrationsgranskningen 2026-08-05).
+    // BIN-1063 steg 3: the handover runs first here too, exactly as
+    // runDeletionCascade runs it. Without it the prefix builds a state the door
+    // can no longer produce — the cascade's owner branch would queue the whole
+    // group — and the assertions after the retry would be true of a shape that
+    // only this test can reach.
+    await runGroupHandover(handoverIo(), ME);
     const kit = meKit();
     const snaps = await collectUserDataSnapshots(ME, kit);
     const plan = await collectDeletionRefs(kit, ME, snaps);
@@ -385,7 +499,12 @@ describe('GDPR account-deletion erasure (BIN-347 Part 2)', () => {
     expect(await exists(['users', ME]), 'profile doc erased').toBe(false);
     expect(await exists(['usernames', MY_NAME]), 'username reservation released').toBe(false);
     expect(await exists(['publicProfiles', ME]), 'public projection erased').toBe(false);
-    expect(await exists(['groups', 'mygroup']), 'owned group erased').toBe(false);
+    // The retry converges on the handover outcome, not on a deletion: the group
+    // survives under its new owner and only my own traces are gone.
+    expect(await exists(['groups', 'mygroup']), 'owned group survives the handover').toBe(true);
+    expect(await ownerOf('mygroup'), 'ownership moved').toBe(OTHER);
+    expect(await exists(['groups', 'mygroup', 'members', ME]), 'my member doc erased').toBe(false);
+    expect(await exists(['groups', 'mygroup', 'household', OTHER]), "the successor's household survives").toBe(true);
     expect(await exists(['sessions', 'mysession']), 'hosted session erased').toBe(false);
     expect(await exists(['reports', 'rep1']), 'moderation report still retained').toBe(true);
 

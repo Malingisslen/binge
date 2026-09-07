@@ -113,6 +113,21 @@ Cap: 80k chars — pay for an addition with a cut, and move what you cut verbati
   `releaseNotifyState/{tmdbId}/notified/{uid}`, `reviews/{id}/likes/{uid}`, `usernames/{name}.uid`. Ask "does
   ANY doc identify a specific user, directly or by doc-id?" If yes: `uid` FIELD + CG sweep, or if retained,
   Art. 17(3) comment + policy entry + reaper.
+- **When a change turns "delete the whole parent" into "the parent SURVIVES", every uid-bearing field in the
+  surviving subtree becomes a new retention — re-derive the field list from the RULES' match blocks and the
+  writer's payloads, never from the diff's own enumeration.** The commonest miss is a SECOND uid field on the
+  SAME document as the one that was found, and it is usually LIST-shaped, so a grep for the scalar idiom
+  (`*Uid`) skips it. FOUND IN REVIEW, BIN-1063 steg 3 bunt 2 (r1, fixed before it shipped — full finding in
+  the archive, dated 2026-09-07): the batch as first written cleared `sessionHistory.pickedByUid` and left
+  `sessionHistory.participantUids` (a `<=50` uid list, `firestore.rules`, written by `recordGroupSessionPick`,
+  rendered as initials) on the very same row, under a module comment attesting that the subtree's uid-bearing
+  fields had been enumerated. The FIXTURE hid it — the emulator seed wrote only `pickedByUid`, so a passing
+  suite proves nothing about a field the seed omits; seed every field the rules' `hasOnly` names. Walk
+  `sed -n <start>,<end>p firestore.rules | grep -n "match /"` for the subtree, then read each block's
+  `hasOnly` list as the field inventory. The durable answer that shipped is a ROSTER TEST: brace-match the
+  subtree, harvest every `/uid/i` name from its `hasOnly` contracts, assert set equality both ways against a
+  declared per-field erasure EXPRESSION (never the field NAME — it still occurs in the row type it is read
+  from), floor the scan's size OUTSIDE the loop. It reaches only collections that HAVE a contract.
 - A new TOP-LEVEL GDPR-cascaded doc needs its own seeded live-emulator assertion in `account-deletion.test.ts`
   — the `KNOWN_USER_SUBCOLLECTIONS` loop misses it, and a mocked test proves wiring, not live erasure. The
   three-way set-equality guard (rules paths == const == helper `collection()` reads == `keyof
@@ -180,7 +195,9 @@ Cap: 80k chars — pay for an addition with a cut, and move what you cut verbati
   RULES treat as authoritative for that decision, and in which direction the two can diverge.** A
   membership ARRAY on the parent doc and a membership SUBCOLLECTION are two records of one fact, written by
   different rule branches, and the weaker one silently becomes the ballot the moment a new consumer reads
-  it. BIN-1063 steg 3: `pickGroupSuccessor` elects from `groups/{gid}/members/*` while `firestore.rules`
+  it. FOUND IN REVIEW, BIN-1063 steg 3 (fixed before it shipped; the shipped `pickGroupSuccessor` takes the
+  array as a required `eligibleUids` parameter and uses the member rows only for each candidate's
+  `joinedAt`). As first written it elected from `groups/{gid}/members/*` while `firestore.rules`
   decides MEMBERSHIP from `groups/{gid}.memberUids`. Say it that way and not "every access clause keys on
   memberUids" — that quantifier is false in the direction that matters here, since the clauses granting the
   most are the ones keyed on `ownerUid` (group `delete`, `sessionHistory` delete) and the group doc's own
@@ -199,16 +216,21 @@ Cap: 80k chars — pay for an addition with a cut, and move what you cut verbati
   is the invariant, not the filter: the elected uid must be an element of the array the write itself
   stores (successor ∈ surviving `memberUids`), which also closes the sibling "owner not in the member
   array" freeze without a second guard. Two tests, one per direction — a roll entry absent from the
-  array must not win, and an array entry with no roll row must yield null, not a fabricated successor.
-  **That second direction buys its safety with a data-loss residual — name it when you accept it, and
-  re-open it at the CALLER.** The array is the access list, so an array entry with no roll row (a
+  array must not win, and the array-entry-with-no-roll-row direction pinned to whichever answer was decided.
+  **That second direction is a PRODUCT decision with a data-loss residual on both answers — it is not
+  yours to settle, and it re-opens at the CALLER.** The array is the access list, so an array entry with no
+  roll row (a
   "ghost": `memberUids` written, the member doc never written — the three-write non-batch join can die
   between writes, scope measured in BIN-1097) is a full member by every rules clause. Yielding null for
   a group whose surviving members are ALL ghosts routes it to the delete branch, destroying shared data
   for people the rules treat as members — the very trade the same file calls "the worse of the two
   failures" when it refuses to delete over a missing `joinedAt`. Live impact was nil only because the
   population was measured empty. The decision belongs to whichever call site maps `delete` onto a real
-  `recursiveDelete`, so a batch wiring this decider to a door must answer it, never inherit it.
+  `recursiveDelete`, so a batch wiring this decider to a door must answer it, never inherit it. **It was
+  answered for `groups` by Malin in BIN-1063 steg 3 bunt 2: a ghost IS a candidate, ranked below everyone
+  with a `joinedAt`, because deleting shared data out from under someone the rules count as a member is the
+  worse of the two failures. It is a dated entry in `accepted-deviations.md` — do not re-file it, and read
+  that file before filing against this shape anywhere else.**
   Companion trap in the same module: a `number | null` ordering key whose "null means unusable" contract
   lives only in prose lets a NON-FINITE value into the ranked pool, where `a !== b && a < b` is false in
   both directions and the winner flips with array order — guard with `Number.isFinite`, not `!== null`.
@@ -267,6 +289,21 @@ Cap: 80k chars — pay for an addition with a cut, and move what you cut verbati
   timed-out function with no `finally`, so a kill between claim and release sticks the flag for the cycle —
   bound the window under the platform timeout, or give the claim a LEASE timestamp. Transactions retry the
   callback, so `.add()` duplicates; use idempotent `.doc(id).set()`.
+- **"Every write is idempotent" is not "a retry REACHES this unit" — check whether the claim write mutates the
+  field the CANDIDATE QUERY selects on.** FOUND IN REVIEW, BIN-1063 steg 3 bunt 2 (r1, fixed before it
+  shipped — full finding in the archive, dated 2026-09-07; the shipped `runHandover.ts` calls
+  `eraseMemberTraces` before `claimOwnership`). As first written the claim ran FIRST: `claimOwnership` swaps
+  `ownerUid` AND drops the leaver from `memberUids`, with the trace erasure after it and outside the
+  transaction. Both doors' candidate queries key on exactly those two fields (`where('ownerUid','==',uid)`
+  in the callable,
+  `where('memberUids','array-contains',uid)` in `collectUserDataSnapshots`), so a throw from the erasure —
+  reachable by an ordinary concurrent delete, since an `update` on a removed row throws, and by a
+  multi-batch `flush()` landing batch 1 and failing batch 2 — strands the departing account's PII where no
+  retry and no sweep can ever see it again. The suite can even SAY so and be read as a strength: the
+  idempotency test asserted "the group no longer matches the ownerUid query at all". Remedies, in order of
+  preference: erase BEFORE the claim; or keep the selecting field intact until the erasure commits and clear
+  it last; or widen the candidate query to the union. Ask at every claim-then-work split: after the claim,
+  what still finds this unit?
 - **Don't GUESS which status a malformed path-param id draws.** BIN-856 assumed 400; live probes showed
   `movie/{NaN,'',abc,-1,0}` all 404 (bad RESOURCE) → `[]`, the SUCCESS path, never reaching the governor.
   Real harm is a quieter **quota LEAK**: no `checkedAt` → immortal item, re-picked every run. Fix either way:
@@ -484,6 +521,16 @@ Cap: 80k chars — pay for an addition with a cut, and move what you cut verbati
   is a hint, never the boundary. **Sha equality proves the BYTES held, not that their CLAIMS do** — a
   byte-identical module's doc comment is falsifiable by a change elsewhere in the diff. An unchanged file the
   diff depends on is exempt from re-reading, never from re-derivation.
+  **THIS FILE is the worst place to write a finding in the present tense, and the only place no gate
+  re-reads.** A finding describes bytes that exist because they are WRONG; the fix deletes them, and the
+  sentence becomes a standing instruction that is false — handed to the next review of the same surface as
+  if it were the code. It is outside every `reviewGates` pattern and in `claimLint.exemptPaths`, so nothing
+  will catch it: BIN-1063 steg 3 bunt 2 shipped with two such bullets, one of them quoting an attestation
+  the same round had struck, both found by the INTEGRATION reviewer rather than by me. So: write the
+  TRANSFERABLE SHAPE plus the durable fix, attribute the instance to the review round in the PAST tense
+  ("found in review, fixed before it shipped"), and point at the dated archive entry for the verbatim
+  finding. Supersede in place, never a bare strike — that carve-out is what the archive exists for. Sweep
+  this file for the ticket id after every round whose findings were accepted.
 - **When a diff's ticket matches a gap NAMED in a prior entry, re-grep to confirm FULL closure** — a targeted
   fix routinely leaves an identical-pattern sibling unfixed. A ticket AC promising 'a new test proves X' with
   no test file in the diff is itself the finding; same for an ADR's Consequences saying a field 'will be

@@ -135,6 +135,17 @@ export async function collectDeletionRefs(
 
   // 6. Groups: owner → delete the whole group + subcollections; member → leave
   //    (strip self from memberUids + delete my member doc + my progress).
+  //
+  // BIN-1063 steg 3: the owner branch is now reached only for a group with NOBODY
+  // left in it. `handOverOwnedGroups` runs before the snapshots are read, and a
+  // group it handed over no longer names this uid in `memberUids` — so it drops
+  // out of the `array-contains` query that fills `groupsSnap`, and the branch
+  // below never sees it. What still arrives here as owned is what the server
+  // decided cannot be handed over, which is a group with no other member.
+  //
+  // The ordering is the whole guarantee, and it is not visible from this file:
+  // see `runDeletionCascade` in `src/contexts/AuthContext.tsx`, which calls the
+  // handover first and does not swallow its failure.
   const memberLeaveUpdates: MemberLeaveUpdate[] = [];
   for (const groupDoc of snaps.groupsSnap.docs) {
     // BIN-329: erase any joinAttempts/{myUid} (holds a plaintext invite token).

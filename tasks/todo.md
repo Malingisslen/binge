@@ -187,8 +187,32 @@ Bygget delas i tre commitar, var och en gron och granskad for sig:
 2. Serverfunktionen och `accountDeletion.ts`s nya gren, med emulatortesterna.
 3. Svepets faltagda halva, kategori for kategori, med raknare och tak.
 
-Manuell deploy kravs: `firebase deploy --only functions` for serverfunktionen.
+### Deploy-ordning for bunt 2 (#25:s bindande villkor 1)
+
+FUNKTIONERNA FORST, hosting sedan. Omvand ordning bryter VARJE kontoradering,
+inte bara for gruppagare: `handOverOwnedGroups()` anropas ovillkorligt som
+forsta rad i `runDeletionCascade`, sa en klient som nar en callable som inte
+finns far ett fel och kaskaden stannar.
+
+1. `firebase deploy --only functions`
+2. Bekrafta att den lever:
+   `firebase functions:list --project binge-nu | grep handOverOwnedGroups`
+3. Forst DA hosting via `workflow_dispatch`. Drift-vakten fäller push-deployen
+   med flit (`functions/**` andrat), och `workflow_dispatch` hoppar over vakten
+   UTAN att kontrollera att funktionerna ar uppe - steg 2 ar den enda
+   kontrollen.
+
 Reglerna rors inte av steg 3 - BIN-1108 tar halet i agar-grenen separat.
+
+### Kartcommiten (#25:s bindande villkor 2)
+
+`docs/workflow-map-universe.json` och `docs/workflow-map.html` gar i SAMMA
+commit som varandra - aldrig delade - och den commiten kommer EFTER
+featurecommiten. Kartans noder pekar pa `src/lib/firebase/groupHandover.ts` och
+`functions/src/groupHandover/index.ts`; ligger kartan forst faller
+sokvagskontrollen. Featurecommiten har darmed ett rott `npm test` i sig sjalv
+(universumet saknar den nya funktionen tills nasta commit) - det ar priset for
+regeln att kartandringar aldrig buntas med featurekod, och bada pushas ihop.
 
 
 # BIN-1063 steg 2 - spegelmigreringen

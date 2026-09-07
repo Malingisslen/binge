@@ -25886,3 +25886,241 @@ STILL OPEN, outside this gate's duty list: the false quantifier "every access cl
 for its owner to supersede in place.
 
 VERDICT: pass (0 blocking).
+
+## 2026-09-07 — BIN-1063 steg 3, bunt 2: the account-delete door wired to the handover
+
+### Diff reviewed (staged, index == worktree on all 19 paths, re-verified at the end)
+Duty list derived from `reviewGates` → `binge-test-reviewer` patterns
+(`\.test\.(ts|tsx)$`, `\.test\.mjs$`, `^src/.*/__tests__/`, `vitest.*\.config\.ts$`):
+
+| file | staged sha |
+| --- | --- |
+| `functions/src/groupHandover/logic.test.ts` | `eda70c98ed37702342f54053db6371741857b94b` |
+| `src/contexts/AuthContext.test.tsx` | `d6cae988cc69d084225c4337b6d101cc2df39249` |
+| `src/test/rules/account-deletion.test.ts` | `83e9218793825ed22a4cda5823faa48e2b869631` |
+| `src/test/rules/group-handover-orchestrator.test.ts` | `d5ac824b84cd6882227bd0761f2bbb0ccb7376eb` |
+
+Production read for context (not in this gate's duty list):
+`functions/src/groupHandover/{logic,runHandover,index}.ts`,
+`src/contexts/AuthContext.tsx`, `src/lib/firebase/{accountDeletion,groupHandover}.ts`.
+
+### Mutations run
+
+Port 8080 was held by another process, so every emulator run used a scratch
+`firebase.json` on offset ports (firestore 8091 / hub 4491 / logging 4592) with a
+distinct project id `demo-binge-mut`. The real `firebase.json` was never touched.
+Snapshots were taken from the WORKTREE (not the index) into the scratchpad and
+restored by `cp`, each restore verified by `git hash-object` against the index sha.
+
+**Mutation C — `src/contexts/AuthContext.tsx`, `await handOverOwnedGroups();` moved
+from BEFORE to AFTER `collectUserDataSnapshots(id)`** (line-index splice preserving
+each line own terminator; anchors asserted before writing).
+`npx vitest run src/contexts/AuthContext.test.tsx` →
+`Tests 2 failed | 82 passed (84)`. The two reds are exactly the two new cases:
+"hands owned groups over BEFORE it reads the snapshots the cascade plans from" and
+"stops the deletion entirely when the handover fails". Restored;
+`git hash-object` = `5251d33efffc33162bdd9f84603adb6d2535d5f5` (index sha).
+
+**Mutation A — `functions/src/groupHandover/runHandover.ts`, the erase block and the
+`claimOwnership` block swapped**, i.e. the pre-fix ordering the security reviewer
+reported (erase AFTER the swap). Both blocks matched verbatim before the swap.
+`firebase -c <scratch>/firebase.json emulators:exec --only firestore --project
+demo-binge-mut "vitest run --config vitest.rules.config.ts
+group-handover-orchestrator.test.ts account-deletion.test.ts"` →
+`Tests 2 failed | 20 passed (22)`. Reds:
+- `leaves the group findable when the erasure fails, so a retry can finish it` —
+  `expected "heir" to be "owner"` at line 376. The swap committed, so the group is
+  no longer reachable by the `ownerUid` query the retry makes.
+- `counts a race rather than writing over a handover that already happened` —
+  `expected true to be false` at line 446: with the old ordering the race short-
+  circuits before the erasure, so `groups/g/members/owner` survives.
+
+So the answer to the question I was asked: **yes, the new test genuinely fails
+against the old ordering**, and it is red for the stated reason, not incidentally.
+File hash asserted identical BEFORE and AFTER the suite run
+(`c57f14e4b1544528a8b4728da174d3d1b4668eda`).
+
+**Mutation B — same file, `dropParticipantIds:` reduced to `[]`.**
+Orchestrator suite alone → `Tests 1 failed | 12 passed (13)`, the single red being
+`drops the departing member from participantUids and leaves the others`. Red-ALONE.
+`grep -c MUTANT` = 1 before and after the run.
+
+**Clean control** after restoring: same two files, `Tests 22 passed (22)`,
+`git hash-object functions/src/groupHandover/runHandover.ts` =
+`4853af95a795eee901642b12a87a3051bed3c3ab` (index sha).
+
+### What the binding conditions from my pre-build critique came to
+
+DISCHARGED:
+- One election only. `grep -rn "pickGroupSuccessor\|buildHandoverUpdate" functions/src`
+  shows `logic.ts` declaring both, `logic.ts:122` calling the picker, `runHandover.ts:163`
+  calling the builder, and nothing else outside `logic.test.ts`. Both the callable
+  (`index.ts:152`) and both test doors go through `runGroupHandover`; no second
+  election anywhere.
+- Call-site test for the ONE door that exists. The sweep door is batch 3 and is
+  written out as deferred in the 2026-09-07 accepted-deviations entry, so it is a
+  decided absence, not a gap.
+- The picker is fed the pre-write `memberUids` (the leaver still in it) —
+  `runHandover.ts:163` passes `group.memberUids`, and `logic.test.ts:38` pins the
+  exclusion against a list that still names the leaver.
+- Retry is a NO-OP, driven rather than asserted about: `is a no-op on a second run
+  rather than a second election` runs the loop twice and compares the group document
+  before and after.
+- The `addedBy` clearing WRITE, and the null-vs-delete question:
+  `clears addedBy only on the rows the departing member added, and keeps the titles`
+  asserts `'addedBy' in data === false`, which a `null` write would fail. Pinned.
+- New fixtures: 0 remaining (`reports toDelete and writes nothing when nobody else
+  remains`), non-sequential `joinedAt` (`picks the earliest joiner…`, deliberately
+  unordered), tied `joinedAt` (`breaks a tie on the lowest uid, not on read order`,
+  driven both ways round), and the absent successor (`hands the group to a ghost…`).
+- Live-sibling-survives per category: `leaves a group it does not own completely
+  alone`, the `heir` half of `erases the departing member traces and nobody
+  else's`, `movie_2` in the addedBy case, `sh2` in the pickedByUid case, and the
+  surviving `['heir']` in the participantUids case.
+
+NOT DISCHARGED — filed blocking:
+1. **No roster requirement over the uid-bearing field set.** `TraceErasure` in
+   `runHandover.ts:58-67` enumerates four fields by hand, and the file own comment
+   tells the reader to `grep -n "Uid" src/types/social.ts src/lib/firebase/groups.ts`
+   — a command in prose that nothing runs. The evidence that this matters is inside
+   this very batch: `sessionHistory.participantUids` was missed and caught by a human
+   reviewer, not by a test. Nothing goes red when a fifth uid-bearing field appears
+   in a group subcollection and no erasure covers it. The repo already has the exact
+   shape for this one collection over:
+   `src/lib/firebase/userData.subcollections.test.ts` derives the subcollection set
+   from `firestore.rules`, asserts set-equality in BOTH directions against
+   `KNOWN_USER_SUBCOLLECTIONS`, pins no-duplicates, and carries an explicit
+   non-emptiness floor ("the enumeration guard would be inert").
+2. **`index.ts:158` `if (summary.failed > 0) throw new HttpsError(...)` is
+   untested, and it is the SERVER half of the guarantee whose CLIENT half this batch
+   does pin.** `AuthContext.test.tsx` "stops the deletion entirely when the
+   handover fails" mocks a REJECTION and proves the client stops. Nothing proves the
+   server produces one. Delete that `if` and the callable resolves with `failed > 0`,
+   `handOverOwnedGroups()` resolves, the cascade proceeds, and its owner branch
+   deletes a group other people are still in — irreversibly, including their
+   `household` cost data. It is a pure predicate over `HandoverSummary`, so it is
+   extractable into the admin-free `logic.ts` exactly as the rest of the decision
+   already is. `request.auth?.uid` at :149 has the same standing.
+
+### Non-blocking, reported
+
+- `account-deletion.test.ts:444-511` ("a retry after an INTERRUPTED plan converges"):
+  the staged interrupted attempt at :457-464 calls
+  `collectUserDataSnapshots`/`collectDeletionRefs`/`applyDeletionPlan` DIRECTLY,
+  skipping `runGroupHandover`. That is why line 496 pre-existing
+  `expect(await exists(['groups','mygroup'])).toBe(false)` labelled `'owned group
+  erased'` still passes: the prefix reproduces the behaviour this batch abandoned,
+  and production cannot reach it (`runDeletionCascade` always runs the handover
+  first, and a group with a remaining member is always handed over). Not a weakened
+  assertion — it is true of the state the test builds — but it is the second
+  `mygroup` site, and the one my condition "not quietly made memberless so the old
+  assertion keeps passing" was about, one variable further in (the PREFIX rather than
+  the fixture).
+- The `noop` arm of the loop (`runHandover.ts:164`) is unexercised at orchestrator
+  level. It is reachable only when `ownerUid` moves between `ownedGroupIds` and
+  `readGroup`; the "no-op on a second run" test asserts `ownedGroups: 0`, i.e. the
+  query no longer returns the group at all, so it never reaches the branch. Drivable
+  the same way `skips a group that vanished…` drives its race.
+- Three near-identical `HandoverIo` implementations now exist (`index.ts`
+  `adminIo`, the orchestrator test `clientIo`, `account-deletion.test.ts`
+  `handoverIo`) with nothing holding them to each other. The admin one is not a
+  mechanical mirror of the others: it alone carries the `BATCH_LIMIT = 450`
+  chunking + `flush()`, which no test reaches — both test ports use one unchunked
+  batch. Precedent-consistent with `retentionCleanup/runCleanup.ts`, which the file
+  own header names, so a residual rather than a gap; but say the chunking part out
+  loud, because that is where a silent partial erasure would live.
+- `AuthContext.test.tsx` `handOverOwnedGroups` mock returns the six-field
+  `HandoverSummary` shape while the real `src/lib/firebase/groupHandover.ts` declares
+  the three-field `HandoverReport`. Nothing reads the return value, so no assertion
+  depends on it — a DRY nit, not a coverage gap.
+
+### Weakening check on the two rewritten `logic.test.ts` cases
+Both pass the four-part test for a legitimate reversal: the fixture went from
+`.toBeNull()` to `.toBe('ghost')` and from `{ kind: 'delete' }` to a full
+`toEqual({ kind: 'handover', ownerUid: 'ghost', memberUids: ['ghost'] })`, i.e.
+STRICTER not looser; the file GREW by one new case (`ranks a ghost below a member
+who has a joinedAt`, with uids ordered against the expected answer so the tie-break
+cannot rescue it); both are red against the old behaviour, which returned null; and
+the reason is a decided product change, recorded in the dated 2026-09-07
+accepted-deviations entry ("En spökmedlem ärver gruppen … Avgjort i bunt 2, inte
+förbisett"), not inferred from the diff own comment.
+
+VERDICT: fail (2 blocking).
+
+## Relocated 70 — BIN-1063 steg 3 bunt 1, the rules quantifier (moved verbatim from the principles file 2026-09-07 to pay for the entry above)
+
+**A comment QUANTIFYING over a rules file ("`firestore.rules` keys every group access clause on `memberUids`") is measured by listing every `allow` under that match block, the parent doc's OWN read included** — BIN-1063 steg 3 shipped that sentence in `logic.ts`, `logic.test.ts` AND the security reviewer's knowledge file while `match /groups/{groupId}` opens with `allow read: if isSignedIn();` (the deliberate unlisted-link model, stated in the rules' own header) and two deletes key on `ownerUid`. Strike the quantifier; the fixture it justifies is untouched, so it is prose, not a coverage gap. **The replacement that closed it names no quantity at all** — "`firestore.rules` decides membership from `memberUids`" survives every counter-example (an ungated `allow read`, two `ownerUid` deletes) because those clauses decide OWNERSHIP or nothing, not membership; grade such a rewrite by re-deriving, and a strike verified in YOUR gate's two files still leaves the copy in ANOTHER gate's `*.knowledge.md` standing — report it for its owner to supersede in place, never edit it yourself.
+
+## Relocated 71 — the `--project` guard remedy (moved verbatim from the principles file 2026-09-07 to stay under the cap)
+
+COUNT each anchor's occurrences in the stripped source before crediting it (`node -e`, no tree edit), anchor the whole block including its `return`, and spell the call site distinctly (`return fn({ a, b });`). Verified on BIN-1063's `--project` guard (failure mode: a whole-population write against a STRANGER'S project). Remedy when the entrypoint is admin-SDK-bound, and it closed the finding in round 2: the argv validation and any pure formatter are admin-free — extract into `*.helpers.mjs` and CALL them, WITH a flag-as-value fixture (`refusalFor(['--apply','--project'])`), or a weakened `includes('--project')` survives; keep the residual scan as ONE regex spanning the condition through `return 1;`.
+
+## Relocated 72 — the BIN-1063 steg 3 `rollOf` / deliberate-redundancy passage (moved verbatim from the principles file 2026-09-07 to stay under the cap)
+
+**A fixture that DERIVES the second list from the first strands the guard reconciling them**: BIN-1063 steg 3's `rollOf(members, leavingUid)` built every `pickGroupSuccessor` call's `eligibleUids` by filtering the leaver out of the member rows, so the picker's OWN leaver-exclusion was deletable at full green — a sibling guard in `buildHandoverUpdate` masked it. Hand it the list a real caller holds (the pre-write `memberUids`, leaver still in it); one such fixture is red-alone (re-verified round 3: 1 fail of 18, and it is that fixture). **A comment declaring the pair DELIBERATE redundancy ("removing either one alone leaves the uid ineligible — do not simplify it away") is a two-sided claim: mutate EACH side separately** — the picker's exclusion (killed only by the pre-write fixture) and the builder's `survivors` filter (killed by the two exact-`toEqual` handover cases). A THIRD mutation — the picker CALL's argument `survivors`→`memberUids` — is green by construction and is exactly what the redundancy comment predicts, so credit it, do not file it (round 3, 18/18). Same round, the sibling shape closed the other half: `null` for two OPPOSITE outcomes became a discriminated `HandoverOutcome` (`handover`/`delete`/`noop`), and each branch swap is then red — `noop`→`delete` 1, `delete`→`noop` 2. A subset test deleted in that same round (`update?.memberUids` `not.toContain` + `length`) needs no run to acquit: same call, same fixture, sibling asserts exact `toEqual` — strictly stronger, so it can never fail alone.
+
+## 2026-09-07 — BIN-1063 steg 3, bunt 2, round 2: both blocking findings re-verified at the new bytes
+
+Moved since round 1: `logic.ts f756710a…`, `logic.test.ts ae4f9a59…`, `index.ts 20543998…`.
+Unmoved and re-hashed: `runHandover.ts 4853af95…`,
+`group-handover-orchestrator.test.ts d5ac824b…`, `AuthContext.test.tsx d6cae988…`,
+`account-deletion.test.ts 83e92187…`. All 21 staged paths: index == worktree, before and after.
+
+### Anchor audit before trusting any source scan
+`logic.test.ts` strips only `//` line comments (`/^\s*\/\/.*$/gm`), so `/** */` blocks
+survive in both `ENTRY` and `LOOP` — the BIN-790 class. Counted every anchor in the
+STRIPPED source with a read-only `node -e`, no tree edit:
+
+- `clearsAddedBy(row.pickedByUid, leavingUid)` → 1
+- `row.participantUids.includes(leavingUid)` → 1
+- `clearsAddedBy(row.addedBy, leavingUid)` → 1
+- `const refusal = refusalForHandover(summary);` → 1
+- `const uid = request.auth?.uid;` → 1
+- `runGroupHandover(adminIo(), uid)` → 1
+
+Exactly one each, so none is satisfiable by a comment or by a sibling declaration.
+The wiring regex spans the condition through the `throw` and matches.
+
+### Mutations (each applied to the worktree, asserted present after the run, restored from a scratchpad snapshot, hash-verified)
+
+1. `runHandover.ts`: `row.participantUids.includes(leavingUid)` → `false`.
+   `vitest run functions/src/groupHandover/logic.test.ts` → `1 failed | 25 passed (26)`,
+   the red being `each declared handler is actually in the loop`. Red-ALONE.
+2. `index.ts`: the whole `if (refusal) { throw new HttpsError('internal', refusal); }`
+   → `void refusal;`. → `1 failed | 25 passed (26)`, red =
+   `is wired into the callable, throw and all`. Red-ALONE. So "the guard exists" and
+   "the guard runs" are now separate, and the second one is pinned.
+3. `firestore.rules`: `'startedByUid'` added to the `sessionHistory` `hasOnly` list, with
+   no handler. → `1 failed | 25 passed (26)`, red = `the derived set and the declared
+   handlers are the same set, both ways`, and the message NAMES the field:
+   `startedByUid is pinned by firestore.rules but has no handler`. This is the →
+   direction, the one the roster exists for. `firestore.rules` restored and verified
+   `c0887334d49791f8cfcff80867109aef562f0a2b`, `grep -c startedByUid` = 0,
+   `git status --porcelain firestore.rules` empty.
+
+Clean control: `logic.test.ts` + `AuthContext.test.tsx` → `110 passed (110)`.
+
+The floor needs no run to acquit: it is hardcoded at 2, and the scan yields exactly
+`{participantUids, pickedByUid}` — so a broken scan (0) fails it, and losing either
+field from the rules fails both the floor and the ← direction. It is outside the loop,
+which is what my condition asked for.
+
+### Residual found this round (non-blocking, reported)
+The roster keys on `hasOnly([...])` inside the brace-matched groups tree. Listing that
+tree's match blocks against its `hasOnly` count: 7 blocks (`groups`, `joinAttempts`,
+`members`, `sessionHistory`, `watchlist`, `progress`, `household`), 5 `hasOnly`
+occurrences. `groups/{gid}/watchlist/{tmdbId}` has NO field contract at all — its
+create/update is membership-only — so the scan is blind to that collection entirely,
+not merely to non-uid-named keys. That makes the exemption comment's causal clause
+("Not uid-named, so no scan keyed on the name can reach it") an incomplete account, and
+its tripwire ("a second one appearing means the scan's key is wrong") would mis-diagnose
+the likelier case: a new uid field on `watchlist`, which no KEY could reach. No field is
+unerased today and the class that actually bit (`participantUids`, a subcollection WITH
+a `hasOnly`) is closed, so this is a naming/mechanism-reach correction, not a gap.
+
+### Verdict
+Both round-1 blocking findings discharged, each verified by my own mutation rather than
+inherited. One condition requested for the remaining work (`account-deletion.test.ts:496`);
+three items dropped or downgraded to follow-ups.
+
+VERDICT: pass (0 blocking).

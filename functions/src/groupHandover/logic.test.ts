@@ -1,11 +1,24 @@
 import { describe, it, expect } from 'vitest';
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import {
   pickGroupSuccessor,
   buildHandoverUpdate,
   clearsAddedBy,
+  refusalForHandover,
+  HANDOVER_PARTIAL,
   type MemberRow,
 } from './logic';
+
+const HERE = join(fileURLToPath(import.meta.url), '..');
+/** The callable, with `//` comments stripped, so a scan reads code not prose. */
+const ENTRY = readFileSync(join(HERE, 'index.ts'), 'utf8').replace(/^\s*\/\/.*$/gm, '');
+/** The loop, same treatment — it declares the erasure's field set. */
+const LOOP = readFileSync(join(HERE, 'runHandover.ts'), 'utf8').replace(/^\s*\/\/.*$/gm, '');
+const RULES = readFileSync(join(HERE, '..', '..', '..', 'firestore.rules'), 'utf8');
 
 const member = (uid: string, joinedAtMs: number | null): MemberRow => ({ uid, joinedAtMs });
 
@@ -79,9 +92,21 @@ describe('pickGroupSuccessor — who inherits the group', () => {
     expect(pickGroupSuccessor(members, 'owner', ['real'])).toBe('real');
   });
 
-  it('returns null when no surviving memberUid has a member row', () => {
+  // A uid in memberUids with no member row is a GHOST: the join is three separate
+  // writes and can die between them. The rules count them in full — every
+  // membership clause reads the array, none consults the row — so skipping them
+  // would route the group to `delete` and destroy shared data for someone the
+  // rules call a member. They rank as unstamped, not as absent.
+  it('elects a ghost — in memberUids, no member row — over deleting the group', () => {
     const members = [member('owner', 100), member('stranded', 200)];
-    expect(pickGroupSuccessor(members, 'owner', ['someone-with-no-row'])).toBeNull();
+    expect(pickGroupSuccessor(members, 'owner', ['ghost'])).toBe('ghost');
+  });
+
+  it('ranks a ghost below a member who has a joinedAt', () => {
+    // uid ordering against the expected answer, so the tie-break cannot rescue it.
+    const members = [member('owner', 10), member('zzz-stamped', 9000)];
+    expect(pickGroupSuccessor(members, 'owner', ['aaa-ghost', 'zzz-stamped']))
+      .toBe('zzz-stamped');
   });
 
   // Without a defined tie-break the successor would depend on the order Firestore
@@ -180,9 +205,9 @@ describe('buildHandoverUpdate — the write, and when there must not be one', ()
       .toEqual({ kind: 'delete' });
   });
 
-  it('reports delete when every surviving memberUid lacks a member row', () => {
+  it('hands over to a ghost rather than deleting the group', () => {
     expect(buildHandoverUpdate('owner', 'owner', members, ['owner', 'ghost']))
-      .toEqual({ kind: 'delete' });
+      .toEqual({ kind: 'handover', ownerUid: 'ghost', memberUids: ['ghost'] });
   });
 });
 
@@ -195,5 +220,159 @@ describe('clearsAddedBy — the departed name goes, the title stays', () => {
   it('leaves a row that carries no addedBy alone', () => {
     expect(clearsAddedBy(undefined, 'gone')).toBe(false);
     expect(clearsAddedBy(null, 'gone')).toBe(false);
+  });
+});
+
+describe('refusalForHandover — the caller must not fall through', () => {
+  // The one thing standing between a group that failed to hand over and the
+  // account cascade's owner branch, which deletes the WHOLE group — other
+  // members' household data included — irreversibly.
+  it('refuses when any group failed', () => {
+    expect(refusalForHandover({ failed: 1, attempted: 0 })).toMatch(/Kunde inte lämna över/);
+    expect(refusalForHandover({ failed: 9, attempted: 0 })).toMatch(/Kunde inte lämna över/);
+  });
+
+  it('allows the caller through only when nothing failed', () => {
+    expect(refusalForHandover({ failed: 0, attempted: 0 })).toBeNull();
+    // A run that wrote and did NOT fail is the ordinary success. It must not be
+    // refused just because it touched something.
+    expect(refusalForHandover({ failed: 0, attempted: 3 })).toBeNull();
+  });
+
+  // The difference the user reads. A failure after something was already written
+  // is not "nothing has been deleted": ownership moved, the uid left memberUids,
+  // rows were erased, and getting back in needs a fresh invite. Without the
+  // marker the client's classifier falls to `untouched` and toasts exactly that
+  // promise — the BIN-876 class one layer up.
+  // Two declarations of one wire marker, on opposite sides of a boundary no
+  // production code crosses. Nothing else holds them to each other, and a
+  // divergence is silent: the client's classifier would fall to `untouched` and
+  // toast the promise that nothing was deleted.
+  it('the client declares the same marker', () => {
+    const client = readFileSync(
+      join(HERE, '..', '..', '..', 'src', 'lib', 'firebase', 'groupHandover.ts'),
+      'utf8',
+    );
+    expect(client).toContain(`export const HANDOVER_PARTIAL = '${HANDOVER_PARTIAL}';`);
+  });
+
+  // The client must OUTWAIT the server, not the other way round. `httpsCallable`
+  // defaults to 70s and only loses its own race — it does not abort the request —
+  // so a client that gives up first throws `deadline-exceeded` while the handover
+  // runs on and usually finishes, and the user reads "Ingenting har raderats" over
+  // writes that landed. Two numbers on opposite sides of a boundary with nothing
+  // else holding them together.
+  it('the client waits at least as long as the function is allowed to run', () => {
+    // Comment-stripped like ENTRY: a future comment carrying a `timeout: <n>`
+    // form would otherwise be matched first and satisfy this without the call
+    // site setting anything.
+    const client = readFileSync(
+      join(HERE, '..', '..', '..', 'src', 'lib', 'firebase', 'groupHandover.ts'),
+      'utf8',
+    ).replace(/^\s*\/\/.*$/gm, '');
+    const clientMs = Number(/timeout:\s*([\d_]+)/.exec(client)?.[1].replace(/_/g, ''));
+    const serverS = Number(/timeoutSeconds:\s*(\d+)/.exec(ENTRY)?.[1]);
+    expect(clientMs, 'the client sets no explicit timeout').toBeGreaterThan(0);
+    expect(serverS, 'the function sets no explicit timeoutSeconds').toBeGreaterThan(0);
+    expect(clientMs).toBeGreaterThanOrEqual(serverS * 1000);
+  });
+
+  it('marks the refusal partial when a write was already attempted', () => {
+    const partial = refusalForHandover({ failed: 1, attempted: 1 });
+    expect(partial).toContain(HANDOVER_PARTIAL);
+    const untouched = refusalForHandover({ failed: 1, attempted: 0 });
+    expect(untouched).not.toContain(HANDOVER_PARTIAL);
+  });
+
+  // "The guard exists" and "the guard runs" are different claims, and the entry
+  // point cannot be imported here (firebase-admin does not resolve under the root
+  // runner). Anchor the whole block through its throw as ONE regex: an anchor on
+  // the condition alone stays green while the body is deleted.
+  it('is wired into the callable, throw and all', () => {
+    expect(ENTRY).toMatch(
+      /const refusal = refusalForHandover\(summary\);\s*if \(refusal\) \{\s*throw new HttpsError\('internal', refusal\);/,
+    );
+  });
+
+  // The uid comes from the authenticated context, never the payload: a caller
+  // can only ever hand over their OWN groups.
+  it('takes the uid from request.auth and refuses without it', () => {
+    expect(ENTRY).toContain('const uid = request.auth?.uid;');
+    expect(ENTRY).toMatch(/if \(!uid\) throw new HttpsError\('unauthenticated'/);
+    expect(ENTRY).toContain('runGroupHandover(adminIo(), uid)');
+  });
+});
+
+describe('the erasure covers every uid-bearing field the group contracts pin', () => {
+  // The roster requirement, and this batch is why it exists. `participantUids`
+  // was missed by a hand-written enumeration and caught by a reviewer, not by a
+  // test: nothing went red. The set is DERIVED from firestore.rules' own field
+  // contracts rather than restated here, so a fifth uid field added to a group
+  // subcollection fails this instead of shipping unerased.
+  const uidFieldsInRules = (() => {
+    // Brace-match the groups tree rather than slicing a guessed window: a window
+    // that is too short silently drops subcollections, and the floor below is the
+    // only thing that would notice.
+    const header = 'match /groups/{groupId}';
+    const start = RULES.indexOf(header);
+    let depth = 0;
+    let end = start;
+    // Open the scan AFTER the path, whose own `{groupId}` is a brace pair that
+    // would close the block on its first character.
+    for (let i = RULES.indexOf('{', start + header.length); i < RULES.length; i += 1) {
+      if (RULES[i] === '{') depth += 1;
+      else if (RULES[i] === '}') {
+        depth -= 1;
+        if (depth === 0) { end = i; break; }
+      }
+    }
+    const groupsTree = RULES.slice(start, end);
+    const found = new Set<string>();
+    for (const block of groupsTree.matchAll(/hasOnly\(\[([^\]]*)\]\)/g)) {
+      for (const name of block[1].matchAll(/'([A-Za-z0-9_]+)'/g)) {
+        if (/uid/i.test(name[1])) found.add(name[1]);
+      }
+    }
+    return found;
+  })();
+
+  // Without a floor the scan can break — a renamed rules block, a changed
+  // `hasOnly` spelling — and report an empty set, which every subset assertion
+  // below would satisfy. The guard would be inert and silent.
+  it('the scan actually found fields', () => {
+    expect(uidFieldsInRules.size).toBeGreaterThanOrEqual(2);
+  });
+
+  // How each field is erased, not merely that its name occurs somewhere. An
+  // earlier draft asserted only `LOOP.toContain(field)` and stayed green when the
+  // erasure was ripped out, because the field name still appeared in the row type
+  // it was read from — the exact "passes for the wrong reason" shape.
+  const ERASURE_EXPRESSION: Record<string, string> = {
+    pickedByUid: 'clearsAddedBy(row.pickedByUid, leavingUid)',
+    participantUids: 'row.participantUids.includes(leavingUid)',
+    // Declared rather than derived. The scan reads `hasOnly` field contracts, and
+    // `groups/{gid}/watchlist/{tmdbId}` has none — its create is membership-only —
+    // so that collection is outside the scan's reach entirely, not merely its key.
+    addedBy: 'clearsAddedBy(row.addedBy, leavingUid)',
+  };
+
+  it('the derived set and the declared handlers are the same set, both ways', () => {
+    // → A new uid field in a group contract has no handler here and fails.
+    for (const field of uidFieldsInRules) {
+      expect(Object.keys(ERASURE_EXPRESSION), `${field} is pinned by firestore.rules but has no handler`)
+        .toContain(field);
+    }
+    // ← A handler for a field the rules no longer pin is dead weight, except the
+    // one that is deliberately not derivable.
+    for (const field of Object.keys(ERASURE_EXPRESSION)) {
+      if (field === 'addedBy') continue;
+      expect([...uidFieldsInRules], `${field} has a handler but nothing pins it`).toContain(field);
+    }
+  });
+
+  it('each declared handler is actually in the loop', () => {
+    for (const [field, expression] of Object.entries(ERASURE_EXPRESSION)) {
+      expect(LOOP, `${field} is no longer erased`).toContain(expression);
+    }
   });
 });

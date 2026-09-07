@@ -103,10 +103,11 @@ export function deletionWasHandedOff(message: string): boolean {
  *                      the data is gone and only the identity survives.
  * - `partial`        — the cascade committed at least one chunk and then failed,
  *                      or it finished and only `deleteUser` did not.
- * - `untouched`      — every remaining path, all of which run before the first
- *                      write: the token read, the snapshot reads, the plan build,
- *                      and a first-chunk failure (which `applyDeletionPlan`
- *                      leaves untagged for precisely this reason).
+ * - `untouched`      — every remaining path: the token read, the snapshot reads,
+ *                      the plan build, a first-chunk failure (which
+ *                      `applyDeletionPlan` leaves untagged for precisely this
+ *                      reason), and a group handover that refused before it
+ *                      wrote anything.
  */
 export type DeletionFailureKind = 'preflight' | 'recent-login' | 'partial' | 'untouched';
 

@@ -21,6 +21,7 @@ import { fsdb, getDb, clearFirestorePersistence } from '@/lib/firebase/db';
 import { initAppCheck } from '@/lib/firebase/appCheck';
 import { collectUserDataSnapshots } from '@/lib/firebase/userData';
 import { collectDeletionRefs, applyDeletionPlan } from '@/lib/firebase/accountDeletion';
+import { handOverOwnedGroups, HANDOVER_PARTIAL } from '@/lib/firebase/groupHandover';
 import { syncMyPublicProfile, clearPublicProfileSignature } from '@/lib/firebase/publicProfile';
 import { disablePushForUser, clearLocalPushTokenId, hasLocalPushToken } from '@/lib/firebase/messaging';
 import { clearAllInviteTokens } from '@/lib/groupInviteCache';
@@ -150,12 +151,18 @@ const AuthContext = createContext<AuthState>({
 // ligger hela Firestore-raderingen, och den tar tid. Marginalen är skillnaden
 // mellan "vi vände bort dig med all data kvar" och "vi hann radera allt först".
 //
-// DBA-panelen 2026-08-05: marginalen måste dominera kaskadens värsta fall, inte
-// nätt och jämnt täcka det. collectDeletionRefs går sekventiellt per grupp och
-// per recension (en round-trip var), så ett tungt konto kan ta tiotals sekunder
-// — och Firebase ~5-minutersgräns är inte ett publicerat kontrakt vi får pressa.
-// 2 min lämnar ~3 min marginal i stället för ~1. Kostnaden är noll i praktiken:
-// den som nekas måste logga in igen ändå, och gör då om försöket på sekunder.
+// DBA-panelen 2026-08-05 valde 2 min i stället för 4 med argumentet att
+// marginalen skulle DOMINERA kaskadens värsta fall. BIN-1063 steg 3 gör det
+// argumentet falskt: gruppöverlämningen ligger numera mellan kontrollen och
+// deleteUser, och klienten väntar på den upp till funktionens hela
+// `timeoutSeconds`. Marginalen täcker alltså inte längre värsta fallet.
+//
+// Talet står kvar ändå, och kostnaden är nedskriven i
+// `.claude/rules/accepted-deviations.md`: utfallet är att deleteUser kan neka på
+// requires-recent-login efter en lyckad kaskad, vilket har en egen ärlig lydelse
+// ("Raderingen har påbörjats men inte slutförts") och ett omförsök som
+// konvergerar. Att sänka talet hade gjort spärren lättare att lösa ut utan att
+// göra marginalen sann; att höja det hade pressat Firebase-gränsen.
 const RECENT_LOGIN_MAX_AGE_MS = 2 * 60 * 1000;
 
 // BIN-909 — how old a Firebase Auth account may be and still be treated as a genuinely
@@ -1218,6 +1225,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * started, which is the definition of limbo.
    */
   const runDeletionCascade = useCallback(async (currentUser: User, id: string) => {
+    // BIN-1063 steg 3, Malins beslut 2026-09-06: en ägd grupp med kvarvarande
+    // medlemmar LÄMNAS ÖVER till den som varit medlem längst, den raderas inte.
+    // Servern gör det, för `ownerUid` är pinnad oförändrad på varje
+    // groups-update-gren, och reglerna kan inte iterera medlems-undersamlingen
+    // för att avgöra vem som varit med längst.
+    //
+    // FÖRST av allt, och ordningen bär: det servern lämnat över slutar matcha
+    // kaskadens egen grupp-fråga, så snapshoten nedan ser bara de grupper som
+    // verkligen ska raderas. Felet sväljs inte — ett fall igenom hade raderat en
+    // grupp andra fortfarande är med i, och en avbruten radering som går att
+    // göra om är det bättre utfallet.
+    // A failure that already WROTE must not fall through to the message promising
+    // nothing was deleted. The server marks its refusal when it attempted a write;
+    // ownership has moved, the uid has left `memberUids` and rows are gone, and
+    // getting back in needs a fresh invite. Same class as BIN-876, one layer up.
+    try {
+      await handOverOwnedGroups();
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      if (detail.includes(HANDOVER_PARTIAL)) throw markCascadePartial(err);
+      throw err;
+    }
+
     // Delad läsning med buildUserExport — om nya user-owned collections
     // läggs till ska de uppdateras i collectUserDataSnapshots.
     const snaps = await collectUserDataSnapshots(id);

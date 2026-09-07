@@ -46,14 +46,24 @@ export type HandoverOutcome =
 /**
  * The member who inherits the group, or null when nobody can.
  *
- * `eligibleUids` is the group document's `memberUids`, never the uids of the
- * member rows. The two lists diverge, and in the direction that escalates:
- * `firestore.rules` decides membership from `memberUids`, while
+ * The BALLOT is `eligibleUids` — the group document's `memberUids` — and the
+ * member rows only supply each candidate's `joinedAt`. That asymmetry is the
+ * whole safety property, and it runs in both directions.
+ *
+ * A row whose uid is NOT in `memberUids` is not a candidate. The two lists
+ * diverge: `firestore.rules` decides membership from `memberUids`, while
  * `groups/{gid}/members/*` is written by a different branch, so a row can outlive
- * the membership it stands for. Electing from the rows alone would make such a
- * row's owner `ownerUid` — able to evict everyone and delete the group — and
- * would re-open BIN-327/H1 one collection deeper, since the owner branch cannot
- * add a uid to `memberUids` but nothing stops it planting a member row.
+ * the membership it stands for. Electing from the rows would make such a row's
+ * owner `ownerUid` — able to evict everyone and delete the group — and would
+ * re-open BIN-327/H1 one collection deeper, since the owner branch cannot add a
+ * uid to `memberUids` but nothing stops it planting a member row.
+ *
+ * A uid in `memberUids` with NO row is still a candidate. The join is three
+ * separate writes and can die between them, leaving a member the rules count in
+ * full — every membership clause reads the array and none consults the row. They
+ * rank as unstamped rather than being skipped, because the alternative is
+ * `delete`, and deleting a group out from under people the rules call members is
+ * the worse of the two failures.
  *
  * The departing uid is excluded first and unconditionally. `createGroup` writes
  * the owner's own member row before anyone else can join, so their `joinedAt` is
@@ -62,17 +72,17 @@ export type HandoverOutcome =
  *
  * Ordering: a usable `joinedAt` outranks none; among those, earliest wins; ties
  * break on the lowest uid, so the successor never depends on the order the rows
- * were read in. When NO remaining member has one, the lowest uid still wins —
- * deleting other people's shared data over a missing field is the worse of the
- * two failures.
+ * were read in. When NO remaining member has one, the lowest uid still wins.
  */
 export function pickGroupSuccessor(
   members: readonly MemberRow[],
   leavingUid: string,
   eligibleUids: readonly string[],
 ): string | null {
-  const eligible = new Set(eligibleUids);
-  const candidates = members.filter((m) => m.uid !== leavingUid && eligible.has(m.uid));
+  const joinedAt = new Map(members.map((m) => [m.uid, m.joinedAtMs]));
+  const candidates = eligibleUids
+    .filter((uid) => uid !== leavingUid)
+    .map((uid) => ({ uid, joinedAtMs: joinedAt.get(uid) ?? null }));
   if (candidates.length === 0) return null;
 
   // `Number.isFinite`, not `!== null`: NaN passes a null check, and both `a < b`
@@ -122,4 +132,34 @@ export function buildHandoverUpdate(
  */
 export function clearsAddedBy(addedBy: unknown, leavingUid: string): boolean {
   return addedBy === leavingUid;
+}
+
+/** The marker the refusal carries when a write was already attempted. */
+export const HANDOVER_PARTIAL = 'binge/handover-partial';
+
+/**
+ * Why the caller must NOT proceed with its own erasure, or null when it may.
+ *
+ * Lives here, next to the rest of the decision, so a test can CALL it. The
+ * callable's own `if` is the only thing standing between a group that failed to
+ * hand over and the account cascade's owner branch, which deletes the WHOLE
+ * group — other members' household data included — irreversibly. A source scan
+ * over the entry point can see that a branch is written, not that it fires.
+ *
+ * The message says whether anything was WRITTEN, and the marker in it is what the
+ * client maps onto its partial-deletion wording. A failure after a group was
+ * already handed over is not "nothing has been deleted": ownership moved, the uid
+ * left `memberUids`, rows were erased, and getting back in needs a fresh invite.
+ *
+ * The summary type is deliberately not imported: this file has no dependency on
+ * the loop, and the two numbers it reads are the ones it is about.
+ */
+export function refusalForHandover(
+  summary: { readonly failed: number; readonly attempted: number },
+): string | null {
+  if (summary.failed === 0) return null;
+  if (summary.attempted > 0) {
+    return `${HANDOVER_PARTIAL}: Kunde inte lämna över alla grupper, och en del ändringar hann göras. Försök igen.`;
+  }
+  return 'Kunde inte lämna över alla grupper. Försök igen.';
 }

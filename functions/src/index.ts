@@ -207,6 +207,14 @@ export { retentionCleanup } from './retentionCleanup';
 // reports-create-regeln är låst till `if false` så bara denna funktion får skapa.
 export { submitReport } from './submitReport';
 
+// ── Gruppöverlämning (BIN-1063 steg 3) ──────────────────────────────────────
+// handOverOwnedGroups: callable som lämnar över den raderande användarens ägda
+// grupper till den medlem som varit med längst, i stället för att radera dem.
+// Server-auktoritativ av två skäl: `ownerUid` är pinnad oförändrad på varje
+// groups-update-gren, och reglerna kan inte iterera medlems-undersamlingen för
+// att kontrollera VEM som varit med längst. Kontot tas ur `request.auth`.
+export { handOverOwnedGroups } from './groupHandover';
+
 // ── Fråga Binge usage/error recorder (BIN-176 learning loop) ─────────────────
 // recordAskBinge: callable som inkrementerar dagliga räknare i askBingeStats/{date}
 // (tom-träff-andel, strandande filterkombos, borttagna tolknings-chips). Enda

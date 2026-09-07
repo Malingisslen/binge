@@ -743,3 +743,80 @@ uppräkning.
 **Re-open when:** raderingspasset som konsumerar fältet byggs, eller en rapport
 visar en kvarliggande `friends`- eller `friendRequestsSent`-rad för ett konto som
 raderats i konsolen efter att backfillen körts.
+
+---
+
+## 2026-09-07 — BIN-1063 steg 3, bunt 2: ägda grupper lämnas över, inte raderas
+
+Efterföljare till BIN-1023-posten och till posten ovan, som båda ställer ägda
+`groups` utanför svepet. Den här buntet tar dem för den ena av de två dörrarna.
+Posterna ovan redigeras inte.
+
+**Vad som byggdes.** En anropbar serverfunktion, `handOverOwnedGroups`, som
+kontots raderaknapp anropar FÖRE kaskaden. Den lämnar över varje grupp kontot
+äger till den medlem som varit med längst, i stället för att radera den. Malins
+beslut 2026-09-06, båda dörrarna — den andra dörren, svepet, är bunt 3.
+
+**Varför en serverfunktion och inte en regelgren.** `ownerUid` är pinnad
+oförändrad på varje `groups`-update-gren, och reglerna kan inte iterera
+medlems-undersamlingen för att kontrollera VEM som varit med längst. En gren lös
+nog att tillåta skrivningen hade lämnat garantin i klientkoden. Både #27 och #4
+avvisade den formen oberoende av varandra.
+
+**Vad som fortfarande INTE görs, och det är avsiktligt:**
+
+* **Svepets dörr är inte byggd.** Ett konto raderat i Firebase Console lämnar
+  fortfarande sin ägda grupp orörd — `retentionCleanup` når inte det fältägda
+  innehållet alls. Det är bunt 3, och tills den finns är detta halva ändringen.
+* **`sessions` där `hostUid ==`, `reviews`, `lists` och reaktionerna** ligger kvar
+  utanför båda dörrarna. Härled mängden ur `collectUserDataSnapshots`, aldrig ur
+  en uppräkning här.
+* **En spökmedlem ärver gruppen.** Ett uid som står i `memberUids` utan
+  medlemsdokument — den icke-atomiska joinen kan dö mellan skrivningarna — räknas
+  som fullvärdig kandidat, rankad under alla med `joinedAt`. Alternativet var att
+  radera gruppen, och att radera delad data för någon reglerna räknar som medlem
+  är det sämre av två fel. Avgjort i bunt 2, inte förbisett.
+* **Redan förfalskade `joinedAt` går inte att laga i efterhand.** Pinningen kom i
+  steg 1; rader skrivna före den kunde bära vad som helst. Noll grupper fanns i
+  produktion 2026-09-07, så mängden är tom — men det står här för att det är mätt,
+  inte antaget.
+
+**Tva saker om vad anvandaren FAR LASA nar overlamningen fallerar:**
+
+* **En dodad funktion klassas som "ingenting raderat".** Markoren som gor ett
+  delvis fel till `partial` kan bara skickas av kod som kor klart och returnerar
+  en sammanfattning. Slas instansen ihjal mitt i loopen — deadline, omstart —
+  finns ingen sammanfattning, ingen markor, och klienten sager "Ingenting har
+  raderats" over skrivningar som landat. `timeoutSeconds` ar hojd till 300 for
+  att smalna fonstret; den kan inte stanga det. Accepterat: raderingen ar
+  idempotent, ett omforsok konvergerar, och alternativet — att alltid varna for
+  delvis radering — hade ljugit i det vanliga fallet dar ingenting skrevs.
+* **`partial`-strangen skyller pa ett anslutningsfel.** En serversidig
+  overlamningsvagran ar inte det. Strangen ar en av de fyra lasta, juridiskt
+  godkanda lydelserna (BIN-813 villkor 4) och skrivs inte om i ett
+  granskningsvarv. Den barande halvan — "En del av din data kan redan vara
+  borttagen" — ar sann, och att dirigera felet hit ar strikt battre an att lamna
+  det i `untouched`. Orsaksledet ar alltsa ibland fel, med flit.
+
+* **Friskhetsmarginalen tacker inte langre kaskadens varsta fall.**
+  `RECENT_LOGIN_MAX_AGE_MS` ar 2 minuter, valt 2026-08-05 med argumentet att
+  marginalen mot Firebases ~5-minutersgrans skulle DOMINERA allt som ligger
+  mellan kontrollen och `deleteUser`. Overlamningen ligger nu dar, och klienten
+  vantar pa den upp till funktionens hela `timeoutSeconds`. Argumentet ar
+  darmed falskt och ar struket i koden. Utfallet: `deleteUser` kan neka pa
+  requires-recent-login EFTER en lyckad kaskad — data borta, identiteten kvar.
+  Accepterat: det ar precis det fall BIN-796/876 gav en egen arlig lydelse
+  ("Raderingen har paborjats men inte slutforts"), omforsoket konvergerar, och
+  bada de andra vagarna ar samre — ett lagre tal loser ut spärren oftare utan
+  att gora marginalen sann, ett hogre pressar en grans som inte ar ett
+  publicerat kontrakt.
+* **En inbjudan fran den avgangne agaren overlever.**
+  `users/{target}/groupInvites/{groupId}` bar `fromUid` och `fromDisplayName`
+  och ligger utanfor gruppens undertrad, sa ingen av de tva dorrarna ror den.
+  Forr raderades gruppen och inbjudan pekade pa ingenting; nu overlever gruppen,
+  och listan faller tillbaka pa det denormaliserade namnet — "<raderat namn>
+  bjod in dig" till en grupp som gar att ga med i. Kvarhallning, inte ett
+  trasigt flode. Tas i bunt 3 eller nar nagon rapporterar det.
+
+**Re-open when:** bunt 3 byggs, eller en rapport visar en grupp vars `ownerUid`
+pekar på ett konto som inte längre finns i Auth.

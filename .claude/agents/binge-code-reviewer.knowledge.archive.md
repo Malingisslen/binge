@@ -8203,3 +8203,218 @@ before treating the file's header claim ("testable under the root vitest toolcha
 `functions/src/` did not open the BIN-1013 ownership hole.
 
 VERDICT: fail (1 blocking).
+
+### 2026-09-07 — a step PREPENDED to the deletion cascade falsifies the failure classifier's premise (BIN-1063 steg 3, bunt 2)
+
+Batch 2 wires the new `handOverOwnedGroups` callable into `runDeletionCascade` as its
+FIRST statement (`src/contexts/AuthContext.tsx:1233`), before
+`collectUserDataSnapshots`. The ordering itself is right and is pinned by a new test
+("hands owned groups over BEFORE it reads the snapshots the cascade plans from").
+
+What nothing pinned is what the user is TOLD when it fails.
+
+- `functions/src/groupHandover/runHandover.ts` catches a per-group failure, counts it in
+  `summary.failed` and continues to the next group, by design ("one bad group cannot
+  strand the others"). So `failed > 0` can coexist with groups already handed over.
+- Per group the writes are: `eraseMemberTraces` (deletes `members/{uid}`,
+  `household/{uid}`, `joinAttempts/{uid}`, every `watchlist/*/progress/{uid}`; clears
+  `watchlist.addedBy`, `sessionHistory.pickedByUid`, drops the uid from
+  `participantUids`) and then `claimOwnership` (transactional `ownerUid` swap +
+  `memberUids` shrink). `eraseMemberTraces` commits in chunks, so it can also land
+  writes and then throw mid-group.
+- `functions/src/groupHandover/index.ts:159-162` then throws
+  `HttpsError('internal', 'Kunde inte lämna över alla grupper. Försök igen.')`.
+- Client side: `deleteAccount`'s catch does `setDeletionInProgress(true)` +
+  `throw markHandedOff(err)`. `markHandedOff` adds `DELETION_HANDED_OFF`, NOT
+  `CASCADE_PARTIAL` — only `applyDeletionPlan` adds that one.
+- `classifyDeletionFailure` (`src/lib/authErrors.ts:113`) therefore returns `untouched`,
+  and `DeleteAccountSection`'s toast reads: "Kunde inte ta bort kontot. **Ingenting har
+  raderats.** Kontrollera anslutningen och försök igen." The `ToastProvider` sits above
+  `AppShell`, so the toast still renders after the shell swaps to `DeletionLimbo`
+  (BIN-816's own recorded behaviour).
+
+Ownership does not come back: `index.ts`'s header states the rules forbid an owner adding
+a uid back to `memberUids`, so re-entry needs a fresh invite.
+
+The `[UX]` accepted deviation of 2026-08-13 does NOT cover this. Its text scopes itself to
+"a failure on the very first commit leaves a marked session whose data was never touched"
+and rests on "the settings page's own message for that case still truthfully says nothing
+was deleted". That premise is what the batch breaks. Same for
+`classifyDeletionFailure`'s own docstring: "`untouched` — every remaining path, all of
+which run before the first write."
+
+Reachability, not just theory: `onCall({ region: 'europe-west1' })` sets no
+`timeoutSeconds`, so the default 60 s applies to a loop whose write count grows with each
+group's watchlist (one `progress/{uid}` delete per item, unbounded). A timeout mid-run is
+the ordinary shape of a partially-committed handover.
+
+Two other observations from the same pass, both non-blocking:
+
+1. **The chunk seam is in the wrong place versus the module `runHandover.ts` names as its
+   pattern.** `retentionCleanup/runCleanup.ts` puts `readonly deleteBatchSize: number` ON
+   the port (line 110) and does the chunking IN the orchestrator (line 574); its port
+   methods only "delete these leaf docs in ONE commit", and
+   `retention-cleanup-orchestrator.test.ts:189` sets `TEST_DELETE_BATCH` so line 663
+   drives a real two-chunk boundary against the emulator. `groupHandover` inverts it:
+   `BATCH_LIMIT` and the `queue`/`flush` machinery live inside the Admin port only, so
+   neither test port chunks and no test anywhere exercises the boundary. Filed as
+   BIN-1109; the filing is fine, but the ticket should record the retentionCleanup shape
+   as the fix (it removes the duplication AND makes the boundary testable in one move).
+2. `src/lib/firebase/groupHandover.ts` declares a three-field `HandoverReport` against the
+   server's six-field `HandoverSummary`. A legal narrowing, and the value is discarded at
+   the only call site — but it is a second hand-maintained model of the wire shape that
+   nothing holds to the first, and the three fields it omits (`raced`, `failed`,
+   `ownedGroups`) are exactly the ones a future caller would need.
+
+Evidence discipline note for the next round: the brief's "full unit suite 4753 passed"
+describes the WORKTREE, which carries `docs/workflow-map-universe.json` and
+`docs/workflow-map.html` as unstaged modifications. At the staged bytes,
+`scripts/check-workflow-map.test.mjs:820` ("check 7 — the COMMITTED universe already lists
+every walked function and route") reads the real files from disk and walks
+`functions/src/index.ts`, which the commit teaches to export `handOverOwnedGroups` — so
+the feature commit alone is red there. `tasks/todo.md` states this and accepts it as the
+price of never bundling map edits with feature code; the two commits are pushed together
+and `deploy.yml` runs the check once, after both.
+
+VERDICT: fail (1 blocking).
+
+### 2026-09-07 — round 2 of the same batch: the tag closes the returning failures, not the dying ones (BIN-1063 steg 3, bunt 2)
+
+The r1 blocking finding was taken correctly and the shape was the one the constraint forced.
+Verified against the staged blobs myself rather than from the brief — `logic.ts 4235675b`,
+`runHandover.ts 2bd9f5c6`, `AuthContext.tsx 07cc76ea`, `groupHandover.ts ca6e486c`,
+`index.ts 20543998` (unmoved), index == worktree on all five.
+
+What landed:
+
+- `HandoverSummary.attempted`, incremented at `runHandover.ts:192` — after the two reads,
+  BEFORE `eraseMemberTraces`. Conservative in the right direction, and the placement is the
+  whole point: a chunked erasure can commit and then throw.
+- `refusalForHandover` now takes `{ failed, attempted }` and prefixes
+  `HANDOVER_PARTIAL = 'binge/handover-partial'` only when `failed > 0 && attempted > 0`, so
+  the benign case (callable unreachable, nothing written) keeps the plain message.
+- `AuthContext.tsx:1237-1243` wraps the call and rethrows `markCascadePartial(err)` on the
+  marker — same shape as the pre-existing `deleteUser` catch two screens down.
+- `HandoverReport` is gone; the client returns `Promise<void>`.
+
+Cross-checked the counter's two directions by hand: group A handed over + group B failing on
+its READ gives `failed:1, attempted:1` → partial, and "En del av din data kan redan vara
+borttagen" is TRUE because A's ownership moved. A lone group failing on its read gives
+`attempted:0` → plain message → `untouched` → "Ingenting har raderats", also true.
+
+TWO findings, both blocking, both remediable without writing a new claim:
+
+1. **The doc block orphaned onto a constant.** `logic.ts:137-153` documents
+   `refusalForHandover`; the same round inserted `export const HANDOVER_PARTIAL` at line 154,
+   between the block and the function. So the block now heads a string constant while opening
+   "Why the caller must NOT proceed with its own erasure, **or null when it may**" and saying
+   "so a test can CALL it" — impossible of a `const` — and `refusalForHandover` at 156 is
+   bare. The client's own copy of the constant (`src/lib/firebase/groupHandover.ts:17-24`)
+   has a correct doc of its own, which is what makes the server-side one read as deliberate.
+   Remedy is a MOVE of three lines, not a rewrite.
+
+2. **`src/lib/authErrors.ts:106-109`'s `untouched` clause is still false, and the residual is
+   the population the machinery exists for.** The coordinator's position is that the clause is
+   true again rather than reworded (the file is unstaged, sha `2d13b325`, unchanged). It is
+   not: the marker can only be emitted by code that RUNS TO COMPLETION and returns a summary.
+   `functions/src/groupHandover/index.ts:149` is `onCall({ region: 'europe-west1' })` with no
+   `timeoutSeconds`, so the v2 default of 60 s applies to a loop issuing one
+   `watchlist/*/progress/{uid}` delete per item across every owned group, sequentially. A
+   deadline-exceeded (or any instance kill) mid-loop returns no summary, carries no marker,
+   classifies `untouched`, and prints "Ingenting har raderats" over writes that landed —
+   BIN-876's own rationale is literally about "an account large enough to span several
+   chunks", i.e. this same population. Raising `timeoutSeconds` narrows but cannot close it.
+   Remedy: strike "all of which run before the first write". The enumeration that follows it
+   survives the strike intact, which is the test for a clean strike.
+
+Non-blocking, recorded rather than fixed: the `partial` string blames "ett anslutningsfel",
+and a server-side handover refusal is not one. The text is one of the four locked,
+legally-approved strings (BIN-813 condition 4) and must NOT be rewritten by a review round;
+the load-bearing half — "En del av din data kan redan vara borttagen" — is true, and routing
+the failure here is strictly better than leaving it in `untouched`. It belongs in the
+deviations log or on the ticket, as a cause clause that is now sometimes wrong by decision.
+
+VERDICT: fail (2 blocking).
+
+### 2026-09-07 — round 3: the timeout raise inverted which side gives up first (BIN-1063 steg 3, bunt 2)
+
+Both r2 findings are genuinely fixed. Shas verified against the index myself, all matching
+the brief and index == worktree: `logic.ts eb2e126c`, `index.ts 1ad73fb6`,
+`authErrors.ts 153e23f7`, `accepted-deviations.md 7375fe0b`; `runHandover.ts 2bd9f5c6`,
+`AuthContext.tsx 07cc76ea`, `groupHandover.ts ca6e486c`, `accountDeletion.ts 8262a0b0`
+unmoved, so the r2 reads still pin the shipping bytes for those four.
+
+- **Doc orphan.** `HANDOVER_PARTIAL` moved to `logic.ts:138` with a one-line doc of its own;
+  the refusal block at 140-156 sits on `refusalForHandover` at 157 again. A move, no prose.
+- **The absolute.** `authErrors.ts:106-109` now reads "`untouched` — every remaining path:
+  the token read, the snapshot reads, the plan build, and a first-chunk failure…". Struck,
+  and the enumeration survived intact, which is the test for a clean strike.
+- **`timeoutSeconds: 300`** with a comment that claims only what it buys ("narrows the
+  window… cannot close it, and a kill returns no summary"). No overclaim.
+- **Deviations entry** gained the two bullets, both matching what I traced.
+
+ONE new blocking finding, created by the timeout raise:
+
+`httpsCallable` takes an options object whose `timeout` defaults to 70 000 ms. MEASURED in
+the installed SDK rather than recalled — `node_modules/@firebase/functions/dist/index.cjs.js`
+line 628, `const timeout = options.timeout || 70000`, used as `Promise.race([postJSON(...),
+failAfterHandle.promise, cancelAllRequests])`. `failAfter` only loses the race for the
+caller; it does not abort the request, so the server keeps running.
+
+`src/lib/firebase/groupHandover.ts:49` passes no options. So before r3 the server (60 s) gave
+up first and the client received the server's own error; after r3 the client gives up at 70 s
+on a function allowed 300 s. In that 230-second band the user is told "Ingenting har
+raderats" while the handover is still running server-side and will usually COMPLETE —
+ownership moved, rows erased. Data is safe (idempotent; the retry converges), but it is the
+same false message the whole ticket was about, made newly reachable by the change that was
+meant to narrow it. It is also NOT what the new deviations bullet accepts: that bullet names
+a KILLED instance returning no summary, not a live call the client walked away from.
+
+Remedy, one line, either direction: pass `{ timeout: 300_000 }` (at or above the server's
+budget) as `httpsCallable`'s third argument so the client waits for the server's verdict, or
+keep `timeoutSeconds` under 70 so the server fires first as before. The first matches the
+raise's stated rationale.
+
+Non-blocking, deliberately not blocked on: after the strike, "every remaining path:" heads a
+four-item list that a reader takes as exhaustive, and the handover's own untouched-classifying
+failures (a refusal with `attempted === 0`, a network failure reaching the callable, a killed
+instance) are not in it. Adding "the group handover" is directly readable from
+`runDeletionCascade` and needs no counting, so it is a correct-in-place case rather than a
+strike. Not blocked because the four listed paths are all true, the deviations entry now names
+the missing case explicitly, and a third round spent on one list item is the non-convergence
+this repo keeps recording.
+
+VERDICT: fail (1 blocking).
+
+### 2026-09-07 — round 4: closed, and the two timeouts are pinned to each other (BIN-1063 steg 3, bunt 2)
+
+Shas verified against the index myself: `groupHandover.ts 70bfa003`, `authErrors.ts a4032f7a`,
+`logic.test.ts f7aae674`; `index.ts 1ad73fb6`, `logic.ts eb2e126c`, `runHandover.ts 2bd9f5c6`,
+`AuthContext.tsx 07cc76ea`, `accountDeletion.ts 8262a0b0` unmoved, so the earlier rounds' reads
+still pin the shipping bytes for those five. index == worktree throughout.
+
+- `httpsCallable(..., { timeout: 300_000 })` at the server's own budget, with a comment
+  stating what the SDK default does and why the ordering must be this way round.
+- `authErrors.ts`'s `untouched` list ends "…and a group handover that refused before it wrote
+  anything" — correct-in-place, readable straight off `runDeletionCascade`, no counting.
+- The guard is real, and I checked it rather than accepting "tests pin it":
+  `logic.test.ts:265` reads `/timeout:\s*([\d_]+)/` out of the client and
+  `/timeoutSeconds:\s*(\d+)/` out of the callable, asserts each `> 0` with a named message so a
+  missing value fails loudly instead of comparing 0 to 0, then `clientMs >= serverS * 1000`.
+  `ENTRY` is `index.ts` with whole-line `//` comments stripped (line 18), so prose in that file
+  cannot satisfy the server side — the value-vs-declaration trap from BIN-790, avoided.
+
+Non-blocking, said once and not blocked on: the CLIENT side is not comment-stripped the way
+`ENTRY` is, so a future comment in `groupHandover.ts` containing a `timeout: <n>` form would be
+matched first (its prose today carries only "70s" and "`timeoutSeconds` (300)", neither of
+which matches). Applying the same `.replace(/^\s*\/\/.*$/gm, '')` to the client read closes it.
+
+Four rounds, four blocking findings, and the shape of them is worth keeping: ONE was in the
+code as first written (the partial handover reported as "Ingenting har raderats"), ONE was a
+false sentence (the `untouched` absolute), ONE was a doc block orphaned by the fix for the
+first, and ONE was a NEW code defect introduced by the fix for the second (the timeout
+inversion). The batch's own corrections carried half the findings — the recorded pattern —
+but each remedy here was a move, a strike or a one-line value, so it converged instead of
+spawning fresh claims.
+
+VERDICT: pass (0 blocking).

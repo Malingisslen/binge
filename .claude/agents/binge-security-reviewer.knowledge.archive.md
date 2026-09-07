@@ -10275,3 +10275,327 @@ touched since. Two of the six false claims were mine, in my own review record. T
 summary of this batch: the code was right early, and the cost was entirely in sentences about it.
 
 Verdict: pass (0 blocking).
+
+### 2026-09-07 — BIN-1063 steg 3, bunt 2: group handover wired to the delete button (3 blocking)
+
+Duty list derived from `reviewGates` in `.claude/shared-plugin.json` (agent
+`binge-security-reviewer`, `patterns` only — no `exclude`, no `keyed`): 8 staged files matched.
+Shas pinned identical at start and end of the round:
+
+    559e10a functions/src/groupHandover/index.ts
+    eda70c9 functions/src/groupHandover/logic.test.ts
+    9cfabe8 functions/src/groupHandover/logic.ts
+    d027c2d functions/src/groupHandover/runHandover.ts
+    498f758 functions/src/index.ts
+    5251d33 src/contexts/AuthContext.tsx
+    8262a0b src/lib/firebase/accountDeletion.ts
+    891a867 src/lib/firebase/groupHandover.ts
+
+Also read for judgement (not duty): `src/test/rules/group-handover-orchestrator.test.ts`,
+`src/test/rules/account-deletion.test.ts` diff, `src/contexts/AuthContext.test.tsx` diff,
+`firestore.rules` 1136-1435, `docs/data-retention-policy.md` diff, `tasks/todo.md` diff,
+`.claude/rules/accepted-deviations.md` (incl. its new 2026-09-07 entry for this batch).
+
+**F1 (blocking) — `sessionHistory.participantUids` is not in the erasure set.**
+The batch converts an owned group's outcome from "deleted whole" (`accountDeletion.ts:162`
+queued every `sessionHistory` doc) to "survives". `runHandover.ts`'s `TraceErasure` clears
+`watchlist.addedBy` and `sessionHistory.pickedByUid` and attests to having enumerated the
+subtree's uid-bearing fields. `firestore.rules:1342-1357` names a seventh field on that same
+document: `participantUids`, a uid list capped at 50, written by `recordGroupSessionPick`
+(`src/lib/firebase/groups.ts:699,711`) and rendered per uid by
+`GroupSessionHistoryPanel.tsx:40`. It survives indefinitely on a doc every group member can
+read, naming an erased account. The emulator fixture (`account-deletion.test.ts:259`) seeds
+only `{ pickedByUid: ME }`, so no test could see it. Same omission in the policy doc's new
+list (`docs/data-retention-policy.md`, "Mina egna spår i den överlämnade gruppen raderas
+ändå: …").
+Rejected fix: delete the whole `sessionHistory` row — that destroys the group's own record,
+which the handover exists to preserve, and is asymmetric with the `addedBy` decision.
+Preferred: `FieldValue.arrayRemove(leavingUid)` on `participantUids` for rows containing it,
+in the same batch as the `pickedByUid` removal, plus a `clearParticipantIds` member on
+`TraceErasure`; alternatively a dated retention decision in the policy doc + the deviations
+entry. The attestation sentence gets struck either way.
+
+**F2 (blocking) — the erasure becomes unreachable the moment the claim commits.**
+`runHandover.ts:165-184` runs `claimOwnership` first; the Admin port
+(`index.ts:67-82`) writes `ownerUid` AND `memberUids: survivors`. Both doors select
+candidates on exactly those fields: `index.ts:36` `where('ownerUid','==',uid)`,
+`userData.ts:209-210` `where('memberUids','array-contains',uid)`. So a throw from
+`eraseMemberTraces` after the swap leaves `members/{uid}` (denormalized displayName /
+username / photoURL), `household/{uid}`, every `watchlist/*/progress/{uid}` and the
+uncleared name fields permanently orphaned. Reachable causes are ordinary, not exotic: the
+code's own comment (`index.ts:88-93`) says the `addedBy` update throws when a member deleted
+the row meanwhile, and `flush()` (`index.ts:96-98`) can commit batch 1 and fail batch 2. The
+callable throws, the user retries, the retry finds 0 owned groups and succeeds, and the
+account is deleted with the traces left behind. `joinAttempts/{uid}` alone self-heals via
+`retentionCleanup`'s 1h reaper; nothing covers the rest (BIN-1023 accept puts field-owned
+group content outside the sweep). `group-handover-orchestrator.test.ts:336-338` states the
+unreachability as a strength ("The group no longer matches the ownerUid query at all"), and
+no test drives an erase failure after a successful claim.
+Fix options weighed: (a) erase before the claim — a failure then leaves the caller still the
+owner so the retry reaches the group; cost is a wider window in which a concurrently added
+row keeps a trace, which the next run closes; (b) leave `leavingUid` in `memberUids` until
+the erasure commits and remove it in a final write — keeps the swap first but needs two
+writes; (c) widen the candidate query to the union of the two predicates. (a) is the
+smallest change and inverts the failure into the safe direction.
+
+**F3 (blocking) — the workflow-map files are in this staged set.**
+`docs/workflow-map.html` (3655e4b, 52 lines changed) and `docs/workflow-map-universe.json`
+(1a28582) are staged alongside the feature. The dispatching brief asserted they were not.
+`tasks/todo.md`'s own "Kartcommiten (#25:s bindande villkor 2)" — staged in the same set —
+requires them in their own commit AFTER the feature commit, and `lessons-digest.md`'s first
+entry is the incident that rule exists for (a feature revert silently dropping map prose).
+Remedy is mechanical: unstage both before committing, commit them together afterwards.
+
+**Judged and cleared.** Ordering: `handOverOwnedGroups()` is awaited as the first statement
+of `runDeletionCascade` (`AuthContext.tsx:1233`), before `collectUserDataSnapshots`, and is
+not swallowed; pinned by two new tests on invocation order and fail-stop. Caller binding:
+uid from `request.auth` only (`index.ts:133`), candidates filtered on `ownerUid == uid`,
+`claimOwnership` re-reads inside `runTransaction` and refuses a moved owner, and
+`buildHandoverUpdate` returns `noop` when `currentOwnerUid !== leavingUid` — so no path
+writes another account's group. `raced` and `readGroup === null` both fall through without a
+write. Successor ∈ surviving `memberUids` by construction (the picker's ballot is
+`survivors`). No secrets; `NEXT_PUBLIC_FIREBASE_USE_EMULATOR` is a public flag. No
+`enforceAppCheck`, consistent with the repo's opt-in App Check — not filed.
+
+**Non-blocking, noted to the founder:** the callable is reachable by any signed-in user
+outside the delete flow, with no confirmation payload and no cooldown; self-only and
+strictly less destructive than the `allow delete` the owner already holds, but it
+irreversibly removes the caller from every group they own (rules forbid the owner re-adding
+a uid to `memberUids`). Per-group reads are unbounded (whole `watchlist` + `sessionHistory`
++ `members`) with no `MAX_PER_RUN`.
+
+### 2026-09-07 — BIN-1063 steg 3, bunt 2, round 2 (1 blocking)
+
+Re-derived the duty list from `reviewGates`: same 8 files; two moved
+(`runHandover.ts` d027c2d → 4853af9, `index.ts` 559e10a → c00866e), six unchanged.
+`docs/workflow-map.html` / `-universe.json` are out of the index (worktree-modified only)
+— F3 closed.
+
+**F1 closed in the code, NOT in its second home.** `TraceErasure.dropParticipantIds` +
+`FieldValue.arrayRemove(leavingUid)` in all three ports; the Admin port defaults a missing
+`participantUids` to `[]` so an old row cannot throw. New emulator test asserts
+`['owner','heir'] → ['heir']` with the row's other fields intact, and the seed now writes
+`participantUids` on EVERY history row — so the doc that is both picked-by and
+participated-in takes two `update`s on one document in one `WriteBatch`, which the green
+emulator run settles empirically for the `Commit` RPC the Admin SDK also uses.
+The false attestation survives verbatim in the PAIRED TEST FILE at
+`src/test/rules/group-handover-orchestrator.test.ts:311-315` — "Enumerating the group
+subtree's uid-bearing fields rather than assuming it was the only one turned up
+`sessionHistory.pickedByUid`" — 23 lines above the test that exists BECAUSE that
+enumeration stopped at two. Exactly the class my own knowledge file names (strike a claim
+from its home, the test file keeps the stronger form under an unchanged sha). Struck, not
+reworded: the sentences either side carry the whole justification.
+
+**F2 closed, and the fix is right.** `eraseMemberTraces` now precedes `claimOwnership`
+(`runHandover.ts:167-193`); the port contract (`:105-112`) and the loop comment both state
+the reachability reason, and the "reading the watchlist after the swap narrows a window"
+sentence is gone. New test drives erase-throw → `handedOver:0, failed:1`, `ownerUid` still
+`owner`, then a clean second run completes it — it fails against the old ordering.
+Consequences I re-derived rather than took: on `raced` the traces are already erased and
+the group's `memberUids` still names the leaver, so the client cascade's member-leave
+branch picks it up and converges; on `failed` the caller is still owner so the retry finds
+it; reading the watchlist BEFORE the swap costs nothing, since a row added afterwards can
+carry neither the leaver's `progress` nor their `addedBy`. I agree with changing the race
+test rather than the code — the erased rows are the departing member's own data, owed to
+them whoever ends up owning the group.
+
+**Non-blocking, unchanged from round 1 and correctly not built:** the callable is reachable
+outside the delete flow (self-only, strictly weaker than the `allow delete` an owner
+already has); unbounded per-group reads with no `MAX_PER_RUN`. Neither is a condition.
+
+### 2026-09-07 — BIN-1063 steg 3, bunt 2, round 3 (0 blocking — PASS)
+
+Shas verified rather than taken: `index.ts` daaf206 (was c00866e),
+`group-handover-orchestrator.test.ts` d5ac824 (was 3ec694c); the other seven duty files
+byte-identical to round 2. Map files still ` M`, out of the index.
+
+The struck claim's second home is gone. `grep -rn "uid-bearing"` over
+`src functions docs tasks .claude/rules` returns two hits and both survive the test I apply
+to such a sentence — could a command contradict it? `runHandover.ts:51` names the fields and
+hands the reader a derive command instead of asserting a walk; the test comment says an
+enumeration that stopped at two WOULD miss the third, which is a statement about the reader's
+likely error, not a count of anything. The replacement paragraph at the pickedByUid test
+carries no quantifier at all. No new claim minted by the fix — the failure mode this repo
+pays for most.
+
+Verified the new header paragraph (`index.ts:19-23`) against `firestore.rules` rather than
+accepting it: self-only ✓; strictly weaker than `allow delete` (`:1244-1245`) ✓; owner cannot
+grow `memberUids` (`hasAll(new ⊆ old)`, `:1157`, BIN-327/H1) ✓; re-entry only via the
+token-join or invite-accept branches, both of which need something the owner or the token
+issues ✓.
+
+**Filed non-blocking, deliberately not gated:** "It does remove the caller from every group
+they own" is a universal over an outcome with three arms — the `toDelete` arm (no other
+member remains) writes nothing, so the caller keeps that membership. Correct in place by
+dropping the quantifier ("from the groups it hands over"), which is directly readable off
+`claimOwnership`'s `memberUids: survivors` and needs no measurement — the carve-out the strike
+rule allows. Judged not worth a fourth round: it over-warns in the cautious direction about a
+self-inflicted effect, and misdescribes no trust boundary. Round 3 was blocked on a sentence
+that asserted the ERASURE ENUMERATION was complete, in the file a reviewer opens to check
+exactly that; this is not that. Recording the distinction because "block on every false
+sentence" and "do not start a correction chain" pull against each other, and where the line
+fell here is the reusable part.
+
+### 2026-09-07 — BIN-1063 steg 3, bunt 2, round 4 (0 blocking — PASS)
+
+Duty list re-derived; unchanged at 8. Moved and re-read: `logic.ts` f756710 (was 9cfabe8),
+`index.ts` 2054399 (was daaf206), `logic.test.ts` 94d0f01 (was eda70c9). Other five
+byte-identical. Map files still out of the index.
+
+`refusalForHandover` is a pure extraction — same `failed > 0` threshold, same message, and
+`index.ts:159-162` throws on a non-null, so the refusal semantics I cleared in round 2 are
+unchanged. The wiring test anchors condition-through-throw as ONE regex, which is the form
+that survives a deleted body (BIN-852's lesson applied by someone else, correctly).
+
+The ROSTER mechanism is worth carrying forward as the general answer to the miss I found:
+brace-match the `match /groups/{groupId}` tree in `firestore.rules`, harvest every
+`/uid/i`-matching name from its `hasOnly` contracts, and assert set equality BOTH ways
+against a declared per-field erasure EXPRESSION (not the field name — an earlier draft's
+`LOOP.toContain(field)` stayed green with the erasure ripped out, because the name still
+appeared in the row type it is read from). Floor of 2 outside the loop against a scan that
+breaks and reports empty; derived set is exactly {pickedByUid, participantUids}, so the
+floor is tight rather than decorative. Brace-matching instead of a guessed window is the
+right call — a short window drops subcollections silently.
+
+**Filed non-blocking:** the `describe` string "the erasure covers every uid-bearing field in
+the group subtree" is a universal the mechanism does not deliver: it reaches only
+collections with a `hasOnly` contract, so `members` and `watchlist` are outside it. Correct
+in place by naming the derivation — "every uid-bearing field the group contracts pin" —
+which is directly readable off the scan and needs no counting. Not gated, and the reasoning
+is the part worth keeping: the block DISCLOSES its own boundary six lines down (`addedBy`
+"declared rather than derived … outside the scan's reach entirely"), so no reader comes away
+believing the scan reaches `watchlist`. Round 3's blocking sentence had no such correction
+anywhere and asserted a completed ACT refuted by the adjacent test. Present practical gap is
+nil — `members` is erased by whole-doc delete, `watchlist.addedBy` by the declared handler;
+the residual is a FUTURE uid field on one of the two unconstrained collections.
+Rounds 2→4 found progressively smaller prose; stopping is part of the job.
+
+### 2026-09-07 — BIN-1063 steg 3, bunt 2, round 5 FINAL (0 blocking — PASS)
+
+Duty list re-derived: still 8. `src/lib/authErrors.ts` is staged but outside my patterns
+(`^src/lib/firebase/` does not reach it) — noted so a later reader does not assume it was
+covered here. Moved and re-read: `logic.ts` eb2e126, `runHandover.ts` 2bd9f5c, `index.ts`
+1ad73fb, `AuthContext.tsx` 07cc76e, `groupHandover.ts` 70bfa00, `logic.test.ts` 793e3d3.
+Unmoved: `functions/src/index.ts` 498f758, `accountDeletion.ts` 8262a0b. Map files still out
+of the index.
+
+**The partial-report fix is in my seat and it is correct.** `attempted` is incremented on the
+line immediately before `eraseMemberTraces`, which is the first write of a group — attempted,
+never committed, which is the conservative direction. I walked the arms: erasure of group A
+lands then B's read throws → attempted 1, failed 1 → PARTIAL (right, A's writes are real);
+A's `readMembers` throws before any write → attempted 0, failed 1 → plain refusal →
+`untouched` (right, nothing was written); erasure lands then `claimOwnership` throws →
+PARTIAL (right). `failed === 0` returns null regardless of `attempted`, which is the success
+path. `AuthContext` maps the marker onto `markCascadePartial` and rethrows everything else.
+The marker string carries no secret and never reaches the UI raw — `classifyDeletionFailure`
+maps to one of the four locked strings.
+
+**Client-outwaits-server** is the non-obvious half and it is pinned properly: the test derives
+BOTH numbers from comment-stripped source, floors each above zero, and asserts
+`clientMs >= serverS * 1000`, so it fails in both directions. `httpsCallable` losing its own
+race without aborting the request is the real mechanic — a client that gives up first reports
+`deadline-exceeded` over a handover that goes on to finish.
+
+**Cost re-checked for the raised timeout:** `timeoutSeconds: 300` lets a caller hold an
+instance five times longer than before, but the work is bounded by groups the caller owns and
+must first have paid to fill, and `setGlobalOptions({ maxInstances: 10 })` caps concurrency.
+Not a new lever.
+
+**Two new deviations bullets read and NOT re-flagged**, both correctly bounded on mechanism,
+severity, scope and re-open: a killed instance returns no summary so a partial run classifies
+`untouched` (window narrowed by the timeout raise, admittedly not closed, erasure idempotent);
+and the `partial` string's cause clause blames a connection error, which a server-side refusal
+is not — one of BIN-813's four locked legal strings, deliberately not rewritten, with the
+load-bearing half ("En del av din data kan redan vara borttagen") true.
+
+My round-4 non-blocking note was taken: the roster `describe` now reads "every uid-bearing
+field the group contracts pin", which names the derivation instead of claiming a walk.
+
+Five rounds, three blocking findings, all in rounds 1–3: two real defects in the code
+(`participantUids` unerased; the erasure unreachable after the claim) and one process
+violation (map files staged with the feature). Rounds 4 and 5 found only prose, both
+non-blocking and both taken voluntarily. The shape worth keeping: the two code defects were
+BOTH ordering/reachability questions — "after this write, what still finds this thing?" — and
+neither was visible from any single file.
+
+### 2026-09-07 — my own knowledge file described the DEFECTS as the code (BIN-1063 steg 3 bunt 2)
+
+Raised by the integration reviewer, verified by the coordinator, verified again by me against the
+staged bytes before editing. Four stale clauses, not the two I was handed — the extra two were in a
+bullet nobody named, and finding them is the reason the sweep has to be by TICKET ID, not by the
+sentences someone quotes at you.
+
+Verified first, then edited:
+  grep -rn "enumerated the" functions/src/groupHandover/   -> no match (rc 1)
+  grep -n "eraseMemberTraces\|claimOwnership" runHandover.ts -> erase call 193, claim call 206
+  grep -c dropParticipantIds runHandover.ts index.ts        -> 2, 1
+
+1. `:281` said `claimOwnership` swaps `ownerUid` and drops the leaver from `memberUids`, "then the
+   trace erasure runs outside the transaction". That is the r1 DEFECT. Shipped code erases first —
+   my own headline finding, inverted into a standing instruction.
+2. `:116` said the batch cleared `pickedByUid` and LEFT `participantUids`, and QUOTED a module
+   attestation that no longer exists in the tree. Quoting struck text is the sharpest version of
+   this: the quotation marks make it look sourced.
+3. `:198` (not flagged to me) said `pickGroupSuccessor` elects from `groups/{gid}/members/*`. The
+   shipped signature takes the array as a required `eligibleUids` parameter — the fix the same
+   bullet prescribes two sentences later. The bullet contained both the defect and its cure, in the
+   same tense.
+4. `:216` (not flagged to me) prescribed "an array entry with no roll row must yield null". Worse
+   than stale: bunt 2 decided the OPPOSITE on Malin's call and booked it in
+   `accepted-deviations.md`, so a future me would have filed against a decided deviation with my
+   own knowledge file as the warrant. Replaced with the decision and a pointer to that file.
+
+All four superseded IN PLACE per the `*.knowledge.md` carve-out — the verbatim findings live in
+this archive's earlier 2026-09-07 entries. Each instance is now past tense and attributed to the
+review round; what stays in the present tense is the transferable shape and the durable fix (the
+roster test, the required-parameter ballot, the claim/erase ordering question).
+
+**The principle, folded into the re-review bullet:** a finding written in the present tense becomes
+false the moment it is fixed, and this file is the one place no gate re-reads — outside every
+`reviewGates` pattern and inside `claimLint.exemptPaths`. Write the shape, attribute the instance
+to the round in the past tense, point at the archive. Sweep this file for the ticket id after every
+round whose findings were accepted. I had written three archive entries congratulating myself on
+catching this exact class in other people's files while shipping four instances of it in my own.
+
+Also noted: `src/contexts/AuthContext.tsx` is in my duty list and its worktree bytes (34d3039) had
+already diverged from the sha my pass pinned (07cc76e) when I checked. That file needs a re-read
+once restaged; a verdict pinned to bytes that moved is not a verdict about what ships.
+
+### 2026-09-07 — BIN-1063 steg 3 bunt 2, round 6 FINAL (0 blocking — PASS)
+
+`src/contexts/AuthContext.tsx` re-read at 34d3039 (my previous pass pinned 07cc76e). Verified
+comment-only MECHANICALLY rather than taking it: one hunk, and
+`diff -u | grep '^[+-]' | grep -v '^[+-][+-]' | grep -v '^[+-]\s*//'` is EMPTY, so no changed
+line is anything but a comment. `const RECENT_LOGIN_MAX_AGE_MS = 2 * 60 * 1000;` appears as a
+context line. Everything else in the duty list byte-identical; map files still out of the index.
+
+The strike is the right one: it names the 2026-08-05 DBA argument as false rather than writing a
+new margin claim, keeps the number, and points at the deviations entry for the cost. No new
+measurable assertion minted.
+
+**Worth carrying: the freshness accept has a backstop its own entry does not mention.** The
+accepted outcome is `deleteUser` refusing on requires-recent-login AFTER a successful cascade —
+data gone, Auth identity left. That identity is not orphaned indefinitely:
+`retentionCleanup`'s orphan-auth sweep candidates on "Auth account exists AND `users/{uid}`
+confirmed absent", and a SUCCESSFUL cascade is exactly that state, so the account enters the
+candidate set and is reaped after the 7-day floor. It is also the state ADR 0022's accept
+depends on NOT being re-created by a second device. So the residual self-heals server-side,
+which makes the accept genuinely bounded rather than permanent — check this before pricing any
+future "the identity survives" finding on this path.
+
+**The second new deviations bullet checked, not taken:** `users/{target}/groupInvites/{groupId}`
+carries the departing owner's `fromUid` + `fromDisplayName`. `collectDeletionRefs:101` erases
+only `snaps.groupInvitesSnap` — the leaver's INCOMING invites at `users/{leaver}/groupInvites`
+— and `grep fromUid` over `userData.ts`/`accountDeletion.ts` returns nothing, so no query
+reaches the outgoing copies. Confirmed residual. NOT a bunt-2 finding, and the distinction is
+the one that matters for this class: `participantUids` was a retention this batch CREATED (the
+group used to be deleted whole), while the invite doc survived the owner's deletion before this
+batch too — what the batch changes is that the invite is now actionable, not that the PII is
+newly retained. Pre-existing + newly visible + booked with an owner is correctly handled;
+newly created + unbooked is what blocks.
+
+Six rounds total. Three blocking, all in rounds 1-3: two code defects (`participantUids`
+unerased on a surviving group; the erasure unreachable after the claim) and one process
+violation (map files staged with the feature). Rounds 4-6 found prose only, all non-blocking,
+all taken voluntarily. Both code defects were the same question — "after this write, what still
+finds this thing?" — and neither was visible from any single file.

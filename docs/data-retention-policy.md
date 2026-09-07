@@ -128,10 +128,32 @@ När användaren raderas:
   sitt eget attempt på sekunder, så allt äldre är en spent-token-orphan.
   UNDANTAGET ur exporten (gruppens delade hemlighet, inte personuppgift).
 - Om jag är owner (`ownerUid == me`) och det finns andra medlemmar →
-  transferera ownership till första andra medlemmen (kommande sprint —
-  TODO). För nuvarande: om owner raderar sig lämnas gruppen ägarlös och
-  kan inte modifieras (okej tillstånd eftersom owner ändå kan delete:a
-  gruppen först).
+  **gruppen lämnas över, den raderas inte** (BIN-1063 steg 3, Malins beslut
+  2026-09-06). Den går till den medlem som varit med längst, mätt på
+  `joinedAt` i `groups/{gid}/members/{uid}` — ett fält servern pinnar till sin
+  egen commit-tid, så det inte går att sätta bakåt för att vinna arvet.
+  Rösträtten är gruppdokumentets `memberUids`; medlemsraderna bidrar bara med
+  tidpunkten.
+
+  Överlämningen görs av den anropbara `handOverOwnedGroups`, inte av klienten:
+  `ownerUid` är pinnad oförändrad på varje regelgren, och reglerna kan inte
+  iterera medlemmarna för att kontrollera vem som varit med längst.
+
+  Mina egna spår i den överlämnade gruppen raderas ändå: `members/{uid}` (som
+  bär en kopia av namn och bild), `household/{uid}`, `joinAttempts/{uid}` och
+  varje `watchlist/*/progress/{uid}`. De uid-bärande FÄLTEN rensas i stället för
+  att raden tas bort: `watchlist.addedBy`, `sessionHistory.pickedByUid` och mitt
+  uid ur `sessionHistory.participantUids`. Raden blir kvar — gruppens egen
+  historik är inte min att radera — men den pekar inte längre på mig.
+
+  Raderingen görs FÖRE ägarbytet, och ordningen bär: båda dörrarna hittar en
+  grupp på `ownerUid` eller på `memberUids`, och bytet ändrar båda samtidigt. En
+  radering som fallerar EFTER ett genomfört byte hade lämnat spåren permanent
+  onåbara. Nu står jag kvar som ägare om något går fel, och omkörningen hittar
+  gruppen igen.
+
+  Finns INGEN annan medlem kvar raderas gruppen som förut. En efterträdare går
+  inte att uppfinna.
 
 ### Hushålls-bidrag (delade prenumerationskostnader) → Samtyckesbaserad, självstyrd radering (BIN-184, 2026-07-05)
 

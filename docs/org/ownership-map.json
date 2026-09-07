@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 555,
+  "patternCount": 559,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -637,8 +637,10 @@
         "functions/scripts/recap-upload.mjs",
         "functions/src/communityRatings/index.ts",
         "functions/src/communityRatings/runAggregate.ts",
+        "functions/src/groupHandover/index.ts",
         "functions/src/groupHandover/logic.test.ts",
         "functions/src/groupHandover/logic.ts",
+        "functions/src/groupHandover/runHandover.ts",
         "functions/src/reclaimOrphanFollows/",
         "functions/src/retentionCleanup/",
         "src/contexts/AuthContext.test.tsx",
@@ -651,6 +653,7 @@
         "src/lib/firebase/config.ts",
         "src/lib/firebase/episodeProgress.test.ts",
         "src/lib/firebase/episodeProgress.ts",
+        "src/lib/firebase/groupHandover.ts",
         "src/lib/firebase/messaging.livetoken.test.ts",
         "src/lib/firebase/messaging.ts",
         "src/lib/firebase/publicProfile.test.ts",
@@ -679,6 +682,7 @@
         "src/test/rules/account-deletion.test.ts",
         "src/test/rules/community-ratings-orchestrator.test.ts",
         "src/test/rules/firestore-rules.test.ts",
+        "src/test/rules/group-handover-orchestrator.test.ts",
         "src/test/rules/retention-cleanup-orchestrator.test.ts",
         "src/test/rules/tmdb-sweep-orchestrator.test.ts"
       ]

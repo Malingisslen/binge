@@ -775,6 +775,14 @@ findings here too.
   storheten ar ordningen mellan dokumenten i en undersamling och nyttolasten pa
   gruppdokumentet.
   → `functions/src/groupHandover/logic.ts`, `functions/src/groupHandover/logic.test.ts`
+- **Gruppöverlämningen som skrivväg** (BIN-1063 steg 3, bunt 2). Serverfunktionen
+  som byter ägare på gruppdokumentet och raderar den avgåendes egna spår i den,
+  loopen bakom den, och klientens anrop. Storheten är skrivvägen mot datalagret:
+  vilka dokument som ändras, i vilken ordning, och vad som är atomiskt. Att den
+  ligger i en callable i stället för i en regelgren är ett datalagerbeslut —
+  `ownerUid` är pinnad på varje regelgren och reglerna kan inte iterera
+  medlemsraderna.
+  → `functions/src/groupHandover/index.ts`, `functions/src/groupHandover/runHandover.ts`, `src/lib/firebase/groupHandover.ts`, `src/test/rules/group-handover-orchestrator.test.ts`
 - **Admin-SDK-skrivarna mot recap-cachen** (BIN-1013-sätet). Skripten som skriver och
   inventerar dokumenten i `recaps/`. Samma skäl som backfillen ovan: de kör med Admin SDK
   mot en samling klienten bara får läsa, så det är datalagrets skrivväg som avgör sätet.
