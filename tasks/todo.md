@@ -1,3 +1,279 @@
+# Sprinten 2026-09-08 - sju biljetter i tre buntar
+
+Urval: 21 oppna biljetter i Backlog, noll i Todo/In Progress. Premisskontrollen
+kordes mot HEAD for varje kandidat innan nagon valdes; alla sju premisser star
+kvar. Kommentarstradarna pa alla sju ar tomma - ingen parkerad handbroms.
+
+## Routning - kord pa varje bunts faktiska filunion
+
+Routas om omedelbart fore varje kritik och fore varje commit med
+`node docs/org/route.mjs $(git diff --cached --name-only)`. Talen nedan ar fran
+urvalet och far aldrig arvas in i ett senare varv.
+
+- Bunt 1: `tier: medium`, `panel: [27]`, `reasonCode: owned`.
+- Bunt 2: `tier: medium`, `panel: [27]`, `reasonCode: owned`,
+  `unownedCode: ["functions/tsconfig.json"]`.
+- Bunt 3: `tier: top`, `panel: [27, 5, 4, 6, 18]`, `reasonCode: high-stakes`
+  (`firestore.rules`).
+
+Den har sessionen kan konvenera bade en enskild kritik och en full panel, sa
+ingen bunt behover parkeras for utebliven kapacitet.
+
+---
+
+## Bunt 1 - skripten under `functions/scripts/` och `scripts/` [Tier A]
+
+Kritik: en blind fran #27 Database Administrator fore bygget.
+
+### BIN-1107 - recap-skripten kan oppna fel projekts databas
+
+Mangden harleds med kommandot, inte ur biljetten:
+`grep -rn "applicationDefault()" functions/scripts/ | grep -v projectId`
+
+- [ ] Kor kommandot. Ge varje traff en `*.helpers.mjs` med `refusalFor(argv)`
+      som returnerar `null | string`, i samma form som
+      `backfill-mirror-uid.helpers.mjs` redan har.
+- [ ] `--project <id>` obligatorisk; id:t vidare till `initializeApp`.
+- [ ] Forsta raden varje korning skriver ar vilket projekt den oppnar.
+- [ ] Test som ANROPAR `refusalFor` for varje skript, inte kallkodsskannar.
+- [ ] Testet pinnar formen `['--apply', '--project']` - en flagga last som
+      varde hade riktat korningen mot ett projekt som heter `--apply`.
+- [ ] Uppdatera anropsexemplen i filhuvudena, `docs/recaps/RUNBOOK.md` och
+      `.claude/skills/recap/SKILL.md` sa inget publicerat kommando vagrar.
+      Kor varje publicerat kommando och LAS utdatan.
+
+Acceptans:
+1. Varje skript kommandot hittar vagrar utan `--project`, bevisat av ett test
+   som anropar vagrandet. *(diff)*
+2. Muteringen som tar bort vagrandets `return` faller minst ett test - och
+   assertionen far inte kunna traffa en systergren. *(diff)*
+3. Varje korning skriver ut projektnamnet forst. *(diff)*
+4. Ingen SPARAD, icke-test-`.mjs` under `functions/scripts/` oppnar en Firestore
+   utan att namnge sitt projekt. *(diff)*
+
+   Kriteriet ar OMSKRIVET 2026-09-08, efter helhetsgranskningen. Den ursprungliga
+   lydelsen var `grep -rn "applicationDefault()" functions/scripts/ | grep -v
+   projectId` ger noll traffar, och den gar inte att uppfylla: den traffar bade
+   vaktens egen kallkod, dar predikatet star skrivet, och `_check-soa.mjs`, som
+   monstret `functions/scripts/_*.mjs` i `.gitignore` haller utanfor repot med flit. Kriteriet och det som
+   faktiskt byggdes var alltsa tva olika mangder, och den som bockade av det hade
+   skrivit ett falskt pastaende.
+
+   Provet ar VAKTEN, inte en omskrivning av den. Kor
+
+   ```
+   npx vitest run functions/scripts/projectArg.helpers.test.mjs
+   ```
+
+   och las fallet "every initializeApp call that uses applicationDefault also
+   names projectId". Det ar samma kontroll som kors i `npm test`.
+
+   Ett forsta forsok att skriva om harledningen som en egen skal-loop var ocksa
+   falskt - `grep -q A && grep -q B || echo` skriver ut varje fil som saknar A,
+   sa den listade de tre hjalpmodulerna och meningen bredvid pastod tom utdata.
+   Struken. En kontroll som redan finns ska anropas, inte beskrivas en gang till.
+
+### BIN-1105 - golvet ser inte att `REQUIRED` krymper
+
+- [ ] `expect(REQUIRED.length).toBe(MIN)` i
+      `scripts/scripts-self-tests-present.test.mjs`. En LIKHET, inte en
+      harledning - `const MIN = REQUIRED.length` kan aldrig falla.
+- [ ] Prova bada riktningarna: ta bort ett namn ur `REQUIRED` utan att rora
+      disken; hoj `MIN` utan att lagga till ett namn. Bada ska falla.
+
+Acceptans:
+1. Ett borttaget namn ur `REQUIRED` faller sviten. *(diff)*
+2. Ett hojt `MIN` utan nytt namn faller sviten. *(diff)*
+3. Diskvaxten ar fortfarande fri: `found.length >= MIN`, aldrig en likhet. *(diff)*
+
+### BIN-1104 - `bundle-report.mjs`s riktiga skrivvag har ingen lyckad gren
+
+- [ ] Vidga den skrivbara fixturen: riktig OBLOCKERAD temp-katalog,
+      `GITHUB_STEP_SUMMARY` pekad pa en FORSEEDAD riktig fil.
+- [ ] `readFileSync` baslinjen tillbaka, havda att den rundgar till
+      `{routes: {...}}`.
+- [ ] Havda att den forseedade sammanfattningens innehall star kvar FORE den
+      nytillagda texten.
+
+Acceptans:
+1. Muteringen som byter `renameSync`s argument faller minst ett test. *(diff)*
+2. Muteringen `flag: 'a'` till `flag: 'w'` faller minst ett test. *(diff)*
+3. Skriptets fail-open-kontrakt ar orort: `main()` returnerar fortfarande 0 nar
+   en riktig skrivning kastar. *(diff)*
+
+---
+
+## Bunt 2 - funktionsbygget [Tier A]
+
+Kritik: en blind fran #27 Database Administrator fore bygget.
+
+### BIN-1110 - testfiler kompileras in i funktionsbygget
+
+- [ ] `functions/src/**/*.test.ts` ut ur det som `npm run build` kompilerar.
+- [ ] NAMNGE vilket kommando som fortfarande typkontrollerar testfilerna, och
+      kontrollera att det kommandot kors i CI. Faller typkontrollen bort utan
+      ersattning byts ett hogljutt fel mot ett tyst.
+- [ ] En check faller om ett testfil-monster ater hamnar i byggets `include`.
+- [ ] `functions/src/groupHandover/logic.test.ts` far ga tillbaka till
+      `fileURLToPath(import.meta.url)`.
+
+Acceptans:
+1. Inga `*.test.ts`-artefakter i `functions/lib/` efter `npm run build`,
+   verifierat med ett kommando vars utdata lases. *(diff)*
+2. Testfilerna typkontrolleras av ett namngivet kommando som CI kor. *(diff)*
+3. En check faller pa ett aterinfort testmonster i `include`. *(diff)*
+
+### BIN-1109 - gruppoverlamningens klumpning nar inget test
+
+- [ ] Bryt ut klumpningen till en ren funktion i den admin-fria
+      syskonmodulen, eller bygg en testport som klumpar som Admin-porten gor.
+- [ ] Fixtur med FLER poster an `BATCH_LIMIT`.
+- [ ] Sag i biljetten vid stangning om `retentionCleanup`s motsvarande
+      klumpning tacks av samma form, eller att den luckan star kvar.
+
+Acceptans:
+1. Ett test driver mer an `BATCH_LIMIT` skrivningar och asserterar att VARJE
+   avsedd rad ar borta, inte bara forsta klumpens. *(diff)*
+2. Muteringen som tar bort `flush()` mellan klumparna faller minst ett test. *(diff)*
+3. Muteringen som later raknaren sta kvar over en flush faller minst ett test. *(diff)*
+
+---
+
+## Bunt 3 - `firestore.rules` [Tier C, top]
+
+Kritik: full panel `[27, 5, 4, 6, 18]`, blint och parallellt, fore bygget.
+Reglerna deployas FOR HAND - `deploy.yml` skeppar bara hosting.
+
+### BIN-1106 - `friendRequests` create saknar `hasOnly`
+
+- [ ] HARLED nyckellistan ur `sendFriendRequest` i `src/lib/firebase/friends.ts`
+      innan regeln skrivs. En for smal lista nekar varje skarp vanforfragan.
+- [ ] `hasOnly` pa create-grenen.
+
+Acceptans:
+1. Emulatortest: ett extra falt nekas. *(diff)*
+2. Emulatortest: den nyttolast `sendFriendRequest` faktiskt bygger gar igenom. *(diff)*
+3. `friends.test.ts` pinnar nyckelmangden exakt, som for de tva andra. *(diff)*
+4. Muteringen som tar bort `hasOnly` faller minst ett test. *(diff)*
+
+### BIN-1108 - en agare kan lamna sin egen grupp och frysa den
+
+Lage vid HEAD, last: agar-grenen kraver `resource.data.memberUids.hasAll(new)`
+och pinnar `ownerUid`, men kraver inte att `request.auth.uid` star kvar i
+`request.resource.data.memberUids`. En delmangd far utelamna agaren.
+
+Det som blockerade fixen ar borta: BIN-1063 steg 3 shippade overlamningen som en
+SERVERFUNKTION (Admin SDK, gar forbi reglerna), sa en sparr pa klientgrenen
+stanger ingen vag steg 3 behover.
+
+- [ ] Villkor som knyter agarens sjalvborttag till ett samtidigt medlemsuttrade.
+- [ ] Kontrollera FORST att `functions/src/groupHandover/` skriver via Admin SDK
+      och alltsa inte traffas. Gor den det inte ar planen fel, inte koden.
+
+Acceptans:
+1. Emulatortest: en agare kan inte skriva bort sig ur `memberUids` pa
+   agar-grenen. *(diff)*
+2. Emulatortest: namnbyte, borttag av NAGON ANNAN och tokenrotation gar
+   fortfarande igenom. *(diff)*
+3. Muteringen som tar bort det nya villkoret faller minst ett test. *(diff)*
+4. Overlamningsfunktionens vag ar oberord, bevisat av att dess svit ar gron. *(diff)*
+
+---
+
+## Behover dig (byggs inte)
+
+- **BIN-454** - `tmdbFieldsSweep`s utrullning. Firebase Console + skarp
+  torrkorning. Star under "gor aldrig detta" i CLAUDE.md; en sprint far inte
+  rora den. Forfaller 2026-11-01.
+- **BIN-521** - buntradgivaren. Bar etiketten `idea`, alltsa ditt produktval.
+- **BIN-824** - hoj SEO-urvalets tak. Biljetten sager sjalv "byggs inte nu",
+  och kraver skarpa GSC-data.
+- **BIN-1114** - satt `REFRESH_DERIVE_TIMEOUT_MS`. Kraver en matning mot skarp
+  drift (`kind: run`), inte nagot en obemannad bunt kan producera.
+
+## Kvar i Backlog, inte valda den har rundan
+
+BIN-1113, BIN-1112, BIN-1111, BIN-1103, BIN-1097, BIN-959, BIN-658, BIN-624,
+BIN-559, BIN-402.
+
+## Efter sprinten
+
+- [ ] Fila foljdbiljetter FORE commit.
+- [ ] Commit per bunt, med granskarna den stageade diffen utloser.
+- [ ] Push-grinden ar ett EGET granskningsvarv over hela `@{u}..HEAD` - inte
+      summan av bunternas. Budgetera det darefter.
+- [ ] `firebase deploy --only firestore:rules` for hand efter bunt 3.
+- [ ] Linear-overgang per bunt, skriven av den som haller shan.
+
+## Deviation log
+
+- [kritik] Bunt 1, helhetsgranskningen varv 4: TRE fynd till, alla i prosa som
+  fanns FORE bunten men som mina egna tillagg gjorde barande. `route.test.mjs`
+  pastod att `recap-upload.helpers.mjs` "seats the #14 fallback" - routern svarar
+  `panel: [27]`; min nya post citerade just den meningen som kontrast. Golvfilens
+  huvud sa att "bada" skripten kors av deployen - `grep` ger tre. Och vaktens
+  rubrik lovade "Firestore-opening" medan loopen bara kanner igen ett
+  inloggningssatt. Alla tre strukna, inget omraknat.
+- [kritik] Bunt 1, helhetsgranskningen varv 2 och 3: TVA fynd till, bada i min egen
+  prosa och bada inne i rattelsen av ett tidigare fynd. (a) Ett publicerat
+  RADERINGSkommando i driftboken (`node -e`, inline) oppnade en onamngiven databas -
+  min forsta svepning var byggd pa skriptnamn och kunde inte se det. (b) Mitt
+  ersattningskriterium bar en skalbugg: `grep -q A && grep -q B || echo` skriver ut
+  varje fil som saknar A, sa den listade tre filer medan meningen bredvid pastod tom
+  utdata. Bada strukna; kriteriet pekar nu pa vaktens EGET testfall i stallet for att
+  beskriva den en gang till.
+- [rattelse] Min mening att inline-kommandot var den ENDA Firestore-oppnande formen
+  utanfor `functions/scripts/` var falsk. Den andra svepningen var nycklad pa
+  `applicationDefault()`, och `gcloud`-formen innehaller inte det uttrycket alls -
+  `docs/RUNBOOK.md:171` aterstaller en HEL databas utan att namnge projekt. Vidgat in
+  i BIN-1122, inte lagat har.
+- [kritik] Bunt 1, helhetsgranskningen: TRE fynd, alla i min egen prosa, inget i
+  koden. (a) Ett publicerat kommando i `tasks/recap-50-shows-progress.md` - en fil
+  bunten inte ror - slutade fungera av min andring; migrerad. (b) "de tva testen
+  ovan ar de enda som ror ett riktigt filsystem" var falskt (sex gor det); struket,
+  inte omraknat. (c) tva riktningsord ("ovan") pekade at fel hall, och det ena
+  namngav ett test som gor precis tvartemot vad meningen pastod; riktningsorden ar
+  borta helt, golvet namnges av sin assertion i stallet.
+- [kritik] Bunt 1, det viktigaste fyndet: testgranskaren RADERADE vagran ur bada
+  skripten och fick hela sviten gron. Hjalparens egna test provar bara hjalparen,
+  och argumentskanningen bara texten inne i `initializeApp(...)`. Ingen nadde
+  `main()`. En kallkodsskanning ankrad genom EXIT ar tillagd, och raderingen
+  faller nu i alla TRE anropande skript. BIN-776:s klass.
+- [rattelse] Testets namn sa "varje skript" om en lista med tva av tre. Vidgat till
+  alla tre i stallet for omskrivet - granskarens sakrare alternativ. Rostern pinnas
+  nu pa MEDLEMSKAP, harlett ur `git ls-files`, inte bara pa storlek.
+- [kritik] Bunt 1: sakerhetsgranskaren fallde vakten TVA ganger till. Forst att
+  kommentarsstrippning + prov mot HELA filtexten kan rensas av en avslutande
+  kommentar var som helst i filen; darefter att reservgrenen provade EXISTENS, sa
+  ett andra olasbart anrop akte med bredvid ett korrekt syskon (dess prov var
+  7/7 gront). Vakten laser nu ARGUMENTET i varje anrop och jamfor ANTAL, inte
+  existens. All kommentarsstrippning ar borta.
+- [rattelse] Tva meningar i min egen kommentar ar STRUKNA, inte omformulerade,
+  efter att jag motbevisat dem med ett kommando: att en kommentar inte kan sta
+  inne i den matchade literalen (den kan - `/* projectId */` inuti klamrarna
+  rensar anropet), och att rubriken "citerar" ett anrop i presens (den gor inte
+  det langre).
+- [kritik] Bunt 1, BIN-1107: min kallkodsvakt flaggade sin EGEN modul sa fort filen
+  stagades. Tva orsaker i samma fynd: modulens rubrik citerar det onamngivna anropet
+  ordagrant for att forklara vad modulen ar till for, och bade `git ls-files` och
+  agarkartans generator laser SPARADE filer - sa `git add` andrade deras svar. Min
+  grona helhetskorning gjordes fore stagningen och matte darfor nagot annat.
+  Testgranskaren fallde bunten tva ganger; bada fynden var akta.
+- [kritik] Bunt 1: forsta rattelsen rackte inte. `if (!src.includes('initializeApp('))`
+  ensamt lamnade halet oppet, eftersom rubriken citerar hela anropet. Vakten strippar
+  nu blockkommentarer forst och sedan HELRADS-kommentarer med samma ankrade uttryck
+  som grannfilen redan anvander. Bada granskarens provformer korda mot en riktig fil:
+  bagge namnger nu ratt fil, tidigare var bagge osynliga.
+- [avvikelse] `functions/scripts/_check-soa.mjs` och `.agents/skills/recap/` ar
+  OSPARADE. Ingen commit kan andra dem, sa de ligger utanfor bunten och gick till
+  BIN-1116 for ditt beslut. Vakten laser darfor spårade filer, inte katalogen.
+- [kritik] BIN-1108: #4 Sakerhetsarkitekten BLOCKERAR planens omfang. Jag verifierade
+  sjalv: "medlem lamnar"-grenen kraver bara `request.auth.uid in resource.data.memberUids`
+  och pinnar `ownerUid` - ingenting utesluter agaren, sa agaren kan lamna via DEN grenen
+  och frysa gruppen aven om agar-grenen lagas. Fixen maste stanga BADA grenarna.
+  Villkoret ar i samma fil, sa routningen andras inte.
+---
+
 # BIN-1063 steg 3 - det faltagda halvan + gruppoverlamningen
 
 Routning: harleds med `node docs/org/route.mjs $(git diff --cached --name-only)`

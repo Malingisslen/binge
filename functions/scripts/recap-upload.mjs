@@ -3,7 +3,12 @@
 // never in CI.
 //
 //   GOOGLE_APPLICATION_CREDENTIALS=/abs/path/recaps-writer.json \
-//     node functions/scripts/recap-upload.mjs [--force] path/to/generated-recaps.json
+//     node functions/scripts/recap-upload.mjs --project binge-nu [--force] path/to/generated-recaps.json
+//
+// `--project` is REQUIRED for every mode that opens a Firestore (BIN-1107). Application
+// Default Credentials carry whatever quota project the machine was set up for, so an
+// unnamed run can open a DIFFERENT project's database, succeed, and report nothing to do.
+// `--unsourced` is exempt: it only appends to a local JSON file and opens no database.
 //
 // Input: a JSON array of generated recaps, TWO entry kinds in the same batch file:
 //   Boundary (default): { tmdbId, season, episode, text, textFull?, model, sources: [{name,url,license}] }
@@ -37,6 +42,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { initializeApp, applicationDefault } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { projectFrom, projectRefusal } from './projectArg.helpers.mjs';
 import {
   invalidRecapReason,
   invalidSeasonRecapReason,
@@ -104,6 +110,17 @@ async function main() {
     appendUnsourced(id, title, reason.join(' '));
     return;
   }
+  // BIN-1107. Refuse before anything else a Firestore-opening mode does. `--unsourced`
+  // returned above precisely because it opens no database and must stay runnable.
+  const refusal = projectRefusal(args);
+  if (refusal) { console.error(refusal); process.exit(1); }
+  const projectId = projectFrom(args);
+  // Strip BOTH tokens before the positional read below, or `--project` lands in inputPath.
+  {
+    const i = args.indexOf('--project');
+    args = args.slice(0, i).concat(args.slice(i + 2));
+  }
+
   // --force: overwrite a season doc that already exists (ordinarily written once). Has no
   // effect on boundary docs, which are always overwritten (that's how a regeneration pass works).
   const force = args.includes('--force');
@@ -116,11 +133,13 @@ async function main() {
   // rewriting the recap docs (backfill for batches uploaded before indexing existed).
   const indexOnly = args[0] === '--index-only';
   const inputPath = indexOnly ? args[1] : args[0];
-  if (!inputPath) { console.error('usage: node functions/scripts/recap-upload.mjs [--force] [--season-only] [--index-only] <recaps.json> | --unsourced <tmdbId> <title> <reason>'); process.exit(1); }
+  if (!inputPath) { console.error('usage: node functions/scripts/recap-upload.mjs --project <id> [--force] [--season-only] [--index-only] <recaps.json> | --unsourced <tmdbId> <title> <reason>'); process.exit(1); }
   if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
     console.error('GOOGLE_APPLICATION_CREDENTIALS is not set — point it at the least-privilege recaps-writer service-account key.');
     process.exit(1);
   }
+
+  console.log(`recap-upload against project ${projectId}`);
 
   const recaps = JSON.parse(readFileSync(resolve(inputPath), 'utf8'));
   if (!Array.isArray(recaps)) { console.error('input must be a JSON array of recap objects'); process.exit(1); }
@@ -141,7 +160,7 @@ async function main() {
   console.log(`${validBoundary.length}/${recaps.length} boundary recaps valid, ${validSeason.length} season recaps valid; ${indexOnly ? 'indexing only…' : 'uploading…'}`);
   if (validBoundary.length === 0 && validSeason.length === 0) return;
 
-  initializeApp({ credential: applicationDefault() });
+  initializeApp({ credential: applicationDefault(), projectId });
   const db = getFirestore();
 
   if (!indexOnly && validBoundary.length > 0) {
@@ -183,7 +202,7 @@ async function main() {
       coveredByShow.set(tmdbId, merged);
     } catch (e) {
       console.error(`INDEX WRITE FAILED for ${tmdbId} — the uploaded recaps are INVISIBLE to clients until indexed.`);
-      console.error(`Recover with: node functions/scripts/recap-upload.mjs --index-only ${inputPath}`);
+      console.error(`Recover with: node functions/scripts/recap-upload.mjs --project ${projectId} --index-only ${inputPath}`);
       console.error(e);
       process.exit(2);
     }

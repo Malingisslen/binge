@@ -26563,3 +26563,380 @@ Full original sentence, deleted with no live-file pointer (folded into the gener
 "Verify, never inherit, claims" bullet's surrounding prose, which already covers the same
 territory): "On a signature-widening test update, judge weakening by mutating the NEW
 composing step and requiring the PRE-EXISTING boundary tests to redden."
+
+## 2026-09-08 — BIN-1107 round 3: strip-order and foreign-comment-token blind spots in projectArg.helpers.test.mjs
+
+**Diff reviewed.** Batch 1, 2026-09-08 sprint, re-review round 3 of BIN-1107 (the
+`--project <id>` refusal shared across `functions/scripts/*.mjs`). Round 2 (prior pass)
+found and required fixes for two blind spots in
+`functions/scripts/projectArg.helpers.test.mjs`'s source-scanning guard ("no tracked
+Firestore-opening script leaves its project unnamed"): an unanchored `/\/\/.*/g` line-strip
+let a `'https://…'` string beside an init call delete the call (file wrongly skipped as a
+non-caller), and the correctness regex alone let a JSDoc quoting the right shape above a
+broken call clear it. Round 3's diff hardened the strip to:
+
+```js
+const src = readFileSync(join(REPO, rel), 'utf8')
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .replace(/^\s*\/\/.*$/gm, '');
+```
+
+i.e. strip block comments first (unanchored), then whole-line `//` comments (anchored to
+line start, the idiom `backfill-mirror-uid.helpers.test.mjs` already used). Also in this
+diff: `functions/scripts/recap-upload.mjs`'s `INDEX WRITE FAILED` recovery command gained
+`--project ${projectId}`, and `recap-coverage-manifest.mjs` gained the same refusal +
+`projectId` wiring as `recap-upload.mjs`.
+
+**Mutations / probes run** (node, ad hoc scripts against the literal shipped regex pair,
+restored nothing since these were throwaway repros in `/tmp`, not repo files):
+
+1. Round-2 regressions re-verified NOT to have resurfaced: a `'https://example.com/docs'`
+   string beside a bare `applicationDefault()` call, and a JSDoc quoting
+   `applicationDefault(), projectId` above a bare call — both still correctly reported as
+   offenders under the new two-stage strip. `offenders: ['f']` for both.
+2. NEW probe — string literal holding an UNTERMINATED `/*`, followed later in the same file
+   by any real, unrelated block comment:
+   ```js
+   const s = "template /* placeholder";
+   initializeApp({ credential: applicationDefault() });
+   /* trailing unrelated comment */
+   ```
+   Result: `offenders: []` — the lazy `/\*[\s\S]*?\*\//g` matches from the `/*` inside the
+   string all the way to the next real `*/`, swallowing the broken `initializeApp(...)`
+   call entirely; the file is skipped as a non-caller. Reproduced with a realistic shape
+   (a stray `// BIN-BROKEN: forgot to add projectId` line, a help-text string, an unrelated
+   trailing JSDoc on a different export) — same result, file silently "CLEARED".
+3. NEW probe — a `//` line comment holding a stray unmatched `/*`, with a real block
+   comment later in the file:
+   ```js
+   // note: template literals sometimes look like /* this
+   initializeApp({ credential: applicationDefault() });
+   /**
+    * unrelated JSDoc later in the file
+    */
+   ```
+   Block-first (shipped order): `offenders: []` (call hidden). Line-first (reversed order):
+   call visible, correctly flagged. This is the STRIP-ORDER dependency: reversing the order
+   fixes probe 3 but does NOT fix probe 2 (re-tested probe 2 under line-first order — still
+   `offenders: []`), so no single reordering closes both.
+4. Dismissed as non-issues after testing (both correctly caught, `offenders: ['f']`): a
+   regex literal containing `//` mid-line (never touches the anchored line-strip, since the
+   line doesn't START with `//`), and a "nested" block comment (`/* outer /* inner */ still
+   */`) — JS has no real nesting, the lazy match still terminates at the first real `*/`
+   and leaves trailing junk text, which doesn't hide the call.
+5. Sanity check: `grep -rn '/\*' functions/scripts/*.mjs` for any existing string content
+   matching the dangerous shape — none found. No currently-tracked file triggers probes 2
+   or 3 today. Also verified `functions/scripts/_check-soa.mjs` (which DOES call
+   `initializeApp({ credential: applicationDefault() })` with no `projectId`) is correctly
+   excluded — it is gitignored (`.gitignore:79: functions/scripts/_*.mjs`), confirmed via
+   `git ls-files` / `git check-ignore -v`, matching the guard's own documented rationale
+   ("reads the files git TRACKS, not the directory").
+6. `functions/scripts/recap-upload.mjs`'s `--index-only` recovery-message scope verified by
+   reading, not assumed: `projectId` is declared via `const projectId = projectFrom(args)`
+   before the `indexOnly` branch point, and the `refusal` early-return already exited before
+   that declaration if no project was named — so `projectId` is guaranteed defined at the
+   `console.error(\`Recover with: … --project ${projectId} --index-only …\`)` line,
+   including on the `--index-only` code path (the index-update loop runs unconditionally,
+   `indexOnly` only gates the later season-doc loop). Confirmed correct, not a finding.
+7. `npx vitest run functions/scripts/projectArg.helpers.test.mjs
+   functions/scripts/backfill-mirror-uid.helpers.test.mjs scripts/bundle-report.test.mjs
+   scripts/scripts-self-tests-present.test.mjs docs/org/route.test.mjs` → 5 files, 995
+   tests, all green.
+8. Re-derived the "two call sites write `credential` first" and "only two/three
+   Firestore-opening scripts" claims in the new comments via
+   `git ls-files -- functions/scripts | grep -v '\.test\.mjs$'` (6 tracked non-test files;
+   3 call `initializeApp(`: `backfill-mirror-uid.mjs`, `recap-coverage-manifest.mjs`,
+   `recap-upload.mjs`, all `{ credential: applicationDefault(), projectId }` in that order)
+   rather than trusting the prose.
+
+**Verdict.** Reported as a NON-BLOCKING finding, not a re-fail: the primary defense
+(`projectRefusal`/`projectFrom`, called directly and mutation-verified at each real call
+site) is unaffected and solid; the source-scan is explicitly a secondary net for a NOT-YET-
+WRITTEN future script; no tracked file today triggers either probe; and the probes require
+a deliberately unusual code shape (an unterminated `/*` embedded in a string or `//`
+comment) unlike round 2's two fixes, which were realistic everyday patterns (a help URL, a
+correctly-shaped JSDoc example) any engineer might write by accident. Folded into the
+active knowledge file's "Verify, never inherit" bullet rather than opened as a fourth
+engineering round on the same guard.
+
+## Relocated 2026-09-08 — entry 83 (BIN-1063 bunt 3, N-guards + stubbed-port-boundary detail, moved from the active file's Admin-SDK-orchestrator bullet to hold the 80k cap)
+
+**When a ticket NAMES N guards, each one needs its OWN failure-injection fixture inside the emulator harness — a green run that only exercises N-1 of them via the happy path (plus the other guards' OWN failure overrides) proves nothing about the Nth.** BIN-1063 steg 3's `deleteAllOrThrow` (throw-not-swallow, so a failed chunk can't let the caller go on to erase `users/{uid}`) is a non-exported helper only reachable through the live orchestrator; the file had no test making `deleteDocs` throw mid-category for a field-owned uid — mutating it to swallow (mirroring `deleteInBatches`) left the whole suite green. **Closed, bunt 3**: a dedicated `deleteDocs` override on `reviews` (first in `FIELD_OWNED_CATEGORIES`) reddens under the swallow mutant, live-verified on both sides — not hand-traced. Do not expect a lone red: a sibling override on the same helper reddens too, and that is coverage overlapping, not a defect. The budget-refusal and handover-failure guards sitting right beside it in the same function ARE covered, which is what makes the gap easy to miss on a read-through: grep every named guard for a DEDICATED override that fails IT specifically, not just for "a failure test exists somewhere in the block".
+
+**A stubbed `attempted` return at a `CleanupIo`-style port boundary tests the CALLER's crediting, not the port's own accumulation — check for a sibling suite proving the port's mechanism before filing "proves only the shape" as a gap** (BIN-1063 bunt 3: `runCleanup.ts` crediting `handover.attempted` before either throw is proven by a stubbed `commitGroupHandover`; `HandoverSummary.attempted` itself is separately proven in `group-handover-orchestrator.test.ts`).
+
+## Relocated 2026-09-08b — entry 84 (BIN-1107 round-4 review: shared-refusal wiring gap, plus the superseded two-stage comment-strip worked example)
+
+**Superseded worked example, struck from the "Verify, never inherit" bullet** (was accurate
+against round 2/3 of BIN-1107, false against round 4's bytes): `projectArg.helpers.test.mjs`'s
+guard no longer strips comments at all. The prior text read: "`projectArg.helpers.test.mjs`'s
+block-then-line strip (BIN-1107) still lets a string holding an unterminated `/*` swallow real
+code up to the next real block comment (either order — neither regex understands string
+boundaries), and lets a `//` line comment holding a stray `/*` do the same because blocks strip
+first; line-first fixes only the second." That is now a description of retired code, not of
+anything in the tree.
+
+**What round 4 actually shipped, and the gap found reviewing it.** The security reviewer's
+round-3 finding (a trailing comment sharing a line with code — e.g. `initializeApp({ credential:
+applicationDefault() }); // projectId set elsewhere` — falsely cleared a genuinely unnamed call,
+because the whole-file comment-strip removed the trailing comment before the scan, so the scan
+saw ambient text elsewhere in the file that happened to contain both `applicationDefault()` and
+`projectId`) led to abandoning comment-stripping entirely. The redesign extracts each
+`initializeApp(` call's own inline object-literal argument (`/initializeApp\(\s*\{[^{}]*\}/g`)
+and asks only of THAT captured text whether it contains `applicationDefault()` and, if so,
+`projectId`. Verified live: a trailing same-line comment no longer clears anything (the matched
+substring stops at the literal's closing `}`, before the comment); a second, genuinely
+unreadable `initializeApp(cfg)` call beside a correct sibling is caught by the added
+`calls > readable.length` shortfall check (verified by mutating `recap-coverage-manifest.mjs`
+to add such a call: the guard named the file). The one acknowledged, currently-untriggered
+residual is a comment written INSIDE the braces (`initializeApp({ credential:
+applicationDefault(), /* projectId */ })`) — verified live to pass silently — which the test's
+own comment scopes honestly ("text someone has to write inside the braces on purpose"), i.e. it
+requires deliberate action rather than an accidental trailing note. No tracked file triggers it;
+documented non-blocking, matching the file's own stated limit.
+
+**The gap actually found in this round (folded into the CALLER-mutation bullet, "Mutate the
+CALLER performing the side effect"):** the shared `projectRefusal` helper (extracted from
+`backfill-mirror-uid.helpers.mjs` into `functions/scripts/projectArg.helpers.mjs`) is
+thoroughly call-tested in isolation (`projectArg.helpers.test.mjs`), and the source-scan guard
+above separately pins that each call's argument literal spells `projectId`. Neither proves that
+`main()` actually CALLS `projectRefusal` and exits on a truthy result before opening Firestore.
+Live-verified: deleting the block
+```
+const refusal = projectRefusal(args);
+if (refusal) { console.error(refusal); process.exit(1); }
+```
+(keeping `const projectId = projectFrom(args);` and the unchanged `initializeApp({credential:
+applicationDefault(), projectId})` call) from `functions/scripts/recap-upload.mjs` left `npx
+vitest run functions/scripts` at 56/56 green and the FULL suite at 281/281 files, 4783/4783
+tests green — identical to the claimed clean-tree baseline. The identical mutation in
+`functions/scripts/recap-coverage-manifest.mjs` produced the same result: 56/56 green. Restored
+both from `git checkout --` (files held no other uncommitted work; hashes re-verified against
+the index: `012d203972468b41ef5fd7988bf2f8ac7f608195` and
+`60a3362cadfa290718b55aac7bc6e2e3d92c6b6a` respectively, both matching pre- and post-mutation).
+
+Only the THIRD call site, `backfill-mirror-uid.mjs`, has coverage for this: its own
+pre-existing (untouched by this diff) `backfill-mirror-uid.helpers.test.mjs` source-scans
+`main()`'s body as one block, `/const refusal = refusalFor\(argv\);\s*if \(refusal\)\s*{\s*console\.log\(refusal\);\s*return 1;/`,
+which would catch the same deletion there. `recap-upload.mjs` and `recap-coverage-manifest.mjs`
+never had an equivalent wiring test written for them — extracting a helper into a shared module,
+and thoroughly testing the helper, did not backfill a wiring test at the sites that were new
+consumers of it. Filed as a blocking finding (round-4 verdict: fail, 1 blocking) rather than
+closed, since the fix — a `main()`-body source-scan per script mirroring the existing
+`backfill-mirror-uid.helpers.test.mjs` idiom, or hoisting the refusal-then-exit shape into a
+tiny exported `refuseAndExit(argv)`/wrapper testable by call — was not yet built at review time.
+
+Everything else reviewed this round verified clean and unchanged: the `scripts/bundle-report.test.mjs`
+BIN-1104 real-write test (`main() really writes the baseline and really APPENDS to the summary`)
+correctly drives a real filesystem round-trip (fixture built with `mkdtempSync`, `TMDB_CACHE_DIR`
+and `GITHUB_STEP_SUMMARY` pointed at real paths, env/cwd restored in a `finally`); mutating
+`renameSync`'s argument order or the append flag to `'w'` would fail it (traced, not
+live-mutated, given time budget — the fixture's own first-run-no-baseline path makes a swapped
+rename throw ENOENT before any assertion runs). `scripts/scripts-self-tests-present.test.mjs`'s
+BIN-1105 `REQUIRED.length === MIN` equality (6 === 6, both counted by hand against the file) is
+unchanged and still load-bearing. `docs/org/route.test.mjs`'s two new `NOT_REVIEW_MACHINERY`
+entries for `functions/scripts/projectArg.helpers(.test)?.mjs` were confirmed necessary (both
+files are live `REVIEW_CANDIDATES`, derived from the vitest glob on disk, not a static list) and
+scoped correctly — the exemption is specific to the `binge-integration-reviewer`
+advising-vs-blocking symmetry check (BIN-874), not a claim that no reviewer reaches the file;
+`^functions/` in a separate gate already does, independently. Full-tree hash sweep of every
+staged path (`git rev-parse :<f>` vs `git hash-object <f>`) showed no index/worktree split at
+close of review.
+
+## Relocated 2026-09-08c — entry 85 (BIN-1063 steg 3, roster-idiom grading detail, moved from the GDPR bullet to hold the 80k cap)
+
+**Grade the built roster by what its IDIOM can reach, not by its describe title** — one keyed on `hasOnly([...])` inside the brace-matched tree is blind to any match block that carries no field contract at all (`groups/{gid}/watchlist` is membership-only), so an exemption comment blaming the KEY ("not uid-named") mis-names the blind spot and its own "a second one means the key is wrong" tripwire would mis-diagnose; list the tree's match blocks against its `hasOnly` count before crediting it. Prove the -> direction by ADDING an unhandled uid field to the rules (it must fail NAMING the field), the <- by ripping out one handler expression, and pin the EXPRESSION per field, never `toContain(fieldName)` — the name still occurs in the row type it is read from, which is green with the erasure gone.
+
+## 2026-09-08d — BIN-1107 round 5: re-review of the round-4 fix (shared-refusal wiring gap closed)
+
+**Diff reviewed.** Batch 1, 2026-09-08 sprint, re-review round 5. Round 4 (prior pass) filed
+one blocking finding: `main()`'s refusal-then-exit block could be deleted from either
+`recap-upload.mjs` or `recap-coverage-manifest.mjs` with the whole suite green, because
+`projectRefusal`'s own call-based test and the source-scan both stayed green — neither
+reached `main()`. Round 5's diff added a `describe('the refusal is wired into every script
+that opens a Firestore', ...)` block to `functions/scripts/projectArg.helpers.test.mjs`: a
+`WIRED` array of `[filename, argsVarName]` pairs driving `it.each`, each row source-scanning
+the named script for the exact block `const refusal = projectRefusal(<var>); if (refusal)
+{ console.error(refusal); process.exit(1); }`, anchored through the `process.exit(1)` call
+(not just the condition), plus a roster-floor test (`expect(WIRED.length).toBe(2)`, a
+LITERAL, not derived from `WIRED.length` itself) guarding against `it.each([])`'s silent
+zero-test pass.
+
+**Mutations / probes run**, all against the real staged files, restored and hash-verified
+after each (`git hash-object` matched the pre-mutation value every time:
+`recap-upload.mjs` -> `012d203972468b41ef5fd7988bf2f8ac7f608195`,
+`recap-coverage-manifest.mjs` -> `60a3362cadfa290718b55aac7bc6e2e3d92c6b6a`,
+`projectArg.helpers.test.mjs` restored via `git checkout --` since it is a newly-staged
+file with no other uncommitted work, hash `1427577c079e16029f30a6e782f0fae18fd70135`):
+
+1. Deleted the two-line refusal block from `recap-upload.mjs` (keeping the import and the
+   unchanged `initializeApp` call). `npx vitest run functions/scripts/projectArg.helpers.test.mjs`
+   -> 1 of 10 failed, naming `recap-upload.mjs` by the `it.each` row. `npx vitest run
+   functions/scripts` -> 1 of 59 failed, same test, nothing else moved.
+2. Same deletion in `recap-coverage-manifest.mjs`. `npx vitest run functions/scripts` -> 1 of
+   59 failed, naming `recap-coverage-manifest.mjs`. Both round-4-identified gaps are now
+   closed — the exact defect that shipped at full green (281/281, 4783/4783) now reddens
+   alone at 58/59 file-local, 1/59 in each case.
+3. Shrank `WIRED` to one entry (dropped `recap-coverage-manifest.mjs`'s row) without touching
+   `WIRED.length`'s own assertion. The roster-floor test failed alone (`expect(WIRED.length).toBe(2)`,
+   received 1) — confirmed not circular (it is a hardcoded literal, not
+   `WIRED.length` compared to itself). Restored via `git checkout --` (new file, no other
+   uncommitted work), hash re-verified.
+4. Full suite: `npx vitest run` -> 281 files, 4786 passed, 4 skipped (4790 total) — matches
+   the sprint's self-reported numbers exactly (recounted, not inherited). The 4 skipped tests
+   pre-exist this diff (grepped for `.skip(`/`skipIf` across `src`, `functions`, `docs`,
+   `scripts` — none found in any file touched by this batch), so they are unrelated and not a
+   new finding.
+5. Full-tree index/worktree sha sweep over every staged path (`git rev-parse :<f>` vs `git
+   hash-object <f>`, all 12 staged files) — no mismatch, done both before mutating and again
+   immediately before the verdict below.
+
+**New probe, not run in round 4 — the exact-text anchor's own blind spot.** Defanged the real
+block in `recap-upload.mjs` to `if (false) { console.error(refusal); process.exit(1); }` and
+appended an unreachable template-string literal elsewhere in the file holding an EXACT verbatim
+copy of the real (non-defanged) block's text. `npx vitest run
+functions/scripts/projectArg.helpers.test.mjs` -> 10/10 GREEN — the source-scan cannot tell
+"this text executes" from "this text exists somewhere in the file", the same accepted
+limitation this repo's `check-workflow-map.test.mjs` BIN-808 wiring test and
+`backfill-mirror-uid.helpers.test.mjs`'s own wiring test both carry (their anchors are
+plain-`toMatch`/`toContain` over source text, not an execution trace). A first attempt at this
+probe (commenting out just `process.exit(1);` as `/* process.exit(1); */`) did NOT fool the
+guard — the regex's literal ` process.exit(1); }` (space, then close-brace) no longer matched
+because of the inserted `*/ `, which is incidental strictness from the exact-spacing anchor,
+not a real defense. Only the `if (false)` + separate verbatim-decoy construction defeated it.
+Graded as the SAME accepted class named in the active file's "check N is actually WIRED INTO
+main()" bullet (source-scan wiring tests are legitimate when nothing better exists; the
+guarantee is "the text wasn't deleted or reworded," not "the check runs"), and this
+construction requires a deliberate adversarial edit (a dead branch plus a hand-placed exact
+duplicate), unlike round 2/3's realistic accidental shapes (a help URL, a correctly-shaped
+JSDoc example). Reported non-blocking, with the recommendation that the test's own comment
+state the residual verbatim, which BIN-808's precedent requires for the "documented" label but
+this file's comment does not yet do.
+
+**Second finding — the roster's own test name overclaims scope.** `WIRED` contains exactly 2
+entries (`recap-upload.mjs`, `recap-coverage-manifest.mjs`), and its floor-test is named
+"names every script the argument scan considers a caller." Recounted independently of the
+diff's own claims: `git ls-files -- functions/scripts | grep -v '\.test\.mjs$'` lists 6 tracked
+files, of which exactly 3 call `initializeApp(` — `backfill-mirror-uid.mjs`,
+`recap-coverage-manifest.mjs`, `recap-upload.mjs` (confirmed by grepping each file directly,
+not by trusting the prior round's count) — and all 3 ARE callers the argument-scan describe
+block (`no tracked Firestore-opening script leaves its project unnamed`) considers. So the
+sentence is false as stated: `WIRED` names 2 of the 3, not "every" one. It is true only in
+aggregate, because the third, `backfill-mirror-uid.mjs`, already has its own equivalent wiring
+test in `backfill-mirror-uid.helpers.test.mjs` (read and confirmed: `it('refuses on
+refusalFor and forwards the parsed project to the SDK', ...)` pins the identical shape). No
+functional gap exists today — all three callers have SOME wiring test — but the false "every"
+risks a future maintainer reading `WIRED` as the canonical, exhaustive roster and deleting the
+"redundant-looking" sibling test, which would reopen exactly the round-4 gap for that one
+script with nothing left to catch it. Reported non-blocking (wording, not a live coverage
+hole), with two possible fixes offered: narrow the sentence to name what `WIRED` actually
+covers, or add the third entry to `WIRED` (a cheap belt-and-braces widening, verified by the
+mutation above to still pass at 3 with the floor raised to 3).
+
+**Everything else re-checked and found intact, not re-narrated in full:**
+`docs/org/route.test.mjs`'s two new `NOT_REVIEW_MACHINERY` entries for
+`functions/scripts/projectArg.helpers(.test)?.mjs` (both are live `REVIEW_CANDIDATES`, the
+exemption reasons both exceed 80 chars, and the `TOOLING_MJS`/blocking-gate symmetry check does
+not reach `functions/`, so no widening was needed there); `docs/org/ownership-map.json`'s
+`patternCount` 562->564 matches the 2 new tracked files added under #27's directory tree;
+`scripts/scripts-self-tests-present.test.mjs`'s `REQUIRED.length === MIN` (6 === 6, recounted
+by reading the array) is unchanged and load-bearing; `scripts/bundle-report.test.mjs`'s
+BIN-1104 real-write test is unchanged from round 4's read. Docs (`SKILL.md`,
+`docs/recaps/RUNBOOK.md`) now show `--project binge-nu` on every published Firestore-opening
+command, matching the new refusal.
+
+**Verdict.** Round-4's blocking finding is CLOSED — live-verified, not hand-traced, on both
+call sites. Two new NON-BLOCKING findings filed above (source-scan's exact-text-anchor
+residual, undocumented; `WIRED`'s test name overclaiming scope by one caller) — reported as
+follow-ups, not a re-fail. `pass (0 blocking)`.
+
+## 2026-09-08e — BIN-1107 round 6: re-review of round 5's two non-blocking findings (both taken)
+
+**Diff reviewed.** Batch 1, 2026-09-08 sprint, re-review round 6. Round 5 filed two
+non-blocking findings against `functions/scripts/projectArg.helpers.test.mjs`: (1) the
+source-scan wiring test's exact-text anchor is defeated by a defanged `if (false)` branch
+plus a verbatim decoy elsewhere in the file, undocumented; (2) `WIRED`'s roster-floor test
+was titled "names every script the argument scan considers a caller" while only naming 2 of
+the 3 real callers. Both were taken. This round re-reviewed only the changed file (all other
+staged files unchanged since round 5, confirmed by hash below).
+
+**What changed.** `WIRED` widened from 2 entries to 3 (added `['backfill-mirror-uid.mjs',
+'refusalFor\(argv\)', 'console\.log\(refusal\);\s*return 1;']`), each entry carrying its
+own helper-call and exit-statement pattern rather than a shared one. The roster-floor test
+was replaced: instead of a bare `expect(WIRED.length).toBe(2)`, it now derives `callers` from
+`execFileSync('git', ['ls-files', '--', 'functions/scripts'])` filtered to non-test `.mjs`
+files whose source `includes('applicationDefault()')`, asserts
+`expect(callers).toEqual(WIRED.map(([name]) => name).sort())`, and keeps
+`expect(WIRED.length).toBe(3)` as a belt-and-braces literal against `it.each([])`'s silent
+zero-test pass. The `it.each(WIRED)` wiring test's comment now states the exact-text-anchor
+residual verbatim (round 5's finding 1): "A verbatim copy parked under `if (false)` satisfies
+this. Closing that needs the script to be callable from a test, which it is not — it imports
+firebase-admin, which the root install does not provide."
+
+**Mutations / probes run**, all against the real staged files, restored and hash-verified
+after each:
+
+1. Recounted `functions/scripts` from the tree directly, not trusting the diff's own prose:
+   `grep -rl "applicationDefault()" functions/scripts --include="*.mjs" | grep -v .test.mjs`
+   found 4 files — the 3 tracked ones plus `functions/scripts/_check-soa.mjs`, which
+   `git check-ignore -v` confirms is matched by `.gitignore:79: functions/scripts/_*.mjs`
+   (a real, live scratch script with the EXACT bug class this ticket fixes — `initializeApp({
+   credential: applicationDefault() })` with no `projectId` — but explicitly and correctly
+   out of scope: both the membership derivation and the separate argument-scan guard read
+   `git ls-files`, and the argument-scan's own comment names this exclusion on purpose
+   ("reads the files git TRACKS... a guard that failed on it would be red for a reason no
+   commit could fix")). `git ls-files -- functions/scripts | grep '\.mjs$' | grep -v
+   '\.test\.mjs$'` confirmed exactly 3 tracked non-test files call `initializeApp(` with
+   `applicationDefault()`: `backfill-mirror-uid.mjs`, `recap-coverage-manifest.mjs`,
+   `recap-upload.mjs` — `WIRED.length` 3 is correct, recounted, not inherited.
+2. Backed up the three scripts (`git hash-object` before: `recap-upload.mjs`
+   `012d203972468b41ef5fd7988bf2f8ac7f608195`, `recap-coverage-manifest.mjs`
+   `60a3362cadfa290718b55aac7bc6e2e3d92c6b6a`, `backfill-mirror-uid.mjs`
+   `8721b8cff4f7264da03141678157a5f45630fbc3` — the first two match round 5's recorded
+   pre-mutation hashes exactly, confirming those two files are byte-unchanged since round 5).
+   Deleted the two-line refusal block from each script in turn, one at a time, restoring and
+   re-hashing (all three matched their pre-mutation value after restore) between mutations.
+   `npx vitest run functions/scripts/projectArg.helpers.test.mjs` after each: 1 failed / 10
+   passed (11 total) in all three cases, each time naming the mutated script's own `it.each`
+   row and nothing else. Control (all three restored): 11/11 green.
+3. Shrank `WIRED` by removing the `backfill-mirror-uid.mjs` row (leaving `WIRED.length`'s own
+   assertion untouched at `3`). Result: 1 failed / 9 passed (10 total) — the membership
+   `toEqual` failed FIRST (`AssertionError: expected [ 'backfill-mirror-uid.mjs', …(2) ] to
+   deeply equal [ 'recap-coverage-manifest.mjs', …(1) ]`), before the `WIRED.length` literal
+   assertion on the same line was even reached. Confirms the membership check is real and
+   independent of the length literal — dropping the entry from the array itself changes what
+   `it.each` iterates, so the roster test catches a shrink even without help from the length
+   pin. Restored via `git checkout --` (newly-staged file, no other uncommitted work), hash
+   re-verified: `868366df3e9e228ff0952ab4c8f481f83a4beb53` (matches the staged index value).
+4. Full-tree index/worktree sha sweep over all 12 staged paths — `git rev-parse :<f>` vs
+   `git hash-object <f>` — no mismatch, both before mutating and immediately before this
+   verdict.
+5. Full suite: `npx vitest run` → 281 files, 4787 passed, 4 skipped (4791 total) — matches
+   the sprint's self-reported numbers exactly (recounted, not inherited). One test more than
+   round 5's recorded 4786, which is exactly accounted for: `WIRED` grew from 2 rows to 3, and
+   `it.each` registers one test per row. Grepped the whole tree for `.skip(`/`skipIf`/`.todo(`
+   — none found (skips are runtime `↓` markers, not static); ran `--reporter=verbose` and
+   confirmed all 4 skipped tests are in `src/app/titleParams.watchdog.test.ts` (BIN-815), a
+   file untouched by this diff and unrelated to it, same as round 5's finding.
+6. Re-read `docs/org/route.test.mjs`'s two `NOT_REVIEW_MACHINERY` entries for
+   `functions/scripts/projectArg.helpers(.test)?.mjs`, `docs/role-responsibilities.md`'s new
+   BIN-1107 ownership entry, `docs/org/ownership-map.json`'s `patternCount` 564 and its two
+   new tracked paths under #27, `docs/recaps/RUNBOOK.md` and `.claude/skills/recap/SKILL.md`'s
+   `--project binge-nu` command updates, and both `scripts/bundle-report.test.mjs`'s BIN-1104
+   real-write test and `scripts/scripts-self-tests-present.test.mjs`'s BIN-1105
+   `REQUIRED.length === MIN` (recounted by hand: 6 named files, `MIN = 6`) — all unchanged
+   since round 5 and confirmed correct by direct read, not by trusting round 5's notes alone.
+   Ran `node docs/org/gen-ownership-map.mjs --check` (0 gaps) and a full unguarded regen (no
+   `--out` flag exists; it writes the real `docs/org/ownership-map.json` in place) — `git diff`
+   after showed no delta, confirming the committed map is byte-identical to what the generator
+   produces today, not merely internally consistent.
+
+**Verdict.** Both of round 5's non-blocking findings are closed: the exact-text-anchor
+residual is now stated verbatim in the test's own comment (satisfying BIN-808's precedent for
+the "documented" label), and `WIRED` was widened to all 3 real callers with a live membership
+derivation replacing the bare length literal — the stronger of round 5's two offered fixes,
+not the cheaper reword. No new blocking or non-blocking findings in the changed file. One
+observation, not filed as a finding since it is explicitly and correctly out of the guard's
+declared scope: `functions/scripts/_check-soa.mjs` is a real, currently-existing example of
+this exact ticket's bug class (untracked/gitignored, so both the membership derivation and the
+argument-scan guard correctly and intentionally do not see it). `pass (0 blocking)`.

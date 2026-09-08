@@ -35,7 +35,7 @@ when Malin names exactly one specific show — that doesn't need orchestration o
 **Step A — refresh the coverage manifest FIRST, before checking anything else:**
 ```
 GOOGLE_APPLICATION_CREDENTIALS=C:/Users/malla/.secrets/recaps-writer.json \
-  node functions/scripts/recap-coverage-manifest.mjs
+  node functions/scripts/recap-coverage-manifest.mjs --project binge-nu
 ```
 This rewrites `docs/recaps/covered-shows.json` from Firestore truth via a cheap
 `listDocuments()` scan (lists document IDs only — not billed as document reads) plus
@@ -82,7 +82,7 @@ const results = await parallel(candidates.map((c) => () =>
     `— never TMDB episode overviews (TMDB ToS bans feeding its data to an LLM). ` +
     `Verify TMDB episode numbering before writing boundaries. Produce self-contained ` +
     `text + textFull per boundary, season docs for completed seasons, spot-check your ` +
-    `own output, then upload via functions/scripts/recap-upload.mjs (credentials: ` +
+    `own output, then upload via functions/scripts/recap-upload.mjs --project binge-nu (credentials: ` +
     `C:/Users/malla/.secrets/recaps-writer.json). Log any unsourced episodes per the ` +
     `skill's --unsourced convention. Report what you seeded.`,
     { label: c.title }
@@ -175,7 +175,7 @@ single agent runs directly when Malin names exactly one show.
 7. **Spot-check** a sample yourself, then upload:
    ```
    GOOGLE_APPLICATION_CREDENTIALS=C:/Users/malla/.secrets/recaps-writer.json \
-     node functions/scripts/recap-upload.mjs scripts/recaps/<file>.local.json
+     node functions/scripts/recap-upload.mjs --project binge-nu scripts/recaps/<file>.local.json
    ```
    The script validates every entry, writes boundary + season docs, and updates the
    coverage index automatically. Season docs are written once — add `--force` only

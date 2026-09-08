@@ -39,7 +39,7 @@ Per show, I:
 - **Default execution mode (decided 2026-07-24): a parallel `Workflow` batch, one subagent per
   show, not one agent working through shows serially.** Skip-checking is done via a committed
   coverage manifest (`docs/recaps/covered-shows.json`, regenerated from Firestore truth by
-  `node functions/scripts/recap-coverage-manifest.mjs` — cheap `listDocuments()` scan, not billed
+  `node functions/scripts/recap-coverage-manifest.mjs --project binge-nu` — cheap `listDocuments()` scan, not billed
   reads) instead of one `recaps/{tmdbId}_index` read per candidate. See SKILL.md "Default mode" for
   the exact batch-building + Workflow-script mechanics.
 - For **each** boundary `(s,e)`: read **per-episode** summaries for episodes **≤ (s,e)** from Wikipedia and
@@ -67,7 +67,7 @@ Per show, I:
 
 ```
 GOOGLE_APPLICATION_CREDENTIALS=/abs/path/recaps-writer.json \
-  node functions/scripts/recap-upload.mjs scripts/recaps/<show>.local.json
+  node functions/scripts/recap-upload.mjs --project binge-nu scripts/recaps/<show>.local.json
 ```
 
 The script re-validates every entry (plain-text guard mirroring `sanitize.ts`; CC BY-SA attribution
@@ -117,7 +117,7 @@ A cached recap can only be changed via Admin SDK. To fix a poisoned/wrong one: r
 
 ```
 GOOGLE_APPLICATION_CREDENTIALS=/abs/path/recaps-writer.json \
-  node -e "const{initializeApp,applicationDefault}=require('firebase-admin/app');const{getFirestore}=require('firebase-admin/firestore');initializeApp({credential:applicationDefault()});getFirestore().doc('recaps/TMDBID_S_E').delete().then(()=>console.log('deleted'))"
+  node -e "const{initializeApp,applicationDefault}=require('firebase-admin/app');const{getFirestore}=require('firebase-admin/firestore');initializeApp({credential:applicationDefault(),projectId:'binge-nu'});getFirestore().doc('recaps/TMDBID_S_E').delete().then(()=>console.log('deleted'))"
 ```
 
 Detection: the per-batch spot-check (§2) is the primary net. A user-facing "rapportera sammanfattning"

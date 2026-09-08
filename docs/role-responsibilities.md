@@ -794,6 +794,11 @@ findings here too.
   inventerar dokumenten i `recaps/`. Samma skäl som backfillen ovan: de kör med Admin SDK
   mot en samling klienten bara får läsa, så det är datalagrets skrivväg som avgör sätet.
   → `functions/scripts/recap-upload.mjs`, `functions/scripts/recap-upload.helpers.mjs`, `functions/scripts/recap-upload.helpers.test.mjs`, `functions/scripts/recap-coverage-manifest.mjs`
+- **Vilken databas ett Admin-SDK-skript öppnar** (BIN-1107). Kontraktet som tvingar varje
+  skript under functions/scripts att NAMNGE sitt projekt innan det öppnar en Firestore.
+  Sätet följer storheten: det här avgör vems data ett skript läser och skriver, alltså
+  datalagret — inte katalogen filen råkar ligga i.
+  → `functions/scripts/projectArg.helpers.mjs`, `functions/scripts/projectArg.helpers.test.mjs`
 - **Filer som saknade en ägande roll** (BIN-871). Datalagret i klienten: firebase-modulerna, dokument-id, skrivvägarna och regeltesterna.
   → `src/contexts/AuthContext.test.tsx`, `src/contexts/WatchlistContext.test.tsx`, `src/hooks/usePublicProfile.test.ts`, `src/lib/firebase/accountDeletion.ts`, `src/lib/firebase/config.ts`, `src/lib/firebase/episodeProgress.test.ts`, `src/lib/firebase/episodeProgress.ts`, `src/lib/firebase/messaging.livetoken.test.ts`, `src/lib/firebase/messaging.ts`, `src/lib/firebase/publicProfile.test.ts`, `src/lib/firebase/publicProfile.ts`, `src/lib/firebase/reports.ts`, `src/lib/firebase/sessions.joinPayload.test.ts`, `src/lib/firebase/sessions.joinPayload.ts`, `src/lib/firebase/sessions.ts`, `src/lib/firebase/userData.subcollections.test.ts`, `src/lib/firebase/userSearch.test.ts`, `src/lib/firebase/userSearch.ts`, `src/lib/firebase/username.test.ts`, `src/lib/firebase/username.ts`, `src/lib/mediaTypeDocId.parity.test.ts`, `src/lib/mediaTypeDocId.test.ts`, `src/lib/watchlistWrites.addWrite.test.ts`, `src/lib/watchlistWrites.test.ts`, `src/lib/watchlistWrites.ts`, `src/test/rules/account-deletion.test.ts`, `src/test/rules/tmdb-sweep-orchestrator.test.ts`, `src/lib/watchStatus.migration.test.ts`
 

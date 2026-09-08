@@ -4,7 +4,12 @@
 // adds up to dozens of round trips per run for zero new information on shows we already know are done).
 //
 //   GOOGLE_APPLICATION_CREDENTIALS=/abs/path/recaps-writer.json \
-//     node functions/scripts/recap-coverage-manifest.mjs
+//     node functions/scripts/recap-coverage-manifest.mjs --project binge-nu
+//
+// `--project` is REQUIRED (BIN-1107). This script only READS, but a read against the wrong
+// project is the more dangerous half: `listDocuments()` succeeds, returns nothing, and the
+// manifest it regenerates then says the show library is empty. "Opened someone else's
+// database" and "nothing is covered yet" produce the same file.
 //
 // Uses listDocuments() — lists document REFERENCES only (ids), no field reads, so this does not
 // count as billed Firestore document reads. Filters to `{tmdbId}_index` ids (recapIndexDocId shape),
@@ -15,14 +20,20 @@ import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { initializeApp, applicationDefault } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
+import { projectFrom, projectRefusal } from './projectArg.helpers.mjs';
 
 const OUT_PATH = resolve('docs/recaps/covered-shows.json');
 const INDEX_ID_RE = /^(\d+)_index$/;
 
-initializeApp({ credential: applicationDefault() });
-const db = getFirestore();
+async function main(argv) {
+  const refusal = projectRefusal(argv);
+  if (refusal) { console.error(refusal); process.exit(1); }
+  const projectId = projectFrom(argv);
+  console.log(`recap-coverage-manifest against project ${projectId}`);
 
-async function main() {
+  initializeApp({ credential: applicationDefault(), projectId });
+  const db = getFirestore();
+
   const refs = await db.collection('recaps').listDocuments();
   const indexRefs = refs.filter((ref) => INDEX_ID_RE.test(ref.id));
 
@@ -58,4 +69,4 @@ async function main() {
   console.log(`wrote ${entries.length} covered shows -> ${OUT_PATH}`);
 }
 
-main();
+main(process.argv.slice(2));

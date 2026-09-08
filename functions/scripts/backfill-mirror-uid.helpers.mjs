@@ -22,19 +22,10 @@ export function patchFor(doc) {
   return { uid: doc.id };
 }
 
-/**
- * The project id the run must target, taken from `--project <id>`.
- *
- * Undefined means the caller did not name one, and the caller must refuse: an
- * Application Default credential carries whatever quota project the machine was
- * set up for, so an unnamed run can open another project's database, succeed, and
- * report zero rows.
- */
-export function projectFrom(argv) {
-  const i = argv.indexOf('--project');
-  const value = i === -1 ? undefined : argv[i + 1];
-  return value && !value.startsWith('--') ? value : undefined;
-}
+// BIN-1107: the `--project` contract moved to a module shared by every Firestore-opening
+// script under this directory. Re-exported so this module's callers keep their import.
+import { projectRefusal } from './projectArg.helpers.mjs';
+export { projectFrom } from './projectArg.helpers.mjs';
 
 /**
  * Why this run must not start, or null when it may.
@@ -51,10 +42,7 @@ export function refusalFor(argv) {
   if (argv.includes('--apply') && argv.includes('--dry-run')) {
     return 'refusing to guess: --dry-run and --apply are mutually exclusive';
   }
-  if (!projectFrom(argv)) {
-    return 'refusing to guess: pass --project <id> (e.g. --project binge-nu)';
-  }
-  return null;
+  return projectRefusal(argv);
 }
 
 /**

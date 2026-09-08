@@ -360,6 +360,64 @@ describe('the report can never fail a deploy', () => {
     }
   });
 
+  // BIN-1104. Neither main()-driving test above reaches realIo's SUCCESSFUL write: the
+  // no-build case returns before the cache is touched, and the throwing case blocks
+  // mkdirSync so writeFileSync and renameSync are never called. Both also delete
+  // GITHUB_STEP_SUMMARY, so appendText never runs for real either. Everything else asserting about what was written goes through fakeIo, which
+  // only does `written[path] = body` — it proves the CALL, never the temp-and-rename dance
+  // and never that `flag: 'a'` PRESERVES an earlier step's summary instead of replacing it.
+  //
+  // So this test drives main() all the way through a successful real write, against an
+  // unblocked cache directory and a PRE-SEEDED summary file, and reads both back off disk.
+  // Swapping renameSync's arguments, or changing the append flag to 'w', survives every
+  // other test in this file.
+  it('main() really writes the baseline and really APPENDS to the summary', () => {
+    const cwd = process.cwd();
+    const dir = process.env.TMDB_CACHE_DIR;
+    const summary = process.env.GITHUB_STEP_SUMMARY;
+    const fixture = mkdtempSync(join(tmpdir(), 'bundle-report-'));
+    const PRIOR = '# an earlier step wrote this\n';
+    try {
+      const chunks = join(fixture, 'out', '_next', 'static', 'chunks');
+      mkdirSync(chunks, { recursive: true });
+      writeFileSync(join(chunks, 'page.js'), 'x'.repeat(1024));
+      writeFileSync(join(fixture, 'out', 'index.html'), page('page.js'));
+
+      // A real directory this time, not one blocked by a file — the write must SUCCEED.
+      const cache = join(fixture, 'cache');
+      process.env.TMDB_CACHE_DIR = cache;
+
+      // A real summary file with content already in it. `flag: 'w'` would erase this line;
+      // `flag: 'a'` leaves it standing in front of whatever the report adds.
+      const summaryFile = join(fixture, 'step-summary.md');
+      writeFileSync(summaryFile, PRIOR);
+      process.env.GITHUB_STEP_SUMMARY = summaryFile;
+
+      process.chdir(fixture);
+      expect(main()).toBe(0);
+
+      // The baseline landed at its final name, not at the temp name renameSync moved it
+      // from — swapped arguments leave the target missing and this read throws.
+      const written = JSON.parse(readFileSync(join(cache, BASELINE_FILE), 'utf8'));
+      expect(Object.keys(written)).toEqual(['routes']);
+      // The VALUE, not the shape. The fixture is deterministic — one page pulling one
+      // 1024-byte chunk — so a size check here is a real assertion rather than a
+      // restatement of measure()'s own never-empty contract.
+      expect(written.routes).toEqual({ '/': 1024 });
+
+      const after = readFileSync(summaryFile, 'utf8');
+      expect(after.startsWith(PRIOR)).toBe(true);
+      expect(after.length).toBeGreaterThan(PRIOR.length);
+    } finally {
+      process.chdir(cwd);
+      rmSync(fixture, { recursive: true, force: true });
+      if (dir === undefined) delete process.env.TMDB_CACHE_DIR;
+      else process.env.TMDB_CACHE_DIR = dir;
+      if (summary === undefined) delete process.env.GITHUB_STEP_SUMMARY;
+      else process.env.GITHUB_STEP_SUMMARY = summary;
+    }
+  });
+
   // "The guard exists" and "the guard runs" are different claims (BIN-776). Pin the CLI
   // entry-point check itself: without it the module runs its CLI at import, which makes
   // vitest hang with no output rather than fail (BIN-802).

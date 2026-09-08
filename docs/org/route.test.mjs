@@ -644,8 +644,12 @@ const TOOLING_MJS = globSync(['docs/**/*.mjs', 'scripts/**/*.mjs'], { cwd: REPO_
 // fails the moment an entry stops being needed.
 const NOT_REVIEW_MACHINERY = {
   'functions/scripts/recap-upload.helpers.mjs':
-    'Recap content pipeline (BIN-185), not review machinery: it decides nothing about who reviews what. The router already calls it code — functions/ is a CODE_ROOT — and seats the #14 fallback, so it is not unreviewed on the advising side. Closing the gap to the blocking gate for every unowned functions/ path is the ownership-vs-gate sweep in BIN-880, not this narrow tooling list.',
+    'Recap content pipeline (BIN-185), not review machinery: it decides nothing about who reviews what. The router already calls it code — functions/ is a CODE_ROOT — so it is not unreviewed on the advising side. Closing the gap to the blocking gate for every unowned functions/ path is the ownership-vs-gate sweep in BIN-880, not this narrow tooling list.',
   'functions/scripts/recap-upload.helpers.test.mjs':
+    'Same subject as the line above, and additionally reached by binge-test-reviewer through the repo-wide `\\.test\\.mjs$` pattern, so it is not a zero-reviewer path.',
+  'functions/scripts/projectArg.helpers.mjs':
+    'BIN-1107. The `--project` contract every Admin-SDK script under functions/scripts/ shares: it decides which DATABASE a script opens, and nothing about who reviews what. Same class as the recap-upload helpers above, and seated with them — docs/role-responsibilities.md gives it to #27 Database Administrator; derive the seat with `node docs/org/route.mjs <path>` rather than trusting a sentence about it. Widening the two narrow tooling lists is a decision Malin makes (2026-08-08, alternative (a)), not one a ticket about script arguments takes in passing.',
+  'functions/scripts/projectArg.helpers.test.mjs':
     'Same subject as the line above, and additionally reached by binge-test-reviewer through the repo-wide `\\.test\\.mjs$` pattern, so it is not a zero-reviewer path.',
   'scripts/scripts-self-tests-present.test.mjs':
     'The floor asserting every script under scripts/ carries a self-test (BIN-850). It has no non-test sibling to gate, and binge-test-reviewer already reaches it via the repo-wide `\\.test\\.mjs$` pattern — so it is NOT a zero-reviewer hole (BIN-874 comment, 2026-08-12). Putting it into the two narrow lists is a widening only Malin decides (2026-08-08, alternative (a)); this check names it instead of staying quiet about it.',

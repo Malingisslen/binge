@@ -15,8 +15,8 @@
 // these two would hide inside the aggregate. That is the exact failure BIN-838 was
 // written to close, one layer up, so the floor has to come along with the files.
 //
-// This is a FLOOR, not an equality: adding a third script self-test is the desired
-// direction and must never fail. The named-file assertions are what make it specific —
+// `found.length >= MIN` is a FLOOR, not an equality: a new script self-test on disk is the
+// desired direction and must never fail. The named-file assertions are what make it specific —
 // a count alone stays green while one file leaves and another arrives (BIN-823).
 
 import { test } from 'vitest';
@@ -28,9 +28,11 @@ import { fileURLToPath } from 'node:url';
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const SELF = 'scripts-self-tests-present.test.mjs';
 
-// The guards that gate the release path today. Both are invoked by deploy.yml as
-// build steps; a test file that stops running leaves the guard itself
-// unverified, which is how BIN-849's three-month outage stayed invisible.
+// The guards under scripts/ whose tests must keep running. A test file that stops running
+// leaves the guard itself unverified, which is how BIN-849's three-month outage stayed
+// invisible. Which of these deploy.yml actually invokes is derivable —
+// `grep -n "node scripts/" .github/workflows/deploy.yml` — and each entry below says what
+// it is for, so no count belongs here.
 // ADD A NEW SCRIPT SELF-TEST? Add its filename here and raise MIN below. That is the
 // whole protection: vitest will run it either way, but nothing notices when it stops
 // running unless it is named here.
@@ -61,8 +63,8 @@ const REQUIRED = [
 
 // A LITERAL, deliberately not `REQUIRED.length`. Deriving it made this assertion unable
 // to fail on its own: deleting a name from REQUIRED lowered the floor in lockstep, so a
-// third self-test added and later lost stayed green — the exact silent shrink this file
-// replaced BIN-838's MIN=2 to prevent, reproduced inside its own replacement. Growth is
+// self-test added and later lost stayed green — the exact silent shrink this file
+// replaced BIN-838's floor to prevent, reproduced inside its own replacement. Growth is
 // free at the runner; raising this number is the deliberate act that keeps the new file
 // protected, and lowering it is the deliberate act a shrink must perform out loud.
 const MIN = 6;
@@ -97,6 +99,22 @@ test('every named script self-test is still on disk under scripts/', () => {
         `if it was deleted, the guard it tests is now unverified.`,
     );
   }
+});
+
+// BIN-1105. The `found.length >= MIN` floor counts the DISK and never reads REQUIRED, so a
+// name could be deleted from that array with the whole suite green — and the named list is
+// what makes this file specific rather than a bare count. Pinning the two to each other is
+// an EQUALITY, deliberately not a derivation: `const MIN = REQUIRED.length` sinks in
+// lockstep with the list and can therefore never fail, which is the silent shrink this file
+// exists to prevent. Disk GROWTH stays free: that floor is untouched.
+test('the named list and the floor move together', () => {
+  assert.equal(
+    REQUIRED.length,
+    MIN,
+    `REQUIRED names ${REQUIRED.length} self-test(s) but MIN is ${MIN}. Adding a self-test ` +
+      `means adding its filename here AND raising MIN; removing one means lowering both. ` +
+      `A name removed on its own silently drops the file from the named watch.`,
+  );
 });
 
 test('the script self-test set never shrinks below its floor', () => {

@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 562,
+  "patternCount": 564,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -631,6 +631,8 @@
         "functions/scripts/backfill-mirror-uid.helpers.mjs",
         "functions/scripts/backfill-mirror-uid.helpers.test.mjs",
         "functions/scripts/backfill-mirror-uid.mjs",
+        "functions/scripts/projectArg.helpers.mjs",
+        "functions/scripts/projectArg.helpers.test.mjs",
         "functions/scripts/recap-coverage-manifest.mjs",
         "functions/scripts/recap-upload.helpers.mjs",
         "functions/scripts/recap-upload.helpers.test.mjs",
