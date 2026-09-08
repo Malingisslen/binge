@@ -1446,7 +1446,7 @@
         {
           "from": "friend-button",
           "to": "firestore",
-          "payload": "sendFriendRequest(toUid) — batch: set users/{toUid}/friendRequests/{myUid} {fromUid,fromDisplayName,fromUsername,sentAt} + set users/{myUid}/friendRequestsSent/{toUid}",
+          "payload": "sendFriendRequest(toUid) — batch: set users/{toUid}/friendRequests/{myUid} + set users/{myUid}/friendRequestsSent/{toUid}. BIN-1106 pinned the key set with hasOnly, so the fields are read off sendFriendRequest and the rule, never enumerated here",
           "transport": "Firestore batch write",
           "verified": true
         },
@@ -1552,7 +1552,7 @@
         {
           "from": "group-members-panel",
           "to": "firestore",
-          "payload": "owner removeMember — update groups/{id}.memberUids arrayRemove(uid) + delete groups/{id}/members/{uid} + groups/{id}/household/{uid} (BIN-184: a removed/leaving member's shared cost doc never survives their membership — no-op if never opted in)",
+          "payload": "owner removeMember — update groups/{id}.memberUids arrayRemove(uid) + delete groups/{id}/members/{uid} + groups/{id}/household/{uid} (BIN-184: a removed/leaving member's shared cost doc never survives their membership — no-op if never opted in). BIN-1108: the owner cannot aim this at themselves — the owner branch and the leave branch each refuse a write that drops the owner while ownerUid still names them, which froze the group for everyone else.",
           "transport": "Firestore write",
           "verified": true
         },
