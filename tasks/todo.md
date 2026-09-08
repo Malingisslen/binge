@@ -207,6 +207,51 @@ BIN-559, BIN-402.
 
 ## Deviation log
 
+- [kritik] Bunt 2, helhetsgranskningen varv 2: FYRA till, och den forsta ar samma
+  fel som forra varvet EN FILKLASS BORT. Att byta CI fran ett bart `tsc` till
+  `npm run typecheck` tog bort den enda kontrollen att den SKEPPADE koden
+  fortfarande kompilerar som CommonJS - sa ett `import.meta` i en
+  PRODUKTIONSfil hade passerat allt och fallit forst i deployen. Skriptet kor nu
+  BADA konfigurationerna; mätt genom att lagga `import.meta` i `push.ts` och se
+  TS1343.
+- [kritik] Bunt 2: min egen `TraceErasureShape` var en andra deklaration av en
+  befintlig typ, alltsa tilldelningsbar fran den - en FEMTE raderingskategori
+  hade kunnat samlas in och aldrig skrivas, utan att nagot foll. En deklaration
+  nu, importerad som typ. Den andra halvan (portarna) ar BIN-1123.
+- [rattelse] "den form resten av repot anvander" var omatt. Struket pa bada
+  stallen. Talet jag forst skrev hit var ocksa fel, och pa ett larorikt satt: det
+  raknade filen den har commiten just flyttat BORT fran idiomet.
+- [foljd] `.claude/agents/binge-code-reviewer.knowledge.md` bad granskare kora
+  `cd functions && npx tsc --noEmit`. Min andring gjorde det kommandot till
+  bygg-konfigen, som hoppar over testfilerna - en instruktion i en fil bunten
+  inte ror blev alltsa falsk av bunten. Ersatt pa plats.
+- [kritik] Bunt 2, helhetsgranskningen: SEX blockerande, och det forsta var att min
+  egen andring FORSVAGADE en befintlig kontroll. `pr-checks.yml`s steg korde ett
+  bart `tsc` fran `functions/`, alltsa BYGG-konfigen - den jag just lart att hoppa
+  over testfiler. Samma commit som slutade SKEPPA testkod hade alltsa slutat
+  KONTROLLERA den pa den enda vag det flodet kor. Lagat, och pinnat sa ett bart
+  `tsc` inte kan komma tillbaka.
+- [kritik] Bunt 2: bygget uteslot EN suffix, korningen samlar TVA
+  (`{test,spec}.ts`). En `.spec.ts` hade skeppats - BIN-1110:s exakta fel en
+  bokstav bort. Bada tacks nu.
+- [rattelse] Fyra falska pastaenden i min egen prosa strukna: ett antal ("bada
+  testportarna" - tre finns), en doc-kommentar min insattning skilt fran sin
+  symbol, och tva pastaenden om vad routern svarade fore ett sate fanns.
+- [matning] Min forsta mutering av `pr-checks.yml` traffade FEL av tva identiska
+  rader och kom tillbaka gron. Spärren var riktig; matningen var trasig. Grep:a
+  vilken rad som muterades, alltid.
+- [upptackt] Bunt 2, BIN-1110: hålet var bredare an biljetten. Rotens
+  `tsconfig.json` EXKLUDERAR `functions`, och `pr-checks.yml` kor bara pa
+  `pull_request` (dvs Dependabot). Alltsa typkontrollerade INGENTING Cloud
+  Functions-koden pa den vag en manniskas commit tar - bara `firebase deploy`,
+  for hand, sist av allt. Typkontrollen ar darfor inkopplad i lefthooks
+  pre-commit, inte bara i den PR-vag repot i praktiken aldrig gar.
+- [upptackt] Bunt 2: att namnge tva nya filer i `functions/` gjorde katalogen
+  "listad fil for fil" i agarkartan, vilket drog fram FEM redan existerande
+  filer utan agare (`index.ts`, `push.ts`, `tsconfig.json`, `package.json`,
+  `package-lock.json`). De ar seatade: FCM-sandarna hos #13, byggets och
+  runtidens konfiguration hos #25. Aldrig `--update-gaps`, som gor halet
+  permanent.
 - [kritik] Bunt 1, helhetsgranskningen varv 4: TRE fynd till, alla i prosa som
   fanns FORE bunten men som mina egna tillagg gjorde barande. `route.test.mjs`
   pastod att `recap-upload.helpers.mjs` "seats the #14 fallback" - routern svarar

@@ -28,6 +28,27 @@ pre-commit:
       fail_text: "tsc found type errors. Fix them before committing (npm run typecheck)."
       priority: 1
 
+    # BIN-1110. The root tsconfig.json EXCLUDES functions, so the step above never
+    # reads a line of Cloud Functions code. Before this, the only thing that
+    # type-checked functions/src was `firebase deploy --only functions` — run by
+    # hand, last of all — and pr-checks.yml, which fires on pull_request and so on
+    # dependabot alone, not on the push-direct-to-main path this repo actually uses.
+    # A test file with a type error therefore reached main and failed at deploy.
+    # This runs the config that covers BOTH halves: the shipped sources and the
+    # test files the build config now excludes.
+    typecheck-functions:
+      glob:
+        - "functions/**/*.ts"
+        - "functions/tsconfig*.json"
+        - "functions/package.json"
+        # The lockfile decides which typescript and which @types actually resolve, so a
+        # lockfile-only change can turn clean code red. The root typecheck step above
+        # globs its own lockfile for exactly this reason.
+        - "functions/package-lock.json"
+      run: npm --prefix functions run typecheck
+      fail_text: "tsc found type errors under functions/. Fix them (npm --prefix functions run typecheck). If it says tsc is not recognized, the functions deps are missing: npm --prefix functions ci."
+      priority: 1
+
     # eslint takes file arguments and still honours eslint.config.mjs, so unlike
     # typecheck this reads only what is staged.
     lint:

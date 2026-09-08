@@ -118,7 +118,12 @@ jobs:
 
       - name: Typecheck functions
         working-directory: functions
-        run: npx tsc --noEmit
+        # NOT a bare `tsc`. That reads tsconfig.json, which BIN-1110 taught to exclude
+        # `src/**/*.test.ts` so the build stops shipping test code to Cloud Functions —
+        # so a bare tsc here would have quietly STOPPED type-checking those files on the
+        # one path this workflow fires, which is dependabot's. The named script reads
+        # tsconfig.typecheck.json, which covers the sources AND the tests.
+        run: npm run typecheck
 
       # The same suite deploy.yml gates on. It carries the org checks that read
       # the working tree — the ownership map and the route selftests — so a

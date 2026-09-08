@@ -1,0 +1,12 @@
+{
+  "//": "BIN-1110. Type-checks what the BUILD deliberately stops compiling: functions/src/**/*.test.ts. Until this file existed the build was the only thing that type-checked them, so excluding them from it would have traded a loud failure for a silent one. Never emits — `outDir` would collide with lib/. `module` is es2022 rather than the build's commonjs because vitest runs these as ESM, which is what makes `import.meta.url` legal here and a compile error over there; that difference is the whole reason the two configs are separate. Wired into lefthook's pre-commit, which is the path this repo's commits actually take (solo, push-direct-to-main). One precondition, named because two reviewers asked for it independently: `vitest/globals` resolves from the ROOT node_modules, not from functions/, which has no vitest of its own. Every caller must therefore have run the root install first. That is what every other lefthook step already assumes, so it adds no new requirement — but a lone `npm --prefix functions ci` on a fresh clone would fail here with a missing-type-definition error that says nothing about the real cause.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "module": "es2022",
+    "moduleResolution": "bundler",
+    "types": ["vitest/globals", "node"]
+  },
+  "include": ["src"],
+  "exclude": []
+}

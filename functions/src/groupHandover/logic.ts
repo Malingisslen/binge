@@ -9,6 +9,13 @@
  * inherits is testable under the root vitest toolchain.
  */
 
+// TYPE-ONLY, so it is erased at compile time and creates no runtime cycle with the module
+// that imports this one. It is a single declaration on purpose: a second, structurally
+// identical shape declared here would be assignable from the real one, so a FIFTH erasure
+// category could be collected in runHandover and never written by memberTraceWrites — and
+// that silence falls in the direction that leaves a departed member's data behind.
+import type { TraceErasure } from './runHandover';
+
 /** One `groups/{gid}/members/{uid}` document, narrowed to what succession reads. */
 export interface MemberRow {
   readonly uid: string;
@@ -144,6 +151,76 @@ export function buildHandoverUpdate(
  */
 export function clearsAddedBy(addedBy: unknown, leavingUid: string): boolean {
   return addedBy === leavingUid;
+}
+
+/**
+ * One write the trace erasure has to make, described rather than performed.
+ *
+ * `collection` and `doc` are relative to the group; `field` names the single field a
+ * `clear`/`drop` touches. Describing the writes instead of issuing them is what lets the
+ * ORDER, the COMPLETENESS and the batching all be checked by calling a function, in a test
+ * that never needs firebase-admin.
+ */
+export interface TraceWrite {
+  readonly op: 'delete' | 'clear' | 'drop';
+  readonly collection: string;
+  readonly doc: string;
+  readonly field?: string;
+}
+
+/**
+ * Every write erasing one member's traces from one group, in the order they must be made.
+ *
+ * BIN-1109. This used to be an inline loop inside the Admin-SDK port, where no test could
+ * reach it: every test port implemented the method as a single unbroken batch, so the
+ * batching's own correctness — that nothing is skipped between chunks, that the counter
+ * resets — was never exercised at all.
+ */
+export function memberTraceWrites(leavingUid: string, erasure: TraceErasure): TraceWrite[] {
+  const writes: TraceWrite[] = [
+    { op: 'delete', collection: 'members', doc: leavingUid },
+    { op: 'delete', collection: 'household', doc: leavingUid },
+    // BIN-329: a joinAttempts row holds a plaintext invite token.
+    { op: 'delete', collection: 'joinAttempts', doc: leavingUid },
+  ];
+  for (const itemId of erasure.itemIds) {
+    writes.push({ op: 'delete', collection: `watchlist/${itemId}/progress`, doc: leavingUid });
+  }
+  for (const itemId of erasure.clearAddedByIds) {
+    writes.push({ op: 'clear', collection: 'watchlist', doc: itemId, field: 'addedBy' });
+  }
+  for (const rowId of erasure.clearPickedByIds) {
+    writes.push({ op: 'clear', collection: 'sessionHistory', doc: rowId, field: 'pickedByUid' });
+  }
+  for (const rowId of erasure.dropParticipantIds) {
+    writes.push({ op: 'drop', collection: 'sessionHistory', doc: rowId, field: 'participantUids' });
+  }
+  return writes;
+}
+
+/**
+ * The writes split into commits no larger than `limit`.
+ *
+ * Firestore commits at most 500 writes at once and the input grows with the group's
+ * watchlist, which nothing bounds. Splitting is therefore not optional — and getting it
+ * wrong loses writes silently, which is why it is a function with a return value rather
+ * than a counter mutated inside a loop.
+ */
+export function chunkWrites(writes: readonly TraceWrite[], limit: number): TraceWrite[][] {
+  if (!Number.isInteger(limit) || limit < 1) {
+    throw new Error(`chunkWrites: limit must be a whole number of at least 1, got ${limit}`);
+  }
+  const chunks: TraceWrite[][] = [];
+  // The advance is floored SEPARATELY from the refusal above, and that redundancy is
+  // deliberate. With the loop advancing by a bare `limit`, deleting the refusal turns a
+  // zero into an infinite loop — so the mutation that removes the guard makes the suite
+  // HANG rather than go red, which reads as stuck CI rather than as a broken guard and is
+  // the symptom BIN-802 already cost this repo. Flooring here means the refusal is the only
+  // thing that rejects a bad limit, its deletion is a plain red, and no input can hang.
+  for (let i = 0; i < writes.length; i += Math.max(1, limit)) {
+    chunks.push(writes.slice(i, i + limit));
+  }
+  return chunks;
 }
 
 /** The marker the refusal carries when a write was already attempted. */

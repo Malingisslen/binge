@@ -26940,3 +26940,165 @@ observation, not filed as a finding since it is explicitly and correctly out of 
 declared scope: `functions/scripts/_check-soa.mjs` is a real, currently-existing example of
 this exact ticket's bug class (untracked/gitignored, so both the membership derivation and the
 argument-scan guard correctly and intentionally do not see it). `pass (0 blocking)`.
+
+## 2026-09-08 — BIN-1110/BIN-1109 batch 2 review (functions typecheck gate + memberTraceWrites/chunkWrites extraction)
+
+Diff reviewed: `functions/src/buildConfig.test.ts` (new), `functions/src/groupHandover/logic.test.ts`
+(added `memberTraceWrites`/`chunkWrites` describe blocks + `HERE`/`REPO` rebased from
+`process.cwd()` to `fileURLToPath(import.meta.url)`), plus production `functions/src/groupHandover/logic.ts`
+(new `TraceWrite`/`TraceErasureShape`/`memberTraceWrites`/`chunkWrites` exports),
+`functions/src/groupHandover/adminIo.ts` (inline accumulate-and-flush batch loop replaced by
+`chunkWrites(memberTraceWrites(...), BATCH_LIMIT)`), `functions/tsconfig.json` (new
+`exclude: ["src/**/*.test.ts"]`), new `functions/tsconfig.typecheck.json`, `functions/package.json`
+(new `typecheck` script), `lefthook.yml` (new `typecheck-functions` pre-commit command).
+
+**Mutation 1 — lefthook wiring anchor is a source scan, not an execution proof.** `buildConfig.test.ts`'s
+"lefthook runs it pre-commit" test asserts two regexes against `lefthook.yml`'s raw text:
+`/typecheck-functions:[\s\S]*?run: npm --prefix functions run typecheck/` and a matching glob-entry
+regex. Backed up `lefthook.yml` (`git hash-object` `0c4d7ac9...`), then scripted every line of the
+`typecheck-functions:` block to be prefixed with `#DISABLED# ` (defanged but text-identical,
+verified via `grep -n typecheck-functions -A8 lefthook.yml`). Ran `npx vitest run
+functions/src/buildConfig.test.ts` from repo root (functions/ has no runner of its own; root
+`vitest.config.ts` globs `functions/src/**/*.{test,spec}.ts`): **6/6 still green**. Restored from
+backup, re-hashed — `0c4d7ac9...` matched exactly, `git status --porcelain lefthook.yml` clean.
+Conclusion: the test's real guarantee is "the command text and one glob entry exist somewhere in
+the file", not "lefthook actually runs it pre-commit" — same class as the archived BIN-1107
+defanged-`if(false)`-branch and BIN-808 wiring-test gaps, just in YAML-comment syntax instead of a
+JS dead branch. Graded non-blocking per house convention (nothing structurally better exists short
+of shelling out to `lefthook run`), but the test's own comment ("asserted here as ONE anchor
+through the command, not as the step's name alone") overclaims what it proves — flagged for the
+comment to state the blind spot, not for a rewrite of the regex (which cannot close it).
+
+**Mutation 2 — `memberTraceWrites` categories can be reordered with the whole file green.** Backed
+up `logic.ts` (`git hash-object` `4035ea4f...`). Reordered the function body so the
+`clearAddedByIds`/`clearPickedByIds`/`dropParticipantIds` loops run BEFORE the `itemIds`
+progress-delete loop (the three unconditional deletes stayed first; total write SET unchanged, only
+cross-category order changed). Ran `npx vitest run functions/src/groupHandover/logic.test.ts`:
+**41/41 still green.** Restored from backup, re-hashed — `4035ea4f...` matched, `git status
+--porcelain` clean. Root cause: every test either populates ONE category in isolation (order among
+its own entries IS pinned via `toEqual`) or populates every category together but only asserts
+`.length`/`.filter(...).toHaveLength(...)` (order-blind) — no fixture combines `itemIds` with any
+of the other three under an order-sensitive `toEqual`. The function's own docstring claims "in the
+order they must be made" and `adminIo.ts`'s comment repeats "WHICH writes and in WHAT ORDER is
+decided by memberTraceWrites" — an explicit ordering claim the suite does not enforce across
+categories. Did not independently establish this ordering is safety-load-bearing (every write is
+independently idempotent per the code's own comments — deletes no-op, `FieldValue.delete()`/
+`arrayRemove()` re-apply cleanly on retry — so a plausible equivalent-mutant defense exists), but
+did not accept that defense unproven either, per the "equivalent mutant is a hypothesis" rule:
+graded BLOCKING because BIN-1109's entire stated purpose is closing exactly this class of gap
+("the split's own correctness ... was asserted by nothing"), and an explicit code-level order claim
+left unpinned inside the very ticket meant to test it is a miss on the ticket's own terms, not a
+theoretical nit.
+
+**Other checks, all clean.** `chunkWrites`'s flattening IS pinned (`chunks.flat()).toEqual(w(1001))`),
+not just `.map(c => c.length)` — no gap there. The `Math.max(1, limit)` floor beside the
+`!Number.isInteger(limit) || limit < 1` refusal: traced by hand and confirmed the comment's claim —
+deleting ONLY the refusal (keeping the floor) makes `chunkWrites(w(3), 0)` no longer throw, so the
+`toThrow` assertions in "refuses a limit..." go red normally; deleting ONLY the floor is inert
+(refusal already guarantees `limit >= 1` before the loop runs). Verified this is the documented
+BIN-802-hang-avoidance shape, not vacuous redundancy. `HERE`/`REPO` path rebase in
+`logic.test.ts` from `process.cwd()` to `fileURLToPath(import.meta.url)` checked by hand — 3
+`join(HERE, '..', '..', '..')` levels from `functions/src/groupHandover/logic.test.ts` correctly
+reach the repo root; `ENTRY`/`LOOP`/`RULES`/client-file reads all still resolve. Full suite
+independently re-run from a clean tree: `282 files / 4801 passed / 4 skipped` — matches the
+sprint's claimed numbers exactly (no drift, no local dirty state before or after). Index/worktree
+shas re-checked immediately before the verdict for all 8 files in scope: all match, no split state.
+Read `.claude/rules/accepted-deviations.md` in full; the 2026-09-07 BIN-1063 steg-3-bunt-2/3
+entries are consistent with this diff and not reopened by it.
+
+**Verdict: fail (1 blocking)** — the `memberTraceWrites` cross-category order gap. The lefthook
+source-scan vacuity is reported non-blocking/documentation-only.
+
+## Relocated 2026-09-08f — entry 86 (`toContain`-anchor defect pair, moved from the
+wiring-test bullet in the principles file to hold the 80k cap, 2026-09-08 batch-2 re-review)
+
+**Two anchor defects recur in the plain-`toContain` form and both survive at full green: an
+anchor on a guard's CONDITION without its BODY (a sibling guard's `return 1;` already
+satisfies it — `toContain` only checks presence), and an anchor of the form `fn({ a, b })`
+satisfied by the FUNCTION'S OWN DECLARATION, leaving the CALL SITE free to drop the
+argument.** COUNT each anchor's occurrences in the stripped source before crediting it,
+anchor the whole block including its `return`, spell the call site distinctly.
+
+## 2026-09-08g — BIN-1110/BIN-1109 batch 2, RE-review after the integration reviewer's six blocking findings
+
+Prior pass (this file, "2026-09-08 — BIN-1110/BIN-1109 batch 2 review") failed on the
+`memberTraceWrites` cross-category order gap and noted the lefthook source-scan vacuity as
+non-blocking. Between then and now the integration reviewer ran a whole-diff pass and failed
+the batch on SIX findings; two produced new test cases (the `pr-checks.yml` bare-`tsc`
+regression + `buildConfig.test.ts` guard against it; the `.spec.ts` sibling-suffix exclude),
+four were false prose claims struck rather than reworded (incl. a "both test ports" count
+corrected to the unquantified "every test port"). This entry re-verifies the CURRENT staged
+bytes, not the prior round's.
+
+**Index/worktree parity.** Looped `git rev-parse :<f>` vs `git hash-object <f>` over all 12
+staged paths before touching anything: all matched (`fb902f8f…` pr-checks.yml, `abf5b2f6…`
+functions/tsconfig.json, `1dc5ba85…` logic.ts, `76a83443…` logic.test.ts, `043f4245…`
+buildConfig.test.ts, `14efb420…` tsconfig.typecheck.json, `972e6ea3…` lefthook.yml, plus the
+four docs/ownership files). No split state.
+
+**Mutation A — pr-checks.yml anchor disambiguation.** The file has TWO `run: npm run
+typecheck` lines (root Typecheck at L99, functions Typecheck at L126). Backed up
+(`fb902f8f…`), replaced only L126 with `run: npx tsc --noEmit` (sed by line number, confirmed
+with `grep -n`), ran `npx vitest run functions/src/buildConfig.test.ts`: **1 of 7 failed**,
+exactly `pr-checks.yml runs the named script, never a bare tsc` — the lazy
+`/name: Typecheck functions[\s\S]*?run: npm run typecheck/` regex does NOT walk backward to
+the earlier root step, so the anchor correctly disambiguates. Restored, re-hashed —
+`fb902f8f…` matched, `git status --porcelain` clean.
+
+**Mutation B — `.spec.ts` exclude is load-bearing, not restated.** Backed up
+`functions/tsconfig.json` (`abf5b2f6…`), dropped `"src/**/*.spec.ts"` from `exclude` leaving
+only `.test.ts`. Ran `buildConfig.test.ts`: **1 of 7 failed** — `expected [ 'src/**/*.test.ts'
+] to include 'src/**/*.spec.ts'` — the `.test.ts` assertion stayed green, confirming the two
+`toContain` calls are independent, not one restating the other. Restored, re-hashed, matched.
+
+**Mutation C — `chunkWrites` off-by-one on the advance.** Backed up `logic.ts` (`1dc5ba85…`),
+changed the loop advance from `Math.max(1, limit)` to `limit + 1` (skips one write per chunk
+above the ceiling). Ran `logic.test.ts`: **1 of 42 failed** — `splits above the ceiling...`
+got `[450, 450, 99]` instead of `[450, 450, 101]`. Caught. Restored, re-hashed, matched.
+
+**Mutation D — `memberTraceWrites` cross-category reorder, the exact gap the prior round
+failed on.** Same file, restored a clean copy, then swapped the `clearAddedByIds` and
+`clearPickedByIds` loops (order changed, full write SET unchanged). Ran `logic.test.ts`:
+**2 of 42 failed** — `keeps the categories in the order the port commits them` (the NEW test
+added since the prior round) and the pre-existing `names the exact field...` case (whose
+fixture happens to combine both categories). Confirms the round-1 blocking finding is now
+closed: a per-category-combining, order-sensitive `toEqual` exists and reddens alone.
+Restored, re-hashed, matched.
+
+**Lefthook source-scan vacuity — re-checked, still accepted, now disclosed.** Did not
+re-run the defang-with-`#` mutation (already recorded byte-for-byte in the prior entry with
+the same verdict: 6/6 green, non-blocking). Confirmed instead that `buildConfig.test.ts`'s
+own comment now states the blind spot verbatim ("It is a source scan, so a block commented
+out line by line satisfies it — measured, not supposed"), which is what the prior round asked
+for. No further action.
+
+**New, not previously reviewed: the `vitest/globals` ancestor-resolution question the
+security reviewer raised and declined to own.** `functions/tsconfig.typecheck.json`'s
+`types: ["vitest/globals", "node"]` has no corresponding `vitest` devDependency in
+`functions/package.json`, and `functions/node_modules/vitest` does not exist on disk
+(confirmed: `ls functions/node_modules/vitest` → ENOENT). Ran `cd functions && npm run
+typecheck` directly: succeeded silently (exit 0), proving TypeScript's `bundler` resolution
+walked up to the REPO ROOT's `node_modules/vitest` for the ambient `vitest/globals` types.
+This is sound in `pr-checks.yml` only because "Install deps" (root `npm ci`) runs before
+"Install functions deps" and "Typecheck functions" — verified by reading the step order
+in the file, not assumed. `lefthook.yml`'s new `typecheck-functions` command has no such
+explicit ordering, but every other lefthook step in this repo (`typecheck`, `lint`) already
+assumes root `node_modules` exists, so this adds no NEW local-hook precondition beyond what
+already existed. No test was written for this — an execution-based test would need a second,
+root-`node_modules`-less environment to be meaningful, which nothing in this repo's toolchain
+sets up cheaply. Graded non-blocking, and recommended (not required) that
+`tsconfig.typecheck.json`'s own comment name the ancestor-resolution dependency explicitly,
+matching the file's existing convention of documenting WHY each option is set the way it is.
+
+**Full suite, independently re-run.** `npm test` from a clean tree (`git status --porcelain`
+empty before and after): `282 files / 4803 passed / 4 skipped` — matches the sprint's claimed
+numbers exactly. (The prior round's archived entry recorded 4801 passed against the SAME
+counts elsewhere in this repo's history; this round's own count, 4803, was independently
+run just now and is what this verdict is based on — no claim is inherited from that entry.)
+
+**Verdict: pass (0 blocking).** Both of the integration reviewer's test-producing findings
+are correctly fixed and mutation-verified; the four struck prose claims left no live
+uncounted or wrongly-counted assertion behind (checked: "every test port" appears three
+times across `adminIo.ts`/`logic.ts`/`logic.test.ts`, none of them a numeric claim); the one
+non-blocking item (ancestor `node_modules` resolution) is a documentation suggestion, not a
+gap in test coverage.

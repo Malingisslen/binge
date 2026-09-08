@@ -13,6 +13,7 @@
 import { FieldValue, Timestamp, type Firestore } from 'firebase-admin/firestore';
 
 import { type HandoverIo } from './runHandover';
+import { chunkWrites, memberTraceWrites } from './logic';
 
 /** Writes per batch, under Firestore's own 500 ceiling. */
 const BATCH_LIMIT = 450;
@@ -77,54 +78,29 @@ export function adminHandoverIo(db: Firestore, log: HandoverIo['log']): Handover
 
     eraseMemberTraces: async (groupId, leavingUid, erasure) => {
       const groupRef = db.doc(`groups/${groupId}`);
-      // Firestore commits at most 500 writes per batch, and the writes here grow
-      // with the watchlist, which nothing bounds.
+      // WHICH writes and in WHAT ORDER is decided by memberTraceWrites, and HOW THEY ARE
+      // SPLIT by chunkWrites — both pure, both in logic.ts, both reachable by a test that
+      // needs no firebase-admin. BIN-1109: this used to be an inline accumulate-and-flush
+      // loop, and no test reached it. Every test port implemented the method as one
+      // unbroken batch, so `flush()` never ran anywhere and the split's own correctness —
+      // that nothing is dropped at a chunk boundary, that the counter resets — was
+      // asserted by nothing. This port now only EXECUTES.
       //
-      // The deletes are no-ops on a document that is already gone, so a retry
-      // converges. The `addedBy` removal is an `update` and DOES throw if the row
-      // was deleted meanwhile — that fails this group, which the loop counts and
-      // reports rather than swallowing. A merging `set` would be worse: on a
-      // deleted row it would resurrect a ghost carrying nothing but a tombstone.
-      let batch = db.batch();
-      let queued = 0;
-      const flush = async () => {
-        if (queued > 0) { await batch.commit(); batch = db.batch(); queued = 0; }
-      };
-
-      const queue = async (fn: (b: FirebaseFirestore.WriteBatch) => void) => {
-        fn(batch);
-        queued += 1;
-        if (queued >= BATCH_LIMIT) await flush();
-      };
-
-      await queue((b) => b.delete(groupRef.collection('members').doc(leavingUid)));
-      await queue((b) => b.delete(groupRef.collection('household').doc(leavingUid)));
-      // BIN-329: a joinAttempts row holds a plaintext invite token.
-      await queue((b) => b.delete(groupRef.collection('joinAttempts').doc(leavingUid)));
-      for (const itemId of erasure.itemIds) {
-        await queue((b) => b.delete(
-          groupRef.collection('watchlist').doc(itemId).collection('progress').doc(leavingUid),
-        ));
+      // The deletes are no-ops on a document that is already gone, so a retry converges.
+      // The field removals are `update` and DO throw if the row was deleted meanwhile —
+      // that fails this group, which the caller counts and reports rather than swallowing.
+      // A merging `set` would be worse: on a deleted row it would resurrect a ghost
+      // carrying nothing but a tombstone.
+      for (const chunk of chunkWrites(memberTraceWrites(leavingUid, erasure), BATCH_LIMIT)) {
+        const batch = db.batch();
+        for (const w of chunk) {
+          const ref = groupRef.collection(w.collection).doc(w.doc);
+          if (w.op === 'delete') batch.delete(ref);
+          else if (w.op === 'clear') batch.update(ref, { [w.field as string]: FieldValue.delete() });
+          else batch.update(ref, { [w.field as string]: FieldValue.arrayRemove(leavingUid) });
+        }
+        await batch.commit();
       }
-      for (const itemId of erasure.clearAddedByIds) {
-        await queue((b) => b.update(
-          groupRef.collection('watchlist').doc(itemId),
-          { addedBy: FieldValue.delete() },
-        ));
-      }
-      for (const rowId of erasure.clearPickedByIds) {
-        await queue((b) => b.update(
-          groupRef.collection('sessionHistory').doc(rowId),
-          { pickedByUid: FieldValue.delete() },
-        ));
-      }
-      for (const rowId of erasure.dropParticipantIds) {
-        await queue((b) => b.update(
-          groupRef.collection('sessionHistory').doc(rowId),
-          { participantUids: FieldValue.arrayRemove(leavingUid) },
-        ));
-      }
-      await flush();
     },
   };
 }

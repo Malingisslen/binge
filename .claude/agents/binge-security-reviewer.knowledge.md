@@ -113,6 +113,14 @@ Cap: 80k chars — pay for an addition with a cut, and move what you cut verbati
   `releaseNotifyState/{tmdbId}/notified/{uid}`, `reviews/{id}/likes/{uid}`, `usernames/{name}.uid`. Ask "does
   ANY doc identify a specific user, directly or by doc-id?" If yes: `uid` FIELD + CG sweep, or if retained,
   Art. 17(3) comment + policy entry + reaper.
+- **A duplicated, structurally-identical type declaration split across an admin/non-admin module pair hides a
+  GDPR-erasure category from the compiler.** Two independently-declared shapes for the same erasure payload
+  (e.g. a local mirror of `TraceErasure`) are mutually assignable, so a category the pure decider COLLECTS can
+  go silently unwritten by the Admin-SDK executor — no type error, no test failure, just a field that never
+  reaches `memberTraceWrites` (BIN-1109/1110, caught before shipping). Fix: one declaration; the other side takes it via `import type`, which the compiler
+  erases, so no runtime cycle and no admin import leaks into the testable-without-firebase side. Which module
+  holds it is not the point and is not stated here — in BIN-1109 both are admin-free, and the Admin-SDK
+  import lives in a third file.
 - **When a change turns "delete the whole parent" into "the parent SURVIVES", every uid-bearing field in the
   surviving subtree becomes a new retention — re-derive the field list from the RULES' match blocks and the
   writer's payloads, never from the diff's own enumeration.** The commonest miss is a SECOND uid field on the

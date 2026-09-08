@@ -360,6 +360,7 @@ Owns **everything Swedish**.
 Owns external data pipelines.
 
 - TMDB client; provider canonicalization + affiliate-link infra; FCM push.
+  → `functions/src/index.ts`, `functions/src/push.ts`
 - Scheduled collectors — episode/return/availability notifications, MOTN
   streaming-offer caching + price history, weekly Cineasterna sync,
   community-rating aggregation, OMDb external ratings. Since BIN-727 step 2 the
@@ -622,6 +623,16 @@ Owns the process.
   gating them would put routine bookkeeping behind a review (the same call Malin
   made for `lessons-digest.md` in BIN-851).
   → `.claude/agents/binge-code-reviewer.md`, `.claude/agents/binge-security-reviewer.md`, `.claude/agents/binge-integration-reviewer.md`, `.claude/agents/binge-test-reviewer.md`, `.claude/hooks/freshness.mjs`, `.claude/hooks/freshness.test.mjs`, `.claude/hooks/preview-gate.mjs`, `.claude/hooks/preview-gate.test.mjs`
+- **Vad funktionsbygget kompilerar, och vad som typkontrollerar resten** (BIN-1110).
+  Byggets konfiguration avgjorde tidigare bada sakerna pa en gang, sa den enda platsen
+  ett typfel i en testfil syntes var i deployen — sist av allt, kord for hand. Satet
+  foljer storheten: det har ar en kvalitetsgrind pa vagen till produktion, inte
+  datalagret filerna rakar handla om.
+  → `functions/tsconfig.typecheck.json`, `functions/src/buildConfig.test.ts`, `functions/tsconfig.json`
+- **Funktionsrunetidens beroendemanifest** (BIN-1110). Vilka paket Cloud Functions kor
+  med, och vilka skript bygget exponerar. Samma sate som byggkonfigurationen ovan, av
+  samma skal: det ar vagen till produktion.
+  → `functions/package.json`, `functions/package-lock.json`
 - **The remaining check scripts under scripts/** (BIN-1080). Same class as `lefthook.yml`
   and the staged-routing gate above: they decide how the repo is checked, and
   check-workflow-map.mjs gates the deploy. A script under scripts/ whose concern is a

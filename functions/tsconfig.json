@@ -13,5 +13,7 @@
     "skipLibCheck": true,
     "resolveJsonModule": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  "//exclude": "BIN-1110. Test files are compiled into lib/ and shipped to Cloud Functions without this. They are still type-checked, by tsconfig.typecheck.json, which lefthook runs pre-commit — see that file's own header for why the two configs cannot be one.",
+  "exclude": ["src/**/*.test.ts", "src/**/*.spec.ts"]
 }

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
   pickGroupSuccessor,
@@ -10,16 +11,22 @@ import {
   isEmptyExcept,
   refusalForHandover,
   HANDOVER_PARTIAL,
+  memberTraceWrites,
+  chunkWrites,
   type MemberRow,
+  type TraceWrite,
 } from './logic';
+import type { TraceErasure } from './runHandover';
 
-// Paths from the repo root, not from `import.meta.url`. `functions/tsconfig.json`
-// compiles `src` as CommonJS and includes test files, so `import.meta` here is a
-// compile error that breaks `firebase deploy --only functions`, while vitest
-// transpiles it happily. A wrong root throws on `readFileSync` rather than
-// silently reading nothing.
-const HERE = join(process.cwd(), 'functions', 'src', 'groupHandover');
-const REPO = process.cwd();
+// Paths from this file rather than from the working directory.
+// It was `process.cwd()` until BIN-1110: the build config compiled test files as
+// CommonJS, where `import.meta` is a compile error, and the only thing that said so
+// was `firebase deploy --only functions` — last of all, by hand. The build no longer
+// compiles them and tsconfig.typecheck.json reads them as the ESM vitest actually
+// runs, so the honest form is available again. Anchoring on the file rather than on
+// the working directory also means the test cannot pass by reading the wrong tree.
+const HERE = join(fileURLToPath(import.meta.url), '..');
+const REPO = join(HERE, '..', '..', '..');
 /** The callable, with `//` comments stripped, so a scan reads code not prose. */
 const ENTRY = readFileSync(join(HERE, 'index.ts'), 'utf8').replace(/^\s*\/\/.*$/gm, '');
 /** The loop, same treatment — it declares the erasure's field set. */
@@ -405,5 +412,135 @@ describe('the erasure covers every uid-bearing field the group contracts pin', (
     for (const [field, expression] of Object.entries(ERASURE_EXPRESSION)) {
       expect(LOOP, `${field} is no longer erased`).toContain(expression);
     }
+  });
+});
+
+// BIN-1109. The batching used to live inside the Admin-SDK port, where no test could reach
+// it: every test port implemented the method as ONE unbroken batch, so `flush()` never ran
+// anywhere and the split's own correctness was asserted by nothing. A group needs more than
+// ~448 rows before it even splits, and no group exists in production, so nothing had gone
+// wrong — but "nothing has gone wrong yet" and "this is checked" are different claims.
+describe('memberTraceWrites', () => {
+  const erasure = (over: Partial<TraceErasure> = {}): TraceErasure => ({
+    itemIds: [],
+    clearAddedByIds: [],
+    clearPickedByIds: [],
+    dropParticipantIds: [],
+    ...over,
+  });
+
+  // The three unconditional deletes come first and are the whole erasure for a member who
+  // touched nothing. A group row and a household row survive a departure otherwise, and the
+  // joinAttempts row holds a plaintext invite token (BIN-329).
+  it('always erases the member row, the household row and the join attempt', () => {
+    expect(memberTraceWrites('U9', erasure())).toEqual([
+      { op: 'delete', collection: 'members', doc: 'U9' },
+      { op: 'delete', collection: 'household', doc: 'U9' },
+      { op: 'delete', collection: 'joinAttempts', doc: 'U9' },
+    ]);
+  });
+
+  // The nested path is written as one collection string rather than walked. Pinned by VALUE
+  // because a wrong path here deletes nothing and reports success — the shape of failure
+  // this whole ticket family is about.
+  it('reaches per-item progress at watchlist/{itemId}/progress', () => {
+    const writes = memberTraceWrites('U9', erasure({ itemIds: ['IT1', 'IT2'] }));
+    expect(writes.slice(3)).toEqual([
+      { op: 'delete', collection: 'watchlist/IT1/progress', doc: 'U9' },
+      { op: 'delete', collection: 'watchlist/IT2/progress', doc: 'U9' },
+    ]);
+  });
+
+  // Each field-clearing category names the field it touches. A write that named the wrong
+  // field would erase a bystander's data, so these are pinned by value too.
+  it('names the exact field for every clear and drop', () => {
+    const writes = memberTraceWrites('U9', erasure({
+      clearAddedByIds: ['IT1'],
+      clearPickedByIds: ['S1'],
+      dropParticipantIds: ['S2'],
+    }));
+    expect(writes.slice(3)).toEqual([
+      { op: 'clear', collection: 'watchlist', doc: 'IT1', field: 'addedBy' },
+      { op: 'clear', collection: 'sessionHistory', doc: 'S1', field: 'pickedByUid' },
+      { op: 'drop', collection: 'sessionHistory', doc: 'S2', field: 'participantUids' },
+    ]);
+  });
+
+  // The ORDER across categories, not only within one. Both this function's docstring and
+  // the port's comment say the list is "in the order they must be made", and a per-category
+  // fixture cannot see a reordering: with one category populated the order is trivially
+  // right, and a test that checks only lengths is blind by construction. Order decides
+  // which chunk a write lands in, so it decides what survives a commit that fails partway.
+  it('keeps the categories in the order the port commits them', () => {
+    expect(memberTraceWrites('U9', erasure({
+      itemIds: ['IT1'],
+      clearAddedByIds: ['IT2'],
+      clearPickedByIds: ['S1'],
+      dropParticipantIds: ['S2'],
+    }))).toEqual([
+      { op: 'delete', collection: 'members', doc: 'U9' },
+      { op: 'delete', collection: 'household', doc: 'U9' },
+      { op: 'delete', collection: 'joinAttempts', doc: 'U9' },
+      { op: 'delete', collection: 'watchlist/IT1/progress', doc: 'U9' },
+      { op: 'clear', collection: 'watchlist', doc: 'IT2', field: 'addedBy' },
+      { op: 'clear', collection: 'sessionHistory', doc: 'S1', field: 'pickedByUid' },
+      { op: 'drop', collection: 'sessionHistory', doc: 'S2', field: 'participantUids' },
+    ]);
+  });
+
+  // Every id the caller hands over must appear exactly once. A category dropped from the
+  // builder is invisible to a test that only counts the total.
+  it('emits one write per id, with no category dropped', () => {
+    const writes = memberTraceWrites('U9', erasure({
+      itemIds: ['A', 'B', 'C'],
+      clearAddedByIds: ['A'],
+      clearPickedByIds: ['S1', 'S2'],
+      dropParticipantIds: ['S3'],
+    }));
+    expect(writes.length).toBe(3 + 3 + 1 + 2 + 1);
+    expect(writes.filter((w) => w.collection === 'watchlist/B/progress')).toHaveLength(1);
+    expect(writes.filter((w) => w.field === 'participantUids')).toHaveLength(1);
+  });
+});
+
+describe('chunkWrites', () => {
+  const w = (n: number) =>
+    Array.from({ length: n }, (_, i): TraceWrite => ({
+      op: 'delete',
+      collection: 'members',
+      doc: `U${i}`,
+    }));
+
+  // The decisive case: MORE writes than the ceiling. Nothing in the suite drove this before,
+  // so a split that dropped the boundary write, or one that never reset its counter and so
+  // left the second commit empty, would have passed everything.
+  it('splits above the ceiling and loses nothing at the boundary', () => {
+    const chunks = chunkWrites(w(1001), 450);
+    expect(chunks.map((c) => c.length)).toEqual([450, 450, 101]);
+    // Flattening must reproduce the input EXACTLY, in order — a boundary write silently
+    // skipped is the half-erasure this guards against, and it is invisible to a length check
+    // on the chunks alone.
+    expect(chunks.flat()).toEqual(w(1001));
+  });
+
+  it('leaves a set at or under the ceiling in one commit', () => {
+    expect(chunkWrites(w(450), 450)).toHaveLength(1);
+    expect(chunkWrites(w(1), 450)).toHaveLength(1);
+  });
+
+  // An empty erasure must produce no commit at all, not one empty commit — a committed empty
+  // batch is a billed write that does nothing.
+  it('produces no commit for no writes', () => {
+    expect(chunkWrites([], 450)).toEqual([]);
+  });
+
+  // A batching limit that is not a whole number at least one is a caller bug, and it must
+  // be REFUSED rather than coerced: silently committing one write per batch would multiply
+  // a large erasure's cost without anyone noticing. Deleting the refusal makes these red
+  // rather than hanging the suite — see the floor beside the loop's advance for why.
+  it('refuses a limit that is not a whole number of at least one', () => {
+    expect(() => chunkWrites(w(3), 0)).toThrow(/at least 1/);
+    expect(() => chunkWrites(w(3), -1)).toThrow(/at least 1/);
+    expect(() => chunkWrites(w(3), 1.5)).toThrow(/at least 1/);
   });
 });

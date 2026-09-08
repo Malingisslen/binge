@@ -10677,3 +10677,94 @@ filter) so a co-edited list is never both stripped and deleted; hosted-session d
 removes only sessions the departing uid HOSTED, matching the existing TTL sweep's own
 subcollection-reap shape, not a new exposure class. No `firestore.rules` changes in this diff
 (pure Admin-SDK sweep, correctly documented as bypassing rules).
+
+### 2026-09-08 — BIN-1110/1109 re-review: CI typecheck fix, duplicate erasure type
+
+Re-review of batch 2, 2026-09-08 sprint. Prior round (BIN-1110) had already been
+passed by this reviewer; the integration reviewer failed it on four blocking
+findings, two squarely in this gate's area, both fixed before this round.
+
+**Finding 1 (this reviewer's own miss, twice).** BIN-1110's fix for
+`functions/src/*.test.ts` riding into the deployed `lib/` bundle (an `import.meta`
+in a source-scanning test broke `firebase deploy --only functions` because the
+build config is CommonJS) initially just swapped CI's bare `tsc` for
+`npm run typecheck` pointed at the build config alone. That silently DROPPED the
+only check that shipped `functions/src` sources still compile as CommonJS — a
+production file using `import.meta` would now pass lefthook, pass pr-checks, and
+fail only at manual deploy. Same failure class BIN-1110 was filed to close, moved
+from test files to production files.
+
+Fix shipped: `functions/tsconfig.json` gets `exclude: ["src/**/*.test.ts",
+"src/**/*.spec.ts"]` (stops compiling tests into `lib/`); a new
+`functions/tsconfig.typecheck.json` (module: es2022, include: src, exclude: [])
+type-checks EVERYTHING including tests as the ESM vitest actually runs them;
+`functions/package.json`'s `typecheck` script runs both configs in sequence.
+`functions/src/buildConfig.test.ts` pins the exact two-config string, the
+exclude list, that the build still emits, and that both `lefthook.yml` and
+`.github/workflows/pr-checks.yml` name the composite script (never a bare `tsc`).
+
+**PoC run this round** (not merely re-read): appended
+`export const MUTANT = import.meta.url;` to `functions/src/push.ts` (a production
+file, not staged in this batch), ran `npm run typecheck` from `functions/`, got
+`src/push.ts(128,23): error TS1343: The 'import.meta' meta-property is only
+allowed when...`. Restored `push.ts` from a scratchpad snapshot taken before the
+mutation and confirmed `git hash-object` matched the pre-mutation blob
+(`c06c400...`). Clean tree passes both configs (confirmed by direct run, not
+inferred from the test file's own assertions). Also confirmed live:
+`pr-checks.yml`'s "Typecheck functions" step runs `npm run typecheck` (not
+`npx tsc --noEmit`), and `lefthook.yml`'s `typecheck-functions` glob covers
+`functions/**/*.ts`, `functions/tsconfig*.json`, `functions/package.json`.
+
+**Finding 2 (integration reviewer, BIN-1109 area).** `functions/src/groupHandover/
+logic.ts` had declared its own `TraceErasureShape`, structurally identical to
+`runHandover.ts`'s real `TraceErasure` (both admin-free/admin modules import
+`TraceErasure`-shaped data — the fields are `itemIds`, `clearAddedByIds`,
+`clearPickedByIds`, `dropParticipantIds`, all consumed by `memberTraceWrites` to
+build the write list `adminIo.ts`'s `eraseMemberTraces` executes). Two
+independently-declared, mutually-assignable shapes meant a fifth erasure category
+added to the real `TraceErasure` later could be COLLECTED into a `logic.ts` call
+site and never WRITTEN, with no compile error — a silent GDPR-completeness gap in
+the leak direction (data a departing member should have scrubbed from a
+handed-over group instead persists).
+
+Fix shipped: `logic.ts` now does `import type { TraceErasure } from
+'./runHandover';` — single declaration, owned by `runHandover.ts` (the module that
+already declares the admin-facing port shapes), consumed type-only so nothing is
+armed at runtime and `logic.ts` stays free of any `firebase-admin` import
+(confirmed: `grep -n "^import" functions/src/groupHandover/logic.ts` shows only
+the type-only import; `adminIo.ts`'s own `import { type HandoverIo } from
+'./runHandover'` is the same pattern, already in the file before this round).
+Verified no import cycle: `runHandover.ts` imports VALUES from `logic.ts`
+(`buildHandoverUpdate`, `clearsAddedBy`) and `logic.ts` imports only the TYPE from
+`runHandover.ts`, which TypeScript erases — the CommonJS `require` graph has
+exactly one edge, `runHandover.ts` → `logic.ts`.
+
+Filed as BIN-1123: the remaining half of this same shape — three emulator-backed
+test ports (in `logic.test.ts`'s surrounding suite / rules harness) still
+hand-enumerate the write list rather than deriving it from `memberTraceWrites`,
+so a real emulator test could still pass while silently not exercising a new
+category. Not blocking this round; the pure-logic path (`memberTraceWrites`,
+`chunkWrites`) that actually decides what gets written is now single-sourced and
+directly unit-tested (BIN-1109, `logic.test.ts`'s new `describe('memberTraceWrites')`
+/ `describe('chunkWrites')` blocks — re-ran with `npx vitest run
+functions/src/buildConfig.test.ts functions/src/groupHandover/logic.test.ts
+--no-cache`, 2 files / 49 tests, all green).
+
+**Struck, not reworded:** an unmeasured "the form the rest of the repo uses"
+claim about `process.cwd()` vs `import.meta.url`-anchored paths, present in both
+`logic.test.ts`'s old comment and (per the batch's own report) elsewhere — the
+correct measurement is 11 test files still use `process.cwd()`, which is a
+number nobody should assert without running `grep -rl "process.cwd()" functions
+| wc -l` first.
+
+Accepted-deviations checked: nothing here matches or reopens anon-vote forgery,
+the Tillsammans session-expiry gate, blocking-as-hygiene, create-only reports,
+or any BIN-1063-steg-3 entry (ghost-member-as-candidate, handover-over-delete,
+the field-owned sweep's scope). This batch only tightens the CI/type-checking
+contract around already-accepted BIN-1063/1109 mechanics and deduplicates a type
+declaration; no new deviation needed.
+
+Verdict: pass (0 blocking). Both re-review findings from the failed prior round
+were fixed and independently re-verified (one by live PoC + hash-restore, one by
+reading the import graph and re-running the test file) rather than trusted from
+the report.
