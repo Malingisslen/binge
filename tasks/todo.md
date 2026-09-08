@@ -207,6 +207,11 @@ BIN-559, BIN-402.
 
 ## Deviation log
 
+- [routning] Bunt 3: buntens FAKTISKA filunion routar till panel [27, 5, 4, 6, 7],
+  inte till urvalets [27, 5, 4, 6, 18]. `src/test/rules/firestore-rules.test.ts`
+  drar in #7 QA/Test, och #18 faller ur. #7 har alltsa inte kritiserat arbetet, sa
+  dess blinda kritik konvenerades EFTER bygget och fore commit. BIN-1052:s regel i
+  praktiken - routa unionen du faktiskt har, inte den du planerade.
 - [kritik] Bunt 2, helhetsgranskningen varv 2: FYRA till, och den forsta ar samma
   fel som forra varvet EN FILKLASS BORT. Att byta CI fran ett bart `tsc` till
   `npm run typecheck` tog bort den enda kontrollen att den SKEPPADE koden

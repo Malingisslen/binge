@@ -552,10 +552,23 @@ service cloud.firestore {
       allow read: if isOwner(uid);
       // Avsändaren skapar request på mottagarens väg. Validera doc-id ===
       // request.auth.uid så ingen kan skapa request "från" någon annan.
+      // BIN-1106: samma nyckelbegransning som `friends` och `friendRequestsSent`
+      // fick i steg 2. Utan den kan vem som helst som ar inloggad skriva ett
+      // dokument med godtyckliga nycklar i NAGON ANNANS trad, upp till
+      // Firestores dokumentgrans. Det raknas mot mottagarens lagring, och
+      // `dataExport.ts` sprider `d.data()` ordagrant - sa innehallet hamnar rakt
+      // in i mottagarens GDPR-export.
+      //
+      // Listan ar harledd ur `sendFriendRequest` i `src/lib/firebase/friends.ts`,
+      // den enda vagen som skapar de har dokumenten. En for smal lista nekar
+      // varje skarp vanforfragan, sa den maste komma darifran och inte ur en
+      // biljett. `friends.test.ts` pinnar samma mangd fran klientsidan.
       allow create: if isSignedIn()
         && fromUid == request.auth.uid
         && request.resource.data.fromUid == request.auth.uid
-        && request.resource.data.fromDisplayName is string;
+        && request.resource.data.fromDisplayName is string
+        && request.resource.data.keys().hasOnly(
+          ['fromUid', 'fromDisplayName', 'fromPhotoURL', 'fromUsername', 'sentAt']);
       allow update: if false;
       // Mottagaren kan radera (decline / vid accept). Avsändaren kan
       // också radera sin egen pending request (cancel).
@@ -1155,6 +1168,22 @@ service cloud.firestore {
         (
           resource.data.ownerUid == request.auth.uid
           && resource.data.memberUids.hasAll(request.resource.data.memberUids)
+          // BIN-1108: agaren maste sta kvar i sin egen medlemslista. `hasAll` sager
+          // bara att den nya listan ar en DELMANGD av den gamla, och en delmangd far
+          // utelamna agaren sjalv. Utan det har villkoret kan agaren skriva bort sig
+          // medan `ownerUid` fortfarande pekar pa dem - och varje agar-grindad atgard
+          // loses upp mot `ownerUid`, sa gruppen blir permanent oforvaltbar for alla
+          // andra: inget namnbyte, inga inbjudningar, ingen tokenrotation, ingen
+          // radering. Ingen sopning fangar det heller; `retentionCleanup` fyrar forst
+          // nar uid:t ar borta ur Auth, och en agare som bara lamnat ar ett levande
+          // konto.
+          //
+          // Att ISTALLET lata grenen bara over agarskapet var vad #27 och #4 avvisade
+          // i BIN-1063: regler kan inte iterera medlems-undersamlingen for att avgora
+          // vem som varit med langst, sa garantin hade legat i klientkoden. Den
+          // frivilliga vagen ut ar `handOverOwnedGroups`, som redan finns och kor pa
+          // Admin SDK - alltsa forbi de har reglerna.
+          && request.auth.uid in request.resource.data.memberUids
           // BIN-276: the owner branch is the ONLY legit rename path (updateGroup
           // patches name/defaults), so name/defaults stay mutable here — but pin
           // identity + invite-token fields so a member-remove write can't also
@@ -1184,6 +1213,14 @@ service cloud.firestore {
           // Medlem lämnar — tar bort sig själv
           request.auth.uid in resource.data.memberUids
           && !(request.auth.uid in request.resource.data.memberUids)
+          // BIN-1108: agaren far inte anvanda DEN HAR grenen som utgang. Den kraver
+          // bara medlemskap och pinnar `ownerUid` oforandrad, sa utan det har
+          // villkoret naa agaren samma frysta lage genom att helt enkelt "lamna" -
+          // och en fix som bara tatade agar-grenen ovan hade lamnat vagen oppen en
+          // gren bort. Det galler ocksa den ensamme agaren: en grupp utan medlemmar
+          // men med ett levande `ownerUid` ar samma tillstand. Agaren raderar gruppen
+          // eller lamnar over den; hen lamnar den inte.
+          && resource.data.ownerUid != request.auth.uid
           // BIN-327: leave may only SHRINK memberUids. Without this a leaving
           // member could set memberUids to a superset — injecting an arbitrary
           // uid as they exit, an uncapped growth path that bypasses the join/

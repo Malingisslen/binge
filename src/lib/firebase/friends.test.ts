@@ -65,6 +65,12 @@ describe('sendFriendRequest', () => {
       fromDisplayName: 'Malin',
       fromUsername: 'malin',
     });
+    // BIN-1106: nyckel-MÄNGDEN pinnas exakt, av samma skäl som för den utgående
+    // spegeln nedan. `toMatchObject` ovan är en delmängdskoll, så ett fält tillagt
+    // här hade stått grönt medan regelns hasOnly nekade varje skarp vänförfrågan.
+    expect(Object.keys(setMock.mock.calls[0][1]).sort()).toEqual(
+      ['fromDisplayName', 'fromPhotoURL', 'fromUid', 'fromUsername', 'sentAt'],
+    );
     expect(setMock.mock.calls[1][0]._path).toBe('users/me/friendRequestsSent/jonatan');
     // BIN-1063 steg 2: fältet uid måste stämma med dokument-id:t, annars nekar regeln
     // skrivningen. Nyckel-MÄNGDEN pinnas exakt, inte som delmängd: regelns

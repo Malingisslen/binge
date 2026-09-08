@@ -39,11 +39,10 @@ setGlobalOptions({
  * Trigger 1: vänförfrågan skapad → push:a mottagaren.
  *
  * Path: users/{recipientUid}/friendRequests/{fromUid}
- * Payload-fält som finns på doc:et (skrivs av sendFriendRequest):
- *   - fromUid: string
- *   - fromDisplayName: string
- *   - fromUsername: string | null
- *   - sentAt: serverTimestamp
+ * Payload-fält: skrivs av `sendFriendRequest` i src/lib/firebase/friends.ts och pinnas
+ * av `firestore.rules`' hasOnly sedan BIN-1106. Läs mängden där — en kopia här blir en
+ * andra sanning, och den som härleder en allowlist ur den skulle neka varje riktig
+ * vänförfrågan.
  */
 export const onFriendRequestCreate = onDocumentCreated(
   'users/{recipientUid}/friendRequests/{fromUid}',

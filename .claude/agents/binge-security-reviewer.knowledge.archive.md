@@ -10768,3 +10768,158 @@ Verdict: pass (0 blocking). Both re-review findings from the failed prior round
 were fixed and independently re-verified (one by live PoC + hash-restore, one by
 reading the import graph and re-running the test file) rather than trusted from
 the report.
+
+### 2026-09-08 — BIN-1106/BIN-1108 re-review: friendRequests hasOnly, owner-cannot-orphan-the-group
+
+Batch 3 of the 2026-09-08 sprint. First pass (this reviewer) had already passed
+`firestore.rules` and `friends.test.ts` byte-identical to what shipped in this
+round; the duty list grew to four files when the integration reviewer's own
+review widened the batch and this gate's `^functions/` and `^src/lib/firebase/`
+patterns picked up `functions/src/index.ts` and `src/lib/firebase/friends.ts`.
+
+**BIN-1106.** `users/{uid}/friendRequests/{fromUid}`'s `create` rule had no
+`hasOnly` before this batch — any signed-in caller writing a request could set
+arbitrary extra keys on the RECIPIENT's document, up to Firestore's 1 MiB
+ceiling, counted against the recipient's storage and copied verbatim into their
+GDPR export by `dataExport.ts` (which spreads `d.data()`). Fixed by adding
+`request.resource.data.keys().hasOnly(['fromUid', 'fromDisplayName',
+'fromPhotoURL', 'fromUsername', 'sentAt'])`, derived from `sendFriendRequest`'s
+actual payload in `src/lib/firebase/friends.ts` — the sole writer. Verified live,
+not merely traced: ran `npm run test:rules` against the real emulator (7 files,
+423/423 green), which includes both halves of the pin — `friendRequests: an
+extra key is denied` (attacker-supplied extra field on the victim's doc,
+`assertFails`) and `friendRequests: the payload sendFriendRequest actually
+writes is allowed` (`assertSucceeds`) — the second is the one a too-narrow list
+would have broken, which is exactly the class this batch's own knowledge-file
+correction is about.
+
+**BIN-1108.** `groups/{groupId}`'s owner-update branch used `hasAll(new ⊆ old)`
+to block the owner adding uids, but a subset relation also lets the owner write
+themselves OUT of `memberUids` while `ownerUid` still names them — freezing the
+group for everyone else (every owner-gated action, including the escape hatch
+`handOverOwnedGroups`, resolves against `ownerUid`, so nobody else can act and
+`retentionCleanup`'s orphan sweep never fires for a live account). The leave
+branch admitted the identical write from the other side (it tests membership,
+not ownership). Fixed on BOTH branches: the owner branch now requires
+`request.auth.uid in request.resource.data.memberUids`, and the leave branch now
+requires `resource.data.ownerUid != request.auth.uid`. Confirmed both guards are
+necessary, not redundant, by reading `src/test/rules/firestore-rules.test.ts`'s
+`groups/{id} the owner cannot leave their own group (BIN-1108)` describe block
+(own comment: "Two branches admit the same write, so the guard is on both... a
+guard on one alone would leave this same write passing") and by the same live
+`test:rules` run — includes the degenerate solo-owner-emptying-the-group case,
+and three legitimate-owner-write survival tests (remove someone else, rename,
+ordinary member leave) so the fix doesn't overcorrect.
+
+**Knowledge-file finding, fixed in this round.** `.claude/agents/binge-security-
+reviewer.knowledge.md`'s BIN-797-derived bullet cited `friendRequests`' header
+comment as the example of a neighbouring enumeration safe to leave untouched,
+"whose create rule carries no `hasOnly`" — a premise this same batch falsifies.
+Superseded in place (not reworded elsewhere, not silently dropped): the bullet
+now says the create rule carries a `hasOnly` as of BIN-1106, so the same header
+line would now hand a maintainer a false allowlist that denies every real
+friend request, and generalises the lesson — a rule starting to PIN a set turns
+every enumeration of that set from neighbouring into part of the change. This
+archive entry is that supersession's paired dated trace; the integration
+reviewer's prior round asked for it explicitly and it had not yet been written
+before this round.
+
+**Two optional strikes taken in the same batch, verified rather than assumed
+harmless.** `functions/src/index.ts`'s `onFriendRequestCreate` doc comment
+listed four of the five pinned fields (it had always omitted `fromPhotoURL`,
+independently of this batch) and `src/lib/firebase/friends.ts`'s module header
+listed three; both now point at `sendFriendRequest` and the rule instead of
+re-enumerating. Checked that the trigger's own code only reads fields inside
+the pinned set (`data.fromDisplayName`, `data.fromUsername` — both present in
+the `hasOnly` list) so the pointer is not a lie, and that the sibling `friends`/
+`friendRequestsSent` header lines in the same file were NOT touched because
+they remain accurate (`{ uid: targetUid, since }` and `{ uid: toUid, sentAt }`
+still match those two collections' own `hasOnly` lists byte for byte) —
+re-listing an untouched, still-true neighbour would have been the same chain
+the struck sentence was about.
+
+**One optional item correctly deferred, not silently dropped.**
+`docs/workflow-map.html:1449` carries the same short field list and was left
+alone with a `workflow-map-stale.json` work order stamped for it — per
+CLAUDE.md the map is re-traced and committed on its own, never bundled with
+feature code. Outside this gate's scope (no `.claude/hooks/**`,
+`docs/org/metrics/**` or code pattern match); noted here only because the
+parent brief asked this round to confirm it wasn't quietly skipped.
+
+**Accepted-deviations checked.** Neither finding matches or reopens anon-vote
+forgery, the Tillsammans session-expiry gate, blocking-as-hygiene, create-only
+reports, or any BIN-1063-steg-3 entry. Both are net-new tightenings with no
+prior accept on record.
+
+**Verdict: pass (0 blocking).**
+
+### 2026-09-08 — Re-review of the same batch: BIN-1125 found, BIN-1108 shipped anyway
+
+Re-review triggered by the integration reviewer failing the batch on a sentence
+in this file (the entry immediately above's home bullet), not on new bytes in
+`firestore.rules`/`functions/src/index.ts`/`friends.ts`/`friends.test.ts` —
+those four were confirmed byte-identical to the pass above. Two measurable
+errors in the bullet: BIN-1106 adds no `memberUids` guard (its whole change is
+the `friendRequests` `hasOnly` — confirmed one added line mentioning
+`memberUids` in the staged diff, and it belongs to BIN-1108); and "closes the
+sibling freeze without a second guard" undercounted the branches that can
+shrink `memberUids` to two when four can (owner, leave, token-join,
+invite-accept — read off `firestore.rules` directly, not recounted from
+memory). Struck to the half needing no counting: the invariant holds for THAT
+write and says nothing about the client-write freeze BIN-1108 guards; which
+branches carry a guard is read off the rules, not off a count in a sentence.
+Superseded in place in the principles file (not a bare strike — this file's
+own archive convention); this entry is that supersession's paired trace,
+requested explicitly by the failing round.
+
+**What the miscount was hiding, verified independently by reading
+`firestore.rules` lines 1243–1278 (not taken from the brief):** the token-join
+and invite-accept branches constrain only `!(uid in old) && uid in new &&
+size() <= 100`, plus the `ownerUid`/`name`/`defaults`/`inviteTokenHash`/
+`inviteTokenRotatedAt` equality pins. Neither relates the rest of `new` to
+`old` — no `old.hasAll(new.removeAll([addedUid]))`, no superset check. A caller
+holding a valid join token (self-issued via `joinAttempts`, hash-checked
+against the group's own `inviteTokenHash`) or a valid `groupInvites` entry can
+therefore write `memberUids: [self]`, evicting the owner and every other
+member in one update — landing the group in exactly the frozen state BIN-1108
+exists to prevent, but reachable by a THIRD PARTY rather than the owner
+themselves. Confirmed the leave/owner branches (BIN-1108's target, lines
+1167–1242) do NOT have this gap: the owner branch's `hasAll(old⊇new)` plus the
+new `auth.uid in new` pin, and the leave branch's exact `size()==old-1` plus
+`ownerUid != auth.uid` pin, both fully constrain their write. Confirmed
+`src/test/rules/firestore-rules.test.ts`'s new BIN-1108 describe block covers
+only the owner/leave branches — no test drives a join or accept write that
+shrinks the array, so the gap is untested as well as unguarded, and
+`.claude/rules/accepted-deviations.md` carries no entry naming it (grepped
+`memberUids`/`BIN-1108`/`BIN-1125`: two unrelated hits, neither this shape).
+Filed as **BIN-1125 (High, not fixed)**. Also filed **BIN-1126**: the
+`friendRequests` create rule's new `hasOnly` bounds the key SET only (per this
+file's own principle) — `fromDisplayName`/`fromUsername` are unbound STRINGS a
+sender fully controls, not checked against the sender's own profile the way
+`matchesOwnIdentity` does for reviews/comments/reactions, and
+`onFriendRequestCreate` in `functions/src/index.ts` renders both verbatim into
+a push notification body. Pre-existing (the fields were writable before
+BIN-1106 too; the new `hasOnly` only bounds which keys, never their values),
+not introduced or worsened by this batch.
+
+**Should this batch be held for BIN-1125?** No — argued, not asserted. BIN-1108
+hardens the OWNER-initiated route (an owner writing themselves out via the
+owner or leave branch) and does not touch, widen, or narrow the join/accept
+branches BIN-1125 lives in; the two are different branches of the same `allow
+update` guarding different attackers (the account's own write vs. a
+token/invite holder's write). Holding BIN-1108 does not reduce BIN-1125's
+exposure by one write — the join/accept branches are exploitable today whether
+or not this commit lands — so withholding a correct, narrow, tested fix buys
+nothing and only delays it. Recommendation: ship this batch; treat BIN-1125 as
+an urgent fast-follow given it is reachable by a third party (not merely
+self-inflicted) and destroys OTHER people's access to shared group data in one
+write, which is a materially worse blast radius than the owner-only freeze
+BIN-1108 closes.
+
+Verdict for the four files actually in this gate's scope
+(`firestore.rules`, `functions/src/index.ts`, `src/lib/firebase/friends.ts`,
+`src/lib/firebase/friends.test.ts`): unchanged from the pass above, all four
+still byte-identical. BIN-1125/1126 are pre-existing gaps outside this diff,
+filed and tracked, not blocking findings against these bytes.
+
+**Verdict: pass (0 blocking).**

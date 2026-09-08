@@ -1120,6 +1120,40 @@ describe('users/{uid}/friends/{targetUid} — forged-friendship guard', () => {
       { uid: VICTIM, sentAt: serverTimestamp(), payload: 'x' },
     ));
   });
+
+  // BIN-1106. The sibling branch step 2 never reached: a stranger could write a
+  // document of any shape into the RECIPIENT's tree, up to Firestore's document
+  // ceiling — on their storage, and verbatim into their GDPR export, which copies
+  // every field as it finds it.
+  it('friendRequests: an extra key is denied', async () => {
+    await assertFails(setDoc(
+      doc(attackerDb(), 'users', VICTIM, 'friendRequests', ATTACKER),
+      {
+        fromUid: ATTACKER,
+        fromDisplayName: 'A',
+        fromPhotoURL: null,
+        fromUsername: 'a',
+        sentAt: serverTimestamp(),
+        payload: 'x'.repeat(1000),
+      },
+    ));
+  });
+
+  // The other half, and the one a too-narrow key list would have broken: the exact
+  // payload sendFriendRequest builds must still go through. Without this, a rule
+  // that denied every real friend request would look correct.
+  it('friendRequests: the payload sendFriendRequest actually writes is allowed', async () => {
+    await assertSucceeds(setDoc(
+      doc(attackerDb(), 'users', VICTIM, 'friendRequests', ATTACKER),
+      {
+        fromUid: ATTACKER,
+        fromDisplayName: 'A',
+        fromPhotoURL: null,
+        fromUsername: 'a',
+        sentAt: serverTimestamp(),
+      },
+    ));
+  });
 });
 
 // BIN-49 — report creation is locked to the submitReport callable. The old
@@ -2023,6 +2057,57 @@ describe('groups/{id} owner-update hardening (BIN-276)', () => {
   it('a non-owner member cannot rotate the invite token', async () => {
     await seedGroup({ inviteTokenHash: 'oldhash', memberUids: [OWNER, 'other_uid'] });
     await assertFails(updateDoc(doc(otherDb(), 'groups', GROUP), { inviteTokenHash: 'newhash' }));
+  });
+});
+
+// BIN-1108. An owner who writes themselves out of memberUids while ownerUid still
+// names them leaves the group permanently unmanageable for everyone else: every
+// owner-gated action resolves against ownerUid, so nobody ELSE can act, and the
+// owner no longer sees the group. `retentionCleanup` never reaches it either — its
+// orphan sweep fires only when the uid is gone from Auth, and this owner's account
+// is alive.
+//
+// Two branches admit the same write, so the guard is on both. A fix scoped to one
+// leaves the hole open a branch away, which is what #4's blind critique caught
+// before any of this was built.
+describe('groups/{id} the owner cannot leave their own group (BIN-1108)', () => {
+  // ONE write, offered to EVERY branch — that is how the rules engine evaluates an
+  // update, and it is why the guard had to go on both. The owner branch admitted it
+  // because `hasAll` only forbids GROWTH, and the leave branch admitted it because it
+  // asks for membership and nothing about ownership. Denying it now means no branch
+  // accepts it; a guard on one alone would leave this same write passing.
+  it('the owner cannot drop themselves — no branch accepts the write', async () => {
+    await seedGroup({ memberUids: [OWNER, 'm2'] });
+    await assertFails(updateDoc(doc(ownerDb(), 'groups', GROUP), { memberUids: ['m2'] }));
+  });
+
+  // The degenerate case the panel asked to be decided rather than left implicit: a
+  // group whose only member is its owner. Emptying it leaves a live ownerUid over
+  // zero members, which is the same unmanageable state. The owner deletes the group
+  // or hands it over; they do not leave it.
+  it('a solo owner cannot empty the group', async () => {
+    await seedGroup({ memberUids: [OWNER] });
+    await assertFails(updateDoc(doc(ownerDb(), 'groups', GROUP), { memberUids: [] }));
+  });
+
+  // The legitimate owner writes must all survive. A guard that denied these would be
+  // worse than the hole: it would break renaming, member removal and token rotation
+  // for every group.
+  it('the owner can still remove SOMEONE ELSE', async () => {
+    await seedGroup({ memberUids: [OWNER, 'm2', 'm3'] });
+    await assertSucceeds(updateDoc(doc(ownerDb(), 'groups', GROUP), { memberUids: [OWNER, 'm3'] }));
+  });
+
+  it('the owner can still rename the group', async () => {
+    await seedGroup({ memberUids: [OWNER, 'm2'] });
+    await assertSucceeds(updateDoc(doc(ownerDb(), 'groups', GROUP), { name: 'Nytt namn' }));
+  });
+
+  // And an ordinary member leaving is untouched — the guard keys on ownerUid, not on
+  // leaving as such.
+  it('a non-owner member can still leave', async () => {
+    await seedGroup({ memberUids: [OWNER, 'other_uid'] });
+    await assertSucceeds(updateDoc(doc(otherDb(), 'groups', GROUP), { memberUids: [OWNER] }));
   });
 });
 

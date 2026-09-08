@@ -87,6 +87,17 @@ Cap: 80k chars — pay for an addition with a cut, and move what you cut verbati
   mandatory.** `hasOnly(['token','createdAt'])` requires neither key — `setDoc({token})` skips the reaper
   forever; fix with `createdAt is timestamp && createdAt == request.time` (BIN-476→480).
 - Exact-self-leave: `size()==old.size()-1` + `hasAll` + `!(auth.uid in new)` = removed only themself.
+- **A shrink-only guard on ONE branch says nothing about the GROWTH branches on the same array field** — each
+  direction needs its own containment check. `groups/{id}`'s token-join and invite-accept branches bound only
+  `!(uid in old) && uid in new && size() <= 100` (plus the identity/token pins); neither relates the REST of
+  `new` to `old`, so a caller holding a valid join token or invite can write `memberUids: [self]` and evict
+  every existing member including the owner — reachable by a THIRD PARTY, not just the account whose own
+  write it is. Fix: pin `new` as `old ∪ {addedUid}` (or `old.hasAll(new.removeAll([addedUid]))`), never just
+  the added element's membership. FOUND IN REVIEW, BIN-1125 (2026-09-08, filed not fixed — see archive):
+  BIN-1108 hardened the adjacent owner and leave branches against the OWNER
+  freezing themselves out; that fix does not touch and does not worsen this growth-side hole, so shipping it
+  alone is coherent — check every OTHER branch touching the same array field for the mirror-image gap before
+  calling a shrink-only fix complete.
 - Admin report-update rules pin `reporterUid`/`target*`/`reason`/`createdAt` by equality to `resource.data.*`.
   `usernames/{username}` has `allow create`, no `allow update`, so writing an existing doc default-denies —
   so a reservation's `uid` changes only via delete-then-create BY ITS OWNER, and a `where('uid','==',me)`
@@ -222,8 +233,9 @@ Cap: 80k chars — pay for an addition with a cut, and move what you cut verbati
   optional argument, or an intersection done solely in the wrapper, leaves the exported picker electing
   from the roll for the next caller, which is the same hole one call site later. The property to assert
   is the invariant, not the filter: the elected uid must be an element of the array the write itself
-  stores (successor ∈ surviving `memberUids`), which also closes the sibling "owner not in the member
-  array" freeze without a second guard. Two tests, one per direction — a roll entry absent from the
+  stores (successor ∈ surviving `memberUids`). That holds for THIS write and says nothing about the
+  freeze reachable from a client write. Two producers, two
+  answers — and which branches carry the guard is read off the rules, never off a count in a sentence. Two tests, one per direction — a roll entry absent from the
   array must not win, and the array-entry-with-no-roll-row direction pinned to whichever answer was decided.
   **That second direction is a PRODUCT decision with a data-loss residual on both answers — it is not
   yours to settle, and it re-opens at the CALLER.** The array is the access list, so an array entry with no
@@ -529,8 +541,11 @@ Cap: 80k chars — pay for an addition with a cut, and move what you cut verbati
   working, never a surviving copy; count only tracked non-knowledge files (BIN-1063 r3).** The pair also
   shows which half converges in one round: a claim needing measurement gets STRUCK, a field list a rule
   now pins is read straight off the writer and corrected IN PLACE — both landed clean, no new claim minted.
-  Leave a NEIGHBOURING stale enumeration the commit did not falsify alone (`friendRequests`' header line,
-  whose create rule carries no `hasOnly`): re-listing it is how one finding becomes a chain.
+  Leave a NEIGHBOURING stale enumeration the commit did not falsify alone: re-listing it is how one finding
+  becomes a chain. Superseded 2026-09-08 (BIN-1106): the example this carried was `friendRequests`' header
+  line, justified by that create rule carrying no `hasOnly` — it carries one now, so the same header would
+  hand a maintainer an allowlist that denies every real friend request. When a rule starts PINNING a set,
+  every enumeration of that set stops being neighbouring and becomes part of the change.
 - **A cross-reference is only as durable as the LIFECYCLE of what it points at.** `code-style.md` makes
   `tasks/` disposable ("delete plans once implemented"), so a JSDoc in permanent code pointing at
   `tasks/todo.md` for a binding condition is not wrong today and wrong later — it is wrong when written,

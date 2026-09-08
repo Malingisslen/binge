@@ -6,7 +6,8 @@ import { getPublicProfileCards } from './publicProfile';
 //
 // Datamodell (alla under users/{uid}/...):
 // - friends/{targetUid}: { uid: targetUid, since: Timestamp } — bekräftade vänner, speglas
-// - friendRequests/{fromUid}: { sentAt, fromDisplayName, fromPhotoURL? } — incoming
+// - friendRequests/{fromUid}: incoming. Fältmängden står i `sendFriendRequest` nedan och
+//   pinnas av firestore.rules' hasOnly sedan BIN-1106 — den räknas inte upp här också.
 // - friendRequestsSent/{toUid}: { uid: toUid, sentAt } — outgoing-tracking för UI
 //
 // Doc-id = uid på den andre. Gör existens-checks i Firestore-regler triviala.

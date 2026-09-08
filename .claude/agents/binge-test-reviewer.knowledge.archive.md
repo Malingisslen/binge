@@ -27102,3 +27102,83 @@ uncounted or wrongly-counted assertion behind (checked: "every test port" appear
 times across `adminIo.ts`/`logic.ts`/`logic.test.ts`, none of them a numeric claim); the one
 non-blocking item (ancestor `node_modules` resolution) is a documentation suggestion, not a
 gap in test coverage.
+
+## 2026-09-08h — BIN-1106/BIN-1108 re-review (batch 3): friendRequests hasOnly + group-leave guard
+
+**Trigger.** Re-review of a previously-passed batch. My gate patterns match two files —
+`src/lib/firebase/friends.test.ts` and `src/test/rules/firestore-rules.test.ts` — and the
+integration reviewer's report said both are byte-identical to what I passed before, with
+the change entirely in `firestore.rules`, `functions/src/index.ts`, `src/lib/firebase/friends.ts`
+and `.claude/agents/binge-security-reviewer.knowledge.md`.
+
+**Byte-identity check (not taken on faith).** Grepped my own agent's prior `read` rows for
+both paths out of `.claude/state/review-ledger.jsonl` (Bash reads of that file are refused;
+used the Grep tool instead). Last reads, same session `aid a1feb0e094b1f8a3a`:
+- `src/lib/firebase/friends.test.ts` sha `c5afc7dfb7a75efd3a2db6811eda8275b88b654b`
+- `src/test/rules/firestore-rules.test.ts` sha `c93a849d4c06a211bd47f7201bffd2730d744957`
+
+`git rev-parse :<path>` AND `git hash-object <path>` both matched those exact shas for both
+files — index and worktree agree, and both agree with what I last reviewed. The claim held.
+
+**What changed and what I checked regardless of the two gated files being unchanged.**
+`firestore.rules` gained two independent guards in this batch:
+1. BIN-1106 — `users/{uid}/friendRequests/{fromUid}` create now carries
+   `hasOnly(['fromUid','fromDisplayName','fromPhotoURL','fromUsername','sentAt'])`, closing
+   the same "stranger writes arbitrary keys into MY tree, up to Firestore's doc ceiling, and
+   it flows into MY GDPR export verbatim" hole that `friends`/`friendRequestsSent` closed in
+   BIN-1063 steg 2. `firestore-rules.test.ts` (lines ~1124-1156) adds the negative/positive
+   pair: an extra-key create denied, and the EXACT payload `sendFriendRequest` builds
+   accepted. Verified `sendFriendRequest` (`src/lib/firebase/friends.ts:38-63`) is the SOLE
+   `set`/`create` writer to `friendRequests` (grepped `src` and `functions/src` — every other
+   hit is `delete`, `getDoc`/`getDocs`, or a `push` into a delete-refs array in
+   `accountDeletion.ts`) and that its literal 5-key payload matches the rule's allowlist and
+   the test's `toEqual` exactly.
+2. BIN-1108 — an owner can no longer write themselves out of `memberUids` on either branch
+   (owner branch: `hasAll` only forbids growth, so it admitted a self-drop; leave branch:
+   keys only on membership, not ownership). `firestore-rules.test.ts` (lines ~2073-2112)
+   drives BOTH branches independently (owner-branch self-drop denied, leave-branch self-drop
+   denied via the solo-owner-empty case), plus three positive controls (owner removes
+   someone else, owner renames, an ordinary member still leaves) — the shape the knowledge
+   file's dual-guard bullet asks for (mutate/test each branch independently, since
+   co-occurrence can make one provably dead).
+
+**Comment strikes audited, not just diffed.** Two production comments were struck to
+pointers rather than reworded:
+- `src/lib/firebase/friends.ts`'s header dropped its own 3-of-5-field enumeration of
+  `friendRequests` in favor of "the set lives in `sendFriendRequest` below and in
+  `firestore.rules`' hasOnly since BIN-1106" — correct, since the header was already stale
+  (missing `fromPhotoURL`/`fromUsername`) before this diff.
+- `functions/src/index.ts`'s trigger doc-comment dropped its own 4-of-5-field enumeration
+  the same way. Confirmed the trigger's actual code only reads `fromDisplayName` and
+  `fromUsername` off the doc (both inside the pinned set), so the strike doesn't hide a
+  live dependency on a field the new comment no longer names.
+Neither strike left a neighbouring restatement standing: grepped `friendRequests` across
+`src/**` and `functions/src/**` for any other field enumeration — none found beyond the two
+struck comments and the test/rule pins themselves.
+
+**Knowledge-file correction (this pass's own finding, not inherited).** My own bullet under
+"Firestore rules testing" carried the identical stale example the security reviewer's
+knowledge file had: "a sibling whose create carries no `hasOnly` (`friendRequests`) needs no
+key-set pin, and a subset matcher there is not a finding." That sentence is now false —
+`friendRequests` gained exactly that `hasOnly` in this batch. Superseded IN PLACE (not
+reworded elsewhere): the principle (scope the ask by the rule, not the collection) is kept,
+the stale example is replaced with the observation that the verdict is per-rule and expires
+the moment a sibling's create gains `hasOnly`, and `friendRequests`/BIN-1106 is named as the
+worked case. This mirrors the security reviewer's own supersession of the structurally
+identical sentence in its own knowledge file (dated 2026-09-08, confirmed by reading
+`binge-security-reviewer.knowledge.md` directly rather than trusting the batch's description
+of it).
+
+**Not filed.** `docs/workflow-map.html:1449`'s short list — confirmed via the batch's own
+account that `workflow-map-stale.json` already carries a trigger for `firestore.rules`, and
+per CLAUDE.md the map is re-traced and committed on its own commit, not bundled here. Not a
+test-reviewer concern in any case (no `.test.ts`/`.tsx` touches that file).
+
+**Verified, not trusted:** `npm test` — 282 files, 4803 passed, 4 skipped, tree clean before
+and after (`git status --porcelain` empty save for the expected staged set).
+
+**Verdict: pass (0 blocking).** Both re-reviewed files unchanged from a prior pass; the
+widened `hasOnly` is covered by a proper negative/positive pair on the collection it was
+added to, the dual-branch BIN-1108 guard is mutated on both branches with positive controls,
+both comment strikes point at the single writer whose code was checked to match, and my own
+knowledge file's now-false illustrative example was corrected in place with its trace here.
