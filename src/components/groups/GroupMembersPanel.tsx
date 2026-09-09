@@ -132,7 +132,11 @@ function AddMemberSearch({
       setErr('Användaren är redan medlem.');
       return;
     }
-    if (!myUid) return;
+    // BIN-1127: gatad pa `user`, inte bara `myUid`. `useAuth` satter uid synkront
+    // medan profilen ar en getDoc bort, sa ett tidigt klick gav `user == null` och
+    // skickade platshallarordet 'Nagon' som avsandarnamn. Regeln binder nu faltet
+    // mot avsandarens egen profil och hade nekat skrivningen.
+    if (!myUid || !user) return;
     setErr(null);
     setInviting(target.uid);
     try {
@@ -140,7 +144,7 @@ function AddMemberSearch({
         groupId,
         groupName,
         fromUid: myUid,
-        fromDisplayName: user?.displayName ?? 'Någon',
+        fromDisplayName: user.displayName || null,
         targetUid: target.uid,
       });
       setInvited(prev => new Set(prev).add(target.uid));

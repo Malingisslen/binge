@@ -27509,3 +27509,143 @@ group under its existing membership cap — and then additionally overwrite owne
 name/defaults in the same write) and structurally identical to an already-tested
 sibling branch's guard, not a regression this diff introduces or worsens: reported as a
 non-blocking follow-up rather than held against this commit.
+
+## 2026-09-09 — BIN-1127: groupInvites create-hardening — ownerUid pin has zero working coverage
+
+**Diff reviewed:** staged `firestore.rules` narrowing `users/{uid}/groupInvites/{groupId}`'s
+`allow create` (BIN-1127) with `hasOnly` over five fields, `groupId` pinned to the path
+variable, `invitedAt is timestamp`, `groupName is string` + `size() <= 48` + pinned to
+`get(groups/{groupId}).data.name`, and `fromDisplayName` nullable/type/length-bounded and
+bound via `isOwnIdentity`. Paired new `describe('groupInvites create hardening (BIN-1127)')`
+block in `src/test/rules/firestore-rules.test.ts` (19 cases). Companion client diff in
+`src/lib/firebase/groups.ts` / `src/components/groups/GroupMembersPanel.tsx` makes
+`fromDisplayName` nullable and gates the invite button on the caller's own profile being
+loaded, matching the new rule — no test file exists for either (pre-existing gap, not
+introduced here; `src/lib/firebase/` domain modules have no established unit-test
+convention in this repo).
+
+**Baseline:** control run, `firebase emulators:exec --only firestore --project
+demo-binge-rules "vitest run --config vitest.rules.config.ts src/test/rules/firestore-rules.test.ts"`
+→ 341/341 green. Worktree/index hashes confirmed equal before starting
+(`dd613775a228872e5c83f1993f468982625f5b84` firestore.rules,
+`d78262275e56c88371fafd2a71c23e7c5d109c80` the test file).
+
+**Mutations run (all restored from a scratchpad CLEAN copy and re-hash-verified
+`dd613775a2...` after every run):**
+
+1. `hasOnly([...])` deleted → 1 fell ("an extra key is denied"). Confirmed by the ticket.
+2. `invitedAt is timestamp` → mere key presence → 1 fell ("a non-timestamp invitedAt is
+   denied"). Confirmed by the ticket.
+3. `groupName.size() <= 48` → `<= 4800` → 1 fell ("a groupName over 48 chars…"). Confirmed.
+4. `isOwnIdentity(...)` → `true` → 2 fell (identity-mismatch + empty-string cases).
+   Confirmed.
+5. `groupName` pin → `true` → 1 fell ("groupName that does not match the group doc").
+   Confirmed.
+6. `groupId` pin → `true` → 1 fell ("groupId must equal the document id"). Confirmed.
+7. **NEW: `get(groups/{groupId}).data.ownerUid == request.auth.uid` (the LAST clause,
+   the one the rule's own comment calls "Bara gruppens ägare kan bjuda in") → `&& true;`**
+   Ran the full 341-case suite: **341/341 STILL GREEN.** The clause enforcing that only
+   the group's actual owner may create an invite has zero working coverage — it can be
+   deleted outright with the whole suite passing.
+8. Root-caused #7 by inspection then confirmed live: the one test named for this clause,
+   "a non-owner cannot invite into a third party inbox", calls as `other_uid` into
+   `third_uid`'s inbox with `fromDisplayName: 'Agaren'` (the default payload), but
+   `beforeEach` only seeds `users/owner_uid`'s profile, never `users/other_uid`'s. The
+   `isOwnIdentity` clause (which sits BEFORE the ownerUid clause in the `&&` chain) calls
+   `get(/databases/.../documents/users/$(request.auth.uid))` for the CALLER — for
+   `other_uid` that document doesn't exist, so `.data` on it throws, which the emulator
+   evaluates as a deny. The test passes for that reason, never reaching the ownerUid
+   clause at all.
+9. Added a temporary probe test (via the same Edit/restore/hash-verify protocol, never
+   left in the tree) seeding a REAL profile for `other_uid` and sending
+   `fromDisplayName: null` (the documented bypass for `isOwnIdentity`, since `null == null`
+   short-circuits it): `PROBE-1127: non-owner with own valid profile, null
+   fromDisplayName, still denied`. Two runs:
+   - Against the REAL (unmutated, hash-verified) rules: 342/342 green, including the
+     probe — the ownerUid clause genuinely denies it in production.
+   - Against mutation #7 (`ownerUid` pin → `true`): 341 green, **1 red — exactly and
+     only the probe.** This is the fixture that should have been in the ticket's own
+     test: it reaches the clause under test instead of being intercepted upstream.
+   Both files restored and re-hash-verified to the original staged blobs afterward
+   (`git status --porcelain` clean, `git diff --stat` empty).
+10. Boundary-flip probes (not among the six, asked for by the review brief): `groupName
+    .size() <= 48` → `< 48` and `fromDisplayName.size() <= 80` → `< 80`, each run alone
+    and restored. Both reddened EXACTLY their own at-limit positive test ("a groupName of
+    exactly 48 chars is allowed" / "…80 chars is allowed") and nothing else — confirming
+    the comment's claimed reasoning ("the group/profile is seeded with the SAME string
+    that is sent, so only the size bound can fail") holds, and that the at-limit fixtures
+    genuinely exercise the exact `<=` boundary rather than being vacuously true regardless
+    of it.
+
+**Read/delete tests in the block:** pre-existing `read`/`delete` rules on this path are
+UNCHANGED by this diff (only `create` was touched). The block's own comment states
+create/read/delete had ZERO rule tests before this batch, so the two added read/delete
+cases close a real, if unrelated, pre-existing gap — not vacuous (a mutation of either
+guard to `true` or to only the `isOwner` half would be caught by the paired stranger/owner
+fixtures already present), but they pin PRE-EXISTING behavior, not new BIN-1127 logic.
+
+**Verdict:** BLOCKING. The rule's central authorization guard — the one its own comment
+names as the whole point of the change ("Bara gruppens ägare kan bjuda in") — has no
+fixture that fails when it's deleted. Any signed-in user can currently write a
+`groupInvites` doc into ANY other user's inbox, for ANY group whose exact name they can
+supply, without that gap being visible to CI. Remedy: replace or accompany the "a
+non-owner cannot invite into a third party inbox" test with one that seeds the caller's
+OWN profile (or sends `fromDisplayName: null`) so the denial is attributable to the
+ownerUid clause — proven above to redden alone under mutation #7 and stay green against
+the real rule.
+
+Folded into the active principles file's Firestore-rules-testing "Attribution" bullet in
+the same pass, generalizing from "null short-circuit" to "an unseeded attacker profile's
+`get()` THROWS and can mask every clause after it in the `&&` chain, not only identity."
+
+## 2026-09-09 (re-review) — BIN-1127 fix verified: ownerUid gap closed, suite-count discrepancy resolved
+
+**Coordinator's claim:** the previous blocking finding (create-branch `ownerUid` pin
+untestable, masked by an unseeded attacker profile) is fixed. New evidence offered: the
+test `'a non-owner cannot invite into a third party inbox'` renamed to `'a signed-in
+stranger with a fully valid payload cannot invite into a third party inbox'`, now seeding
+`users/other_uid` with a real profile and sending a `fromDisplayName` matching it, so
+`isOwnIdentity` is satisfied and the ownership clause is the only one left standing.
+Claimed control: 467/467 green. Claimed mutant (`ownerUid` pin → `true`): 466 passed / 1
+failed, the named test.
+
+**Re-derivation, independently:**
+1. Confirmed `firestore.rules` unchanged (`dd613775a228872e5c83f1993f468982625f5b84`,
+   matches the hash from the prior review) and the test file changed
+   (`d78262275e5...` → `a5385121039c712715499970339823c22cb86421`), both equal to the
+   staged index.
+2. First control run, scoped to the single file (`vitest run … firestore-rules.test.ts`):
+   **341/341 green — NOT 467.** Treated the discrepancy as a claim to verify per this
+   file's own "verify, never inherit" principle, rather than either trusting it or
+   immediately reporting the coordinator wrong.
+3. Ran the ownerUid mutation against that same scoped file: **340 passed / 1 failed**,
+   the exact named test, exactly like the coordinator's shape (466/467 minus 341/341 is
+   the same ratio, off by the same 126-test gap in both control and mutant) — the
+   qualitative result matched even though the raw numbers didn't, which is the tell that
+   the difference is SCOPE, not fabrication.
+4. Checked `ls src/test/rules/*.test.ts` — 7 files share `vitest.rules.config.ts`'s
+   `include` glob, not 1. Ran the real `npm run test:rules` (all 7 files): **467/467
+   green**, matching the coordinator exactly. Re-ran the ownerUid mutation through the
+   same full command: **466 passed / 1 failed**, same named test, same file — exact match
+   to the coordinator's numbers. Restored and re-hash-verified
+   (`dd613775a228872e5c83f1993f468982625f5b84`) after every run.
+5. Checked the sibling question the coordinator raised: the `delete` branch's own
+   `isOwner(uid) || get(groups/{groupId}).data.ownerUid == request.auth.uid` disjunct.
+   Mutated the second disjunct to `true` (`isOwner(uid) || true`) and ran the scoped
+   file: 340 passed / 1 failed, red-alone on `'the recipient and the group owner can
+   delete it, a stranger cannot'`. No masking here — the delete rule has no identity
+   clause ahead of it that could error out first, so the OR-disjunct is genuinely pinned
+   by the existing "stranger cannot" assertion. Restored, hash-verified.
+6. Walked the `&&`-chain evaluation order for all 19 tests in the block by hand (Firestore
+   rules `&&` short-circuits left-to-right) to check for any OTHER wrong-reason denial the
+   fix might have introduced or left standing — none found; every denial test's payload
+   satisfies every clause positioned before the one its name claims, and the one exception
+   (the renamed non-owner test) is now fixed.
+
+**Verdict:** the previously blocking finding is closed, confirmed by an independent
+re-run producing byte-for-byte the same pass/fail counts and the same failing test name
+as the coordinator's report, through the identical command. No new gap found on the
+`delete` branch or elsewhere in the block. The 467-vs-341 discrepancy was MY under-scoped
+control (one file instead of the full `include` glob), not a false claim — corrected in
+the same pass by folding "check you ran the same command, not a narrower scope" into the
+existing suite-count-verification bullet.

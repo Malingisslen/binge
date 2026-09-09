@@ -681,9 +681,40 @@ service cloud.firestore {
       // Bara mottagaren ser sina inbjudningar.
       allow read: if isOwner(uid);
       // Bara gruppens ägare kan bjuda in, och bara någon annan än sig själv.
+      //
+      // BIN-1127: samma härdning som `friendRequests` fick i BIN-1119/1126, och av
+      // samma skäl — dokumentet skrivs i NÅGON ANNANS träd och sprids ordagrant i
+      // mottagarens GDPR-export (`toExportDocs` i `src/lib/firebase/dataExport.ts`).
+      // Utan nyckellista och värdegränser kunde en gruppägare skriva vad som helst,
+      // i vilken storlek som helst, i vem som helsts inkorg.
+      //
+      // `fromDisplayName` binds mot avsändarens EGEN profil via `isOwnIdentity`.
+      // Det är den halva som har säkerhetsvärde: mottagarens UI slår upp
+      // avsändarens riktiga namn i `publicProfiles`, vars läsregel är gatad på
+      // synlighet. Är avsändaren varken publik eller redan vän faller listan
+      // tillbaka på det här fältet, och utan bindningen kunde en främling låna en
+      // betrodd persons namn.
+      //
+      // `groupName` får en EGEN längdgräns och inte bara en pinning mot
+      // `groups/{groupId}.name` — det fältet har ingen typ- eller längdvalidering i
+      // någon gren, så en pinning ensam hade ärvt en obegränsad källa in i varje
+      // mottagares lagring. Talet är detsamma som formulärens `maxLength`; härled
+      // det med `grep -rn "maxLength={48}" src`.
       allow create: if isSignedIn()
         && uid != request.auth.uid
         && request.resource.data.fromUid == request.auth.uid
+        && request.resource.data.groupId == groupId
+        && request.resource.data.invitedAt is timestamp
+        && request.resource.data.groupName is string
+        && request.resource.data.groupName.size() <= 48
+        && (request.resource.data.get('fromDisplayName', null) == null
+          || (request.resource.data.fromDisplayName is string
+            && request.resource.data.fromDisplayName.size() <= 80))
+        && isOwnIdentity(request.resource.data.get('fromDisplayName', null), null)
+        && request.resource.data.keys().hasOnly(
+          ['groupId', 'groupName', 'fromUid', 'fromDisplayName', 'invitedAt'])
+        && request.resource.data.groupName
+          == get(/databases/$(database)/documents/groups/$(groupId)).data.name
         && get(/databases/$(database)/documents/groups/$(groupId)).data.ownerUid == request.auth.uid;
       allow update: if false;
       // Mottagaren raderar (accept/decline). Ägaren kan dra tillbaka en inbjudan.

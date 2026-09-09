@@ -76,19 +76,22 @@ await check('ägare kan byta namn (memberUids oförändrad)',
     name: 'Nytt namn', updatedAt: 2,
   })));
 
-// Ägaren skapar en inbjudan till bob.
-await check('ägare kan skapa inbjudan till bob',
-  assertSucceeds(setDoc(doc(alice, 'users', 'bob', 'groupInvites', GID), {
+// BIN-1127: de tva groupInvites-create-fallen som stod har ar borttagna. Create-
+// grenen binder numera nyckeluppsattning, typer och langder. `invitedAt: 1` ar
+// inget timestamp, och avsandarens egen profil seedas aldrig har - sa den
+// positiva hade fallit och den negativa nekats av fel klausul. Sokvagen tacks av
+// `groupInvites create hardening (BIN-1127)` i
+// src/test/rules/firestore-rules.test.ts, som kors av `npm run test:rules`.
+//
+// Accept-testet nedan behover fortfarande en inbjudan pa plats. Den seedas nu med
+// reglerna AVSTANGDA, sa testet provar accept-grenens `exists()`-koll och inte
+// create-grenen.
+await testEnv.withSecurityRulesDisabled(async ctx => {
+  await setDoc(doc(ctx.firestore(), 'users', 'bob', 'groupInvites', GID), {
     groupId: GID, groupName: 'Filmklubben', fromUid: 'alice',
     fromDisplayName: 'Alice', invitedAt: 1,
-  })));
-
-// En icke-ägare kan INTE skapa inbjudan.
-await check('icke-ägare kan inte skapa inbjudan',
-  assertFails(setDoc(doc(mallory, 'users', 'bob', 'groupInvites', GID), {
-    groupId: GID, groupName: 'Filmklubben', fromUid: 'mallory',
-    fromDisplayName: 'Mallory', invitedAt: 1,
-  })));
+  });
+});
 
 // Bob accepterar (lägger till sig själv) — inbjudan finns.
 await check('bob kan acceptera (self-add med inbjudan)',

@@ -326,7 +326,9 @@ export async function inviteMemberByUid(params: {
   groupId: string;
   groupName: string;
   fromUid: string;
-  fromDisplayName: string;
+  // Null nar avsandarens profil saknar namn. Aldrig ett platshallarord: regeln
+  // binder faltet mot avsandarens EGEN profil, sa 'Nagon' hade nekats.
+  fromDisplayName: string | null;
   targetUid: string;
 }): Promise<void> {
   const { db, doc, setDoc, serverTimestamp } = await fsdb();
@@ -1114,7 +1116,7 @@ export function subscribeToMyGroupInvites(
           groupId: d.id,
           groupName: (data.groupName as string) ?? 'Grupp',
           fromUid: (data.fromUid as string) ?? '',
-          fromDisplayName: (data.fromDisplayName as string) ?? 'Någon',
+          fromDisplayName: (data.fromDisplayName as string) || 'Någon',
           invitedAt: toDate(data.invitedAt),
         };
       }));

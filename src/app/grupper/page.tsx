@@ -135,10 +135,12 @@ function PendingInvites() {
   );
 }
 
-// Slår upp gruppnamn via groupId och inbjudarens namn via fromUid istället för
-// att lita på klient-satta groupName/fromDisplayName på invite-doc:et (de
-// valideras inte regel-sidigt och är därmed förfalskbara). Faller tillbaka till
-// de denormaliserade fälten om uppslaget inte är läsbart.
+// Slår upp gruppnamn via groupId och inbjudarens namn via fromUid, och faller
+// tillbaka till de denormaliserade fälten på invite-doc:et när uppslaget inte är
+// läsbart. Uppslagningen av avsändarnamnet är gatad på synlighet: är avsändaren
+// varken publik eller redan vän går profilen inte att läsa och fallbacken går in.
+// Därför binder create-regeln fältet i stället (BIN-1127; se `groupInvites` i
+// firestore.rules).
 function useInviteIdentity(invite: GroupInvite) {
   const groupQuery = useQuery({
     queryKey: ['invite-group-name', invite.groupId],

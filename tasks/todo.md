@@ -1,3 +1,375 @@
+# Sprinten 2026-09-09 - sju biljetter i fyra buntar
+
+Urval: 26 oppna biljetter i Backlog, noll i Todo/In Progress. Premisskontrollen
+kordes mot HEAD for varje kandidat innan nagon valdes. Sex premisser star kvar;
+BIN-1124:s ar DELVIS BORTA och biljetten skrivs om fore bygget (se bunt 2).
+Kommentarstradarna pa alla sju ar tomma - ingen parkerad handbroms.
+
+## Routning - kord pa varje bunts faktiska filunion
+
+Talen nedan ar fran urvalet. De far aldrig arvas in i ett senare varv: routas om
+omedelbart fore varje kritik och fore varje commit med
+`node docs/org/route.mjs $(git diff --cached --name-only)`.
+
+- Bunt 1: `tier: top`, `panel: [27, 5, 4, 6, 18]`, `reasonCode: high-stakes`
+  (`firestore.rules`).
+- Bunt 2: `tier: medium`, `panel: [8]`, `reasonCode: owned`.
+- Bunt 3: `tier: medium`, `panel: [5]`, `reasonCode: owned`.
+- Bunt 4: `tier: medium`, `panel: [14]`, `reasonCode: owned`.
+
+Bunt 3 och 4 ar SPLITTADE ur en gemensam bunt just for att routningen ska
+stamma: unionen av deras filer routar `[14]` och lamnar #5 Legal i `dropped`,
+vilket hade byggt en integritetspolicytext utan den agande rollen.
+
+Den har sessionen kan konvenera bade en enskild kritik och en full panel, sa
+ingen bunt behover parkeras for utebliven kapacitet.
+
+---
+
+## Bunt 1 - firestore.rules: tre hal i vanner och grupper [Tier C]
+
+Kritik: full panel `[27, 5, 4, 6, 18]`, blint, fore bygget.
+
+### BIN-1125 - den som gar med i en grupp kan skriva bort alla andra
+
+Premiss verifierad vid HEAD: bada vaxtgrenarna kraver att skribenten star i den
+NYA listan och inte i den gamla, men relaterar inget ovrigt mellan dem. Harled
+dem sjalv med ett kommando som soker efter grenrubrikerna i `firestore.rules`.
+
+- [ ] Villkor som binder den nya listan till den gamla pa bada vaxtgrenarna.
+- [ ] Mat formen mot regelsprakets faktiska version innan den skrivs in -
+      sarskilt att `removeAll` finns, och att storleksvillkoret inte krockar
+      med det befintliga taket.
+- [ ] Emulatortest per gren: kan inte ta bort nagon annan i samma skrivning.
+- [ ] Emulatortest per gren: en vanlig anslutning gar fortfarande igenom.
+
+Acceptans:
+1. Ett emulatortest visar att en som gar med via token inte kan ta bort nagon
+   annan i samma skrivning. *(diff)*
+2. Samma for invite-accept-grenen. *(diff)*
+3. En vanlig anslutning gar fortfarande igenom pa bada grenarna. *(diff)*
+4. Muteringen som tar bort det nya villkoret faller minst ett test PER GREN.
+   *(diff)*
+
+### BIN-1119 - friendRequests har inga vardegranser
+
+Premiss verifierad vid HEAD: create-grenen har en nyckelbegransning och ett
+typkrav pa visningsnamnet, inget mer.
+
+- [ ] Harled gransen ur profilreglernas egen validering i `firestore.rules` -
+      skriv ingen andra siffra.
+- [ ] Kontrollera mot `sendFriendRequest` i `src/lib/firebase/friends.ts` att
+      ingen skarp nyttolast hamnar utanfor gransen.
+- [ ] Stall samma fraga till `friends` och `friendRequestsSent`; svara i
+      biljetten oavsett vilket svaret blir.
+
+Acceptans:
+1. Ett emulatortest visar att ett overlangt `fromDisplayName` nekas. *(diff)*
+2. Ett emulatortest visar att den nyttolast `sendFriendRequest` faktiskt bygger
+   fortfarande gar igenom. *(diff)*
+3. Gransen ar samma konstant profilreglerna anvander, inte en andra siffra.
+   *(diff)*
+4. Muteringen som tar bort vardegransen faller minst ett test. *(diff)*
+5. Samma fraga stalld till `friends` och `friendRequestsSent`; galler den dar
+   ocksa sags det, annars sags varfor inte. *(diff)*
+
+### BIN-1126 - en vanforfragan binds inte till avsandarens egen profil
+
+Premiss verifierad vid HEAD: identitetsjamforelsen finns och anvands av
+recensioner, kommentarer och reaktioner - men inte av `friendRequests`.
+
+- [ ] Mat kostnaden for bindningsvagen INNAN losningen valjs: ett `get()` per
+      skriven vanforfragan. Las den accepterade avvikelsen om
+      `effectiveVisibility` i `.claude/rules/accepted-deviations.md`, dar ett
+      korsdokument-`get()` avvisades av kostnadsskal.
+- [ ] Vag mot cache-vagen: lat notis och UI lasa avsandarens profil i stallet,
+      sa falten inte kan ljuga.
+- [ ] Kontrollera vilket dokument identitetsjamforelsen faktiskt laser innan en
+      mening skrivs om vilket det ar.
+- [ ] Skriv ned det valda alternativet och skalet i biljetten.
+
+Acceptans:
+1. Ett emulatortest visar att en vanforfragan med ett `fromDisplayName` som
+   inte ar avsandarens nekas - eller, om cache-vagen valjs, att UI och notis
+   inte langre laser faltet. *(diff)*
+2. En akta vanforfragan gar fortfarande igenom. *(diff)*
+3. Kostnaden per skrivning ar matt och nedskriven innan losningen valjs.
+   *(diff)*
+4. Muteringen som tar bort bindningen faller minst ett test. *(diff)*
+
+Bunt 1 avslutas med en manuell regel-deploy - `deploy.yml` skeppar bara hosting.
+
+---
+
+## Bunt 2 - tva grindar som inte nar sina filer [Tier A]
+
+Kritik: en blind fran den roll routern namner for buntens faktiska filunion.
+
+### BIN-1124 - PREMISSEN AR DELVIS BORTA, biljetten skrivs om forst
+
+Biljetten pastar att `functions/package.json` nar NOLL granskare. Vid HEAD ar
+det falskt: sakerhetsgranskaren nar den via ett katalogmonster. Kommandot i
+biljettkroppen svarar alltsa redan med en granskare, sa dess acceptanskriterium
+1 ar uppfyllt utan att nagot byggs.
+
+Det som ar SANT vid HEAD, harlett med samma slags kommando: helhetsgranskaren
+nar rotens manifest och funktionernas lasfil, men inte funktionernas manifest.
+Det ar asymmetrin som star kvar.
+
+- [x] Skriv om biljettkroppen i Linear till den matta luckan FORE bygget.
+- [x] Ge helhetsgranskaren en post som nar `functions/package.json`.
+- [x] Stageat prov: bara den filen andrad, och granskaren blockerar. Kort i BADA
+      riktningarna mot samma stageade bytes, mot den skarpa commit-hooken.
+
+Acceptans:
+1. Helhetsgranskaren nar `functions/package.json`, bevisat med det harledande
+   kommandot. *(diff)*
+2. Ett stageat prov med bara den filen andrad blockeras av den granskaren.
+   *(diff)*
+3. Symmetritestet ar gront efter andringen. Router-sidan matt 2026-09-09 med
+   `node docs/org/route.mjs` pa vardera manifestet: bada svarar med samma agande
+   roll, sa den sidan var REDAN symmetrisk och andras inte. Kriteriets krav pa en
+   router-andring ar struket, inte omformulerat - det gick inte att uppfylla.
+   *(diff)*
+4. Ingen mening som raknar upp vilka nycklar konfigen har - peka pa posten och
+   lat listan harledas. *(diff)*
+
+### BIN-1122 - publicerade kommandon kan oppna fel databas
+
+Mangden harleds med ett kommando som soker efter gcloud-formen i sparade
+`.md`-filer och filtrerar bort dem som redan namnger sitt projekt. Kor det och
+las utdatan innan en rad skrivs; mangden ar daterad, inte permanent.
+
+- [ ] Ett golv som laser SPARADE `.md`-filer och kraver att ett korbart
+      kommando som oppnar en Firestore namnger sitt projekt.
+- [ ] Formen harleds over bada kommandofamiljerna - Admin-SDK:t namnger
+      projektet i ett objekt, gcloud i en flagga. Ett monster som bara kan
+      den ena ar samma defekt igen.
+- [ ] Prosa faller ingenting: `tasks/lessons.md` beskriver faran och namner
+      uttrycket. Bevisa med lardomsfilen som fixtur.
+- [ ] `*.knowledge.archive.md` star utanfor.
+- [ ] Ratta varje traff kommandot ger.
+
+Acceptans:
+1. Ett publicerat, korbart kommando i en sparad `.md` som oppnar en Firestore
+   utan att namna sitt projekt faller ett test - bevisat for BADA formerna.
+   *(diff)*
+2. Muteringen som ateranfor den projektlosa formen i `docs/recaps/RUNBOOK.md`
+   faller exakt det testet. *(diff)*
+3. Varje traff kommandot ger namnger sitt projekt nar biljetten stangs.
+   *(diff)*
+4. Prosa som beskriver hazarden faller ingenting - bevisat med lardomsfilen
+   som fixtur. *(diff)*
+5. Golvet laser sparade filer, sa en osparad kopia gor det aldrig permanent
+   rott. *(diff)*
+
+---
+
+## Bunt 3 - integritetspolicyn lovar en radering som inte sker [Tier B]
+
+Kritik: en blind fran #5 Legal / GDPR Counsel. Routa om pa den faktiska
+unionen omedelbart fore kritiken - buntens filuppsattning ar inte fastslagen
+forran retentionsdokumentet ar kontrollerat.
+
+Disposition: **build-review**. Texten ar publicerad juridik som Malin ager;
+den byggs, men parkeras i In Review i stallet for att stangas.
+
+### BIN-1115 - policyn sager att grupper du ager RADERAS
+
+Premiss verifierad vid HEAD: meningen star kvar i
+`src/app/integritet/page.tsx`. Beteendet harleds ur `functions/src`, inte ur
+biljetten.
+
+- [ ] Las `.claude/rules/accepted-deviations.md`, posterna daterade
+      2026-09-07, som beskriver vad de tva dorrarna gor och inte gor.
+- [ ] Skriv om halvmeningen sa den beskriver overlamningen.
+- [ ] Sag ocksa vad som hander med en agd grupp UTAN kvarvarande medlemmar.
+- [ ] Kontrollera `docs/data-retention-policy.md` mot samma fraga; star samma
+      pastaende dar rattas det i samma commit.
+
+Acceptans:
+1. Avsnittet beskriver overlamningen, inte en radering, for en agd grupp med
+   kvarvarande medlemmar. *(diff)*
+2. Texten sager ocksa vad som hander med en agd grupp utan kvarvarande
+   medlemmar. *(diff)*
+3. Ingen ny mening som raknar upp samlingar eller antal. *(diff)*
+4. `docs/data-retention-policy.md` kontrollerad mot samma fraga. *(diff)*
+
+---
+
+## Bunt 4 - en falsk sats i WatchlistContext [Tier A]
+
+Kritik: en blind fran #14 Software Architect.
+
+### BIN-1112 - satsen om att ingenting nagonsin hittar dokumentet
+
+Premiss verifierad vid HEAD: satsen star kvar i
+`src/contexts/WatchlistContext.tsx`.
+
+- [ ] STRYK satsen. Skriv INGEN ny mening om att BIN-1023 hittar den efter
+      sitt fonster - det ar ett nytt pastaende granskaren da maste mata.
+- [ ] Halvan fore ar sann och star kvar.
+- [ ] Kontrollera att strykningen inte lamnar grannstycket utan subjekt.
+
+Acceptans:
+1. Satsen finns inte kvar. *(diff)*
+2. Ingen ny mening om vad som hittar dokumentet har lagts till. *(diff)*
+
+---
+
+## Behover dig (Tier D / needs-approval)
+
+- **BIN-1116** - `.agents/skills/recap/` ar en osparad dubblett. Biljetten sager
+  sjalv "Kraver ett beslut, inte ett bygge" och att en sprint inte raderar filer
+  i ditt arbetstrad pa egen hand. Ligger kvar tills du svarar: radera eller
+  spara.
+- **BIN-1118** (`Feature`) och **BIN-521** (`idea`) - produktval som ar dina.
+  Byggs aldrig av en sprint.
+- **BIN-454 / BIN-402** - tmdbTosSweep-utrullningen. Star under "gor aldrig
+  detta" i CLAUDE.md; en sprint far inte rora den.
+- **BIN-1121** - matning mot skarp produktionsdata.
+- `.codex/` ligger osparat i arbetstradet och namns inte av nagon biljett.
+  Roras inte av den har sprinten.
+
+## Bunt 5 - BIN-1127: gruppinbjudningarnas create-gren [Tier C]
+
+Tillagd efter urvalet, pa Malins "ta det direkt nu".
+
+Routning pa buntens FAKTISKA union, kord fore commit:
+
+```
+node docs/org/route.mjs $(git diff --cached --name-only)
+```
+
+Unionen vaxte med tva klientfiler efter kritiken. Las panelen ur kommandots
+utdata, inte ur en mening har.
+
+### Bindande acceptanskriterier ur den blinda kritiken
+
+1. Nyckellista och vardegranser pa create: `hasOnly` over de fem falten, `groupId`
+   pinnad mot sokvagen, `invitedAt is timestamp`, `fromDisplayName` bunden via
+   `isOwnIdentity` plus egen typ- och langdgrans.
+2. `groupName` far en EGEN grans, inte bara en pinning (DPO, blockerande; samma
+   fynd oberoende fran Security, DBA och QA). Kallan `groups/{id}.name` har ingen
+   typ- eller langdvalidering i nagon gren, sa en pinning ensam hade arvt en
+   obegransad kalla in i varje mottagares lagring och GDPR-export. Foljdbiljett pa
+   kallan: BIN-1140.
+3. Klientens inbjudningsknapp gatas pa den laddade profilen (DBA, blockerande).
+   `handleInvite` gatade bara pa `myUid`; `user` ar en getDoc bort, sa ett tidigt
+   klick skickade platshallarordet som avsandarnamn - vilket den nya regeln nekar.
+   Samma monster som `useFriendActions` redan bar.
+4. Grundsvit, inte bara granstester (QA). Varje nekande-test seedar bade
+   gruppdokumentet och avsandarens egen profil, sa nekandet bevisligen kommer fran
+   den klausul testet namnger. Det handkorda `scripts/test-rules.mjs` hade tva
+   egna create-fall; de ar borttagna i samma commit och tacks nu av
+   emulatorsviten.
+
+### Bevis
+
+`npm run test:rules`: 467 grona (var 448). Muteringarna nedan korda en i taget, var
+och en med mutanten asserterad fore OCH efter sviten, tradet aterstallt fran en
+arbetstradskopia och verifierat med `git hash-object`. Tabellen ar protokollet:
+
+| Mutation | Fallda test |
+|---|---|
+| `hasOnly` borttagen | 1 |
+| `invitedAt is timestamp` -> bara nyckelnarvaro | 1 |
+| `groupName.size() <= 48` -> `<= 4800` | 1 |
+| `isOwnIdentity(...)` -> `true` | 2 |
+| `groupName`-pinningen -> `true` | 1 |
+| `groupId`-pinningen -> `true` | 1 |
+| agarkollen (`ownerUid == request.auth.uid`) -> `true` | 1 |
+
+Den sista raden kom av testgranskarens blockerande fynd: agarkollen gick att
+radera med hela sviten gron. Nekande-testet for en utomstaende seedade inte
+ANROPARENS egen profil, sa `isOwnIdentity`s `get()` kastade pa ett dokument som
+inte finns och nekandet kom darifran - fore agarkollen i `&&`-kedjan. Testet
+seedar nu den profilen och skickar en i ovrigt giltig payload, sa agarkollen ar
+den enda klausul som kan falla.
+
+Produktionsmatning 2026-09-09: noll grupper i `binge-nu`, sa 48-gransen kan inte
+neka nagon befintlig grupp.
+
+### Foljdbiljetter filade fore commit
+
+BIN-1140, BIN-1141, BIN-1142, BIN-1143, BIN-1144, BIN-1145.
+
+## Efter sprinten
+
+- [ ] Fila foljdbiljetter FORE commit.
+- [ ] Commit per bunt, med granskarna den stageade diffen utloser.
+- [ ] Push-grinden ar ett EGET granskningsvarv over hela `@{u}..HEAD` - inte
+      summan av bunt-granskningarna. Budgetera det darefter.
+- [ ] Manuell regel-deploy efter bunt 1.
+- [ ] Linear-overgang per bunt, skriven av den som haller shan.
+
+## Deviation log
+
+- [discovery] Bunt 1:s FAKTISKA stageade union routar `panel: [27, 5, 4, 6, 7]`, inte
+  urvalets `[27, 5, 4, 6, 18]`. Testfilen och de tva klientfilerna kom in i unionen
+  och #7 QA bytte plats med #18. Bada har kritiserat: #18 fran urvalet, #7 pa den
+  stageade unionen fore commit. Kommandot ar
+  `node docs/org/route.mjs $(git diff --cached --name-only)`.
+- [deviation] BIN-1126: panelen delade sig 2-3 mellan bindning i regeln (a) och att
+  lita pa uppslagning i stallet (b). Delningen berodde pa en FAKTAFRAGA, inte pa en
+  vardering: #6 och #18 utgick fran att UI:t redan slar upp avsandarens riktiga
+  profil, #4 matte att den lasningen ar gatad pa synlighet och alltsa faller tillbaka
+  pa det forfalskbara faltet for en PRIVAT avsandare. Byggt: bindningen (a) OCH den
+  auktoritativa uppslagningen i notisen, eftersom (a) inte nar dokument skrivna fore
+  deployen och (b) inte nar en privat avsandare.
+- [deviation] BIN-1119: #6 ville binda `fromUsername` mot teckenmonstret
+  `isValidUsername`. Byggt som typ + langd i stallet. Skalet star i regeln: faltet ar
+  en visnings-cache, och `users/{uid}.username` valideras inte av nagon regel, sa ett
+  monsterkrav hade kunnat neka en akta forfragan. #18:s villkor om att en for snav
+  grans ar den dyrare felriktningen vagde tyngre an #6:s.
+- [discovery] `sentAt` hade INGEN typkontroll. `hasOnly` slapper igenom nyckeln, sa
+  hela nyttolasten kunde ha lagts dar och varje annan vardegrans varit verkningslos.
+  Ingen av de fem rollerna namnde den; hittad vid bygget.
+
+- [discovery] BIN-1126: UI:t slar REDAN upp avsandarens riktiga profil i
+  `src/hooks/useSenderProfile.ts` och faller tillbaka pa de lagrade falten bara nar
+  profilen inte gar att lasa. Uppmatt av #6:s blinda kritik. #4 matte sedan att den
+  uppslagningen ar gatad pa synlighet, sa fallbacken gar in for varje PRIVAT
+  avsandare - darav bindningen i regeln, inte bara en uppslagning i notisen.
+- [correction] Tva pastaenden jag skrev har ar STRUKNA, inte omformulerade, efter
+  helhetsgranskningen:
+  * att push-notisen var den enda kvarvarande forfalskningsvagen (den ar lagad i
+    samma bunt, och UI:ts fallback var den andra);
+  * att klienten skrev ett LITTERALT reservnamn som en bindning darfor hade nekat.
+    Den grenen var onabar: `UserProfile.displayName` ar typad som en strang och
+    sätts med `?? ''`, sa ett konto utan namn bar en TOM STRANG och den gamla
+    `??`-grenen kunde aldrig losa ut. Harled det med
+    `grep -n "displayName" src/types/domain.ts src/contexts/AuthContext.tsx`.
+- [deviation] BIN-1125: den form biljetten foreslog (`removeAll` + storlek + 1)
+  gar att kringga med en DUBBLETT. Nya listan `[jag, jag]` mot gamla `[agare]`
+  uppfyller alla fyra villkoren och skriver bort agaren. Formen som halls i
+  stallet ar `nya.hasAll(gamla)` + `storlek(nya) == storlek(gamla) + 1`, som
+  bade utesluter dubbletten och ger #5:s villkor att agaren star kvar.
+- [discovery] BIN-1127: tva av fem roller lamnade blockerande villkor som INTE stod
+  i biljetten, och bada lag utanfor den filuppsattning biljetten namnde - det ena i
+  klientkoden, det andra en niva upp i regelfilen. Buntens union vaxte darfor efter
+  kritiken; routern kord om pa den faktiska unionen.
+- [discovery] BIN-1127: en kvarglomd Firestore-emulator fran ett tidigare
+  granskningsvarv holl port 8080, sa `npm run test:rules` inte gick att starta.
+  Felmeddelandet pekar pa porten, inte pa orsaken.
+- [correction] Ett pastaende i `src/app/grupper/page.tsx` ar STRUKET, inte
+  omformulerat: kommentaren sa att `groupName` och `fromDisplayName` inte valideras
+  regel-sidigt och darfor ar forfalskbara. Bada binds nu av create-grenen.
+- [deviation] BIN-1127: mina sex forsta muteringar provade de NYA klausulerna och
+  missade att den BEFINTLIGA agarkollen blivit otestbar av mitt eget nya test.
+  Ett nekande-test bevisar ingenting om vilken klausul som nekade forran fixturen
+  nar fram till den. Hittat av testgranskaren, inte av mig.
+- [discovery] BIN-1127: `scripts/test-rules.mjs` kors av ingen automatik och ar
+  rott redan vid HEAD pa ett Tillsammans-fall som bunten inte ror. Mott bada
+  vagarna med samma kommando: 21 passerade / 1 fallde vid HEAD, 19 / 1 med
+  bunten (tva farre for att bunten tog bort skriptets tva groupInvites-fall).
+  Filad som BIN-1145. Accept-testet dar behovde en inbjudan som de borttagna
+  fallen rakade skapa; den seedas nu med reglerna avstangda, sa testet provar
+  accept-grenen och inte create-grenen.
+
+
+---
+
 # Sprinten 2026-09-08 - sju biljetter i tre buntar
 
 Urval: 21 oppna biljetter i Backlog, noll i Todo/In Progress. Premisskontrollen
@@ -207,6 +579,17 @@ BIN-559, BIN-402.
 
 ## Deviation log
 
+- [leverans] Alla tre buntar shippade och pushade 2026-09-08: 68275c9, 103e30d,
+  36317c7, plus kartans egen commit 06ee9cb. Deployen ar RÖD med flit -
+  skyddet "Guard - rules/functions changed" stoppar hela korningen nar
+  `firestore.rules` eller `functions/**` andrats, sa HOSTING deployades INTE och
+  cachen ar inte rensad. Malin kor `firebase deploy --only firestore:rules` och
+  `--only functions` for hand; darefter kors hosting om.
+- [oppet] Push-grinden hittade en falsk mening i `firestore.rules` och en i
+  regeltestet: bada pastar att `handOverOwnedGroups` ar en frivillig vag ut for
+  en agare. Klientomslaget tar inget gruppargument och anropas bara av
+  kontoraderingen. Icke-blockerande, sa den ligger kvar pa main - noterad pa
+  BIN-1118 med instruktionen att STRYKA bada.
 - [routning] Bunt 3: buntens FAKTISKA filunion routar till panel [27, 5, 4, 6, 7],
   inte till urvalets [27, 5, 4, 6, 18]. `src/test/rules/firestore-rules.test.ts`
   drar in #7 QA/Test, och #18 faller ur. #7 har alltsa inte kritiserat arbetet, sa
@@ -274,9 +657,9 @@ BIN-559, BIN-402.
   beskriva den en gang till.
 - [rattelse] Min mening att inline-kommandot var den ENDA Firestore-oppnande formen
   utanfor `functions/scripts/` var falsk. Den andra svepningen var nycklad pa
-  `applicationDefault()`, och `gcloud`-formen innehaller inte det uttrycket alls -
-  `docs/RUNBOOK.md:171` aterstaller en HEL databas utan att namnge projekt. Vidgat in
-  i BIN-1122, inte lagat har.
+  `applicationDefault()`, och `gcloud`-formen innehaller inte det uttrycket alls - en
+  aterstallning av en HEL databas i `docs/RUNBOOK.md` namngav inget projekt. Vidgat in
+  i BIN-1122 och lagat dar; radnumret ar struket, det gick inaktuellt i samma commit.
 - [kritik] Bunt 1, helhetsgranskningen: TRE fynd, alla i min egen prosa, inget i
   koden. (a) Ett publicerat kommando i `tasks/recap-50-shows-progress.md` - en fil
   bunten inte ror - slutade fungera av min andring; migrerad. (b) "de tva testen

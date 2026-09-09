@@ -2201,6 +2201,130 @@ async function seedInvite(uid: string) {
   });
 }
 
+// BIN-1127 - groupInvites create-harden. Fore den har bunten band create varken
+// nyckeluppsattning, typer eller langder: en gruppagare kunde skriva vad som
+// helst i vem som helsts inkorg, och dokumentet gar rakt in i mottagarens
+// GDPR-export.
+//
+// Varje nekande-test seedar bade gruppdokumentet OCH avsandarens egen profil.
+// Utan det nekar identitetsklausulen forst och testet blir gront av fel skal -
+// samma falla BIN-1126 dokumenterade for friendRequests.
+const INVITEE = 'other_uid';
+
+async function seedInviterProfile(fields: Record<string, unknown>) {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'users', OWNER), fields);
+  });
+}
+function invitePayload(over: Record<string, unknown> = {}) {
+  return {
+    groupId: GROUP, groupName: 'Filmklubben', fromUid: OWNER,
+    fromDisplayName: 'Agaren', invitedAt: serverTimestamp(), ...over,
+  };
+}
+function writeInvite(over: Record<string, unknown> = {}, target = INVITEE) {
+  return setDoc(doc(ownerDb(), 'users', target, 'groupInvites', GROUP), invitePayload(over));
+}
+
+describe('groupInvites create hardening (BIN-1127)', () => {
+  beforeEach(async () => {
+    await seedGroup();
+    await seedInviterProfile({ displayName: 'Agaren' });
+  });
+
+  it('the group owner can invite another user', async () => {
+    await assertSucceeds(writeInvite());
+  });
+  // Den som ropar maste ha en EGEN profil seedad, annars kastar `isOwnIdentity`s
+  // `get()` pa ett dokument som inte finns och nekandet kommer darifran i stallet
+  // for fran agarkollen - som da gar att radera med hela sviten gron. Payloaden ar
+  // i ovrigt giltig (gruppnamnet matchar gruppdokumentet, avsandarnamnet matchar
+  // den egna profilen), sa agarkollen ar den enda klausul som kan falla.
+  it('a signed-in stranger with a fully valid payload cannot invite into a third party inbox', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', 'other_uid'), { displayName: 'Frammling' });
+    });
+    await assertFails(setDoc(
+      doc(otherDb(), 'users', 'third_uid', 'groupInvites', GROUP),
+      invitePayload({ fromUid: 'other_uid', fromDisplayName: 'Frammling' }),
+    ));
+  });
+  it('the owner cannot invite themselves', async () => {
+    await assertFails(writeInvite({}, OWNER));
+  });
+  it('fromUid must be the caller', async () => {
+    await assertFails(writeInvite({ fromUid: 'someone_else' }));
+  });
+  it('groupId must equal the document id', async () => {
+    await assertFails(writeInvite({ groupId: 'another_group' }));
+  });
+  it('an extra key is denied', async () => {
+    await assertFails(writeInvite({ payload: 'x'.repeat(500) }));
+  });
+  it('a missing invitedAt is denied', async () => {
+    await assertFails(setDoc(
+      doc(ownerDb(), 'users', INVITEE, 'groupInvites', GROUP),
+      { groupId: GROUP, groupName: 'Filmklubben', fromUid: OWNER, fromDisplayName: 'Agaren' },
+    ));
+  });
+  it('a non-timestamp invitedAt is denied', async () => {
+    await assertFails(writeInvite({ invitedAt: 'igar' }));
+  });
+  it('a groupName that does not match the group document is denied', async () => {
+    await assertFails(writeInvite({ groupName: 'En annan grupp' }));
+  });
+  it('a non-string groupName is denied', async () => {
+    await assertFails(writeInvite({ groupName: 42 }));
+  });
+
+  // Langdgransen mates for sig: gruppen seedas med SAMMA strang som skickas, sa
+  // pinningen mot groups/{id}.name ar uppfylld och bara storleken kan falla.
+  it('a groupName over 48 chars is denied even when it matches the group doc', async () => {
+    const tooLong = 'g'.repeat(49);
+    await seedGroup({ name: tooLong });
+    await assertFails(writeInvite({ groupName: tooLong }));
+  });
+  it('a groupName of exactly 48 chars is allowed', async () => {
+    const atLimit = 'g'.repeat(48);
+    await seedGroup({ name: atLimit });
+    await assertSucceeds(writeInvite({ groupName: atLimit }));
+  });
+
+  it('a fromDisplayName that does not match the sender profile is denied', async () => {
+    await assertFails(writeInvite({ fromDisplayName: 'Malin' }));
+  });
+  it('a null fromDisplayName is allowed when the profile has no name', async () => {
+    await seedInviterProfile({ username: 'agaren' });
+    await assertSucceeds(writeInvite({ fromDisplayName: null }));
+  });
+  it('an empty-string fromDisplayName is denied when the profile has a name', async () => {
+    await assertFails(writeInvite({ fromDisplayName: '' }));
+  });
+  it('a fromDisplayName over 80 chars is denied even when it matches the profile', async () => {
+    const tooLong = 'n'.repeat(81);
+    await seedInviterProfile({ displayName: tooLong });
+    await assertFails(writeInvite({ fromDisplayName: tooLong }));
+  });
+  it('a fromDisplayName of exactly 80 chars is allowed', async () => {
+    const atLimit = 'n'.repeat(80);
+    await seedInviterProfile({ displayName: atLimit });
+    await assertSucceeds(writeInvite({ fromDisplayName: atLimit }));
+  });
+
+  it('only the recipient can read their invite', async () => {
+    await seedInvite(INVITEE);
+    await assertSucceeds(getDoc(doc(otherDb(), 'users', INVITEE, 'groupInvites', GROUP)));
+    await assertFails(getDoc(doc(ownerDb(), 'users', INVITEE, 'groupInvites', GROUP)));
+  });
+  it('the recipient and the group owner can delete it, a stranger cannot', async () => {
+    await seedInvite(INVITEE);
+    await assertFails(deleteDoc(doc(testEnv.authenticatedContext('third_uid').firestore(), 'users', INVITEE, 'groupInvites', GROUP)));
+    await assertSucceeds(deleteDoc(doc(ownerDb(), 'users', INVITEE, 'groupInvites', GROUP)));
+    await seedInvite(INVITEE);
+    await assertSucceeds(deleteDoc(doc(otherDb(), 'users', INVITEE, 'groupInvites', GROUP)));
+  });
+});
+
 describe('groups/{id} owner-update hardening (BIN-276)', () => {
   it('owner can remove a member (shrink memberUids)', async () => {
     await seedGroup({ memberUids: [OWNER, 'm2'] });
