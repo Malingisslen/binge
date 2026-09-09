@@ -123,8 +123,8 @@ high-stakes list + tier rules below are the spec; `route.mjs` is their executabl
 **The router does not clear itself (BIN-805, founder's call 2026-08-08).** `CODE_ROOTS`
 mirrors the repo's own production globs, so `docs/` and `scripts/` are not code — which
 meant `docs/org/route.mjs`, the file that decides who reviews everything else, routed
-`skip`. Narrow exception, not a widening: `route.mjs`, its test, and the gate scripts
-(`scripts/check-workflow-map.mjs` + its test) count as code; the rest of `docs/` and
+`skip`. Narrow exception, not a widening: `route.mjs`, its test, and the gate scripts count
+as code — the set is `TOOLING_CODE_FILES` in `docs/org/route.mjs`; the rest of `docs/` and
 `scripts/` routes exactly as before, so an ordinary helper-script tweak still pulls in no
 reviewer. Because `docs/` belongs to Technical Writer #21, such a path IS owned — so the
 tier now asks whether a *code* role owns it, and code owned only by #21 seats

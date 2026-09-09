@@ -145,6 +145,16 @@ export const TOOLING_CODE_FILES = new Set([
   // blocks, and widening one has never widened the other.
   'scripts/bundle-report.mjs',
   'scripts/bundle-report.test.mjs',
+  // BIN-1122. The floor that refuses a published command which opens a Firestore without
+  // naming the project. What it guards is text an operator pastes during an incident —
+  // among it, a command that restores a whole database — so a weakening here is invisible in
+  // every diff of executing code. Added in the SAME commit as its `reviewGates` pattern, per
+  // BIN-830, and for the reason BIN-1088 recorded: a new .mjs under scripts/
+  // matches no gate pattern while its own `.test.mjs` sibling is already picked up by the
+  // test reviewer, so without both halves the check's LOGIC reaches main unreviewed while its
+  // test does not.
+  'scripts/check-published-commands.mjs',
+  'scripts/check-published-commands.test.mjs',
   // BIN-1063 steg 2. Engangs-backfillen som skriver motpartens uid som ett falt
   // pa friends/friendRequestsSent. Den kor med Admin SDK och forbigar darmed
   // firestore.rules helt — den ar det enda som kan skriva de raderna, eftersom

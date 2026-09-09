@@ -635,9 +635,9 @@ Owns the process.
   → `functions/package.json`, `functions/package-lock.json`
 - **The remaining check scripts under scripts/** (BIN-1080). Same class as `lefthook.yml`
   and the staged-routing gate above: they decide how the repo is checked, and
-  check-workflow-map.mjs gates the deploy. A script under scripts/ whose concern is a
-  security control sits with #4 instead, and §4’s own bullets are where those are named;
-  no list of them is kept here. File names in this bullet are written without backticks for
+  check-workflow-map.mjs gates the deploy. A script under scripts/ whose concern belongs to
+  another role sits with that role, named in its own bullets; no list of them is kept here,
+  and the arrow below is what this bullet claims. File names in this bullet are written without backticks for
   the same reason the lockfile is: the generator harvests backtick-quoted tracked paths, so
   naming a file in a sentence that declines to own it would own it.
   → `scripts/check-workflow-map.mjs`, `scripts/check-workflow-map.test.mjs`, `scripts/check-knowledge-caps.mjs`, `scripts/check-knowledge-caps.test.mjs`, `scripts/prune-map-flag.mjs`, `scripts/prune-map-flag.test.mjs`
@@ -810,6 +810,15 @@ findings here too.
   Sätet följer storheten: det här avgör vems data ett skript läser och skriver, alltså
   datalagret — inte katalogen filen råkar ligga i.
   → `functions/scripts/projectArg.helpers.mjs`, `functions/scripts/projectArg.helpers.test.mjs`
+- **Vilken databas ett PUBLICERAT kommando öppnar** (BIN-1122). Samma fråga som posten
+  ovan, ett publiceringssteg längre ut: golvet som kräver att ett kommando i en spårad
+  `.md` namnger sitt projekt innan det öppnar en Firestore. Det som gjorde en egen post
+  nödvändig är att skriptgolvet strukturellt inte kunde se dem — det läser
+  `git ls-files -- functions/scripts`, och ett kommando i en driftbok når det aldrig.
+  Två sådana hittades för hand, en som RADERADE ett dokument och en som ÅTERSTÄLLER en
+  hel databas. Sätet följer samma storhet som posten ovan och av samma skäl: frågan är
+  vems data som öppnas, alltså datalagret — inte katalogen filen ligger i.
+  → `scripts/check-published-commands.mjs`, `scripts/check-published-commands.test.mjs`
 - **Filer som saknade en ägande roll** (BIN-871). Datalagret i klienten: firebase-modulerna, dokument-id, skrivvägarna och regeltesterna.
   → `src/contexts/AuthContext.test.tsx`, `src/contexts/WatchlistContext.test.tsx`, `src/hooks/usePublicProfile.test.ts`, `src/lib/firebase/accountDeletion.ts`, `src/lib/firebase/config.ts`, `src/lib/firebase/episodeProgress.test.ts`, `src/lib/firebase/episodeProgress.ts`, `src/lib/firebase/messaging.livetoken.test.ts`, `src/lib/firebase/messaging.ts`, `src/lib/firebase/publicProfile.test.ts`, `src/lib/firebase/publicProfile.ts`, `src/lib/firebase/reports.ts`, `src/lib/firebase/sessions.joinPayload.test.ts`, `src/lib/firebase/sessions.joinPayload.ts`, `src/lib/firebase/sessions.ts`, `src/lib/firebase/userData.subcollections.test.ts`, `src/lib/firebase/userSearch.test.ts`, `src/lib/firebase/userSearch.ts`, `src/lib/firebase/username.test.ts`, `src/lib/firebase/username.ts`, `src/lib/mediaTypeDocId.parity.test.ts`, `src/lib/mediaTypeDocId.test.ts`, `src/lib/watchlistWrites.addWrite.test.ts`, `src/lib/watchlistWrites.test.ts`, `src/lib/watchlistWrites.ts`, `src/test/rules/account-deletion.test.ts`, `src/test/rules/tmdb-sweep-orchestrator.test.ts`, `src/lib/watchStatus.migration.test.ts`
 

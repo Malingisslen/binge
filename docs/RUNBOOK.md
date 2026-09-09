@@ -169,6 +169,7 @@ gcloud firestore backups list --project=binge-nu
 
 # Restore from a specific timestamp
 gcloud firestore import \
+  --project=binge-nu \
   --database="(default)" \
   gs://your-bucket/backups/<timestamp>
 ```

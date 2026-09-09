@@ -59,6 +59,9 @@ const REQUIRED = [
   // never-fails contract is the thing its tests pin. Lose the file and a report that
   // silently measures nothing looks exactly like a report that had nothing to say.
   'bundle-report.test.mjs',
+  // BIN-1122. The published-command floor, over the commands an operator pastes during an
+  // incident — a restore and a delete are both in that set.
+  'check-published-commands.test.mjs',
 ];
 
 // A LITERAL, deliberately not `REQUIRED.length`. Deriving it made this assertion unable
@@ -67,7 +70,7 @@ const REQUIRED = [
 // replaced BIN-838's floor to prevent, reproduced inside its own replacement. Growth is
 // free at the runner; raising this number is the deliberate act that keeps the new file
 // protected, and lowering it is the deliberate act a shrink must perform out loud.
-const MIN = 6;
+const MIN = 7;
 
 // Reads the DISK set, recursively and on both suffixes, to line up as closely as a
 // directory read can with what vitest's `scripts/**/*.{test,spec}.mjs` collects. It is not
@@ -90,6 +93,14 @@ const MIN = 6;
 const found = readdirSync(scriptsDir, { recursive: true })
   .map((f) => String(f).replace(/\\/g, '/'))
   .filter((f) => (f.endsWith('.test.mjs') || f.endsWith('.spec.mjs')) && f !== SELF);
+
+// Without this, a name can be removed from REQUIRED and a DUPLICATE of a neighbour put in
+// its place: the length still equals MIN, every entry is still on disk, and the file's own
+// claim to be a named watch rather than a bare count is silently false. That is the shrink
+// this file exists to make loud, reproduced inside it.
+test('the named list holds no duplicates', () => {
+  assert.equal(new Set(REQUIRED).size, REQUIRED.length);
+});
 
 test('every named script self-test is still on disk under scripts/', () => {
   for (const name of REQUIRED) {

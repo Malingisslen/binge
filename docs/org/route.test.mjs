@@ -353,8 +353,7 @@ describe('the router and the gate scripts cannot clear themselves (BIN-805)', ()
   it('the gate scripts have a real owner now, not the fallback seat (BIN-1080)', () => {
     // Every code file under scripts/ was unowned until BIN-1080: the router answered
     // `unmapped-code` about the repo's own check machinery and printed advice nobody was
-    // assigned to follow. One file sits with #4 and the rest with #25, which owns how the
-    // repo is checked. What decided the first seat is recorded on BIN-1080, not here.
+    // assigned to follow. What decided a seat is recorded on the ticket that moved it.
     const sec = route(['scripts/check-public-env.mjs']);
     expect(sec.reasonCode).toBe('owned');
     expect(sec.panel).toEqual([4]);
@@ -456,9 +455,7 @@ describe('the router and the gate scripts cannot clear themselves (BIN-805)', ()
     // retired `expect(isCodePath(path)).toBe(true)` from the `it.each` above; the
     // dedup line on GATE_FILES further down is kept, because that list is two
     // independent `readdirSync` calls concatenated, not a Set being spread.
-    // Raised to the list's measured length on 2026-08-25 (BIN-979) and again on
-    // 2026-09-06 (BIN-1063, +3 backfill entries), because a floor that
-    // does not follow its list is a guard that never fires. No claim is made here about
+    // A floor that does not follow its list is a guard that never fires. No claim is made here about
     // how many widenings it fell behind by — measure the list instead, with the command
     // that set this number:
     //   node -e "import('./docs/org/route.mjs').then(m=>console.log(m.TOOLING_CODE_FILES.size))"
@@ -479,7 +476,7 @@ describe('the router and the gate scripts cannot clear themselves (BIN-805)', ()
     // biconditional reads false === false, and gate-symmetry's A1 is keyed on isCodePath,
     // which the removal switches off. Re-measure with the command above; never copy this
     // number forward without running it.
-    expect(GATE_SCRIPTS.length).toBeGreaterThanOrEqual(36);
+    expect(GATE_SCRIPTS.length).toBeGreaterThanOrEqual(38);
   });
 
   it('names every one of those scripts in the BLOCKING list too (BIN-864/873)', () => {
