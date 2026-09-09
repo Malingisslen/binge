@@ -10,8 +10,8 @@ export default function IntegritetPage() {
   return (
     <LegalPageShell
       title="Integritetspolicy"
-      lastUpdated="2026-08-08"
-      version="1.2"
+      lastUpdated="2026-09-09"
+      version="1.3"
     >
       <section>
         <h2>1. Vem är ansvarig?</h2>
@@ -105,8 +105,11 @@ export default function IntegritetPage() {
             blockeringar, vän- och följar-relationer (även de speglade hos
             motparten), dina recensioner inklusive likes och kommentarer på dem,
             kommentarer och likes du gjort på andras recensioner, dina listor,
-            Tillsammans-sessioner du är värd för, samt grupper du äger (grupper
-            du bara är medlem i lämnar du automatiskt). Slutligen raderas ditt
+            samt Tillsammans-sessioner du är värd för. En grupp du äger lämnas i
+            stället över till den medlem som varit med längst, om gruppen har kvar
+            några medlemmar — annars raderas den, och dina egna spår i en
+            överlämnad grupp tas bort ändå. Grupper du bara är medlem i lämnar du
+            automatiskt. Slutligen raderas ditt
             inloggningskonto och din användarnamns-reservation. Publikt innehåll
             anonymiseras inte — det raderas helt. De följar-länkar som andra
             användare har till ditt konto kan vi av tekniska skäl inte radera i

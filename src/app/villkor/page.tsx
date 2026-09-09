@@ -11,8 +11,8 @@ export default function VillkorPage() {
   return (
     <LegalPageShell
       title="Användarvillkor"
-      lastUpdated="2026-06-01"
-      version="1.0"
+      lastUpdated="2026-09-09"
+      version="1.1"
     >
       <section>
         <h2>1. Vad Binge är</h2>
@@ -126,8 +126,11 @@ export default function VillkorPage() {
           bevakningslista, avsnittsframsteg, betyg och anteckningar,
           notifikationer, dina recensioner (inklusive likes och kommentarer),
           dina kommentarer och likes på andras recensioner, dina listor, dina
-          Tillsammans-sessioner, grupper du äger, blockeringar, dina vän- och
+          Tillsammans-sessioner, blockeringar, dina vän- och
           följar-relationer, push-notistoken och din användarnamns-reservation.
+          En grupp du äger lämnas i stället över till den medlem som varit med
+          längst, om gruppen har kvar några medlemmar — annars raderas den, och
+          dina egna spår i en överlämnad grupp tas bort ändå.
           Grupper du bara är medlem i lämnar du automatiskt. Även publikt
           innehåll raderas helt — det anonymiseras inte. Se{' '}
           <Link href="/integritet">integritetspolicyn</Link> för fullständig
