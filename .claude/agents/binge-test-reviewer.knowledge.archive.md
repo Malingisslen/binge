@@ -27649,3 +27649,24 @@ as the coordinator's report, through the identical command. No new gap found on 
 control (one file instead of the full `include` glob), not a false claim — corrected in
 the same pass by folding "check you ran the same command, not a narrower scope" into the
 existing suite-count-verification bullet.
+
+## 2026-09-09 (rattelse, BIN-1127 push-grinden)
+
+Ett pastaende i BIN-1127-posten ovan ar falskt och rattas har i stallet for att
+redigeras dar - filen ar append-only. Posten skrev att ingen testfil finns for
+`src/lib/firebase/groups.ts` eller `GroupMembersPanel.tsx`, och att
+`src/lib/firebase/` saknar en etablerad enhetstestkonvention i det har repot.
+
+Kor kommandot i stallet: `ls src/lib/firebase/*.test.ts`. Bland dem ligger
+`src/lib/firebase/groups.test.ts`, testfilen for just den modul bunten andrade -
+den driver redan accept-vagen for gruppinbjudningar.
+
+Foljden av det falska pastaendet var att en verklig lucka vinkades igenom: ingen
+test pinnade `inviteMemberByUid`s faltuppsattning mot regelns `hasOnly`, och
+regeltesterna skriver sin egen payload for hand och ar darfor blinda for
+skrivaren. Push-grinden hittade det. Testet finns nu i `groups.test.ts` och ar
+muteringsprovat (`invitedAt` -> `sentAt` faller det).
+
+Lardomen: ett "det finns ingen X" ar ett okontrollerat pastaende tills ett
+kommando kort, och just den formen anvands for att AVFARDA arbete - den ar
+darfor dyrare an de flesta.

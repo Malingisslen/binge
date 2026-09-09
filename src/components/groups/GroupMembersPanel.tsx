@@ -189,7 +189,7 @@ function AddMemberSearch({
                 </div>
                 <button
                   onClick={() => handleInvite(u)}
-                  disabled={already || busy || isInvited}
+                  disabled={already || busy || isInvited || !user}
                   className="px-2 py-[2px] text-xxs border-none rounded-sm cursor-pointer font-[inherit] bg-acc-deep text-white disabled:bg-rule disabled:text-ink-3 disabled:cursor-default"
                 >
                   {already ? 'Medlem' : isInvited ? 'Inbjuden' : busy ? 'Bjuder in…' : 'Bjud in'}

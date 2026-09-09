@@ -93,6 +93,7 @@ import {
   refreshMyHouseholdContributions,
   joinGroupViaToken,
   acceptGroupInvite,
+  inviteMemberByUid,
   MY_GROUPS_LIMIT,
 } from './groups';
 
@@ -863,5 +864,51 @@ describe('medlemsdokumentets fältuppsättning är delad mellan createGroup och 
       'uid',
       'username',
     ]);
+  });
+});
+
+
+describe('inbjudningens faltuppsattning ar pinnad mot regeln (BIN-1127)', () => {
+  // `firestore.rules`' create-gren for users/{uid}/groupInvites/{groupId} kraver
+  // `keys().hasOnly` over exakt de har fem nycklarna. Regeltesterna skriver sin
+  // EGEN payload for hand och ar darfor blinda for den har filen: doper vi om ett
+  // falt har, eller lagger till ett sjatte, nekas varje inbjudan i produktion med
+  // hela sviten gron. Den har testen ar den enda kopplingen mellan skrivaren och
+  // regeln.
+  it('inviteMemberByUid skriver exakt de fem falt regeln tillater', async () => {
+    setDocMock.mockClear();
+    await inviteMemberByUid({
+      groupId: 'g-invite',
+      groupName: 'Filmklubben',
+      fromUid: 'owner-invite',
+      fromDisplayName: 'Malin',
+      targetUid: 'target-invite',
+    });
+    const call = setDocMock.mock.calls.find(
+      ([ref]) => (ref as { _path: string })._path === 'users/target-invite/groupInvites/g-invite',
+    );
+    expect(call).toBeDefined();
+    expect(Object.keys(call![1] as Record<string, unknown>).sort()).toEqual([
+      'fromDisplayName',
+      'fromUid',
+      'groupId',
+      'groupName',
+      'invitedAt',
+    ]);
+  });
+
+  it('groupId i nyttolasten ar samma varde som dokumentets id', async () => {
+    setDocMock.mockClear();
+    await inviteMemberByUid({
+      groupId: 'g-pin',
+      groupName: 'Filmklubben',
+      fromUid: 'owner-pin',
+      fromDisplayName: null,
+      targetUid: 'target-pin',
+    });
+    const call = setDocMock.mock.calls.find(
+      ([ref]) => (ref as { _path: string })._path === 'users/target-pin/groupInvites/g-pin',
+    );
+    expect((call![1] as { groupId: string }).groupId).toBe('g-pin');
   });
 });

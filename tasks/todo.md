@@ -292,7 +292,7 @@ neka nagon befintlig grupp.
 
 ### Foljdbiljetter filade fore commit
 
-BIN-1140, BIN-1141, BIN-1142, BIN-1143, BIN-1144, BIN-1145.
+BIN-1140, BIN-1141, BIN-1142, BIN-1143, BIN-1144, BIN-1145, BIN-1146.
 
 ## Efter sprinten
 
@@ -306,9 +306,8 @@ BIN-1140, BIN-1141, BIN-1142, BIN-1143, BIN-1144, BIN-1145.
 ## Deviation log
 
 - [discovery] Bunt 1:s FAKTISKA stageade union routar `panel: [27, 5, 4, 6, 7]`, inte
-  urvalets `[27, 5, 4, 6, 18]`. Testfilen och de tva klientfilerna kom in i unionen
-  och #7 QA bytte plats med #18. Bada har kritiserat: #18 fran urvalet, #7 pa den
-  stageade unionen fore commit. Kommandot ar
+  urvalets `[27, 5, 4, 6, 18]` - #7 QA bytte plats med #18. Bada har kritiserat: #18
+  fran urvalet, #7 pa den stageade unionen fore commit. Kommandot ar
   `node docs/org/route.mjs $(git diff --cached --name-only)`.
 - [deviation] BIN-1126: panelen delade sig 2-3 mellan bindning i regeln (a) och att
   lita pa uppslagning i stallet (b). Delningen berodde pa en FAKTAFRAGA, inte pa en
