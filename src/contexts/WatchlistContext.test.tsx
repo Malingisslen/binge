@@ -1132,8 +1132,7 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
   //
   // What it costs to miss: the leftover row BIN-965 accepts is self-owned and re-deletable
   // with the same button. This one lands under a uid whose Auth account is about to be
-  // gone, and the server sweep looks for Auth accounts WITHOUT a profile — so nothing ever
-  // finds it again.
+  // gone.
   it('BIN-1011: an account deletion starting mid-flight cancels the add', async () => {
     await mountSeeded([]);
     let releaseShow: (show: unknown) => void = () => {};
@@ -2091,10 +2090,9 @@ describe('WatchlistContext — updateNotes + eager notes migration (BIN-505/BIN-
     // `WatchlistProvider` mounts ABOVE `AppShell`, so it survives the swap to the
     // limbo screen and keeps running its auto-writers off the snapshot with no
     // user action at all. `isOwner(uid)` in firestore.rules never requires
-    // users/{uid} to exist, so those writes land after the profile is gone —
-    // and the server sweep, which looks for accounts WITHOUT a profile, can
-    // never see them. Personal data outliving an Art. 17 request, not an untidy
-    // screen (security + test review, 2026-08-13).
+    // users/{uid} to exist, so those writes land after the profile is gone.
+    // Personal data outliving an Art. 17 request, not an untidy screen
+    // (security + test review, 2026-08-13).
     window.localStorage.setItem('binge:deletionStarted:u1', JSON.stringify({ startedAt: 1 }));
     try {
       await mountSeeded([seedDoc({ tmdbId: 50, notes: 'privat anteckning' })]);
@@ -3420,8 +3418,7 @@ describe('WatchlistContext — the add door refuses during an account deletion (
 
     // Not merely "it threw": no document may reach Firestore. A full add payload passes
     // BIN-942's create floor, so a write that got through would create a fresh library row
-    // under a uid whose erasure is already running — and the orphan sweep looks for Auth
-    // accounts WITHOUT a profile, so nothing would ever find it.
+    // under a uid whose erasure is already running.
     expect(setDoc).not.toHaveBeenCalled();
     expect(captureError).toHaveBeenCalledWith(
       expect.objectContaining({ message: expect.stringContaining('binge/deletion-in-progress') }),

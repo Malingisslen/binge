@@ -1347,8 +1347,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
         //
         // The cost of missing it is worse here than the leftover row BIN-965 accepts:
         // that row is self-owned and re-deletable with the same button, whereas once
-        // `deleteUser()` succeeds this uid has no Auth account at all, and the orphan
-        // sweep looks for Auth accounts WITHOUT a profile — so nothing ever finds it.
+        // `deleteUser()` succeeds this uid has no Auth account at all.
         // A residual remains (a write that clears this check microseconds before the
         // cascade's delete lands), and it is deliberately NOT chased with a
         // compensating delete — BIN-965 decided that question.
