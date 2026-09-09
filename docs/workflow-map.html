@@ -1531,7 +1531,7 @@
         {
           "from": "group-members-panel",
           "to": "firestore",
-          "payload": "inviteMemberByUid (search by @handle) — set users/{targetUid}/groupInvites/{groupId} {fromUid,groupName}; target later runs acceptGroupInvite — reads the group doc first and short-circuits to retiring the stale invite when the caller is already a member with a member doc (BIN-1063); otherwise SEPARATE awaited writes, never a batch: memberUids arrayUnion, then writeMemberDoc (create with joinedAt / merge without it), then delete the invite doc",
+          "payload": "inviteMemberByUid (search by @handle) — set users/{targetUid}/groupInvites/{groupId} {groupId,groupName,fromUid,fromDisplayName,invitedAt} — sedan BIN-1127 binder create-regeln hela dokumentet: nyckellistan, typerna, langderna, groupName mot gruppdokumentets namn och fromDisplayName mot avsandarens egen profil; target later runs acceptGroupInvite — reads the group doc first and short-circuits to retiring the stale invite when the caller is already a member with a member doc (BIN-1063); otherwise SEPARATE awaited writes, never a batch: memberUids arrayUnion, then writeMemberDoc (create with joinedAt / merge without it), then delete the invite doc",
           "transport": "Firestore write",
           "verified": true
         },
