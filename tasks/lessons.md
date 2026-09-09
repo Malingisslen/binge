@@ -1290,7 +1290,8 @@ sant och rakna igen. Ny fil, raderad fil och oparsbar JSON ska ALLA falla.
 
 **Regel:** normalisera bada sidor fore jamforelsen och skriv tillbaka filens egna radslut,
 eller ankra pa EN rad utan radslut. `test/run-fixtures.mjs` har `
-` pa en rad och `
+` pa en rad och `
+
 ` pa
 nasta; ett fyrradigt ankare gav "0 traffar" tre forsok i rad medan `grep` visade raden.
 Samma runda: `String.replace(a, b)` expanderar `$'` inne i `b` till "allt efter traffen" och
@@ -1613,3 +1614,36 @@ kommandot ar hela beviset for repots mest sakerhetskansliga yta — en sprint so
 `firestore.rules`, ser exit 0 och gar vidare har inte provat sina regler. Porten holls av
 ett ANNAT repos emulator, vilket ar normaltillstandet pa en maskin med flera projekt.
 Push-grinden markte det bara genom att lasa raderna.
+
+### [Testing] Ett nekande-test bevisar inget om VILKEN klausul som nekade (2026-09-09, BIN-1127)
+
+**Trigger:** ett `assertFails` mot en regel vars `&&`-kedja har flera klausuler, dar en
+tidigare klausul gor ett `get()`.
+
+**Regel:** fixturen maste uppfylla varje klausul FORE den testet namnger, annars nekas
+skrivningen tidigare an du tror och den klausul du trodde du provade gar att radera med
+hela sviten gron. Ett `get()` pa ett dokument som inte finns KASTAR, vilket nekar hela
+regeln - sa en oseedad anropare maskerar allt efter sig.
+
+**Exempel:** `groupInvites`-testet "en icke-agare kan inte bjuda in" seedade aldrig
+ANROPARENS egen profil. `isOwnIdentity` gor ett `get()` pa den och ligger fore agarkollen,
+sa nekandet kom darifran. Agarkollen - som fanns lange fore bunten - gick att byta mot
+`true` med 467/467 gront. Testgranskaren hittade det; mina sex egna muteringar provade bara
+de NYA klausulerna och sag det inte. Fixen ar att seeda profilen och skicka en i ovrigt
+giltig payload, sa exakt en klausul kan falla.
+
+### [Workflow] "Det finns ingen testfil for X" ar ett okontrollerat pastaende (2026-09-09, BIN-1127)
+
+**Trigger:** en mening som AVFARDAR arbete med att nagot inte finns - ingen testfil, ingen
+konvention, ingen anropare.
+
+**Regel:** kor kommandot. Den har formen ar dyrare an andra omatta pastaenden, eftersom den
+inte bara ar fel utan aktivt stanger en lucka fran att bli lagad.
+
+**Exempel:** en granskares arkivpost skrev att ingen testfil finns for
+`src/lib/firebase/groups.ts` och att katalogen saknar enhetstestkonvention. `ls
+src/lib/firebase/*.test.ts` ger 15 filer, daribland `groups.test.ts` for just den modulen.
+Foljden av det falska pastaendet var att en verklig lucka vinkades igenom: ingenting
+pinnade skrivarens faltuppsattning mot regelns `hasOnly`, sa ett omdopt falt hade nekat
+varje inbjudan i produktion med hela sviten gron. Push-grinden hittade bade meningen och
+luckan. Arkivet ar append-only, sa rattelsen ar en daterad post - inte en redigering.
