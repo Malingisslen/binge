@@ -41,6 +41,7 @@ import {
   removeFriend,
   getFriendStatus,
   listFriends,
+  listFriendRequests,
 } from './friends';
 
 beforeEach(() => {
@@ -227,6 +228,83 @@ describe('listFriends', () => {
       photoURL: null,
       username: null,
       since: new Date('2026-01-01'),
+    }]);
+  });
+});
+
+// BIN-1126: the rules bind the stored name to the sender's own profile, and null is
+// what a profile with no name sends. Nothing pinned the read side — the placeholder
+// could have been deleted from here with every suite green, and a request from a
+// nameless account would then have rendered with no name at all.
+describe('listFriendRequests', () => {
+  it('sätter reservnamnet när avsändarens namn är null', async () => {
+    getDocsMock.mockResolvedValueOnce({
+      docs: [
+        {
+          id: 'namnlos',
+          data: () => ({
+            fromUid: 'namnlos',
+            fromDisplayName: null,
+            fromPhotoURL: null,
+            fromUsername: null,
+            sentAt: { toDate: () => new Date('2026-01-01') },
+          }),
+        },
+      ],
+    });
+    expect(await listFriendRequests('me')).toEqual([{
+      fromUid: 'namnlos',
+      fromDisplayName: 'Användare',
+      fromPhotoURL: null,
+      fromUsername: null,
+      sentAt: new Date('2026-01-01'),
+    }]);
+  });
+
+  // The case production actually produces. A profile with no display name carries an
+  // EMPTY STRING, not null — the type says so — so a nullish check on either side of
+  // the round trip would leave a nameless sender rendering blank while every test
+  // about null stayed green.
+  it('sätter reservnamnet även när namnet är en tom sträng', async () => {
+    getDocsMock.mockResolvedValueOnce({
+      docs: [
+        {
+          id: 'tomstrang',
+          data: () => ({
+            fromUid: 'tomstrang',
+            fromDisplayName: '',
+            fromPhotoURL: null,
+            fromUsername: null,
+            sentAt: { toDate: () => new Date('2026-01-01') },
+          }),
+        },
+      ],
+    });
+    const [request] = await listFriendRequests('me');
+    expect(request.fromDisplayName).toBe('Användare');
+  });
+
+  it('lämnar ett riktigt namn orört', async () => {
+    getDocsMock.mockResolvedValueOnce({
+      docs: [
+        {
+          id: 'jonatan',
+          data: () => ({
+            fromUid: 'jonatan',
+            fromDisplayName: 'Jonatan',
+            fromPhotoURL: 'http://avatar',
+            fromUsername: 'jonatan',
+            sentAt: { toDate: () => new Date('2026-01-01') },
+          }),
+        },
+      ],
+    });
+    expect(await listFriendRequests('me')).toEqual([{
+      fromUid: 'jonatan',
+      fromDisplayName: 'Jonatan',
+      fromPhotoURL: 'http://avatar',
+      fromUsername: 'jonatan',
+      sentAt: new Date('2026-01-01'),
     }]);
   });
 });

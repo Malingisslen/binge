@@ -27,11 +27,26 @@ service cloud.firestore {
     // De måste matcha avsändarens egen profil-doc, annars kan en användare
     // skriva en recension/kommentar som ser ut att komma från någon annan (M5).
     // Optionella fält valideras bara när de är satta — saknas de är det OK.
+    //
+    // BIN-1126: tar VÄRDENA, inte dokumentet, så samma jämförelse kan användas av
+    // en samling som stavar nycklarna annorlunda (`fromDisplayName`/`fromUsername`
+    // på en vänförfrågan). Ett andra exemplar av samma jämförelse hade blivit två
+    // sanningar om vad "din egen identitet" betyder.
+    //
+    // Den läser avsändarens PRIVATA `users/{uid}`-dokument, inte den publika
+    // projektionen. Skillnaden är load-bearing: projektionens läsregel är gatad på
+    // synlighet, så en klient kan inte alltid läsa den — men en regel-intern
+    // `get()` är priviligierad och når det privata dokumentet oavsett.
+    function isOwnIdentity(displayName, username) {
+      return (displayName == null
+          || displayName == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('displayName', null))
+        && (username == null
+          || username == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('username', null));
+    }
+    // `d.get(k, null)` ger null både när nyckeln saknas och när den är satt till
+    // null, vilket är exakt de två fall den gamla lydelsen släppte igenom.
     function matchesOwnIdentity(d) {
-      return (!('username' in d) || d.username == null
-          || d.username == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('username', null))
-        && (!('displayName' in d) || d.displayName == null
-          || d.displayName == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('displayName', null));
+      return isOwnIdentity(d.get('displayName', null), d.get('username', null));
     }
 
     // Reviews content bounds.
@@ -532,6 +547,14 @@ service cloud.firestore {
             && exists(/databases/$(database)/documents/users/$(targetUid)/friendRequests/$(uid)))
         )
         && request.resource.data.uid == targetUid
+        // BIN-1119 ställde samma fråga här som på `friendRequests`: nyckellistan
+        // nedan säger vilka nycklar som får finnas, aldrig hur stora de får vara.
+        // Svaret skiljer sig, och skälet är att den här mängden är annorlunda:
+        // `uid` är pinnad mot sökvägsvariabeln och därmed bunden av dokument-id:ts
+        // egen längd, så `since` är den enda nyckel vars värde var fritt. Ett
+        // typkrav räcker alltså här — ingen längdgräns behövs, eftersom ingen
+        // kvarvarande nyckel bär text.
+        && request.resource.data.since is timestamp
         // #4:s villkor i panelen for BIN-1063 steg 2. Spegel-grenen later
         // acceptorn skapa ett dokument under MOTPARTENS trad; utan en
         // nyckelbegransning kan den fylla det med vad som helst upp till
@@ -563,10 +586,68 @@ service cloud.firestore {
       // den enda vagen som skapar de har dokumenten. En for smal lista nekar
       // varje skarp vanforfragan, sa den maste komma darifran och inte ur en
       // biljett. `friends.test.ts` pinnar samma mangd fran klientsidan.
+      //
+      // BIN-1119: `hasOnly` ovan sätter tak på ANTALET nycklar, aldrig på hur mycket
+      // som får ligga i dem. Utan värdegränser kan en inloggad främling fördela ett
+      // dokument upp mot Firestores gräns över de tillåtna nycklarna — på
+      // mottagarens lagring, och rakt in i mottagarens GDPR-export. Talen är INTE
+      // nya: de är samma gränser `isValidPublicProfile` redan sätter på samma
+      // storheter. En andra siffra här hade glidit isär från den.
+      //
+      // `fromUsername` bunds på typ och längd, inte på `isValidUsername`s
+      // teckenmönster. Fältet är en visnings-cache, aldrig en uppslagningsnyckel, och
+      // `users/{uid}.username` valideras inte av någon regel — bara reservationen
+      // under `usernames/` gör det. Ett mönsterkrav här hade alltså kunnat neka en
+      // äkta vänförfrågan från ett konto vars profil bär något regeln aldrig prövat,
+      // och det är den dyrare felriktningen (#18).
+      //
+      // BIN-1126: identiteten binds också till avsändarens EGEN profil, som reglerna
+      // redan gör för recensioner, kommentarer och reaktioner. `fromDisplayName` och
+      // `fromUsername` renderas för mottagaren och byggs in i push-notisen, så utan
+      // bindningen kan vem som helst skicka "Malin (@malin) vill bli vän" utan att
+      // vara det. Att i stället låta UI:t slå upp avsändarens riktiga profil räcker
+      // inte: `publicProfiles`-läsregeln är gatad på synlighet och parterna är per
+      // definition inte vänner än, så för en PRIVAT avsändare faller UI:t tillbaka
+      // på just det fältet.
+      //
+      // Null släpps igenom i båda ändar, så ett konto vars profil saknar namn kan
+      // skicka en förfrågan.
+      //
+      // Kostnaden, vägd innan formen valdes: bindningen läser ett dokument per
+      // SKRIVEN vänförfrågan. Repot betalar redan exakt den läsningen på varje
+      // skrivväg `matchesOwnIdentity` gatar. Härled vilka de är i stället för att
+      // lita på den meningen:
+      //
+      //   grep -n "matchesOwnIdentity(" firestore.rules
+      //
+      // Den accepterade avvikelsen som avvisade ett korsdokument-`get()` av
+      // kostnadsskäl gällde LÄSREGELN på appens mest trafikerade yta, där varje
+      // visning av en titel hade betalat. Den säger ingenting om en skrivväg.
+      //
+      // `fromPhotoURL` binds INTE, bara längdbegränsas. Den renderas som en bild och
+      // aldrig som identitetstext, ingen regel i den här filen har någon
+      // domänbegränsning på en photoURL, och profilens egen kan ändras mellan att
+      // klienten läste den och att förfrågan skickas — en bindning hade nekat den
+      // skrivningen utan att stänga något som texten inte redan stänger.
       allow create: if isSignedIn()
         && fromUid == request.auth.uid
         && request.resource.data.fromUid == request.auth.uid
-        && request.resource.data.fromDisplayName is string
+        // Varje tillåten nyckel måste bäras av ett villkor här. `hasOnly` säger bara
+        // vilka nycklar som får finnas, så en nyckel utan typkrav — `sentAt` var en —
+        // tar emot en godtycklig sträng och gör de andra gränserna verkningslösa.
+        && (request.resource.data.get('fromDisplayName', null) == null
+          || (request.resource.data.fromDisplayName is string
+            && request.resource.data.fromDisplayName.size() <= 80))
+        && (request.resource.data.get('fromUsername', null) == null
+          || (request.resource.data.fromUsername is string
+            && request.resource.data.fromUsername.size() <= 20))
+        && (request.resource.data.get('fromPhotoURL', null) == null
+          || (request.resource.data.fromPhotoURL is string
+            && request.resource.data.fromPhotoURL.size() <= 500))
+        && request.resource.data.sentAt is timestamp
+        && isOwnIdentity(
+          request.resource.data.get('fromDisplayName', null),
+          request.resource.data.get('fromUsername', null))
         && request.resource.data.keys().hasOnly(
           ['fromUid', 'fromDisplayName', 'fromPhotoURL', 'fromUsername', 'sentAt']);
       allow update: if false;
@@ -583,6 +664,9 @@ service cloud.firestore {
       // false harunder, sa faltet ar oforanderligt utan extra villkor.
       allow create: if isOwner(uid)
         && request.resource.data.uid == toUid
+        // BIN-1119, samma svar som på `friends` ovan: `uid` är pinnad mot
+        // dokumentets id, så `sentAt` var den enda nyckel vars värde var fritt.
+        && request.resource.data.sentAt is timestamp
         && request.resource.data.keys().hasOnly(['uid', 'sentAt']);
       allow update: if false;
       allow delete: if isOwner(uid) || isOwner(toUid);
@@ -1247,6 +1331,26 @@ service cloud.firestore {
           exists(/databases/$(database)/documents/groups/$(groupId)/joinAttempts/$(request.auth.uid))
           && !(request.auth.uid in resource.data.memberUids)
           && request.auth.uid in request.resource.data.memberUids
+          // BIN-1125: relate the NEW list to the OLD one. Until this landed, the two
+          // growth branches only asserted that the writer had joined — nothing tied
+          // the rest of the list to what was there before, so the same write could
+          // drop everyone else. `ownerUid` is pinned below, so a third party with a
+          // valid invite could leave the group pointing at an owner who is no longer
+          // a member: BIN-1108's frozen end state, reached by someone other than the
+          // owner. BIN-1108 closed the two branches that SHRINK the list on purpose;
+          // these two shrink as a side effect of never comparing.
+          //
+          // Read the two clauses as a pair, not as independent bounds. `hasAll(old)`
+          // is what closes the removal; the exact-plus-one size is what stops a
+          // joiner from adding a stranger alongside themselves in the same write.
+          //
+          // The ticket proposed `old.hasAll(new.removeAll([self]))` for the first
+          // half. That form is satisfied by a DUPLICATE: new `[self, self]` against
+          // old `[owner]` passes every clause — removeAll strips both copies and
+          // `hasAll([])` is true — while writing the owner out. `hasAll(old)` has no
+          // such reading.
+          && request.resource.data.memberUids.hasAll(resource.data.memberUids)
+          && request.resource.data.memberUids.size() == resource.data.memberUids.size() + 1
           // BIN-327: bound the only two growth paths (join + accept) so memberUids
           // can't be inflated toward the 1 MiB doc limit / read-amplified on every
           // membership get(). size() is an in-payload check — zero extra get() cost.
@@ -1267,6 +1371,8 @@ service cloud.firestore {
           exists(/databases/$(database)/documents/users/$(request.auth.uid)/groupInvites/$(groupId))
           && !(request.auth.uid in resource.data.memberUids)
           && request.auth.uid in request.resource.data.memberUids
+          && request.resource.data.memberUids.hasAll(resource.data.memberUids)   // BIN-1125 (see join branch)
+          && request.resource.data.memberUids.size() == resource.data.memberUids.size() + 1
           && request.resource.data.memberUids.size() <= 100   // BIN-327 (see join branch)
           && request.resource.data.ownerUid == resource.data.ownerUid
           && request.resource.data.name == resource.data.name

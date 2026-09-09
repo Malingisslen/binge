@@ -27182,3 +27182,330 @@ widened `hasOnly` is covered by a proper negative/positive pair on the collectio
 added to, the dual-branch BIN-1108 guard is mutated on both branches with positive controls,
 both comment strikes point at the single writer whose code was checked to match, and my own
 knowledge file's now-false illustrative example was corrected in place with its trace here.
+
+## 2026-09-09 — BIN-1125/BIN-1119/BIN-1126 re-review: memberUids containment fix + friendRequests value bounds and identity bind
+
+**Trigger.** Re-review of a staged diff whose bytes changed since a prior pass. The prior
+pass had named one surviving mutation (narrowing `fromUsername.size() <= 20` or
+`fromPhotoURL.size() <= 500` to `<`, undetected because only `fromDisplayName` had an
+at-the-limit positive). Since then: two at-the-limit positives were added (username,
+photoURL), five review rounds struck false/self-contradictory comments (two inside test
+files), and `.claude/agents/binge-security-reviewer.knowledge.md` joined the batch with a
+corrected BIN-1125 bullet.
+
+**Files read in full** (staged, index/worktree shas matched before and after):
+`firestore.rules` (ff111f7), `functions/src/index.ts` (ab7f9cc), `src/hooks/useFriends.ts`
+(14e57fd), `src/hooks/useSenderProfile.ts` (27c6670), `src/lib/firebase/friends.test.ts`
+(2b58066), `src/lib/firebase/friends.ts` (da1cb13), `src/test/rules/firestore-rules.test.ts`
+(60f6381), `.claude/agents/binge-security-reviewer.knowledge.md` (fe07976).
+
+**1. The two new at-limit tests, verified live, not read.** Clean baseline:
+`npm run test:rules` → 7 files, 445/445 green. Mutated BOTH bounds at once
+(`fromUsername.size() <= 20` → `< 20`, `fromPhotoURL.size() <= 500` → `< 500`) in a
+scratchpad-snapshotted `firestore.rules`, re-ran: `1 failed | 6 passed` file-level,
+`2 failed | 443 passed` test-level, and the two failures were exactly `a username at
+exactly the limit is allowed` and `a photo URL at exactly the limit is allowed` — matching
+the batch's own claim number-for-number. Restored from the scratchpad snapshot,
+`git hash-object` confirmed `ff111f70d0caf98cae4a8e3339c5627d7cdafe14` both before and
+after, `git diff firestore.rules` empty. The username fixture (`'a'.repeat(19) + 'b'`) is a
+value the app could really hold (matches `isValidUsername`'s pattern too), though the
+comment's implied contrast with "just the right length" is weak — a homogeneous
+`'a'.repeat(20)` would also pass the pattern, so the shaping doesn't distinguish this
+fixture from a naive one on THIS rule; not blocking, since `fromUsername` here is bound on
+type+length only, never on `isValidUsername`'s character class (the rule comment says so).
+
+**2. Another surviving mutation, found and verified live.** `isOwnIdentity`'s two
+`get(k, null)` calls use `null` as the sentinel for "field absent OR explicitly null" —
+the function's own comment states this is deliberate. Mutated the `displayName` leg's
+default from `null` to `''` (a payload's `fromDisplayName` compared against a profile
+missing the field) and re-ran the full rules suite: **445/445 still green** — this mutant
+is UNDETECTED. Reachability: not a live hole today (production code really uses `null`,
+and every existing fixture either matches the real profile value or uses `null` itself,
+never `''` against an absent field) — it is a latent test-coverage gap that would let a
+future accidental change to the sentinel (e.g. a find-replace, or copying the idiom
+elsewhere with a different falsy default) ship with the whole suite green, silently
+allowing an attacker whose profile has no `displayName` to forge `fromDisplayName: ''` as
+their "own identity". Closing it costs one fixture: seed a sender profile WITHOUT
+`displayName`, write `fromDisplayName: ''`, assert denied. Restored from the same
+scratchpad snapshot, hash re-verified. Folded into the principles file as a new bullet
+under "Sentinel / key-absence assertions" (a cut of equal size, `getAfter()`-dependent
+rules needing `writeBatch` never bare `setDoc` (BIN-25), was relocated out to stay under
+the 80k cap — see the Relocated entry immediately below).
+
+**3. Clause-order audit — no "earlier clause denies first" instance found in the new
+tests.** Hand-traced every BIN-1119/BIN-1126 fixture against the `&&`-chain order in the
+`friendRequests` create rule (isSignedIn → fromUid pin → displayName bound → username
+bound → photoURL bound → sentAt timestamp → isOwnIdentity → hasOnly) and confirmed each
+test's seed makes every OTHER clause pass, so the ONE clause it's named for is the one
+denying. Traced in detail: the four negative bound tests (each seeds a matching sender
+profile so `isOwnIdentity` cannot be the reason for the denial), the four identity-bind
+tests, and the `friends`/`friendRequestsSent` `since`/`sentAt`-not-a-timestamp tests (both
+seed a valid preceding branch so the timestamp clause is what's reached). The
+already-documented earlier instance of this class (`friendRequests: an extra key is
+denied` / `the payload … is allowed`, which used to pass or fail for the wrong reason
+before `isOwnIdentity` existed) is fixed in this diff via `seedSenderProfile`, per its own
+comment — re-verified the reasoning holds, not re-broken by the later additions.
+
+**4. Group `memberUids` containment fix, verified live.** Confirmed by direct trace (not
+re-run, since the security reviewer's knowledge file already carries a verified mutation
+trace for this exact fix) that `new.hasAll(old) && new.size() == old.size() + 1` is applied
+identically on both the token-join and invite-accept branches, that the OWNER branch above
+them is shrink-only (`old.hasAll(new)`, cannot reach this growth path at all), and that the
+duplicate-self-padding test (`['other_uid','other_uid']` against `old=[OWNER]`) is
+denied by `hasAll(old)` failing (`new` never contains `OWNER`) under the shipped form,
+while it would PASS under the ticket's originally-proposed `old.hasAll(new.removeAll([self]))`
+form (`old.hasAll([])` is vacuously true) — confirming the regression test the security
+knowledge file's superseded-form warning names.
+
+**5. Test-file comments, checked as claims.** `friends.test.ts`'s "nothing pinned the read
+side" claim for `listFriendRequests` verified against `git show HEAD:src/lib/firebase/
+friends.test.ts` — no such describe block existed before this diff, so the claim is exactly
+true, not an overclaim. Mutated `friends.ts`'s fallback (`(data.fromDisplayName as string)
+|| 'Användare'` → drop the fallback) and ran `npx vitest run src/lib/firebase/
+friends.test.ts`: exactly the two new "reservnamnet" tests failed (16 passed, 2 failed of
+18), confirming the comment's "could have been deleted with every suite green" claim about
+the PRE-diff state and the new tests' bite post-diff. `useFriends.ts`'s claim that
+`UserProfile.displayName` is typed as a non-nullable `string` (so an unset name is `''`,
+not `null`) verified against `src/types/domain.ts:136` and `AuthContext.tsx:229,442`
+(`firebaseUser.displayName ?? ''`) — accurate.
+
+**Still unpinned, and reachable only as a future-regression risk, not a live hole:** item 2
+above (the `get(k, null)`→`get(k, '')` sentinel). Also pre-existing and NOT introduced by
+this diff: no dedicated "missing sentAt"/"missing since" test exists for `friendRequests`,
+`friends`, or `friendRequestsSent` (only "missing uid" is tested) — the `is timestamp`
+clause makes an absent field deny by construction (dot-access on a missing key errors),
+but nothing pins that construction directly. Non-blocking; consistent with this file's
+existing pattern of testing uid-presence but not timestamp-presence throughout.
+
+**Verdict: fail (1 blocking)** — the sentinel-default gap in item 2, cheap to close with
+one fixture, in the same security-relevant identity-binding surface this ticket's four
+prior rounds already hardened to this level of rigor.
+
+## Relocated 87 — the `getAfter()`/`writeBatch` one-liner (moved verbatim from the
+`hasOnly()`-key-set bullet in the principles file 2026-09-09, to pay for the sentinel-default
+addition above and hold the 80k cap; unrelated to this entry's topic, parked here only for
+space)
+
+`getAfter()`-dependent rules need `writeBatch`, never bare `setDoc` (BIN-25).
+
+## 2026-09-09b — BIN-1119/1125/1126 re-review (prior verdict fail (1 blocking), fix verified + a second surviving mutation found)
+
+Second pass on the same staged diff. Prior round's blocking finding (`isOwnIdentity`'s
+`get('displayName', null)` sentinel unpinned) was closed with the fixture it named: seed
+`ATTACKER` profile with no `displayName`, write `fromDisplayName: ''`, `assertFails`.
+
+**1. Verified the fix live, mutation + control both re-run.** Clean baseline first:
+`npm run test:rules` → 7 files, `446/446` green (grew from 445 — the new fixture itself
+adds the 446th test). Built a scratchpad-copy rig per the house method (never mutated the
+shared `firestore.rules` in place): copied it to
+`.../scratchpad/firestore.rules.mutant` with `get('displayName', null)` →
+`get('displayName', '')` (verified via `md5sum` the copy differs, and `git hash-object
+firestore.rules` / `git rev-parse :firestore.rules` both `ff111f70…` before AND after every
+run below — the tracked file was never touched). Dropped a throwaway
+`src/test/rules/zz-mutation-bin1126.test.ts` (untracked, deleted before finishing) whose
+`readFileSync` pointed at the mutant copy, ran it alone via
+`firebase emulators:exec --only firestore --project demo-binge-rules-mut "npx vitest run
+src/test/rules/zz-mutation-bin1126.test.ts --config vitest.rules.config.ts"`:
+**1 failed | 319 passed (320)**, and the ONE failure was exactly `an empty name is denied
+when the sender's profile carries none`, failing with `Error: Expected request to fail, but
+it succeeded.` at its own `assertFails` line — not an earlier clause in the `&&` chain
+denying first (verified separately in item 3). The other 6 rules-test files all boot
+`OPEN_RULES` (grepped each file's `rules:` line to confirm), so they are structurally blind
+to any `firestore.rules` mutation and were not re-run; `320 + 126 (other 6 files) = 446`,
+matching the full-suite claim exactly.
+
+**2. A second surviving mutation, found and verified live.** BIN-1125's join-branch guard is
+`request.resource.data.memberUids.hasAll(resource.data.memberUids) &&
+request.resource.data.memberUids.size() == resource.data.memberUids.size() + 1`. All four
+new join-branch tests (`ONLY member`, `drop one member`, `add a stranger`, `duplicate
+self`) either also break the size arithmetic or never drop an existing member, so none
+isolates `hasAll(old)` from `size==old+1` — a SWAP fixture (drop one old member, add self
+PLUS one stranger, netting the same `+1` delta) satisfies `size` while violating `hasAll`,
+and no test in the suite has that shape. Built a second scratchpad mutant
+(`firestore.rules.mutant2`, `hasAll(resource.data.memberUids)` deleted from the JOIN branch
+ONLY — confirmed via `diff` it is a single-line removal, and the ACCEPT branch's copy at
+line 1374 is untouched). Added one PROBE test (clearly labelled, not part of the shipped
+suite) to a throwaway copy of the test file: `seedGroup({memberUids:[OWNER,'m2']})`,
+`sealJoinAttempt('other_uid')`, `assertFails(updateDoc(..., {memberUids:[OWNER,'other_uid',
+'stranger']}))`. Against the REAL staged rules: **1 passed** (correctly denied — confirms
+the probe's expectation is right, not a bogus assertion). Against `mutant2`: **1 failed —
+`Expected request to fail, but it succeeded.`** — the write wrongly succeeds with `m2`
+dropped and a stranger added, proving no test in the batch catches removing `hasAll(old)`
+alone from the join branch. `firestore.rules` re-hashed `ff111f70…` after this run too; both
+throwaway files deleted (`zz-mutation-bin1126.test.ts`, `zz-mutation2-bin1125.test.ts`), `git
+status --porcelain` confirmed clean of scratch artifacts before writing this entry. NOT
+folded into `accepted-deviations.md` — this is an open, cheap-to-close test gap, not a
+decided risk; reachability is real (an attacker holding a sealed join attempt against a
+group with ≥2 members can drop one member and add a co-conspirator in the same write) and
+severity matches BIN-1108's frozen-owner concern this same ticket was filed to close, so it
+is reported as blocking, not filed as a follow-up ticket.
+
+**3. Clause-order re-audit, specific to the sentinel fix.** Confirmed the new fixture's
+failure (item 1) is NOT masked by an earlier `&&` clause: the seeded profile
+(`{username:'attacker'}`, no `displayName`) makes `fromUid`/`sentAt`/bound/`hasOnly` clauses
+all pass under both the real and mutant rules; only the `isOwnIdentity` comparison differs
+between them, and that IS what the run isolates.
+
+**4. Test-file comments, checked as claims, per the task's explicit instruction to treat
+them as suspect.** (a) "Nothing else in the suite writes an empty string against an absent
+field" — `grep -n "displayName:.*''|username:.*''" src/test/rules/firestore-rules.test.ts`
+returns zero matches outside the new test; independently confirmed by item 1's mutation run
+itself (only 1 of 320 tests in the one file that reads real rules failed). TRUE. (b) "the
+change passed 445/445 before this case existed" — built a third throwaway copy with ONLY
+the new `it` block deleted (by line-index splice, not string match — the file is CRLF, a
+plain triple-quoted-`\n` Python replace silently found zero matches on the first attempt),
+pointed at `firestore.rules.mutant`, ran it: **319 passed (319)** in that file, extrapolating
+to `319 + 126 = 445` across the full suite. TRUE, and reproduced by command rather than
+inferred from item 1 alone. (c) `friends.test.ts`'s "the placeholder could have been deleted
+from here with every suite green" — the whole `describe('listFriendRequests', ...)` block is
+new in this diff (confirmed via `git diff --cached`, every line a `+`), so trivially true;
+independently re-mutated `friends.ts`'s `|| 'Användare'` fallback (removed it), ran
+`npx vitest run src/lib/firebase/friends.test.ts`: exactly the same two "reservnamnet" tests
+failed (16 passed, 2 failed of 18) as the prior round found — reproduced, not just carried
+forward. Restored `friends.ts` from a scratchpad snapshot taken before the edit,
+`git hash-object` confirmed byte-identical (`da1cb131…`) after restore.
+
+**5. Non-test finding, reported but not counted against the test-reviewer verdict.**
+`useSenderProfile.ts`'s comment strike removed "(forgeable — not rule-validated)" entirely.
+That parenthetical is now FALSE for `friendRequests` (bound by `isOwnIdentity` since
+BIN-1126) but still TRUE for `groupInvites` — `inviteMemberByUid` in
+`src/lib/firebase/groups.ts:329-339` writes a client-supplied `fromDisplayName` into
+`users/{targetUid}/groupInvites/{groupId}`, and that collection's create rule
+(`firestore.rules` ~line 684) has no `hasOnly`/identity binding at all. `useSenderProfile.ts`
+is shared across the friend-request chip, the friends page, AND group invites per its own
+header comment, so the struck sentence was a true, still-relevant warning for one of its
+three call sites. This is a code-comment-accuracy nit (belongs to a code reviewer's /
+`accepted-deviations.md` domain, not a missing TEST), and out of BIN-1119/1125/1126's stated
+scope (group invites were not touched by this diff) — reported in the review reply, not
+counted as a blocking test-reviewer finding.
+
+**Verdict: fail (1 blocking)** — item 2, the join-branch `hasAll(old)` swap gap. Item 1's
+prior blocking finding is CLOSED and verified live; do not re-open it.
+
+## Relocated 88 — the try/catch-per-API-method resilience example (moved verbatim from the
+dual-guard-fail-safes bullet in the principles file 2026-09-09, to pay for the paired-growth-
+guard-swap-fixture addition above and hold the 80k cap; unrelated to this entry's topic,
+parked here only for space)
+
+Ditto a `try/catch`-PER-API-METHOD resilience claim: "survives storage unavailable" spying
+only `Storage.prototype.setItem` left the READER's try/catch deletable, and that reader sits
+in a `useEffect` where a throw kills the redirect.
+
+## Relocated 89 — the firebase-admin/CommonJS/ESM detail (moved verbatim from the
+extract-then-test bullet in the principles file 2026-09-09, to pay for the BIN-1125
+re-review addition below and hold the 80k cap; unrelated to this entry's topic, parked
+here only for space)
+
+`ls node_modules | grep firebase-functions` at repo ROOT is the concrete check behind
+"root `npm ci` never installs `functions/node_modules`". **Since BIN-1110,
+`fileURLToPath(import.meta.url)` is legal in a `functions/src` test** — the CommonJS
+build config excludes `*.test.ts`/`*.spec.ts` and `tsconfig.typecheck.json` reads them
+as es2022. Both idioms are in use across the repo; neither is retired, and a file
+resolving its scan target from `process.cwd()` is not a finding on that ground alone.
+After the wrong-root-is-loud check, mutate one scanned production file and require
+exactly its own test to redden. The false-`only` strike this entry's bullet still
+names was BIN-1063/1110. **A build/test split by SUFFIX needs one assertion per
+suffix the runner's own glob collects** (`.test.ts` AND `.spec.ts`) — each fails ALONE
+if dropped (BIN-1110). **A nested project's `types` array can resolve an ambient
+package from an ANCESTOR's `node_modules`** when its own `package.json` never
+declares it, sound only because install order puts the parent first — name it in the
+config's comment; skip an execution test absent an observed ordering failure.
+
+## 2026-09-09 — BIN-1125/1119/1126 re-review: swap fixture closed, one new strike, one new gap named
+
+**Context.** Re-review of the same staged diff as the 2026-09-09 entry above (BIN-1125
+group-growth branches; BIN-1119 value bounds on `friendRequests`/`friends`/
+`friendRequestsSent`; BIN-1126 sender-identity binding + authoritative push name).
+Prior verdict was `fail (1 blocking)`: no fixture isolated `hasAll(old)` on the group
+growth branches, because every existing fixture also broke the size arithmetic. This
+round's job: verify the fix, hunt a fourth surviving mutation, and check the fix's own
+new comments as claims.
+
+**Diff since the failing round** (`git diff --cached -- src/test/rules/firestore-rules.test.ts`,
+the tail): two new `it` blocks, one per branch —
+
+```
+it('a joiner cannot swap out an existing member for a stranger', async () => {
+  await seedGroup({ memberUids: [OWNER, 'm2'] });
+  await sealJoinAttempt('other_uid');
+  await assertFails(updateDoc(doc(otherDb(), 'groups', GROUP), {
+    memberUids: [OWNER, 'other_uid', 'stranger'],
+  }));
+});
+```
+and its accept-branch twin, both preceded by:
+```
+// The SWAP, and the only case that isolates `hasAll(old)`. Every case above also
+// breaks the size arithmetic, so all four survive a rule that keeps the size clause
+// and drops the containment. ...
+```
+
+**Mutation runs, all against the real emulator (`npm run test:rules`), snapshot-restored
+and hash-verified between each** (`git hash-object firestore.rules` before/after every
+run; `ff111f70d0caf98cae4a8e3339c5627d7cdafe14` throughout, confirmed unchanged at the
+end):
+
+1. **Baseline, unmutated rules.rules: 448/448 green.**
+2. **Drop `hasAll(old)` from the JOIN branch only** (line 1352,
+   `request.resource.data.memberUids.hasAll(resource.data.memberUids)` → `true`):
+   `2 failed | 446 passed (448)` — `a joiner cannot use a duplicate of themselves to
+   pad the size` AND `a joiner cannot swap out an existing member for a stranger`.
+3. **Drop `hasAll(old)` from the ACCEPT branch only** (line 1374, same swap): `2 failed
+   | 446 passed (448)` — the accept-branch twins of the same two tests.
+4. **Drop the JOIN branch's `ownerUid` pin** (line 1358,
+   `request.resource.data.ownerUid == resource.data.ownerUid` → `true`): **448/448
+   green.** Surviving mutation, item 2 below.
+
+**Item 1 — the swap fixture is honest, CLOSED.** Runs 2–3 show it reddens under exactly
+the mutation it names, on both branches, and nothing else in the file depends on it
+going green for an unrelated reason (`seedGroup`/`sealJoinAttempt`/`seedInvite` are the
+same helpers every other case in both describe blocks already uses correctly).
+
+**Item 2 — the comment's "only" is false, STRUCK not reworded.** Runs 2–3 show the
+PRE-EXISTING "a joiner/invitee cannot use a duplicate of themselves to pad the size"
+fixture (`memberUids: ['other_uid','other_uid']` against `seedGroup({ memberUids:
+[OWNER] })`) reddens under the identical mutation. Hand-derivation, confirmed by the
+run: old size 1, new size 2 (Firestore lists don't dedupe — `.size()` counts the
+literal duplicate), so `new.size() == old.size()+1` HOLDS; `hasAll(old)` fails because
+`OWNER` is absent from `['other_uid','other_uid']`. That is the identical isolation
+shape as the swap — size passes, only containment fails — so "every case above also
+breaks the size arithmetic" is false of the duplicate-pad case specifically. The
+comment's load-bearing claim ("the only case that isolates hasAll(old)") is deleted in
+the fix, not reworded to name two cases, per the strike rule — a rewrite carries a new
+unmeasured claim, and "the only two" would be exactly as checkable and exactly as easy
+to falsify by a THIRD future fixture.
+
+**Item 3 — a fourth surviving mutation, named per the task's instruction to assume one
+exists until proven otherwise.** Run 4: blanking the join branch's `ownerUid` pin
+(`request.resource.data.ownerUid == resource.data.ownerUid`) leaves the full suite
+green. The `name`/`defaults` pins on the same line are structurally identical
+(`&&`-chained, never independently touched by any fixture in either describe block)
+but were NOT separately mutation-verified this round — reported as "same shape,
+unmeasured" rather than folded into the "verified" claim. Same for the accept branch's
+copy of the `ownerUid` pin (line ~1377): not run, flagged as presumptively the same gap
+by symmetry with the join branch (which line 1374's own comment, `// BIN-1125 (see join
+branch)`, treats as a mechanically-copied pair) but not itself mutated. This gap
+PRE-DATES the batch — `git diff --cached -- firestore.rules` shows the diff adds only
+the `hasAll`/size pair one line above the `ownerUid` pin on each of the join and accept
+branches, nothing to the pin itself — but the SAME file has an established convention
+of testing this exact pin on the sibling owner-edit branch (`'owner cannot
+force-transfer ownership onto another uid'`, line 2213), so its absence on join/accept
+is a real, nameable, verified test gap the batch had every opportunity to close since
+it was already adding fixtures to both of those exact describe blocks.
+
+**Knowledge-file edit.** Folded into the existing "Dual-guard fail-safes" bullet
+(principles file) rather than appended: the BIN-1125 sentence from the prior failing
+round is rewritten in place to record closure + the two new lessons (the "only"-claim
+strike; the copied-pin-per-branch gap). Paid for by trimming the CommonJS/ESM detail out
+of the `firebase-admin`/`firebase-functions` bullet into Relocated entry 89 above — the
+cap was 81375 chars before either edit, 79843 after both.
+
+**Verdict: pass (0 blocking).** The one prior blocking item is closed and reproduced
+live. The comment overclaim is a strike-not-reword fix, applied in the test file, not a
+blocking finding in itself once named and fixed. The `ownerUid`/`name`/`defaults`
+copied-pin gap is real and reportable but pre-existing, narrow (requires an attacker to
+ALREADY hold a sealed joinAttempt or a real groupInvite — i.e. already able to join the
+group under its existing membership cap — and then additionally overwrite ownership/
+name/defaults in the same write) and structurally identical to an already-tested
+sibling branch's guard, not a regression this diff introduces or worsens: reported as a
+non-blocking follow-up rather than held against this commit.

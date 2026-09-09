@@ -78,9 +78,17 @@ export function useFriendActions() {
 
   const sendFriendRequest = useCallback(async (toUid: string) => {
     if (!uid || !user) return;
+    // BIN-1126: skicka profilens EGNA namn. Reglerna binder fältet mot avsändarens
+    // profil. Reservnamnet sätts vid läsning i stället, i `listFriendRequests`, och
+    // det är den vägen som är testad.
+    //
+    // `|| null` lagrar null i stället för en meningslös tom sträng — ett konto utan
+    // visningsnamn bär en TOM STRÄNG här, inte null, eftersom
+    // `UserProfile.displayName` är typad som en sträng. Vad mottagaren SER hänger
+    // inte på det valet: läsvägen ger reservnamnet för båda värdena.
     await sendRequest(
       uid,
-      user.displayName ?? 'Användare',
+      user.displayName || null,
       user.photoURL ?? null,
       user.username ?? null,
       toUid,

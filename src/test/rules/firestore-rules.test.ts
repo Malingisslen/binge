@@ -988,6 +988,14 @@ describe('users/{uid}/friends/{targetUid} — forged-friendship guard', () => {
       });
     });
   }
+  // BIN-1126: the friendRequests create rule reads the SENDER's own profile, so the
+  // sender needs one before their write can be judged. Fields are passed in rather
+  // than fixed, because whether they match the payload is the thing under test.
+  async function seedSenderProfile(uid: string, fields: Record<string, unknown>) {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', uid), fields);
+    });
+  }
 
   it('attacker cannot forge friends/{attacker} on a victim who never requested them', async () => {
     // No pending request from VICTIM → ATTACKER exists.
@@ -1080,6 +1088,25 @@ describe('users/{uid}/friends/{targetUid} — forged-friendship guard', () => {
     ));
   });
 
+  // BIN-1119's fifth question, asked of the two neighbouring collections and
+  // answered here rather than only in prose. `uid` is pinned to the document id in
+  // both, so the timestamp was the one key whose value was free — and it carried no
+  // type check, which is what let the whole payload ride in it.
+  it('friends: a since that is not a timestamp is denied', async () => {
+    await seedRequest(VICTIM, ATTACKER);
+    await assertFails(setDoc(
+      doc(victimDb(), 'users', VICTIM, 'friends', ATTACKER),
+      { uid: ATTACKER, since: 'x'.repeat(1000) },
+    ));
+  });
+
+  it('friendRequestsSent: a sentAt that is not a timestamp is denied', async () => {
+    await assertFails(setDoc(
+      doc(attackerDb(), 'users', ATTACKER, 'friendRequestsSent', VICTIM),
+      { uid: VICTIM, sentAt: 'x'.repeat(1000) },
+    ));
+  });
+
   it('friendRequestsSent: a missing uid is denied', async () => {
     await assertFails(setDoc(
       doc(attackerDb(), 'users', ATTACKER, 'friendRequestsSent', VICTIM),
@@ -1125,7 +1152,15 @@ describe('users/{uid}/friends/{targetUid} — forged-friendship guard', () => {
   // document of any shape into the RECIPIENT's tree, up to Firestore's document
   // ceiling — on their storage, and verbatim into their GDPR export, which copies
   // every field as it finds it.
+  //
+  // The seed is what keeps this test about `hasOnly`. BIN-1126 put an identity
+  // comparison EARLIER in the same `&&` chain, and that comparison reads the
+  // sender's own profile — which `clearFirestore()` guarantees is absent unless a
+  // test seeds it. A missing document makes the comparison deny, so without this
+  // line the write is refused before `hasOnly` is ever reached: the test stays green
+  // while the key allowlist it was written to protect could be deleted outright.
   it('friendRequests: an extra key is denied', async () => {
+    await seedSenderProfile(ATTACKER, { displayName: 'A', username: 'a' });
     await assertFails(setDoc(
       doc(attackerDb(), 'users', VICTIM, 'friendRequests', ATTACKER),
       {
@@ -1142,7 +1177,13 @@ describe('users/{uid}/friends/{targetUid} — forged-friendship guard', () => {
   // The other half, and the one a too-narrow key list would have broken: the exact
   // payload sendFriendRequest builds must still go through. Without this, a rule
   // that denied every real friend request would look correct.
+  //
+  // BIN-1126 added the sender profile to this test's setup. The create rule now
+  // compares the identity fields against the sender's own `users/{uid}` document, so
+  // the payload can only be judged against a sender who has one — which every
+  // signed-in account does, since `ensureUserProfile` writes it at sign-in.
   it('friendRequests: the payload sendFriendRequest actually writes is allowed', async () => {
+    await seedSenderProfile(ATTACKER, { displayName: 'A', username: 'a' });
     await assertSucceeds(setDoc(
       doc(attackerDb(), 'users', VICTIM, 'friendRequests', ATTACKER),
       {
@@ -1153,6 +1194,146 @@ describe('users/{uid}/friends/{targetUid} — forged-friendship guard', () => {
         sentAt: serverTimestamp(),
       },
     ));
+  });
+
+  // ---- BIN-1119: value bounds ----
+  //
+  // `hasOnly` above caps the NUMBER of keys, never how much may sit inside them. A
+  // signed-in stranger could still fill a document toward Firestore's ceiling in the
+  // recipient's tree — on their storage, and verbatim into their GDPR export.
+  //
+  // The limits are the same ones `isValidPublicProfile` already applies to the same
+  // quantities. Each case below writes one over-long field and leaves the rest at a
+  // legitimate value, so a failure names which bound broke.
+  describe('friendRequests value bounds (BIN-1119)', () => {
+    function payload(over: Record<string, unknown> = {}) {
+      return {
+        fromUid: ATTACKER,
+        fromDisplayName: 'A',
+        fromPhotoURL: null,
+        fromUsername: 'a',
+        sentAt: serverTimestamp(),
+        ...over,
+      };
+    }
+    async function write(over: Record<string, unknown> = {}) {
+      return setDoc(
+        doc(attackerDb(), 'users', VICTIM, 'friendRequests', ATTACKER),
+        payload(over),
+      );
+    }
+
+    it('an over-long fromDisplayName is denied', async () => {
+      await seedSenderProfile(ATTACKER, { displayName: 'x'.repeat(81), username: 'a' });
+      await assertFails(write({ fromDisplayName: 'x'.repeat(81) }));
+    });
+
+    it('an over-long fromPhotoURL is denied', async () => {
+      await seedSenderProfile(ATTACKER, { displayName: 'A', username: 'a' });
+      await assertFails(write({ fromPhotoURL: 'x'.repeat(501) }));
+    });
+
+    it('an over-long fromUsername is denied', async () => {
+      await seedSenderProfile(ATTACKER, { displayName: 'A', username: 'y'.repeat(21) });
+      await assertFails(write({ fromUsername: 'y'.repeat(21) }));
+    });
+
+    // sentAt carried no type check at all, which made every bound above pointless:
+    // the key was allowed by `hasOnly`, so the whole payload could ride in it.
+    it('a sentAt that is not a timestamp is denied', async () => {
+      await seedSenderProfile(ATTACKER, { displayName: 'A', username: 'a' });
+      await assertFails(write({ sentAt: 'x'.repeat(1000) }));
+    });
+
+    // A bound with only an over-long negative case is satisfied by an off-by-one:
+    // narrowing `<= N` to `< N` denies a legitimate value at exactly N and no test
+    // notices, because nothing writes one. Each bound therefore gets its own
+    // at-the-limit positive, not just the first.
+    it('a name at exactly the limit is allowed', async () => {
+      const atLimit = 'x'.repeat(80);
+      await seedSenderProfile(ATTACKER, { displayName: atLimit, username: 'a' });
+      await assertSucceeds(write({ fromDisplayName: atLimit }));
+    });
+
+    it('a username at exactly the limit is allowed', async () => {
+      // 20 characters, and shaped so the username rules would accept it too — a
+      // value the app can really hold, not just one of the right length.
+      const atLimit = 'a'.repeat(19) + 'b';
+      await seedSenderProfile(ATTACKER, { displayName: 'A', username: atLimit });
+      await assertSucceeds(write({ fromUsername: atLimit }));
+    });
+
+    it('a photo URL at exactly the limit is allowed', async () => {
+      const atLimit = 'h'.repeat(500);
+      await seedSenderProfile(ATTACKER, { displayName: 'A', username: 'a' });
+      await assertSucceeds(write({ fromPhotoURL: atLimit }));
+    });
+  });
+
+  // ---- BIN-1126: the sender may not present someone else's identity ----
+  //
+  // The rule bound the sender's uid but never their presentation, so a request could
+  // arrive — in the pending list and on the recipient's lock screen — wearing any
+  // name and username. Reviews, comments and reactions were already bound this way;
+  // friend requests were the collection left out.
+  //
+  // Letting the UI look the sender up INSTEAD of binding the write was weighed and
+  // rejected: the `publicProfiles` read rule is gated on visibility and the two
+  // parties are by definition not friends yet, so for a private sender that lookup
+  // returns nothing and the UI falls back to the stored field — the very field this
+  // rule makes trustworthy.
+  describe('friendRequests identity binding (BIN-1126)', () => {
+    async function write(over: Record<string, unknown> = {}) {
+      return setDoc(
+        doc(attackerDb(), 'users', VICTIM, 'friendRequests', ATTACKER),
+        {
+          fromUid: ATTACKER,
+          fromDisplayName: 'Attacker',
+          fromPhotoURL: null,
+          fromUsername: 'attacker',
+          sentAt: serverTimestamp(),
+          ...over,
+        },
+      );
+    }
+
+    it('a fromDisplayName that is not the sender\'s own is denied', async () => {
+      await seedSenderProfile(ATTACKER, { displayName: 'Attacker', username: 'attacker' });
+      await assertFails(write({ fromDisplayName: 'Malin' }));
+    });
+
+    it('a fromUsername that is not the sender\'s own is denied', async () => {
+      await seedSenderProfile(ATTACKER, { displayName: 'Attacker', username: 'attacker' });
+      await assertFails(write({ fromUsername: 'malin' }));
+    });
+
+    it('the sender\'s own identity is allowed', async () => {
+      await seedSenderProfile(ATTACKER, { displayName: 'Attacker', username: 'attacker' });
+      await assertSucceeds(write());
+    });
+
+    // The client sends null when the profile carries no name; the placeholder that
+    // stands in for it lives on the read path.
+    it('a null name from a profile with no name is allowed', async () => {
+      await seedSenderProfile(ATTACKER, { username: 'attacker' });
+      await assertSucceeds(write({ fromDisplayName: null }));
+    });
+
+    it('a name is denied when the sender\'s profile carries none', async () => {
+      await seedSenderProfile(ATTACKER, { username: 'attacker' });
+      await assertFails(write({ fromDisplayName: 'Malin' }));
+    });
+
+    // Pins the SENTINEL the helper defaults an absent field to, not just the
+    // comparison around it. With `null` as that default, an absent profile name
+    // matches only a null payload; change the default to any other falsy value and
+    // a payload carrying that value silently becomes "your own identity". Nothing
+    // else in the suite writes an empty string against an absent field, so the
+    // change passed 445/445 before this case existed.
+    it('an empty name is denied when the sender\'s profile carries none', async () => {
+      await seedSenderProfile(ATTACKER, { username: 'attacker' });
+      await assertFails(write({ fromDisplayName: '' }));
+    });
   });
 });
 
@@ -2255,6 +2436,54 @@ describe('groups token-join membership add + size cap (BIN-327)', () => {
     await sealJoinAttempt('other_uid');
     await assertFails(updateDoc(doc(otherDb(), 'groups', GROUP), { memberUids: [...base100, 'other_uid'] }));
   });
+
+  // BIN-1125. The branch above proves the joiner may GROW the list; these prove it
+  // may do nothing else to it. Until this landed, nothing related the new list to
+  // the old one, so a third party holding a sealed attempt could write themselves in
+  // as the only member — leaving `ownerUid` pinned to someone no longer in
+  // `memberUids`, which is the unmanageable end state BIN-1108 was filed about.
+  it('a joiner cannot write themselves in as the ONLY member', async () => {
+    await seedGroup({ memberUids: [OWNER, 'm2'] });
+    await sealJoinAttempt('other_uid');
+    await assertFails(updateDoc(doc(otherDb(), 'groups', GROUP), { memberUids: ['other_uid'] }));
+  });
+
+  it('a joiner cannot drop one existing member while adding themselves', async () => {
+    // A partial removal is refused, not only a total one.
+    await seedGroup({ memberUids: [OWNER, 'm2'] });
+    await sealJoinAttempt('other_uid');
+    await assertFails(updateDoc(doc(otherDb(), 'groups', GROUP), { memberUids: [OWNER, 'other_uid'] }));
+  });
+
+  it('a joiner cannot add a stranger alongside themselves', async () => {
+    await seedGroup({ memberUids: [OWNER] });
+    await sealJoinAttempt('other_uid');
+    await assertFails(updateDoc(doc(otherDb(), 'groups', GROUP), {
+      memberUids: [OWNER, 'other_uid', 'stranger'],
+    }));
+  });
+
+  // The form the ticket proposed — `old.hasAll(new.removeAll([self]))` plus the size
+  // clause — passes this write: removeAll strips BOTH copies and hasAll([]) is true,
+  // while the owner is gone and the size is old+1. It is here so that a future
+  // rewrite toward that shape fails instead of shipping.
+  it('a joiner cannot use a duplicate of themselves to pad the size', async () => {
+    await seedGroup({ memberUids: [OWNER] });
+    await sealJoinAttempt('other_uid');
+    await assertFails(updateDoc(doc(otherDb(), 'groups', GROUP), {
+      memberUids: ['other_uid', 'other_uid'],
+    }));
+  });
+
+  // The swap. Here the count is honest — one member out, the joiner and a stranger
+  // in, net +1 — and containment is the only thing left to refuse it.
+  it('a joiner cannot swap out an existing member for a stranger', async () => {
+    await seedGroup({ memberUids: [OWNER, 'm2'] });
+    await sealJoinAttempt('other_uid');
+    await assertFails(updateDoc(doc(otherDb(), 'groups', GROUP), {
+      memberUids: [OWNER, 'other_uid', 'stranger'],
+    }));
+  });
 });
 
 describe('groups invite-accept (BIN-327)', () => {
@@ -2266,6 +2495,47 @@ describe('groups invite-accept (BIN-327)', () => {
   it('without a groupInvite, accept is denied', async () => {
     await seedGroup({ memberUids: [OWNER] });
     await assertFails(updateDoc(doc(otherDb(), 'groups', GROUP), { memberUids: [OWNER, 'other_uid'] }));
+  });
+
+  // BIN-1125, the accept branch's own twin of the join-branch cases above. Written
+  // out rather than shared with a loop: the two branches are separate clauses in
+  // the rule, and a fix applied to only one of them has to fail here.
+  it('an invitee cannot write themselves in as the ONLY member', async () => {
+    await seedGroup({ memberUids: [OWNER, 'm2'] });
+    await seedInvite('other_uid');
+    await assertFails(updateDoc(doc(otherDb(), 'groups', GROUP), { memberUids: ['other_uid'] }));
+  });
+
+  it('an invitee cannot drop one existing member while adding themselves', async () => {
+    await seedGroup({ memberUids: [OWNER, 'm2'] });
+    await seedInvite('other_uid');
+    await assertFails(updateDoc(doc(otherDb(), 'groups', GROUP), { memberUids: [OWNER, 'other_uid'] }));
+  });
+
+  it('an invitee cannot add a stranger alongside themselves', async () => {
+    await seedGroup({ memberUids: [OWNER] });
+    await seedInvite('other_uid');
+    await assertFails(updateDoc(doc(otherDb(), 'groups', GROUP), {
+      memberUids: [OWNER, 'other_uid', 'stranger'],
+    }));
+  });
+
+  it('an invitee cannot use a duplicate of themselves to pad the size', async () => {
+    await seedGroup({ memberUids: [OWNER] });
+    await seedInvite('other_uid');
+    await assertFails(updateDoc(doc(otherDb(), 'groups', GROUP), {
+      memberUids: ['other_uid', 'other_uid'],
+    }));
+  });
+
+  // The swap's twin. The two branches carry hand-copied clauses, so a containment
+  // clause deleted from one of them has to fail here and not only on the join side.
+  it('an invitee cannot swap out an existing member for a stranger', async () => {
+    await seedGroup({ memberUids: [OWNER, 'm2'] });
+    await seedInvite('other_uid');
+    await assertFails(updateDoc(doc(otherDb(), 'groups', GROUP), {
+      memberUids: [OWNER, 'other_uid', 'stranger'],
+    }));
   });
 });
 

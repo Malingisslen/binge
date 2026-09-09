@@ -88,16 +88,21 @@ Cap: 80k chars — pay for an addition with a cut, and move what you cut verbati
   forever; fix with `createdAt is timestamp && createdAt == request.time` (BIN-476→480).
 - Exact-self-leave: `size()==old.size()-1` + `hasAll` + `!(auth.uid in new)` = removed only themself.
 - **A shrink-only guard on ONE branch says nothing about the GROWTH branches on the same array field** — each
-  direction needs its own containment check. `groups/{id}`'s token-join and invite-accept branches bound only
-  `!(uid in old) && uid in new && size() <= 100` (plus the identity/token pins); neither relates the REST of
-  `new` to `old`, so a caller holding a valid join token or invite can write `memberUids: [self]` and evict
+  direction needs its own containment check. `groups/{id}`'s token-join and invite-accept branches bounded only
+  `!(uid in old) && uid in new && size() <= 100` (plus the identity/token pins); nothing related the REST of
+  `new` to `old`, so a caller holding a valid join token or invite could write `memberUids: [self]` and evict
   every existing member including the owner — reachable by a THIRD PARTY, not just the account whose own
-  write it is. Fix: pin `new` as `old ∪ {addedUid}` (or `old.hasAll(new.removeAll([addedUid]))`), never just
-  the added element's membership. FOUND IN REVIEW, BIN-1125 (2026-09-08, filed not fixed — see archive):
-  BIN-1108 hardened the adjacent owner and leave branches against the OWNER
-  freezing themselves out; that fix does not touch and does not worsen this growth-side hole, so shipping it
-  alone is coherent — check every OTHER branch touching the same array field for the mirror-image gap before
-  calling a shrink-only fix complete.
+  write it is. FOUND IN REVIEW, BIN-1125; **CLOSED 2026-09-09** on both branches. BIN-1108 had hardened the
+  adjacent owner and leave branches against the OWNER freezing themselves out, and that fix neither touched
+  nor worsened this growth-side hole — check every OTHER branch touching the same array field for the
+  mirror-image gap before calling a shrink-only fix complete.
+- **`old.hasAll(new.removeAll([addedUid]))` is NOT a sound containment check, and it was the recommended form
+  here until 2026-09-09.** A DUPLICATE defeats it: `new = [self, self]` against `old = [owner]` satisfies it
+  — `removeAll` strips both copies and `hasAll([])` is true — while the size clause reads `2 == 1 + 1` and the
+  owner is written out. The form that holds is the containment stated forwards, `new.hasAll(old)`, paired with
+  an exact `new.size() == old.size() + 1`; read the pair together, since `hasAll` alone admits a stranger
+  added alongside the joiner and the size alone admits the duplicate. Pinned on both branches by the tests
+  named `a joiner cannot use a duplicate of themselves to pad the size` and its invitee twin.
 - Admin report-update rules pin `reporterUid`/`target*`/`reason`/`createdAt` by equality to `resource.data.*`.
   `usernames/{username}` has `allow create`, no `allow update`, so writing an existing doc default-denies —
   so a reservation's `uid` changes only via delete-then-create BY ITS OWNER, and a `where('uid','==',me)`

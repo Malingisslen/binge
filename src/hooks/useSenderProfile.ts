@@ -5,9 +5,8 @@ import { getPublicProfileCard } from '@/lib/firebase/publicProfile';
 
 // Resolve a sender/inviter's display name + username from the public projection
 // (BIN-505) via their uid, instead of trusting client-set fromDisplayName/
-// fromUsername (forgeable — not rule-validated). Returns null when the projection
-// isn't readable (private / not yet backfilled); callers fall back to the
-// denormalized fields.
+// fromUsername. Returns null when the projection isn't readable (private / not yet
+// backfilled); callers fall back to the denormalized fields.
 //
 // SHARED so the friend-request chip (TopbarActions), the friends page
 // (FriendsPageClient), and group invites (grupper) all resolve the SAME shape

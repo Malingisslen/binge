@@ -35,9 +35,12 @@ export interface FriendRequest {
 // 2. users/{myUid}/friendRequestsSent/{toUid}  — egen tracking för UI
 //
 // Atomisk batch så ingen halv-state kan lämnas.
+// BIN-1126: `myDisplayName` är nullbar. Reglerna binder fältet mot avsändarens egen
+// profil och släpper igenom null i båda ändar, så ett konto utan visningsnamn kan
+// skicka en förfrågan. Läsvägen nedan sätter reservnamnet i stället.
 export async function sendFriendRequest(
   myUid: string,
-  myDisplayName: string,
+  myDisplayName: string | null,
   myPhotoURL: string | null,
   myUsername: string | null,
   toUid: string,
@@ -172,7 +175,10 @@ export async function listFriendRequests(myUid: string): Promise<FriendRequest[]
     const data = d.data();
     return {
       fromUid: d.id,
-      fromDisplayName: (data.fromDisplayName as string) ?? 'Användare',
+      // BIN-1126: `||`, så både null och en tom sträng får reservnamnet. Fältet är
+      // numera nullbart på skrivvägen, och äldre dokument kan bära en tom sträng
+      // från tiden då klienten skickade profilens värde rakt av.
+      fromDisplayName: (data.fromDisplayName as string) || 'Användare',
       fromPhotoURL: (data.fromPhotoURL as string | null) ?? null,
       fromUsername: (data.fromUsername as string | null) ?? null,
       sentAt: data.sentAt?.toDate?.() ?? new Date(),

@@ -50,8 +50,17 @@ export const onFriendRequestCreate = onDocumentCreated(
     const data = event.data?.data();
     if (!data) return;
     const recipientUid = event.params.recipientUid;
-    const fromDisplayName = (data.fromDisplayName as string) ?? 'Någon';
-    const fromUsername = data.fromUsername as string | null;
+
+    // BIN-1126: slå upp avsändarens namn auktoritativt, precis som
+    // `onSessionPickCreate` nedan gör för den som valde en titel. Reglerna binder
+    // numera fälten på dokumentet, men den bindningen gäller framåt — dokument
+    // skrivna innan den deployades bär vad som helst, och den här notisen är den
+    // yta där ett förfalskat namn syns på en låsskärm.
+    const db = getFirestore();
+    const senderSnap = await db.collection('users').doc(event.params.fromUid).get();
+    const senderData = senderSnap.data();
+    const fromDisplayName = (senderData?.displayName as string) || 'Någon';
+    const fromUsername = (senderData?.username as string | null) ?? null;
 
     // Klick på notif → vännernas-sidan med pending-fliken aktiv.
     // /friends/?tab=requests fungerar i appen via search-param-läsare.
