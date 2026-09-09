@@ -1563,3 +1563,53 @@ sjalv skrivit. De atervandande formerna:
 **Kontrollen:** dar en mening maste sta, skriv ett KOMMANDO som harleder den - och kor
 kommandot fore du skriver meningen. Och nar en rattelse namner ett tal: talet ar det
 nasta granskningsvarvets fynd.
+
+### [Workflow] Routningen flyttar sig medan bunten byggs — och varje flytt ar en egen kritik (2026-09-09, BIN-1122)
+
+**Trigger:** en bunt vars filuppsattning inte ar densamma nar den committas som nar den
+valdes.
+
+**Regel:** kor routern pa den FAKTISKA unionen precis fore varje kritik och fore varje
+commit, och konvenera den panel den namner just da. Arv aldrig en tier eller en panel ur
+urvalet, ur en plan eller ur en tidigare kritik.
+
+**Exempel:** BIN-1122 routade tre gangar. Urvalet gissade #8 utifran en dokumenttung
+filuppsattning; de byggda filerna la till tooling under `scripts/` och flyttade den till
+#25; att ge det nya skriptet ett UTTRYCKLIGT sate i agarkartan flyttade den till #27. Var
+och en fick sin egen blinda kritik, och de sa olika saker — #8 blockerade pa att lasa hela
+filer i stallet for hagnade block, #25 kravde att undantaget forankrades i en katalog och
+inte bara i ett suffix, #27 matte upp en tredje kommandoform golvet inte ser. En arvd
+panel hade missat tva av tre. Ett byte av SATE ar en omfangsandring precis som ett tillagg
+eller en krympning.
+
+### [Workflow] En strykning i en fil ar en halv atgard — grinden som ser resten ar inte per-fil (2026-09-09, BIN-1112)
+
+**Trigger:** ett falskt pastaende som ska strykas ur en kommentar eller ett dokument.
+
+**Regel:** stryk pa VARJE stalle meningen bor, i samma bunt, och sok med flera lydelser —
+kopiorna ar omformulerade, inte kopierade. Las varje traffs MEKANISM innan den rors: i en
+familj av snarlika meningar ar nagra sanna, och den som stryker dem gor dokumentationen
+samre.
+
+**Exempel:** biljetten pekade ut ett stalle. Den agande rollen kravde en BREDARE strykning
+an sa, eftersom det som blev kvar viskade samma slutsats utan att skriva den. Kodgranskaren
+blockerade pa att en strykning pa ett stalle bara flyttar pastaendet, sa tva kopior till kom
+med; helhetsgranskningen hittade en tredje i SAMMA fil, ett tusental rader bort, och tva till
+i en high-stakes-fil som hade tvingat hela bunten till full panel — de bokfordes i stallet.
+Av traffarna var flera SANNA om en annan mekanism. Antalet steg vid varje varv, sa biljetten
+bar numera ett kommando i stallet for en siffra.
+
+### [Testing] Ett kommando som avslutar med 0 utan att kora nagot ar en tyst spärr (2026-09-09, BIN-1137)
+
+**Trigger:** ett verifieringskommando som startar en extern process — en emulator, en
+server, en container.
+
+**Regel:** las utdatan, inte exitkoden. Och nar du bygger ett sadant kommando: fa det att
+falla nar processen inte startade.
+
+**Exempel:** `npm run test:rules` skriver `Could not start Firestore Emulator, port taken`
+och avslutar med 0. Noll test kordes. `npm test` kor inte regeltesterna alls, sa det
+kommandot ar hela beviset for repots mest sakerhetskansliga yta — en sprint som andrar
+`firestore.rules`, ser exit 0 och gar vidare har inte provat sina regler. Porten holls av
+ett ANNAT repos emulator, vilket ar normaltillstandet pa en maskin med flera projekt.
+Push-grinden markte det bara genom att lasa raderna.
