@@ -119,8 +119,7 @@
   </section>
 </div>
 
-<script id="data" type="application/json">
-{
+<script id="data" type="application/json">{
   "columns": [
     {
       "key": "ui",
@@ -2605,6 +2604,13 @@
         {
           "from": "cf-handOverOwnedGroups",
           "to": "firestore",
+          "payload": "BIN-1147: eraseSentInvites runs FIRST, before the owned-groups query. A collection group query on groupInvites where fromUid == uid finds the invitations this account SENT, which live in OTHER users' trees and no path walk reaches, and one atomic batch deletes them. Above SENT_INVITE_BATCH_LIMIT it deletes nothing and refuses: the order is what makes a refusal a run that wrote nothing, so the caller's \"nothing has been deleted\" wording stays true. Needs the COLLECTION_GROUP fieldOverride on groupInvites/fromUid — deploy the index before the function or every self-service deletion fails. The sweep reaches the same documents through FIELD_OWNED_CATEGORIES' groupInvitesSent, whose deletes are chunked instead.",
+          "transport": "Firestore write (Admin SDK)",
+          "verified": true
+        },
+        {
+          "from": "cf-handOverOwnedGroups",
+          "to": "firestore",
           "payload": "query groups where ownerUid == uid; per group read members (joinedAt), watchlist and sessionHistory. The ballot is the group doc's memberUids and the member rows only supply joinedAt: a row can outlive the membership it stands for, and electing from the rows would hand the group to someone firestore.rules no longer counts as a member",
           "transport": "firestore-query",
           "verified": true
@@ -2904,8 +2910,7 @@
       "area": "library"
     }
   ]
-}
-</script>
+}</script>
 
 <script>
 const DATA = JSON.parse(document.getElementById('data').textContent);
