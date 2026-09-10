@@ -29,7 +29,10 @@ Allt som bara användaren själv ser tas bort helt:
 - `users/{uid}/friends/*` (+ speglad radering på vännens sida)
 - `users/{uid}/friendRequests/*` (inkommande, + speglad sent-sida)
 - `users/{uid}/friendRequestsSent/*` (utgående, + speglad in-sida)
-- `users/{uid}/groupInvites/*` (inkomna grupp-inbjudningar)
+- `users/{uid}/groupInvites/*` (inkomna grupp-inbjudningar). De inbjudningar jag
+  SKICKAT ligger inte här utan i mottagarnas träd — de raderas också, men av
+  servern och genom en fråga, inte genom den här listan. Se avsnittet om
+  grupp-medlemskap.
 - `users/{uid}/listFollows/*` (följda listor, BIN-96)
 - `users/{uid}/pauseHistory/*` (paus-/återupptag-historik från Sparande)
 
@@ -155,6 +158,22 @@ När användaren raderas:
 
   Finns INGEN annan medlem kvar raderas gruppen som förut. En efterträdare går
   inte att uppfinna.
+- **Inbjudningar jag har SKICKAT raderas ur mottagarnas träd** (BIN-1147, Malins
+  beslut 2026-09-10). En inbjudan ligger på `users/{mottagare}/groupInvites/{gid}`
+  och bär mitt uid och mitt namn. Den gäller varje konto som raderar sig, inte
+  bara gruppägare — därför står den som en egen punkt och inte under ägarfallet.
+
+  Görs av servern, i samma anropbara funktion som överlämningen, och FÖRE den.
+  Klienten kan inte göra det själv: läsregeln på den sökvägen är `isOwner(uid)`,
+  så ingen klientfråga kan spänna över andras träd. Servern hittar dem på
+  `fromUid`, ett fält reglerna pinnar vid skapandet och gör oföränderligt.
+
+  Samma sopning gör det för ett konto som raderats i Firebase Console. De två
+  dörrarna skriver INTE på samma sätt — knappens väg och sopningens väg har olika
+  tak och olika felbeteende. Mekanismen står i `SENT_INVITE_BATCH_LIMIT`s egen
+  kommentar och i posten daterad 2026-09-10 i `.claude/rules/accepted-deviations.md`;
+  den upprepas inte här, eftersom två exemplar av ett beslut är två saker som kan
+  glida isär.
 
 ### Hushålls-bidrag (delade prenumerationskostnader) → Samtyckesbaserad, självstyrd radering (BIN-184, 2026-07-05)
 
@@ -707,11 +726,17 @@ moderering stänger av någon — räknas aldrig som borta. Det delade taket
 (`withinOrphanCeiling`) vägrar hela körningen om kandidatmängden är orimlig.
 
 **Det fältägda innehållet (BIN-1063 steg 3, 2026-09-07).** Innehåll som ägs via
-ett FÄLT i stället för via uid:t i sökvägen sveps numera också, i denna ordning:
-`reviews` med sina `likes` och `comments`; den avgångnes egna likes och
-kommentarer var de än ligger; avsnittsreaktionerna i
-`episodeReactions/*/reactions/*`; `lists`; hostade `sessions` med sina
-`participants` och `swipes`; och till sist grupperna.
+ett FÄLT i stället för via uid:t i sökvägen sveps numera också. Uppräkningen står
+inte här: den går inaktuell nästa gång en kategori läggs till, vilket redan har
+hänt en gång. Läs `FIELD_OWNED_CATEGORIES` i
+`functions/src/retentionCleanup/fieldOwned.ts`; sviten har en test som fäller om
+körningen och listan glider isär.
+
+En kategori som frågar med ett collection group-predikat behöver dessutom ett
+`fieldOverrides`-index i `firestore.indexes.json`. Ingenting fäller om det
+saknas — emulatorn indexerar automatiskt, så testsviten är grön ändå — och
+symptomet i drift är att frågan kastar och sopningen hoppar över det uid:t tills
+indexet byggts.
 
 **När en recension raderas följer ANDRAS likes och kommentarer under den med.**
 Frågan filtrerar inte på uid — den listar allt under recensionen. Det är

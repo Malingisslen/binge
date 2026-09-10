@@ -11,7 +11,7 @@
  * `adminIo.ts`. Neither re-derives who inherits.
  */
 
-import { buildHandoverUpdate, clearsAddedBy, type MemberRow } from './logic';
+import { buildHandoverUpdate, clearsAddedBy, refusalForSentInvites, type MemberRow } from './logic';
 
 /** One `groups/{gid}/watchlist/{id}` row, narrowed to what the handover reads. */
 export interface WatchlistRow {
@@ -111,6 +111,28 @@ export interface HandoverIo {
    * the retry: after the swap, neither door's query would return it again.
    */
   eraseMemberTraces(groupId: string, leavingUid: string, erasure: TraceErasure): Promise<void>;
+
+  /**
+   * Paths of every `users/{other}/groupInvites/{groupId}` the uid SENT.
+   *
+   * A collection-group query on `fromUid`, which only Admin credentials can run:
+   * the read rule on that path is `isOwner(uid)`, so no client query can span
+   * other people's trees. That is why this door is server-side at all.
+   *
+   * `fromUid` is pinned to the writer on create and immutable after, so the
+   * predicate is sound for every document that has ever existed in the
+   * collection — verified against the commit that created it, not assumed.
+   */
+  sentInvitePaths(uid: string): Promise<readonly string[]>;
+
+  /**
+   * Delete every given path in ONE atomic batch, or write nothing.
+   *
+   * The atomicity is the point, not an optimisation: see
+   * `SENT_INVITE_BATCH_LIMIT`. The caller refuses above the ceiling rather than
+   * chunking, so this method never has to decide anything.
+   */
+  deleteSentInvites(paths: readonly string[]): Promise<void>;
   log: { info(message: string, data?: unknown): void; error(message: string, data?: unknown): void };
 }
 
@@ -232,4 +254,41 @@ export async function runGroupHandover(
 
   io.log.info('groupHandover done', { leavingUid, ...summary });
   return summary;
+}
+
+
+/**
+ * Erase the invitations this uid SENT into other people's trees.
+ *
+ * Runs BEFORE `runGroupHandover` in the callable. The order is load-bearing, not
+ * incidental: a refusal here is a run that has written nothing at all, so the
+ * caller's "nothing has been deleted" message stays true. Run after the
+ * handover, the same refusal would arrive on top of writes that already landed.
+ *
+ * Independent of group ownership — an invite you sent is yours to erase whether
+ * or not you still own the group it points at, and the handover may have moved
+ * that ownership already.
+ *
+ * The sweep reaches the same documents by a DIFFERENT mechanism — the
+ * `groupInvitesSent` category, whose deletes are chunked under the sweep's own
+ * ceiling. The all-or-nothing property below is this function's, not that one's.
+ * Derive the callers rather than trusting a sentence:
+ * git grep -n "eraseSentInvites(" -- functions/src
+ *
+ * Returns how many were found and erased. Throws the refusal string when the
+ * count exceeds what one atomic batch can carry.
+ */
+export async function eraseSentInvites(
+  io: Pick<HandoverIo, 'sentInvitePaths' | 'deleteSentInvites' | 'log'>,
+  uid: string,
+): Promise<{ found: number }> {
+  const paths = await io.sentInvitePaths(uid);
+  const refusal = refusalForSentInvites(paths.length);
+  if (refusal) {
+    io.log.error('groupHandover: sent-invite erasure refused', { uid, found: paths.length });
+    throw new Error(refusal);
+  }
+  if (paths.length > 0) await io.deleteSentInvites(paths);
+  io.log.info('groupHandover: sent invites erased', { uid, found: paths.length });
+  return { found: paths.length };
 }

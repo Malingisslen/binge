@@ -32,6 +32,57 @@ Index builds are **async** — a scheduled job that reads a not-yet-`Enabled` co
 index logs errors until the build finishes (Firestore Console → Indexes). Several newer
 functions **no-op silently without their secrets** (below) — set those first.
 
+**When a new index is read by code that throws to a waiting caller, the one-sweep command
+above is wrong — split it (BIN-1147).** The warning above is scoped to a scheduled job,
+which self-heals; but that is a proxy. The question that decides it is whether the call
+site sits inside error isolation that defers to a later run, or throws to something
+waiting. `retentionCleanup` has that isolation — one uid's failure defers that uid and
+keeps its watch record. `handOverOwnedGroups` does not: the account-delete button awaits
+it before its cascade, so an unbuilt index fails **every self-service account deletion**,
+and the user is told nothing was deleted.
+
+```bash
+firebase deploy --only firestore:indexes
+```
+
+Then confirm the index is actually built. The Console shows it, but this is the checkable
+form — a `fieldOverrides` entry is NOT a composite index, so `indexes composite list` will
+not show it:
+
+```bash
+gcloud firestore indexes fields describe <field> --collection-group=<collection> --project=binge-nu --format=json
+```
+
+Built means an entry with `"queryScope": "COLLECTION_GROUP"` and `"state": "READY"` —
+`CREATING` means keep waiting. Then the targeted deploy:
+
+```bash
+firebase deploy --only functions:<name>,firestore:rules
+```
+
+Derive the function names rather than copying a list out of here — a hand-maintained subset
+is the drift this section warns about. Two steps: find the directories that run the query,
+then read the export from each directory's `index.ts`.
+
+```bash
+git grep -l "collectionGroup('<collection>'" -- functions/src
+git grep -n "export const .* = on" -- functions/src/<dir>/index.ts
+```
+
+**Always include `firestore:rules`, even when the change touched none.** Rules deploys are
+manual and lag commits by design, nothing in this repo reports whether the live rules match
+`main`, and redeploying unchanged rules is idempotent and near-free. Making it conditional
+turns free insurance into a judgment call under time pressure.
+
+The reverse order is safe when nothing new reads the index yet.
+
+**Rollback.** Both halves are reversible. Revert the function source and redeploy the named
+functions — instant and safe, since the old code never issues the query. The index can be
+removed by dropping its `fieldOverrides` entry and redeploying `firestore:indexes`. Revert
+the functions first or independently; an index left standing after a function revert is not
+a correctness risk, but it does cost index maintenance on every write to that collection,
+for everyone, until it is removed.
+
 Post-deploy verification:
 ```bash
 curl -I https://binge.nu | grep -iE "content-security-policy|strict-transport|x-content-type|x-frame|referrer-policy|permissions-policy"

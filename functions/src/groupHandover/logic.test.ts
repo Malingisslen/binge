@@ -10,13 +10,15 @@ import {
   clearsAddedBy,
   isEmptyExcept,
   refusalForHandover,
+  refusalForSentInvites,
+  SENT_INVITE_BATCH_LIMIT,
   HANDOVER_PARTIAL,
   memberTraceWrites,
   chunkWrites,
   type MemberRow,
   type TraceWrite,
 } from './logic';
-import type { TraceErasure } from './runHandover';
+import { eraseSentInvites, type TraceErasure } from './runHandover';
 
 // Paths from this file rather than from the working directory.
 // It was `process.cwd()` until BIN-1110: the build config compiled test files as
@@ -337,7 +339,12 @@ describe('refusalForHandover — the caller must not fall through', () => {
   it('takes the uid from request.auth and refuses without it', () => {
     expect(ENTRY).toContain('const uid = request.auth?.uid;');
     expect(ENTRY).toMatch(/if \(!uid\) throw new HttpsError\('unauthenticated'/);
-    expect(ENTRY).toContain('runGroupHandover(adminHandoverIo(getFirestore(), logger), uid)');
+    // BIN-1147 split the Io out into a variable so the erasure and the handover
+    // share one handle. The claim is unchanged and now covers BOTH consumers:
+    // each is handed the auth-derived uid, and the port is the Admin one.
+    expect(ENTRY).toContain('const io = adminHandoverIo(getFirestore(), logger);');
+    expect(ENTRY).toContain('eraseSentInvites(io, uid)');
+    expect(ENTRY).toContain('runGroupHandover(io, uid)');
   });
 });
 
@@ -542,5 +549,85 @@ describe('chunkWrites', () => {
     expect(() => chunkWrites(w(3), 0)).toThrow(/at least 1/);
     expect(() => chunkWrites(w(3), -1)).toThrow(/at least 1/);
     expect(() => chunkWrites(w(3), 1.5)).toThrow(/at least 1/);
+  });
+});
+
+
+describe('refusalForSentInvites — the ceiling refuses instead of half-erasing (BIN-1147)', () => {
+  it('lets a count at the limit through', () => {
+    expect(refusalForSentInvites(SENT_INVITE_BATCH_LIMIT)).toBeNull();
+  });
+  it('refuses one over the limit', () => {
+    expect(refusalForSentInvites(SENT_INVITE_BATCH_LIMIT + 1)).not.toBeNull();
+  });
+  it('lets zero through', () => {
+    expect(refusalForSentInvites(0)).toBeNull();
+  });
+  // The refusal must NOT carry the partial marker: it fires before anything is
+  // written, so the caller's "nothing has been deleted" wording stays true.
+  it('carries no partial marker', () => {
+    expect(refusalForSentInvites(SENT_INVITE_BATCH_LIMIT + 1)).not.toContain(HANDOVER_PARTIAL);
+  });
+  it('stays under Firestore own 500-write batch ceiling', () => {
+    expect(SENT_INVITE_BATCH_LIMIT).toBeLessThan(500);
+  });
+});
+
+describe('eraseSentInvites — one atomic batch, or nothing (BIN-1147)', () => {
+  const ioWith = (paths: readonly string[]) => {
+    const deleted: string[][] = [];
+    return {
+      io: {
+        sentInvitePaths: async () => paths,
+        deleteSentInvites: async (p: readonly string[]) => { deleted.push([...p]); },
+        log: { info: () => {}, error: () => {} },
+      },
+      deleted,
+    };
+  };
+
+  it('deletes every found path in a SINGLE call', async () => {
+    const { io, deleted } = ioWith(['users/a/groupInvites/g1', 'users/b/groupInvites/g2']);
+    await expect(eraseSentInvites(io, 'me')).resolves.toEqual({ found: 2 });
+    expect(deleted).toEqual([['users/a/groupInvites/g1', 'users/b/groupInvites/g2']]);
+  });
+
+  it('writes nothing when there is nothing to erase', async () => {
+    const { io, deleted } = ioWith([]);
+    await expect(eraseSentInvites(io, 'me')).resolves.toEqual({ found: 0 });
+    expect(deleted).toEqual([]);
+  });
+
+  // The decisive case: over the ceiling it must write NOTHING, not a prefix.
+  it('erases nothing at all when the count exceeds the ceiling', async () => {
+    const many = Array.from({ length: SENT_INVITE_BATCH_LIMIT + 1 }, (_, i) => `users/u${i}/groupInvites/g`);
+    const { io, deleted } = ioWith(many);
+    await expect(eraseSentInvites(io, 'me')).rejects.toThrow(/Ingenting raderades/);
+    expect(deleted).toEqual([]);
+  });
+});
+
+describe('the callable erases sent invites BEFORE it hands over (BIN-1147)', () => {
+  // Order is load-bearing: a refusal from the erasure must be a run that wrote
+  // nothing, so the client's "nothing has been deleted" message stays true.
+  // The entry point cannot be imported here (firebase-admin does not resolve
+  // under the root runner), so the order is pinned by scanning its source.
+  it('calls eraseSentInvites earlier in the entry point than runGroupHandover', () => {
+    const erase = ENTRY.indexOf('eraseSentInvites(io');
+    const handover = ENTRY.indexOf('runGroupHandover(io');
+    expect(erase).toBeGreaterThan(-1);
+    expect(handover).toBeGreaterThan(-1);
+    expect(erase).toBeLessThan(handover);
+  });
+
+  // Position alone proves TEXT order, not that the erasure gates anything. Drop
+  // the `await` and the two calls race: the refusal blocks nothing, the catch
+  // becomes dead code an async rejection can never reach, and the whole suite
+  // stayed green. So pin the await AND the wrap as ONE regex — an anchor on
+  // either half alone survives the deletion of the other.
+  it('awaits the erasure and wraps its refusal as an HttpsError', () => {
+    expect(ENTRY).toMatch(
+      /try \{\s*await eraseSentInvites\(io, uid\);\s*\} catch \(err\) \{\s*throw new HttpsError\('internal',/,
+    );
   });
 });

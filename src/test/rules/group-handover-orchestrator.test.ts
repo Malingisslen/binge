@@ -1,12 +1,12 @@
 import { afterAll, beforeAll, beforeEach, describe, it, expect } from 'vitest';
 import { initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
 import {
-  collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where,
+  collection, collectionGroup, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where,
   writeBatch, deleteField, arrayRemove, serverTimestamp, Timestamp,
   type Firestore,
 } from 'firebase/firestore';
 
-import { runGroupHandover, type HandoverIo } from '../../../functions/src/groupHandover/runHandover';
+import { eraseSentInvites, runGroupHandover, type HandoverIo } from '../../../functions/src/groupHandover/runHandover';
 
 /**
  * BIN-1063 steg 3 — the group-handover ORCHESTRATOR against a real Firestore
@@ -66,6 +66,19 @@ function clientIo(): HandoverIo & { errors: unknown[] } {
   return {
     errors,
     log: { info: () => {}, error: (_m, data) => { errors.push(data); } },
+
+    // BIN-1147. Real implementations: the describe block named for the erasure,
+    // further down this file, drives this port against the emulator. The sibling
+    // harnesses implement these two methods for the type and never call them,
+    // and each says so where it does it.
+    sentInvitePaths: async (uid) =>
+      (await getDocs(query(collectionGroup(d, 'groupInvites'), where('fromUid', '==', uid))))
+        .docs.map((x) => x.ref.path),
+    deleteSentInvites: async (paths) => {
+      const batch = writeBatch(d);
+      paths.forEach((path) => batch.delete(doc(d, path)));
+      await batch.commit();
+    },
 
     ownedGroupIds: async (uid) => {
       const snap = await getDocs(query(collection(d, 'groups'), where('ownerUid', '==', uid)));
@@ -469,4 +482,51 @@ describe('runGroupHandover — the loop', () => {
 
     expect(summary).toMatchObject({ ownedGroups: 1, handedOver: 0, toDelete: 0, noop: 0, raced: 0, failed: 0 });
   });
+});
+
+describe('eraseSentInvites — against a live emulator (BIN-1147)', () => {
+  // The unit tests prove the DECISION against a mock. This proves the write
+  // half: that the query really reaches a third party's tree, and that the
+  // batch really removes the documents. A mock cannot tell either apart from a
+  // no-op.
+  // `fromDisplayName` is deliberately the OTHER party's name, so a query written
+  // against the display field instead of `fromUid` picks the wrong document.
+  // A fixture where the two fields agree cannot tell the two predicates apart.
+  const seedInvite = (target: string, gid: string, fromUid: string) =>
+    setDoc(doc(db(), 'users', target, 'groupInvites', gid), {
+      groupId: gid, groupName: 'Filmklubben', fromUid,
+      fromDisplayName: fromUid === 'owner' ? 'stranger' : 'owner',
+      invitedAt: serverTimestamp(),
+    });
+
+  it('erases what the leaver sent and leaves a live account invite standing', async () => {
+    await seedInvite('invitee', 'g-owner', 'owner');
+    await seedInvite('invitee', 'g-stranger', 'stranger');
+
+    const result = await eraseSentInvites(clientIo(), 'owner');
+
+    expect(result).toEqual({ found: 1 });
+    expect((await getDoc(doc(db(), 'users', 'invitee', 'groupInvites', 'g-owner'))).exists()).toBe(false);
+    // The sibling is protected by the fromUid predicate, not by its doc id.
+    expect((await getDoc(doc(db(), 'users', 'invitee', 'groupInvites', 'g-stranger'))).exists()).toBe(true);
+  });
+
+  it('reaches invitations spread across several recipients', async () => {
+    await seedInvite('a', 'g1', 'owner');
+    await seedInvite('b', 'g2', 'owner');
+
+    expect(await eraseSentInvites(clientIo(), 'owner')).toEqual({ found: 2 });
+    expect((await getDoc(doc(db(), 'users', 'a', 'groupInvites', 'g1'))).exists()).toBe(false);
+    expect((await getDoc(doc(db(), 'users', 'b', 'groupInvites', 'g2'))).exists()).toBe(false);
+  });
+
+  it('writes nothing when the leaver sent none', async () => {
+    await seedInvite('invitee', 'g-stranger', 'stranger');
+    expect(await eraseSentInvites(clientIo(), 'owner')).toEqual({ found: 0 });
+    expect((await getDoc(doc(db(), 'users', 'invitee', 'groupInvites', 'g-stranger'))).exists()).toBe(true);
+  });
+
+  // The over-the-ceiling case is NOT driven here: it needs more seeded documents
+  // than the limit, which is slow against an emulator. It is covered against the
+  // decision in logic.test.ts, and BIN-1148 carries the end-to-end half.
 });

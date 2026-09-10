@@ -21,8 +21,19 @@ describe('FIELD_OWNED_CATEGORIES', () => {
   // remain — so the list itself needs pinning, not just its members.
   it('names every category the field-owned sweep is responsible for', () => {
     expect([...FIELD_OWNED_CATEGORIES]).toEqual([
-      'reviews', 'foreignReviewUgc', 'reactions', 'lists', 'sessions', 'groups',
+      'reviews', 'foreignReviewUgc', 'reactions', 'lists', 'sessions',
+      'groupInvitesSent', 'groups',
     ]);
+  });
+
+  // The order is a decision, not incidental, so pin the two places it matters
+  // rather than only the membership: `groups` runs the handover and must be
+  // last, and the sent invites must be erased before it, so both doors agree
+  // that an invitation is the sender's to erase however ownership moved.
+  it('erases sent invites before it touches groups, and groups last', () => {
+    const order = [...FIELD_OWNED_CATEGORIES];
+    expect(order.indexOf('groupInvitesSent')).toBeLessThan(order.indexOf('groups'));
+    expect(order[order.length - 1]).toBe('groups');
   });
 
   it('has no duplicates', () => {

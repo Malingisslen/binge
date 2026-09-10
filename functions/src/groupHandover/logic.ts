@@ -252,3 +252,36 @@ export function refusalForHandover(
   }
   return 'Kunde inte lämna över alla grupper. Försök igen.';
 }
+
+/**
+ * The most sent invitations one departing account may erase in a single run.
+ *
+ * The erasure is ONE atomic batch by design (#13's binding condition on
+ * BIN-1147): a chunked delete can half-complete, and the client would still
+ * classify a mid-loop death as "nothing has been deleted" — the BIN-876/813
+ * class, twice fixed already. Firestore caps a batch at 500 writes, so the
+ * ceiling sits under it rather than at it.
+ *
+ * Exceeding it erases NOTHING and refuses loudly. That is the deliberate
+ * direction: a refusal is retryable and leaves a true message, a partial
+ * erasure is neither.
+ */
+export const SENT_INVITE_BATCH_LIMIT = 450;
+
+/**
+ * Why the sent-invite erasure must refuse, or null when it may proceed.
+ *
+ * Lives here so a test can CALL it rather than scan for it.
+ *
+ * The message carries no partial marker on purpose: this runs BEFORE the
+ * handover writes anything, so a refusal here means the run wrote nothing at
+ * all, and the caller's "nothing has been deleted" wording stays true.
+ *
+ * It reaches LOGS, not the user. `classifyDeletionFailure` maps an untagged
+ * failure to `untouched`, which renders one of the four locked BIN-813 wordings
+ * — so this text must not be written as if the user will read it.
+ */
+export function refusalForSentInvites(found: number): string | null {
+  if (found <= SENT_INVITE_BATCH_LIMIT) return null;
+  return `Fler an ${SENT_INVITE_BATCH_LIMIT} skickade gruppinbjudningar. Ingenting raderades.`;
+}

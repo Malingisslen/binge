@@ -28,6 +28,19 @@ export function adminHandoverIo(db: Firestore, log: HandoverIo['log']): Handover
       return snap.docs.map((d) => d.id);
     },
 
+    sentInvitePaths: async (uid) => {
+      const snap = await db.collectionGroup('groupInvites').where('fromUid', '==', uid).select().get();
+      return snap.docs.map((d) => d.ref.path);
+    },
+
+    // One batch, never chunked: `eraseSentInvites` refuses above the ceiling
+    // rather than splitting, so a half-erased state cannot arise here.
+    deleteSentInvites: async (paths) => {
+      const batch = db.batch();
+      paths.forEach((path) => batch.delete(db.doc(path)));
+      await batch.commit();
+    },
+
     readGroup: async (groupId) => {
       const snap = await db.doc(`groups/${groupId}`).get();
       if (!snap.exists) return null;

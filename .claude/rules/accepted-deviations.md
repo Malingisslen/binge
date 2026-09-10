@@ -893,3 +893,63 @@ raderaknappen — aldrig ett andra val.
 **Re-open when:** speglingarnas raderingspass byggs, eller en korning loggar en
 budgetvagran — den betyder att ett verkligt konto ar storre an taket och att
 talet behover ett beslut, inte en hojning i forbigaende.
+
+---
+
+## 2026-09-10 — BIN-1147: inbjudningar du SKICKAT overlever inte langre din radering
+
+Narmar TVA poster ovan, bada daterade 2026-09-07: "BIN-1063 steg 3, bunt 2" och
+"BIN-1063 steg 3, bunt 3". Bada ar append-only och star kvar ordagrant; den har
+posten sager vad som inte langre galler i dem. Ingendera retireras till arkivet
+— de tacker mycket mer an den har punkten, och att arkivera dem hade tagit bort
+sant och barande innehall tillsammans med den enda mening som blivit fel.
+
+**Punkten som stangs.** Bunt 2 skrev "En inbjudan fran den avgangne agaren
+overlever" och parkerade den med "tas i bunt 3 eller nar nagon rapporterar det".
+Bunt 3 tog den inte och upprepade den: `findFieldOwned` hade ingen
+`groupInvites`-gren, och `deleteUserTree` nadde bara den avgangnes EGNA
+inkommande inbjudningar. Bada dorrarna gor det nu.
+
+**Vad som byggdes.** Erasingen ligger i `handOverOwnedGroups`, den anropbara som
+raderaknappen redan kor fore kaskaden, och i `retentionCleanup`s faltagda svep
+som kategorin `groupInvitesSent`. Bada hittar dokumenten med en collection
+group-fraga pa `fromUid`, men de SKRIVER olika: den anropbara i en enda atomar
+batch, sopningen i chunkar under sitt eget tak. Harled anroparna hellre an att
+tro pa en mening: `git grep -n "eraseSentInvites(" -- functions/src`.
+
+**Varfor servern och inte klienten.** Lasregeln pa
+`users/{uid}/groupInvites/{groupId}` ar `isOwner(uid)`, sa ingen klientfraga kan
+spanna over andras trad. Det ar inte ett val utan en formaga klienten saknar.
+
+**HARDRADERING, inte nullning av namnfalten — och vilken precedens det foljer.**
+`collectDeletionRefs` hardraderar redan den speglade `friendRequests`-posten i
+den ANDRES trad nar avsandaren raderar sitt konto (avsnitt 2c). En vantande
+social handling som initiatoren tar tillbaka genom att forsvinna raderas alltsa
+helt i det har repot, och `groupInvites` foljer samma regel i stallet for att
+uppfinna en andra. Bade #6 och #5 vagde nullning mot radering och landade i att
+den avgorande invandningen inte ar vilket som ar mildast, utan att tva nastan
+identiska objekt inte far behandlas olika utan att nagon skrivit ned varfor.
+
+**Vad som INTE ar accepterat, och alltsa fortfarande fileable:**
+1. Att erasingen skulle kunna halvkoras PA KNAPPENS VAG. Dar ar den EN atomar
+   batch, och over taket raderas ingenting alls. En delvis erasing som klienten
+   anda klassar som "ingenting har raderats" ar BIN-876/813-klassen och far inte
+   aterinforas. Sopningens vag ar en annan mekanism med ett annat tak och ett
+   annat felbeteende — dess delvisa korning ar redan accepterad i bunt 3-posten
+   ovan, och den accepten ar oberord.
+2. Att vagran skulle bara delvis-markoren. Erasingen kor FORE overlamningen just
+   for att en vagran ska vara en korning som inte skrivit nagot.
+3. Att en annan spegling skulle vinkas igenom med den har posten som stod.
+   `followers` sveps av `reclaimOrphanFollows`; `friends` och
+   `friendRequestsSent` gjordes fragebara i steg 2 men deras raderingspass ar
+   fortfarande inte byggt. Den posten star kvar och ar oberord.
+
+**Kvar som oppet arbete:** en skickad inbjudan raderas nu men har aldrig ingatt i
+avsandarens EGEN Art. 20-export. Asymmetrin fanns fore det har och finns kvar
+efter; den ar #21:s iakttagelse och har en egen biljett, BIN-1150.
+
+**Re-open when:** en rapport visar en kvarliggande `groupInvites`-rad vars
+`fromUid` pekar pa ett konto som inte langre finns i Auth, eller en korning
+loggar `groupHandover: sent-invite erasure refused` — det senare betyder att ett
+verkligt konto ligger over taket och att talet behover ett beslut, inte en
+hojning i forbigaende.

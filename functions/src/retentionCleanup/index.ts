@@ -292,6 +292,17 @@ const adminIo: CleanupIo = {
           })(),
           arrayStrips: [],
         };
+      case 'groupInvitesSent':
+        // The invitations this uid SENT, which live in other people's trees and
+        // no path walk reaches. `fromUid` is pinned on create and immutable, so
+        // the predicate is sound for every document the collection has ever
+        // held. Needs the COLLECTION_GROUP fieldOverride on `groupInvites`/
+        // `fromUid`; without it this query throws and the sweep skips this uid
+        // until the index is READY.
+        return {
+          deletePaths: await paths(db.collectionGroup('groupInvites').where('fromUid', '==', uid)),
+          arrayStrips: [],
+        };
       case 'groups':
         // Handled by `commitGroupHandover`; the loop never asks for this.
         return { deletePaths: [], arrayStrips: [] } satisfies CategoryFindings;

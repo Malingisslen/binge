@@ -3,9 +3,8 @@
  *
  * BIN-1023 erased what a departed account owns through the uid in its PATH: the
  * whole `users/{uid}` tree and `publicProfiles/{uid}`. This is the half owned
- * through a FIELD, which no path walk can reach — reviews, the account's own
- * likes and comments wherever they sit, episode reactions, lists, hosted
- * sessions, and the groups the account owned.
+ * through a FIELD, which no path walk can reach. The categories are the
+ * `FIELD_OWNED_CATEGORIES` array below, which `fieldOwned.test.ts` pins.
  *
  * Pure predicates only, no firebase-admin import, so the deciding half is
  * testable under the root vitest toolchain like `logic.ts` and `orphans.ts`.
@@ -16,6 +15,12 @@
  *
  * #6 DPO's binding condition: the order is stated, not incidental. `groups` is
  * LAST.
+ *
+ * BIN-1147: `groupInvitesSent` erases the invitations the departed account sent
+ * into other people's trees. It sits before `groups` because the handover that
+ * `groups` runs moves ownership away, and an invitation is the sender's to erase
+ * regardless of who owns the group by then — putting it after would make the two
+ * doors disagree about that, since the callable erases before its own handover.
  *
  * Which categories are world-readable is not asserted here: it is a property of
  * `firestore.rules`, and a sentence about it goes stale the next time a match
@@ -30,6 +35,7 @@ export const FIELD_OWNED_CATEGORIES = [
   'reactions',
   'lists',
   'sessions',
+  'groupInvitesSent',
   'groups',
 ] as const;
 

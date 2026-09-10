@@ -1,6 +1,82 @@
 # Archived knowledge — relocated from binge-test-reviewer.knowledge.md.
 Append-only historical record. Entries are verbatim, original order.
 
+## 2026-09-10 — BIN-1147 re-review: the "four tests" claim was a sum across two files, not one predicate
+
+**Task:** re-review the staged BIN-1147 diff (`git diff --cached`) after two prior passes
+(the second recorded as a pass). The commit gate reported PRE-CHANGE bytes read for four
+files and stale bytes for a fifth, so this pass re-opened all five with `Read`:
+`functions/src/groupHandover/logic.test.ts`, `functions/src/retentionCleanup/fieldOwned.test.ts`,
+`src/test/rules/group-handover-orchestrator.test.ts`,
+`src/test/rules/retention-cleanup-orchestrator.test.ts`, `src/test/rules/account-deletion.test.ts`.
+Also re-read `.claude/rules/accepted-deviations.md` in full (956 lines, two pages).
+
+**What changed since the prior pass:** only `refusalForSentInvites`'s message string, in
+`functions/src/groupHandover/logic.ts`:
+```
+- Du har fler an 450 skickade gruppinbjudningar. Ingenting raderades. Hor av dig sa tar vi det for hand.
++ Fler an 450 skickade gruppinbjudningar. Ingenting raderades.
+```
+(diffed via `git cat-file -p bb85fbd132a0737d1516e64f17ded69caf71fd2e -- functions/src/groupHandover/logic.ts`
+against the current staged blob `7952db33b7a3938303c8b9ac204926845a5d19ab`). The dropped
+clause ("Get in touch and we'll sort it by hand") was user-directed; the new comment on the
+function correctly documents that the string reaches LOGS only (`classifyDeletionFailure`
+maps any untagged failure to one of four locked `BIN-813` user-facing wordings, never this
+raw string). Grepped every test file in scope for `Ingenting raderades|Hor av dig` — the
+only assertion is `rejects.toThrow(/Ingenting raderades/)` in `logic.test.ts:605`, which
+still matches both the old and new strings. No assertion pinned the dropped sentence, so
+nothing was weakened; this is a legitimate correction of a comment that used to describe
+the string as user-facing when it never reaches the user.
+
+**Item 1 — the three harness comments, checked against the actual code (not the prose):**
+1. `group-handover-orchestrator.test.ts`'s `clientIo()`: "Real implementations, and the
+   ONLY harness that drives them" — confirmed true: its own `eraseSentInvites — against a
+   live emulator` describe block calls `eraseSentInvites(clientIo(), 'owner')`.
+2. `retention-cleanup-orchestrator.test.ts`'s `handoverIo()`: "Present because `HandoverIo`
+   requires them, and NOT exercised from this harness" — confirmed true: `handoverIo(db)`
+   is only ever passed to `runGroupHandover` inside `commitGroupHandover`, never to
+   `eraseSentInvites`.
+3. `account-deletion.test.ts`'s `handoverIo()`: same claim, plus "Measured: throwing stubs
+   leave the suite green" — LIVE-VERIFIED this pass: replaced both `sentInvitePaths` and
+   `deleteSentInvites` with throwing stubs, ran `firebase emulators:exec --only firestore
+   --project demo-binge-rules "npx vitest run --config vitest.rules.config.ts
+   src/test/rules/account-deletion.test.ts"` → 9/9 green. Restored from a scratchpad
+   snapshot taken before mutation, confirmed byte-identical via `git hash-object`
+   (`79e225f17b03aaaa8043e49a1654cd253b8cb66e`, matches `git rev-parse :<path>`).
+
+**Item 2 — fixture discrimination, the corrected finding:** the task's framing ("swapping
+the sweep's predicate from `fromUid` to `fromDisplayName` should fail four tests, not
+zero") conflates two separate hand-copied predicates. Live-mutated each alone, snapshot →
+mutate → run → restore → hash-verify, tree confirmed clean (`git status --porcelain`
+showed only pre-existing staged `M` entries) both times:
+- `retention-cleanup-orchestrator.test.ts:332` (the sweep's OWN `findFieldOwned`
+  `groupInvitesSent` query) mutated alone → **1 test failed** (`erases %s ... > sent
+  group invites`), 45 passed.
+- `group-handover-orchestrator.test.ts:75` (`clientIo().sentInvitePaths`, the query
+  `eraseSentInvites` actually drives) mutated alone → **3 tests failed** (all three in
+  `eraseSentInvites — against a live emulator`), 13 passed.
+- Baseline (both files, unmutated): 62/62 green.
+
+So "four" is only true as the SUM across two files' independent copies of the same
+literal predicate — not a property of "the sweep's predicate" alone. The fixtures DO
+discriminate (non-vacuous both places), but a reviewer accepting the merged count at
+face value would have mis-attributed 3 of the 4 failures to the wrong file. Folded into
+the active knowledge file's Admin-SDK-orchestrator bullet rather than left as a one-off.
+
+**Other diff content in scope, checked additive-only:** `git diff --cached --stat` on the
+five test files showed 217 insertions / 8 deletions total; every deletion was a legitimate
+replacement (a combined `ENTRY.toContain(...)` split into three assertions matching a real
+production refactor that introduced an `io` variable; a category-roster literal `'reviews',
+'foreignReviewUgc', 'reactions', 'lists', 'sessions', 'groups'` widened to include
+`'groupInvitesSent'` in both its declared occurrences; `fieldOwnedDocs` expected count
+bumped from 15 to 16 to reflect one new seeded document; a comment's stale count word
+("the other FIVE categories") struck rather than bumped to a new number, per the
+strike-don't-reword convention). None weakened a prior assertion.
+
+**Verdict:** pass (0 blocking). No test-quality defect found; the only correction was to
+the review's own prior imprecise "four tests" framing, now fixed in the active knowledge
+bullet rather than carried forward.
+
 
 
 ## Relocated 2026-07-04 — consolidation batch (entries 2026-06-14 → 2026-06-26; durable lessons distilled into the active file's principles section)
@@ -27670,3 +27746,167 @@ muteringsprovat (`invitedAt` -> `sentAt` faller det).
 Lardomen: ett "det finns ingen X" ar ett okontrollerat pastaende tills ett
 kommando kort, och just den formen anvands for att AVFARDA arbete - den ar
 darfor dyrare an de flesta.
+
+## Relocated 2026-09-10 — entry 90 (disabled-button handler-hollowing bullet, moved from
+"Rounding, jsdom, TZ/DST" to hold the 80k cap)
+
+fireEvent.click on a disabled button fires NO handler, so adding disabled={cond}
+RETROACTIVELY hollows out an existing case's post-click assertions: a mutation that used to go
+red goes green. Verified twice (BIN-645). So on any diff adding disabled/aria-disabled,
+RE-RUN the prior round's handler mutations rather than carrying the verdict. Usually NOT a gap:
+the in-handler guards become unreachable behind an attribute the same case pins
+(toBeDisabled() goes red if removed) — accepted defense-in-depth — but the comments must stop
+claiming to prove handler behaviour.
+
+## Relocated 2026-09-10b — entry 91 (DST guard fixture bullet, moved from "Rounding, jsdom,
+TZ/DST" to hold the 80k cap)
+
+A DST guard is real only if the buggy fixed-ms path yields a DIFFERENT calendar date at that
+fixture — spring-forward never crosses local midnight (tautologically green), so anchor across
+FALL-BACK (Sun 2026-10-25) and assert the exact ISO under TZ=Europe/Stockholm. Floor BOTH
+sides to local midnight for whole-day diffs (BIN-145); pick an instant where zones disagree
+(23:30 UTC = next day CEST) (BIN-105/350).
+
+## Relocated 2026-09-10c — entry 92 (alias-table per-member fixture bullet, moved from
+"Parsers, regex, dispatch, lookup tables & SEO" to hold the 80k cap)
+
+Alias tables: one exhaustive identity loop (every entry times every alias) covers current AND
+future aliases (BIN-64/90). An ALLOWLIST needs a fixture per MEMBER, not just per rejected
+value: BIN-645's RETURN_QUERY_KEYS was reject-side pinned (adding 'invite' to red) yet
+DELETING 'row' left 25/25 green while killing that surface's return path. Name every member
+in the keeps-it case; one added expect makes the deletion red-alone — re-derive PER MEMBER,
+not once (q reddens 2 cases, status/provider/row 1 each).
+
+## 2026-09-10 — BIN-1147 review: sent-invite erasure (two doors), full trace
+
+Diff reviewed (staged, git diff --cached): functions/src/groupHandover/adminIo.ts,
+functions/src/groupHandover/index.ts, functions/src/groupHandover/logic.ts,
+functions/src/groupHandover/logic.test.ts, functions/src/groupHandover/runHandover.ts,
+functions/src/retentionCleanup/fieldOwned.ts, functions/src/retentionCleanup/fieldOwned.test.ts,
+functions/src/retentionCleanup/index.ts, src/test/rules/account-deletion.test.ts,
+src/test/rules/group-handover-orchestrator.test.ts,
+src/test/rules/retention-cleanup-orchestrator.test.ts, firestore.indexes.json,
+docs/data-retention-policy.md, .claude/rules/accepted-deviations.md,
+docs/org/metrics/events.jsonl, tasks/todo.md. Read every file in full with the Read tool
+before judging it.
+
+What the ticket built. handOverOwnedGroups (the callable) and retentionCleanup's field-owned
+sweep (new groupInvitesSent category) both now erase users/{target}/groupInvites/{groupId}
+docs the departing uid SENT, found via a collection-group query on fromUid. The erasure
+(eraseSentInvites in runHandover.ts) runs in ONE atomic batch, refuses above
+SENT_INVITE_BATCH_LIMIT (450) writing nothing, and runs BEFORE the handover in the callable so
+a refusal is a run that wrote nothing.
+
+Mutations run, each with a scratchpad snapshot taken and hash-verified BEFORE mutating and
+AFTER restoring (git hash-object vs git rev-parse :path, both matching the index both times),
+tree confirmed git status --porcelain = only pre-existing staged lines with no worktree delta
+after each restore:
+
+1. functions/src/groupHandover/runHandover.ts — eraseSentInvites changed to
+   const paths: string[] = []; instead of await io.sentInvitePaths(uid). Ran
+   npx vitest run functions/src/groupHandover/logic.test.ts (root config): 2 of 53 tests
+   failed (deletes every found path in a SINGLE call, erases nothing at all when the count
+   exceeds the ceiling), 51 passed — INCLUDING the loop queries the sent invites by fromUid,
+   not by path (expect(LOOP).toContain('sentInvitePaths')), which stayed green because the
+   substring also appears in HandoverIo's own interface declaration/JSDoc in the same file.
+   Not filed as a fresh gap: the mutant is caught by two sibling tests in the same file; this
+   one's NAME overclaims ("queries... by fromUid") what it checks (a bare substring), which
+   is the "test whose name lies" class — rename or delete, not blocking.
+2. src/test/rules/retention-cleanup-orchestrator.test.ts — handoverIo(db)'s
+   sentInvitePaths/deleteSentInvites replaced with async () => { throw new Error(...) }.
+   Ran the FULL npm run test:rules (471 tests, 7 files, real Firestore emulator, port 8080
+   confirmed free via netstat first): 471/471 still passed. commitGroupHandover calls
+   runGroupHandover(handoverIo(db), uid) and runGroupHandover never calls eraseSentInvites —
+   these two port methods are real client-SDK implementations (satisfying HandoverIo's type)
+   but are DEAD CODE in this file: nothing calls them.
+3. Same mutation applied to src/test/rules/account-deletion.test.ts's handoverIo() (its own
+   separate implementation of the same two methods). npm run test:rules: 471/471 still
+   passed. runDeletion() only calls runGroupHandover(handoverIo(), ME), never
+   eraseSentInvites. So of the THREE emulator harnesses the ticket describes as having
+   gained "REAL client-SDK implementations... rather than stubs", only ONE
+   (group-handover-orchestrator.test.ts's clientIo(), exercised by its own
+   eraseSentInvites — against a live emulator describe block) is actually driven. The claim
+   "real, not stubs" is true of the CODE and false of the COVERAGE for two of the three —
+   filed as the review's one blocking finding.
+4. src/test/rules/retention-cleanup-orchestrator.test.ts — the groupInvitesSent branch of
+   findFieldOwned changed from where('fromUid', '==', uid) to
+   where('fromDisplayName', '==', uid). Every seed in both harnesses sets
+   fromDisplayName: fromUid (or : uid) — identical value — so this is a genuine
+   field-selection ambiguity, not a typo-proofing exercise. npm run test:rules: 471/471
+   still passed, including the exact fieldOwnedDocs === 16 count and the 'sent group
+   invites' it.each row. Confirms the comment "protected by the fromUid predicate, not by
+   its doc id" (group-handover-orchestrator.test.ts) is UNPROVEN by this suite — it would
+   read identically if the code kept the sender's uid in fromDisplayName instead. Filed as
+   non-blocking (cheap fix: vary fromDisplayName independently of fromUid in one fixture
+   per harness).
+
+Re-derivation, not mutation: the fieldOwnedDocs count moved 15 to 16. Hand-traced through
+eraseFieldOwned's write order (functions/src/retentionCleanup/runCleanup.ts) against the
+seedFieldOwned/seedOrphanData fixture for consoled: reviews 3 + foreignReviewUgc 2 +
+reactions 1 + lists 2 (1 delete + 1 array-strip) + sessions 3 + groupInvitesSent 1 +
+groups (handover.attempted 1 for shared + handoverDocs remainder 1 + solo delete 2) = 16.
+16 is correct for this fixture; the +1 over the pre-BIN-1147 baseline is exactly the one
+users/invitee/groupInvites/g-consoled document. The count is an aggregate scalar and could
+in principle be satisfied by a compensating pair of off-by-one errors elsewhere, but the
+adjacent it.each table independently pins presence/absence of each individual path
+(including the g-consoled/g-keeper pair), so it is not the sole line of defense — not filed.
+
+The BIN-1148 disclosure ("the over-the-ceiling case is NOT driven here... BIN-1148 carries
+the end-to-end half", group-handover-orchestrator.test.ts) was checked against
+tasks/todo.md's staged BIN-1143 write-up, which independently names BIN-1148 as a real
+follow-up ticket with the same narrower scope. Judged honest: the mocked
+eraseSentInvites — one atomic batch, or nothing unit test in logic.test.ts (over-ceiling
+case: rejects.toThrow(/Ingenting raderades/), deleted stays []) genuinely exercises the
+production DECISION (refuse, write nothing) end-to-end except for the live Firestore
+query/count step, which has no .limit() anywhere in the query chain and is not a novel risk
+class for this codebase's other collection-group queries.
+
+Verdict: fail (1 blocking) at review time — the two dead harness port implementations
+(finding 2/3 above). Reported to the calling agent as one blocking finding (folded, since both
+mutations demonstrate the identical gap shape) plus two non-blocking test-quality nits (the
+vacuous LOOP.toContain scan; the fromDisplayName/fromUid fixture ambiguity).
+
+## Relocated 2026-09-10d — entry 93 (hand-typed exported-constant DRY-nit grading, moved from
+"GDPR, PII, deletion & money guards" to hold the 80k cap)
+
+A test hand-typing an EXPORTED constant's literal instead of importing it is a DRY nit, not a
+coverage gap — check the FAILURE MODE (a startsWith/prefix matcher still reddens on a future
+constant edit) before filing it as blocking, not merely a follow-up (BIN-1038).
+
+## 2026-09-10b — BIN-1147 re-review: coverage overclaim struck, fixtures discriminate, vacuous test deleted
+
+Re-reviewed the staged diff after the coordinator's fix pass. Verified independently rather
+than trusting the coordinator's numbers, per protocol:
+
+1. Reapplied the identical throwing-stub mutation to BOTH `retention-cleanup-orchestrator.
+   test.ts`'s and `account-deletion.test.ts`'s `sentInvitePaths`/`deleteSentInvites`
+   simultaneously and ran the full `npm run test:rules`: 471/471 green, confirming the new
+   comments in both files ("present because HandoverIo requires them, NOT exercised from this
+   harness... measured, not assumed") are TRUE, not a reworded overclaim. Grep confirmed no
+   other assertion in either file reads these methods' return values.
+2. Reapplied the `fromUid`→`fromDisplayName` field-swap mutation to BOTH
+   `retention-cleanup-orchestrator.test.ts`'s `groupInvitesSent` branch AND
+   `group-handover-orchestrator.test.ts`'s `clientIo().sentInvitePaths` and ran the full
+   suite: exactly 4 tests failed by name (`erases what the leaver sent and leaves a live
+   account invite standing`, `reaches invitations spread across several recipients`, `writes
+   nothing when the leaver sent none`, `erases sent group invites for the departed account and
+   leaves the live one alone`) — matching the coordinator's claim exactly. Grepped both files
+   for other reads of the `fromDisplayName` field value: none exist, so swapping it to the
+   other party's name (`uid === 'consoled' ? 'keeper' : 'consoled'` / `fromUid === 'owner' ?
+   'stranger' : 'owner'`) did not falsify any neighbouring assertion — the swap-fixture edit
+   that closes one blind spot is exactly the kind of change that can open another, and here it
+   didn't.
+3. Confirmed `expect(LOOP).toContain('sentInvitePaths')` no longer exists anywhere in
+   `logic.test.ts` (deleted, not renamed).
+4. Restored every mutated file and re-verified `git hash-object` against `git rev-parse :<f>`
+   after each run; `git status --porcelain` showed only the pre-existing staged `M ` lines
+   throughout. Independently reran `npm run typecheck` (0 errors) and the full `npx vitest run`
+   (283 files / 4851 passed — one fewer than the prior review's 4852, matching the deleted
+   vacuous test) rather than trusting the coordinator's reported counts.
+
+No new findings. All three prior findings (dead harness ports presented as coverage; fixtures
+too equal to discriminate the field; a vacuous source-scan test) are resolved — the first by
+honest disclosure naming the one harness that DOES prove it (an accepted pattern in this repo,
+same shape as `runAggregate.ts`'s "NOT PROVEN HERE" list), not by making the dead code live.
+
+Verdict: pass (0 blocking).

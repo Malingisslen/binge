@@ -294,6 +294,125 @@ neka nagon befintlig grupp.
 
 BIN-1140, BIN-1141, BIN-1142, BIN-1143, BIN-1144, BIN-1145, BIN-1146.
 
+## Bunt 6 - BIN-1143: en inbjudan du SKICKAT ska inte overleva din radering [Tier C]
+
+Malins beslut 2026-09-10, alternativ B: bygg bort restsparet i stallet for att
+skriva en mening om det. Bokfort som kommentar pa BIN-1143.
+
+### Vad som ar matt
+
+`users/{target}/groupInvites/{groupId}` bar avsandarens `fromUid` och nas av
+INGEN av de tva raderingsdorrarna: `findFieldOwned` har ingen `groupInvites`-gren,
+och klientkaskaden nar bara den avgangnes EGNA inkommande inbjudningar.
+Bokfort i `.claude/rules/accepted-deviations.md` (2026-09-07) som oppet arbete.
+
+Klienten KAN inte na dem: lasregeln ar `isOwner(uid)`, sa ingen klientfraga kan
+spanna over andras trad. Darfor maste bada dorrarna ga via servern.
+
+### Routning
+
+Routa om pa den faktiska unionen fore varje kritik och fore commit - las
+utfallet ur kommandot:
+
+```
+node docs/org/route.mjs $(git diff --cached --name-only)
+```
+
+Unionen flyttade sig flera ganger under arbetet, och varje flytt satte nagon ny
+som inte hade horts - senast refuserade routningsgrinden commiten for att en
+tillagd fil satte en roll ingen granskningsrad namngav. Varje sadan roll
+konvenerades innan bygget gick vidare. Vilka som faktiskt kritiserat star i
+`review`-raderna for BIN-1147 i `docs/org/metrics/events.jsonl`; racka dem inte
+har.
+
+### Bindande acceptanskriterier ur kritiken
+
+1. **En enda atomar batch** (#13). En andra callable avvisades: en extra inväntad
+   rundtur gor det bokforda `RECENT_LOGIN_MAX_AGE_MS`-problemet strikt varre, och
+   ett bart kast kan halvradera medan klienten fortfarande klassar korningen som
+   "ingenting raderat" - BIN-876/813-klassen. Erasingen viks darfor in i den
+   befintliga `handOverOwnedGroups` och skriver i EN batch.
+2. **Arv inte den gamla motiveringen** (#4). Callabelns huvud argumenterar att den
+   ar ofarlig for att den ar "strikt svagare an den `allow delete` en agare redan
+   har". Det galler INTE erasingen: `allow delete` pa den sokvagen ar mottagaren
+   ELLER den NUVARANDE agaren, sa efter en overlamning kvalificerar avsandaren inte
+   langre. Det ar en akta, om an smal, vidgning och huvudet ska saga det.
+3. **Tva dokumentationsposter** (#6, #5). En daterad efterfoljare i
+   accepted-deviations som NAMNGER precedensen - `accountDeletion.ts` hardraderar
+   redan den speglade `friendRequests`-posten i den andres trad - plus en rad i
+   `docs/data-retention-policy.md` for ut-sidan, i samma form som den befintliga
+   `friendRequestsSent`-raden.
+4. **Ror inte den publicerade juridiska texten** (#5, blockerande). BIN-1143 stangs
+   som BYGGD, inte som en textandring.
+5. **Deployordning** (#27). Sopningen sjalvlaker pa ett saknat index, callabeln gor
+   det inte - deploya indexet FORST, bekrafta att det ar READY, och funktionen
+   sedan. Fel ordning fäller varje sjalvbetjanad radering tills indexet byggts.
+6. **Deployinstruktionen ar #8:s** (den rollen satte `EXTERNAL_ACTIONS.md`, och
+   routningsgrinden refuserade commiten tills den konvenerats). Fyra villkor,
+   alla inne i den filen: `firestore:rules` skickas med OBETINGAT, eftersom
+   regeldeployer slapar efter commitarna med flit och ingenting rapporterar om de
+   live-serverade reglerna matchar `main`; "vanta pa Enabled i konsolen" ersatt av
+   ett kommando som gar att kora, eftersom ett `fieldOverrides` inte ar ett
+   sammansatt index och inte syns i `indexes composite list`; funktionsnamnen
+   harleds i stallet for att kopieras; och en rollback-punkt, som ocksa sager att
+   ett kvarlamnat index kostar underhall pa varje skrivning tills det tas bort.
+
+### Bevis
+
+Muteringar, en i taget, mutanten asserterad fore OCH efter varje korning och
+tradet aterstallt fran en arbetstradskopia verifierad med `git hash-object`:
+
+| Mutation | Var | Fallda test |
+|---|---|---|
+| vagran avstangd (`if (false)`) | `eraseSentInvites` | 1 |
+| den atomara raderingen ersatt av en loop per sokvag | `eraseSentInvites` | 1 |
+| erasingen flyttad EFTER overlamningen | callabeln | 1 |
+| sopningens fraga ersatt av en tom lista | emulatorharnesket | 2 |
+| `await` OCH `try/catch` strukna | callabeln | 1 |
+| `try/catch` struket, `await` kvar | callabeln | 1 |
+| predikatet bytt fran `fromUid` till `fromDisplayName` | sopningens harnesk | 1 |
+| samma byte | erasingens harnesk | 3 |
+
+Raderna om predikatet kom av #7:s andra fynd: varje fixtur satte de tva falten
+LIKA, sa bytet gav identiskt utfall och noll test fallde. Nu bar fixturerna
+motpartens namn i namnfaltet. De tva harnesken bar var sin handskriven kopia av
+predikatet, sa de muteras var for sig - ett gemensamt tal hade varit en summa och
+inte en egenskap hos nagondera.
+
+Hela sviten gron. `npm run test:rules`: 471 over 7 filer.
+
+Typkontrollen tvingade fram nagot #7 bara hann fila: de tre
+emulatorharnesken implementerar `HandoverIo`, sa de tva nya metoderna gick inte
+att utelamna. `group-handover-orchestrator.test.ts` DRIVER dem mot en riktig
+emulator. De tva andra gor det inte - testgranskaren matte att throwing stubbar
+dar lamnar hela sviten gron - och deras kommentarer sager det rakt ut i stallet
+for att lata implementationen se ut som tackning.
+
+Raderna om `await` och `try/catch` kom av #7:s blockerande fynd: utan `await`
+racer erasingen overlamningen i stallet for att grinda den, catch-blocket blir
+dod kod en asynkron rejection aldrig nar, och HELA sviten var gron.
+Positionstestet bevisade TEXTordning, inte att erasingen grindar nagot.
+
+### Foljdbiljetter
+
+BIN-1147 bar bygget. BIN-1150: en skickad inbjudan raderas nu men har aldrig
+ingatt i avsandarens EGEN Art. 20-export - asymmetrin fanns fore bunten och star
+kvar efter den. BIN-1149: indexsparren i
+`userData.subcollections.test.ts` laser bara klienthalvan, sa den hade inte fallt
+om den har bunten glomt sitt index. BIN-1148 (#7) ar kvar men mycket smalare: skrivhalvan bevisas
+nu mot en riktig emulator, och det som star kvar ar fallet OVER taket, som kraver
+fler seedade dokument an gransen och darfor ar langsamt mot en emulator.
+
+### Ett pastaende i mitt eget uppdrag var falskt
+
+Jag skrev att `fromUid` pinnats mot anroparen "sedan BIN-1127". #4 motbevisade det
+och jag verifierade sjalv: pinningen ar OFORANDRAD kontext i BIN-1127:s diff och
+kom med `627e24f`, samma commit som skapade samlingen. Det har alltsa aldrig
+funnits ett forfalskningsfonster - sopningen kan lita pa faltet for hela
+samlingens livstid. Galler bara `groupInvites`; andra samlingar har haft sadana
+fonster.
+
+
 ## Efter sprinten
 
 - [ ] Fila foljdbiljetter FORE commit.

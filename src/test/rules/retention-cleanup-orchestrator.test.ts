@@ -323,6 +323,15 @@ function makeIo(db: Firestore, auth: FakeAuth, overrides: Partial<CleanupIo> = {
           }
           return { deletePaths: [...nested, ...hosted.docs.map((d) => d.ref.path)], arrayStrips: [] };
         }
+        case 'groupInvitesSent':
+          // Mirrors the Admin adapter's collection-group query on `fromUid`.
+          // Without this branch the new category would return undefined here and
+          // the emulator would never exercise it — the roster test pins the LIST,
+          // this pins that the sweep actually reaches the documents.
+          return {
+            deletePaths: await pathsOf(query(collectionGroup(db, 'groupInvites'), where('fromUid', '==', uid))),
+            arrayStrips: [],
+          };
         case 'groups':
           return { deletePaths: [], arrayStrips: [] };
       }
@@ -375,6 +384,21 @@ function makeIo(db: Firestore, auth: FakeAuth, overrides: Partial<CleanupIo> = {
 function handoverIo(db: Firestore): HandoverIo {
   return {
     log: { info: () => {}, error: () => {} },
+    // BIN-1147. Present because `HandoverIo` requires them, and NOT exercised
+    // from this harness: the sweep reaches sent invites through `findFieldOwned`,
+    // never through `eraseSentInvites`. Replacing these two with throwing stubs
+    // leaves the whole suite green — measured, not assumed. They are written
+    // faithfully anyway so a future test that does drive them starts from real
+    // behaviour; the harness that actually proves the erasure is
+    // group-handover-orchestrator.test.ts.
+    sentInvitePaths: async (uid) =>
+      (await getDocs(query(collectionGroup(db, 'groupInvites'), where('fromUid', '==', uid))))
+        .docs.map((d) => d.ref.path),
+    deleteSentInvites: async (paths) => {
+      const batch = writeBatch(db);
+      paths.forEach((path) => batch.delete(doc(db, path)));
+      await batch.commit();
+    },
     ownedGroupIds: async (uid) =>
       (await getDocs(query(collection(db, 'groups'), where('ownerUid', '==', uid)))).docs.map((d) => d.id),
     readGroup: async (groupId) => {
@@ -921,6 +945,17 @@ async function seedFieldOwned(db: Firestore): Promise<void> {
     await setDoc(doc(db, 'sessions', `sess-${uid}`), { hostUid: uid });
     await setDoc(doc(db, 'sessions', `sess-${uid}`, 'participants', uid), { uid });
     await setDoc(doc(db, 'sessions', `sess-${uid}`, 'swipes', 'movie_42'), { votes: {} });
+    // An invitation this uid SENT, living in a THIRD party's tree. Owned by the
+    // field, unreachable by any path walk from the sender (BIN-1147).
+    // `fromDisplayName` deliberately does NOT echo `fromUid`, and the two
+    // accounts SWAP names: a query mistakenly written against the display field
+    // would erase the wrong row, and a fixture where the two fields agree cannot
+    // tell the two predicates apart at all.
+    await setDoc(doc(db, 'users', 'invitee', 'groupInvites', `g-${uid}`), {
+      groupId: `g-${uid}`, groupName: 'Filmklubben', fromUid: uid,
+      fromDisplayName: uid === 'consoled' ? 'keeper' : 'consoled',
+      invitedAt: ts(NOW - 3000),
+    });
   }
   await setDoc(doc(db, 'reviews', 'rev-stranger'), { uid: 'stranger', text: 'annans' });
   // A list a stranger OWNS and the departing account merely co-edits. Deleting it
@@ -962,6 +997,7 @@ describe('retentionCleanup orchestrator — the FIELD-owned half (BIN-1063 steg 
     ['owned lists', 'lists/list-consoled', 'lists/list-keeper'],
     ['hosted sessions', 'sessions/sess-consoled', 'sessions/sess-keeper'],
     ['session participants', 'sessions/sess-consoled/participants/consoled', 'sessions/sess-keeper/participants/keeper'],
+    ['sent group invites', 'users/invitee/groupInvites/g-consoled', 'users/invitee/groupInvites/g-keeper'],
   ])('erases %s for the departed account and leaves the live one alone', async (_label, gone, kept) => {
     const db = adminLikeDb();
     await sweepPastTheFloor(db);
@@ -977,7 +1013,8 @@ describe('retentionCleanup orchestrator — the FIELD-owned half (BIN-1063 steg 
   // could not express both.
   it('the table is checked against the list the run walks', () => {
     expect([...FIELD_OWNED_CATEGORIES]).toEqual([
-      'reviews', 'foreignReviewUgc', 'reactions', 'lists', 'sessions', 'groups',
+      'reviews', 'foreignReviewUgc', 'reactions', 'lists', 'sessions',
+      'groupInvitesSent', 'groups',
     ]);
   });
 
@@ -1050,10 +1087,10 @@ describe('retentionCleanup orchestrator — the FIELD-owned half (BIN-1063 steg 
     expect(summary.fieldOwnedUids).toBe(1);
     // An EXACT count, not just non-zero: the clean path tops the handover's
     // estimate up on top of the attempted-group credit, and a `toBeGreaterThan(0)`
-    // is satisfied by the other five categories alone, so the top-up could be
+    // is satisfied by the other categories alone, so the top-up could be
     // deleted green. Re-derive with the probe rather than trusting the number:
     // set it to -1 and read what the failure reports.
-    expect(summary.fieldOwnedDocs).toBe(15);
+    expect(summary.fieldOwnedDocs).toBe(16);
     expect(summary.fieldOwnedRefused).toBe(0);
   });
 

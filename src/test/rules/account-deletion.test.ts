@@ -76,6 +76,21 @@ function handoverIo(): HandoverIo {
   };
   return {
     log: { info: () => {}, error: () => {} },
+    // BIN-1147. Present because `HandoverIo` requires them, and NOT exercised
+    // here — this harness drives `runGroupHandover`, which never calls the
+    // erasure. Measured: throwing stubs leave the suite green. The harness
+    // that proves the erasure is group-handover-orchestrator.test.ts.
+    sentInvitePaths: (uid) => withDb(async d => {
+      const snap = await fsMod.getDocs(
+        fsMod.query(fsMod.collectionGroup(d, 'groupInvites'), fsMod.where('fromUid', '==', uid)),
+      );
+      return snap.docs.map(x => x.ref.path);
+    }),
+    deleteSentInvites: (paths) => withDb(async d => {
+      const batch = fsMod.writeBatch(d);
+      paths.forEach(path => batch.delete(fsMod.doc(d, path)));
+      await batch.commit();
+    }),
     ownedGroupIds: (uid) => withDb(async d => {
       const snap = await fsMod.getDocs(
         fsMod.query(fsMod.collection(d, 'groups'), fsMod.where('ownerUid', '==', uid)),
@@ -141,7 +156,11 @@ function handoverIo(): HandoverIo {
 }
 
 /**
- * The whole door, in the order `runDeletionCascade` runs it.
+ * The handover, then the cascade, in the order `runDeletionCascade` runs them.
+ *
+ * Not the whole door: since BIN-1147 the callable also erases the invitations
+ * this uid sent, before the handover, and that step is deliberately not driven
+ * here — see the port above.
  *
  * The handover goes FIRST, and the order is the guarantee: a group it hands over
  * stops naming this uid in `memberUids`, so it drops out of the `array-contains`
