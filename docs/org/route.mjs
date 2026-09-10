@@ -155,6 +155,15 @@ export const TOOLING_CODE_FILES = new Set([
   // test does not.
   'scripts/check-published-commands.mjs',
   'scripts/check-published-commands.test.mjs',
+  // BIN-1137. The wrapper behind `npm run test:rules`. `npm test` does not run the
+  // Firestore rules suite at all, so this file decides whether the only proof
+  // `firestore.rules` has can report a healthy run without having registered a single
+  // test — and `deploy.yml`'s hosting job gates on that suite via `needs:`. Weakening
+  // its floor would be invisible in every diff of executing app code. Added in the SAME
+  // commit as its `reviewGates` pattern, per BIN-830: one list advises, the other
+  // blocks, and widening one has never widened the other.
+  'scripts/run-rules-tests.mjs',
+  'scripts/run-rules-tests.test.mjs',
   // BIN-1063 steg 2. Engangs-backfillen som skriver motpartens uid som ett falt
   // pa friends/friendRequestsSent. Den kor med Admin SDK och forbigar darmed
   // firestore.rules helt — den ar det enda som kan skriva de raderna, eftersom

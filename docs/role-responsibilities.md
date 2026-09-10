@@ -250,6 +250,12 @@ assertion to go green").
 
 - Firestore rules tests against the emulator (100+ cases).
   → `src/test/rules/firestore-rules.test.ts`
+- **The wrapper that makes that suite's green mean something** (BIN-1137). `npm test`
+  does not run the rules suite at all, so this command is its only run — and a run that
+  cannot say how many tests it registered is indistinguishable from a healthy one. The
+  script is seated here rather than with the check-scripts because the quantity it
+  measures is the suite's own coverage, not the repo's check machinery.
+  → `scripts/run-rules-tests.mjs`, `scripts/run-rules-tests.test.mjs`
 - Pure-logic extraction (`*.helpers.ts`) so units test without Firebase.
 - Regression guards — design anti-patterns, forced `Europe/Stockholm` TZ to
   catch off-by-one date bugs, `assertNever` exhaustiveness.

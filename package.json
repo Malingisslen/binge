@@ -20,7 +20,7 @@
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
-    "test:rules": "firebase emulators:exec --only firestore --project demo-binge-rules \"vitest run --config vitest.rules.config.ts\"",
+    "test:rules": "node scripts/run-rules-tests.mjs",
     "emulators": "firebase emulators:start --only auth,firestore",
     "emulators:export": "firebase emulators:export ./emulator-data",
     "emulators:import": "firebase emulators:start --only auth,firestore --import=./emulator-data"

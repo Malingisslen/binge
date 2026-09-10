@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 573,
+  "patternCount": 575,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -123,6 +123,8 @@
       "title": "QA / Test Engineer (automated)",
       "slug": "qa-test-engineer-automated",
       "patterns": [
+        "scripts/run-rules-tests.mjs",
+        "scripts/run-rules-tests.test.mjs",
         "src/lib/design/consistency.test.ts",
         "src/test/rules/firestore-rules.test.ts",
         "vitest.config.ts"

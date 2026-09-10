@@ -1,3 +1,270 @@
+# Sprinten 2026-09-10 - sju biljetter i tva buntar
+
+Urval: 40 oppna biljetter i Backlog, noll i Todo/In Progress. Premisskontrollen
+kordes mot HEAD (847d093) for varje kandidat innan nagon valdes - inte mot
+biljettexten. Kommentarstradarna pa alla sju ar TOMMA (kontrollerat en och en
+med `list_comments`), sa ingen parkerad handbroms galler nagon av dem.
+
+BIN-1142 ar en DUBBLETT av BIN-1134 - samma rad i samma gren, samma fix. Den
+byggs inte separat; den stangs mot samma commit.
+
+## Uppmatt mot produktion (binge-nu) 2026-09-10, fore bygget
+
+Kommandot ligger i scratchpad och namnger projektet uttryckligen (lardomen om
+ADC och tyst fel databas). Utfall:
+
+- `groups`: **0 dokument**. Ingen legacy-grupp kan lasas ut av en nyckellista.
+- `users`: **4 dokument**, langsta `displayName` **13 tecken**, noll over 80.
+- `followers` (collection group): **2 dokument**, enda nyckeln `followedAt`.
+
+Det svarar pa legacy-fragan i BIN-1128 (kriterium 3), BIN-1140 och BIN-1134
+med en matning i stallet for ett antagande. Svaret aldras: mat om det innan
+reglerna deployas om det drojer.
+
+## Routning - kord pa varje bunts faktiska filunion
+
+Talen nedan far ALDRIG arvas in i ett senare varv. Routa om omedelbart fore
+varje kritik och fore varje commit med
+`node docs/org/route.mjs $(git diff --cached --name-only)`.
+
+- Bunt 1 (`package.json`, `scripts/test-rules.mjs`, nytt omslagsskript,
+  `.github/workflows/pr-checks.yml`): `tier: medium`, `panel: [4]`.
+- Bunt 2 (`firestore.rules`, `src/test/rules/firestore-rules.test.ts`):
+  `tier: top`, `panel: [27, 4, 6, 7, 13]`, `reasonCode: high-stakes`.
+
+Den har sessionen kan konvenera bade en enskild kritik och en full panel, sa
+ingen bunt behover parkeras for utebliven kapacitet.
+
+## Ordningen — RATTAD 2026-09-11, under bygget
+
+Urvalet skrev att bunt 1 gar FORE bunt 2, med skalet att BIN-1137 gor bunt 2:s
+bevis otillforlitligt. Den premissen holl inte: `npm run test:rules` MATTES ge
+exit 1 med porten upptagen, pa bada CLI-versionerna (se avsnittet ovan). Beviset
+var alltsa palitligt sa lange nagon laste utdatan.
+
+Commit-ordningen ar i stallet REGLERNA FORST, av ett annat skal: `scripts/test-rules.mjs`
+raderas, och de fall som bara fanns dar flyttas till `src/test/rules/firestore-rules.test.ts`.
+Raderingen och flytten maste ligga i SAMMA commit, annars finns ett mellanlage
+dar tackningen ar borta. Den commiten ar regelbunten. Omslagsskriptet och
+grindarna foljer i commit tva; ingenting anropar det raderade skriptet, sa den
+ordningen bryter ingenting.
+
+Bada commitarnas filunion routas om omedelbart fore varje commit; talen i
+avsnittet ovan ar urvalets och far inte arvas.
+
+---
+
+## Bunt 1 - regeltesternas trovardighet [Tier A]
+
+Kritik: enskild, `#4 Security Architect`, blint, fore bygget.
+
+### BIN-1137 - `npm run test:rules` avslutar med 0 nar porten ar upptagen
+
+Premiss verifierad vid HEAD: `package.json`s `test:rules` ar
+`firebase emulators:exec --only firestore --project demo-binge-rules "vitest run
+--config vitest.rules.config.ts"`. Inget i kedjan sager till nar emulatorn
+aldrig startade.
+
+- [ ] Mat FORST hur `firebase emulators:exec` faktiskt beter sig med porten
+      upptagen - exitkod och utdata, bada nedskrivna. Skriv ingen mening om
+      det innan kommandot kort.
+- [ ] En korning dar porten ar upptagen avslutar med skilt fran noll. *(diff)*
+- [ ] En kontroll som faller om vagen nagonsin blir tyst igen. *(diff)*
+- [ ] Fragan ledig port kontra hart fel ar BESVARAD i biljetten, inte avgjord
+      i forbigaende. *(diff)*
+- [ ] Vad CI gor med regeltesterna i dag ar nedskrivet, harlett med ett
+      kommando som star bredvid svaret. *(diff)*
+
+### BIN-1145 - `scripts/test-rules.mjs` ar rott och ingen kor det
+
+Premiss verifierad vid HEAD: filen finns (238 rader), inget i `package.json`
+eller `.github/workflows/` anropar den.
+
+- [ ] Avgor de tva fragorna i biljetten mot KODEN: ar Tillsammans-fallet fel
+      eller ar regeln fel, och ska skriptet finnas kvar. Las
+      `.claude/rules/accepted-deviations.md` och ADR 0015 forst - de tva
+      accepterade riskerna kan gora fallet inaktuellt.
+- [ ] Ingen unik tackning gar forlorad: varje fall som bara finns i skriptet
+      ar flyttat till emulatorsviten innan skriptet tas bort. *(diff)*
+- [ ] Efter atgarden finns inget regeltest som ingen automatik kor. *(diff)*
+
+## Bunt 2 - firestore.rules: fyra hal i profil, foljare och grupp [Tier C]
+
+Kritik: full panel `[27, 4, 6, 7, 13]`, blint, fore bygget.
+Reglerna deployas FOR HAND efterat (Tier D).
+
+### BIN-1134 (+ BIN-1142, dubblett) - create-grenen har ingen grans pa namnet
+
+Premiss verifierad vid HEAD: `match /users/{uid}`s `allow create` kraver bara
+att `isAdmin` saknas; `allow update` bar `is string && size() <= 80` pa
+`displayName` och 160 pa `bio`.
+
+- [ ] Ett emulatortest visar att ett overlangt `displayName` nekas vid create. *(diff)*
+- [ ] Ett emulatortest visar att en vanlig registrering fortfarande gar igenom. *(diff)*
+- [ ] Gransen ar SAMMA tal som update-grenen redan anvander, inte en andra siffra. *(diff)*
+- [ ] Muteringen som tar bort gransen faller minst ett test - kord, med utfallet
+      redovisat. *(diff)*
+- [ ] Fragan om trunkering i notistexten ar besvarad i biljetten. *(diff)*
+
+### BIN-1141 - `followers`-create binder inget faltinnehall
+
+Premiss verifierad vid HEAD: enda villkoren ar `isOwner(followerUid)` och
+`existsAfter(.../following/...)`.
+
+- [ ] `keys().hasOnly(['followedAt'])` + typkontroll pa `followedAt`. *(diff)*
+- [ ] Ett emulatortest visar att en okand nyckel nekas, och ett att en vanlig
+      foljning gar igenom. *(diff)*
+- [ ] Muteringen som tar bort nyckellistan faller minst ett test. *(diff)*
+
+### BIN-1140 + BIN-1128 - gruppdokumentet har ingen nyckellista alls
+
+De tva ar samma fix sedd fran create- respektive dokumentnivan och byggs
+tillsammans. Premiss verifierad vid HEAD: enda `hasOnly` i hela
+`match /groups/{groupId}`-blocket sitter pa `memberUids` och ar en kontroll av
+LISTANS innehall, inte av dokumentets nyckelmangd.
+
+- [ ] Harled nyckelmangden ur de vagar som FAKTISKT skriver dokumentet
+      (`src/lib/firebase/groups.ts`), inte ur biljetten. Racka ocksa
+      Admin-SDK-vagarna - de gar forbi reglerna men bestammer vad som ligger
+      i dokumentet.
+- [ ] Ett emulatortest visar att ett okant toppnivafalt nekas. *(diff)*
+- [ ] Varje skrivvag koden faktiskt har gar fortfarande igenom, en test per
+      vag - skapa, byt namn, rotera token, sla av token, joina, acceptera,
+      lamna. *(diff)*
+- [ ] Typ- och langdkontroll pa `name`. Talet 48 finns redan i formularen;
+      motivera i regeln varfor regelns tal ar det tal det ar. *(diff)*
+- [ ] Muteringen som tar bort nyckellistan faller minst ett test. *(diff)*
+
+### BIN-1135 - tillvaxtgrenarnas pinnar ar oprovade
+
+Premiss verifierad vid HEAD: bada tillvaxtgrenarna pinnar `ownerUid`, `name`
+och `defaults`; granskaren matte 448/448 grona med `ownerUid`-villkoret pa
+join-grenen nollstallt.
+
+- [ ] Ett nekande test per pinnat falt (`ownerUid`, `name`, `defaults`) pa
+      join-grenen. *(diff)*
+- [ ] Samma pa accept-grenen. *(diff)*
+- [ ] En vanlig anslutning gar fortfarande igenom pa bada grenarna. *(diff)*
+- [ ] Muteringen kord PER FALT och PER GREN, en i taget, med utfallen
+      redovisade. En mutering som faller ett join-test sager ingenting om
+      accept-grenen. *(diff)*
+
+## Panelens bindande villkor — infolierade 2026-09-10
+
+Åtta kritiker kördes över tre routningar. Routningen flyttade sig UNDER arbetet:
+kritiken vidgade filunionen, och omkörningen gav
+
+- Bunt 1: `[4]` → **`[7]`** (testfilen kom in i unionen).
+- Bunt 2: `[27, 4, 6, 7, 13]` → **`[27, 5, 4, 6, 7]`** (`publicProfile.ts` kom in;
+  #13 föll ur, #5 Legal kom in).
+
+Båda de nytillkomna rollerna konvenerades innan bygget. #13:s mätningar behålls
+som underlag men är inte längre panelens.
+
+### Mätt av mig, inte av en roll
+
+- `netstat -ano` visar port 8080 LISTENING på PID 15100. Processens kommandorad
+  är ett ANNAT repos emulator (`--project_id butlery-recipe-ratings-test --rules
+  C:\Butlery\butlery\firestore.rules`). Det är precis BIN-1137:s läge, live.
+- `npm run test:rules` med den porten upptagen → **EXIT=1**, med
+  `Error: Could not start Firestore Emulator, port taken.` Samma sak via
+  `npx firebase-tools@14.27.0`, versionen `deploy.yml` pinnar. Lokal CLI är
+  15.26.0.
+- **BIN-1137:s premiss om exit 0 går alltså INTE att reproducera här.** Kriterium 1
+  är uppfyllt redan vid HEAD, mätt på två CLI-versioner. Det som byggs är
+  kriterium 2 — den mekaniska spärren mot att vägen någonsin blir tyst — inte
+  exitkoden.
+- `#7 QA`:s villkor nr 4 i bunt 2 var FEL: det påstod att `createGroup` inte
+  skriver `inviteTokenRotatedAt`. `sed -n '100,112p' src/lib/firebase/groups.ts`
+  visar att den gör det. Hade villkoret följts hade varje gruppskapande nekats i
+  produktion med hela sviten grön. #27, #13 och #5 räknade upp samma åtta fält
+  oberoende av varandra.
+
+### Bunt 2 — bindande
+
+1. `users/{uid}` create får SAMMA klausuler som update redan bär, samma tal.
+   Gäller `bio` (160) lika mycket som `displayName` (80) — #6 och #27 oberoende:
+   att laga halva asymmetrin i samma redigering är en halv reparation.
+2. `followers` får `keys().hasOnly(['followedAt'])` OCH `followedAt is timestamp`
+   i SAMMA klausul som täcker både create och update (#6): en nyckellista utan
+   typkontroll släpper igenom en godtyckligt lång sträng in i mottagarens
+   GDPR-export.
+3. Gruppdokumentets nyckellista är EXAKT de åtta fält `createGroup` skriver.
+   För snäv → gruppskapande bryts i produktion. För vid → hålet är öppet igen.
+   Läggs EN gång, utanför hela update-OR-satsen (#27): fältmängden är fast och
+   varje klientskrivning är en `updateDoc` som bevarar orörda fält.
+4. `name` binds till samma 48 som `groupInvites.groupName` redan pinnas mot, med
+   en kommentar som säger att de två talen måste flytta tillsammans (#5).
+   Testet får ALDRIG asserta mot regelfilens källtext (#7) — en kommentar som
+   nämner 48 hade uppfyllt en sådan assertion utan att bindningen fanns.
+5. En kommentar vid nyckellistan som pekar ut Admin-SDK-vägarna
+   (`functions/src/groupHandover/adminIo.ts`) som medskyldiga källor att bredda
+   samtidigt (#27, #13): de går förbi reglerna, så ett nytt fält därifrån fäller
+   nästa ORELATERADE klientskrivning i stället.
+6. `src/lib/firebase/publicProfile.ts` — meningen om att `users/{uid}` saknar
+   längdregel vid registrering blir falsk i samma commit och STRYKS (#5, #13).
+   Klampningen `.slice(0, 80)` / `.slice(0, 160)` står KVAR (#5): regler binder
+   aldrig retroaktivt, så den är fortfarande det enda som skyddar ett konto vars
+   värde skrevs före deployen.
+7. Nekande-testerna måste uppfylla varje klausul FÖRE den de prövar (#7):
+   `sealJoinAttempt`/`seedInvite` först, en i övrigt giltig medlemsökning, och
+   ENDAST det pinnade fältet ändrat. Följarens test måste skriva `following` i
+   samma batch, annars nekar `existsAfter` först och maskerar allt efter sig.
+8. Sex fristående test för BIN-1135 — `ownerUid`/`name`/`defaults` × join/accept,
+   handuppräknade som resten av grupp-sviten (#7). Muteringen körs per fält och
+   per gren, en i taget, med utfallen redovisade.
+9. En positiv kontroll per verklig skrivväg mot gruppdokumentet (#6): skapa, byt
+   namn, rotera token, slå av token, joina, acceptera, lämna.
+
+### Bunt 2 — konflikt, avgjord
+
+#6 punkt 3 ville lägga nyckellistan BARA på create, med skälet att update-grenarna
+har olika fältmängder. #27 punkt 1 ville lägga den en gång för hela dokumentet.
+Avgjort till #27: `request.resource.data` vid en update är hela dokumentet EFTER
+skrivningen, inte patchen, så varje gren ser samma åtta nycklar oavsett vilka fält
+den själv rör. #6:s verkliga oro — att en gren bryts — besvaras av villkor 9, inte
+av att skopa spärren smalare. Kriteriet är att varje skrivväg har ett eget grönt
+test.
+
+### Bunt 1 — bindande
+
+1. Golvet i omslagsskriptet måste fälla åt BÅDA hållen och pinnas så att en
+   omdöpning på andra sidan fäller. Formen avgörs av #7:s kritik.
+2. Skriptets CLI ligger bakom en entry-point-vakt, annars äter den testkörarens
+   argv och hänger vitest utan utdata.
+3. Skriptets självtest registreras i `scripts/scripts-self-tests-present.test.mjs`
+   och golvet där höjs — annars märker ingen när testet slutar köras.
+4. `users/{uid}.bio`-längdvalideringen på update-grenen har NOLL täckning i
+   emulatorsviten och finns bara i skriptet som raderas (#4). Den måste flyttas
+   över, inte tappas.
+5. `isAdmin`-eskaleringsspärren har noll `assertFails`-test i hela repot (#4).
+   Den stängs här, eftersom bunten ändå rör testfilen.
+6. Vilka av skriptets fall som är verkligt unika härleds fall för fall med
+   kommandon, inte på känsla.
+
+### Beslut som var mina att fatta
+
+**Upptagen port: hårt fel, med ett uttryckligt `--port <n>`.** Automatiskt
+portval är bortvalt: en grön körning ska inte kunna dölja vilken port och vilken
+regelfil den faktiskt använde — det är hela biljettens ämne. Den genererade
+temporära konfigurationen pekar på `firestore.rules` med ABSOLUT sökväg, härledd
+ur reporoten, så ingen andra kopia av regelfilen kan glida isär. #4 varnade för
+att ett ovillkorligt hårt fel gör kommandot obrukbart lokalt när en granne kör
+sin emulator; `--port` är svaret på den varningen, och den här sprinten behövde
+den själv.
+
+
+## Needs you (Tier D)
+
+- [ ] `firebase deploy --only firestore:rules` efter att bunt 2 pushats.
+      Deployen ar rod med flit nar `firestore.rules` andrats - skyddet stoppar
+      hosting sa lange reglerna inte ar ute.
+
+## Deviation log
+
+
+---
+
 # Sprinten 2026-09-09 - sju biljetter i fyra buntar
 
 Urval: 26 oppna biljetter i Backlog, noll i Todo/In Progress. Premisskontrollen

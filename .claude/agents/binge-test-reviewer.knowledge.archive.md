@@ -27910,3 +27910,105 @@ honest disclosure naming the one harness that DOES prove it (an accepted pattern
 same shape as `runAggregate.ts`'s "NOT PROVEN HERE" list), not by making the dead code live.
 
 Verdict: pass (0 blocking).
+
+## 2026-09-10 — BIN-1134/1140/1141/1145 review: two numeric "non-string" fixtures don't discriminate
+
+**Task:** review the staged diff (`git diff --cached`) touching `firestore.rules`,
+`src/test/rules/firestore-rules.test.ts`, `src/lib/firebase/publicProfile.ts` and
+`functions/src/groupHandover/logic.test.ts` — new `users/{uid}` create value bounds
+(BIN-1134/1142), `users/{uid}` update value bounds + isAdmin escalation (BIN-1145/1137),
+`followers` mirror value bounds (BIN-1141), `groups/{id}` document key list + name bound
+(BIN-1140/1128), growth-branch pins (BIN-1135), and tests ported from the deleted
+`scripts/test-rules.mjs`. Read all four staged files with `Read`, plus
+`.claude/rules/accepted-deviations.md` in full (two pages).
+
+**Method.** Read every new `it()`/`describe()` and cross-checked its fixture against the
+exact rule clause it claims to isolate, walking each `&&` chain to confirm no earlier
+clause could deny first for an unrelated reason (the BIN-1127 get()-throws-and-masks
+class). Checked all seven "write path" positive controls in the `groups/{id}` key-list
+block against the REAL production call sites (`grep -n` in `src/lib/firebase/groups.ts`
+and `src/hooks/useFollow.ts`) rather than trusting the fixtures — all seven matched the
+real payload shapes exactly (`createGroup`, `updateGroup`, `rotateInviteToken`,
+`disableInviteToken`, `joinGroupViaToken` step 2, `acceptGroupInvite`, `removeMember`).
+Verified the `logic.test.ts` brace-counting scan (`uidFieldsInRules`) actually behaves as
+its own comment claims by running it standalone against the real `firestore.rules`:
+
+```
+node -e '... same brace-depth scan as the test file ...'
+→ [ 'ownerUid', 'memberUids', 'pickedByUid', 'participantUids' ]
+```
+
+confirming the new `isValidGroupDoc()` hasOnly literal is what makes `ownerUid`/
+`memberUids` newly appear in the derived set, and that the new `HANDOVER_EXPRESSION` map
+(pinned on `ownerUid: successorUid` / `memberUids: survivors`, grepped present verbatim
+in `logic.ts` line 143, not merely the field names) closes exactly that gap. This is a
+genuine widening, not a weakening — confirmed by reading `logic.test.ts`'s diff in full.
+
+**Live mutation checks, isolated (never touched the tracked `firestore.rules`).** Built
+two disposable emulator rigs under `node_modules/.tmp-mutant-check{,2}` (resolves to the
+real repo `node_modules`, no copy, no junction), each with its own `firebase.json`
+(offset ports 8199/8198), its own project id, and a scratch COPY of `firestore.rules`
+with one line removed:
+
+1. `isValidGroupDoc()`'s `&& request.resource.data.name is string` deleted, leaving only
+   `.size() <= 48`. Probe: `name: 42` (the suite's own fixture) — **still denied**
+   (`Function not found error: Name: [size]` — the emulator throws evaluating `.size()`
+   on a number and fails closed, coincidentally). `name: Array(10).fill('x')` —
+   **succeeded**, i.e. the mutant survives a fixture that actually needs the type check.
+2. Same removal on `users/{uid}` create's `displayName` clause (`... is string &&`
+   dropped, `.size() <= 80` kept). Probe: `displayName: 42` — still denied (same
+   `Function not found` masking). `displayName: Array(10).fill('x')` — succeeded.
+
+Both confirmed twice (mutate → probe fails to discriminate → restore path never touched;
+`git hash-object firestore.rules` == `git rev-parse :firestore.rules` before, during
+after both rigs, plus `git status --porcelain -- firestore.rules` showed only the
+pre-existing staged `M` throughout).
+
+**The tell was already in the diff.** The sibling `bio` non-string test in the SAME new
+`describe` block (BIN-1134/1142) uses `bio: []` — an empty array — which correctly
+discriminates (`[].size() === 0 <= 160` slips through if `is string` is dropped, so the
+fixture reddens exactly then). The `displayName` test two lines below it, and the
+`name` test in the separate `groups/{id}` block, both use a bare `42` instead. One field
+right, two wrong, same commit, same author, same idiom.
+
+**Verdict logic:** blocking, not a nit — this is exactly the shape the reviewer's mandate
+calls out ("Finns en mutering jag INTE körde som skulle överleva?"), live-verified, and
+the fix is mechanical (swap the fixture, as `bio` already shows). Not filed against
+`accepted-deviations.md` — no entry there addresses this idiom.
+
+**Also checked and found clean:** the `followers` mirror's `followedAt is timestamp`
+clause has no `.size()`-style rescue (a string fixture like `'igar'` discriminates
+directly, no masking); the BIN-1135 growth-branch pin tests (`ownerUid`/`name`/`defaults`
+unchanged) correctly test PRE-EXISTING production clauses per the 2026-09-09 archived
+entry on the same rule, not new code — filling a real prior coverage gap, not padding;
+no `assertFails`/`assertSucceeds` in the new blocks is masked by an earlier clause; no
+existing assertion was weakened, skipped, or loosened anywhere in the four files.
+
+Verdict: fail (1 blocking) — the surviving-mutant class above, filed against both
+affected fixtures (`displayName` create test, `name` groups-doc test).
+
+## Relocated 2026-09-10e — entry 94 (the BIN-1147 duplicated-predicate SUM-count bullet,
+moved from "Extract-then-test & layering" to make room under the 80k cap)
+
+**A handed-down "swap X, N tests redden" count for a predicate DUPLICATED across files is
+a claim about a SUM, and mutating only one copy under-measures it** — BIN-1147's
+`where('fromUid', ...)` is hand-copied into the sweep's `findFieldOwned`
+(retention-cleanup-orchestrator.test.ts) AND the erasure port
+`clientIo().sentInvitePaths` (group-handover-orchestrator.test.ts, the one harness that
+actually drives `eraseSentInvites`); live-verified the sweep's own copy alone kills 1,
+the erasure port's copy alone kills 3, and "4" is only true as their sum — mutate and
+attribute EACH copy separately rather than crediting a merged figure to "the sweep's
+predicate".
+
+## Relocated 2026-09-10f — entry 95 (BIN-1027 mutation-shape ambiguity + BIN-852
+data-file-state-dependence bullets, moved from "Verify, never inherit, claims" to make
+room under the 80k cap)
+
+**A claimed kill-count for "swap to a date condition" is ambiguous between mutation
+SHAPES** — a raw-field filter (`watchedAt != null`) vs one routed through an
+already-gated helper (`seenDate(i) != null`) can kill a different count of the same
+tests (BIN-1027: 1 vs 2) — reproduce the ticket's own literal shape.
+
+**A mutation-count/exit-code claim tied to a DATA FILE the diff regenerates is
+state-dependent** — re-run against the file state that ships, not pre-regeneration
+(BIN-852: "exit=0→1" became exit=0; "2 of 54" became 1).
