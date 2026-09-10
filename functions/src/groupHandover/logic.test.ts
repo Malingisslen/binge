@@ -33,6 +33,8 @@ const REPO = join(HERE, '..', '..', '..');
 const ENTRY = readFileSync(join(HERE, 'index.ts'), 'utf8').replace(/^\s*\/\/.*$/gm, '');
 /** The loop, same treatment — it declares the erasure's field set. */
 const LOOP = readFileSync(join(HERE, 'runHandover.ts'), 'utf8').replace(/^\s*\/\/.*$/gm, '');
+/** The pure logic, same treatment — it builds the group document's own handover write. */
+const LOGIC = readFileSync(join(HERE, 'logic.ts'), 'utf8').replace(/^\s*\/\/.*$/gm, '');
 const RULES = readFileSync(join(REPO, 'firestore.rules'), 'utf8');
 
 const member = (uid: string, joinedAtMs: number | null): MemberRow => ({ uid, joinedAtMs });
@@ -401,15 +403,39 @@ describe('the erasure covers every uid-bearing field the group contracts pin', (
     addedBy: 'clearsAddedBy(row.addedBy, leavingUid)',
   };
 
+  // The second way a uid field is dealt with, and the reason this map exists at all.
+  // BIN-1140/1128 gave the group DOCUMENT its own `hasOnly`, and the scan above reads
+  // the whole groups tree — so `ownerUid` and `memberUids` started arriving in the
+  // derived set. They are not row erasures and never were: the departing owner's uid
+  // leaves the group document by being REPLACED with the successor's, in the same
+  // write. Declaring them here keeps the roster requirement honest in both directions
+  // — a new uid field still has to be classified as one or the other and cannot pass
+  // by being neither — where widening the scan's exclusion would have made the group
+  // document permanently unwatched.
+  const HANDOVER_EXPRESSION: Record<string, string> = {
+    ownerUid: 'ownerUid: successorUid',
+    memberUids: 'memberUids: survivors',
+  };
+
+  it('the group document\'s own uid fields are handed over, not merely named', () => {
+    // Pinned on the expressions in buildHandoverUpdate, not on the field names: the
+    // names occur in the row types they are read from, so a `toContain(field)` would
+    // stay green with the handover ripped out.
+    for (const expr of Object.values(HANDOVER_EXPRESSION)) {
+      expect(LOGIC, `the handover no longer writes \`${expr}\``).toContain(expr);
+    }
+  });
+
   it('the derived set and the declared handlers are the same set, both ways', () => {
+    const declared = [...Object.keys(ERASURE_EXPRESSION), ...Object.keys(HANDOVER_EXPRESSION)];
     // → A new uid field in a group contract has no handler here and fails.
     for (const field of uidFieldsInRules) {
-      expect(Object.keys(ERASURE_EXPRESSION), `${field} is pinned by firestore.rules but has no handler`)
+      expect(declared, `${field} is pinned by firestore.rules but has no handler`)
         .toContain(field);
     }
     // ← A handler for a field the rules no longer pin is dead weight, except the
     // one that is deliberately not derivable.
-    for (const field of Object.keys(ERASURE_EXPRESSION)) {
+    for (const field of declared) {
       if (field === 'addedBy') continue;
       expect([...uidFieldsInRules], `${field} has a handler but nothing pins it`).toContain(field);
     }

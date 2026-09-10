@@ -701,6 +701,148 @@ describe('BIN-505 users/{uid} read is owner-only', () => {
   });
 });
 
+// BIN-1134/BIN-1142 - users/{uid} create bar bara isAdmin-sparren.
+//
+// Varje fall skrivs mot ETT falt i taget. `users/{uid}` create kraver inget
+// annat an agarskap och franvaron av `isAdmin`, sa ett nekande har kan bara
+// komma fran den nya varde-klausulen - det finns ingen tidigare klausul att
+// maskera bakom.
+//
+// Talen kommer fran update-grenen, som bar dem sedan tidigare. De testas
+// bada, at bada hallen, vid gransvardet - aldrig mot regelfilens kalltext:
+// en kommentar som namner talet hade uppfyllt en sadan assertion utan att
+// bindningen fanns.
+describe('users/{uid} create value bounds (BIN-1134/BIN-1142)', () => {
+  const NAME_MAX = 80;
+  const BIO_MAX = 160;
+  function signup(over: Record<string, unknown> = {}) {
+    return setDoc(doc(ownerDb(), 'users', OWNER), {
+      displayName: 'Malin', bio: 'hej', isPublic: false,
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp(), ...over,
+    });
+  }
+
+  it('a normal signup still goes through', async () => {
+    await assertSucceeds(signup());
+  });
+  it('a displayName at exactly the limit is allowed', async () => {
+    await assertSucceeds(signup({ displayName: 'x'.repeat(NAME_MAX) }));
+  });
+  it('a displayName one over the limit is denied', async () => {
+    await assertFails(signup({ displayName: 'x'.repeat(NAME_MAX + 1) }));
+  });
+  // A LIST, not a number. `42` proves nothing here: the clause is
+  // `is string && .size() <= N`, and `.size()` on a number raises its own
+  // evaluation error that denies the write whether or not `is string` is present —
+  // so the type check could be deleted with this test still green. A list has a
+  // `.size()`, so it passes the bound and only `is string` can refuse it. Measured:
+  // with `is string` removed, `displayName: 42` still denies and a list gets in.
+  it('a non-string displayName is denied', async () => {
+    await assertFails(signup({ displayName: ['x', 'y'] }));
+  });
+  it('a null displayName is allowed', async () => {
+    await assertSucceeds(signup({ displayName: null }));
+  });
+  it('a bio at exactly the limit is allowed', async () => {
+    await assertSucceeds(signup({ bio: 'b'.repeat(BIO_MAX) }));
+  });
+  it('a bio one over the limit is denied', async () => {
+    await assertFails(signup({ bio: 'b'.repeat(BIO_MAX + 1) }));
+  });
+  it('a non-string bio is denied', async () => {
+    await assertFails(signup({ bio: [] }));
+  });
+  it('isAdmin at create is still denied (the pre-existing guard is untouched)', async () => {
+    await assertFails(signup({ isAdmin: true }));
+  });
+});
+
+// BIN-1145 - flyttad fran `scripts/test-rules.mjs` [M5/L4], som raderas i samma
+// commit.
+// Update-grenens bio-grans hade noll tackning i den har sviten; den fanns bara
+// i det skript ingen automatik korde.
+//
+// BIN-1137 / #4: `isAdmin`-eskaleringssparren hade noll `assertFails` i hela
+// repot. Den ar Console-only med flit - utan de har fallen ar det pastaendet
+// obevisat.
+describe('users/{uid} update value bounds + isAdmin escalation (BIN-1145, BIN-1137)', () => {
+  async function seedOwnProfile(fields: Record<string, unknown> = {}) {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', OWNER), {
+        displayName: 'Malin', bio: 'hej', ...fields,
+      });
+    });
+  }
+
+  it('the owner can update their bio within the limit', async () => {
+    await seedOwnProfile();
+    await assertSucceeds(updateDoc(doc(ownerDb(), 'users', OWNER), { bio: 'b'.repeat(160) }));
+  });
+  it('a bio over the limit is denied on update', async () => {
+    await seedOwnProfile();
+    await assertFails(updateDoc(doc(ownerDb(), 'users', OWNER), { bio: 'b'.repeat(161) }));
+  });
+  it('a displayName over the limit is denied on update', async () => {
+    await seedOwnProfile();
+    await assertFails(updateDoc(doc(ownerDb(), 'users', OWNER), { displayName: 'x'.repeat(81) }));
+  });
+
+  // The escalation guard. A client may never grant itself isAdmin, and may never
+  // change one it was granted through the Console.
+  it('the owner cannot grant themselves isAdmin on update', async () => {
+    await seedOwnProfile();
+    await assertFails(updateDoc(doc(ownerDb(), 'users', OWNER), { isAdmin: true }));
+  });
+  it('an existing isAdmin may be re-sent unchanged (a normal profile save)', async () => {
+    await seedOwnProfile({ isAdmin: true });
+    await assertSucceeds(updateDoc(doc(ownerDb(), 'users', OWNER), { isAdmin: true, bio: 'ny' }));
+  });
+  it('an admin cannot revoke their own isAdmin from the client either', async () => {
+    await seedOwnProfile({ isAdmin: true });
+    await assertFails(updateDoc(doc(ownerDb(), 'users', OWNER), { isAdmin: false }));
+  });
+});
+
+// BIN-1141 - followers-dokumentet ligger i MOTTAGARENS trad, skrivs av foljaren,
+// och sprids ordagrant av GDPR-exporten.
+//
+// Varje fall skriver BADA halvorna i samma batch. `existsAfter`-klausulen ligger
+// FORE den nya nyckellistan, sa ett test som bara skriver spegeln nekas av
+// existsAfter och sager ingenting om det som provas.
+describe('users/{uid}/followers/{followerUid} value bounds (BIN-1141)', () => {
+  const FOLLOWER = 'other_uid';
+  function followBatch(mirror: Record<string, unknown>) {
+    const db = otherDb();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'users', FOLLOWER, 'following', OWNER), { followedAt: serverTimestamp() });
+    batch.set(doc(db, 'users', OWNER, 'followers', FOLLOWER), mirror);
+    return batch.commit();
+  }
+
+  it('a real follow batch still goes through', async () => {
+    await assertSucceeds(followBatch({ followedAt: serverTimestamp() }));
+  });
+  it('an unknown key on the mirror is denied', async () => {
+    await assertFails(followBatch({ followedAt: serverTimestamp(), evil: 'x'.repeat(5000) }));
+  });
+  it('a non-timestamp followedAt is denied', async () => {
+    await assertFails(followBatch({ followedAt: 'igar' }));
+  });
+  it('a mirror with no followedAt at all is denied', async () => {
+    await assertFails(followBatch({}));
+  });
+  it('a later update that adds a key to an existing mirror is denied', async () => {
+    await assertSucceeds(followBatch({ followedAt: serverTimestamp() }));
+    const db = otherDb();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'users', FOLLOWER, 'following', OWNER), { followedAt: serverTimestamp() });
+    batch.set(doc(db, 'users', OWNER, 'followers', FOLLOWER), {
+      followedAt: serverTimestamp(), note: 'smuggled',
+    });
+    await assertFails(batch.commit());
+  });
+});
+
 describe('BIN-505 publicProfiles/{uid} projection', () => {
   const card = { displayName: 'Malin', username: 'malin', photoURL: null, bio: 'hej', isPublic: true, createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
   async function seedSourceVisibility(fields: Record<string, unknown>) {
@@ -2663,6 +2805,183 @@ describe('groups invite-accept (BIN-327)', () => {
   });
 });
 
+// BIN-1140/BIN-1128 - gruppdokumentets nyckelmangd och `name`s form.
+//
+// Nyckellistan ar ett TAK som ligger pa create OCH pa hela update-OR-satsen.
+// Det gor varje skrivvag koden har till ett fall som maste bevisas gron var
+// for sig: en for snav lista bryter en av dem i produktion med hela sviten
+// i ovrigt gron.
+//
+// Nyttolasten nedan ar `createGroup`s egen. Harled den, lita inte pa den har
+// raden:
+//   sed -n '/const groupRef = await addDoc/,/^  });/p' src/lib/firebase/groups.ts
+describe('groups/{id} document key list + name bound (BIN-1140/BIN-1128)', () => {
+  const NAME_MAX = 48;
+  function createPayload(over: Record<string, unknown> = {}) {
+    return {
+      name: 'Filmklubben',
+      ownerUid: OWNER,
+      memberUids: [OWNER],
+      defaults: { region: 'SE' },
+      inviteTokenHash: 'a'.repeat(64),
+      inviteTokenRotatedAt: serverTimestamp(),
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      ...over,
+    };
+  }
+  function createGroup(over: Record<string, unknown> = {}) {
+    return setDoc(doc(ownerDb(), 'groups', 'newgroup'), createPayload(over));
+  }
+
+  it("createGroup's exact payload is still accepted", async () => {
+    await assertSucceeds(createGroup());
+  });
+  it('an unknown top-level key at create is denied', async () => {
+    await assertFails(createGroup({ evil: 'x'.repeat(5000) }));
+  });
+  it('a name at exactly the limit is allowed', async () => {
+    await assertSucceeds(createGroup({ name: 'g'.repeat(NAME_MAX) }));
+  });
+  it('a name one over the limit is denied', async () => {
+    await assertFails(createGroup({ name: 'g'.repeat(NAME_MAX + 1) }));
+  });
+  // A LIST, not a number — same reason as the displayName case above: `.size()` on a
+  // number denies on its own, so a numeric fixture cannot tell `is string` from its
+  // absence.
+  it('a non-string name is denied', async () => {
+    await assertFails(createGroup({ name: ['x', 'y'] }));
+  });
+
+  // One test per write path the code actually has. Each is a POSITIVE control:
+  // the key list must not lock any of them out.
+  it('write path — the owner renames the group', async () => {
+    await seedGroup({ memberUids: [OWNER] });
+    await assertSucceeds(updateDoc(doc(ownerDb(), 'groups', GROUP), {
+      name: 'Nytt namn', updatedAt: serverTimestamp(),
+    }));
+  });
+  it('write path — the owner edits defaults', async () => {
+    await seedGroup({ memberUids: [OWNER] });
+    await assertSucceeds(updateDoc(doc(ownerDb(), 'groups', GROUP), {
+      defaults: { region: 'NO' }, updatedAt: serverTimestamp(),
+    }));
+  });
+  it('write path — the owner rotates the invite token', async () => {
+    await seedGroup({ memberUids: [OWNER] });
+    await assertSucceeds(updateDoc(doc(ownerDb(), 'groups', GROUP), {
+      inviteTokenHash: 'b'.repeat(64), inviteTokenRotatedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }));
+  });
+  it('write path — the owner disables the invite token', async () => {
+    await seedGroup({ memberUids: [OWNER] });
+    await assertSucceeds(updateDoc(doc(ownerDb(), 'groups', GROUP), {
+      inviteTokenHash: null, updatedAt: serverTimestamp(),
+    }));
+  });
+  it('write path — a joiner with a sealed attempt adds themselves', async () => {
+    await seedGroup({ memberUids: [OWNER] });
+    await sealJoinAttempt('other_uid');
+    await assertSucceeds(updateDoc(doc(otherDb(), 'groups', GROUP), {
+      memberUids: [OWNER, 'other_uid'], updatedAt: serverTimestamp(),
+    }));
+  });
+  it('write path — an invitee accepts', async () => {
+    await seedGroup({ memberUids: [OWNER] });
+    await seedInvite('other_uid');
+    await assertSucceeds(updateDoc(doc(otherDb(), 'groups', GROUP), {
+      memberUids: [OWNER, 'other_uid'], updatedAt: serverTimestamp(),
+    }));
+  });
+  it('write path — a member leaves', async () => {
+    await seedGroup({ memberUids: [OWNER, 'other_uid'] });
+    await assertSucceeds(updateDoc(doc(otherDb(), 'groups', GROUP), {
+      memberUids: [OWNER], updatedAt: serverTimestamp(),
+    }));
+  });
+
+  // ...and the ceiling holds on every one of them that a stranger can reach.
+  it('an unknown key smuggled onto a rename is denied', async () => {
+    await seedGroup({ memberUids: [OWNER] });
+    await assertFails(updateDoc(doc(ownerDb(), 'groups', GROUP), {
+      name: 'Nytt namn', evil: 'x'.repeat(5000),
+    }));
+  });
+  it('an unknown key smuggled onto a join is denied', async () => {
+    await seedGroup({ memberUids: [OWNER] });
+    await sealJoinAttempt('other_uid');
+    await assertFails(updateDoc(doc(otherDb(), 'groups', GROUP), {
+      memberUids: [OWNER, 'other_uid'], evil: 'x'.repeat(5000),
+    }));
+  });
+  it('an unknown key smuggled onto an accept is denied', async () => {
+    await seedGroup({ memberUids: [OWNER] });
+    await seedInvite('other_uid');
+    await assertFails(updateDoc(doc(otherDb(), 'groups', GROUP), {
+      memberUids: [OWNER, 'other_uid'], evil: 'x'.repeat(5000),
+    }));
+  });
+  it('an over-long name on a rename is denied', async () => {
+    await seedGroup({ memberUids: [OWNER] });
+    await assertFails(updateDoc(doc(ownerDb(), 'groups', GROUP), {
+      name: 'g'.repeat(NAME_MAX + 1),
+    }));
+  });
+});
+
+// BIN-1135 - de tva tillvaxtgrenarna pinnar `ownerUid`, `name` och `defaults`
+// oforandrade i samma skrivning som en medlem laggs till. Ingenting rorde de
+// pinnarna: en granskare nollstallde `ownerUid`-villkoret pa join-grenen och
+// hela sviten var gron.
+//
+// Sex handuppraknade fall, tre falt gange tva grenar. Ingen loop och ingen delad
+// hjalpare mellan grenarna: klausulerna ar handkopierade i regeln, sa en fix pa
+// bara den ena maste falla har. Varje fall skickar en i OVRIGT giltig anslutning
+// - beviset seedat, listan vaxer med exakt sig sjalv - sa den enda klausul som
+// kan neka ar den pinnade.
+describe('groups/{id} growth branches pin ownerUid/name/defaults (BIN-1135)', () => {
+  const JOINER = 'other_uid';
+  function joinWriting(extra: Record<string, unknown>) {
+    return updateDoc(doc(otherDb(), 'groups', GROUP), {
+      memberUids: [OWNER, JOINER], ...extra,
+    });
+  }
+
+  describe('token-join branch', () => {
+    beforeEach(async () => {
+      await seedGroup({ memberUids: [OWNER] });
+      await sealJoinAttempt(JOINER);
+    });
+    it('the joiner cannot take ownerUid in the same write', async () => {
+      await assertFails(joinWriting({ ownerUid: JOINER }));
+    });
+    it('the joiner cannot rename the group in the same write', async () => {
+      await assertFails(joinWriting({ name: 'Kapad' }));
+    });
+    it('the joiner cannot change defaults in the same write', async () => {
+      await assertFails(joinWriting({ defaults: { region: 'NO' } }));
+    });
+  });
+
+  describe('invite-accept branch', () => {
+    beforeEach(async () => {
+      await seedGroup({ memberUids: [OWNER] });
+      await seedInvite(JOINER);
+    });
+    it('the invitee cannot take ownerUid in the same write', async () => {
+      await assertFails(joinWriting({ ownerUid: JOINER }));
+    });
+    it('the invitee cannot rename the group in the same write', async () => {
+      await assertFails(joinWriting({ name: 'Kapad' }));
+    });
+    it('the invitee cannot change defaults in the same write', async () => {
+      await assertFails(joinWriting({ defaults: { region: 'NO' } }));
+    });
+  });
+});
+
+
 // BIN-532/BIN-533: members/{memberUid} create rule (firestore.rules) gates on
 // `request.auth.uid in get(groups/{groupId}).data.memberUids` — a get() that
 // resolves against the database state BEFORE the whole batch/transaction,
@@ -2977,6 +3296,75 @@ describe('groups sessionHistory pickedByUid anti-forge', () => {
     await assertFails(setDoc(doc(otherDb(), 'groups', GROUP, 'sessionHistory', 's2'), {
       ...validPick, sessionId: 's2', pickedByUid: OWNER,
     }));
+  });
+  // BIN-1145, ported from `scripts/test-rules.mjs`, deleted in this commit. The
+  // identity pin had
+  // two cases here; the key ceiling beside it had none.
+  it('a pick carrying an unknown field is denied', async () => {
+    await seedGroup({ memberUids: [OWNER, 'other_uid'] });
+    await assertFails(setDoc(doc(otherDb(), 'groups', GROUP, 'sessionHistory', 's3'), {
+      ...validPick, sessionId: 's3', evil: 'x'.repeat(5000),
+    }));
+  });
+});
+
+// BIN-1145 — ported from `scripts/test-rules.mjs`, deleted in this commit.
+// Nothing ever ran that script: no npm script and no workflow invoked it,
+// so it had been red at HEAD for an unknown length of time on a case its own
+// fixture had outgrown (an anon participant keyed `p1`, where BIN-509's
+// `anonShapedPid` requires 32 lowercase-hex characters — the rule was right and
+// the fixture was stale).
+//
+// These are the cases that existed ONLY there. Each was checked against this file
+// before being moved; the rest of the script overlapped what is already here.
+
+// [M1] The follow mirror. `existsAfter` is what stops a stranger writing a
+// follower into someone else's tree, and it is the one clause a single-document
+// write can never satisfy — the honest follow writes both halves in one batch.
+describe('users/{uid}/followers — the forge guard (BIN-1145, ported)', () => {
+  it('a follower doc written alone, with no matching following doc, is denied', async () => {
+    await assertFails(setDoc(
+      doc(otherDb(), 'users', OWNER, 'followers', 'other_uid'),
+      { followedAt: serverTimestamp() },
+    ));
+  });
+  it('a stranger cannot write a follower doc naming somebody else', async () => {
+    // The doc id is the follower. Writing one for a third party is a forged
+    // relationship in the victim's own tree.
+    await assertFails(setDoc(
+      doc(otherDb(), 'users', OWNER, 'followers', 'third_party'),
+      { followedAt: serverTimestamp() },
+    ));
+  });
+});
+
+// [H2] The Tillsammans participant document's key list and its displayName bound.
+// The BIN-24/509/540 blocks above all pass a fixed `displayName`, so neither the
+// key ceiling nor the length bound had a case anywhere in this suite.
+describe('sessions/{id}/participants — key list + displayName bound (BIN-1145, ported)', () => {
+  function participant(over: Record<string, unknown> = {}) {
+    return {
+      uid: null, displayName: 'Gast', providers: [8, 337], vetoRemaining: 1,
+      isHost: false, joinedAt: serverTimestamp(), lastActiveAt: serverTimestamp(),
+      ...over,
+    };
+  }
+  it('a valid anonymous participant is still accepted', async () => {
+    await assertSucceeds(setDoc(
+      doc(anonDb(), 'sessions', 's1', 'participants', ANON1), participant(),
+    ));
+  });
+  it('an unknown field is denied', async () => {
+    await assertFails(setDoc(
+      doc(anonDb(), 'sessions', 's1', 'participants', ANON1),
+      participant({ evil: 'x'.repeat(10000) }),
+    ));
+  });
+  it('an over-long displayName is denied', async () => {
+    await assertFails(setDoc(
+      doc(anonDb(), 'sessions', 's1', 'participants', ANON1),
+      participant({ displayName: 'x'.repeat(200) }),
+    ));
   });
 });
 

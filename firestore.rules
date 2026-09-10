@@ -252,8 +252,29 @@ service cloud.firestore {
       // watchlist-friends-fallback) är priviligierade läsningar som förbigår den
       // här read-regeln, så de fortsätter fungera oförändrat.
       allow read: if isOwner(uid);
+      // BIN-1134/BIN-1142: create bar bara isAdmin-spärren. Bio- och
+      // displayName-klausulerna nedan fanns bara på `update`, så en profil kunde
+      // skrivas med ett godtyckligt långt namn vid registreringen och sedan aldrig
+      // valideras — fältet prövas först den dag ägaren råkar spara om det.
+      //
+      // Det är inte bara lagring på ens eget dokument: `functions/src/index.ts`
+      // läser `users/{uid}.displayName` auktoritativt och bygger notistexten av
+      // det, så namnet visas på någon ANNANS låsskärm. `isOwnIdentity` binder
+      // dessutom `friendRequests.fromDisplayName` och `groupInvites.fromDisplayName`
+      // mot samma fält; de bär en egen 80-gräns bredvid bindningen, så ett otyglat
+      // värde kopieras inte vidare — det gör i stället varje inbjudan och varje
+      // vänförfrågan från det kontot permanent nekad tills profilen sparas om.
+      //
+      // Talen är update-grenens egna (80 / 160), inte nya. Flyttas ett av dem
+      // måste båda grenarna flytta i samma redigering.
       allow create: if isOwner(uid)
-        && !('isAdmin' in request.resource.data);
+        && !('isAdmin' in request.resource.data)
+        && (!('bio' in request.resource.data)
+          || request.resource.data.bio == null
+          || (request.resource.data.bio is string && request.resource.data.bio.size() <= 160))
+        && (!('displayName' in request.resource.data)
+          || request.resource.data.displayName == null
+          || (request.resource.data.displayName is string && request.resource.data.displayName.size() <= 80));
       allow update: if isOwner(uid)
         && (
           // Får inte sätta/röra isAdmin via update
@@ -503,8 +524,25 @@ service cloud.firestore {
       // som helst forga följare för andra (M1). existsAfter (inte exists) krävs
       // eftersom followUser skriver following + followers i samma batch; exists
       // skulle se pre-commit-state där following ännu inte finns och neka.
+      //
+      // BIN-1141: existsAfter binder VEM som får skriva, aldrig VAD. Dokumentet
+      // ligger i mottagarens träd, skrivs av någon annan, och `dataExport.ts`
+      // sprider det ordagrant (`toExportDocs(s.followersSnap)`) in i mottagarens
+      // GDPR-export — så utan de två klausulerna nedan kunde en främling lägga
+      // godtyckliga nycklar och godtyckligt stora värden i min export.
+      //
+      // Nyckellistan ensam räcker inte: utan `is timestamp` kan `followedAt`
+      // fortfarande vara en godtyckligt lång sträng. Båda klausulerna måste ligga
+      // på DEN HÄR raden, som täcker både create och update — annars kan ett rent
+      // dokument skapas och sedan uppdateras fullt.
+      //
+      // `reclaimOrphanFollows` läser fältet men skriver aldrig hit, och dess
+      // `parseFollowedAt` tål ett saknat/feltypat värde, så typkravet kan inte
+      // störa svepet.
       allow create, update: if isOwner(followerUid)
-        && existsAfter(/databases/$(database)/documents/users/$(followerUid)/following/$(uid));
+        && existsAfter(/databases/$(database)/documents/users/$(followerUid)/following/$(uid))
+        && request.resource.data.keys().hasOnly(['followedAt'])
+        && request.resource.data.followedAt is timestamp;
       allow delete: if isOwner(followerUid);
     }
 
@@ -696,10 +734,13 @@ service cloud.firestore {
       // betrodd persons namn.
       //
       // `groupName` får en EGEN längdgräns och inte bara en pinning mot
-      // `groups/{groupId}.name` — det fältet har ingen typ- eller längdvalidering i
-      // någon gren, så en pinning ensam hade ärvt en obegränsad källa in i varje
-      // mottagares lagring. Talet är detsamma som formulärens `maxLength`; härled
-      // det med `grep -rn "maxLength={48}" src`.
+      // `groups/{groupId}.name`: en pinning ensam ärver vad källan råkar tillåta,
+      // och den här samlingen ligger i mottagarens lagring och GDPR-export. Talet
+      // är detsamma som `isValidGroupDoc()` binder källan till, och som formulären
+      // använder. Härled båda med
+      //   grep -nE "data\.[A-Za-z]+\.size\(\) <= 48" firestore.rules
+      //   grep -rn "maxLength=" src/app/grupper/ny/page.tsx
+      // De måste flytta i samma redigering.
       allow create: if isSignedIn()
         && uid != request.auth.uid
         && request.resource.data.fromUid == request.auth.uid
@@ -1264,7 +1305,54 @@ service cloud.firestore {
     match /groups/{groupId} {
       allow read: if isSignedIn();
 
+      // BIN-1140/BIN-1128: dokumentets nyckelmängd och `name`s form.
+      //
+      // Före den här funktionen ställde ingen gren i hela blocket någon fråga om
+      // vilka nycklar dokumentet får ha — det enda `hasOnly` som fanns satt på
+      // `memberUids` och kontrollerade LISTANS innehåll. Varje skrivare som
+      // passerade någon gren kunde alltså lägga till toppnivåfält upp mot
+      // dokumentgränsen, på ett dokument `allow read: if isSignedIn()` gör
+      // läsbart för varje inloggat konto och som läses om vid varje
+      // medlemskapskontroll. `name` hade heller ingen typ- eller längdgräns i
+      // någon gren; formulärens 48 tecken är en UI-hint, inte en spärr.
+      //
+      // Listan är de fält `createGroup` skriver. Härled den, lita inte på
+      // uppräkningen här:
+      //   grep -n -A 10 "addDoc(collection(db, 'groups')" src/lib/firebase/groups.ts
+      // Kommandot är skrivet utan klammerparenteser med flit: `logic.test.ts` i
+      // functions/ läser det HÄR blocket genom att räkna klamrar från match-raden,
+      // så en ensam klammer i en kommentar avslutar dess skanning i förtid och gör
+      // dess uid-fältsvakt tyst verkningslös.
+      // För SNÄV lista bryter gruppskapande i produktion; för VID lista lämnar
+      // hålet öppet. Den är ett TAK, aldrig ett golv.
+      //
+      // Villkoret ligger EN gång och täcker både create och hela update-OR-satsen.
+      // Det går därför att den mängden är fast: vid en update är
+      // `request.resource.data` hela dokumentet EFTER skrivningen, inte patchen,
+      // så varje gren ser samma nycklar oavsett vilka fält den själv rör — även
+      // `disableInviteToken`, som bara sätter `inviteTokenHash: null`.
+      //
+      // MEDSKYLDIGA KÄLLOR. `functions/src/groupHandover/adminIo.ts` skriver till
+      // samma dokument via Admin SDK och går förbi de här reglerna helt. Den kan
+      // aldrig fällas här — men lägger den någonsin ett fält utanför listan, är det
+      // nästa HELT ORELATERADE klientskrivning (ett namnbyte) som nekas, eftersom
+      // det främmande fältet ligger kvar i `request.resource.data`. Bredda listan i
+      // samma commit som en sådan Admin-SDK-skrivning, aldrig efteråt.
+      //
+      // Talet 48 är samma tal som `groupInvites.groupName` redan pinnas mot en bit
+      // upp i filen. Regelspråket har ingen delad konstant, så de två måste flytta
+      // i samma redigering.
+      function isValidGroupDoc() {
+        return request.resource.data.keys().hasOnly([
+            'name', 'ownerUid', 'memberUids', 'defaults',
+            'inviteTokenHash', 'inviteTokenRotatedAt', 'createdAt', 'updatedAt'
+          ])
+          && request.resource.data.name is string
+          && request.resource.data.name.size() <= 48;
+      }
+
       allow create: if isSignedIn()
+        && isValidGroupDoc()
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.memberUids.hasOnly([request.auth.uid])
         && request.auth.uid in request.resource.data.memberUids;
@@ -1279,7 +1367,7 @@ service cloud.firestore {
       // oförändrad. Tillägg sker alltid genom att mål-användaren själv
       // accepterar en inbjudan (accept-branchen nedan). Detta stänger H1 där
       // ägaren tyst kunde lägga till vem som helst utan samtycke.
-      allow update: if isSignedIn() && (
+      allow update: if isSignedIn() && isValidGroupDoc() && (
         (
           resource.data.ownerUid == request.auth.uid
           && resource.data.memberUids.hasAll(request.resource.data.memberUids)

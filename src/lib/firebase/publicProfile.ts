@@ -171,8 +171,10 @@ export async function syncMyPublicProfile(uid: string, src: PublicCardSource): P
     const photoURL = src.photoURL && src.photoURL.length <= 500 ? src.photoURL : null;
     // Clamp to the projection rule's caps (80 / 160) so an over-long name or bio
     // can't make the WHOLE atomic write fail the rule and get swallowed — which
-    // would leave the user with NO projection (invisible everywhere). users/{uid}
-    // itself has no length rule on displayName at signup, so this is reachable.
+    // would leave the user with NO projection (invisible everywhere). BIN-1134 put
+    // the same caps on the users/{uid} create branch, but a rule binds only the
+    // writes that come after it, so a value stored before that deploy is still
+    // reachable here — the clamp stays.
     const displayName = (src.displayName ?? '').slice(0, 80);
     const bio = (src.bio ?? '').slice(0, 160);
     // BIN-816 AC2: through the chokepoint, which refuses the write while a
