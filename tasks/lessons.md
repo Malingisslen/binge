@@ -1707,3 +1707,36 @@ anda: ledgern sa att fem av dem aldrig lasts vid de bytes som skulle ga ut
 laste dem med `Read` och citerade forsta raden i var och en. Samma klass som 2026-08-19:s
 post om att granskarens RAPPORT inte ar beviset - men har med ett pass-utfall, inte ett
 fail, vilket ar svarare att misstro.
+
+### [Workflow] En STRYKNING kan lamna ordet som vilade pa den kvar (2026-09-11, BIN-1154)
+
+**Trigger:** du stryker en mening for att den ar falsk, och en grannmening bygger pa den.
+
+**Regel:** las stycket igen EFTER strykningen och fraga vilket ord som nu star utan
+motivering. Ett absolut ord - "permanent", "varje", "aldrig" - overlever ofta den mening
+som gjorde det sant, och da ar det kvar som ett omatt pastaende med farre ledtradar an
+forut.
+
+**Exempel:** BIN-1154 byggde en redigeringsyta for visningsnamnet. Meningen "kontot kan
+inte laga det sjalv: ingen yta i appen andrar visningsnamnet" blev falsk och stroks. Kvar
+stod att ett for langt namn gor varje inbjudan och varje vanforfragan "permanent nekad" -
+en foljd som bara var sann sa lange ingen yta fanns. Samma sorts absoluta pastaende, olika
+formulerat, stod dessutom pa tre stallen till, daribland i den alltid laddade digesten och
+i en correction-rad skriven i varvet fore. Push-grinden tog fyra varv pa att fa bort allt;
+atta av atta fynd lag i min egen rattelse av det foregaende.
+
+### [Workflow] Ett tal i en loggrad ar lika omatt som ett tal i en kommentar (2026-09-11, BIN-1154)
+
+**Trigger:** du skriver en `correction`-rad eller en `review`-rad som forklarar ett fynd.
+
+**Regel:** samma disciplin som i koden. Rader i `docs/org/metrics/events.jsonl` ar
+granskningsbevis och lases av grindarna, sa ett oraknat tal dar ar varre an i en kommentar,
+inte battre. Filen ar dessutom append-only aven for en rad som aldrig pushats - att rakna
+en ostadad rad som "inte publicerad an" underkandes av #21 med filens egen text som skal.
+
+**Exempel:** rattelseraden for ett oraknat tal bar sjalv ett oraknat tal ("tre andra rader
+sager samma sak" - det var tio). Nasta version pastod att samma ORD stod pa tre stallen
+till; det var samma sorts pastaende, olika formulerat, och ett av stallena bar det aldrig.
+En tredje version sa att en roll kom in i panelen nar en fil tillkom - filen lag redan dar,
+och det var unionen som KRYMPTE. Tre varv, tre olika falska tal, alla i rader vars syfte
+var att bokfora ett falskt tal.
