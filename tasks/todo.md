@@ -261,9 +261,10 @@ appen fran senaste laget. Matt: korningen pa `4b5650b`, jobbet `deploy`, steget
 "Deploy to Firebase Hosting" - gront. Den klampande klienten ligger alltsa ute
 mot de gamla, tillatande reglerna, vilket ar den sakra riktningen.
 
-Kvar:
-
-- [ ] `firebase deploy --only firestore:rules`.
+Kvar: ingenting. Reglerna deployades 2026-09-11 pa Malins begaran
+(`firebase deploy --only firestore:rules --project binge-nu`), och utfallet
+verifierades genom att lasa tillbaka reglerna fran `binge-nu` - samma radantal
+som filen pa main, och de tre nya vakterna pa plats.
 
 Att det loste sig var tur, inte plan. Ligger doc-commitarna FORE regelcommiten
 nasta gang hjalper det inte.
