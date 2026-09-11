@@ -25,7 +25,6 @@ Acceptanskriterier:
 3. `{diff}` Befintliga `followers`-villkoren (BIN-1141) ar oforandrade.
 
 ### BIN-1155 — groups/{gid}/members/{uid} har ingen faltvalidering
-Matt fore bygget: `awk '/match \/groups\/\{groupId\}\/members/,/^      \}/' firestore.rules | grep -c hasOnly` ger `0`.
 Biljettens premiss "ingen yta kan andra visningsnamnet" FOLL 2026-09-11 (BIN-1154 shippade
 en redigeringsyta), sa kedjan biljetten litade pa ar bruten — det gor den mer angelagen.
 

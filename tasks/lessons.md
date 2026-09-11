@@ -1744,9 +1744,9 @@ vars hela syfte var att bokfora ett omatt pastaende.
 
 **Trigger:** tva roller blockerar pa villkor som utesluter varandra, och bada har matt ratt.
 
-**Regel:** leta efter ordningen fore kompromissen. Fyra roller kravde en
-identitetsbindning och sa att de blockerade utan den; den femte - som ager
-faltkontraktet - blockerade PA den, eftersom mekanismen laser ett live-dokument medan
+**Regel:** leta efter ordningen fore kompromissen. Sakerhets-, jurist- och
+dataskyddsrollen kravde en identitetsbindning och sa att de blockerade utan den; rollen
+som ager faltkontraktet blockerade PA den, eftersom mekanismen laser ett live-dokument medan
 skrivaren skickar en minneskopia, vilket ar en oppen defekt i en ANNAN biljett. Ingen av
 dem hade fel. Att valja sida hade shippat antingen en oskyddad yta eller ett kant fel i
 tre nya skrivvagar. Bygg ingendera: skriv ut varje rolls insats pa biljetten, lank den
@@ -1761,7 +1761,7 @@ ut som ett beslut. Skriv "oenig" i klartext och namnge bada sidorna.
 harleda nagot, men aldrig andrade.
 
 **Regel:** routa en tredje gang, mot `git diff --cached --name-only`, omedelbart fore
-skrivning. Kryssningslardomen (BIN-1050/938) handlar om biljetter som faller bort; det har
+skrivning. Krympningslardomen (BIN-1050) handlar om biljetter som faller bort; det har
 ar en form till: en fil du LASER kan aldrig hamna i commiten, sa unionen krymper av sig
 sjalv mellan kritiken och skrivningen, utan att nagot beslut andrades.
 
