@@ -1672,7 +1672,7 @@ alltso halva meningen, och ett i `firestore.rules` nadde ett av tva formular med
 `maxLength`. Tva av tre lagades genom att VIDGA kommandot; det tredje genom att avgransa
 meningen och skriva ut vad kommandot inte svarar pa.
 
-### [Workflow] En FOLJD i en kommentar ar ett pastaende, och den provas genom att framkalla den (2026-09-11, BIN-1140)
+### [Workflow] En FOLJD i en kommentar ar ett pastaende, och den provas genom att framkalla den (2026-09-11, BIN-1140/1134)
 
 **Trigger:** en kommentar som beskriver vad som HANDER om nagot gar sonder - "da blir
 spärren tyst verkningslos", "da nekas skrivningen", "da svarar ett nytt forsok X".
