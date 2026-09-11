@@ -992,8 +992,10 @@ Alternativet — att kasta och saga att ingenting sparades — ar en osanning i 
 vanliga fallet for att undvika en osanning i det sallsynta.
 
 **Re-open when:** `kind: 'updateDisplayName-authSync'` dyker upp i Sentry-scopet
-`auth`. Det ar observationskanalen, och den ar den enda: divergensen ar osynlig
-i appen, eftersom varje yta laser Firestore-kopian.
+`auth`. Divergensen ar inte helt osynlig i appen - `buildExistingProfile`s
+fallback och `tryAutoClaimUsername`s backfill laser bada Auth-kopian - men
+ingendera skriver ned att den gjorde det, sa Sentry-raden ar det som gar att
+bevaka.
 
 ### 2. Golvet pa `displayName` ar klientsidigt, med flit
 

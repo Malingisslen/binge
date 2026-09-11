@@ -1737,6 +1737,10 @@ describe('AuthContext — an aborted deletion is not resurrected (BIN-816)', () 
       ['updateNotificationSettings', () => ctx!.updateNotificationSettings({ priceDrops: true })],
       ['updateDefaultVisibility', () => ctx!.updateDefaultVisibility('public')],
       ['updateProviderTier', () => ctx!.updateProviderTier(8, null)],
+      // BIN-1154: den enda skrivaren vars ANDRA lagring ligger utanfor
+      // chokepointen. Just darfor ar den det fall som pinnar att en markerad
+      // session inte nar Auth-posten heller - ordningen ar hela skalet.
+      ['updateDisplayName', () => ctx!.updateDisplayName('Nytt namn')],
     ];
 
     for (const [name, run] of writers) {

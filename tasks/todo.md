@@ -160,15 +160,16 @@ om skickade gruppinbjudningar.
 
 #19 SHOULD 3 antog att ett inklistrat langt namn star kvar i faltet tills blur.
 Det gor det inte: HTML `maxlength` begransar varje anvandarinmatning i
-kontrollen, inklistring inraknad. Matt i BIN-1134 i gar. Klampningen i
+kontrollen, inklistring inraknad. Matt i BIN-1134. Klampningen i
 kontextfunktionen ar darfor ett skydd for anropare som inte kom fran formularet,
 inte for inklistringen.
 
 ## Routning
 
-Arv aldrig ett routningstal harifran. Urvalet gissade pa tre filer; den byggda
-unionen ar sex, och `.claude/rules/accepted-deviations.md` bytte panelen fran
-#14 till #25. Harled i stallet, fore varje kritik och fore varje commit:
+Arv aldrig ett routningstal harifran. Urvalet gissade pa en mindre
+filuppsattning an den byggda, och `.claude/rules/accepted-deviations.md` bytte
+panelen fran #14 till #25. Harled i stallet, fore varje kritik och fore varje
+commit:
 
     node docs/org/route.mjs $(git diff --cached --name-only)
 
