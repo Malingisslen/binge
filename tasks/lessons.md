@@ -1717,13 +1717,14 @@ motivering. Ett absolut ord - "permanent", "varje", "aldrig" - overlever ofta de
 som gjorde det sant, och da ar det kvar som ett omatt pastaende med farre ledtradar an
 forut.
 
-**Exempel:** BIN-1154 byggde en redigeringsyta for visningsnamnet. Meningen "kontot kan
-inte laga det sjalv: ingen yta i appen andrar visningsnamnet" blev falsk och stroks. Kvar
-stod att ett for langt namn gor varje inbjudan och varje vanforfragan "permanent nekad" -
-en foljd som bara var sann sa lange ingen yta fanns. Samma sorts absoluta pastaende, olika
-formulerat, stod dessutom pa flera stallen till, daribland i den alltid laddade digesten
-och i en correction-rad skriven i varvet fore. Harled kopiorna, rakna dem inte: samma
-mening ar omformulerad pa varje stalle, sa en enkel grep hittar en av dem.
+**Exempel:** BIN-1154 byggde en redigeringsyta for visningsnamnet, vilket gjorde den har
+meningen i `firestore.rules` falsk:
+
+    Kontot kan inte laga det sjalv: ingen yta i appen andrar visningsnamnet.
+
+Den stroks i `a0826d2`. Grannmeningen i samma kommentar behold ordet den vilade pa - att
+ett for langt namn gor varje inbjudan och varje vanforfragan "permanent nekad" - och stod
+kvar ett helt granskningsvarv till, tills `a44010c` tog ordet.
 
 ### [Workflow] Ett tal i en loggrad ar lika omatt som ett tal i en kommentar (2026-09-11, BIN-1154)
 
@@ -1734,10 +1735,8 @@ granskningsbevis och lases av grindarna, sa ett oraknat tal dar ar varre an i en
 inte battre. Filen ar dessutom append-only aven for en rad som aldrig pushats - att rakna
 en ostadad rad som "inte publicerad an" underkandes av #21 med filens egen text som skal.
 
-**Exempel:** rattelseraden for ett oraknat tal bar sjalv ett oraknat tal - "tre andra
-rader sager samma sak", vilket `grep -c "append-only" docs/org/metrics/events.jsonl`
-motsager.
-Nasta version pastod att samma ORD stod pa flera stallen till; det var samma sorts
-pastaende, olika formulerat, och ett av stallena bar det aldrig. Bada raderna skrevs for
-att bokfora ett fynd om omatta pastaenden.
+**Exempel:** en `correction`-rad som bokforde ett falskt pastaende skrev sjalv "tre andra
+rader i filen sager samma sak". Kommandot som avgor saken -
+`grep -c "append-only" docs/org/metrics/events.jsonl` - motsager den. Talet stod i en rad
+vars hela syfte var att bokfora ett omatt pastaende.
 
