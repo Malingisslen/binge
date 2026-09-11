@@ -1,3 +1,176 @@
+# Sprint 2026-09-11b — sex biljetter
+
+Urval: 6 av 44 backlog-biljetter. Rena tradet, allt pa main.
+
+Routningen ar kord pa de FAKTISKA filuppsattningarna nedan, inte pa biljetternas
+meningar om dem. Kommandot star vid varje bunt; kor om det innan varje kritik och
+omedelbart fore varje commit (BIN-1052/1050).
+
+## Bunt A — firestore.rules faltvalidering [Tier C] — BIN-1153, BIN-1155
+
+Routning: `node docs/org/route.mjs --md firestore.rules src/lib/firebase/groups.ts src/hooks/useFollow.ts test/rules/*.test.mjs`
+→ Tier **top** · #4 Security Architect, #27 DBA, #5 Legal/GDPR, #6 DPO, #18 Community Manager
+
+Disposition: build (korrekthet/harding, inget produktval).
+
+### BIN-1153 — users/{uid}/following binder inget faltinnehall
+Matt fore bygget: `grep -n -A 4 "match /users/{uid}/following/{targetUid}" firestore.rules`
+ger `allow read, write: if isOwner(uid);` utan `hasOnly`.
+
+Acceptanskriterier:
+1. `{diff}` Grenen binder nyckeluppsattningen och typen pa det falt skrivaren faktiskt
+   skriver — harledd ur `src/hooks/useFollow.ts`, inte ur biljetten.
+2. `{diff}` Ett nekande-test skriver BADA halvorna (following + followers) i samma
+   batch, sa nekandet inte kommer fran en annan klausul an den testet namnger.
+3. `{diff}` Befintliga `followers`-villkoren (BIN-1141) ar oforandrade.
+
+### BIN-1155 — groups/{gid}/members/{uid} har ingen faltvalidering
+Matt fore bygget: `awk '/match \/groups\/\{groupId\}\/members/,/^      \}/' firestore.rules | grep -c hasOnly` ger `0`.
+Biljettens premiss "ingen yta kan andra visningsnamnet" FOLL 2026-09-11 (BIN-1154 shippade
+en redigeringsyta), sa kedjan biljetten litade pa ar bruten — det gor den mer angelagen.
+
+Acceptanskriterier:
+1. `{diff}` Nyckellistan ar harledd ur skrivvagarna i `src/lib/firebase/groups.ts`.
+2. `{diff}` Typ och langd per falt; namnlangden matchar det tak `users/{uid}` redan har.
+3. `{diff}` BIN-1063 steg 1:s `joinedAt`-villkor pa create och update ar oforandrade.
+4. `{diff}` Emulatortest, inte mockade — ett mockat test provar anropets form och
+   utvarderar inga regler (BIN-1063).
+
+**Tier D (Needs you):** `firebase deploy --only firestore:rules` gors manuellt.
+
+## Bunt B — Tillsammans namnlangd [Tier A] — BIN-1156
+
+Routning: `node docs/org/route.mjs --md src/app/tillsammans/ny/page.tsx src/components/pages/TillsammansSessionPageClient.tsx src/lib/firebase/sessions.ts`
+→ Tier **medium** · #26 Information Architect (+ varning: `src/app/tillsammans/ny/page.tsx` saknar agande roll)
+
+Matt fore bygget: `grep -c maxLength` pa bada falten ger `0`.
+
+Acceptanskriterier:
+1. `{diff}` Bada inmatningsfalten har `maxLength` satt till samma tak som regeln kapar vid.
+2. `{diff}` `createSession` och `joinSession` klampar namnet som sista skyddsnat.
+3. `{diff}` Varje producent drivs av ett EGET test — BIN-1134 visade att en av tre
+   klampningar overlever sviten annars.
+4. `{diff}` `firestore.rules` ar INTE andrad av den har biljetten.
+
+## Bunt C — inloggning och installningar [Tier B] — BIN-1157, BIN-1161
+
+Routning: `node docs/org/route.mjs --md src/components/settings/UsernameSection.tsx src/components/settings/ProfileSection.tsx src/app/login/page.tsx`
+→ Tier **medium** · #19 Customer Support / Success
+
+### BIN-1157 — ett avstangt konto far radet att kolla sin internetuppkoppling
+Disposition: **build-review**. Koden ar sjalvklar; texten till nagon som just blivit
+avstangd ar Malins att titta pa.
+
+Acceptanskriterier:
+1. `{diff}` `auth/user-disabled` och `auth/too-many-requests` far var sitt meddelande.
+2. `{diff}` Texten for `user-disabled` sager vad personen kan gora hardnast.
+3. `{diff}` `.claude/rules/accepted-deviations.md`s BIN-590-post ar last fore skrivningen.
+
+### BIN-1161 — installningarnas falt saknar etikettkoppling
+Harlett svep (inte biljettens mening): de vevande `<label>`-omslagen i
+`ContentFilterSection` och `NotificationsSection` ar implicit kopplade och OK;
+`ProvidersSection` anvander `aria-label`. Luckan ar `UsernameSection` — anvandarnamn,
+bio och radiogruppen "Standardsynlighet", alla med frikopplade etiketter.
+
+Acceptanskriterier:
+1. `{diff}` Anvandarnamn och bio far `<label htmlFor>` mot ett `id` pa kontrollen.
+2. `{diff}` Hjalptexten under respektive falt nas via `aria-describedby`.
+3. `{diff}` Radiogruppen far en gruppetikett en skarmlasare annonserar.
+4. `{diff}` `autoComplete` dar det finns ett meningsfullt varde.
+
+## Bunt D — npm test ar inte stabilt gron [Tier A] — BIN-1158
+
+Routning: `node docs/org/route.mjs --md scripts/prune-map-flag.test.mjs .claude/hooks/freshness.test.mjs vitest.config.ts`
+→ Tier **medium** · #25 Engineering Manager / Release Manager
+
+Bindande villkor ur biljetten: **hoj inte default-timeouten och ror inte assertionerna.**
+
+Acceptanskriterier:
+1. `{diff}` Orsaken ar MATT fore atgarden — hur lang tid en `git`-spawn faktiskt tar,
+   och om testen delar en resurs. Matningen star i biljetten.
+2. `{diff}` Atgarden ar isolering eller serialisering, inte en hojd timeout och inte
+   en forsvagad assertion.
+3. `{run}` `npm test` kors om tre ganger i rad med samma utfall.
+
+## Deviation log
+
+- [needs-human] BIN-1155: planen lade den i bunt A med BIN-1153. Panelen gav en
+  OLOST KONFLIKT — #4/#5/#6 kraver identitetsbindning av `displayName`/`username`
+  och blockerar utan den; #27, som ager faltkontraktet, blockerar PA den (den
+  vidgar BIN-1163:s kanda fel till tre nya skrivvagar); #18 blockerar separat pa
+  tyst nekande. Biljetten drogs ur, ingen kod skriven, parkerad blockerad av
+  BIN-1163. Konflikten star utskriven pa biljetten.
+- [deviation] Bunt A KRYMPTE till BIN-1153 ensam. Routern kordes om pa den
+  faktiska unionen och gav en ANNAN panel — #7 QA tillkom, #5 foll bort. #7
+  konvenerades separat och blockerade pa ett saknat test; testet ar skrivet.
+  Kommandot och utfallet:
+  `node docs/org/route.mjs --md firestore.rules src/hooks/useFollow.ts src/test/rules/firestore-rules.test.ts`
+  → `Tier top · #27, #4, #6, #7, #18`
+- [deviation] Bunt B VIDGADES: #26:s villkor drog in `src/lib/clampText.ts`.
+  Routern kordes om pa unionen och gav samma tier och samma roll:
+  `node docs/org/route.mjs --md src/app/tillsammans/ny/page.tsx src/components/pages/TillsammansSessionPageClient.tsx src/lib/firebase/sessions.ts src/lib/clampText.ts src/lib/clampText.test.ts`
+  → `Tier medium · #26`
+- [deviation] Bunt C: #19 flaggade ett kontoexistens-orakel i #4:s mandat. #4
+  konvenerades pa just den fragan och kravde en HEDGAD lydelse. Den shippade
+  texten uppfyller bada roller; lydelsen ar anda Malins att godkanna, sa
+  BIN-1157 parkeras i In Review.
+- [needs-human] BIN-1158: #25 satte beviskravet till tio raka rena hela
+  `npm test`-korningar. Det gar inte att mota inom sprinten. Biljetten drogs ur
+  FORE bygget, ingen kod skriven, tillbaka i Backlog med villkoren som rubrik.
+
+- [deviation] Testgranskaren fallde commit A: typkravet hade inget update-fall, sa
+  en mutering som tar bort det bara pa update-grenen overlevde alla 526. Samma hal
+  fanns i followers-blocket (BIN-1141). Ett update-fall per block tillagt; var och
+  en av de tva muteringarna faller exakt sitt eget nya test.
+- [deviation] Helhetsgranskaren fallde commit B tva ganger. (1) En kommentar i
+  sessions.ts pastod att bada namnen matas av samma inmatningsfalt - falskt for
+  GroupPageClient. Struken i koden och i commit-texten; loggraden fick en
+  correction-rad. (2) Den nya testfilen saknade agare i agarkartan, vilket hade
+  fallt tva test i npm test och gjort deployen rod. Den helt grona korningen fore
+  stagningen bevisade ingenting: kontrollen laser git ls-files.
+- [discovery] Tva emulatorkorningar dodades av OS:et vid minnesbrist. Bada gangerna
+  stod mutanten kvar i firestore.rules; aterstalld fran egen snapshot och
+  hash-verifierad mot den granskade versionen.
+- [discovery] En loggrad om hur manga test en mutering faller namngav inte
+  muteringen: bada htmlFor borttagna ger 5 av 6, bara htmlFor=username ger 4 av 6.
+  Ny correction-rad namnger bada.
+
+## Utfall
+
+| Biljett | Byggd | Muteringar korda | Utfall |
+|---|---|---|---|
+| BIN-1153 | ja | 5 (hasOnly, typkrav, isOwner, typkrav bara pa update-grenen x2 block) | 528/528 regeltest grona |
+| BIN-1156 | ja | 4 (vardera klampning + surrogatvakten) | 6/6 nya test |
+| BIN-1157 | ja | 1 (felkoden i grenen) | 12/12 i login-sviten |
+| BIN-1161 | ja | 2 (etikettkoppling, radiogrupp) | 6/6 nya test |
+| BIN-1155 | NEJ | — | olost rollkonflikt, parkerad |
+| BIN-1158 | NEJ | — | beviskravet ryms inte, tillbaka i Backlog |
+
+Commitar: BIN-1156 `0b7d284`, BIN-1157 + BIN-1161 `3c5dde8` — pushade tillsammans (`cc5b1a7..3c5dde8`) fore regelandringen, sa att deras deploy inte stoppas av regelvakten. BIN-1153 `d58449b` pushas separat; regelvakten i deploy.yml stoppar den deployen med flit tills reglerna deployats manuellt.
+
+## Needs you (Tier D)
+
+- Manuell `firebase deploy --only firestore:rules` efter bunt A.
+
+## Ej valda — kraver ditt beslut
+
+- **BIN-1162 + BIN-1163** (namnbytet foljer inte med till gruppmedlemslistor /
+  andra flikar nekas). Bada ar foljder av BIN-1154. Bada har tva-tre mekanismval med
+  olika kostnad mot 25 SEK-taket, och bada ar `top` pa `AuthContext.tsx`. Ett val, inte
+  ett bygge.
+- **BIN-1152** (gruppdokumentet lasbart for varje inloggat konto). Regelfilens egen
+  kommentar sager att det ar en medveten "unlisted link"-modell. Att strama at ar ett
+  produktval.
+- **BIN-1118** (lamna over en grupp), **BIN-521** (bundle-radgivare) — `Feature`/`idea`,
+  byggs aldrig av en sprint.
+
+## Efter sprinten
+
+- Manuell regeldeploy.
+- Foljdbiljetter filas FORE commit.
+
+---
+
 # BIN-1154 - visningsnamnet far en redigeringsyta [Tier B/C]
 
 Malins beslut 2026-09-11: bygg ytan. Biljetten var parkerad som ett produktval;

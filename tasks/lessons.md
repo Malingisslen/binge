@@ -1740,3 +1740,41 @@ rader i filen sager samma sak". Kommandot som avgor saken -
 `grep -c "append-only" docs/org/metrics/events.jsonl` - motsager den. Talet stod i en rad
 vars hela syfte var att bokfora ett omatt pastaende.
 
+### [Workflow] En panel kan vara akta OENIG - da ar ordningen mellan biljetter svaret, inte en kompromiss (2026-09-11, BIN-1155)
+
+**Trigger:** tva roller blockerar pa villkor som utesluter varandra, och bada har matt ratt.
+
+**Regel:** leta efter ordningen fore kompromissen. Fyra roller kravde en
+identitetsbindning och sa att de blockerade utan den; den femte - som ager
+faltkontraktet - blockerade PA den, eftersom mekanismen laser ett live-dokument medan
+skrivaren skickar en minneskopia, vilket ar en oppen defekt i en ANNAN biljett. Ingen av
+dem hade fel. Att valja sida hade shippat antingen en oskyddad yta eller ett kant fel i
+tre nya skrivvagar. Bygg ingendera: skriv ut varje rolls insats pa biljetten, lank den
+som blockerad av den biljett som loser laget, och lat Malin avgora ordningen.
+
+**Exempel:** en syntes som doljer att panelen ar oenig ar varre an ingen syntes - den ser
+ut som ett beslut. Skriv "oenig" i klartext och namnge bada sidorna.
+
+### [Workflow] Commit-unionen tappar den fil du bara LASTE - och det routar om panelen (2026-09-11, BIN-1153)
+
+**Trigger:** du routade panelen pa en filuppsattning som inkluderade en fil du laste for att
+harleda nagot, men aldrig andrade.
+
+**Regel:** routa en tredje gang, mot `git diff --cached --name-only`, omedelbart fore
+skrivning. Kryssningslardomen (BIN-1050/938) handlar om biljetter som faller bort; det har
+ar en form till: en fil du LASER kan aldrig hamna i commiten, sa unionen krymper av sig
+sjalv mellan kritiken och skrivningen, utan att nagot beslut andrades.
+
+**Exempel:** panelen konvenerades pa `firestore.rules src/hooks/useFollow.ts` plus
+regeltestet och gav en roster med #18. `useFollow.ts` lastes bara for att harleda vilket
+falt skrivaren skriver - den andrades aldrig. Commitens faktiska union byter darfor #18 mot
+#13, som konvenerades separat fore skrivning. Kommandot som avgor saken:
+`node docs/org/route.mjs --md $(git diff --cached --name-only | tr '\n' ' ')`
+
+### [Testing] En DODAD muteringskorning lamnar mutanten kvar i tradet - aterstallningen sist i skriptet kors aldrig (2026-09-11, BIN-1153)
+
+**Trigger:** en muteringskorning i bakgrunden avslutas av nagot annat an sig sjalv - OS:et vid minnesbrist, en avbruten session, en timeout.
+
+**Regel:** behandla varje avbrott som att mutanten STAR KVAR. Skriptets egen `cp snapshot fil` sist kors bara om skriptet nar dit. Kolla direkt efter avbrottet: `grep -c MUTANT <fil>`, och jamfor `git hash-object <fil>` mot snapshotens hash innan du gor nagot annat med tradet. Aterstall fran din EGEN snapshot, aldrig `git checkout --`.
+
+**Exempel:** tva korningar av regelemulatorn dodades av OS:et vid minnesbrist samma kvall. Bada gangerna stod `// MUTANT-G` kvar i `firestore.rules` efterat; en commit fran det laget hade skeppat en regel dar typkravet saknades pa update-grenen. Efter aterstallningen matchade hashen den granskade versionen.

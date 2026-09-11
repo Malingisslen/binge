@@ -28012,3 +28012,67 @@ tests (BIN-1027: 1 vs 2) — reproduce the ticket's own literal shape.
 **A mutation-count/exit-code claim tied to a DATA FILE the diff regenerates is
 state-dependent** — re-run against the file state that ships, not pre-regeneration
 (BIN-852: "exit=0→1" became exit=0; "2 of 54" became 1).
+
+## 2026-09-11 — BIN-1156: a sibling clamp shadows its own dedicated test
+
+**Diff reviewed** (staged, 5 files): `src/lib/clampText.ts` (+11: new `MAX_SESSION_DISPLAY_NAME = 80`
+constant, own comment distinguishing it from `MAX_DISPLAY_NAME`), `src/lib/firebase/sessions.ts`
+(+8/-3: `clampToCodeUnits` applied to `createSession`'s `hostName` and participant `displayName`,
+and to `joinSession`'s shared `identity.displayName`), `src/lib/firebase/sessions.clamp.test.ts`
+(new, 129 lines, 6 tests), and two form components adding `maxLength={MAX_SESSION_DISPLAY_NAME}`
+to plain `<input>`s (no logic, no test owed).
+
+**Author's claim**: 4 mutations run, each failing ≥1 test — (1) `createSession` `hostName`
+clamp removed, (2) `createSession` participant `displayName` clamp removed, (3) `joinSession`
+`identity.displayName` clamp removed, (4) `clampToCodeUnits`'s surrogate-pair guard removed
+(bare `cut` returned).
+
+**Verification protocol**: `git ls-files -s` + `git hash-object` on all three prod/test files
+BEFORE touching anything (all three matched — clean start). Snapshotted working-tree bytes of
+`sessions.ts` and `clampText.ts` to scratchpad. Baseline control run: 6/6 green
+(`npx vitest run src/lib/firebase/sessions.clamp.test.ts`). Then for each of the 4 claimed
+mutations: edit the real file → `grep` to confirm the mutant landed → run the test file → record
+exactly which test(s) failed → restore from scratchpad copy → `git hash-object` confirmed equal
+to `git ls-files -s`'s blob sha before touching the next mutation.
+
+**Results, all 4 confirmed real** (author's claim was accurate):
+1. `hostName` clamp removed (`sessions.ts:42`) → exactly 1 test failed: "sessions/{id}.hostName
+   kapas — etiketten har inget tak i reglerna alls" (`Expected 80, Received 120`).
+2. Participant `displayName` clamp removed (`sessions.ts:61`) → exactly 1 test failed:
+   "participants/{pid}.displayName kapas aven nar hostDisplayName ar satt (grupp-startad
+   session)". **The sibling test "…kapas nar hostDisplayName saknas" stayed GREEN** under this
+   mutation — see finding below.
+3. `joinSession`'s `identity.displayName` clamp removed (`sessions.ts:106`) → 3 tests failed:
+   both `joinSession` describe-block tests plus the surrogate-pair test (which is written using
+   `joinSession`, not `createSession`).
+4. `clampToCodeUnits`'s surrogate guard stripped (bare `cut` returned) → exactly 1 test failed:
+   the surrogate-pair test (`Expected 79, Received 80`).
+
+Also live-grepped `firestore.rules` to check the code comments' factual claims: the
+`participants/{pid}` `allow create, update` block does have `displayName.size() <= 80`;
+the `sessions/{sessionId}` doc's own `allow create`/`update` validates only `hostUid`, with
+NO content check on `hostName` at all. Matches the ticket's stated premise and the in-code
+BIN-1156 comment exactly.
+
+**Finding filed as non-blocking**: "participants/{pid}.displayName kapas nar hostDisplayName
+saknas" (`sessions.clamp.test.ts:78-85`) does not independently witness the clamp call it names.
+`createSession` builds the participant payload as
+`clampToCodeUnits(params.hostDisplayName ?? hostName, MAX)`, where `hostName` (line 42) has
+ALREADY been through `clampToCodeUnits` earlier in the same function. When `hostDisplayName` is
+undefined (this test's fixture), the fallback value handed to the second clamp call is already
+≤ MAX chars, so deleting the SECOND clamp's wrapper is invisible to this fixture — confirmed live
+via mutation #2 above (this exact test stayed green). Only the sibling fixture ("…hostDisplayName
+ar satt", which supplies a RAW unclamped `hostDisplayName`) bypasses the shadowing and kills the
+mutant. Net suite coverage is intact (mutation #2 is still caught, just by a different named
+test than the one whose docstring claims the "one test per producer, driven separately" premise
+this exact file's header cites BIN-1134 for) — so this is a mislabeled/over-claiming test name,
+not a coverage hole. Folded into the knowledge file's "Sibling stamps with ASYMMETRIC guards"
+bullet (a shared-variable shadowing case, distinct from asymmetric-guard shadowing already there).
+
+**Tree hygiene**: `git status --porcelain` before and after showed exactly the 5 originally
+staged files in the index (`M`/`A` in the left column); all other unstaged changes (rules,
+login, settings, docs, lessons) were left untouched throughout, per instruction. Final control
+run after full restore: 6/6 green. `git log --oneline -1` unchanged across the whole review
+(`cc5b1a7`).
+
+**Verdict**: pass, 0 blocking. One non-blocking finding filed above.
