@@ -1654,3 +1654,58 @@ Foljden av det falska pastaendet var att en verklig lucka vinkades igenom: ingen
 pinnade skrivarens faltuppsattning mot regelns `hasOnly`, sa ett omdopt falt hade nekat
 varje inbjudan i produktion med hela sviten gron. Push-grinden hittade bade meningen och
 luckan. Arkivet ar append-only, sa rattelsen ar en daterad post - inte en redigering.
+
+### [Workflow] Ett publicerat kommando maste kunna MOTSAGA meningen bredvid (2026-09-11, BIN-1134)
+
+**Trigger:** en mening som inte gar att rakna om, med ett kommando bredvid som ska vara
+harledningen.
+
+**Regel:** fraga om kommandot kan ge ETT SVAR SOM FALLER meningen. Kan det inte det ar
+paret vardelost - meningen ar lika omatt som utan kommandot, men ser kontrollerad ut, sa
+strykregeln fangar den inte.
+
+**Exempel:** flodeskartan sa "varje skrivare av faltet klampar innan den skriver" och
+publicerade `grep -rn clampToCodeUnits src`. Det kommandot hittar KLAMPNINGARNA, aldrig
+skrivarna - en ny oklampad skrivare ar osynlig for det. Samma runda: ett kommando i
+`clampText.ts` sa "harled klausulerna for profilens FALT" men grep:ade bara `displayName`,
+alltso halva meningen, och ett i `firestore.rules` nadde ett av tva formular med samma
+`maxLength`. Tva av tre lagades genom att VIDGA kommandot; det tredje genom att avgransa
+meningen och skriva ut vad kommandot inte svarar pa.
+
+### [Workflow] En FOLJD i en kommentar ar ett pastaende, och den provas genom att framkalla den (2026-09-11, BIN-1140)
+
+**Trigger:** en kommentar som beskriver vad som HANDER om nagot gar sonder - "da blir
+spärren tyst verkningslos", "da nekas skrivningen", "da svarar ett nytt forsok X".
+
+**Regel:** framkalla felet mot en kopia och las utfallet. En foljd ar dyrare an ett tal:
+den styr vad nasta lasare TROR att den kan lita pa, och tva av de har var inte bara fel i
+grad utan i riktning.
+
+**Exempel:** jag skrev att en ensam klammerparentes i en regelkommentar skulle gora
+`logic.test.ts` uid-faltsvakt "tyst verkningslos". Sex granskare replikerade skanningen var
+for sig mot egna kopior: en ensam `}` ger tom faltmangd och FALLER golvet hogljutt, och en
+ensam `{` andrar ingenting alls - meningen var fel om bada axlarna den pastod. Samma runda:
+jag skrev att formularets `maxLength` "galler tangentbordet, inte en inklistrad strang".
+HTML `maxlength` kapar ocksa en inklistring. Och en tredje: en regelkommentar lovade att ett
+for langt namn provas "den dag agaren sparar om profilen" - ingen yta i appen andrar
+visningsnamnet, sa den dagen kommer aldrig, OCH update-grenen provar hela efterdokumentet,
+sa ett lagrat for langt namn nekar varje senare profilskrivning. Strangare an kommentaren
+sa, inte losare.
+
+### [Workflow] Push-grindens dom ar ledgern, aven nar granskaren sager pass (2026-09-11, BIN-1134)
+
+**Trigger:** en helhetsgranskning som avslutar pa `pass (0 blocking)` och redovisar en
+fillista.
+
+**Regel:** rakna inte varvet som klart forran `git push` slapper igenom. Grinden bokfor bara
+`Read`-verktyget; en granskare som last en fil med `Grep` eller `git show` har inte last den
+enligt ledgern. Be om ett kontrollerbart bevis - citera forsta raden i varje fil - i stallet
+for en sammanfattning, och rakna med ett extra varv i budgeten.
+
+**Exempel:** nionde varvet gav `pass`, med en tabell over 15 lasta filer. Pushen nekades
+anda: ledgern sa att fem av dem aldrig lasts vid de bytes som skulle ga ut
+(`.claude/shared-plugin.json`, `docs/org/route.mjs`, `package.json`,
+`src/app/login/page.tsx`, `src/components/settings/UsernameSection.tsx`). Tionde varvet
+laste dem med `Read` och citerade forsta raden i var och en. Samma klass som 2026-08-19:s
+post om att granskarens RAPPORT inte ar beviset - men har med ett pass-utfall, inte ett
+fail, vilket ar svarare att misstro.
