@@ -119,7 +119,8 @@
   </section>
 </div>
 
-<script id="data" type="application/json">{
+<script id="data" type="application/json">
+{
   "columns": [
     {
       "key": "ui",
@@ -818,6 +819,13 @@
           "to": "firestore",
           "payload": "read users/{uid}",
           "transport": "Firestore read",
+          "verified": true
+        },
+        {
+          "from": "auth-context",
+          "to": "firestore",
+          "payload": "BIN-1134 create leg. The profile document's own rule now bounds displayName and bio on CREATE, not only on update, and a value past either bound does not get truncated by Firestore - the whole write is refused. On this leg that is the worst possible moment: createUserWithEmailAndPassword has already succeeded, so the refusal leaves an Auth account with no profile, the form reports a connection problem (the wrong cause), and trying again answers email-already-in-use. Nothing in the app can then repair it, because there is no surface anywhere that edits a display name (BIN-1154). Three writers therefore clamp before they write, through one shared helper: ensureUserProfile (the Google account's own name, which no screen in the app can shorten first), register()'s profile write, and register()'s updateProfile against the Auth record - a SEPARATE store of the same personal datum, outside every Firestore rule and outside the GDPR export, which ensureUserProfile reads back on the next sign-in. The clamp is not a bare slice: cutting between UTF-16 code units can split a surrogate pair, and Firestore accepts that write and reads the value back with a replacement character, so the name comes back broken rather than shortened. The registration form carries the same bound as a maxLength so the shortening is visible where somebody is actually typing; the Google path has no such moment, which is the residual.",
+          "transport": "clampToCodeUnits -> mergeUserDoc / updateProfile",
           "verified": true
         },
         {
@@ -2910,7 +2918,8 @@
       "area": "library"
     }
   ]
-}</script>
+}
+</script>
 
 <script>
 const DATA = JSON.parse(document.getElementById('data').textContent);
