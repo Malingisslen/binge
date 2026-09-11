@@ -723,6 +723,14 @@ findings here too.
   watchlist fields); a new field omitted from the whitelist silently `permission-denied`s
   client writes.
   → `firestore.rules`, `src/test/rules/firestore-rules.test.ts`
+- **The value bounds a producer must stay inside** (BIN-1134). The rules cap profile
+  fields by length, and a producer that writes past the cap does not get a truncated
+  value — it gets the whole write refused, which on the create path leaves an account
+  with no profile at all. The module carries the caps and the clamp both sides share,
+  so the number cannot drift between the rule and the code that feeds it. Seated here
+  rather than with the UI because the quantity it is about is the field contract, not
+  the form.
+  → `src/lib/clampText.ts`, `src/lib/clampText.test.ts`
 - **Lazy write-on-edit migration** — `migrateStatus()` normalizes legacy schemas at
   read-time; docs are rewritten only on user edit, never in bulk.
   → `src/lib/watchStatus.migration.ts`, `src/contexts/WatchlistContext.tsx`

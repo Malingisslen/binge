@@ -1,6 +1,7 @@
 import { fsdb } from './db';
 import { toDate } from './utils';
 import { mergePublicProfileDoc } from './userDocWrite';
+import { clampToCodeUnits, MAX_DISPLAY_NAME, MAX_BIO } from '@/lib/clampText';
 
 // BIN-505: public profile PROJECTION. users/{uid} is owner-locked because it
 // carries sensitive fields (email, hemkommun, providerCosts, providerCampaigns,
@@ -175,8 +176,8 @@ export async function syncMyPublicProfile(uid: string, src: PublicCardSource): P
     // the same caps on the users/{uid} create branch, but a rule binds only the
     // writes that come after it, so a value stored before that deploy is still
     // reachable here — the clamp stays.
-    const displayName = (src.displayName ?? '').slice(0, 80);
-    const bio = (src.bio ?? '').slice(0, 160);
+    const displayName = clampToCodeUnits(src.displayName ?? '', MAX_DISPLAY_NAME);
+    const bio = clampToCodeUnits(src.bio ?? '', MAX_BIO);
     // BIN-816 AC2: through the chokepoint, which refuses the write while a
     // deletion is in progress. The cascade erases publicProfiles/{uid}; without
     // this, the next render of the owner's own session rebuilt it from React

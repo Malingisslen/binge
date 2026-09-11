@@ -109,10 +109,10 @@ describe('syncMyPublicProfile', () => {
   });
 
   // BIN-522: pin the clamping BIN-505's reviewers verified only by manual trace.
-  // users/{uid} has NO length rules on these fields at signup, but the projection
-  // rule (isValidPublicProfile) caps displayName/bio/photoURL at 80/160/500 — an
-  // unclamped write would fail the WHOLE atomic set and get swallowed, leaving
-  // the user with no projection at all (invisible in search/friends/profile).
+  // The projection rule (isValidPublicProfile) caps displayName/bio/photoURL at
+  // 80/160/500 — an unclamped write would fail the WHOLE atomic set and get
+  // swallowed, leaving the user with no projection at all (invisible in
+  // search/friends/profile).
   it('clamps displayName (80) and bio (160) to the projection rule caps instead of failing the whole write', async () => {
     await syncMyPublicProfile('u3', {
       displayName: 'N'.repeat(200),

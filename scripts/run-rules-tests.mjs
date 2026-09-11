@@ -159,7 +159,12 @@ function main(argv) {
   // written with paths that carry no spaces. It cost a run to learn why: unquoted, the
   // outer shell splits it and the firebase CLI answers `unknown option '--reporter=json'`
   // — it had claimed vitest's flags as its own.
-  const inner = ['npx', 'vitest', ...VITEST_ARGS, '--reporter=json',
+  //
+  // BOTH reporters. `--reporter=json` alone REPLACES the default one, so a RED rules
+  // suite printed a single "JSON report written to ..." line and no failing test name —
+  // on the one surface `deploy.yml`'s hosting job gates on, with the detail left in a
+  // gitignored file nobody is pointed at.
+  const inner = ['npx', 'vitest', ...VITEST_ARGS, '--reporter=default', '--reporter=json',
     `--outputFile=${REPORT_REL}`].join(' ');
 
   const args = ['firebase', 'emulators:exec', '--only', 'firestore',

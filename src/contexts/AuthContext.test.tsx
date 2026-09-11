@@ -427,6 +427,85 @@ describe('AuthContext — register() username-klobbring (BIN-517)', () => {
   });
 });
 
+// BIN-1134, klampningen. `firestore.rules` NEKAR sedan den biljetten en create med
+// ett `displayName` over taket - pa BADA grenarna. Ingen producent klampade, sa en
+// registrering med ett langt namn skapade Auth-kontot, fick profilwriten nekad, och
+// lamnade ett konto utan profil som ett nytt forsok bara svarade
+// `auth/email-already-in-use` pa. Push-grinden hittade det; inget test sag det.
+//
+// Tre skrivningar klampar nu, och alla tre pinnas har. Utan de har fallen gar varje
+// enskild `.slice()` att radera med hela sviten gron - och da ar defekten tillbaka
+// utan att nagot sager till. Talet star som en literal i testet med flit: hade det
+// harletts ur samma konstant koden anvander hade bada sidor kollapsat till samma
+// meningslosa jamforelse.
+describe('AuthContext — ett for langt visningsnamn klampas i stallet for att neka kontot (BIN-1134)', () => {
+  const LONG = 'x'.repeat(200);
+
+  it("register()'s profilwrite bar ett klampat displayName", async () => {
+    renderAuth();
+    await act(async () => {});
+
+    await act(async () => {
+      await ctx!.register('malin@example.com', 'hemligt-losenord', LONG, '2026-01');
+    });
+
+    const [, payload] = userDocWrites()[0] as [unknown, Record<string, unknown>, unknown];
+    expect(payload.displayName).toBe('x'.repeat(80));
+  });
+
+  it("register() klampar aven Auth-postens egen kopia", async () => {
+    renderAuth();
+    await act(async () => {});
+
+    await act(async () => {
+      await ctx!.register('malin@example.com', 'hemligt-losenord', LONG, '2026-01');
+    });
+
+    // Auth-posten ar en EGEN lagring av samma uppgift, utanfor varje
+    // Firestore-regel - och `ensureUserProfile` laser tillbaka just det faltet vid
+    // nasta inloggning. Lamnas den otrunkerad sager de tva lagringarna olika saker.
+    expect(updateProfileMock).toHaveBeenCalledTimes(1);
+    const [, profileArg] = updateProfileMock.mock.calls[0] as unknown as [unknown, { displayName: string }];
+    expect(profileArg.displayName).toBe('x'.repeat(80));
+  });
+
+  it('Google-vagens forsta profilskrivning klampas ocksa', async () => {
+    // DEN HAR ar den vag `register()`-fallen ovan INTE nar, och den ar den
+    // farligare av de tva: strangen kommer fran Google-kontot, sa ingen yta i
+    // appen kan gora den kortare innan den skrivs. Mattes: utan det har fallet
+    // overlevde en mutering som tog bort just den klampningen medan de tva andra
+    // dog - alltsa var halva fixen opinnad.
+    renderAuth();
+    const previous = fakeUser.displayName;
+    fakeUser.displayName = LONG;
+    try {
+      await login(null); // ingen doc alls -> create-grenen i ensureUserProfile
+      const writes = userDocWrites();
+      expect(writes.length).toBeGreaterThan(0);
+      const [, payload] = writes[0] as [unknown, Record<string, unknown>, unknown];
+      expect(payload.displayName).toBe('x'.repeat(80));
+    } finally {
+      fakeUser.displayName = previous;
+    }
+  });
+
+  it('ett namn under taket skrivs oforandrat pa bada vagarna', async () => {
+    // Kontrollprovet. Utan det skulle ett `.slice(0, 0)` - eller vilken annan
+    // sonderslagen klampning som helst - uppfylla de tva fallen ovan.
+    renderAuth();
+    await act(async () => {});
+
+    await act(async () => {
+      await ctx!.register('malin@example.com', 'hemligt-losenord', 'Malin', '2026-01');
+    });
+
+    const [, payload] = userDocWrites()[0] as [unknown, Record<string, unknown>, unknown];
+    expect(payload.displayName).toBe('Malin');
+    const [, profileArg] = updateProfileMock.mock.calls[0] as unknown as [unknown, { displayName: string }];
+    expect(profileArg.displayName).toBe('Malin');
+  });
+});
+
 // BIN-516: den synkrona spegel-ref:en (BIN-40-mönstret) uppdaterades FÖRE
 // await:en och återställdes aldrig vid write-fel — ett avvisat värde smyg-
 // persisterades då via nästa lyckade edits spread. Rollbacken måste utesluta

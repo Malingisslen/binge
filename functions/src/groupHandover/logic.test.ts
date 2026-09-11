@@ -387,7 +387,10 @@ describe('the erasure covers every uid-bearing field the group contracts pin', (
   // `hasOnly` spelling — and report an empty set, which every subset assertion
   // below would satisfy. The guard would be inert and silent.
   it('the scan actually found fields', () => {
-    expect(uidFieldsInRules.size).toBeGreaterThanOrEqual(2);
+    // Raised 2 -> 4 when BIN-1140 gave the group document its own hasOnly: the scan
+    // now derives ownerUid, memberUids, pickedByUid and participantUids. Lowering it
+    // is the deliberate act a shrink has to perform out loud.
+    expect(uidFieldsInRules.size).toBeGreaterThanOrEqual(4);
   });
 
   // How each field is erased, not merely that its name occurs somewhere. An

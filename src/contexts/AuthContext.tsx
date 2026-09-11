@@ -36,7 +36,9 @@ import { markDeletionStarted, clearDeletionStarted, isDeletionStarted, deletionM
 import { mergeUserDoc, assertProfileWritable } from '@/lib/firebase/userDocWrite';
 import { REQUIRES_RECENT_LOGIN, STALE_SESSION_PREFLIGHT, markHandedOff, markCascadePartial } from '@/lib/authErrors';
 import { useOptimisticMirrorField } from '@/hooks/useOptimisticMirrorField';
+import { clampToCodeUnits, MAX_DISPLAY_NAME } from '@/lib/clampText';
 import type { ItemVisibility, UserProfile } from '@/types';
+
 
 interface AuthState {
   user: UserProfile | null;
@@ -439,7 +441,13 @@ async function createProfileWithConsent(firebaseUser: User): Promise<ProfileLoad
   const ref = doc(db, 'users', firebaseUser.uid);
 
   const profile: UserProfile = {
-    displayName: firebaseUser.displayName ?? '',
+    // Klampad, av samma skal som `syncMyPublicProfile` klampar sin projektion:
+    // `firestore.rules` NEKAR numera en create med ett `displayName` over 80
+    // tecken (BIN-1134), och den har strangen kommer fran Googles konto - inte
+    // fran nagon yta vi styr. Utan klampningen skapas Auth-kontot, profilwriten
+    // nekas, och anvandaren star med ett konto utan profil som ett nytt forsok
+    // bara svarar `auth/email-already-in-use` pa.
+    displayName: clampToCodeUnits(firebaseUser.displayName ?? '', MAX_DISPLAY_NAME),
     email: firebaseUser.email ?? '',
     photoURL: firebaseUser.photoURL,
     username: null,
@@ -853,7 +861,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = useCallback(async (email: string, password: string, name: string, termsVersion: string) => {
     const cred = await createUserWithEmailAndPassword(auth, email, password);
-    await updateProfile(cred.user, { displayName: name });
+    // Klampad har ocksa, och inte bara pa Firestore-skrivningen nedan. Auth-posten
+    // ar en EGEN lagring av samma personuppgift, utanfor varje Firestore-regel och
+    // utanfor GDPR-exporten - och `ensureUserProfile` laser tillbaka just det har
+    // faltet vid nasta inloggning. Lamnas den otrunkerad sager de tva lagringarna
+    // olika saker om anvandarens namn, och den langre versionen ar den ingen kan se.
+    await updateProfile(cred.user, { displayName: clampToCodeUnits(name, MAX_DISPLAY_NAME) });
     // Create the user doc ourselves (instead of relying on onAuthStateChanged
     // + ensureUserProfile) so we can atomically include terms-acceptance
     // metadata. onAuthStateChanged will subsequently load the complete doc.
@@ -861,7 +874,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // brand-new uid can never carry a deletion marker, so the gate is a no-op
     // here — it is uniformity that keeps the chokepoint test meaningful.
     await mergeUserDoc(cred.user.uid, kit => ({
-      displayName: name,
+      // Klampad — se `ensureUserProfile`. Formularets `maxLength` racker inte som
+      // enda skydd: den galler tangentbordet, inte en inklistrad strang eller ett
+      // anrop som inte kom fran formularet.
+      displayName: clampToCodeUnits(name, MAX_DISPLAY_NAME),
       email: cred.user.email ?? email,
       photoURL: cred.user.photoURL,
       // OBS: inget `username: null` här (BIN-517) — den här writen racear

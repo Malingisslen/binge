@@ -1609,11 +1609,18 @@ server, en container.
 falla nar processen inte startade.
 
 **Exempel:** `npm run test:rules` skriver `Could not start Firestore Emulator, port taken`
-och avslutar med 0. Noll test kordes. `npm test` kor inte regeltesterna alls, sa det
-kommandot ar hela beviset for repots mest sakerhetskansliga yta — en sprint som andrar
-`firestore.rules`, ser exit 0 och gar vidare har inte provat sina regler. Porten holls av
-ett ANNAT repos emulator, vilket ar normaltillstandet pa en maskin med flera projekt.
-Push-grinden markte det bara genom att lasa raderna.
+nar porten ar upptagen, och noll test kors. `npm test` kor inte regeltesterna alls, sa det
+kommandot ar hela beviset for repots mest sakerhetskansliga yta. Porten holls av ett ANNAT
+repos emulator, vilket ar normaltillstandet pa en maskin med flera projekt. Push-grinden
+markte det bara genom att lasa raderna.
+
+**Rattelse 2026-09-10 (BIN-1137):** pastaendet att kommandot avslutade med 0 ar STRUKET.
+Det gick inte att reproducera - matt med porten upptagen gav det exit 1, bade pa den lokalt
+installerade firebase-tools och pa den version `deploy.yml` pinnar. Exitkoden ljog inte.
+Det som saknades var att ingenting nagonstans pastod att ett test hade KORTS; det ar vad
+`scripts/run-rules-tests.mjs` golv nu gor. Regeln ovan star kvar oforandrad - las utdatan,
+och bygg kommandot sa att det faller - men skalet den vilade pa var ett annat an det som
+stod har.
 
 ### [Testing] Ett nekande-test bevisar inget om VILKEN klausul som nekade (2026-09-09, BIN-1127)
 

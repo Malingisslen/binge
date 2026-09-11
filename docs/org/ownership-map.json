@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 575,
+  "patternCount": 577,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -665,6 +665,8 @@
         "src/contexts/WatchlistContext.tsx",
         "src/hooks/usePublicProfile.test.ts",
         "src/hooks/usePublicProfile.ts",
+        "src/lib/clampText.test.ts",
+        "src/lib/clampText.ts",
         "src/lib/firebase/accountDeletion.ts",
         "src/lib/firebase/config.ts",
         "src/lib/firebase/episodeProgress.test.ts",

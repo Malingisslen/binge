@@ -156,11 +156,16 @@ export default function LoginPage() {
         </div>
 
         <form onSubmit={handleSubmit}>
+          {/* maxLength pa namnfaltet speglar taket firestore.rules satter pa
+              profilens displayName. Utan det kapas ett langre namn i tysthet vid
+              registreringen, och det finns ingen yta i appen dar man kan andra det
+              efterat — samma form som bio-faltet redan har i installningarna. */}
           {mode === 'register' && (
             <input
               type="text"
               placeholder="Namn"
               aria-label="Namn"
+              maxLength={80}
               value={name}
               onChange={e => setName(e.target.value)}
               className="w-full px-2 py-[6px] mb-2 text-base border border-rule rounded-sm bg-white font-[inherit] outline-none focus:border-acc-deep"
