@@ -512,8 +512,28 @@ service cloud.firestore {
 
     // Follow system
     match /users/{uid}/following/{targetUid} {
-      allow read, write: if isOwner(uid);
+      allow read: if isOwner(uid);
       allow read: if get(/databases/$(database)/documents/users/$(uid)).data.isPublic == true;
+      // BIN-1153: `write` band vem,
+      // aldrig vad — agaren kunde skriva godtyckliga nycklar och godtyckligt stora
+      // varden. Dokumentet ar dessutom PUBLIKT lasbart nar profilen ar oppen (raden
+      // ovan), sa ett uppblast varde blir nagon annans laskostnad.
+      //
+      // INGEN existsAfter har, till skillnad fran `followers` nedan: den speglade
+      // doc:en ligger i MOTTAGARENS trad och skrivs av nagon annan, sa den behover
+      // binda vem. Den har ligger i agarens eget trad under isOwner(uid) och har
+      // ingen forfalskningsvag att stanga.
+      //
+      // Bada klausulerna maste ligga pa DEN HAR raden, som tacker create OCH
+      // update — annars kan ett rent dokument skapas och sedan uppdateras fullt.
+      // Harled skrivarna och deras faltuppsattning i stallet for att lita pa meningen:
+      //   git grep -n "'following'" -- src functions
+      allow create, update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(['followedAt'])
+        && request.resource.data.followedAt is timestamp;
+      // Delete lamnas oformad med flit: en legacy-rad med fel form maste ga att
+      // avfolja bort, annars strandar den for alltid.
+      allow delete: if isOwner(uid);
     }
     match /users/{uid}/followers/{followerUid} {
       allow read: if isOwner(uid);

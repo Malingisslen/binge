@@ -841,6 +841,76 @@ describe('users/{uid}/followers/{followerUid} value bounds (BIN-1141)', () => {
     });
     await assertFails(batch.commit());
   });
+  // Fallet ovan provar bara nyckellistan pa UPDATE-grenen. Utan det har fallet
+  // gar det att flytta typkravet till enbart create med hela sviten gron — just
+  // den klyvning regelkommentaren varnar for.
+  it('a later update that keeps the keys but breaks the type is denied', async () => {
+    await assertSucceeds(followBatch({ followedAt: serverTimestamp() }));
+    const db = otherDb();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'users', FOLLOWER, 'following', OWNER), { followedAt: serverTimestamp() });
+    batch.set(doc(db, 'users', OWNER, 'followers', FOLLOWER), { followedAt: 'igar' });
+    await assertFails(batch.commit());
+  });
+});
+
+// BIN-1153 - following-dokumentet ligger i AGARENS EGET trad under isOwner(uid).
+//
+// Darfor skriver de isolerande fallen EN doc, inte en batch: grenen har ingen
+// existsAfter och ingen get(), sa det finns ingen tidigare klausul som kan neka i
+// stallet — men en batch ar allt-eller-inget och skulle gora nekandet oattribuerbart
+// igen. Det produktionsformade fallet sist skriver bada halvorna, som followUser gor.
+describe('users/{uid}/following/{targetUid} value bounds (BIN-1153)', () => {
+  const TARGET = 'target_uid';
+  function writeFollowing(payload: Record<string, unknown>) {
+    const db = ownerDb();
+    return setDoc(doc(db, 'users', OWNER, 'following', TARGET), payload);
+  }
+
+  it('a real follow write still goes through', async () => {
+    await assertSucceeds(writeFollowing({ followedAt: serverTimestamp() }));
+  });
+  it('an unknown key is denied', async () => {
+    await assertFails(writeFollowing({ followedAt: serverTimestamp(), evil: 'x'.repeat(5000) }));
+  });
+  it('a non-timestamp followedAt is denied', async () => {
+    await assertFails(writeFollowing({ followedAt: 'igar' }));
+  });
+  it('a doc with no followedAt at all is denied', async () => {
+    await assertFails(writeFollowing({}));
+  });
+  it('a later update that adds a key to an existing doc is denied', async () => {
+    await assertSucceeds(writeFollowing({ followedAt: serverTimestamp() }));
+    await assertFails(setDoc(doc(ownerDb(), 'users', OWNER, 'following', TARGET), {
+      followedAt: serverTimestamp(), note: 'smuggled',
+    }));
+  });
+  // Samma skal som i followers-blocket: utan ett update-fall for typkravet kan det
+  // flyttas till enbart create med hela sviten gron.
+  it('a later update that keeps the keys but breaks the type is denied', async () => {
+    await assertSucceeds(writeFollowing({ followedAt: serverTimestamp() }));
+    await assertFails(writeFollowing({ followedAt: 'igar' }));
+  });
+
+  // Utan det har fallet overlever en mutation som byter isOwner(uid) mot
+  // isSignedIn() hela sviten: varje fall ovan skriver som agaren sjalv, sa
+  // ingen av dem ror auktorisationsdelen av den sammanslagna klausulen.
+  it('a WELL-FORMED payload from someone else is still denied', async () => {
+    await assertFails(setDoc(doc(otherDb(), 'users', OWNER, 'following', TARGET), {
+      followedAt: serverTimestamp(),
+    }));
+  });
+
+  // Produktionsformen: useFollow skriver bada halvorna i EN batch. Ett trasigt
+  // following-falt maste falla hela commiten, inte tyst passera bredvid en giltig
+  // spegel.
+  it('the real followUser batch fails when only the following half is malformed', async () => {
+    const db = ownerDb();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'users', OWNER, 'following', TARGET), { followedAt: 'igar' });
+    batch.set(doc(db, 'users', TARGET, 'followers', OWNER), { followedAt: serverTimestamp() });
+    await assertFails(batch.commit());
+  });
 });
 
 describe('BIN-505 publicProfiles/{uid} projection', () => {
