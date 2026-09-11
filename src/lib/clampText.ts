@@ -31,7 +31,7 @@ export function clampToCodeUnits(value: string, max: number): string {
 /**
  * Taket `firestore.rules` satter pa `users/{uid}.displayName`, pa BADA grenarna.
  * Exporterad och delad med flit: fore BIN-1134 bodde talet som en bar literal pa
- * flera stallen, och inget band dem ihop. Flyttas taket i regeln flyttas det har.
+ * flera stallen, och inget band dem ihop.
  */
 export const MAX_DISPLAY_NAME = 80;
 
