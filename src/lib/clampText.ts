@@ -17,7 +17,7 @@
  *
  * VAR TAKEN BOR. Talen star dar de bokstavligen ar — i `firestore.rules`.
  * Harled klausulerna for profilens falt med:
- *   awk '/match .users.{uid} {/,/^    }/' firestore.rules | grep -n displayName
+ *   awk '/match .users.{uid} {/,/^    }/' firestore.rules | grep -nE 'displayName|bio'
  */
 export function clampToCodeUnits(value: string, max: number): string {
   if (value.length <= max) return value;

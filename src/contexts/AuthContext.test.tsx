@@ -428,9 +428,9 @@ describe('AuthContext — register() username-klobbring (BIN-517)', () => {
 });
 
 // BIN-1134, klampningen. `firestore.rules` NEKAR sedan den biljetten en create med
-// ett `displayName` over taket - pa BADA grenarna. Ingen producent klampade, sa en
-// registrering med ett langt namn skapade Auth-kontot, fick profilwriten nekad, och
-// lamnade ett konto utan profil. Push-grinden hittade det; inget test sag det.
+// ett `displayName` over taket - pa BADA grenarna. En registrering med ett langt
+// namn skapade Auth-kontot, fick profilwriten nekad, och lamnade ett konto utan
+// profil. Push-grinden hittade det; inget test sag det.
 //
 // Utan testerna nedan gar varje enskilt `clampToCodeUnits(...)` att radera med
 // hela sviten gron - och da ar defekten tillbaka utan att nagot sager till.

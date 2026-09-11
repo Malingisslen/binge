@@ -52,7 +52,7 @@ Bada commitarnas filunion routas om omedelbart fore varje commit.
 
 Kritik: enskild, `#4 Security Architect`, blint, fore bygget.
 
-### BIN-1137 - `npm run test:rules` avslutar med 0 nar porten ar upptagen
+### BIN-1137 - regeltesterna kan se grona ut utan att ha kort
 
 Premiss verifierad vid HEAD: `package.json`s `test:rules` ar
 `firebase emulators:exec --only firestore --project demo-binge-rules "vitest run

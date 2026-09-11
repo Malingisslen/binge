@@ -873,9 +873,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // brand-new uid can never carry a deletion marker, so the gate is a no-op
     // here — it is uniformity that keeps the chokepoint test meaningful.
     await mergeUserDoc(cred.user.uid, kit => ({
-      // Klampad — se `ensureUserProfile`. Formularets `maxLength` racker inte som
-      // enda skydd: den galler tangentbordet, inte en inklistrad strang eller ett
-      // anrop som inte kom fran formularet.
+      // Klampad — se `createProfileWithConsent`. Formularets `maxLength` racker
+      // inte som enda skydd: ett anrop som inte kom fran formularet nar det aldrig.
       displayName: clampToCodeUnits(name, MAX_DISPLAY_NAME),
       email: cred.user.email ?? email,
       photoURL: cred.user.photoURL,

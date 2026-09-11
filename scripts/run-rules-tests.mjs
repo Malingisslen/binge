@@ -177,7 +177,13 @@ function main(argv) {
   }
   args.push(`"${inner}"`);
 
-  const run = spawnSync('npx', args, { cwd: REPO, encoding: 'utf8', shell: true });
+  // `--no-install`: utan den hamtar npx TYST senaste firebase-tools fran registret
+  // nar PATH-uppslaget missar. `deploy.yml` installerar en pinnad version globalt och
+  // nycklar emulator-cachen pa den, sa en sadan hamtning gor bade pinningen och
+  // cachenyckeln verkningslosa utan att nagot blir rott. Med flaggan avslutar npx
+  // med en felkod i stallet. En maskin utan firebase-tools far alltsa ett hart fel
+  // har, inte en installation.
+  const run = spawnSync('npx', ['--no-install', ...args], { cwd: REPO, encoding: 'utf8', shell: true });
   const output = `${run.stdout ?? ''}${run.stderr ?? ''}`;
   process.stdout.write(output);
 

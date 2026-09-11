@@ -14,6 +14,9 @@
 //   3. return ok on a non-zero exit code      → "the child failed" goes green
 
 import { test, expect, describe } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   verdict, looksLikePortTaken, describePortHolder, buildAltConfig, parsePort, MIN_TESTS,
 } from './run-rules-tests.mjs';
@@ -138,5 +141,25 @@ describe('parsePort', () => {
     expect(() => parsePort(['--port', 'nope'])).toThrow();
     expect(() => parsePort(['--port'])).toThrow();
     expect(() => parsePort(['--port', '99999'])).toThrow();
+  });
+});
+
+// `main()` is not exercised by any case above — every one of them drives a pure
+// boundary. So the spärr that keeps this wrapper on the pinned CLI is deletable with
+// the whole file green unless something pins the call itself (BIN-852's shape).
+//
+// The anchor is the CALL, not the flag: `--no-install` also appears in the comment
+// six lines above it, so `toContain('--no-install')` alone would be satisfied by the
+// prose and survive the mutation that removes the flag from the argument list.
+//
+// Two mutations must fail this case:
+//   1. drop `'--no-install'` from the args   → npx silently fetches latest on a miss
+//   2. rename `npx` to something else        → the pinned global is no longer what runs
+describe('main() runs the emulator CLI through npx with --no-install', () => {
+  const HERE = join(fileURLToPath(import.meta.url), '..');
+  const SOURCE = readFileSync(join(HERE, 'run-rules-tests.mjs'), 'utf8');
+
+  test('the spawn call carries the flag as its first argument', () => {
+    expect(SOURCE).toContain("spawnSync('npx', ['--no-install', ...args]");
   });
 });
