@@ -1735,7 +1735,8 @@ inte battre. Filen ar dessutom append-only aven for en rad som aldrig pushats - 
 en ostadad rad som "inte publicerad an" underkandes av #21 med filens egen text som skal.
 
 **Exempel:** rattelseraden for ett oraknat tal bar sjalv ett oraknat tal - "tre andra
-rader sager samma sak", dar `grep -c "append-only" docs/org/metrics/events.jsonl` ger tio.
+rader sager samma sak", vilket `grep -c "append-only" docs/org/metrics/events.jsonl`
+motsager.
 Nasta version pastod att samma ORD stod pa flera stallen till; det var samma sorts
 pastaende, olika formulerat, och ett av stallena bar det aldrig. Bada raderna skrevs for
 att bokfora ett fynd om omatta pastaenden.
