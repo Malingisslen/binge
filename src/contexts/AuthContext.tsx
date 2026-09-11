@@ -23,6 +23,7 @@ import { collectUserDataSnapshots } from '@/lib/firebase/userData';
 import { collectDeletionRefs, applyDeletionPlan } from '@/lib/firebase/accountDeletion';
 import { handOverOwnedGroups, HANDOVER_PARTIAL } from '@/lib/firebase/groupHandover';
 import { syncMyPublicProfile, clearPublicProfileSignature } from '@/lib/firebase/publicProfile';
+import { captureError } from '@/lib/sentry';
 import { disablePushForUser, clearLocalPushTokenId, hasLocalPushToken } from '@/lib/firebase/messaging';
 import { clearAllInviteTokens } from '@/lib/groupInviteCache';
 import { CURRENT_TERMS_VERSION } from '@/lib/legal';
@@ -78,6 +79,13 @@ interface AuthState {
   pauseProvider: (providerId: number, resumeAt?: string | null) => Promise<void>;
   resumeProvider: (providerId: number) => Promise<void>;
   updateUsername: (username: string) => Promise<void>;
+  /**
+   * BIN-1154. Namnet bor i TVA lagringar: `users/{uid}.displayName` och Firebase
+   * Auth-postens egen kopia. Den har skriver bada, i den ordningen, och KASTAR
+   * vid vagran - samma kanal som varje annan faltuppdaterare har. Anroparen
+   * gatar sin bekraftelse pa att await:en inte kastade.
+   */
+  updateDisplayName: (name: string) => Promise<void>;
   updateBio: (bio: string) => Promise<void>;
   updateDefaultVisibility: (visibility: ItemVisibility) => Promise<void>;
   /**
@@ -131,6 +139,7 @@ const AuthContext = createContext<AuthState>({
   pauseProvider: async () => {},
   resumeProvider: async () => {},
   updateUsername: async () => {},
+  updateDisplayName: async () => {},
   updateBio: async () => {},
   updateDefaultVisibility: async () => {},
   visibilitySyncPending: false,
@@ -1153,6 +1162,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await batch.commit();
     setUser(prev => prev ? { ...prev, providerPauses: next } : null);
   }, [uid, user]);
+  // BIN-1154: visningsnamnet far en redigeringsyta. Till skillnad fran varje
+  // annan faltuppdaterare har ror den TVA lagringar av samma personuppgift,
+  // och ordningen mellan dem ar ett beslut, inte en slump.
+  //
+  // FIRESTORE FORST, Auth-posten bara om den gick igenom. Skalet ar inte
+  // estetiskt: `mergeUserDoc`/`assertProfileWritable` ar den enda sparren som
+  // stoppar en profilskrivning under en pagaende radering, och `updateProfile`
+  // gar inte genom den chokepointen alls. Ett ovillkorligt Auth-anrop hade
+  // latit ett konto markerat for radering andra sin Auth-post medan Firestore
+  // korrekt nekade - halet ADR 0019 och BIN-816 stangde.
+  //
+  // Klampningen ligger kvar aven om faltet bar `maxLength`: den skyddar en
+  // anropare som inte kom fran formularet, precis som i `register()`.
+  const updateDisplayName = useCallback(async (name: string) => {
+    const trimmed = name.trim();
+    // Tomt namn vagras har, inte av regeln - `size() <= 80` saknar undre grans.
+    // Namnet visas for andra (notiser pa nagon annans lasskarm, vanlistor,
+    // gruppmedlemmar), sa tomt ar samre an det gamla. Se accepted-deviations.
+    if (!trimmed) throw new Error('displayName-empty');
+    const clamped = clampToCodeUnits(trimmed, MAX_DISPLAY_NAME);
+    await updateUserField('displayName', clamped);
+    // Har ar Firestore-kopian sparad och projektionen foljer via effekten som
+    // beror pa `user.displayName`. Auth-posten ar den andra lagringen; att den
+    // fallerar ar VARKEN en ren framgang eller en vagran. Avgjort: det raknas
+    // som framgang med en loggad avvikelse. Att kasta hade sagt "sparades inte"
+    // om ett namn som ar sparat och som anvandaren ser pa skarmen.
+    const current = auth.currentUser;
+    if (!current) return;
+    try {
+      await updateProfile(current, { displayName: clamped });
+    } catch (err) {
+      console.error('displayName: Auth-posten kom efter Firestore-kopian:', err);
+      captureError(err, { scope: 'auth', kind: 'updateDisplayName-authSync' });
+    }
+  }, [updateUserField]);
+
   const updateBio = useCallback((bio: string) => updateUserField('bio', bio), [updateUserField]);
 
   const updateDefaultVisibility = useCallback(async (visibility: ItemVisibility) => {
@@ -1464,7 +1509,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn, signInEmail, register, resendEmailVerification, signOut,
       updateProviders, updateDefaultView, updateProviderCosts, updateHomeMunicipality, updateRotationSchedule, setProviderCost, setProviderRenewalDay, updateProviderTier, setProviderCampaign,
       pauseProvider, resumeProvider,
-      updateUsername, updateBio, updateDefaultVisibility, visibilitySyncPending, deletionInProgress, pendingReconsent, completeReconsent, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
+      updateUsername, updateDisplayName, updateBio, updateDefaultVisibility, visibilitySyncPending, deletionInProgress, pendingReconsent, completeReconsent, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
       setCalibrationGenres, deleteAccount,
     }),
     [
@@ -1472,7 +1517,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn, signInEmail, register, resendEmailVerification, signOut,
       updateProviders, updateDefaultView, updateProviderCosts, updateHomeMunicipality, updateRotationSchedule, setProviderCost, setProviderRenewalDay, updateProviderTier, setProviderCampaign,
       pauseProvider, resumeProvider,
-      updateUsername, updateBio, updateDefaultVisibility, visibilitySyncPending, deletionInProgress, pendingReconsent, completeReconsent, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
+      updateUsername, updateDisplayName, updateBio, updateDefaultVisibility, visibilitySyncPending, deletionInProgress, pendingReconsent, completeReconsent, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
       setCalibrationGenres, deleteAccount,
     ]
   );

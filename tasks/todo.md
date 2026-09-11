@@ -1,3 +1,182 @@
+# BIN-1154 - visningsnamnet far en redigeringsyta [Tier B/C]
+
+Malins beslut 2026-09-11: bygg ytan. Biljetten var parkerad som ett produktval;
+den handbromsen ar nu lyft av henne, i klartext ("ja bygg den").
+
+## Vad som ar matt FORE bygget
+
+- `src/components/settings/ProfileSection.tsx` RENDERAR `user.displayName` men
+  har ingen kontroll for att andra det. `grep -rn "displayName" src/components/settings/`
+- `updateUserField` finns och ar generisk, men har inget `displayName`-anropsstalle.
+  `grep -rn "updateUserField(" src`
+- Regeln behover INTE andras. `users/{uid}`s update-gren binder redan
+  `displayName` till hogst 80 tecken:
+  `awk '/match .users.{uid} {/,/^    }/' firestore.rules | grep -nE 'displayName|bio'`
+  Alltsa ingen manuell regeldeploy for den har biljetten.
+- Den publika projektionen foljer AUTOMATISKT. Effekten i `AuthContext.tsx` som
+  anropar `syncMyPublicProfile` har `user?.displayName` i sin beroendelista, sa
+  en lyckad skrivning stammer om projektionen utan extra kod.
+
+## Skarmen
+
+```
++-- Profil ---------------------------------+
+|                                           |
+|  Namn                                     |
+|  +-------------------------------------+  |
+|  | Malin                               |  |
+|  +-------------------------------------+  |
+|  Visas for andra i notiser och pa din     |
+|  profil. Max 80 tecken.                   |
+|                                           |
+|  E-post:  malin@exempel.se                |
+|                                           |
+|  [ Logga ut ]                             |
++-------------------------------------------+
+```
+
+Placeringen ar vald, inte fragad: faltet ligger dar namnet redan visas, i
+`ProfileSection`. Alternativet var `UsernameSection`, dar bio och anvandarnamn
+redigeras - men da star namnet kvar som dod text en ruta ovanfor, vilket ar
+precis det som gor att man inte hittar redigeringen.
+
+Monstret ar bio-faltets: kontrollerat falt, sparar pa blur, toast vid utfall.
+
+## Vad som byggs
+
+1. `updateDisplayName(name)` i `AuthContext`:
+   - trimmar, VAGRAR tomt (namnet visas i notiser pa andras lasskarmar; tomt ar
+     samre an det gamla),
+   - klampar med `clampToCodeUnits(..., MAX_DISPLAY_NAME)` - inte ett bart
+     avhugg, av samma skal som resten av BIN-1134,
+   - skriver Firestore via `updateUserField`,
+   - skriver OCKSA Auth-posten via `updateProfile`. Det ar den andra lagringen
+     av samma personuppgift, och BIN-1154 avsnitt 2 handlar om att de tva glider
+     isar. En redigering som bara lagar den ena gor asymmetrin varre.
+   - returnerar ett UTFALL. Skrivvagen kan vagra, och en ovillkorlig toast gor
+     varje vagran till en logn - se lardomen om det.
+2. `ProfileSection`: faltet, `maxLength={MAX_DISPLAY_NAME}`, hjalptext, toast
+   gatad pa utfallet.
+3. Test: klampningen, tomt namn vagras, bada lagringarna skrivs, och en vagran
+   toastar inte framgang.
+
+## Acceptanskriterier
+
+1. Man kan andra sitt visningsnamn i installningarna och det syns direkt. *(diff)*
+2. Ett namn over taket kortas av redan i faltet, och ett inklistrat langt namn
+   likasa - inte tyst vid skrivningen. *(diff)*
+3. Ett tomt namn sparas aldrig. *(diff)*
+4. Bade Firestore-dokumentet och Auth-posten bar det nya namnet efter en lyckad
+   redigering. *(diff)*
+5. En vagrad skrivning bekraftas INTE i UI. *(diff)*
+6. Muteringen som tar bort klampningen faller minst ett test. *(diff)*
+7. Ingen regelandring, alltsa ingen manuell deploy. *(diff)*
+
+## Panelens bindande villkor — infolierade 2026-09-11
+
+Fem blinda kritiker, alla `accept-with-conditions`. Villkoren nedan ar bindande
+acceptanskriterier, inte forslag.
+
+### Kontraktet (#14, MUST 1)
+
+`updateDisplayName` returnerar `Promise<void>` och KASTAR vid vagran — inte ett
+utfallsobjekt. Skalet: varje annan faltuppdaterare i `AuthContext` signalerar
+misslyckande genom att kasta, och anroparens `try/catch` toastar. `ItemWriteOutcome`
+finns i `WatchlistContext` bara for att de sex vagarna SVALJER `permission-denied`;
+har sväljs ingenting. Tva kontrakt i samma granssnitt ar det som ska undvikas.
+
+`ProfileSection` gatar sin bekraftelse pa att `await` inte kastade. Det ar samma
+sak som #19 begarde, uttryckt i husets egen form.
+
+### Skrivordningen (#27 MUST 1, #5 MUST 1)
+
+1. Firestore FORST, via `updateUserField('displayName', klampat)`.
+2. Auth-posten ENDAST om steg 1 gick igenom.
+
+Skalet ar inte estetiskt. `mergeUserDoc`/`assertProfileWritable` ar den enda
+spärren som stoppar en profilskrivning under en pagaende radering. `updateProfile`
+gar inte genom den chokepointen alls. Ett ovillkorligt Auth-anrop hade alltsa
+latit ett markerat konto andra sin Auth-post medan Firestore korrekt nekade —
+precis det hal ADR 0019 och BIN-816 stangde.
+
+### Det tredje utfallet (#27 MUST 2, #5 MUST 1)
+
+Firestore lyckas, Auth-skrivningen fallerar. Det ar VARKEN en ren framgang eller
+en vagran, och tystnad ar inte ett beslut.
+
+**Avgjort: det raknas som FRAMGANG, med en loggad avvikelse.** Den auktoritativa
+kopian ar sparad, projektionen foljer den, och anvandaren ser sitt nya namn —
+att kasta dar hade sagt "sparades inte" om ett namn som ar sparat. Avvikelsen
+rapporteras med `console.error` + `captureError({ scope: 'auth', kind:
+'updateDisplayName-authSync' })`, samma konvention som BIN-957:s fyra vagar.
+
+Det upphaver #14:s MUST 2: invandningen var att ett kast efter `setUser` skulle
+bekrafta en vagrad skrivning. Med det har utfallet kastas det inte.
+
+### Aterupplivningsresten (#27 MUST 3)
+
+`createProfileWithConsent` bygger `displayName` ur `firebaseUser.displayName`
+ensamt. En Auth-post som blivit efter enligt ovan ar alltsa vad som skrivs
+tillbaka om `users/{uid}` senare raderas och ateruppstar (avbruten radering,
+atersamtycke). Anvandarens eget namn kan tyst falla tillbaka till ett aldre
+varde. Eget konto, egen historik, ingen lacka.
+
+Stangs med en daterad post i `.claude/rules/accepted-deviations.md` — den ska
+ocksa bokfora att regeln INTE har nagot golv pa `displayName` (`size() <= 80`
+saknar undre grans), sa AC3 ar klientsidig (#27 SHOULD).
+
+### Vad anvandaren ser (#19 MUST 1-3, #2 MUST 2)
+
+- Tomt namn: faltet ATERSTALLS synligt till senast sparade namn — aldrig kvar
+  som tomt — och en toast sager varfor.
+- Vagrad skrivning: egen feltoast, bios lydelse.
+- Toasten lever 2,5 sekunder, sa aterstallningen av faltet ar den bestaende
+  signalen. Den ar inte valfri.
+
+### Tillganglighet (#2 MUST 1 och 3)
+
+`<label htmlFor>` mot ett `id` pa faltet, `aria-describedby` mot hjalptexten,
+och `autoComplete="nickname"` (inte `name`, som betyder juridiskt namn). Kopiera
+INTE grannfaltens omarkerade monster framat; deras egen lucka ar filad som
+BIN-1161.
+
+### Hjalptexten (#5 MUST 2)
+
+"Visas for andra i notiser och pa din profil" underdriver. Namnet syns ocksa i
+recensioner, kommentarer, gruppmedlemslistor, vanlistor, Tillsammans-sessioner,
+sokresultat, flodet och avsnittsreaktioner. Rakna INTE upp dem — en uppraekning
+gar inaktuell. Lydelsen blir:
+
+    Visas for andra anvandare i appen, till exempel i notiser och pa din profil.
+
+### Exportluckan (#5 MUST 3)
+
+Auth-postens kopia har aldrig ingatt i artikel 20-exporten och gor det inte
+heller efter den har andringen — varken skapad eller forvarrad har. Filad som
+**BIN-1160**, inte byggd i den har bunten. BIN-1150 tacker den INTE; den handlar
+om skickade gruppinbjudningar.
+
+### En mening som var fel i kritiken
+
+#19 SHOULD 3 antog att ett inklistrat langt namn star kvar i faltet tills blur.
+Det gor det inte: HTML `maxlength` begransar varje anvandarinmatning i
+kontrollen, inklistring inraknad. Matt i BIN-1134 i gar. Klampningen i
+kontextfunktionen ar darfor ett skydd for anropare som inte kom fran formularet,
+inte for inklistringen.
+
+## Routning
+
+Arv aldrig ett routningstal harifran. Urvalet gissade pa tre filer; den byggda
+unionen ar sex, och `.claude/rules/accepted-deviations.md` bytte panelen fran
+#14 till #25. Harled i stallet, fore varje kritik och fore varje commit:
+
+    node docs/org/route.mjs $(git diff --cached --name-only)
+
+#25 konvenerades blint pa den byggda diffen nar omkorningen visade att rollen
+tillkommit.
+
+---
+
 # Sprinten 2026-09-10 - sju biljetter i tva buntar
 
 Urval: 40 oppna biljetter i Backlog, noll i Todo/In Progress. Premisskontrollen

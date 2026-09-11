@@ -953,3 +953,74 @@ efter; den ar #21:s iakttagelse och har en egen biljett, BIN-1150.
 loggar `groupHandover: sent-invite erasure refused` — det senare betyder att ett
 verkligt konto ligger over taket och att talet behover ett beslut, inte en
 hojning i forbigaende.
+
+---
+
+## BIN-1154: visningsnamnets tva lagringar kan glida isar, och regeln har inget golv — 2026-09-11
+
+Tva beslut, inte oppna brister. Fila inte "Auth-posten kan bli efter" eller
+"tomt visningsnamn nekas bara av klienten".
+
+Sedan den har biljetten gar `displayName` att andra i installningarna.
+`updateDisplayName` i `AuthContext` skriver **Firestore forst** och Auth-posten
+bara om den skrivningen gick igenom. Ordningen ar inte estetisk:
+`mergeUserDoc`/`assertProfileWritable` ar den enda sparren som stoppar en
+profilskrivning under en pagaende radering, och `updateProfile` gar inte genom
+den chokepointen alls.
+
+### 1. En fallerad Auth-skrivning raknas som FRAMGANG, med en loggad avvikelse
+
+Firestore-kopian ar den auktoritativa: den ar bunden av reglerna, den ligger i
+artikel 20-exporten, och den publika projektionen foljer den. Fallerar
+Auth-skrivningen efter att den lyckats ar namnet sparat och anvandaren ser det
+pa skarmen — att kasta dar hade sagt "sparades inte" om nagot som ar sparat.
+
+Avvikelsen rapporteras med `console.error` + `captureError({ scope: 'auth',
+kind: 'updateDisplayName-authSync' })`, samma konvention som BIN-957:s fyra
+vagar. Tyst svaljning vore det tredje felet och ar inte accepterat.
+
+**Resten det lamnar:** `createProfileWithConsent` bygger `displayName` ur
+`firebaseUser.displayName` ensamt — det finns inget Firestore-dokument att falla
+tillbaka pa vid den punkten. En Auth-post som blivit efter ar alltsa vad som
+skrivs tillbaka om `users/{uid}` senare raderas och ateruppstar (avbruten
+radering, atersamtycke, BIN-909:s kantfall). Anvandarens eget namn kan da tyst
+falla tillbaka till ett aldre varde.
+
+**Why:** eget konto, egen historik, ingen korsanvandarlacka, och laget kraver
+bade en fallerad Auth-skrivning OCH en senare radering-plus-aterupplivning.
+Alternativet — att kasta och saga att ingenting sparades — ar en osanning i det
+vanliga fallet for att undvika en osanning i det sallsynta.
+
+**Re-open when:** `kind: 'updateDisplayName-authSync'` dyker upp i Sentry-scopet
+`auth`. Det ar observationskanalen, och den ar den enda: divergensen ar osynlig
+i appen, eftersom varje yta laser Firestore-kopian.
+
+### 2. Golvet pa `displayName` ar klientsidigt, med flit
+
+`firestore.rules` binder `displayName` till `size() <= 80` pa bade create och
+update. Den har **ingen undre grans**, sa ett tomt namn nekas av klienten och
+aldrig av regeln - bade vid registreringen och i installningarna. Den som gar
+forbi bada kan blanka sitt eget namn for alla som ser det.
+
+Harled bada halvorna:
+```
+awk '/match .users.{uid} {/,/^    }/' firestore.rules | grep -nE 'displayName|bio'
+grep -n "displayName-empty" src/contexts/AuthContext.tsx
+```
+
+**Why:** att stanga det i regeln kraver en regelandring och en manuell deploy
+for ett lage dar den enda som drabbas ar den som sjalv kringgatt sitt eget
+formular. Samma avvagning som BIN-590 gor for losenordsstyrkan, och av samma
+skal: kontoagaren skadar bara sin egen visning.
+
+**INTE accepterat, fortfarande fileable:** att klientgolvet tas bort ur
+`updateDisplayName`, och att en ANNAN skrivvag till samma falt laggs till utan
+samma kontroll. Harled var golvet star:
+```
+grep -rn "Ange ditt namn\|displayName-empty" src
+```
+Accepten galler att golvet ar klientsidigt, inte att det far forsvinna fran en
+vag som har det.
+
+**Re-open when:** ett konto observeras med tomt visningsnamn i produktion, eller
+en andra skrivvag till faltet byggs.

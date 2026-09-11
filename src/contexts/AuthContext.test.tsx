@@ -32,6 +32,7 @@ let authCallback: ((u: FakeUser | null) => void) | null = null;
 const createUserWithEmailAndPassword = vi.fn(async () => ({ user: fakeUser }));
 const sendEmailVerification = vi.fn(async () => {});
 const updateProfileMock = vi.fn(async () => {});
+const captureErrorMock = vi.hoisted(() => vi.fn());
 // BIN-669/732: controllable, so a test can make the sign-out REJECT and still
 // assert the remembered path is gone. An inline `vi.fn(async () => {})` in the
 // factory below could not, which is why the failure path shipped untested the
@@ -71,6 +72,7 @@ vi.mock('firebase/auth', () => ({
 const authObj = vi.hoisted(() => ({
   currentUser: null as { uid: string; email: string | null; photoURL: string | null; displayName: string | null; emailVerified: boolean; metadata: { creationTime: string | undefined } } | null,
 }));
+vi.mock('@/lib/sentry', () => ({ captureError: captureErrorMock, initSentry: () => {} }));
 vi.mock('@/lib/firebase/config', () => ({ auth: authObj }));
 
 // Firestore-kit: path-kodande doc-refs (som WatchlistContext-harnessen) så
@@ -2298,5 +2300,99 @@ describe('AuthContext — reconsent gate for a returning account (BIN-909)', () 
 
     expect(ctx!.user).toBeNull();
     expect(ctx!.pendingReconsent).toBe(true); // still gated, nothing adopted
+  });
+});
+
+// BIN-1154: visningsnamnet far en redigeringsyta, och den ror TVA lagringar av
+// samma personuppgift. Ordningen mellan dem ar ett beslut - Firestore forst,
+// Auth-posten bara om den gick igenom - och den ordningen ar vad de har fallen
+// pinnar. Utan dem gar bade chokepoint-villkoret och klampningen att radera med
+// hela sviten gron.
+describe('AuthContext - visningsnamnet gar att andra, och skrivningarna har en ordning (BIN-1154)', () => {
+  it('namnet skrivs klampat till Firestore-kopian', async () => {
+    renderAuth();
+    await login({ displayName: 'Malin', email: 'malin@example.com' });
+    setDoc.mockClear();
+
+    await act(async () => { await ctx!.updateDisplayName('y'.repeat(200)); });
+
+    const [, payload] = userDocWrites()[0] as [unknown, Record<string, unknown>, unknown];
+    expect(payload.displayName).toBe('y'.repeat(80));
+  });
+
+  it('Auth-posten far samma BEARBETADE varde, sa de tva lagringarna inte glider isar', async () => {
+    // Fixturen maste vara en dar ra, trimmad och klampad strang skiljer sig at.
+    // Med ett vanligt namn ar alla tre samma strang, och testet kan da inte se
+    // skillnad pa `clamped` och den ra parametern - matt: en mutering som
+    // skickade den ra strangen till Auth overlevde hela blocket gront.
+    renderAuth();
+    await login({ displayName: 'Malin', email: 'malin@example.com' });
+    updateProfileMock.mockClear();
+    setDoc.mockClear();
+
+    await act(async () => { await ctx!.updateDisplayName('  ' + 'y'.repeat(200) + '  '); });
+
+    expect(updateProfileMock).toHaveBeenCalledTimes(1);
+    const [, arg] = updateProfileMock.mock.calls[0] as unknown as [unknown, { displayName: string }];
+    expect(arg.displayName).toBe('y'.repeat(80));
+    // Och samma strang i bada lagringarna - det ar hela poangen med paret.
+    const [, payload] = userDocWrites()[0] as [unknown, Record<string, unknown>, unknown];
+    expect(payload.displayName).toBe(arg.displayName);
+  });
+
+  it('ett tomt namn kastar och ror ingen av lagringarna', async () => {
+    // Regeln har inget GOLV pa `displayName` - `size() <= 80` saknar undre
+    // grans - sa den har vagran ar klientsidig och finns bara har.
+    renderAuth();
+    await login({ displayName: 'Malin', email: 'malin@example.com' });
+    setDoc.mockClear();
+    updateProfileMock.mockClear();
+
+    await expect(ctx!.updateDisplayName('   ')).rejects.toThrow();
+
+    expect(userDocWrites()).toHaveLength(0);
+    expect(updateProfileMock).not.toHaveBeenCalled();
+  });
+
+  it('en nekad Firestore-skrivning nar ALDRIG Auth-posten', async () => {
+    // Det har ar villkoret, inte en detalj. `mergeUserDoc` ar den enda sparren
+    // som stoppar en profilskrivning under en pagaende radering; `updateProfile`
+    // gar inte genom den alls. Ett ovillkorligt Auth-anrop hade latit ett konto
+    // markerat for radering andra sin Auth-post medan Firestore korrekt nekade.
+    renderAuth();
+    await login({ displayName: 'Malin', email: 'malin@example.com' });
+    updateProfileMock.mockClear();
+    setDoc.mockRejectedValueOnce(new Error('permission-denied'));
+
+    await expect(ctx!.updateDisplayName('Nytt namn')).rejects.toThrow();
+
+    expect(updateProfileMock).not.toHaveBeenCalled();
+  });
+
+  it('en fallerad Auth-skrivning ar INTE en vagran - den rapporteras och slapper igenom', async () => {
+    // Firestore-kopian ar sparad och anvandaren ser sitt nya namn. Att kasta har
+    // hade sagt "sparades inte" om ett namn som ar sparat. Avvikelsen loggas i
+    // stallet, sa den gar att hitta - tyst svaljning vore det tredje felet.
+    renderAuth();
+    await login({ displayName: 'Malin', email: 'malin@example.com' });
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    updateProfileMock.mockRejectedValueOnce(new Error('auth/network-request-failed'));
+    setDoc.mockClear();
+
+    await act(async () => {
+      await expect(ctx!.updateDisplayName('Nytt namn')).resolves.toBeUndefined();
+    });
+
+    const [, payload] = userDocWrites()[0] as [unknown, Record<string, unknown>, unknown];
+    expect(payload.displayName).toBe('Nytt namn');
+    expect(errSpy).toHaveBeenCalled();
+    // Den har raden ar accepted-deviations-postens ENDA re-open-kanal.
+    // Utan att den pinnas gar `captureError` att dopa om eller radera med
+    // hela sviten gron, och accepten blir permanent by construction.
+    expect(captureErrorMock).toHaveBeenCalledWith(
+      expect.any(Error),
+      { scope: 'auth', kind: 'updateDisplayName-authSync' },
+    );
+    errSpy.mockRestore();
   });
 });
