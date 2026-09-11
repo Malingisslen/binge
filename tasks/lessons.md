@@ -1678,8 +1678,7 @@ meningen och skriva ut vad kommandot inte svarar pa.
 spärren tyst verkningslos", "da nekas skrivningen", "da svarar ett nytt forsok X".
 
 **Regel:** framkalla felet mot en kopia och las utfallet. En foljd ar dyrare an ett tal:
-den styr vad nasta lasare TROR att den kan lita pa, och tva av de har var inte bara fel i
-grad utan i riktning.
+den styr vad nasta lasare TROR att den kan lita pa.
 
 **Exempel:** jag skrev att en ensam klammerparentes i en regelkommentar skulle gora
 `logic.test.ts` uid-faltsvakt "tyst verkningslos". Sex granskare replikerade skanningen var
@@ -1688,7 +1687,7 @@ ensam `{` andrar ingenting alls - meningen var fel om bada axlarna den pastod. S
 jag skrev att formularets `maxLength` "galler tangentbordet, inte en inklistrad strang".
 HTML `maxlength` kapar ocksa en inklistring. Och en tredje: en regelkommentar lovade att ett
 for langt namn provas "den dag agaren sparar om profilen" - ingen yta i appen andrar
-visningsnamnet, sa den dagen kommer aldrig, OCH update-grenen provar hela efterdokumentet,
+visningsnamnet (se BIN-1154), sa den dagen kommer aldrig, OCH update-grenen provar hela efterdokumentet,
 sa ett lagrat for langt namn nekar varje senare profilskrivning. Strangare an kommentaren
 sa, inte losare.
 
