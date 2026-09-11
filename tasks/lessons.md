@@ -1721,9 +1721,9 @@ forut.
 inte laga det sjalv: ingen yta i appen andrar visningsnamnet" blev falsk och stroks. Kvar
 stod att ett for langt namn gor varje inbjudan och varje vanforfragan "permanent nekad" -
 en foljd som bara var sann sa lange ingen yta fanns. Samma sorts absoluta pastaende, olika
-formulerat, stod dessutom pa tre stallen till, daribland i den alltid laddade digesten och
-i en correction-rad skriven i varvet fore. Push-grinden tog fyra varv pa att fa bort allt;
-atta av atta fynd lag i min egen rattelse av det foregaende.
+formulerat, stod dessutom pa flera stallen till, daribland i den alltid laddade digesten
+och i en correction-rad skriven i varvet fore. Harled kopiorna, rakna dem inte: samma
+mening ar omformulerad pa varje stalle, sa en enkel grep hittar en av dem.
 
 ### [Workflow] Ett tal i en loggrad ar lika omatt som ett tal i en kommentar (2026-09-11, BIN-1154)
 
@@ -1734,9 +1734,9 @@ granskningsbevis och lases av grindarna, sa ett oraknat tal dar ar varre an i en
 inte battre. Filen ar dessutom append-only aven for en rad som aldrig pushats - att rakna
 en ostadad rad som "inte publicerad an" underkandes av #21 med filens egen text som skal.
 
-**Exempel:** rattelseraden for ett oraknat tal bar sjalv ett oraknat tal ("tre andra rader
-sager samma sak" - det var tio). Nasta version pastod att samma ORD stod pa tre stallen
-till; det var samma sorts pastaende, olika formulerat, och ett av stallena bar det aldrig.
-En tredje version sa att en roll kom in i panelen nar en fil tillkom - filen lag redan dar,
-och det var unionen som KRYMPTE. Tre varv, tre olika falska tal, alla i rader vars syfte
-var att bokfora ett falskt tal.
+**Exempel:** rattelseraden for ett oraknat tal bar sjalv ett oraknat tal - "tre andra
+rader sager samma sak", dar `grep -c "append-only" docs/org/metrics/events.jsonl` ger tio.
+Nasta version pastod att samma ORD stod pa flera stallen till; det var samma sorts
+pastaende, olika formulerat, och ett av stallena bar det aldrig. Bada raderna skrevs for
+att bokfora ett fynd om omatta pastaenden.
+
