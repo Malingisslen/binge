@@ -1319,9 +1319,7 @@ service cloud.firestore {
       // uppräkningen här:
       //   grep -n -A 10 "addDoc(collection(db, 'groups')" src/lib/firebase/groups.ts
       // Kommandot är skrivet utan klammerparenteser med flit: `logic.test.ts` i
-      // functions/ läser det HÄR blocket genom att räkna klamrar från match-raden,
-      // så en ensam klammer i en kommentar avslutar dess skanning i förtid och gör
-      // dess uid-fältsvakt tyst verkningslös.
+      // functions/ läser det HÄR blocket genom att räkna klamrar från match-raden.
       // För SNÄV lista bryter gruppskapande i produktion; för VID lista lämnar
       // hålet öppet. Den är ett TAK, aldrig ett golv.
       //

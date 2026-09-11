@@ -149,7 +149,7 @@ describe('parsePort', () => {
 // the whole file green unless something pins the call itself (BIN-852's shape).
 //
 // The anchor is the CALL, not the flag: `--no-install` also appears in the comment
-// six lines above it, so `toContain('--no-install')` alone would be satisfied by the
+// that explains it, so `toContain('--no-install')` alone would be satisfied by the
 // prose and survive the mutation that removes the flag from the argument list.
 //
 // Two mutations must fail this case:
