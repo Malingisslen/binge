@@ -255,11 +255,18 @@ Mellan de tva sista stegen ligger den GAMLA, oklampade klienten mot den NYA
 regeln - precis det fel BIN-1134 handlar om, natt av en Google-registrering
 med ett langt namn.
 
-Kor darfor i den har ordningen:
+Steg 1 blev gjort utan att nagon korde det for hand: lardomscommitarna sist i
+sprinten ror ingen regelfil, sa deras deploy passerade skyddet och skickade ut
+appen fran senaste laget. Matt: korningen pa `4b5650b`, jobbet `deploy`, steget
+"Deploy to Firebase Hosting" - gront. Den klampande klienten ligger alltsa ute
+mot de gamla, tillatande reglerna, vilket ar den sakra riktningen.
 
-- [ ] 1. Kor om hosting-deployen for hand (`workflow_dispatch` pa `deploy.yml`).
-      Den hoppar over skyddet med flit, sa den klampande klienten gar ut forst.
-- [ ] 2. `firebase deploy --only firestore:rules`.
+Kvar:
+
+- [ ] `firebase deploy --only firestore:rules`.
+
+Att det loste sig var tur, inte plan. Ligger doc-commitarna FORE regelcommiten
+nasta gang hjalper det inte.
 
 ## Deviation log
 
