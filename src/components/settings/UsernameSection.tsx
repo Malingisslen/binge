@@ -53,9 +53,12 @@ export function UsernameSection() {
     <SettingsSection title="Publik profil">
       <div className="space-y-2">
         <div>
-          <label className="text-xs text-ink-3 block mb-[2px]">Användarnamn</label>
+          <label htmlFor="username" className="text-xs text-ink-3 block mb-[2px]">Användarnamn</label>
           <div className="flex gap-2">
             <input
+              id="username"
+              autoComplete="username"
+              aria-describedby={user.username ? 'username-help' : undefined}
               value={usernameInput}
               onChange={e => setUsernameInput(e.target.value.toLowerCase())}
               placeholder="filmnerden"
@@ -71,12 +74,13 @@ export function UsernameSection() {
             </button>
           </div>
           {user.username && (
-            <div className="text-xxs text-ink-3 mt-[2px]">binge.nu/user/{user.username}</div>
+            <div id="username-help" className="text-xxs text-ink-3 mt-[2px]">binge.nu/user/{user.username}</div>
           )}
         </div>
         <div>
-          <label className="text-xs text-ink-3 block mb-[2px]">Bio</label>
+          <label htmlFor="bio" className="text-xs text-ink-3 block mb-[2px]">Bio</label>
           <textarea
+            id="bio"
             value={bioInput}
             onChange={e => setBioInput(e.target.value)}
             onBlur={async () => {
@@ -91,8 +95,8 @@ export function UsernameSection() {
           />
         </div>
         <div>
-          <label className="text-xs text-ink-3 block mb-[4px]">Standardsynlighet</label>
-          <div className="space-y-[6px]">
+          <span id="defaultVisibility-label" className="text-xs text-ink-3 block mb-[4px]">Standardsynlighet</span>
+          <div role="radiogroup" aria-labelledby="defaultVisibility-label" className="space-y-[6px]">
             {VISIBILITY_OPTIONS.map(opt => (
               <label key={opt.value} className="flex items-start gap-2 cursor-pointer">
                 <input

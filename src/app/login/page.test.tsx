@@ -1,6 +1,6 @@
 // src/app/login/page.test.tsx
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, act } from '@testing-library/react';
+import { render, act, fireEvent } from '@testing-library/react';
 import LoginPage from './page';
 
 // BIN-645: the login page is where the sign-in journey ENDS, so it owns two
@@ -157,5 +157,66 @@ describe('LoginPage — where you land after signing in (BIN-645)', () => {
 
     expect(push).not.toHaveBeenCalled();
     expect(window.sessionStorage.getItem('binge:nextAfterLogin')).toBe('/movie/603/');
+  });
+});
+
+// BIN-1157: fem felkoder hade egen text, allt annat foll igenom till "Kontrollera
+// anslutningen". Tva av de genomfallande betyder nagot HELT annat, och for ett
+// avstangt konto ar radet aktivt vilseledande — uppkopplingen blir aldrig problemet.
+//
+// Testet driver hela formularet, inte en utbruten hjalpfunktion: grenen bor i
+// `handleSubmit`s catch, och en assertion mot en hjalpfunktion hade varit gron
+// aven om grenen aldrig kopplades in i formularet.
+describe('LoginPage — felkoder som inte ar natverksfel (BIN-1157)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    window.sessionStorage.clear();
+    auth.user = null;
+    auth.uid = null;
+    auth.profileLoading = false;
+    auth.loading = false;
+  });
+
+  async function submitWithCode(code: string) {
+    auth.signInEmail.mockRejectedValueOnce(Object.assign(new Error('x'), { code }));
+    const { container } = render(<LoginPage />);
+    const email = container.querySelector('input[type="email"]') as HTMLInputElement;
+    const password = container.querySelector('input[type="password"]') as HTMLInputElement;
+    fireEvent.change(email, { target: { value: 'a@b.se' } });
+    fireEvent.change(password, { target: { value: 'hemligt123' } });
+    await act(async () => {
+      fireEvent.submit(container.querySelector('form') as HTMLFormElement);
+    });
+    return container.textContent ?? '';
+  }
+
+  it('ett avstangt konto far inte radet att kolla sin uppkoppling', async () => {
+    const text = await submitWithCode('auth/user-disabled');
+    expect(text).toContain('inte tillgängligt just nu');
+    expect(text).not.toContain('Kontrollera anslutningen');
+  });
+
+  it('lydelsen for ett avstangt konto bekraftar inte att kontot finns', async () => {
+    // #4 Security: registreringsgrenen rojer redan att en adress har ett konto,
+    // men den kraver ett registreringsforsok. En obetingad "det har kontot ar
+    // avstangt" hade rojt det for den som bara gissar en adress.
+    const text = await submitWithCode('auth/user-disabled');
+    expect(text).toContain('Om kontot finns');
+  });
+
+  it('en strypning sager at dig att vanta, inte att kolla anslutningen', async () => {
+    const text = await submitWithCode('auth/too-many-requests');
+    expect(text).toContain('Vänta en stund');
+    expect(text).not.toContain('Kontrollera anslutningen');
+  });
+
+  it('en okand kod faller fortfarande igenom till den generella texten', async () => {
+    const text = await submitWithCode('auth/internal-error');
+    expect(text).toContain('Kontrollera anslutningen');
+  });
+
+  it('fel losenord ar oforandrat', async () => {
+    const text = await submitWithCode('auth/wrong-password');
+    expect(text).toContain('Fel e-post eller lösenord.');
   });
 });

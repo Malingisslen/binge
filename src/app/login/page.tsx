@@ -107,6 +107,19 @@ export default function LoginPage() {
         setError('E-postadressen används redan.');
       } else if (code === 'auth/weak-password') {
         setError('Lösenordet måste vara minst 6 tecken.');
+      } else if (code === 'auth/user-disabled') {
+        // BIN-1157: kontot är avstängt i konsolen. Att råda någon att kontrollera
+        // sin uppkoppling är aktivt vilseledande — den blir aldrig problemet.
+        //
+        // Lydelsen är HEDGAD med flit (#4 Security). Registreringsgrenen ovan
+        // avslöjar redan att en adress har ett konto, men den kräver ett
+        // registreringsförsök; en obetingad "det här kontot är avstängt" skulle
+        // dessutom röja att ett KÄNT konto är avstängt utan att lösenordet bevisas.
+        // Vi kan inte läsa ur repot om Firebase returnerar koden före eller efter
+        // lösenordskontrollen, så texten antar det sämre fallet.
+        setError('Om kontot finns är det inte tillgängligt just nu. Mejla hej@binge.nu om du behöver hjälp.');
+      } else if (code === 'auth/too-many-requests') {
+        setError('För många försök. Vänta en stund och försök igen.');
       } else if (mode === 'register') {
         setError('Kunde inte skapa kontot. Kontrollera anslutningen och försök igen.');
       } else {
