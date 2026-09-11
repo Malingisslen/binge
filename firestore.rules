@@ -254,8 +254,7 @@ service cloud.firestore {
       allow read: if isOwner(uid);
       // BIN-1134/BIN-1142: create bar bara isAdmin-spärren. Bio- och
       // displayName-klausulerna nedan fanns bara på `update`, så en profil kunde
-      // skrivas med ett godtyckligt långt namn vid registreringen och sedan aldrig
-      // valideras — fältet prövas först den dag ägaren råkar spara om det.
+      // skrivas med ett godtyckligt långt namn vid registreringen.
       //
       // Det är inte bara lagring på ens eget dokument: `functions/src/index.ts`
       // läser `users/{uid}.displayName` auktoritativt och bygger notistexten av
@@ -263,7 +262,8 @@ service cloud.firestore {
       // dessutom `friendRequests.fromDisplayName` och `groupInvites.fromDisplayName`
       // mot samma fält; de bär en egen 80-gräns bredvid bindningen, så ett otyglat
       // värde kopieras inte vidare — det gör i stället varje inbjudan och varje
-      // vänförfrågan från det kontot permanent nekad tills profilen sparas om.
+      // vänförfrågan från det kontot permanent nekad. Kontot kan inte laga det
+      // själv: ingen yta i appen ändrar visningsnamnet. Se BIN-1154.
       //
       // Talen är update-grenens egna (80 / 160), inte nya. Flyttas ett av dem
       // måste båda grenarna flytta i samma redigering.
@@ -739,7 +739,7 @@ service cloud.firestore {
       // är detsamma som `isValidGroupDoc()` binder källan till, och som formulären
       // använder. Härled båda med
       //   grep -nE "data\.[A-Za-z]+\.size\(\) <= 48" firestore.rules
-      //   grep -rn "maxLength=" src/app/grupper/ny/page.tsx
+      //   grep -rn "maxLength=" src/app/grupper src/components/groups
       // De måste flytta i samma redigering.
       allow create: if isSignedIn()
         && uid != request.auth.uid
