@@ -203,7 +203,7 @@ som underlag men är inte längre panelens.
    nästa ORELATERADE klientskrivning i stället.
 6. `src/lib/firebase/publicProfile.ts` — meningen om att `users/{uid}` saknar
    längdregel vid registrering blir falsk i samma commit och STRYKS (#5, #13).
-   Klampningen `.slice(0, 80)` / `.slice(0, 160)` står KVAR (#5): regler binder
+   Klampningen står KVAR (#5): regler binder
    aldrig retroaktivt, så den är fortfarande det enda som skyddar ett konto vars
    värde skrevs före deployen.
 7. Nekande-testerna måste uppfylla varje klausul FÖRE den de prövar (#7):
@@ -256,9 +256,21 @@ den själv.
 
 ## Needs you (Tier D)
 
-- [ ] `firebase deploy --only firestore:rules` efter att bunt 2 pushats.
-      Deployen ar rod med flit nar `firestore.rules` andrats - skyddet stoppar
-      hosting sa lange reglerna inte ar ute.
+**ORDNINGEN SPELAR ROLL har, och det ar push-grindens fynd.** `deploy.yml`s
+skydd gor hosting-jobbet rott pa varje push som rort `firestore.rules`. Den
+naiva foljden blir: push -> hosting rod -> regler ut for hand -> hosting om.
+Mellan de tva sista stegen ligger den GAMLA, oklampade klienten mot den NYA
+regeln - precis det fel BIN-1134 handlar om, natt av en Google-registrering
+med ett langt namn.
+
+Kor darfor i den har ordningen:
+
+- [ ] 1. Kor om hosting-deployen for hand (`workflow_dispatch` pa `deploy.yml`).
+      Den hoppar over skyddet med flit, sa den klampande klienten gar ut forst.
+- [ ] 2. `firebase deploy --only firestore:rules`.
+
+Fonstret ar tomt i dag - produktionen hade fyra konton med langsta namn 13
+tecken 2026-09-10 - sa det har ar billig ordning, inte en bradska.
 
 ## Deviation log
 

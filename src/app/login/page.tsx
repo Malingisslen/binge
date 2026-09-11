@@ -9,6 +9,7 @@ import { scorePassword } from '@/lib/passwordStrength';
 import { PasswordStrengthMeter } from '@/components/auth/PasswordStrengthMeter';
 import { CURRENT_TERMS_VERSION, MIN_AGE } from '@/lib/legal';
 import { takeNextPath } from '@/lib/nextPath';
+import { MAX_DISPLAY_NAME } from '@/lib/clampText';
 
 export default function LoginPage() {
   const { user, uid, profileLoading, signIn, signInEmail, register, loading } = useAuth();
@@ -165,7 +166,7 @@ export default function LoginPage() {
               type="text"
               placeholder="Namn"
               aria-label="Namn"
-              maxLength={80}
+              maxLength={MAX_DISPLAY_NAME}
               value={name}
               onChange={e => setName(e.target.value)}
               className="w-full px-2 py-[6px] mb-2 text-base border border-rule rounded-sm bg-white font-[inherit] outline-none focus:border-acc-deep"
