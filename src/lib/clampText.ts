@@ -15,8 +15,8 @@
  * Funktionen slapper darfor det avslutande tecknet nar snittet skulle klyva ett
  * par. Resultatet ar hogst `max` kodenheter och alltid valformat.
  *
- * VAR TAKEN BOR. Talen star dar de bokstavligen ar — i `firestore.rules`. Den har
- * filen bar bara mekanismen. Harled klausulerna for profilens falt med:
+ * VAR TAKEN BOR. Talen star dar de bokstavligen ar — i `firestore.rules`.
+ * Harled klausulerna for profilens falt med:
  *   awk '/match .users.{uid} {/,/^    }/' firestore.rules | grep -n displayName
  */
 export function clampToCodeUnits(value: string, max: number): string {

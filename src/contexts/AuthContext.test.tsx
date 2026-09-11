@@ -432,11 +432,10 @@ describe('AuthContext — register() username-klobbring (BIN-517)', () => {
 // registrering med ett langt namn skapade Auth-kontot, fick profilwriten nekad, och
 // lamnade ett konto utan profil. Push-grinden hittade det; inget test sag det.
 //
-// Tre skrivningar klampar nu, och alla tre pinnas har. Utan de har fallen gar varje
-// enskild `.slice()` att radera med hela sviten gron - och da ar defekten tillbaka
-// utan att nagot sager till. Talet star som en literal i testet med flit: hade det
-// harletts ur samma konstant koden anvander hade bada sidor kollapsat till samma
-// meningslosa jamforelse.
+// Utan testerna nedan gar varje enskild `.slice()` att radera med hela sviten
+// gron - och da ar defekten tillbaka utan att nagot sager till. Talet star som
+// en literal i testet med flit: hade det harletts ur samma konstant koden
+// anvander hade bada sidor kollapsat till samma meningslosa jamforelse.
 describe('AuthContext — ett for langt visningsnamn klampas i stallet for att neka kontot (BIN-1134)', () => {
   const LONG = 'x'.repeat(200);
 

@@ -1308,8 +1308,7 @@ service cloud.firestore {
       // BIN-1140/BIN-1128: dokumentets nyckelmängd och `name`s form.
       //
       // Före den här funktionen ställde ingen gren i hela blocket någon fråga om
-      // vilka nycklar dokumentet får ha — det enda `hasOnly` som fanns satt på
-      // `memberUids` och kontrollerade LISTANS innehåll. Varje skrivare som
+      // vilka nycklar dokumentet får ha. Varje skrivare som
       // passerade någon gren kunde alltså lägga till toppnivåfält upp mot
       // dokumentgränsen, på ett dokument `allow read: if isSignedIn()` gör
       // läsbart för varje inloggat konto och som läses om vid varje
