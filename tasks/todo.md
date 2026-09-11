@@ -1,3 +1,346 @@
+# Sprint 2026-09-12 — namnbytet, gruppens privatliv, och tystnaden när en join nekas
+
+Urval: 6 av 46 backlog-biljetter. Rent träd (`git status --porcelain` tomt) och allt på
+main vid start. Basen härleds med `git merge-base --fork-point @{u} HEAD`, inte ur en
+sha skriven här — en sha i ett plandokument är falsk i samma commit som den ligger i.
+
+Fyra av de sex är produktval Malin redan avgjort (2026-09-11, ett omvänt 2026-09-12 —
+se batch A). Handbromsarna är lyfta. De två övriga är korrekthetsfixar.
+
+**Routningen körs på de FAKTISKA filuppsättningarna, inte på biljetternas meningar om
+dem.** Kommandot står vid varje batch. Kör om det (a) före varje kritik, (b) om en
+kritik vidgar eller krymper omfånget, och (c) mot `git diff --cached --name-only`
+omedelbart före varje commit (BIN-1050/1052/1122).
+
+**Batch 0 går först med flit.** Den ger tre filer i den här sprintens blast radius en
+ägande roll. Alla efterföljande paneler routas mot ägarkartan EFTER den ändringen —
+gör man tvärtom sitter #14 som fallback på batchar där #18 är den riktiga ägaren.
+
+## Mätt i produktion före bygget (2026-09-12, projektet namngivet: `binge-nu`)
+
+```
+groups: 0   sessions: 0   users: 4   publicProfiles: 2
+```
+
+Noll grupper och noll sessioner: **ingen åtstramning i den här sprinten kan gå sönder
+för någon befintlig rad, och ingen migrering behövs.** Det svaret åldras — kör om det
+innan någon lutar sig mot det en andra gång. Kommandot ligger i
+`scratchpad/count-prod.mjs` (Admin SDK, projektet namngivet i anropet per BIN-1063).
+
+Att `publicProfiles` (2) är färre än `users` (4) är inte en bugg i sig — projektionen
+skrivs först när kontot laddar appen efter BIN-505 — men det är den mätning som gör
+batch A:s omvända beslut nödvändigt. Se nedan.
+
+---
+
+## Batch 0 — tre filer utan ägande roll [Tier A] — BIN-1168
+
+Routning: `node docs/org/route.mjs --md docs/role-responsibilities.md docs/org/ownership-map.json`
+
+Disposition: **build** (ren bokföring, inget produktval).
+
+Biljetten namnger `src/app/tillsammans/ny/page.tsx`. Routern namnger två till så fort
+den här sprintens övriga filer är med, och alla tre ligger i sprintens blast radius:
+
+```
+node docs/org/route.mjs --md src/app/grupper/page.tsx src/components/groups/GroupMembersPanel.tsx src/app/tillsammans/ny/page.tsx
+```
+
+→ `⚠ Unowned code path(s)` för alla tre, panel seatad på #14-fallbacken.
+
+Sätet följer vad filen HANDLAR om, inte vilken katalog den ligger i (BIN-613):
+
+* `src/app/grupper/page.tsx` och `src/components/groups/GroupMembersPanel.tsx` → **§18
+  Community Manager**, som redan äger grupper och sessioner, i dess befintliga bullet
+  "Filer som saknade en ägande roll (BIN-871)".
+* `src/app/tillsammans/ny/page.tsx` → **§26 Information Architect**. Det är biljettens
+  eget förslag och vilar på att systerfilen
+  `src/components/pages/TillsammansSessionPageClient.tsx` redan sitter där, satt i
+  BIN-871. Samma flöde, samma säte.
+
+Filsökvägar i backticks, aldrig ett katalogtoken — ett backtick-citerat KATALOGtoken
+ger rollen hela katalogen (BIN-1080).
+
+Acceptanskriterier:
+1. `{diff}` De tre sökvägarna står i sina respektive rollsektioner, var och en som en
+   egen backtick-citerad FILsökväg, och `docs/org/ownership-map.json` är regenererad med
+   generatorn — aldrig `--update-gaps`, som gör hålet permanent (BIN-1013).
+2. `{diff}` Kommandot ovan svarar utan `⚠ Unowned code path(s)` efteråt. Klistra in
+   routerns utfall FÖRE och EFTER i commiten; vilka roller som seatas är kommandots
+   svar, inte en mening här.
+3. `{diff}` Hela sviten körs, inte bara den ändrade buntens test:
+   `docs/org/gen-ownership-map.test.mjs` och `docs/org/gate-symmetry.test.mjs` läser
+   ägarbaslinjen som INDATA, så en ny ägarrad kan fälla test i filer bunten inte rör
+   (BIN-1013).
+
+---
+
+## Batch A — namnbytet når de andra flikarna och gruppmedlemslistorna [Tier C] — BIN-1163, BIN-1162
+
+Routning (kör om efter batch 0):
+`node docs/org/route.mjs --md src/contexts/AuthContext.tsx src/lib/firebase/groups.ts`
+→ vid urvalet: Tier **top**, full panel.
+
+Disposition: **build** — båda är avgjorda produktval, handbromsarna lyfta.
+
+### Malins beslut, och det ENA som vändes
+
+* **BIN-1163 (2026-09-11):** namnbytet sänds till andra öppna flikar. Inte omläsning
+  vid fokus, inte färsk hämtning hos varje skrivare. "Det här ska vara en ren händelse,
+  inte ett tillstånd som ska överleva" — ADR 0019 om `localStorage`-flaggor utan
+  pensionering.
+* **BIN-1162 (2026-09-11):** sluta denormalisera namnet, läs `publicProfiles`.
+  **VÄNT 2026-09-12** till motsatsen: skriv om kopiorna. Se nästa stycke.
+
+### Varför BIN-1162:s första svar inte gick att bygga — mätt, inte antaget
+
+Två mätningar mot HEAD, båda 2026-09-12:
+
+1. **En Tillsammans-plats kan sakna konto.** `firestore.rules:1202-1207` tar emot en
+   deltagare med `uid == null` på en `anonShapedPid`-väg (32 hex). En plats utan konto
+   har inget profildokument att läsa namnet ur — det finns ingen annan plats det kan bo.
+2. **En gruppmedlem med privat profil är oläsbar för sina egna gruppkompisar.**
+   `publicProfiles/{uid}`s läsregel (`firestore.rules:795-799`) släpper in ägaren, en
+   publik profil, eller en vän — ingen av dem beskriver "vi delar grupp". Produktionen
+   samma dag: 4 konton, 2 publika profiler.
+
+Båda hade gett TOMT namn i listan. Malin valde därför den andra vägen (2026-09-12):
+**skriv om kopiorna vid namnbyte, och lämna Tillsammans orört** (sessioner lever 7
+dagar och bär anonyma platser). Se `[[project_bin1162_fanout_decided]]`.
+
+**Följd för BIN-1155:** namnkopian stannar på medlemsdokumentet, så `displayName` hör
+kvar i den nyckellistan och identitetsfrågan där löses INTE upp — den besvaras i
+stället av att BIN-1163 byggs först.
+
+### BIN-1163 — mekanismen
+
+Mätt före bygget (`src/contexts/AuthContext.tsx`): `user`-state sätts av `setUser`;
+`updateDisplayName` skriver Firestore först (`updateUserField`), Auth-posten sedan
+(BIN-1154:s avvikelsepost). Filens två `window.addEventListener` bevakar
+raderingsmarkören (`storage`) och `emailVerified` (`focus`) — ingen av dem rör
+profilfält. Härled i stället för att lita på meningen:
+
+```
+grep -n "addEventListener('storage'\|addEventListener('focus'" src/contexts/AuthContext.tsx
+```
+
+Fem skrivvägar skickar namnkopian in i en skrivning `isOwnIdentity` binder. Härled
+dem — lista dem inte:
+
+```
+grep -n "isOwnIdentity(\|matchesOwnIdentity(" firestore.rules
+grep -rn "displayName: user" src/hooks src/lib/firebase src/components
+```
+
+Acceptanskriterier:
+1. `{diff}` Ett lyckat namnbyte når andra öppna flikar i samma webbläsare och
+   uppdaterar deras `user`-state, utan att lämna kvar något tillstånd att pensionera.
+   `BroadcastChannel` är den form som uppfyller "ren händelse" utan att röra
+   `localStorage` alls; väljs något annat ska ADR 0019:s fråga besvaras i koden bredvid.
+2. `{diff}` Mekanismen bär **både** `displayName` och `username`. `isOwnIdentity` binder
+   båda (`firestore.rules:40-45`), och `updateUsername` har exakt samma inaktuella
+   kopia — att bara bära namnet shippar halva fixen.
+3. `{diff}` Ett test driver HELA förloppet: håll → sänd → ta emot i en andra
+   prenumerant → hävda att skrivningen nu bär det NYA värdet. Ett test som bara pinnar
+   att sändningen startar är blint för muteringen som aldrig avslutar den (BIN-645).
+4. `{diff}` Kanalen stängs när providern avmonteras, bevisat genom att spionera på just
+   den handtaget — inte genom `vi.getTimerCount()` (BIN-790-familjen).
+5. `{diff}` En miljö utan `BroadcastChannel` får inte krascha appen; den faller tillbaka
+   på dagens självläkande beteende (en omladdning löser det).
+
+### BIN-1162 — mekanismen
+
+Maskineriet finns redan: `updateProviders` (`src/contexts/AuthContext.tsx`) kör
+`where('memberUids','array-contains', uid)` med `limit(MY_GROUPS_LIMIT)` och anropar
+`updateMemberProviders` per grupp, bäst-möjliga och felsvaljande per grupp. Härled
+formen hellre än att lita på meningen:
+
+```
+grep -n "MY_GROUPS_LIMIT" src/contexts/AuthContext.tsx src/lib/firebase/groups.ts
+```
+
+Reglerna tillåter skrivningen: medlemsdokumentets `selfOrOwner()` täcker en medlem som
+skriver sin egen rad, och `joinedAt` lämnas orörd av en patch som bara rör namnfälten
+(`firestore.rules:1596-1597` jämför `get(...,null)` på båda sidor).
+
+Acceptanskriterier:
+1. `{diff}` Ett namnbyte skriver om `displayName` **och** `username` på varje
+   `groups/{g}/members/{uid}` där uid är medlem, med samma tak och samma
+   felsvaljande-per-grupp som `updateProviders` — konstanten importeras, kopieras inte
+   (samma skäl som står i `updateProviders`' egen kommentar).
+2. `{diff}` `joinedAt` rörs inte av skrivningen, bevisat av ett test som fäller om
+   fältet kommer med i patchen.
+3. `{diff}` `sessions/{id}/participants/{pid}` ändras INTE av den här biljetten. Det är
+   Malins avgränsning, och skälet (anonyma platser + 7 dagars livslängd) skrivs i koden
+   där avgränsningen syns.
+4. `{diff}` Namnbytets EGEN bekräftelse är inte gatad på fan-outen: en grupp som inte
+   går att skriva om får inte få användaren att tro att namnbytet misslyckades
+   (`updateProviders`' bäst-möjliga form). Men ett fel rapporteras — tyst svaljning är
+   det tredje felet (BIN-957-konventionen: `console.error` + `captureError`).
+
+**Tier D (Needs you):** ingen. Batch A rör inte `firestore.rules`.
+
+---
+
+## Batch B — gruppen slutar vara läsbar för alla, och en nekad join säger sanningen [Tier C] — BIN-1152, BIN-1166
+
+Routning: `node docs/org/route.mjs --md firestore.rules src/lib/firebase/groups.ts src/components/pages/GroupPageClient.tsx src/app/grupper/page.tsx`
+→ vid urvalet: Tier **top**, full panel.
+
+Disposition: **build** — BIN-1152 är Malins avgjorda produktval; BIN-1166 är en bugg.
+
+De ligger i samma batch för att de rör **samma kodvägar**: BIN-1152 gör gruppdokumentet
+oläsbart för en icke-medlem, och båda inträdesvägarna (`joinGroupViaToken`,
+`acceptGroupInvite`) LÄSER just det dokumentet innan de går med. Att strama åt utan att
+bygga om felklassningen är att göra tystnaden värre.
+
+### BIN-1166 — vad som är mätt
+
+* `acceptGroupInvite` kastar vidare; enda anroparen loggar till konsolen och gör inget
+  mer. Härled: `grep -n "catch" -A 2 src/app/grupper/page.tsx`. Sidan har noll
+  toast-anrop i dag; `useToast` finns (`src/contexts/ToastContext.tsx`) och används av
+  t.ex. `src/components/settings/UsernameSection.tsx`.
+* `joinGroupViaToken`s sista catch returnerar ovillkorligt `'transient'`, med sin egen
+  kommentar som skäl att token redan är verifierad. Anroparen
+  (`src/components/pages/GroupPageClient.tsx`) försöker igen med backoff och landar på
+  "Ladda om sidan och försök igen" — ett råd som inte kan laga ett schemanekande.
+* Det är BIN-942:s dokumenterade misstag igen: att klumpa ihop "nekad" med "tillfällig".
+
+### BIN-1152 — vad som är mätt
+
+`match /groups/{groupId}` har `allow read: if isSignedIn()`
+(`firestore.rules:1324-1325`), och kommentarblocket ovanför (1298-1323) kallar det en
+avsiktlig "unlisted link"-modell. **Det står ingenstans som ett avgjort val** — varken i
+`docs/org/adr/` eller i `.claude/rules/accepted-deviations.md`; ADR 0008 rör
+`memberUids`-taket, inte läsningen. Malin har nu avgjort det åt andra hållet.
+
+Förhandsvisningen som modellen finns för har två ytor, båda mätta:
+
+```
+grep -n "getDoc(doc(db, 'groups'" src/app/grupper/page.tsx
+grep -rn "useGroup(" src/components/pages/GroupPageClient.tsx
+```
+
+Acceptanskriterier:
+1. `{diff}` Gruppdokumentet är läsbart bara för den som står i `memberUids`. Den
+   `array-contains`-fråga fyra kodvägar använder fortsätter fungera — bevisat av ett
+   emulatortest som kör frågan, inte av ett resonemang om att Firestore klarar mönstret.
+2. `{diff}` Ett eget litet dokument bär gruppens namn och är läsbart för den som är
+   inloggad, efter `publicProfiles`-mönstret (BIN-505): positiv nyckellista, typ och
+   längd per fält, och samma 48-teckens tak som `groups.name` och
+   `groupInvites.groupName` redan pinnas mot. De tre talen har ingen delad konstant i
+   regelspråket och måste flytta i samma redigering.
+3. `{diff}` Namndokumentet skrivs av VARJE väg som sätter eller ändrar gruppens namn —
+   härled dem ur koden, räkna dem inte i en mening. En väg som glömmer det gör
+   förhandsvisningen tom.
+4. `{diff}` Båda inträdesvägarna fungerar för en icke-medlem som per definition inte
+   längre kan läsa gruppdokumentet. `joinGroupViaToken`s kortslutningar (`not_found`,
+   `already_member`, saknad `inviteTokenHash`) vilar alla på den läsningen; regeln gör
+   redan hash-kontrollen serversidigt och join-grenen kräver redan att uid inte står i
+   `memberUids`, så kortslutningarna är optimeringar, inte spärrar. Ett emulatortest
+   driver en join och en accept från ett konto som aldrig kunnat läsa dokumentet.
+5. `{diff}` `joinGroupViaToken` skiljer `permission-denied` från infrastruktur i sista
+   catchen, och anroparen slutar råda till omladdning för det första. `isPermissionDenied`
+   återanvänds — ingen andra definition.
+6. `{diff}` Den som tar emot en inbjudan ser något när det misslyckas. Bekräftelsen är
+   kedjad på skrivningen, aldrig ovillkorlig (BIN-1025: en vägran gör varje ovillkorlig
+   bekräftelse till en lögn).
+7. `{diff}` Emulatortest, inte mockade. Ett mockat test bevisar anropets FORM och
+   utvärderar inga regler (BIN-1063). Varje nekande-test seedar anroparens profil, så
+   nekandet kommer från den klausul testet namnger och inte från ett `get()` som kastar
+   på ett dokument som inte finns (BIN-1127).
+8. `{diff}` Befintliga villkor är oförändrade: `isValidGroupDoc`s nyckellista,
+   BIN-1125:s `hasAll`+storlekspar på båda tillväxtgrenarna, BIN-327:s tak på 100,
+   BIN-1108:s ägarvillkor, BIN-365:s exakta självlämning.
+
+**Tier D (Needs you):** `firebase deploy --only firestore:rules` görs manuellt efter
+push. Deploy-flödet shippar bara hosting.
+
+---
+
+## Batch C — medlemsdokumentet binder vad som får skrivas [Tier C] — BIN-1155
+
+Routning: `node docs/org/route.mjs --md firestore.rules src/lib/firebase/groups.ts`
+→ vid urvalet: Tier **top**, full panel.
+
+Disposition: **build**. Panelen var ÄKTA oenig 2026-09-11 och ordningen är svaret, inte
+en kompromiss — se `[[project_decisions_2026-09-11]]` och biljettens egen tråd.
+
+### Vad som är mätt
+
+Medlemsblocket har ingen nyckellista. Biljettens eget kommando kan inte fälla sin
+mening (ankaret matchar ingen rad); det rättade står i tråden:
+
+```
+awk '/match \/members\/\{memberUid\}/,/^      \}/' firestore.rules | wc -l
+awk '/match \/members\/\{memberUid\}/,/^      \}/' firestore.rules | grep -c hasOnly
+```
+
+Kör `wc -l` FÖRE nollan. Ett tomt intervall och en frisk nolla ser likadana ut.
+Mätt 2026-09-12: `48` rader, `0` träffar.
+
+### Vad panelen var oenig om, och varför ordningen löser det
+
+Fem roller var eniga om nyckellistan plus typ och längd. Oenigheten gällde att dessutom
+BINDA `displayName`/`username` mot den live-profilen:
+
+* **#4, #5, #6 krävde bindningen** och blockerade utan den.
+* **#27 blockerade PÅ den**, för att bindningen läser live-värdet medan appen skickar
+  minneskopian — exakt BIN-1163 — och hade spritt ett känt fel till tre nya skrivvägar.
+
+Byggs BIN-1163 först (batch A) faller #27:s invändning bort. Batch A byggs först i den
+här sprinten, så bindningen kan byggas.
+
+Acceptanskriterier:
+1. `{diff}` Nyckellistan är härledd ur de vägar som FAKTISKT skriver dokumentet vid den
+   punkten — `memberFields` plus `joinedAt`, plus vad batch A:s omskrivning rör. Härled
+   den; ärv den inte ur biljetten eller ur den här planen.
+2. `{diff}` Typ och längd per fält. Namnlängden matchar det tak `users/{uid}` redan har,
+   och talet flyttar i samma redigering som sina syskon om det någonsin ändras.
+3. `{diff}` BIN-1063 steg 1:s `joinedAt`-villkor på create och update är oförändrade —
+   `request.resource.data.joinedAt == request.time` på create, och den
+   `get(...,null)`-jämförelse på update som gör fältet oföränderligt utan att göra
+   dokumentet oraderbart.
+4. `{diff}` Identitetsbindningen gäller den som skriver sin EGEN rad. Vad den betyder
+   för ägaren — som `selfOrOwner()` också släpper in på andras rader — skrivs ut som ett
+   val i regelkommentaren, inte lämnas underförstått. Det gränsar till BIN-1167, som
+   inte byggs här.
+5. `{diff}` Emulatortest, inte mockade, och varje nekande-test seedar anroparens profil
+   (BIN-1127). Ett test per klausul, med en positiv tvilling — husets mönster i
+   `src/test/rules/firestore-rules.test.ts`.
+
+**Tier D (Needs you):** `firebase deploy --only firestore:rules`, samma deploy som
+batch B.
+
+---
+
+## Needs you (Tier D)
+
+1. **`firebase deploy --only firestore:rules`** efter push. Batch B och C ändrar båda
+   regelfilen; en deploy räcker för båda. `deploy.yml` shippar bara hosting.
+2. **BIN-1158 — npm test är inte stabilt grön.** UTDRAGEN, inte byggd. Två skäl, båda
+   ur biljettens egen tråd: beviskravet är tio raka rena körningar av HELA `npm test`
+   (~30 minuters ren körtid, ett `kind: run`-kriterium en sprint inte kan producera),
+   och release-ansvarige lämnade uttryckligen EN fråga till dig — om ett per-test-undantag
+   från timeouten räknas som samma sak som att höja den. Tills dess: en röd deploy som
+   bara visar `Test timed out in 5000ms` i `scripts/prune-map-flag.test.mjs` är den
+   flaken, inte din ändring. Kör om deployen.
+
+## Känt hinder i verktygen (inte en biljett)
+
+Regeltesterna kräver Firestore-emulatorn, och port 8080 hålls just nu av ett annat
+projekts emulator (Butlery). `npm run test:rules` vägrar då köra — det är BIN-1137:s
+golv som gör vägran hörbar i stället för tyst grön. Rör INTE den processen; en
+syskonsession äger den. Kör i stället batch B och C:s regeltester mot en egen
+konfiguration med eget projekt-id och egen port (BIN-1153).
+
+## Deviation log
+
+
+---
+
+# Arkiv — tidigare sprintar
+
 # Sprint 2026-09-11b — sex biljetter
 
 Urval: 6 av 44 backlog-biljetter. Rena tradet, allt pa main.
