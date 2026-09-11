@@ -18,6 +18,7 @@ import { usePageMeta } from '@/hooks/usePageMeta';
 import { LoadingView } from '@/components/ui/LoadingView';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import type { SessionCandidate, SessionParticipant, TogetherSession, VoteKind } from '@/types';
+import { MAX_SESSION_DISPLAY_NAME } from '@/lib/clampText';
 
 export default function TillsammansSessionPageClient({ id }: { id: string }) {
   const { session, participants, swipes, loading, notFound, expired } = useSession(id);
@@ -161,6 +162,7 @@ function JoinSessionForm({
             value={name}
             onChange={e => setName(e.target.value)}
             placeholder="T.ex. Erik"
+            maxLength={MAX_SESSION_DISPLAY_NAME}
             className="w-full max-w-[260px] px-2 py-1 text-base border border-rule rounded-sm bg-white"
           />
         </div>

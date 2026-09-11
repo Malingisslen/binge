@@ -12,6 +12,7 @@ import { useWatchlist } from '@/hooks/useWatchlist';
 import { SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
 import { storeParticipantId } from '@/hooks/useSession';
 import { FormSection, FormRadioGroup } from '@/components/ui/FormSection';
+import { MAX_SESSION_DISPLAY_NAME } from '@/lib/clampText';
 import type {
   AggregationStrategy,
   ProviderMode,
@@ -103,6 +104,7 @@ function NyContent() {
             value={hostName}
             onChange={e => setHostName(e.target.value)}
             placeholder="T.ex. Lisa"
+            maxLength={MAX_SESSION_DISPLAY_NAME}
             className="w-full max-w-[260px] px-2 py-1 text-base border border-rule rounded-sm bg-white"
           />
         </FormSection>

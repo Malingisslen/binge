@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 577,
+  "patternCount": 578,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -677,6 +677,7 @@
         "src/lib/firebase/publicProfile.test.ts",
         "src/lib/firebase/publicProfile.ts",
         "src/lib/firebase/reports.ts",
+        "src/lib/firebase/sessions.clamp.test.ts",
         "src/lib/firebase/sessions.joinPayload.test.ts",
         "src/lib/firebase/sessions.joinPayload.ts",
         "src/lib/firebase/sessions.ts",

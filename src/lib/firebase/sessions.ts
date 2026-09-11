@@ -2,6 +2,7 @@ import { fsdb, lazySubscribe } from './db';
 import { toDate, generateSecureToken } from './utils';
 import { planJoinFields } from './sessions.joinPayload';
 import { mediaTypeDocId, parseTmdbIdFromDocId, parseMediaTypeFromDocId } from '@/lib/mediaTypeDocId';
+import { clampToCodeUnits, MAX_SESSION_DISPLAY_NAME } from '@/lib/clampText';
 import type { MediaType } from '@/types';
 import type {
   SessionConfig,
@@ -34,9 +35,13 @@ export async function createSession(params: {
   expiresAt.setDate(expiresAt.getDate() + SESSION_TTL_DAYS);
 
   const { db, collection, doc, setDoc, addDoc, serverTimestamp, Timestamp } = await fsdb();
+  // BIN-1156: bara deltagar-doc:ens displayName har ett tak i reglerna. Klampas bara den, lyckas
+  // session-doc:ens hostName anda med en godtyckligt lang etikett i sessionslistan
+  // — halva fixen, och den halvan syns inte i nagot permission-denied.
+  const hostName = clampToCodeUnits(params.hostName, MAX_SESSION_DISPLAY_NAME);
   const sessionRef = await addDoc(collection(db, 'sessions'), {
     hostUid: params.hostUid,
-    hostName: params.hostName,
+    hostName,
     groupId: params.groupId ?? null,
     config: params.config,
     status: 'active',
@@ -52,7 +57,7 @@ export async function createSession(params: {
   const participantId = params.hostUid ?? generateSecureToken();
   await setDoc(doc(db, 'sessions', sessionRef.id, 'participants', participantId), {
     uid: params.hostUid,
-    displayName: params.hostDisplayName ?? params.hostName,
+    displayName: clampToCodeUnits(params.hostDisplayName ?? hostName, MAX_SESSION_DISPLAY_NAME),
     providers: params.hostProviders,
     vetoRemaining: 1,
     isHost: true,
@@ -92,9 +97,12 @@ export async function joinSession(params: {
   // ha med fälten, annars faller create-grenens is-int/is-bool-krav.
   // Extra-läsningen är billig: joins är sällsynta och sessionsavgränsade.
   const existing = await getDoc(ref);
+  // BIN-1156: klampningen ligger pa den DELADE identity-konstruktionen, inte inne
+  // i first-join-grenen — annars nekas en aterinstigande deltagare som bytt till
+  // ett langre namn pa exakt samma satt som ett forstagangsinträde gjorde.
   const identity = {
     uid: params.uid,
-    displayName: params.displayName,
+    displayName: clampToCodeUnits(params.displayName, MAX_SESSION_DISPLAY_NAME),
     providers: params.providers,
     lastActiveAt: serverTimestamp(),
   };
