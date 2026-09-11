@@ -56,8 +56,8 @@ Monstret ar bio-faltets: kontrollerat falt, sparar pa blur, toast vid utfall.
    - KASTAR vid vagran. Skrivvagen kan neka, och en ovillkorlig toast gor
      varje vagran till en logn - se lardomen om det. Den slutliga formen star
      i villkorsavsnittet nedan, som ar det som galler.
-2. `ProfileSection`: faltet, `maxLength={MAX_DISPLAY_NAME}`, hjalptext, toast
-   gatad pa utfallet.
+2. `ProfileSection`: faltet, `maxLength={MAX_DISPLAY_NAME}`, hjalptext, och en
+   bekraftelse som bara visas om await:en inte kastade.
 3. Test: klampningen, tomt namn vagras, bada lagringarna skrivs, och en vagran
    toastar inte framgang.
 

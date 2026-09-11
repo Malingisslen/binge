@@ -1019,7 +1019,7 @@ skal: kontoagaren skadar bara sin egen visning.
 `updateDisplayName`, och att en ANNAN skrivvag till samma falt laggs till utan
 samma kontroll. Harled var golvet star:
 ```
-grep -rn "Ange ditt namn\|displayName-empty" src
+grep -rnE "Ange ditt namn|displayName-empty|kan inte vara tomt" src
 ```
 Accepten galler att golvet ar klientsidigt, inte att det far forsvinna fran en
 vag som har det.
