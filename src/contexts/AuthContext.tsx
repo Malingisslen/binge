@@ -81,9 +81,11 @@ interface AuthState {
   updateUsername: (username: string) => Promise<void>;
   /**
    * BIN-1154. Namnet bor i TVA lagringar: `users/{uid}.displayName` och Firebase
-   * Auth-postens egen kopia. Den har skriver bada, i den ordningen, och KASTAR
-   * vid vagran - samma kanal som varje annan faltuppdaterare har. Anroparen
-   * gatar sin bekraftelse pa att await:en inte kastade.
+   * Auth-postens egen kopia. Den har skriver bada, i den ordningen. Ett tomt
+   * namn och en nekad FIRESTORE-skrivning kastar - samma kanal som varje annan
+   * faltuppdaterare har - medan en fallerad Auth-skrivning rapporteras och
+   * slapper igenom, se accepted-deviations. Anroparen gatar sin bekraftelse pa
+   * att await:en inte kastade.
    */
   updateDisplayName: (name: string) => Promise<void>;
   updateBio: (bio: string) => Promise<void>;

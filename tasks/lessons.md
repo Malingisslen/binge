@@ -1686,10 +1686,9 @@ for sig mot egna kopior: en ensam `}` ger tom faltmangd och FALLER golvet hoglju
 ensam `{` andrar ingenting alls - meningen var fel om bada axlarna den pastod. Samma runda:
 jag skrev att formularets `maxLength` "galler tangentbordet, inte en inklistrad strang".
 HTML `maxlength` kapar ocksa en inklistring. Och en tredje: en regelkommentar lovade att ett
-for langt namn provas "den dag agaren sparar om profilen" - ingen yta i appen andrar
-visningsnamnet (se BIN-1154), sa den dagen kommer aldrig, OCH update-grenen provar hela efterdokumentet,
-sa ett lagrat for langt namn nekar varje senare profilskrivning. Strangare an kommentaren
-sa, inte losare.
+for langt namn provas "den dag agaren sparar om profilen" - update-grenen provar
+hela efterdokumentet, sa ett lagrat for langt namn nekar varje senare
+profilskrivning. Strangare an kommentaren sa, inte losare.
 
 ### [Workflow] Push-grindens dom ar ledgern, aven nar granskaren sager pass (2026-09-11, BIN-1134)
 

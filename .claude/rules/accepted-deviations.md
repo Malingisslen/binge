@@ -1026,3 +1026,17 @@ vag som har det.
 
 **Re-open when:** ett konto observeras med tomt visningsnamn i produktion, eller
 en andra skrivvag till faltet byggs.
+
+### Kvarvarande oppet arbete ur BIN-1154
+
+**INTE accepterat, fortfarande fileable.** Det viktigaste i den har posten.
+`isOwnIdentity` jamfor det `displayName` en skrivning bar mot det LIVE vardet i
+`users/{uid}`, och skrivarna skickar `AuthContext`s kopia i minnet, som inte
+synkas mellan flikar. Fore den har biljetten var faltet oforanderligt efter
+registreringen, sa en inaktuell kopia var onabar; nu kan en andra flik fa sina
+recensioner, kommentarer, reaktioner, vanforfragningar och gruppinbjudningar
+NEKADE tills den laddas om. Spärren byggdes mot forfalskning i BIN-1126 och
+faller nu pa vanlig anvandning. Filat som **BIN-1163**; mekanismen och
+atgardsalternativen star dar, inte har. Vinka inte igenom det med den har
+posten som stod.
+

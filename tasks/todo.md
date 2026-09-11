@@ -53,8 +53,9 @@ Monstret ar bio-faltets: kontrollerat falt, sparar pa blur, toast vid utfall.
    - skriver OCKSA Auth-posten via `updateProfile`. Det ar den andra lagringen
      av samma personuppgift, och BIN-1154 avsnitt 2 handlar om att de tva glider
      isar. En redigering som bara lagar den ena gor asymmetrin varre.
-   - returnerar ett UTFALL. Skrivvagen kan vagra, och en ovillkorlig toast gor
-     varje vagran till en logn - se lardomen om det.
+   - KASTAR vid vagran. Skrivvagen kan neka, och en ovillkorlig toast gor
+     varje vagran till en logn - se lardomen om det. Den slutliga formen star
+     i villkorsavsnittet nedan, som ar det som galler.
 2. `ProfileSection`: faltet, `maxLength={MAX_DISPLAY_NAME}`, hjalptext, toast
    gatad pa utfallet.
 3. Test: klampningen, tomt namn vagras, bada lagringarna skrivs, och en vagran

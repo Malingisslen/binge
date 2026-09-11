@@ -1737,9 +1737,9 @@ describe('AuthContext — an aborted deletion is not resurrected (BIN-816)', () 
       ['updateNotificationSettings', () => ctx!.updateNotificationSettings({ priceDrops: true })],
       ['updateDefaultVisibility', () => ctx!.updateDefaultVisibility('public')],
       ['updateProviderTier', () => ctx!.updateProviderTier(8, null)],
-      // BIN-1154: den enda skrivaren vars ANDRA lagring ligger utanfor
-      // chokepointen. Just darfor ar den det fall som pinnar att en markerad
-      // session inte nar Auth-posten heller - ordningen ar hela skalet.
+      // BIN-1154: den har skrivaren har en ANDRA lagring utanfor chokepointen,
+      // sa den pinnar ocksa att en markerad session inte nar Auth-posten.
+      // Ordningen mellan de tva skrivningarna ar hela skalet.
       ['updateDisplayName', () => ctx!.updateDisplayName('Nytt namn')],
     ];
 
@@ -2390,7 +2390,7 @@ describe('AuthContext - visningsnamnet gar att andra, och skrivningarna har en o
     const [, payload] = userDocWrites()[0] as [unknown, Record<string, unknown>, unknown];
     expect(payload.displayName).toBe('Nytt namn');
     expect(errSpy).toHaveBeenCalled();
-    // Den har raden ar accepted-deviations-postens ENDA re-open-kanal.
+    // Den har raden ar re-open-kanalen for punkt 1 i accepted-deviations-posten.
     // Utan att den pinnas gar `captureError` att dopa om eller radera med
     // hela sviten gron, och accepten blir permanent by construction.
     expect(captureErrorMock).toHaveBeenCalledWith(

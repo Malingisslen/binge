@@ -262,8 +262,7 @@ service cloud.firestore {
       // dessutom `friendRequests.fromDisplayName` och `groupInvites.fromDisplayName`
       // mot samma fält; de bär en egen 80-gräns bredvid bindningen, så ett otyglat
       // värde kopieras inte vidare — det gör i stället varje inbjudan och varje
-      // vänförfrågan från det kontot permanent nekad. Kontot kan inte laga det
-      // själv: ingen yta i appen ändrar visningsnamnet. Se BIN-1154.
+      // vänförfrågan från det kontot permanent nekad.
       //
       // Talen är update-grenens egna (80 / 160), inte nya. Flyttas ett av dem
       // måste båda grenarna flytta i samma redigering.
