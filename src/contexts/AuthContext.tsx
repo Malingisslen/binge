@@ -445,8 +445,7 @@ async function createProfileWithConsent(firebaseUser: User): Promise<ProfileLoad
     // `firestore.rules` NEKAR numera en create med ett `displayName` over 80
     // tecken (BIN-1134), och den har strangen kommer fran Googles konto - inte
     // fran nagon yta vi styr. Utan klampningen skapas Auth-kontot, profilwriten
-    // nekas, och anvandaren star med ett konto utan profil som ett nytt forsok
-    // bara svarar `auth/email-already-in-use` pa.
+    // nekas, och anvandaren star med ett konto utan profil.
     displayName: clampToCodeUnits(firebaseUser.displayName ?? '', MAX_DISPLAY_NAME),
     email: firebaseUser.email ?? '',
     photoURL: firebaseUser.photoURL,

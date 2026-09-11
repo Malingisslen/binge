@@ -127,6 +127,27 @@ describe('syncMyPublicProfile', () => {
     expect((payload.bio as string)).toBe('B'.repeat(160));
   });
 
+  // BIN-1134: 'N'.repeat(200) ovan kan inte skilja den delade hjalparen fran ett
+  // bart `.slice(0, 80)` — bada ger samma strang. Den HAR indatan kan: ett bart
+  // slice klyver sista surrogatparet, Firestore tar emot det och laser tillbaka
+  // U+FFFD. Kontrollprovet forst, sa testet inte ar gront av fel skal.
+  it('klyver aldrig ett surrogatpar i projektionens displayName', async () => {
+    const input = 'x' + '\u{1F600}'.repeat(40); // 1 + 80 kodenheter
+    expect(input.slice(0, 80).charCodeAt(79)).toBeGreaterThanOrEqual(0xd800);
+
+    await syncMyPublicProfile('u3b', {
+      displayName: input,
+      username: null,
+      photoURL: null,
+      bio: '',
+      createdAt: null,
+    });
+    const payload = setDocMock.mock.calls[0][1] as Record<string, unknown>;
+    const written = payload.displayName as string;
+    expect(written).toBe('x' + '\u{1F600}'.repeat(39));
+    expect(written.length).toBe(79);
+  });
+
   it('omits an over-long photoURL (rule cap 500) as null; a within-cap URL passes through untouched', async () => {
     const longUrl = `https://x.example/${'p'.repeat(500)}`; // > 500 chars total
     await syncMyPublicProfile('u4', { displayName: 'A', username: null, photoURL: longUrl, bio: '', createdAt: null });

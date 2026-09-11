@@ -46,7 +46,7 @@ sessions/{id}/swipes/{mediaType_tmdbId}   — mediaTypeDocId(), t.ex. movie_42 /
                                            ett dokument-val tappar röster, BIN-608), tills
                                            sessionens TTL städat bort dem.
 
-groups/{groupId}                         — permanenta grupper, inviteToken + inviteTokenRotatedAt
+groups/{groupId}                         — permanenta grupper, inviteTokenHash + inviteTokenRotatedAt
 groups/{id}/members/{uid}
 groups/{id}/watchlist/{mediaType_tmdbId}
 

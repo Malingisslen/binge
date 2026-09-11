@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/contexts/ToastContext';
 import { SettingsSection } from './SettingsSection';
 import type { ItemVisibility } from '@/types';
+import { MAX_BIO } from '@/lib/clampText';
 
 const VISIBILITY_OPTIONS: { value: ItemVisibility; label: string; description: string }[] = [
   { value: 'private', label: 'Privat', description: 'Bara jag ser mina titlar och min profil.' },
@@ -84,7 +85,7 @@ export function UsernameSection() {
               catch { toast('Kunde inte spara. Försök igen om en stund.'); }
             }}
             placeholder="Berätta lite om dig…"
-            maxLength={160}
+            maxLength={MAX_BIO}
             rows={2}
             className="w-full px-2 py-1 text-xs border border-rule rounded-sm bg-surface text-ink font-[inherit] resize-none outline-none"
           />

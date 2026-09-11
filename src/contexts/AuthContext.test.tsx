@@ -430,8 +430,7 @@ describe('AuthContext — register() username-klobbring (BIN-517)', () => {
 // BIN-1134, klampningen. `firestore.rules` NEKAR sedan den biljetten en create med
 // ett `displayName` over taket - pa BADA grenarna. Ingen producent klampade, sa en
 // registrering med ett langt namn skapade Auth-kontot, fick profilwriten nekad, och
-// lamnade ett konto utan profil som ett nytt forsok bara svarade
-// `auth/email-already-in-use` pa. Push-grinden hittade det; inget test sag det.
+// lamnade ett konto utan profil. Push-grinden hittade det; inget test sag det.
 //
 // Tre skrivningar klampar nu, och alla tre pinnas har. Utan de har fallen gar varje
 // enskild `.slice()` att radera med hela sviten gron - och da ar defekten tillbaka

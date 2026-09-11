@@ -23,14 +23,9 @@ reglerna deployas om det drojer.
 
 ## Routning - kord pa varje bunts faktiska filunion
 
-Talen nedan far ALDRIG arvas in i ett senare varv. Routa om omedelbart fore
+Ett routningstal far ALDRIG arvas in i ett senare varv. Routa om omedelbart fore
 varje kritik och fore varje commit med
 `node docs/org/route.mjs $(git diff --cached --name-only)`.
-
-- Bunt 1 (`package.json`, `scripts/test-rules.mjs`, nytt omslagsskript,
-  `.github/workflows/pr-checks.yml`): `tier: medium`, `panel: [4]`.
-- Bunt 2 (`firestore.rules`, `src/test/rules/firestore-rules.test.ts`):
-  `tier: top`, `panel: [27, 4, 6, 7, 13]`, `reasonCode: high-stakes`.
 
 Den har sessionen kan konvenera bade en enskild kritik och en full panel, sa
 ingen bunt behover parkeras for utebliven kapacitet.
@@ -39,7 +34,7 @@ ingen bunt behover parkeras for utebliven kapacitet.
 
 Urvalet skrev att bunt 1 gar FORE bunt 2, med skalet att BIN-1137 gor bunt 2:s
 bevis otillforlitligt. Den premissen holl inte: `npm run test:rules` MATTES ge
-exit 1 med porten upptagen, pa bada CLI-versionerna (se avsnittet ovan). Beviset
+exit 1 med porten upptagen, pa bada CLI-versionerna. Beviset
 var alltsa palitligt sa lange nagon laste utdatan.
 
 Commit-ordningen ar i stallet REGLERNA FORST, av ett annat skal: `scripts/test-rules.mjs`
@@ -49,8 +44,7 @@ dar tackningen ar borta. Den commiten ar regelbunten. Omslagsskriptet och
 grindarna foljer i commit tva; ingenting anropar det raderade skriptet, sa den
 ordningen bryter ingenting.
 
-Bada commitarnas filunion routas om omedelbart fore varje commit; talen i
-avsnittet ovan ar urvalets och far inte arvas.
+Bada commitarnas filunion routas om omedelbart fore varje commit.
 
 ---
 
@@ -268,9 +262,6 @@ Kor darfor i den har ordningen:
 - [ ] 1. Kor om hosting-deployen for hand (`workflow_dispatch` pa `deploy.yml`).
       Den hoppar over skyddet med flit, sa den klampande klienten gar ut forst.
 - [ ] 2. `firebase deploy --only firestore:rules`.
-
-Fonstret ar tomt i dag - produktionen hade fyra konton med langsta namn 13
-tecken 2026-09-10 - sa det har ar billig ordning, inte en bradska.
 
 ## Deviation log
 
@@ -529,10 +520,7 @@ utdata, inte ur en mening har.
    pinnad mot sokvagen, `invitedAt is timestamp`, `fromDisplayName` bunden via
    `isOwnIdentity` plus egen typ- och langdgrans.
 2. `groupName` far en EGEN grans, inte bara en pinning (DPO, blockerande; samma
-   fynd oberoende fran Security, DBA och QA). Kallan `groups/{id}.name` har ingen
-   typ- eller langdvalidering i nagon gren, sa en pinning ensam hade arvt en
-   obegransad kalla in i varje mottagares lagring och GDPR-export. Foljdbiljett pa
-   kallan: BIN-1140.
+   fynd oberoende fran Security, DBA och QA). Foljdbiljett pa kallan: BIN-1140.
 3. Klientens inbjudningsknapp gatas pa den laddade profilen (DBA, blockerande).
    `handleInvite` gatade bara pa `myUid`; `user` ar en getDoc bort, sa ett tidigt
    klick skickade platshallarordet som avsandarnamn - vilket den nya regeln nekar.
