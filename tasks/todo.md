@@ -113,9 +113,7 @@ Premiss verifierad vid HEAD: enda villkoren ar `isOwner(followerUid)` och
 ### BIN-1140 + BIN-1128 - gruppdokumentet har ingen nyckellista alls
 
 De tva ar samma fix sedd fran create- respektive dokumentnivan och byggs
-tillsammans. Premiss verifierad vid HEAD: enda `hasOnly` i hela
-`match /groups/{groupId}`-blocket sitter pa `memberUids` och ar en kontroll av
-LISTANS innehall, inte av dokumentets nyckelmangd.
+tillsammans.
 
 - [ ] Harled nyckelmangden ur de vagar som FAKTISKT skriver dokumentet
       (`src/lib/firebase/groups.ts`), inte ur biljetten. Racka ocksa
@@ -145,7 +143,7 @@ join-grenen nollstallt.
 
 ## Panelens bindande villkor — infolierade 2026-09-10
 
-Åtta kritiker kördes över tre routningar. Routningen flyttade sig UNDER arbetet:
+Routningen flyttade sig UNDER arbetet:
 kritiken vidgade filunionen, och omkörningen gav
 
 - Bunt 1: `[4]` → **`[7]`** (testfilen kom in i unionen).
