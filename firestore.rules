@@ -1112,7 +1112,7 @@ service cloud.firestore {
       // bit ner i filen, och som `MAX_SESSION_DISPLAY_NAME` i src/lib/clampText.ts.
       // Regelspråket har ingen delad konstant, så de måste flytta i samma redigering.
       // Härled det, lita inte på den här meningen:
-      //   grep -n "displayName.size()" firestore.rules
+      //   awk '/^      match \/participants\/\{pid\} \{/,/^      \}/' firestore.rules | grep -n displayName
       //   grep -n "MAX_SESSION_DISPLAY_NAME" src/lib/clampText.ts
       //
       // Klausulen ligger INLINE på båda grenarna och inte i en delad funktion: de är
