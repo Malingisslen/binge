@@ -94,9 +94,9 @@ Acceptanskriterier:
 ## Batch B — sessionsetikettens tak [Tier C] — BIN-1165 (BIN-1170 utdragen)
 
 > **UTFALL: SHIPPAD.** Åtta commitar, 6f55b35 → d54e4c7, pushade. BIN-1170 drogs ut vid
-> urvalet; skälet och det härledda fältunderlaget står på den biljetten. Nitton
-> granskningsvarv över fem granskare, ETT blockerande fynd i koden. Följdbiljetter:
-> BIN-1175, BIN-1177. Tier D kvar: regeldeployen.
+> urvalet; skälet och det härledda fältunderlaget står på den biljetten. Det enda
+> blockerande fyndet i koden var ett saknat test på update-grenen; allt annat var prosa.
+> Följdbiljetter: BIN-1175, BIN-1177. Tier D kvar: regeldeployen.
 
 Routning: `node docs/org/route.mjs --md firestore.rules src/lib/firebase/sessions.ts ...`
 
@@ -130,8 +130,7 @@ Acceptanskriterier:
       `notifications`, `fcmTokens`) rörs inte. De har sitt eget omfång i BIN-1170:s
       tråd och skulle vidga den här buntens panel. *(diff)*
 
-**Tier D (Needs you):** `firebase deploy --only firestore:rules`. Den här buntens egen,
-inte delad med någon annan bunt i sprinten.
+**Tier D (Needs you):** `firebase deploy --only firestore:rules`.
 
 ---
 
@@ -243,7 +242,7 @@ Disposition: **build** (test-gap). Mätt: ingen av de tre EMULATORPORTARNA nämn
 som visar var den faktiskt nämns, inklusive sin egen enhetstestsvit — medan de tre
 emulatorportarna (`src/test/rules/account-deletion.test.ts`,
 `group-handover-orchestrator.test.ts`, `retention-cleanup-orchestrator.test.ts`) var och
-en bär en identisk handkopierad batch-mock. En sjätte kategori i `memberTraceWrites` blir
+en bär en identisk handkopierad batch-mock. En ny kategori i `memberTraceWrites` blir
 alltså tyst otäckt i alla tre.
 
 Biljettens andra halva (den dubblerade `TraceErasure`-typen) är REDAN lagad —
