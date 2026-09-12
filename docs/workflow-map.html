@@ -1517,7 +1517,7 @@
         {
           "from": "grupper-new-page",
           "to": "firestore",
-          "payload": "createGroup — addDoc groups/{id} {name,ownerUid,memberUids:[ownerUid],defaults,inviteTokenHash:sha256(token)} + setDoc groups/{id}/members/{ownerUid} {role:'owner',...}",
+          "payload": "createGroup — addDoc groups/{id} {name,ownerUid,memberUids:[ownerUid],defaults,inviteTokenHash:sha256(token)} + setDoc groups/{id}/members/{ownerUid} {uid,displayName,username,photoURL,providers,joinedAt} — the field set firestore.rules' isValidGroupMember pins; derive it with: grep -n -A 10 function.memberFields src/lib/firebase/groups.ts",
           "transport": "Firestore write",
           "verified": true
         },
@@ -1601,7 +1601,7 @@
         {
           "from": "auth-context",
           "to": "firestore",
-          "payload": "BIN-1162: a rename fans out to each group's own copy of the name. publishIdentityChange runs AFTER the users/{uid} write resolves, then queries groups where memberUids array-contains uid — bounded by MY_GROUPS_LIMIT, the constant imported from groups.ts rather than re-declared — and calls updateMemberIdentity(groupId, uid, {displayName, username}) per group. That write is a two-key updateDoc, never memberFields() and never a merge set: the caller has no authoritative source for a member's per-group role, and omitting joinedAt is what satisfies the rule's immutability check, while updateDoc's not-found failure is what stops the fan-out recreating a row the deletion cascade already took. Each group is caught on its own (captureError kind identityFanOut-group; a failed import or query is identityFanOut-query), so a group whose write fails keeps the OLD name until the next rename or rejoin — there is no reconciliation pass, and that residual is a dated entry in accepted-deviations.md. Tillsammans participants are deliberately untouched: a session seat can be anonymous, so there is no account to resolve a current name from.",
+          "payload": "BIN-1162: a rename fans out to each group's own copy of the name. publishIdentityChange runs AFTER the users/{uid} write resolves, then queries groups where memberUids array-contains uid — bounded by MY_GROUPS_LIMIT, the constant imported from groups.ts rather than re-declared — and calls updateMemberIdentity(groupId, uid, {displayName, username}) per group. That write is a two-key updateDoc, never memberFields() and never a merge set: memberFields() builds the WHOLE document, so rebuilding through it would stamp photoURL and providers with values this caller does not own, and omitting joinedAt is what satisfies the rule's immutability check, while updateDoc's not-found failure is what stops the fan-out recreating a row the deletion cascade already took. Each group is caught on its own (captureError kind identityFanOut-group; a failed import or query is identityFanOut-query), so a group whose write fails keeps the OLD name until the next rename or rejoin — there is no reconciliation pass, and that residual is a dated entry in accepted-deviations.md. Tillsammans participants are deliberately untouched: a session seat can be anonymous, so there is no account to resolve a current name from.",
           "transport": "Firestore write (fan-out)",
           "verified": true
         }
