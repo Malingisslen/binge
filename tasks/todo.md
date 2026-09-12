@@ -67,7 +67,7 @@ gruppdokumentet, med `ownerUid` och `memberUids`, blir läsbart bara för medlem
 Handbromsen är lyft och mönstret är utpekat: ett eget litet dokument för den publika
 delen, som `publicProfiles` gör för profiler (BIN-505).
 
-Vad som är fel i dag: `firestore.rules:1325` är `allow read: if isSignedIn();` på
+Vad som är fel i dag: `allow read: if isSignedIn();` står på
 `match /groups/{groupId}`. Varje inloggat konto kan alltså läsa varje grupps `memberUids`
 och `ownerUid` — vem som är med i vems grupp går att räkna upp.
 
@@ -130,7 +130,8 @@ Acceptanskriterier:
       `notifications`, `fcmTokens`) rörs inte. De har sitt eget omfång i BIN-1170:s
       tråd och skulle vidga den här buntens panel. *(diff)*
 
-**Tier D (Needs you):** samma regeldeploy som batch A — en deploy täcker båda.
+**Tier D (Needs you):** `firebase deploy --only firestore:rules`. Den här buntens egen,
+inte delad med någon annan bunt i sprinten.
 
 ---
 
@@ -237,8 +238,9 @@ beviset).
 
 Routning: körs mot de faktiska filerna före kritiken.
 
-Disposition: **build** (test-gap). Mätt: `git grep -n "memberTraceWrites"` träffar bara
-`functions/src/groupHandover/{adminIo.ts,logic.ts}` och aldrig en testfil, medan de tre
+Disposition: **build** (test-gap). Mätt: ingen av de tre EMULATORPORTARNA nämner
+`memberTraceWrites` — härled med `git grep -n "memberTraceWrites" -- src functions`,
+som visar var den faktiskt nämns, inklusive sin egen enhetstestsvit — medan de tre
 emulatorportarna (`src/test/rules/account-deletion.test.ts`,
 `group-handover-orchestrator.test.ts`, `retention-cleanup-orchestrator.test.ts`) var och
 en bär en identisk handkopierad batch-mock. En sjätte kategori i `memberTraceWrites` blir
