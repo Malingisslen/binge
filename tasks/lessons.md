@@ -1778,3 +1778,33 @@ falt skrivaren skriver - den andrades aldrig. Commitens faktiska union byter dar
 **Regel:** behandla varje avbrott som att mutanten STAR KVAR. Skriptets egen `cp snapshot fil` sist kors bara om skriptet nar dit. Kolla direkt efter avbrottet: `grep -c MUTANT <fil>`, och jamfor `git hash-object <fil>` mot snapshotens hash innan du gor nagot annat med tradet. Aterstall fran din EGEN snapshot, aldrig `git checkout --`.
 
 **Exempel:** tva korningar av regelemulatorn dodades av OS:et vid minnesbrist samma kvall. Bada gangerna stod `// MUTANT-G` kvar i `firestore.rules` efterat; en commit fran det laget hade skeppat en regel dar typkravet saknades pa update-grenen. Efter aterstallningen matchade hashen den granskade versionen.
+
+---
+
+### [Workflow] Routningen flyttar sig MEDAN bunten byggs — kontrollera den mot den stageade unionen, inte bara vid urvalet
+
+**Trigger:** en batch vars filuppsättning växer under bygget — en testfixtur, en sida som visade sig behöva en rättelse, en ny modul.
+
+**Regel:** kör `node docs/org/route.mjs --md $(git diff --cached --name-only | tr '\n' ' ')` omedelbart före commit och jämför panelen mot den som faktiskt kritiserade. Har en NY roll seatats har den inte sett något, och den måste kritisera den byggda diffen innan commit — logga den som en egen `review`-rad och skriv ut att den kördes sent och varför.
+
+**Exempel:** 2026-09-12 routade urvalet BIN-1155/1166 till `[4,5,6,26,27]`. Under bygget lades en medlemslistefixtur och skapa-grupp-sidan till i unionen, och den stageade uppsättningen routade till `[4,5,6,18,27]` — #26 ut, #18 in. #18 hade filat den ena biljetten och blockerat den andra, men inte sett en rad kod. Kritiken kördes före commit och gav ett blockerande fynd: den kvarstående texten på inbjudningsraden rekommenderade en omladdning även för en inbjudan som inte längre fanns, alltså precis den felskyllning biljetten fanns för att ta bort. BIN-1050/1052 skrev regeln för en union som KRYMPER; den här är samma sak åt andra hållet.
+
+---
+
+### [Security] En jämförare som släpper igenom null på CREATE blir en RADERINGSLUCKA på UPDATE
+
+**Trigger:** en identitets- eller ägarbindning som återanvänder en hjälpare byggd för create, där ett frånvarande fält betyder "skickades inte".
+
+**Regel:** på update finns en tredje form utöver "satt" och "null": `deleteField()` TAR BORT nyckeln. Både en typkontroll av formen `(!('x' in d) || ...)` och en `isOwnIdentity(null, …)` ser då ett frånvarande fält och släpper igenom. Kräv `!= null` i ägargrenen, och driv `deleteField()` som ett eget test — från både den egna raden och från den som får skriva andras.
+
+**Exempel:** BIN-1155:s första version band `displayName`/`username` på gruppens medlemsdokument. Att FÖRFALSKA namnet var stängt; att TÖMMA det var öppet, och ägargrenen räckte för att göra det på en annan medlems rad. Säkerhetsgranskaren bevisade det mot emulatorn innan något shippades. Följdregel från samma runda: bind på update bara ett fält som FAKTISKT ändras — en ovillkorlig bindning nekade varje uppdatering av en rad vars lagrade namn hunnit bli inaktuellt, inklusive en tjänstelistepatch som aldrig rör identiteten, och stängde därmed läkningsvägen BIN-1162:s daterade avvikelse vilar på.
+
+---
+
+### [Workflow] Ett städsteg EFTER den bärande skrivningen gör en framgång till ett rapporterat misslyckande
+
+**Trigger:** en funktion som avslutar med att rensa upp — radera en inbjudan, en markör, en attempt-doc — efter att det som räknas redan landat.
+
+**Regel:** allt efter den bärande skrivningen ska vara bäst-möjliga och rapporteras separat, aldrig kastas vidare. Och lås tillstånd på något som kan SKRIVAS OM: en nyckel som bara är dokument-id:t sitter kvar när dokumentet återskapas.
+
+**Exempel:** `acceptGroupInvite` avslutade med `await deleteDoc(groupInvites/{groupId})` utanför varje try, efter att medlemskapet redan etablerats. Ett tappat nätverk där kastade förbi utfallet och gränssnittet sa "kunde inte acceptera" om något Firestore tagit emot — BIN-1025:s klass omvänd: där bekräftades en vägran, här nekades en framgång. Samma runda: inbjudningsradens spärr nycklades bara på `groupId`, medan en ny inbjudan skriver om SAMMA dokument-id och listkomponenten aldrig avmonteras — en nekad rad låstes för resten av sessionen, också mot en färsk giltig inbjudan. Spärren bär nu inbjudans tidsstämpel.

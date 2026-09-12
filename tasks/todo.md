@@ -390,7 +390,13 @@ Härled den ur `memberFields()` vid bygget — ärv den inte ur den här meninge
 22. `{diff}` Hela sviten körs, inte bara buntens test — en ny fil under en katalog
     ägarkartan listar fil för fil är en ägarkartshändelse (BIN-1013).
 
-**Tier D (Needs you):** `firebase deploy --only firestore:rules` efter push.
+**Tier D — GJORD 2026-09-12, inte kvar.** Push-deployen gick rött med flit: skyddet i
+`deploy.yml` fäller varje push som rör `firestore.rules`, så reglerna inte smygs ut.
+Återhämtningen står i skyddets eget felmeddelande och kördes i den ordning som inte kan
+gå fel: hostingen först via `gh workflow run deploy.yml` (workflow_dispatch hoppar över
+skyddet), sedan Cloudflare-rensningen, sedan `firebase deploy --only firestore:rules`.
+Omvänd ordning hade nekat den då live-satta klienten, som fortfarande skriver de två
+borttagna fälten.
 
 ### Eskalerat till Malin av juristen — egen biljett, inte den här batchen
 
