@@ -3076,7 +3076,7 @@ describe('groups members/{memberUid} create — batch vs sequential (BIN-532/BIN
       createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
     });
     batch.set(doc(db, 'groups', 'newgrp', 'members', OWNER), {
-      uid: OWNER, role: 'owner', notifications: true, joinedAt: serverTimestamp(),
+      uid: OWNER, joinedAt: serverTimestamp(),
     });
     await assertFails(batch.commit());
   });
@@ -3089,7 +3089,7 @@ describe('groups members/{memberUid} create — batch vs sequential (BIN-532/BIN
       createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
     }));
     await assertSucceeds(setDoc(doc(db, 'groups', 'newgrp2', 'members', OWNER), {
-      uid: OWNER, role: 'owner', notifications: true, joinedAt: serverTimestamp(),
+      uid: OWNER, joinedAt: serverTimestamp(),
     }));
   });
 
@@ -3101,7 +3101,7 @@ describe('groups members/{memberUid} create — batch vs sequential (BIN-532/BIN
     const batch = writeBatch(db);
     batch.update(doc(db, 'groups', GROUP), { memberUids: [OWNER, 'other_uid'] });
     batch.set(doc(db, 'groups', GROUP, 'members', 'other_uid'), {
-      uid: 'other_uid', role: 'member', notifications: true, joinedAt: serverTimestamp(),
+      uid: 'other_uid', joinedAt: serverTimestamp(),
     });
     await assertFails(batch.commit());
   });
@@ -3112,7 +3112,7 @@ describe('groups members/{memberUid} create — batch vs sequential (BIN-532/BIN
     const db = otherDb();
     await assertSucceeds(updateDoc(doc(db, 'groups', GROUP), { memberUids: [OWNER, 'other_uid'] }));
     await assertSucceeds(setDoc(doc(db, 'groups', GROUP, 'members', 'other_uid'), {
-      uid: 'other_uid', role: 'member', notifications: true, joinedAt: serverTimestamp(),
+      uid: 'other_uid', joinedAt: serverTimestamp(),
     }));
   });
 
@@ -3125,7 +3125,7 @@ describe('groups members/{memberUid} create — batch vs sequential (BIN-532/BIN
     const batch = writeBatch(db);
     batch.update(doc(db, 'groups', GROUP), { memberUids: [OWNER, 'other_uid'] });
     batch.set(doc(db, 'groups', GROUP, 'members', 'other_uid'), {
-      uid: 'other_uid', role: 'member', notifications: true, joinedAt: serverTimestamp(),
+      uid: 'other_uid', joinedAt: serverTimestamp(),
     });
     await assertFails(batch.commit());
   });
@@ -3136,7 +3136,7 @@ describe('groups members/{memberUid} create — batch vs sequential (BIN-532/BIN
     const db = otherDb();
     await assertSucceeds(updateDoc(doc(db, 'groups', GROUP), { memberUids: [OWNER, 'other_uid'] }));
     await assertSucceeds(setDoc(doc(db, 'groups', GROUP, 'members', 'other_uid'), {
-      uid: 'other_uid', role: 'member', notifications: true, joinedAt: serverTimestamp(),
+      uid: 'other_uid', joinedAt: serverTimestamp(),
     }));
   });
 });
@@ -3162,7 +3162,7 @@ describe('groups members/{memberUid} joinedAt — pinnad vid create, oföränder
   const FUTURE = Timestamp.fromMillis(Date.now() + 86_400_000);
 
   function memberPayload(uid: string, over: Record<string, unknown> = {}) {
-    return { uid, role: 'member', notifications: true, joinedAt: serverTimestamp(), ...over };
+    return { uid, joinedAt: serverTimestamp(), ...over };
   }
 
   // Seedat med reglerna AVSTÄNGDA, så create-regeln under prövning aldrig är det
@@ -3223,7 +3223,7 @@ describe('groups members/{memberUid} joinedAt — pinnad vid create, oföränder
   it('en medlem KAN INTE ändra joinedAt på sitt eget befintliga member-doc', async () => {
     await seedGroup({ memberUids: [OWNER, 'other_uid'] });
     await seedMemberDoc('other_uid', {
-      uid: 'other_uid', role: 'member', notifications: true,
+      uid: 'other_uid',
       joinedAt: Timestamp.fromMillis(1_700_000_000_000),
     });
     await assertFails(updateDoc(
@@ -3237,7 +3237,7 @@ describe('groups members/{memberUid} joinedAt — pinnad vid create, oföränder
   it('en medlem KAN uppdatera providers utan att röra joinedAt (updateMemberProviders form)', async () => {
     await seedGroup({ memberUids: [OWNER, 'other_uid'] });
     await seedMemberDoc('other_uid', {
-      uid: 'other_uid', role: 'member', notifications: true, providers: [8],
+      uid: 'other_uid', providers: [8],
       joinedAt: Timestamp.fromMillis(1_700_000_000_000),
     });
     await assertSucceeds(updateDoc(
@@ -3249,7 +3249,7 @@ describe('groups members/{memberUid} joinedAt — pinnad vid create, oföränder
   it('ägaren KAN INTE ändra joinedAt på ett annat medlems-doc', async () => {
     await seedGroup({ memberUids: [OWNER, 'm2'] });
     await seedMemberDoc('m2', {
-      uid: 'm2', role: 'member', notifications: true,
+      uid: 'm2',
       joinedAt: Timestamp.fromMillis(1_700_000_000_000),
     });
     await assertFails(updateDoc(
@@ -3261,12 +3261,16 @@ describe('groups members/{memberUid} joinedAt — pinnad vid create, oföränder
   it('ägaren KAN uppdatera ett annat medlems-doc utan att röra joinedAt', async () => {
     await seedGroup({ memberUids: [OWNER, 'm2'] });
     await seedMemberDoc('m2', {
-      uid: 'm2', role: 'member', notifications: true,
+      uid: 'm2',
       joinedAt: Timestamp.fromMillis(1_700_000_000_000),
     });
+    // Fältet är `providers`, inte `notifications` som det var före BIN-1155:
+    // `notifications` finns inte längre på dokumentet och fälls numera av
+    // nyckellistan, vilket hade gjort testet grönt av fel skäl — det hade prövat
+    // `hasOnly` i stället för ägargrenen och joinedAt, som är vad det heter efter.
     await assertSucceeds(updateDoc(
       doc(ownerDb(), 'groups', GROUP, 'members', 'm2'),
-      { notifications: false },
+      { providers: [8] },
     ));
   });
 
@@ -3275,7 +3279,7 @@ describe('groups members/{memberUid} joinedAt — pinnad vid create, oföränder
   // levande utelåsning som ingen av testerna ovan kan se.
   it('ett member-doc som SAKNAR joinedAt går fortfarande att uppdatera', async () => {
     await seedGroup({ memberUids: [OWNER, 'other_uid'] });
-    await seedMemberDoc('other_uid', { uid: 'other_uid', role: 'member', providers: [8] });
+    await seedMemberDoc('other_uid', { uid: 'other_uid', providers: [8] });
     await assertSucceeds(updateDoc(
       doc(otherDb(), 'groups', GROUP, 'members', 'other_uid'),
       { providers: [8, 119] },
@@ -3289,7 +3293,7 @@ describe('groups members/{memberUid} joinedAt — pinnad vid create, oföränder
   it('en medlem kan fortfarande radera sitt eget member-doc', async () => {
     await seedGroup({ memberUids: [OWNER, 'other_uid'] });
     await seedMemberDoc('other_uid', {
-      uid: 'other_uid', role: 'member', notifications: true,
+      uid: 'other_uid',
       joinedAt: Timestamp.fromMillis(1_700_000_000_000),
     });
     await assertSucceeds(deleteDoc(
@@ -3300,7 +3304,7 @@ describe('groups members/{memberUid} joinedAt — pinnad vid create, oföränder
   it('ägaren kan fortfarande radera ett annat medlems-doc', async () => {
     await seedGroup({ memberUids: [OWNER, 'm2'] });
     await seedMemberDoc('m2', {
-      uid: 'm2', role: 'member', notifications: true,
+      uid: 'm2',
       joinedAt: Timestamp.fromMillis(1_700_000_000_000),
     });
     await assertSucceeds(deleteDoc(
@@ -3310,13 +3314,291 @@ describe('groups members/{memberUid} joinedAt — pinnad vid create, oföränder
 
   it('ett member-doc utan joinedAt går fortfarande att radera', async () => {
     await seedGroup({ memberUids: [OWNER, 'other_uid'] });
-    await seedMemberDoc('other_uid', { uid: 'other_uid', role: 'member' });
+    await seedMemberDoc('other_uid', { uid: 'other_uid' });
     await assertSucceeds(deleteDoc(
       doc(otherDb(), 'groups', GROUP, 'members', 'other_uid'),
     ));
   });
 });
 
+
+
+
+// BIN-1155. Fore den har biljetten hade medlemsblocket ingen nyckellista och inga
+// vardegranser alls — matt over intervallet med `grep -c hasOnly`, som gav 0 pa 48
+// rader. Dokumentet ar lasbart for varje medlem i gruppen, sa vem som helst med
+// skrivratt kunde lagga godtyckliga toppnivafalt pa nagot alla i gruppen laser om.
+//
+// Varje nekande har sin positiva tvilling: utan den bevisar ett fallande test bara att
+// NAGOT nekade, inte att det var klausulen testet heter efter.
+describe('groups members/{memberUid} — nyckellista, vardegranser och identitet (BIN-1155)', () => {
+  // Anroparens egen profil. `matchesOwnIdentity` gor ett get() mot users/{uid}, och ett
+  // get() mot ett dokument som inte finns KASTAR och nekar hela regeln — en oseedad
+  // anropare hade gjort varje test harunder gront av fel skal (BIN-1127).
+  async function seedProfile(uid: string, fields: Record<string, unknown>) {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', uid), fields);
+    });
+  }
+
+  // Seedat med reglerna AVSTANGDA, sa create-regeln aldrig ar det som avgor om ett
+  // update-fall passerar. Egen kopia: syskonblockets helper ar scopad dit.
+  async function seedExistingMember(uid: string, data: Record<string, unknown>) {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'groups', GROUP, 'members', uid), data);
+    });
+  }
+
+  it('den fulla faltuppsattningen memberFields() skriver passerar', async () => {
+    await seedGroup({ memberUids: [OWNER, 'other_uid'] });
+    await seedProfile('other_uid', { displayName: 'Malin', username: 'malin' });
+    await assertSucceeds(setDoc(doc(otherDb(), 'groups', GROUP, 'members', 'other_uid'), {
+      uid: 'other_uid',
+      displayName: 'Malin',
+      username: 'malin',
+      photoURL: 'https://example.com/a.png',
+      providers: [8, 76],
+      joinedAt: serverTimestamp(),
+    }));
+  });
+
+  // Den avgorande formen for produktionen: `memberFields()` skriver ALLTID username och
+  // photoURL, bada typade `string | null`. Ett bart `is string` hade nekat varje
+  // gruppskapande och varje join for ett konto utan avatar eller utan anvandarnamn.
+  it('null i username och photoURL passerar — kontot utan avatar maste kunna ga med', async () => {
+    await seedGroup({ memberUids: [OWNER, 'other_uid'] });
+    await seedProfile('other_uid', { displayName: 'Malin' });
+    await assertSucceeds(setDoc(doc(otherDb(), 'groups', GROUP, 'members', 'other_uid'), {
+      uid: 'other_uid',
+      displayName: 'Malin',
+      username: null,
+      photoURL: null,
+      providers: [],
+      joinedAt: serverTimestamp(),
+    }));
+  });
+
+  it('ett frammande falt nekas', async () => {
+    await seedGroup({ memberUids: [OWNER, 'other_uid'] });
+    await seedProfile('other_uid', { displayName: 'Malin' });
+    await assertFails(setDoc(doc(otherDb(), 'groups', GROUP, 'members', 'other_uid'), {
+      uid: 'other_uid',
+      displayName: 'Malin',
+      providers: [],
+      joinedAt: serverTimestamp(),
+      hemlighet: 'x',
+    }));
+  });
+
+  // `role` och `notifications` togs BORT ur skrivvagen (Malins beslut 2026-09-12 —
+  // ingen av dem hade en lasare i appen). Testet ar darfor inte kosmetiskt: det ar
+  // det som haller dem borta om nagon ateranvander en gammal payload.
+  it('de borttagna falten role och notifications nekas', async () => {
+    await seedGroup({ memberUids: [OWNER, 'other_uid'] });
+    await seedProfile('other_uid', { displayName: 'Malin' });
+    await assertFails(setDoc(doc(otherDb(), 'groups', GROUP, 'members', 'other_uid'), {
+      uid: 'other_uid',
+      displayName: 'Malin',
+      role: 'owner',
+      joinedAt: serverTimestamp(),
+    }));
+    await assertFails(setDoc(doc(otherDb(), 'groups', GROUP, 'members', 'other_uid'), {
+      uid: 'other_uid',
+      displayName: 'Malin',
+      notifications: false,
+      joinedAt: serverTimestamp(),
+    }));
+  });
+
+  it('ett displayName over 80 tecken nekas, 80 exakt passerar', async () => {
+    await seedGroup({ memberUids: [OWNER, 'other_uid'] });
+    const over = 'x'.repeat(81);
+    const exact = 'x'.repeat(80);
+    await seedProfile('other_uid', { displayName: over });
+    await assertFails(setDoc(doc(otherDb(), 'groups', GROUP, 'members', 'other_uid'), {
+      uid: 'other_uid', displayName: over, joinedAt: serverTimestamp(),
+    }));
+    await seedProfile('other_uid', { displayName: exact });
+    await assertSucceeds(setDoc(doc(otherDb(), 'groups', GROUP, 'members', 'other_uid'), {
+      uid: 'other_uid', displayName: exact, joinedAt: serverTimestamp(),
+    }));
+  });
+
+  // Bada sidor av taket. Ett test som bara provar OVER gransen ar uppfyllt ocksa av ett
+  // tak som satts for lagt — huset pinnar exakta granser fran bada hallen. Ett eget
+  // `it` per tak med flit: den forsta lyckade skrivningen SKAPAR dokumentet, sa ett
+  // andra par i samma test blir updates dar `joinedAt`-lasningen fangar dem forst och
+  // testet blir rott av fel skal.
+  it('photoURL pinnas pa bada sidor av sitt tak', async () => {
+    await seedGroup({ memberUids: [OWNER, 'other_uid'] });
+    await seedProfile('other_uid', { displayName: 'Malin' });
+    await assertFails(setDoc(doc(otherDb(), 'groups', GROUP, 'members', 'other_uid'), {
+      uid: 'other_uid', displayName: 'Malin', photoURL: 'h'.repeat(501), joinedAt: serverTimestamp(),
+    }));
+    await assertSucceeds(setDoc(doc(otherDb(), 'groups', GROUP, 'members', 'other_uid'), {
+      uid: 'other_uid', displayName: 'Malin', photoURL: 'h'.repeat(500), joinedAt: serverTimestamp(),
+    }));
+  });
+
+  it('providers pinnas pa bada sidor av sitt tak', async () => {
+    await seedGroup({ memberUids: [OWNER, 'other_uid'] });
+    await seedProfile('other_uid', { displayName: 'Malin' });
+    await assertFails(setDoc(doc(otherDb(), 'groups', GROUP, 'members', 'other_uid'), {
+      uid: 'other_uid',
+      displayName: 'Malin',
+      providers: Array.from({ length: 101 }, (_, i) => i),
+      joinedAt: serverTimestamp(),
+    }));
+    await assertSucceeds(setDoc(doc(otherDb(), 'groups', GROUP, 'members', 'other_uid'), {
+      uid: 'other_uid',
+      displayName: 'Malin',
+      providers: Array.from({ length: 100 }, (_, i) => i),
+      joinedAt: serverTimestamp(),
+    }));
+  });
+
+  it('ett ogiltigt anvandarnamn nekas', async () => {
+    await seedGroup({ memberUids: [OWNER, 'other_uid'] });
+    await seedProfile('other_uid', { displayName: 'Malin', username: 'INTE GILTIGT' });
+    await assertFails(setDoc(doc(otherDb(), 'groups', GROUP, 'members', 'other_uid'), {
+      uid: 'other_uid', displayName: 'Malin', username: 'INTE GILTIGT', joinedAt: serverTimestamp(),
+    }));
+  });
+
+  // LIVE-halet, inte hardning. `memberDocToObject` foredrar FALTET framfor
+  // dokument-id:t (`data.uid ?? id`) och `GroupMembersPanel` skickar faltets varde till
+  // `removeMember`, sa ett forfalskat uid fick agarens nasta "ta bort"-klick att
+  // radera en ANNAN medlem.
+  it('uid-faltet kan inte peka pa en annan medlem an radens egen', async () => {
+    await seedGroup({ memberUids: [OWNER, 'other_uid'] });
+    await seedProfile('other_uid', { displayName: 'Malin' });
+    await assertFails(setDoc(doc(otherDb(), 'groups', GROUP, 'members', 'other_uid'), {
+      uid: OWNER, displayName: 'Malin', joinedAt: serverTimestamp(),
+    }));
+  });
+
+  it('ett displayName som inte ar skrivarens eget nekas', async () => {
+    await seedGroup({ memberUids: [OWNER, 'other_uid'] });
+    await seedProfile('other_uid', { displayName: 'Malin' });
+    await assertFails(setDoc(doc(otherDb(), 'groups', GROUP, 'members', 'other_uid'), {
+      uid: 'other_uid', displayName: 'Nagon Annan', joinedAt: serverTimestamp(),
+    }));
+  });
+
+  // Agargrenen i selfOrOwner() far skriva en annan medlems rad. Den far inte forfalska
+  // identiteten pa den — bindningen galler BADA grenarna med flit.
+  it('agaren kan inte skriva ett namn pa en ANNAN medlems rad', async () => {
+    await seedGroup({ memberUids: [OWNER, 'm2'] });
+    await seedProfile(OWNER, { displayName: 'Agaren' });
+    await seedProfile('m2', { displayName: 'Medlemmen' });
+    await assertFails(setDoc(doc(ownerDb(), 'groups', GROUP, 'members', 'm2'), {
+      uid: 'm2', displayName: 'Medlemmen', joinedAt: serverTimestamp(),
+    }));
+  });
+
+  // Vid en UPDATE ar request.resource.data hela dokumentet EFTER skrivningen, inte
+  // patchen. Ett villkor snavare an det som redan star lagrat nekar darfor varje
+  // partiell patch — och bada formerna nedan kor i produktion sedan BIN-1162/BIN-536.
+  it('updateMemberIdentitys tvanyckelspatch passerar mot ett fullt dokument', async () => {
+    await seedGroup({ memberUids: [OWNER, 'other_uid'] });
+    await seedProfile('other_uid', { displayName: 'Nytt Namn', username: 'nytt_namn' });
+    await seedExistingMember('other_uid', {
+      uid: 'other_uid',
+      displayName: 'Gammalt',
+      username: 'gammalt',
+      photoURL: null,
+      providers: [8],
+      joinedAt: Timestamp.fromMillis(1_700_000_000_000),
+    });
+    await assertSucceeds(updateDoc(doc(otherDb(), 'groups', GROUP, 'members', 'other_uid'), {
+      displayName: 'Nytt Namn', username: 'nytt_namn',
+    }));
+  });
+
+  // DET AVGORANDE FALLET, och det som forsta utkastet av regeln fick fel. Vid en update
+  // ar request.resource.data hela EFTERdokumentet, sa en rad vars lagrade namn hunnit bli
+  // inaktuellt — precis den rest BIN-1162:s daterade post accepterar — hade med en
+  // ovillkorlig identitetsbindning fallt VARJE uppdatering av raden, aven en som aldrig
+  // ror namnet. Det hade stangt lakningsvagen posten vilar pa. Regeln binder darfor bara
+  // ett falt som FAKTISKT andras.
+  it('en providers-patch passerar aven nar radens lagrade namn ar inaktuellt', async () => {
+    await seedGroup({ memberUids: [OWNER, 'other_uid'] });
+    await seedProfile('other_uid', { displayName: 'Nytt Namn', username: 'nytt_namn' });
+    await seedExistingMember('other_uid', {
+      uid: 'other_uid',
+      displayName: 'Gammalt Namn',
+      username: 'gammalt',
+      photoURL: null,
+      providers: [8],
+      joinedAt: Timestamp.fromMillis(1_700_000_000_000),
+    });
+    await assertSucceeds(updateDoc(doc(otherDb(), 'groups', GROUP, 'members', 'other_uid'), {
+      providers: [8, 76],
+    }));
+  });
+
+  // Och forfalskningen ar anda stangd: att ANDRA faltet kraver fortfarande din egen
+  // live-profil. Utan den har tvillingen vore mjukningen ovan en oppning.
+  it('att ANDRA namnet till nagon annans nekas aven fran ett inaktuellt utgangslage', async () => {
+    await seedGroup({ memberUids: [OWNER, 'other_uid'] });
+    await seedProfile('other_uid', { displayName: 'Nytt Namn', username: 'nytt_namn' });
+    await seedExistingMember('other_uid', {
+      uid: 'other_uid',
+      displayName: 'Gammalt Namn',
+      username: 'gammalt',
+      photoURL: null,
+      providers: [8],
+      joinedAt: Timestamp.fromMillis(1_700_000_000_000),
+    });
+    await assertFails(updateDoc(doc(otherDb(), 'groups', GROUP, 'members', 'other_uid'), {
+      displayName: 'Nagon Annan',
+    }));
+  });
+
+  // Den tredje formen, och den som forsta versionen av regeln slappte igenom:
+  // `deleteField()` TAR BORT nyckeln i stallet for att andra den, och da ser bade
+  // typkontrollen och `isOwnIdentity` ett franvarande falt. Att forfalska var stangt;
+  // att TOMMA var det inte — och agargrenen racker till for att gora det pa nagon
+  // annans rad. Fyndet ar sakerhetsgranskarens, bevisat mot emulatorn.
+  it('namnet kan inte RADERAS bort ur raden, varken av en sjalv eller av agaren', async () => {
+    await seedGroup({ memberUids: [OWNER, 'other_uid'] });
+    await seedProfile(OWNER, { displayName: 'Agaren' });
+    await seedProfile('other_uid', { displayName: 'Malin', username: 'malin' });
+    await seedExistingMember('other_uid', {
+      uid: 'other_uid',
+      displayName: 'Malin',
+      username: 'malin',
+      photoURL: null,
+      providers: [8],
+      joinedAt: Timestamp.fromMillis(1_700_000_000_000),
+    });
+    await assertFails(updateDoc(doc(otherDb(), 'groups', GROUP, 'members', 'other_uid'), {
+      displayName: deleteField(),
+    }));
+    await assertFails(updateDoc(doc(ownerDb(), 'groups', GROUP, 'members', 'other_uid'), {
+      displayName: deleteField(),
+    }));
+    await assertFails(updateDoc(doc(otherDb(), 'groups', GROUP, 'members', 'other_uid'), {
+      username: deleteField(),
+    }));
+  });
+
+  it('updateMemberProviders ennyckelspatch passerar mot ett fullt dokument', async () => {
+    await seedGroup({ memberUids: [OWNER, 'other_uid'] });
+    await seedProfile('other_uid', { displayName: 'Malin', username: 'malin' });
+    await seedExistingMember('other_uid', {
+      uid: 'other_uid',
+      displayName: 'Malin',
+      username: 'malin',
+      photoURL: null,
+      providers: [8],
+      joinedAt: Timestamp.fromMillis(1_700_000_000_000),
+    });
+    await assertSucceeds(updateDoc(doc(otherDb(), 'groups', GROUP, 'members', 'other_uid'), {
+      providers: [8, 76],
+    }));
+  });
+});
 
 
 // Varför en icke-ägande medlem som redan står i memberUids inte kan läggas till

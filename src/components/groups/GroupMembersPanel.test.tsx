@@ -29,9 +29,7 @@ function member(over: Partial<GroupMember> & { uid: string }): GroupMember {
     username: null,
     photoURL: null,
     providers: [],
-    role: 'member',
     joinedAt: null,
-    notifications: true,
     ...over,
   } as GroupMember;
 }

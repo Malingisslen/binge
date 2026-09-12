@@ -82,6 +82,12 @@ export interface SessionSwipe {
 }
 
 // Permanenta grupper (Fas 2)
+// BIN-1155, Malins beslut 2026-09-12: medlemsradens `role`-falt ar borttaget. Det
+// hade ingen lasare - agarskap harleds ur `group.ownerUid` - och att lasa fast ett
+// dott falt i medlemsdokumentets nyckellista hade formellt godkant data varje
+// gruppmedlem kan lasa utan att nagot behovde den. Typen star kvar tills vidare
+// som ordforrad for gruppens agarskapsbegrepp; harled dess anvandare med
+// `grep -rn GroupRole src functions` innan nagon litar pa den.
 export type GroupRole = 'owner' | 'member';
 
 export interface GroupDefaults {
@@ -111,9 +117,7 @@ export interface GroupMember {
   username: string | null;
   photoURL: string | null;
   providers: number[];
-  role: GroupRole;
   joinedAt: Date;
-  notifications: boolean;
 }
 
 export interface GroupWatchlistItem {

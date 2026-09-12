@@ -12,6 +12,7 @@ import {
   type GroupInvite,
 } from '@/lib/firebase/groups';
 import { useAuth } from '@/hooks/useAuth';
+import type { AcceptInviteResult } from '@/lib/firebase/groups';
 import type { Group, GroupMember, GroupWatchlistItem } from '@/types';
 
 export function useMyGroups(uid: string | null) {
@@ -76,14 +77,22 @@ export function useMyGroupInvites() {
     return () => unsub();
   }, [uid]);
 
-  const accept = useCallback(async (groupId: string) => {
-    if (!uid || !user) return;
-    await acceptInvite({
+  // BIN-1166: utfallet RETURNERAS. Forr awaitades det och kastades bort, sa varken
+  // ett nekande eller ett natverksfel nadde ytan — inbjudan lag kvar i listan utan
+  // forklaring. Formen ar densamma som joinGroupViaToken redan har.
+  //
+  // BIN-1155: platshallaren 'Användare' ar borta. Medlemsdokumentets regel binder
+  // numera namnet till skrivarens egen profil, sa ett platshallarnamn hade NEKATS —
+  // samma fela som BIN-1127 stangde for gruppinbjudningar. Funktionen ar redan gatad
+  // pa att profilen ar laddad (`!user` returnerar ovan), sa vardet finns.
+  const accept = useCallback(async (groupId: string): Promise<AcceptInviteResult> => {
+    if (!uid || !user) return { ok: false, reason: 'transient' };
+    return acceptInvite({
       groupId,
       uid,
-      displayName: user.displayName ?? 'Användare',
-      username: user.username ?? null,
-      photoURL: user.photoURL ?? null,
+      displayName: user.displayName,
+      username: user.username,
+      photoURL: user.photoURL,
       providers: user.myProviders ?? [],
     });
   }, [uid, user]);

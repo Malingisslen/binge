@@ -28076,3 +28076,153 @@ run after full restore: 6/6 green. `git log --oneline -1` unchanged across the w
 (`cc5b1a7`).
 
 **Verdict**: pass, 0 blocking. One non-blocking finding filed above.
+
+## 2026-09-12 — BIN-1155/BIN-1166 re-review: boundary twins verified live, new UI-outcome gap found
+
+**Trigger**: re-run of a prior `pass (0 blocking)` after two test-file changes: (1) `photoURL`/
+`providers` boundary pairs in `src/test/rules/firestore-rules.test.ts` got an exact-at-boundary
+`assertSucceeds` twin, split into two separate `it` blocks; (2) a stale `role` justification
+comment struck in `src/lib/firebase/groups.test.ts`.
+
+**Diff reviewed** (full `git diff --cached`, 19 files): `firestore.rules` (BIN-1155
+`isValidGroupMember` + `keepsOrOwnsIdentity`), `src/test/rules/firestore-rules.test.ts` (new
+BIN-1155 describe block), `src/lib/firebase/groups.ts`/`.test.ts` (BIN-1166 outcome
+discrimination: `refused`/`invite_invalid`/`transient`/`GROUP_WRITE_REFUSED`),
+`functions/src/groupHandover/logic.test.ts` (floor raised 4→5, new `ROW_DELETED_EXPRESSION`),
+`src/components/groups/GroupMembersPanel.test.tsx`, `src/hooks/useGroups.ts`,
+`src/app/grupper/page.tsx`, `src/app/grupper/ny/page.tsx`, `src/components/pages/
+GroupPageClient.tsx`, `src/contexts/AuthContext.tsx`, `src/types/social.ts`, plus
+ownership-map/role-responsibilities/events.jsonl/accepted-deviations bookkeeping.
+
+**Mutations run** (live emulator, isolated scratch rig — port 8097, own `firebase.json`
+pointing `rules` at a scratchpad copy, own throwaway test file inside `src/test/rules/`
+matching `vitest.rules.config.ts`'s include glob):
+1. Baseline: the two new boundary-twin `it`s (photoURL, providers) both green in isolation.
+2. **Combined-in-one-`it` probe** (both boundary pairs sharing one document, no intervening
+   `clearFirestore()`): reproduced the exact failure the ticket claimed — the second pair's
+   `assertSucceeds` denied with `false for 'update' @ L1688` (the `keepsOrOwnsIdentity`/
+   `joinedAt` immutability line), NOT the boundary clause under test. Confirms the split into
+   two separate `it` blocks is a measured fix, not a style choice: `beforeEach(clearFirestore)`
+   only resets between `it`s, so the first successful write inside a combined test CREATES the
+   doc and the second pair becomes an UPDATE whose `joinedAt` (re-sent via `serverTimestamp()`)
+   no longer matches the stored one.
+3. `photoURL.size() <= 500` → `<= 499` (member-doc copy only, reviews copy at line 233 hit too
+   by a blind `sed`, irrelevant to this probe): killed exactly the photoURL twin (1 failed),
+   providers twin unaffected (isolated).
+4. `providers.size() <= 100` → `<= 99` (member-doc copy only, line 1216's sibling collection
+   untouched): killed exactly the providers twin, photoURL twin unaffected.
+5. Real `firestore.rules` verified untouched throughout via `git rev-parse :firestore.rules` ==
+   `git hash-object firestore.rules` before and after (`2f27e90d…`), no contamination.
+6. Balanced-braces check on the new rules comment block (BIN-1155's own comment references
+   `logic.test.ts`'s brace-counting scan and claims the count is now 5, up from 4): counted
+   `{`/`}` in added comment lines — 2/2, balanced (`users/{uid}`, `publicProfiles/{uid}` on one
+   line) — consistent with the archived claim that an earlier unbalanced draft shrank the scan
+   to 3.
+7. `npx vitest run` on the four gate-matched test files (`groups.test.ts`,
+   `GroupMembersPanel.test.tsx`, `logic.test.ts`) — 96/96 green, including every BIN-1166
+   `isPermissionDenied` both-directions case.
+
+**Read via the Read tool** (ledger): `binge-test-reviewer.knowledge.md` (full),
+`accepted-deviations.md` (full, both pages), `src/types/social.ts`, `src/app/grupper/page.tsx`,
+`src/app/grupper/ny/page.tsx`, `src/components/pages/GroupPageClient.tsx`,
+`src/lib/firebase/groups.test.ts` (full), `src/components/groups/GroupMembersPanel.test.tsx`
+(full), `functions/src/groupHandover/logic.test.ts` (full), `src/test/rules/
+firestore-rules.test.ts` (page 1 of the full-file Read invocation).
+
+**Finding (new, not reached in the prior pass)**: `src/app/grupper/page.tsx`'s `PendingInvites`
+component gained a `blocked: Map<string, 'invite_invalid'|'refused'>` state, a three-way
+toast-text branch on `accept()`'s result, and button disablement keyed on it;
+`src/app/grupper/ny/page.tsx` gained a message-selection branch on `err.message ===
+GROUP_WRITE_REFUSED`; `src/components/pages/GroupPageClient.tsx` gained a `joinFailed` boolean
+and a five-way `joinError` text branch including a new `'refused'` case. `find`/`ls` confirmed
+**no test file exists for any of the three** (`src/app/grupper/*.test.tsx`,
+`GroupPageClient.test.tsx` — none present). The producing library (`groups.ts`/`.test.ts`) is
+thoroughly and bidirectionally mutation-resistant; none of that coverage reaches the three
+consumers that decide what the user actually reads. Folded into the knowledge file's "A UI
+CONFIRMATION that restates a write decision is a SECOND consumer" bullet.
+
+**Not filed** (accepted / already handled): the `role`/`notifications` strike in
+`groups.test.ts` matches an actual production field removal (`memberFields()` no longer writes
+them), replaced with precise `not.toHaveProperty` assertions — not a weakening. The BIN-1166
+reject→resolve contract change in `groups.ts` has full bidirectional coverage at every call
+site. `docs/org/metrics/events.jsonl` shows an org-panel critique already ran on this same diff
+(panel [4,5,6,26,27] then [18]) and fixed one blocking finding (stale reload-text on an
+invite that no longer holds) — that pass covers product/security/legal/DPO/DBA concerns, not
+test coverage, so it does not subsume this finding.
+
+**Verdict**: fail, 1 blocking (the untested three-file UI-outcome-branching gap above).
+
+## 2026-09-12b — BIN-1166 re-review: extraction closes the blocking finding, one half-pin found in the new tests
+
+**Trigger**: re-run after the prior fail. The buried ternaries in `src/app/grupper/page.tsx`,
+`src/components/pages/GroupPageClient.tsx` and `src/app/grupper/ny/page.tsx` were extracted
+into a pure module, `src/lib/groupDenialCopy.ts` (`inviteAcceptToast`, `inviteBlocksRetry`,
+`inviteRowNotice`, `joinLinkMessage`, `joinAttemptFailed`), with `src/lib/groupDenialCopy.test.ts`
+beside it (16 tests, difference-based oracles: `Set(...).size`, `not.toBe`, targeted
+`toContain`/`not.toContain`).
+
+**Diff re-read in full** (`Read`, not `git diff`): `groupDenialCopy.ts`, `groupDenialCopy.test.ts`,
+`src/app/grupper/page.tsx`, `src/app/grupper/ny/page.tsx`, `src/components/pages/
+GroupPageClient.tsx`, `src/types/social.ts`, `src/lib/firebase/groups.ts` (diff), `src/lib/
+firebase/groups.test.ts` (diff, BIN-1166 describe block), `src/components/groups/
+GroupMembersPanel.test.tsx` (diff), `functions/src/groupHandover/logic.test.ts` (diff),
+`firestore.rules` (diff, `isValidGroupMember`/`keepsOrOwnsIdentity`), `src/contexts/
+AuthContext.tsx` (diff), `src/hooks/useGroups.ts` (diff), both knowledge files (full),
+`accepted-deviations.md` (full, both pages).
+
+**Mutations run** (real prod file, scratchpad-backed, `git hash-object`/`git rev-parse :<f>`
+matched `96f42d6e…` before and after every mutation, `rm -rf node_modules/.vite/vitest` first):
+1. Swap `invite_invalid`/generic `refused` message bodies in `inviteAcceptToast` → killed
+   ALONE by "skickar bara den ogiltiga inbjudan till agaren…" (1 failed, 15 passed).
+2. Collapse `inviteRowNotice`'s two branches to the same string → killed by BOTH
+   "ger olika kvarstaende text…" and "rader inte till omladdning…" (2 failed).
+3. Make `inviteBlocksRetry` also return `'transient'` instead of `null` → killed ALONE by
+   "laser inte raden for ett tillfalligt fel" (1 failed).
+4. **Survived, 16/16 green**: made `joinLinkMessage`'s `not_found` branch also read
+   `attemptsExhausted` (`attemptsExhausted ? 'Gruppen hittades inte.' : 'Gruppen hittades inte
+   just nu.'`). The docstring claims "Bara det tillfalliga utfallet bryr sig om" (only the
+   transient outcome cares) but no test pins that the OTHER four terminal branches return the
+   SAME string at both flag values — the one test that varies `exhausted` per-branch
+   ("utfallet med de flesta forsoken kvar ar anda inte tomt") only asserts `toBeTruthy()` per
+   cell, never compares the two cells. Folded into the knowledge file's "forwarded BOOLEAN"
+   bullet (arkiv 19 section) rather than filed as a fresh bullet.
+
+**Verified non-vacuous**: the `!` non-null assertion in "gissar aldrig pa en orsak" means a
+`null`/`undefined` return throws rather than silently passing the `not.toContain` checks — a
+destroyed measurement cannot satisfy that test by accident.
+
+**Verified no user-visible string regression**: diffed the extracted `transient`/`invalid_token`/
+`not_found`/`already_member` strings in `joinLinkMessage` byte-for-byte against
+`GroupPageClient.tsx`'s pre-diff inline ternary (via `git diff --cached`, old lines still visible
+in the hunk) — identical. Only the `refused` case is new text, for a branch (`refused`) that did
+not exist before BIN-1155 made the write refusable — not a changed pre-existing string.
+
+**Judgment call, not filed as blocking**: `src/app/grupper/ny/page.tsx` still does its own
+two-branch `err.message === GROUP_WRITE_REFUSED ? … : …` inline, no test file. Smaller risk than
+the three fixed sites — it's a single boolean gate against an exported sentinel, not a ladder
+mixed into JSX — but it is the same silent-revert shape BIN-1166 exists to close. Reported as a
+non-blocking recommendation (extract as a 6th function, or add one test pinning the
+`GROUP_WRITE_REFUSED` string) rather than a fresh blocking finding.
+
+**Not reached in this pass** (scope was the BIN-1166 copy module): `firestore.rules`'
+`isValidGroupMember`/`keepsOrOwnsIdentity` (BIN-1155) — has a dedicated `describe` block in
+`src/test/rules/firestore-rules.test.ts` (confirmed present, not mutation-verified live in this
+pass; the 2026-09-12 entry above already did that work) — and `useGroups.ts`'s new
+`{ ok: false, reason: 'transient' }` early-return guard clause, which has no test file at all
+(`useGroups.test.ts` does not exist) but is a one-line non-branching discriminant over an
+already-tested downstream function, matching the "one-line gate, no first RTL harness owed"
+exemption.
+
+**Verdict**: pass, 0 blocking.
+
+## Relocated 2026-09-12 — entry 96 (call-site prop enumeration + stakeholder-comment
+acceptance criteria, cut from the active file to pay for the BIN-1166 boolean-half-pin addition)
+
+Verbatim, moved out of the "converse acquits most mocked-hook component tests" bullet:
+
+**Enumerate EVERY prop the new call site hands the REUSED shared row, every ARGUMENT its
+callback hands BACK, AND the props that row forwards to ITS children — the third list is the
+one nobody checks** (a `season`/`tmdbId` skew changes `episodeReactionKey(tmdbId, season, ep)`
+and collides two threads). **A stakeholder condition recorded in a code comment IS an
+acceptance criterion** — grep staged comments for "reviewed by / godkänd", COUNT THE CLAUSES,
+mutate the literal each names.

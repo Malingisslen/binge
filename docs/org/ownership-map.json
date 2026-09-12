@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 592,
+  "patternCount": 595,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -419,6 +419,8 @@
         "src/lib/feedTrending.ts",
         "src/lib/firebase/friends.test.ts",
         "src/lib/firebase/friends.ts",
+        "src/lib/groupDenialCopy.test.ts",
+        "src/lib/groupDenialCopy.ts",
         "src/lib/groupInviteCache.test.ts",
         "src/lib/groupInviteCache.ts",
         "src/lib/groupInviteToken.test.ts",
@@ -581,6 +583,7 @@
         "src/app/global-error.tsx",
         "src/app/grupper/error.tsx",
         "src/app/grupper/layout.tsx",
+        "src/app/grupper/ny/page.tsx",
         "src/app/grupper/page.tsx",
         "src/app/layout.tsx",
         "src/app/login/layout.tsx",

@@ -10923,3 +10923,95 @@ still byte-identical. BIN-1125/1126 are pre-existing gaps outside this diff,
 filed and tracked, not blocking findings against these bytes.
 
 **Verdict: pass (0 blocking).**
+
+
+## 2026-09-12 — BIN-1155/BIN-1166: keepsOrOwnsIdentity() null-bypass lets a writer erase an identity field with no ownership check
+
+**Scope of this review:** `firestore.rules`, `functions/src/groupHandover/logic.test.ts`,
+`src/lib/firebase/groups.ts` (+ their paired test files), per the gate's `reviewGates` match
+for this staged batch. Read `.claude/rules/accepted-deviations.md` in full first, including
+the BIN-1162 entry this change directly interacts with (the "stale row heals at the next
+write that touches it" clause `keepsOrOwnsIdentity()`'s update branch exists to preserve).
+
+**What BIN-1155 built.** `groups/{gid}/members/{uid}` gained, for the first time, a
+`hasOnly` key list (`isValidGroupMember`) and per-field bounds, plus an identity binding —
+full `matchesOwnIdentity` on create, a narrower `keepsOrOwnsIdentity()` on update that only
+constrains a field that actually CHANGES (unconditional would have denied every update to a
+row whose stored name had gone stale, closing the BIN-1162 healing path on purpose). `role`
+and `notifications` were dropped from the doc (Malin's decision, no reader existed for
+either). BIN-1166 layered `permission-denied` vs transient classification onto the three
+member-write paths.
+
+**Finding, live-PoC'd, not a rules-trace hypothesis.**
+`keepsOrOwnsIdentity()`:
+```
+function keepsOrOwnsIdentity() {
+  return (request.resource.data.get('displayName', null) == resource.data.get('displayName', null)
+      || isOwnIdentity(request.resource.data.get('displayName', null), null))
+    && (request.resource.data.get('username', null) == resource.data.get('username', null)
+      || isOwnIdentity(null, request.resource.data.get('username', null)));
+}
+```
+`isOwnIdentity(displayName, username)` returns `true` whenever the parameter passed is
+`null` — correct when reused for CREATE-time optional fields (`matchesOwnIdentity`, reviews/
+comments), where "absent" only ever means "writer never set this field". Reused here for an
+UPDATE diff, the same null bypass fires when a previously-SET field is made absent: the
+`==` disjunct fails (new `null` != old string), and `isOwnIdentity(null, null)` is
+unconditionally `true`, with no comparison to the caller's own live profile at all.
+
+Reachable via the ordinary Firestore Web SDK, not a crafted REST payload:
+`updateDoc(ref, { displayName: deleteField() })` (equivalently `{ displayName: null }`).
+`selfOrOwner()` admits this write on (a) the caller's own row, and — the actually dangerous
+case — (b) via the owner branch, on ANY OTHER member's row. The module's own comment claims
+this is closed ("Förfalskningen är ändå omöjlig: att ÄNDRA fältet till något som inte är
+ditt kräver fortfarande din egen live-profil") — false for this one value.
+
+**Live PoC** (throwaway `src/test/rules/_poc-bin1155.test.ts`, deleted before finishing,
+run against a fresh emulator on port 8085 — 8080 was held by a neighbouring project's
+`firebase emulators` per the standing port policy):
+```
+it('OWNER can delete another members displayName field entirely, ...', async () => {
+  ...
+  await assertSucceeds(updateDoc(doc(ownerDb(), 'groups', GROUP, 'members', 'other_uid'), {
+    displayName: deleteField(),
+  }));
+});
+```
+Both the owner-on-foreign-row and self-on-own-row variants `assertSucceeds` (2/2 passed).
+Confirmed by reading `functions/src` that no Admin-SDK path writes fields to this doc (only
+deletes it wholesale via `memberTraceWrites`), so the gap is reachable ONLY through this
+rule, not masked by a narrower application-level writer.
+
+**Severity.** Not privilege escalation, not a data leak — the exploit erases (renders blank,
+`memberDocToObject`'s `?? ''`) a display name/username on a row the writer already has some
+legitimate write access to (their own, or — for the owner — a row they can already delete
+outright). It is a genuine forgery of the specific property the ticket's own comments and
+tests claim is closed, live-verified, and cheaper to fix now than to re-discover after
+BIN-1155 ships as "the identity binding is airtight."
+
+**Fix considered, not built by this review** (review agents don't edit code): gate the
+ownership disjunct on the new value being non-null too —
+`(new==old) || (new!=null && isOwnIdentity(new,null))` — so "the field is now absent" only
+ever passes via the unchanged branch (i.e., it was already absent/null before), never as a
+fresh erasure. This preserves the BIN-1162 healing path (an unconditional binding was
+rejected for exactly that reason) since the unchanged branch is untouched.
+
+**What was NOT a finding, verified rather than assumed:**
+- Key-list completeness: every field every client writer sends (`memberFields()` via
+  `createGroup`/`joinGroupViaToken`/`acceptGroupInvite`, `updateMemberProviders`,
+  `updateMemberIdentity`) is inside `isValidGroupMember`'s `hasOnly` list; `functions/src`
+  writes no fields to this doc at all (grepped).
+- `uid` pin holds on both create and update; delete carries no `request.resource` and
+  correctly has neither `isValidGroupMember` nor `keepsOrOwnsIdentity` attached to it.
+- `role`/`notifications` fully removed: `memberFields()`, the rules `hasOnly` list, and
+  `GroupMember`/`GroupMembersPanel` all agree; `grep -rn "member.role|.notifications\b"
+  src functions` (excluding tests) returns nothing.
+- BIN-1166's `permission-denied` classification leaks nothing to an invite-link holder —
+  the reason codes are returned only to the caller who already attempted the write, and the
+  new UI copy (`grupper/page.tsx`, `GroupPageClient.tsx`) never guesses which clause failed.
+- `functions/src/groupHandover/logic.ts`'s `memberTraceWrites` deletes the member row
+  wholesale (`{ op: 'delete', collection: 'members', doc: leavingUid }`), confirmed by the
+  new `ROW_DELETED_EXPRESSION` test in `logic.test.ts` — a field-level erasure path for this
+  doc is genuinely unnecessary, matching the ticket's own claim.
+
+**Verdict: fail (1 blocking).**

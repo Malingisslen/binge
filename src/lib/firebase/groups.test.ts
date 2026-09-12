@@ -57,6 +57,9 @@ vi.mock('./db', () => ({
     return () => unsub();
   },
 }));
+const captureErrorMock = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/sentry', () => ({ captureError: captureErrorMock, initSentry: () => {} }));
+
 vi.mock('firebase/firestore', () => ({
   collection: vi.fn((_db: unknown, ...path: string[]) => ({ _path: path.join('/') })),
   doc: (...args: unknown[]) => mocks.docMock(...(args as [unknown, ...unknown[]])),
@@ -95,6 +98,7 @@ import {
   acceptGroupInvite,
   inviteMemberByUid,
   updateMemberIdentity,
+  GROUP_WRITE_REFUSED,
   MY_GROUPS_LIMIT,
 } from './groups';
 
@@ -170,7 +174,11 @@ describe('createGroup (BIN-532 REVERTED: sequential writes, not an atomic batch)
     expect(setDocMock).toHaveBeenCalledTimes(1);
     const [memberRef, memberPayload] = setDocMock.mock.calls[0];
     expect((memberRef as { _path: string })._path).toBe(`groups/${result.groupId}/members/owner-1`);
-    expect(memberPayload).toMatchObject({ uid: 'owner-1', role: 'owner' });
+    // BIN-1155: `role` skrivs inte langre (Malins beslut 2026-09-12 — inget last
+    // det, och medlemsraden ar lasbar for hela gruppen). Nyckeluppsattningen som
+    // helhet pinnas av BIN-1101-testet langre ner i filen.
+    expect(memberPayload).toMatchObject({ uid: 'owner-1' });
+    expect(memberPayload).not.toHaveProperty('role');
 
     expect(result.groupId).toBeTruthy();
     expect(result.inviteToken).toHaveLength(32); // 16 bytes hex
@@ -439,7 +447,12 @@ describe('joinGroupViaToken / acceptGroupInvite — rollback on partial write fa
       username: 'malin',
       photoURL: null,
       providers: [8],
-    })).rejects.toThrow('network error');
+    // BIN-1166: funktionen KASTAR inte langre, den returnerar ett klassificerat
+    // utfall. Skalet ar att anroparen forr fick ett kastat fel som enda anropare
+    // loggade till konsolen och inget mer — inbjudan lag kvar i listan utan
+    // forklaring. Ett natverksfel ar `transient`; ett nekande skiljs numera ut.
+    // Rollback-assertionerna nedan ar OFORANDRADE: det ar bara beskedet som bytt form.
+    })).resolves.toEqual({ ok: false, reason: 'transient' });
 
     const groupRefUpdateCalls = updateDocMock.mock.calls.filter(([ref]) =>
       (ref as { _path: string })._path === 'groups/g2');
@@ -564,7 +577,9 @@ describe('joinGroupViaToken / acceptGroupInvite — no batch + clean happy path 
     const memberWrite = setDocMock.mock.calls.find(([ref]) =>
       (ref as { _path: string })._path === 'groups/g-happy/members/user-happy');
     expect(memberWrite).toBeDefined();
-    expect(memberWrite?.[1]).toMatchObject({ uid: 'user-happy', role: 'member' });
+    // BIN-1155: se kommentaren vid agarens motsvarande assertion ovan.
+    expect(memberWrite?.[1]).toMatchObject({ uid: 'user-happy' });
+    expect(memberWrite?.[1]).not.toHaveProperty('role');
   });
 
   it('acceptGroupInvite skriver SEKVENTIELLA writes, aldrig en batch', async () => {
@@ -817,8 +832,7 @@ describe('accept/join — medlemsdokumentet skrivs som create eller merge efter 
 // payload ur samma memberFields(), och DET är vad som hindrar dem från att glida
 // isär. Utan ett test på det är delningen bara en konvention.
 //
-// Testet jämför NYCKLAR, inte värden: role skiljer sig med flit (owner mot
-// member), och joinedAt sätts av båda men på olika villkor.
+// Testet jämför NYCKLAR, inte värden: joinedAt sätts av båda men på olika villkor.
 describe('medlemsdokumentets fältuppsättning är delad mellan createGroup och join-flödena (BIN-1100)', () => {
   function keysWrittenTo(path: string) {
     const call = setDocMock.mock.calls.find(([ref]) => (ref as { _path: string })._path === path);
@@ -855,13 +869,15 @@ describe('medlemsdokumentets fältuppsättning är delad mellan createGroup och 
 
     expect(ownerKeys).toEqual(joinerKeys);
     // BIN-1101
+    // BIN-1101, omraknad av BIN-1155: `role` och `notifications` ar borta ur
+    // skrivvagen, och listan MASTE vara exakt den `firestore.rules`'
+    // `isValidGroupMember` slapper igenom — en nyckel har som saknas dar nekas i
+    // produktion, en nyckel dar som saknas har ar ett hal som star oppet.
     expect(ownerKeys).toEqual([
       'displayName',
       'joinedAt',
-      'notifications',
       'photoURL',
       'providers',
-      'role',
       'uid',
       'username',
     ]);
@@ -926,8 +942,7 @@ describe('updateMemberIdentity — smal patch, aldrig ett helt medlemsdokument',
     expect(updateDocMock).toHaveBeenCalledTimes(1);
     const [ref, payload] = updateDocMock.mock.calls[0] as [{ _path: string }, Record<string, unknown>];
     expect(ref._path).toBe('groups/g1/members/u1');
-    // Nycklarna raknas upp. `role`, `photoURL`, `providers` och `notifications` ags
-    // inte av den har anroparen, och `joinedAt` ar oforanderlig sedan BIN-1063 steg 1
+    // Nycklarna raknas upp. `photoURL` och `providers` ags inte av den har anroparen, och `joinedAt` ar oforanderlig sedan BIN-1063 steg 1
     // — den halls orord just genom att UTELAMNAS ur patchen, sa regelns
     // `get(...,null)`-jamforelse pa update blir trivialt uppfylld.
     expect(Object.keys(payload).sort()).toEqual(['displayName', 'username']);
@@ -955,5 +970,123 @@ describe('updateMemberIdentity — smal patch, aldrig ett helt medlemsdokument',
     // create och fallit pa `joinedAt == request.time` — ratt utfall, av en slump.
     expect(setDocMock).not.toHaveBeenCalled();
     expect(updateDocMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+// BIN-1166. Ett nekat medlemskap var TYST pa inbjudningsvagen — anroparen loggade till
+// konsolen och gjorde inget mer — och FELSKYLLT pa lankvagen, som rapporterade varje
+// sent fel som 'transient' och lat anvandaren ladda om sidan for nagot en omladdning
+// inte lagar. Sedan BIN-1155 har medlemsdokumentet faltregler, sa nekandet ar natt.
+//
+// Testen driver den enda skillnad som betyder nagot: ett fel MED koden
+// 'permission-denied' mot ett utan.
+describe('nekande skiljs fran infrastruktur (BIN-1166)', () => {
+  const denied = () => Object.assign(new Error('denied'), { code: 'permission-denied' });
+
+  beforeEach(() => { captureErrorMock.mockClear(); });
+
+  it('acceptGroupInvite: ett nekande pa medlemsskrivningen ger refused, inte transient', async () => {
+    setDocMock.mockRejectedValueOnce(denied());
+    await expect(acceptGroupInvite({
+      groupId: 'g-den', uid: 'u-den', displayName: 'Malin',
+      username: 'malin', photoURL: null, providers: [8],
+    })).resolves.toEqual({ ok: false, reason: 'refused' });
+    // Rollbacken ar oforandrad: det ar beskedet som andrats, inte skrivvagen.
+    const rollbacks = updateDocMock.mock.calls.filter(([ref]) =>
+      (ref as { _path: string })._path === 'groups/g-den');
+    expect(rollbacks).toHaveLength(2);
+    expect(captureErrorMock).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({ scope: 'groups', kind: 'acceptGroupInvite-memberDoc' }),
+    );
+  });
+
+  // De tva nekandena har olika atgard och far darfor inte kollapsa till samma svar:
+  // en ogiltig inbjudan loses av en ny inbjudan, ett schemanekande gor det inte.
+  // Att klumpa ihop dem ar exakt BIN-942:s misstag.
+  it('acceptGroupInvite: ett nekande pa memberUids ger invite_invalid, inte refused', async () => {
+    updateDocMock.mockRejectedValueOnce(denied());
+    await expect(acceptGroupInvite({
+      groupId: 'g-inv', uid: 'u-inv', displayName: 'Malin',
+      username: 'malin', photoURL: null, providers: [8],
+    })).resolves.toEqual({ ok: false, reason: 'invite_invalid' });
+    // Ingen medlemsskrivning hann ske, sa det finns ingenting att rulla tillbaka.
+    expect(setDocMock).not.toHaveBeenCalled();
+    expect(captureErrorMock).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({ kind: 'acceptGroupInvite-memberUids' }),
+    );
+  });
+
+  // Den enda AKTA koddefekten i den har bunten, och den shippade utan pinne forst:
+  // inbjudan stadas bort EFTER att medlemskapet redan ar etablerat, sa ett tappat
+  // natverk pa just den rundturen kastade forbi utfallet och anroparen sa "kunde inte
+  // acceptera" om nagot Firestore tagit emot. Utan det har testet gar `retireInvite`
+  // att backa med hela sviten gron.
+  it('acceptGroupInvite: ett fallerat stadande av inbjudan gor INTE joinet misslyckat', async () => {
+    seedDoc('groups/g-tidy', {
+      exists: () => true,
+      data: () => ({ memberUids: ['owner'] }),
+    });
+    deleteDocMock.mockRejectedValueOnce(new Error('network'));
+
+    await expect(acceptGroupInvite({
+      groupId: 'g-tidy', uid: 'u-tidy', displayName: 'Malin',
+      username: 'malin', photoURL: null, providers: [8],
+    })).resolves.toEqual({ ok: true });
+
+    // Inte tyst: felet ar rapporterat, med sitt eget kind sa ett systematiskt
+    // haveri har gar att skilja fran ett nekat medlemskap.
+    expect(captureErrorMock).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({ scope: 'groups', kind: 'acceptGroupInvite-retireInvite' }),
+    );
+    // Och medlemskapet rullades INTE tillbaka — det ar poangen.
+    const rollbacks = updateDocMock.mock.calls.filter(([ref, payload]) =>
+      (ref as { _path: string })._path === 'groups/g-tidy'
+      && (payload as Record<string, unknown>).memberUids
+      && ((payload as Record<string, { _type?: string }>).memberUids)._type === 'arrayRemove');
+    expect(rollbacks).toHaveLength(0);
+  });
+
+  it('acceptGroupInvite: ett natverksfel ar fortfarande transient', async () => {
+    setDocMock.mockRejectedValueOnce(new Error('network'));
+    await expect(acceptGroupInvite({
+      groupId: 'g-net', uid: 'u-net', displayName: 'Malin',
+      username: 'malin', photoURL: null, providers: [8],
+    })).resolves.toEqual({ ok: false, reason: 'transient' });
+  });
+
+  it('joinGroupViaToken: ett nekande pa medlemsskrivningen ger refused', async () => {
+    seedDoc('groups/g-join', {
+      exists: () => true,
+      data: () => ({ memberUids: ['owner'], inviteTokenHash: 'h' }),
+    });
+    setDocMock
+      .mockResolvedValueOnce(undefined)   // joinAttempt
+      .mockRejectedValueOnce(denied());   // member doc
+    const res = await joinGroupViaToken({
+      groupId: 'g-join', token: 't', uid: 'u-join', displayName: 'Malin',
+      username: 'malin', photoURL: null, providers: [8],
+    });
+    expect(res).toEqual({ ok: false, reason: 'refused' });
+    expect(captureErrorMock).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({ kind: 'joinGroupViaToken-memberDoc' }),
+    );
+  });
+
+  it('createGroup: ett nekande kastas som GROUP_WRITE_REFUSED, ett natverksfel kastas ratt igenom', async () => {
+    setDocMock.mockRejectedValueOnce(denied());
+    await expect(createGroup({
+      ownerUid: 'o1', ownerDisplayName: 'Malin', ownerUsername: 'malin',
+      ownerPhotoURL: null, ownerProviders: [], name: 'G', defaults: { providerMode: 'intersect', aggregation: 'least_misery', mediaType: 'both' },
+    })).rejects.toThrow(GROUP_WRITE_REFUSED);
+
+    setDocMock.mockRejectedValueOnce(new Error('network'));
+    await expect(createGroup({
+      ownerUid: 'o1', ownerDisplayName: 'Malin', ownerUsername: 'malin',
+      ownerPhotoURL: null, ownerProviders: [], name: 'G', defaults: { providerMode: 'intersect', aggregation: 'least_misery', mediaType: 'both' },
+    })).rejects.toThrow('network');
   });
 });

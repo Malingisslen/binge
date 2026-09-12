@@ -9,6 +9,15 @@ import { fsdb } from '@/lib/firebase/db';
 import { useSenderProfile } from '@/hooks/useSenderProfile';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/contexts/ToastContext';
+import {
+  blockedReason,
+  inviteAcceptToast,
+  inviteBlocksRetry,
+  inviteRowNotice,
+  inviteStamp,
+  type InviteBlock,
+} from '@/lib/groupDenialCopy';
 import { useMyGroups, useMyGroupInvites } from '@/hooks/useGroups';
 import type { GroupInvite } from '@/lib/firebase/groups';
 
@@ -100,16 +109,54 @@ function GrupperList() {
 
 function PendingInvites() {
   const { invites, accept, decline } = useMyGroupInvites();
+  const { show: toast } = useToast();
   const [busy, setBusy] = useState<string | null>(null);
+  // BIN-1166: ett nekande ar DETERMINISTISKT — samma inbjudan ger samma svar varje
+  // gang. En toast forsvinner efter nagra sekunder och raden ser darefter orord ut,
+  // sa utan det har tillstandet kan man trycka "Acceptera" i all oandlighet pa nagot
+  // som aldrig kan lyckas. Tillstandet ar per groupId och overlever toasten.
+  //
+  // Det bar ORSAKEN, inte en boolean: de tva nekandena har olika atgard. En inbjudan
+  // som inte langre haller lagas av en ny inbjudan och av ingenting annat; ett
+  // schemanekande kan mycket val ga over vid en omladdning, som hamtar om den profil
+  // regeln jamfor mot. En gemensam text hade gett fel rad at det ena av dem — samma
+  // felskyllning den har biljetten finns for att ta bort.
+  //
+  // Och det bar TIDPUNKTEN, for annars ar meningen ovan inte sann i koden.
+  // `inviteMemberByUid` skriver om samma dokument-id, sa en agare som bjuder in pa
+  // nytt ger raden ett nytt `invitedAt` — men komponenten avmonteras aldrig (den
+  // returnerar null nar listan ar tom), sa en spar som bara kandes pa groupId hade
+  // last raden for resten av sessionen mot en inbjudan som faktiskt ar giltig.
+  const [blocked, setBlocked] = useState<Map<string, InviteBlock>>(new Map());
 
   if (invites.length === 0) return null;
 
-  const handle = async (groupId: string, action: 'accept' | 'decline') => {
+  const handle = async (invite: GroupInvite, action: 'accept' | 'decline') => {
+    const groupId = invite.groupId;
     setBusy(groupId);
     try {
-      await (action === 'accept' ? accept(groupId) : decline(groupId));
+      if (action === 'decline') {
+        await decline(groupId);
+        return;
+      }
+      const res = await accept(groupId);
+      // Textvalet ligger i `@/lib/groupDenialCopy`, inte har. Det ar hela biljetten,
+      // och ett val inbakat i en komponent utan testfil gar att byta tillbaka utan att
+      // nagot faller — samma tystnad BIN-1166 finns for att stanga.
+      const message = inviteAcceptToast(res);
+      if (message) toast(message);
+      const reason = inviteBlocksRetry(res);
+      if (reason) {
+        setBlocked(prev => new Map(prev).set(groupId, { reason, at: inviteStamp(invite) }));
+      }
     } catch (e) {
       console.error(e);
+      // Grenad pa handlingen: bada vagarna gar genom samma try, sa ett fallerat
+      // AVBOJANDE hade annars fatt beskedet om ett accepterande — samma sorts
+      // felskyllning den har biljetten finns for att ta bort, en knapp bort.
+      toast(action === 'decline'
+        ? 'Kunde inte avböja inbjudan just nu. Försök igen om en stund.'
+        : 'Kunde inte acceptera inbjudan just nu. Försök igen om en stund.');
     } finally {
       setBusy(null);
     }
@@ -126,8 +173,9 @@ function PendingInvites() {
             key={inv.groupId}
             invite={inv}
             busy={busy === inv.groupId}
-            onAccept={() => handle(inv.groupId, 'accept')}
-            onDecline={() => handle(inv.groupId, 'decline')}
+            blocked={blockedReason(blocked, inv)}
+            onAccept={() => handle(inv, 'accept')}
+            onDecline={() => handle(inv, 'decline')}
           />
         ))}
       </ul>
@@ -169,11 +217,13 @@ function useInviteIdentity(invite: GroupInvite) {
 function InviteRow({
   invite,
   busy,
+  blocked,
   onAccept,
   onDecline,
 }: {
   invite: GroupInvite;
   busy: boolean;
+  blocked: 'invite_invalid' | 'refused' | null;
   onAccept: () => void;
   onDecline: () => void;
 }) {
@@ -182,12 +232,14 @@ function InviteRow({
     <li className="px-3 py-2 flex items-center gap-2">
       <div className="flex-1 min-w-0">
         <div className="text-xs font-semibold text-ink truncate">{groupName}</div>
-        <div className="text-xxs text-ink-3 truncate">{fromDisplayName} bjöd in dig</div>
+        {inviteRowNotice(blocked)
+          ? <div className="text-xxs text-danger-ink truncate">{inviteRowNotice(blocked)}</div>
+          : <div className="text-xxs text-ink-3 truncate">{fromDisplayName} bjöd in dig</div>}
       </div>
       <div className="flex gap-1">
         <button
           onClick={onAccept}
-          disabled={busy}
+          disabled={busy || blocked !== null}
           className="px-2 py-[2px] text-xxs border border-acc-deep bg-acc-deep text-white rounded-sm cursor-pointer font-[inherit] disabled:opacity-60"
         >
           Acceptera

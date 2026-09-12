@@ -1139,3 +1139,35 @@ biljetten. Skriv inte av den halvan.
 **RE-OPEN WHEN:** `kind: 'identityFanOut-group'` eller `kind: 'identityFanOut-query'`
 dyker upp i Sentry-scopet `auth`. En enstaka träff är väntad och godartad;
 återkommande träffar betyder punkt 2 och är en annan fråga än den här posten.
+
+---
+
+## BIN-1155: medlemsradens fältuppsättning är låst, och två fält är borta — 2026-09-12
+
+Efterföljare till BIN-1162-posten ovan. Den är append-only och står ordagrant kvar;
+den här raden säger vad som inte längre beskriver dokumentet.
+
+BIN-1162-postens punkt 3 räknar upp `role`, `photoURL`, `providers` och
+`notifications` som fält fan-outen inte äger. **`role` och `notifications` finns inte
+längre på dokumentet**: Malins beslut 2026-09-12, sedan dataskyddsrollen blockerat på
+att låsa fast två fält utan läsare i appen på något varje gruppmedlem kan läsa.
+Ägarskap härleds ur `group.ownerUid`, och notisflaggan var hårdkodad `true` utan
+reglage. Härled fältmängden hellre än att lita på någon uppräkning:
+
+```
+grep -n -A 10 "function memberFields" src/lib/firebase/groups.ts
+```
+
+**Punkt 3:s accept är oförändrad i sak.** Den säger att fan-outen inte får växa, och
+den gäller precis lika starkt över en kortare fältlista — `firestore.rules`
+`isValidGroupMember` binder numera nyckelmängden, så en växande patch nekas av regeln
+i stället för att bara vara ogillad i prosa.
+
+**Vad som TILLKOM samma dag, och som inte är en accept utan en stängd lucka:**
+medlemsdokumentet har nu typ- och längdgränser per fält, `uid` är pinnat mot
+sökvägssegmentet, och identitetsfälten binds till skrivarens egen live-profil — på
+update bara när fältet faktiskt ändras, just för att inte stänga den läkningsväg
+BIN-1162-posten vilar på.
+
+**Re-open when:** ett fält läggs tillbaka på medlemsdokumentet. Då flyttar både
+`memberFields()` och regelns nyckellista, i samma commit.

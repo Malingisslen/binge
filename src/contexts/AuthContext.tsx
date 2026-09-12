@@ -1300,10 +1300,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // och da ska syskonflikarna och gruppraderna fa veta det.
     //
     // Vardet ar det KLAMPADE, samma strang som gick till dokumentet - aldrig ett
-    // omharlett. Medlemsdokumentet har ingen egen langdgrans i reglerna att falla
-    // tillbaka pa; harled det med
-    //   awk '/match \/members\/\{memberUid\}/,/^      \}/' firestore.rules
-    // (#27 DBA).
+    // omharlett eller omlast (#27 DBA).
     await publishIdentityChange({ displayName: clamped, username: user?.username ?? null });
   }, [updateUserField, publishIdentityChange, user?.username]);
 

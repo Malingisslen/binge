@@ -6,7 +6,7 @@ import { Users } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import { FormSection, FormRadioGroup } from '@/components/ui/FormSection';
 import { useAuth } from '@/hooks/useAuth';
-import { createGroup } from '@/lib/firebase/groups';
+import { createGroup, GROUP_WRITE_REFUSED } from '@/lib/firebase/groups';
 import { cacheInviteToken } from '@/lib/groupInviteCache';
 import { PageHeader } from '@/components/layout/PageHeader';
 import type {
@@ -56,7 +56,12 @@ function NyGruppContent() {
       router.push(`/grupper/${groupId}`);
     } catch (err) {
       console.error(err);
-      setError('Kunde inte skapa grupp. Försök igen.');
+      // BIN-1166: sedan BIN-1155 kan ägarens egen medlemsskrivning nekas av
+      // medlemsdokumentets fältregler, och då lagar inget omförsök det. Att säga
+      // "Försök igen" på det är samma felskyllning som länkvägen hade.
+      setError((err as { message?: string } | null)?.message === GROUP_WRITE_REFUSED
+        ? 'Det gick inte att skapa gruppen. Ladda om sidan och prova igen — hjälper det inte, mejla hej@binge.nu.'
+        : 'Kunde inte skapa grupp. Försök igen.');
       setSubmitting(false);
     }
   };

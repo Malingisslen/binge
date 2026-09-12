@@ -79,6 +79,18 @@ Cap: 80k chars — pay for an addition with a cut, and move what you cut verbati
   is STRICTER (missing → error → DENY): guard only when omission should pass (BIN-357). A pin can also block
   the LEGITIMATE flow (BIN-276's `inviteTokenHash` pin broke rotation while 100 tests passed) — trace every
   legitimate client mutation of a pinned field.
+- **A "field is optional, null bypasses the check" comparator built for CREATE forges an ERASURE when reused
+  as an UPDATE identity-binding pin.** `isOwnIdentity(v, ...)` returns true unconditionally when `v == null` —
+  correct for create, where "absent" only ever means "the writer never set this optional field". Reused inside
+  an update-time `keepsOrOwnsIdentity()` as `new.get('displayName',null)==old.get(...) || isOwnIdentity(new.get(...),null)`,
+  the same null trivially satisfies the SECOND disjunct too: a writer under `selfOrOwner()` can `updateDoc(ref,
+  {displayName: deleteField()})` (or an explicit `{displayName: null}`) on ANY row it may write — including,
+  via the owner branch, a DIFFERENT member's row — turning a previously-set field absent with NO identity check
+  at all, live-PoC'd both ways (BIN-1155). The module comment's own claim ("changing the field to something
+  that isn't yours still requires your own live profile") is false for this one value. Fix: require the
+  ownership disjunct to also assert the NEW value is non-null — `(new==old) || (new!=null && isOwnIdentity(new,null))`
+  — so "unset" only ever passes via the unchanged branch (old was already null/absent), never as a fresh erasure.
+  Tell: any update rule building on a create-time "optional field" comparator to express "unchanged OR mine".
 - **A client-writable timestamp a server reads as "fresh → skip action" needs `<= request.time`, not just
   `is timestamp`** — else `Timestamp.fromMillis(futureMs)` defeats the sweep forever. `serverTimestamp()`
   resolves to exactly `request.time` (`<=`, not `<`); promoting an unvalidated field to this ratchet makes any

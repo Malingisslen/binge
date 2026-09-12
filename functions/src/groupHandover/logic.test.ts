@@ -387,10 +387,15 @@ describe('the erasure covers every uid-bearing field the group contracts pin', (
   // `hasOnly` spelling — and report an empty set, which every subset assertion
   // below would satisfy. The guard would be inert and silent.
   it('the scan actually found fields', () => {
-    // Raised 2 -> 4 when BIN-1140 gave the group document its own hasOnly: the scan
-    // now derives ownerUid, memberUids, pickedByUid and participantUids. Lowering it
-    // is the deliberate act a shrink has to perform out loud.
-    expect(uidFieldsInRules.size).toBeGreaterThanOrEqual(4);
+    // Raised 2 -> 4 when BIN-1140 gave the group document its own hasOnly, and
+    // 4 -> 5 when BIN-1155 gave the MEMBER document one, which pins `uid` against the
+    // path segment. Lowering it is the deliberate act a shrink has to perform out loud.
+    //
+    // The floor earned its keep on that second raise: BIN-1155's first draft carried an
+    // awk pattern in a rules COMMENT whose braces did not balance, which closed the
+    // brace scan above early and shrank the derived set to three. Nothing else in the
+    // file would have said so.
+    expect(uidFieldsInRules.size).toBeGreaterThanOrEqual(5);
   });
 
   // How each field is erased, not merely that its name occurs somewhere. An
@@ -420,6 +425,25 @@ describe('the erasure covers every uid-bearing field the group contracts pin', (
     memberUids: 'memberUids: survivors',
   };
 
+  // The third way, added by BIN-1155. `groups/{gid}/members/{uid}` gained its own
+  // `hasOnly`, which pins the row's `uid` field against the path segment — so the scan
+  // now derives `uid`. It is neither erased field-by-field nor handed over: the whole
+  // ROW goes, which is strictly more than clearing one field on it. Declaring it keeps
+  // the roster requirement honest rather than teaching the scan to look away, the same
+  // reasoning HANDOVER_EXPRESSION above carries.
+  const ROW_DELETED_EXPRESSION: Record<string, string> = {
+    uid: "{ op: 'delete', collection: 'members', doc: leavingUid }",
+  };
+
+  it('a uid field on a row that is deleted whole is covered by that delete', () => {
+    // Pinned on the delete EXPRESSION, not on the field name: `uid` occurs all over
+    // the row types it is read from, so a name check would stay green with the delete
+    // ripped out.
+    for (const expr of Object.values(ROW_DELETED_EXPRESSION)) {
+      expect(LOGIC, `the member row is no longer deleted (\`${expr}\`)`).toContain(expr);
+    }
+  });
+
   it('the group document\'s own uid fields are handed over, not merely named', () => {
     // Pinned on the expressions in buildHandoverUpdate, not on the field names: the
     // names occur in the row types they are read from, so a `toContain(field)` would
@@ -430,7 +454,11 @@ describe('the erasure covers every uid-bearing field the group contracts pin', (
   });
 
   it('the derived set and the declared handlers are the same set, both ways', () => {
-    const declared = [...Object.keys(ERASURE_EXPRESSION), ...Object.keys(HANDOVER_EXPRESSION)];
+    const declared = [
+      ...Object.keys(ERASURE_EXPRESSION),
+      ...Object.keys(HANDOVER_EXPRESSION),
+      ...Object.keys(ROW_DELETED_EXPRESSION),
+    ];
     // → A new uid field in a group contract has no handler here and fails.
     for (const field of uidFieldsInRules) {
       expect(declared, `${field} is pinned by firestore.rules but has no handler`)

@@ -1574,6 +1574,57 @@ service cloud.firestore {
           );
         }
 
+        // BIN-1155: dokumentets nyckelmängd och varje fälts form.
+        //
+        // Före den här funktionen ställde ingen gren i medlemsblocket någon fråga om
+        // vilka nycklar dokumentet får ha eller hur stora värdena får vara: ett
+        // `grep -c hasOnly` över medlemsblocket gav 0.
+        // (Kommandot skrivs utan klamrar med flit — `logic.test.ts` i functions/ läser
+        // det HÄR trädet genom att räkna klamrar från match-raden, och en ensam
+        // klammer i en kommentar stänger dess skanning i förtid. Golvet i det testet
+        // fångade precis det.) Dokumentet är
+        // läsbart för VARJE medlem i gruppen, så en godtycklig skrivare kunde lägga
+        // toppnivåfält upp mot dokumentgränsen på något alla i gruppen läser om.
+        //
+        // Listan är de fält `memberFields()` skriver, plus `joinedAt`. Härled den,
+        // lita inte på uppräkningen här:
+        //   grep -n -A 10 "function memberFields" src/lib/firebase/groups.ts
+        // För SNÄV lista bryter gruppskapande och join i produktion; för VID lämnar
+        // hålet öppet. Den är ett TAK, aldrig ett golv.
+        //
+        // MEDSKYLDIGA KÄLLOR. Mätt 2026-09-12 skriver `functions/` inga fält till det
+        // här dokumentet — den läser det och raderar det. Börjar en Admin-SDK-väg
+        // skriva ett fält hit måste listan vidgas i SAMMA commit, annars är det nästa
+        // HELT ORELATERADE klientskrivning som nekas: vid en update är
+        // `request.resource.data` hela dokumentet EFTER skrivningen, inte patchen, så
+        // ett främmande fält ligger kvar i den och fälls av `hasOnly`. Samma skäl gör
+        // att en rad som inte uppfyller värdegränserna blir permanent oredigerbar.
+        //
+        // TALEN HAR VAR SIN EGEN KÄLLA och får aldrig gissas ur en granne. `displayName`
+        // följer `MAX_DISPLAY_NAME` i src/lib/clampText.ts (80) — samma tak som
+        // `users/{uid}` och `publicProfiles/{uid}`, INTE gruppnamnets 48. Ett snävare
+        // tak här hade nekat BIN-1162:s omskrivning för den vars namn ryms i profilen
+        // men inte på medlemsraden, och den staleness läker aldrig. `username` går
+        // genom `isValidUsername`, `photoURL` mot projektionens 500, `providers` mot
+        // samma listtak som Tillsammans-deltagarna.
+        //
+        // Varje fält prövas BARA om det finns, som `isValidPublicProfile` gör: ett
+        // dokument som saknar en nyckel ska gå att uppdatera vidare, inte låsas.
+        function isValidGroupMember(d) {
+          return d.keys().hasOnly(['uid', 'displayName', 'username', 'photoURL', 'providers', 'joinedAt'])
+            // uid får peka på precis en rad: sin egen. `memberDocToObject` föredrar
+            // FÄLTET framför dokument-id:t och `GroupMembersPanel` skickar fältets
+            // värde till `removeMember`, så ett förfalskat uid fick ägarens nästa
+            // "ta bort"-klick att radera en annan medlem. Samma form som
+            // sessions/.../participants redan stängde i BIN-509/BIN-24.
+            && (!('uid' in d) || d.uid == memberUid)
+            && (!('displayName' in d) || (d.displayName is string && d.displayName.size() <= 80))
+            && (!('username' in d) || d.username == null || isValidUsername(d.username))
+            && (!('photoURL' in d) || d.photoURL == null
+              || (d.photoURL is string && d.photoURL.size() <= 500))
+            && (!('providers' in d) || (d.providers is list && d.providers.size() <= 100));
+        }
+
         // joinedAt pinnas till serverns commit-tid, samma mönster som joinAttempts
         // createdAt (BIN-480) och household updatedAt. Fältet blir tilldelningsnyckeln
         // när en ägarlös grupp lämnas över till den medlem som varit med längst
@@ -1585,6 +1636,8 @@ service cloud.firestore {
         // för att lita på den här meningen:
         //   grep -n "'members'" src/lib/firebase/groups.ts
         allow create: if selfOrOwner()
+          && isValidGroupMember(request.resource.data)
+          && matchesOwnIdentity(request.resource.data)
           && request.resource.data.joinedAt == request.time;
 
         // Oföränderligt efteråt. Uppslag med default på BÅDA sidor, aldrig ett bart
@@ -1593,7 +1646,48 @@ service cloud.firestore {
         // igen, och updateMemberProviders låstes ute tills doc:et reparerats manuellt.
         // Saknas fältet på båda sidor jämförs null mot null och en uppdatering av
         // något ANNAT fält går igenom.
+        // BIN-1155: identitetsfälten binds till skrivarens EGEN live-profil, samma
+        // `matchesOwnIdentity` som recensioner, kommentarer och reaktioner redan bär.
+        // Panelen var splittrad på den här punkten 2026-09-11 — databasansvarige
+        // blockerade PÅ bindningen, eftersom den läser live-värdet medan appen skickade
+        // den kopia som låg i minnet. Den invändningen är upplöst: kopian hålls färsk
+        // mellan flikar sedan BIN-1163.
+        //
+        // Villkoret gäller BÅDA grenarna i `selfOrOwner()` med flit. Ägargrenen kunde
+        // annars skriva ett godtyckligt namn på en ANNAN medlems rad — ingen klientväg
+        // gör det i dag (ägarens enda skrivning mot en främmande rad är en delete, som
+        // inte bär någon request.resource), men en bindning som bara gäller ena grenen
+        // hade lämnat formen öppen för nästa skrivare.
+        //
+        // PÅ UPDATE binds bara ett fält som FAKTISKT ÄNDRAS, och det är inte en
+        // uppmjukning utan en rättelse. `request.resource.data` är hela dokumentet
+        // EFTER skrivningen, inte patchen, så en rad vars lagrade namn hunnit bli
+        // inaktuellt — precis den rest BIN-1162:s daterade post accepterar — hade
+        // annars fällt VARJE uppdatering av raden, inklusive en `providers`-patch som
+        // aldrig rör identiteten. Det hade stängt just den läkningsväg posten vilar på.
+        // Förfalskningen är ändå omöjlig: att ÄNDRA fältet till något som inte är ditt
+        // kräver fortfarande din egen live-profil.
+        //
+        // `!= null` ar inte dekorativt. `isOwnIdentity` slapper igenom null med flit —
+        // pa en CREATE betyder det "faltet skickades inte", och dar fangas ett faktiskt
+        // null anda av typkontrollen i `isValidGroupMember`. Pa en UPDATE finns en tredje
+        // form: `deleteField()` TAR BORT nyckeln, och da ser bade typkontrollen och
+        // `isOwnIdentity` ett franvarande falt och slapper igenom. Utan villkoret nedan
+        // kunde alltsa vem som helst med skrivratt — inklusive agaren pa en ANNAN
+        // medlems rad — RADERA namnet i stallet for att andra det, och bindningen hade
+        // inte jamfort mot nagot alls. Att forfalska ar stangt; att tomma var det inte.
+        function keepsOrOwnsIdentity() {
+          return (request.resource.data.get('displayName', null) == resource.data.get('displayName', null)
+              || (request.resource.data.get('displayName', null) != null
+                && isOwnIdentity(request.resource.data.get('displayName', null), null)))
+            && (request.resource.data.get('username', null) == resource.data.get('username', null)
+              || (request.resource.data.get('username', null) != null
+                && isOwnIdentity(null, request.resource.data.get('username', null))));
+        }
+
         allow update: if selfOrOwner()
+          && isValidGroupMember(request.resource.data)
+          && keepsOrOwnsIdentity()
           && request.resource.data.get('joinedAt', null) == resource.data.get('joinedAt', null);
 
         allow delete: if selfOrOwner();

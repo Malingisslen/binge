@@ -1,6 +1,7 @@
 import { fsdb, lazySubscribe, type FirestoreKit } from './db';
 import { toDate, generateSecureToken, sha256Hex } from './utils';
 import { isPermissionDenied } from './errorCodes';
+import { captureError } from '@/lib/sentry';
 import { mediaTypeDocId, resolveTmdbId } from '@/lib/mediaTypeDocId';
 import {
   buildHouseholdContribution,
@@ -13,7 +14,6 @@ import type {
   Group,
   GroupDefaults,
   GroupMember,
-  GroupRole,
   GroupWatchlistItem,
   MediaType,
 } from '@/types';
@@ -85,6 +85,42 @@ function invalidateMyGroupsCache(uid: string): void {
 // liten regression jämfört med "riktig" atomicitet — men det är det enda
 // som faktiskt fungerar från en klient. Riktig atomicitet kräver en
 // Cloud Function (admin SDK, förbi klient-regler).
+/**
+ * BIN-1166: ett nekat medlemskap var tyst pa ena vagen och felskyllt pa den andra.
+ *
+ * `refused` betyder att servern sa nej pa sak — sedan BIN-1155 har medlemsdokumentet
+ * faltregler, och ett omforsok med samma data far samma svar. `transient` ar
+ * infrastruktur, dar ett omforsok hjalper. Att lata det forsta se ut som det andra ar
+ * exakt det misstag BIN-942 redan dokumenterat en gang.
+ */
+export type JoinViaTokenResult =
+  | { ok: true }
+  | { ok: false; reason: 'not_found' | 'invalid_token' | 'already_member' | 'refused' | 'transient' };
+
+/**
+ * Tva nekanden med olika atgard, darfor tva varden. `invite_invalid` kommer fran
+ * gruppdokumentets accept-gren — inbjudan haller inte langre — medan `refused` kommer
+ * fran medlemsdokumentets faltregler. Att kollapsa dem hade gett samma besked pa tva
+ * lagen dar anvandarens nasta steg skiljer sig.
+ */
+export type AcceptInviteResult =
+  | { ok: true }
+  | { ok: false; reason: 'invite_invalid' | 'refused' | 'transient' };
+
+export const GROUP_WRITE_REFUSED = 'binge/group-write-refused';
+
+/**
+ * `groups.ts` hade noll `captureError`-anrop fore BIN-1166, sa en systematisk
+ * regelregression pa nagon av de har skrivvagarna hade varit osynlig: felen syns inte
+ * i datan och anvandaren har inget att anmala nar inget hander. Samma konvention som
+ * BIN-957 och BIN-1162 — `console.error` for den som sitter med konsolen, en
+ * Sentry-rad for den som bevakar.
+ */
+function reportGroupWriteError(kind: string, err: unknown): void {
+  console.error('groups: skrivningen nekades eller foll (' + kind + ')', err);
+  captureError(err, { scope: 'groups', kind });
+}
+
 export async function createGroup(params: {
   ownerUid: string;
   ownerDisplayName: string;
@@ -125,26 +161,32 @@ export async function createGroup(params: {
     // writeMemberDoc gör vore därför alltid ett svar vi redan känner, och den
     // kostar mot 25 kr/mån-taket. Fältuppsättningen delas ändå (BIN-1100).
     //
-    // Byt hit till writeMemberDoc den dag create-regeln för members/{memberUid}
-    // pinnar ett fält till — då blir handdubbleringen en fälla värd läsningen.
+    // Utlösaren den här raden brukade peka på — att create-regeln pinnar ett fält
+    // till — inträffade i BIN-1155: grenen bär nu både en nyckellista och en
+    // identitetsbindning. Den handskrivna payloaden uppfyller båda (den går genom
+    // samma `memberFields()`), så bytet är fortfarande inte nödvändigt; det som
+    // ändrats är att argumentet inte längre är "den dagen kommer".
     await setDoc(doc(db, 'groups', groupRef.id, 'members', params.ownerUid), {
       ...memberFields(params.ownerUid, {
         displayName: params.ownerDisplayName,
         username: params.ownerUsername,
         photoURL: params.ownerPhotoURL,
         providers: params.ownerProviders,
-        role: 'owner',
       }),
       joinedAt: serverTimestamp(),
     });
   } catch (err) {
-    console.error('owner member doc write failed after group create — rolling back the group doc', err);
+    reportGroupWriteError('createGroup-memberDoc', err);
     await deleteDoc(doc(db, 'groups', groupRef.id)).catch(rollbackErr => {
       console.error('rollback of the group doc ALSO failed — an ownerless group remains, needs manual Firestore fix', rollbackErr);
     });
     // Kastas vidare: anroparen får INTE ett groupId + token för en grupp som
     // inte längre finns. Ett omförsök är säkert — inget spår är kvar.
-    throw err;
+    //
+    // BIN-1166: men VAD som kastas ar inte langre likgiltigt. Sedan BIN-1155 kan
+    // agarens egen medlemsskrivning nekas av faltreglerna, och da laker inget
+    // omforsok — anroparen maste kunna saga nagot annat an "forsok igen".
+    throw isPermissionDenied(err) ? new Error(GROUP_WRITE_REFUSED) : err;
   }
 
   invalidateMyGroupsCache(params.ownerUid);
@@ -230,7 +272,7 @@ export async function joinGroupViaToken(params: {
   username: string | null;
   photoURL: string | null;
   providers: number[];
-}): Promise<{ ok: true } | { ok: false; reason: 'not_found' | 'invalid_token' | 'already_member' | 'transient' }> {
+}): Promise<JoinViaTokenResult> {
   const { db, doc, getDoc, setDoc, updateDoc, deleteDoc, arrayUnion, arrayRemove, serverTimestamp } = await fsdb();
   const ref = doc(db, 'groups', params.groupId);
   const snap = await getDoc(ref);
@@ -292,19 +334,18 @@ export async function joinGroupViaToken(params: {
         username: params.username,
         photoURL: params.photoURL,
         providers: params.providers,
-        role: 'member',
       },
     );
   } catch (err) {
-    console.error('member doc write failed after memberUids update — rolling back to allow retry', err);
+    reportGroupWriteError('joinGroupViaToken-memberDoc', err);
     await updateDoc(ref, { memberUids: arrayRemove(params.uid), updatedAt: serverTimestamp() }).catch(rollbackErr => {
       console.error('rollback of memberUids ALSO failed — uid is now a ghost member, needs manual Firestore fix', rollbackErr);
     });
-    // Token är redan bevisat giltig här (steg 1 + 2 gick igenom), så det här är
-    // per definition infrastruktur — och rollbacken ovan gör ett omförsök
-    // säkert. 'transient' är alltså både sannare och det som faktiskt låter
-    // anroparen försöka igen.
-    return { ok: false, reason: 'transient' };
+    // BIN-1166: kommentaren har sa att token redan ar bevisad giltig, sa allt
+    // efterat MASTE vara infrastruktur. Det slutade vara sant med BIN-1155:
+    // medlemsdokumentet har faltregler nu, och ett omforsok med samma data far samma
+    // svar. Ett infrastrukturfel ar en annan sak.
+    return { ok: false, reason: isPermissionDenied(err) ? 'refused' : 'transient' };
   }
 
   invalidateMyGroupsCache(params.uid);
@@ -353,9 +394,20 @@ type MemberProfileFields = {
   username: string | null;
   photoURL: string | null;
   providers: number[];
-  role: string;
 };
 
+/**
+ * Medlemsdokumentets HELA faltuppsattning, plus `joinedAt` som bara skrivs vid
+ * create. `firestore.rules`' medlemsblock har en `hasOnly`-lista som maste vara
+ * exakt den har mangden - harled den harifran, aldrig ur en uppraekning i prosa.
+ *
+ * BIN-1155, Malins beslut 2026-09-12: `role` och `notifications` ar BORTA. Ingen av
+ * dem hade en lasare - agarskap harleds ur `group.ownerUid`, och notisflaggan var
+ * hardkodad `true` utan reglage - och dokumentet ar lasbart for varje gruppmedlem,
+ * sa att lasa fast dem i nyckellistan hade formellt godkant data ingenting behovde.
+ * Lagg tillbaka ett falt nar nagot faktiskt laser det, och vidga listan i reglerna i
+ * SAMMA commit.
+ */
 function memberFields(uid: string, profile: MemberProfileFields) {
   return {
     uid,
@@ -363,8 +415,6 @@ function memberFields(uid: string, profile: MemberProfileFields) {
     username: profile.username,
     photoURL: profile.photoURL,
     providers: profile.providers,
-    role: profile.role,
-    notifications: true,
   };
 }
 
@@ -413,6 +463,25 @@ async function writeMemberDoc(
 // isOwner(uid), oberoende av grupp-state), men görs sist så ett avbrutet
 // flöde (t.ex. nätverksfel efter steg 1) lämnar inbjudan kvar för en ny
 // accept-försök istället för att tyst tappa bort den.
+/**
+ * BIN-1166: att stada bort inbjudan far ALDRIG gora ett lyckat medlemskap till ett
+ * misslyckat. Den har skrivningen ligger efter att medlemskapet redan ar etablerat, sa
+ * ett tappat natverk pa just den rundturen kastade forbi utfallet och anroparen sa
+ * "kunde inte acceptera" om nagot Firestore tagit emot — anvandaren ar med i gruppen,
+ * raden star kvar i listan, och beskedet sager motsatsen. Samma form som BIN-1025, fast
+ * atervand: dar var det en VAGRAN som bekraftades, har ar det en FRAMGANG som nekas.
+ *
+ * En kvarliggande inbjudan ar ofarlig: `already_member`-spärren kortsluter nasta forsok
+ * och raderar den da. `joinGroupViaToken` gor redan likadant med sitt joinAttempt-doc.
+ */
+async function retireInvite(run: () => Promise<void>): Promise<void> {
+  try {
+    await run();
+  } catch (err) {
+    reportGroupWriteError('acceptGroupInvite-retireInvite', err);
+  }
+}
+
 export async function acceptGroupInvite(params: {
   groupId: string;
   uid: string;
@@ -420,7 +489,7 @@ export async function acceptGroupInvite(params: {
   username: string | null;
   photoURL: string | null;
   providers: number[];
-}): Promise<void> {
+}): Promise<AcceptInviteResult> {
   const { db, doc, getDoc, setDoc, updateDoc, deleteDoc, arrayUnion, arrayRemove, serverTimestamp } = await fsdb();
   const groupRef = doc(db, 'groups', params.groupId);
 
@@ -448,16 +517,26 @@ export async function acceptGroupInvite(params: {
     const existingMember = await getDoc(doc(db, 'groups', params.groupId, 'members', params.uid));
     if (existingMember.exists()) {
       invalidateMyGroupsCache(params.uid);
-      await deleteDoc(doc(db, 'users', params.uid, 'groupInvites', params.groupId));
-      return;
+      await retireInvite(() => deleteDoc(doc(db, 'users', params.uid, 'groupInvites', params.groupId)));
+      return { ok: true };
     }
     // Spöke — fall igenom, precis som före den här spärren fanns.
   }
 
-  await updateDoc(groupRef, {
-    memberUids: arrayUnion(params.uid),
-    updatedAt: serverTimestamp(),
-  });
+  // BIN-1166: den har skrivningen hade inget try/catch alls, sa ett nekande blev en
+  // ohanterad rejection hos anroparen. Ett nekande HAR betyder att inbjudan inte
+  // langre haller — gruppregelns accept-gren kraver att inbjudningsdokumentet finns
+  // och att uid inte redan star i memberUids — och det ar en ANNAN sak an ett nekande
+  // pa medlemsskrivningen nedan. Att klumpa ihop dem ar exakt BIN-942:s misstag.
+  try {
+    await updateDoc(groupRef, {
+      memberUids: arrayUnion(params.uid),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (err) {
+    reportGroupWriteError('acceptGroupInvite-memberUids', err);
+    return { ok: false, reason: isPermissionDenied(err) ? 'invite_invalid' : 'transient' };
+  }
 
   // Code review (2026-07-18, high-effort pass): egen try/catch, samma
   // motivering som joinGroupViaToken — om DEN här writen faller (nätverksfel
@@ -475,19 +554,22 @@ export async function acceptGroupInvite(params: {
         username: params.username,
         photoURL: params.photoURL,
         providers: params.providers,
-        role: 'member',
       },
     );
   } catch (err) {
-    console.error('member doc write failed after memberUids update — rolling back to allow retry', err);
+    reportGroupWriteError('acceptGroupInvite-memberDoc', err);
     await updateDoc(groupRef, { memberUids: arrayRemove(params.uid), updatedAt: serverTimestamp() }).catch(rollbackErr => {
       console.error('rollback of memberUids ALSO failed — uid is now a ghost member, needs manual Firestore fix', rollbackErr);
     });
-    throw err;
+    // Rollbacken ovan ar oforandrad av BIN-1166 — det enda som andras ar VAD
+    // anroparen far veta. Sedan BIN-1155 kan den har skrivningen nekas av
+    // medlemsdokumentets faltregler, och ett omforsok laker inte det.
+    return { ok: false, reason: isPermissionDenied(err) ? 'refused' : 'transient' };
   }
 
   invalidateMyGroupsCache(params.uid);
-  await deleteDoc(doc(db, 'users', params.uid, 'groupInvites', params.groupId));
+  await retireInvite(() => deleteDoc(doc(db, 'users', params.uid, 'groupInvites', params.groupId)));
+  return { ok: true };
 }
 
 // Avböj inbjudan — raderar bara invite-doc:et utan att bli medlem.
@@ -601,12 +683,10 @@ export async function updateMemberProviders(
  * Exakt två nycklar, via `updateDoc` — medvetet, och båda halvorna är bindande
  * villkor ur panelen 2026-09-12:
  *
- * `memberFields()` hade varit den uppenbara återanvändningen och är fel här. Den
- * kräver ett `role`, och anroparen (`AuthContext`) har ingen auktoritativ källa för
- * vilken roll uid:t har i en viss grupp — en omskrivning genom den kunde degradera en
- * ägare till `member` och samtidigt stampa över `photoURL`, `providers` och
- * `notifications` med värden anroparen inte äger. `joinedAt` hålls orörd av att den
- * utelämnas: regelns `get(...,null)`-jämförelse på update är då trivialt uppfylld.
+ * `memberFields()` hade varit den uppenbara återanvändningen och är fel här: den
+ * bygger HELA dokumentet, så en omskrivning genom den stampar över `photoURL` och
+ * `providers` med värden den här anroparen inte äger. `joinedAt` hålls orörd av att
+ * den utelämnas: regelns `get(...,null)`-jämförelse på update är då trivialt uppfylld.
  *
  * `updateDoc` och inte `setDoc(..., { merge: true })`: båda formerna misslyckas om
  * raden hunnit raderas av kontoraderingens kaskad, men bara `updateDoc` misslyckas
@@ -936,9 +1016,7 @@ export function memberDocToObject(id: string, data: Record<string, unknown>): Gr
     username: (data.username as string | null) ?? null,
     photoURL: (data.photoURL as string | null) ?? null,
     providers: (data.providers as number[]) ?? [],
-    role: ((data.role as GroupRole) ?? 'member'),
     joinedAt: toDate(data.joinedAt),
-    notifications: (data.notifications as boolean) ?? true,
   };
 }
 

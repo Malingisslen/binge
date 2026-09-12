@@ -234,8 +234,7 @@ fem — ingen omkörning behövdes. Villkoren nedan är ACCEPTANSKRITERIER, inte
    (#27 rådgivande, #6 blockerande: en fan-out får aldrig återuppliva en rad
    raderingskaskaden redan tagit.)
 9. **Värdet som skrivs är det REDAN klampade**, samma sträng som gick till `users/{uid}` —
-   inte ett omhärlett eller omläst värde. Medlemsdokumentet har ingen egen längdgräns i
-   reglerna förrän batch C, så det finns inget skyddsnät under. (#27 rådgivande.)
+   inte ett omhärlett eller omläst värde. (#27 rådgivande.)
 10. **Restens av en halvfärdig fan-out skrivs ned som ett daterat val i
     `.claude/rules/accepted-deviations.md`**, med en re-open-utlösare knuten till ett
     specifikt `captureError`-`kind`. Ett nätverksfel på någon grupp lämnar just de raderna
@@ -274,137 +273,133 @@ fem — ingen omkörning behövdes. Villkoren nedan är ACCEPTANSKRITERIER, inte
 
 ---
 
-## Batch B — gruppen slutar vara läsbar för alla, och en nekad join säger sanningen [Tier C] — BIN-1152, BIN-1166
+## Batch B — medlemsraden binder vad som får skrivas, och ett nekande syns [Tier C] — BIN-1155, BIN-1166
 
-Routning: `node docs/org/route.mjs --md firestore.rules src/lib/firebase/groups.ts src/components/pages/GroupPageClient.tsx src/app/grupper/page.tsx`
-→ vid urvalet: Tier **top**, full panel.
+Routning, körd på den faktiska filuppsättningen:
+`node docs/org/route.mjs --md firestore.rules src/lib/firebase/groups.ts src/components/pages/GroupPageClient.tsx src/app/grupper/page.tsx src/app/grupper/ny/page.tsx src/types/social.ts src/test/rules/firestore-rules.test.ts src/lib/firebase/groups.test.ts`
+→ Tier **top**. Vilka roller som seatas är kommandots svar, inte en mening här: kör om
+det före varje kritik och mot `git diff --cached --name-only` omedelbart före varje
+commit.
 
-Disposition: **build** — BIN-1152 är Malins avgjorda produktval; BIN-1166 är en bugg.
+Panelen FLYTTADE sig under bygget, och det är själva skälet till att den regeln finns.
+Urvalets filuppsättning gav en roster; unionen växte med en medlemslistefixtur och
+skapa-grupp-sidan, och den seatade då en roll som inte hade kritiserat något. Den
+kritiken kördes före commit, mot den byggda diffen i stället för mot planen, och står
+som en egen rad i `docs/org/metrics/events.jsonl`. Den hittade ett blockerande fynd.
 
-De ligger i samma batch för att de rör **samma kodvägar**: BIN-1152 gör gruppdokumentet
-oläsbart för en icke-medlem, och båda inträdesvägarna (`joinGroupViaToken`,
-`acceptGroupInvite`) LÄSER just det dokumentet innan de går med. Att strama åt utan att
-bygga om felklassningen är att göra tystnaden värre.
+**BIN-1152 är UTDRAGEN ur sprinten.** Den kräver ett nytt publikt dokument för gruppnamnet
+och en omskrivning av båda inträdesvägarna, eftersom de LÄSER gruppdokumentet innan de går
+med — en åtstramning av läsregeln bryter dem. För stort för att hänga på den här batchen.
+Beslutet är fattat och står kvar; biljetten bär hela mätningen.
 
-### BIN-1166 — vad som är mätt
-
-* `acceptGroupInvite` kastar vidare; enda anroparen loggar till konsolen och gör inget
-  mer. Härled: `grep -n "catch" -A 2 src/app/grupper/page.tsx`. Sidan har noll
-  toast-anrop i dag; `useToast` finns (`src/contexts/ToastContext.tsx`) och används av
-  t.ex. `src/components/settings/UsernameSection.tsx`.
-* `joinGroupViaToken`s sista catch returnerar ovillkorligt `'transient'`, med sin egen
-  kommentar som skäl att token redan är verifierad. Anroparen
-  (`src/components/pages/GroupPageClient.tsx`) försöker igen med backoff och landar på
-  "Ladda om sidan och försök igen" — ett råd som inte kan laga ett schemanekande.
-* Det är BIN-942:s dokumenterade misstag igen: att klumpa ihop "nekad" med "tillfällig".
-
-### BIN-1152 — vad som är mätt
-
-`match /groups/{groupId}` har `allow read: if isSignedIn()`
-(`firestore.rules:1324-1325`), och kommentarblocket ovanför (1298-1323) kallar det en
-avsiktlig "unlisted link"-modell. **Det står ingenstans som ett avgjort val** — varken i
-`docs/org/adr/` eller i `.claude/rules/accepted-deviations.md`; ADR 0008 rör
-`memberUids`-taket, inte läsningen. Malin har nu avgjort det åt andra hållet.
-
-Förhandsvisningen som modellen finns för har två ytor, båda mätta:
+### Vad som är mätt, före bygget
 
 ```
-grep -n "getDoc(doc(db, 'groups'" src/app/grupper/page.tsx
-grep -rn "useGroup(" src/components/pages/GroupPageClient.tsx
+awk '/match \/members\/\{memberUid\}/,/^      \}/' firestore.rules | wc -l      → 48
+awk '/match \/members\/\{memberUid\}/,/^      \}/' firestore.rules | grep -c hasOnly → 0
 ```
 
-Acceptanskriterier:
-1. `{diff}` Gruppdokumentet är läsbart bara för den som står i `memberUids`. Den
-   `array-contains`-fråga fyra kodvägar använder fortsätter fungera — bevisat av ett
-   emulatortest som kör frågan, inte av ett resonemang om att Firestore klarar mönstret.
-2. `{diff}` Ett eget litet dokument bär gruppens namn och är läsbart för den som är
-   inloggad, efter `publicProfiles`-mönstret (BIN-505): positiv nyckellista, typ och
-   längd per fält, och samma 48-teckens tak som `groups.name` och
-   `groupInvites.groupName` redan pinnas mot. De tre talen har ingen delad konstant i
-   regelspråket och måste flytta i samma redigering.
-3. `{diff}` Namndokumentet skrivs av VARJE väg som sätter eller ändrar gruppens namn —
-   härled dem ur koden, räkna dem inte i en mening. En väg som glömmer det gör
-   förhandsvisningen tom.
-4. `{diff}` Båda inträdesvägarna fungerar för en icke-medlem som per definition inte
-   längre kan läsa gruppdokumentet. `joinGroupViaToken`s kortslutningar (`not_found`,
-   `already_member`, saknad `inviteTokenHash`) vilar alla på den läsningen; regeln gör
-   redan hash-kontrollen serversidigt och join-grenen kräver redan att uid inte står i
-   `memberUids`, så kortslutningarna är optimeringar, inte spärrar. Ett emulatortest
-   driver en join och en accept från ett konto som aldrig kunnat läsa dokumentet.
-5. `{diff}` `joinGroupViaToken` skiljer `permission-denied` från infrastruktur i sista
-   catchen, och anroparen slutar råda till omladdning för det första. `isPermissionDenied`
-   återanvänds — ingen andra definition.
-6. `{diff}` Den som tar emot en inbjudan ser något när det misslyckas. Bekräftelsen är
-   kedjad på skrivningen, aldrig ovillkorlig (BIN-1025: en vägran gör varje ovillkorlig
-   bekräftelse till en lögn).
-7. `{diff}` Emulatortest, inte mockade. Ett mockat test bevisar anropets FORM och
-   utvärderar inga regler (BIN-1063). Varje nekande-test seedar anroparens profil, så
-   nekandet kommer från den klausul testet namnger och inte från ett `get()` som kastar
-   på ett dokument som inte finns (BIN-1127).
-8. `{diff}` Befintliga villkor är oförändrade: `isValidGroupDoc`s nyckellista,
-   BIN-1125:s `hasAll`+storlekspar på båda tillväxtgrenarna, BIN-327:s tak på 100,
-   BIN-1108:s ägarvillkor, BIN-365:s exakta självlämning.
+Kör `wc -l` FÖRE nollan — ett tomt intervall och en frisk nolla ser likadana ut.
 
-**Tier D (Needs you):** `firebase deploy --only firestore:rules` görs manuellt efter
-push. Deploy-flödet shippar bara hosting.
+Produktion `binge-nu` 2026-09-12: **0 grupper**. Ingen befintlig rad kan brytas, och ingen
+migrering behövs. Det svaret åldras.
 
----
+### Malins beslut 2026-09-12: `role` och `notifications` tas BORT
 
-## Batch C — medlemsdokumentet binder vad som får skrivas [Tier C] — BIN-1155
+Dataskyddsrollen blockerade på att låsa fast två fält utan läsare i appen. Mätt: `role`
+skrivs och mappas men ägarskap härleds ur `group.ownerUid`, och `notifications` är
+hårdkodat `true` på varje skrivväg utan vare sig reglage eller läsare. Malin valde att ta
+bort båda hellre än att formellt godkänna dem.
 
-Routning: `node docs/org/route.mjs --md firestore.rules src/lib/firebase/groups.ts`
-→ vid urvalet: Tier **top**, full panel.
+Nyckellistan blir därmed `uid, displayName, username, photoURL, providers, joinedAt`.
+Härled den ur `memberFields()` vid bygget — ärv den inte ur den här meningen.
 
-Disposition: **build**. Panelen var ÄKTA oenig 2026-09-11 och ordningen är svaret, inte
-en kompromiss — se `[[project_decisions_2026-09-11]]` och biljettens egen tråd.
+### Acceptanskriterier — BIN-1155
 
-### Vad som är mätt
+1. `{diff}` `role` och `notifications` skrivs inte längre till medlemsdokumentet, och
+   finns inte i nyckellistan. `MemberProfileFields`, `GroupMember` och `memberDocToObject`
+   följer med; ingen anropare skickar `role` längre.
+2. `{diff}` Nyckellistan är härledd ur `memberFields()` plus `joinedAt`, och kommentaren
+   säger hur man härleder om den — aldrig en handskriven uppräkning som kan glida.
+3. `{diff}` Värdegränser per fält, och varje tal hämtat från sin EGNA källa:
+   `displayName` ≤ `MAX_DISPLAY_NAME` (80 — **inte** gruppnamnets 48; ett snävare tak än
+   profilens hade gjort BIN-1162:s omskrivning permanent nekad för den vars namn ryms i
+   profilen men inte här, alltså en staleness som aldrig läker), `username` genom den
+   befintliga `isValidUsername()`, `photoURL` ≤ 500, `providers` lista ≤ 100.
+4. `{diff}` De nullbara fälten accepterar `null`, inte bara sin typ. `memberFields()`
+   skriver alltid `username` och `photoURL`, båda `string | null`. Ett bart `is string`
+   nekar varje gruppskapande och varje join för ett konto utan avatar eller utan
+   användarnamn. Ett emulatortest driver exakt den formen och hävdar att den LYCKAS.
+5. `{diff}` `uid` pinnas mot sökvägen: `request.resource.data.uid == memberUid`. Det är
+   inte hårdning utan en LIVE lucka — `memberDocToObject` föredrar fältet framför
+   dokument-id:t (`data.uid ?? id`) och `GroupMembersPanel` skickar fältets värde till
+   `removeMember`, så en förfalskad `uid` får ägarens nästa "ta bort"-klick att radera en
+   ANNAN medlem. Samma form som `sessions/.../participants` redan stängde i BIN-509/24.
+6. `{diff}` `displayName` och `username` binds till skrivarens LIVE-profil. Panelens
+   splittring på den punkten (2026-09-11) är upplöst: databasansvariges invändning var att
+   bindningen läser live-värdet medan appen skickade en minneskopia, och den kopian hålls
+   färsk sedan BIN-1163. Bindningen stänger samtidigt ägargrenens väg att skriva ett
+   godtyckligt namn på en ANNAN medlems rad.
+7. `{diff}` BIN-1063 steg 1:s `joinedAt`-villkor på create och update är oförändrade.
+8. `{diff}` Ett emulatortest driver en PARTIELL patch — `updateMemberIdentity`s
+   tvånyckelsskrivning och `updateMemberProviders`s ennyckelsskrivning — och hävdar att den
+   passerar. Vid update är `request.resource.data` HELA efterdokumentet, inte patchen, så
+   ett villkor som är snävare än det som redan står lagrat nekar varje sådan skrivning.
+9. `{diff}` Ett emulatortest tvingar fram ett schemanekande inne i `joinGroupViaToken` och
+   `acceptGroupInvite` och hävdar att `memberUids`-rollbacken fortfarande fyrar. Den
+   accepterade avvikelsen om en strandad kompenserande skrivning är skriven för en
+   KAPPLÖPNING; den här batchen öppnar en andra, icke-race-orsak för samma väg.
+10. `{diff}` Kommentaren vid den nya validatorn säger, som `isValidGroupDoc`s redan gör,
+    att en framtida rad som inte uppfyller gränserna blir permanent oredigerbar — och att
+    en Admin-SDK-väg som börjar skriva ett fält hit måste vidga listan i SAMMA commit.
+    Mätt i dag: `functions/` läser och raderar medlemsraden, den skriver inga fält dit.
+11. `{diff}` Emulatortest, inte mockade, och varje nekande-test seedar anroparens profil
+    så nekandet kommer från den klausul testet namnger (BIN-1127). Körs med
+    `npm run test:rules -- --port 8085` — port 8080 hålls av ett annat projekt och rörs inte.
 
-Medlemsblocket har ingen nyckellista. Biljettens eget kommando kan inte fälla sin
-mening (ankaret matchar ingen rad); det rättade står i tråden:
+### Acceptanskriterier — BIN-1166
 
-```
-awk '/match \/members\/\{memberUid\}/,/^      \}/' firestore.rules | wc -l
-awk '/match \/members\/\{memberUid\}/,/^      \}/' firestore.rules | grep -c hasOnly
-```
+12. `{diff}` **TRE** skrivvägar klassificerar nekanden, inte två. `createGroup`s
+    medlemsskrivning får sitt allra första nåbara `permission-denied` av kriterium 6, och
+    dess enda anropare visar i dag ett enda "Försök igen" för varje fel.
+13. `{diff}` `acceptGroupInvite` har TVÅ oklassificerade kastställen — `memberUids`-uppdateringen
+    (utan try/catch) och `writeMemberDoc`-catchen. De får inte kollapsa till samma svar:
+    ett nekande på den första är en inbjudningsfråga, på den andra en schema-/identitetsfråga
+    med en annan åtgärd. Att klumpa ihop dem är exakt BIN-942:s misstag.
+14. `{diff}` `isPermissionDenied` återanvänds; ingen andra definition, ingen tredje hink.
+15. `{diff}` Länkvägen slutar råda till omladdning för ett permanent nekande, och den
+    YTTRE texten på sidan lagas också — i dag står "Be ägaren om en inbjudningslänk" kvar
+    ovanför felrutan, vilket är fel åtgärd för ett schemanekande. En misslyckad join ska
+    peka mot en riktig destination, inte mot att göra om samma sak.
+16. `{diff}` Inbjudningsraden får ett tillstånd som ÖVERLEVER toasten. En toast försvinner
+    på 2,5 sekunder och raden ser därefter orörd ut, så en användare kan trycka "Acceptera"
+    i all oändlighet på ett nekande som är deterministiskt.
+17. `{diff}` Texten påstår ingen ORSAK klienten inte kan veta. Den återanvänder inte
+    `invalid_token`-strängen (som bär en annan, riktig betydelse) och inte BIN-813:s låsta
+    raderingssträngar — juristen svarade uttryckligen att den precedensen INTE når hit,
+    så ny text är rätt, den ska bara inte peka ut en orsak.
+18. `{diff}` Meddelandet nämner aldrig någon ANNAN användares tillstånd, och exponerar inte
+    rått regelfel (som kan röja fältlistan).
+19. `{diff}` Nekandena rapporteras med `captureError`. `groups.ts` har i dag noll
+    `captureError`-anrop, så en systematisk regelregression här vore osynlig.
+20. `{diff}` De två ytorna får LÄSA olika — inbjudningsraden är en liten handling i en
+    lista, länksidan är en hel sida man landat på — men ingen av dem får lova ett omförsök
+    som inte kan lyckas.
+21. `{diff}` Varje producent drivs av ett EGET test; ett test per klausul med en positiv
+    tvilling, husets mönster i `src/test/rules/firestore-rules.test.ts`.
+22. `{diff}` Hela sviten körs, inte bara buntens test — en ny fil under en katalog
+    ägarkartan listar fil för fil är en ägarkartshändelse (BIN-1013).
 
-Kör `wc -l` FÖRE nollan. Ett tomt intervall och en frisk nolla ser likadana ut.
-Mätt 2026-09-12: `48` rader, `0` träffar.
+**Tier D (Needs you):** `firebase deploy --only firestore:rules` efter push.
 
-### Vad panelen var oenig om, och varför ordningen löser det
+### Eskalerat till Malin av juristen — egen biljett, inte den här batchen
 
-Fem roller var eniga om nyckellistan plus typ och längd. Oenigheten gällde att dessutom
-BINDA `displayName`/`username` mot den live-profilen:
+Medlemsraden bär `providers`, alltså vilka streamingtjänster man har, och den är läsbar för
+varje gruppmedlem utan samtyckessteg. Integritetssidan beskriver samtyckesgrindad delning
+för Hushålls-kostnadsfunktionen men säger inget om att en bar tjänstelista delas automatiskt
+när man går med i en grupp. Ingen av biljetterna skapar luckan och ingen behöver lösa den
+för att shippa — men den här batchen låser fast fältet, så det är rätt tillfälle att fila.
 
-* **#4, #5, #6 krävde bindningen** och blockerade utan den.
-* **#27 blockerade PÅ den**, för att bindningen läser live-värdet medan appen skickar
-  minneskopian — exakt BIN-1163 — och hade spritt ett känt fel till tre nya skrivvägar.
-
-Byggs BIN-1163 först (batch A) faller #27:s invändning bort. Batch A byggs först i den
-här sprinten, så bindningen kan byggas.
-
-Acceptanskriterier:
-1. `{diff}` Nyckellistan är härledd ur de vägar som FAKTISKT skriver dokumentet vid den
-   punkten — `memberFields` plus `joinedAt`, plus vad batch A:s omskrivning rör. Härled
-   den; ärv den inte ur biljetten eller ur den här planen.
-2. `{diff}` Typ och längd per fält. Namnlängden matchar det tak `users/{uid}` redan har,
-   och talet flyttar i samma redigering som sina syskon om det någonsin ändras.
-3. `{diff}` BIN-1063 steg 1:s `joinedAt`-villkor på create och update är oförändrade —
-   `request.resource.data.joinedAt == request.time` på create, och den
-   `get(...,null)`-jämförelse på update som gör fältet oföränderligt utan att göra
-   dokumentet oraderbart.
-4. `{diff}` Identitetsbindningen gäller den som skriver sin EGEN rad. Vad den betyder
-   för ägaren — som `selfOrOwner()` också släpper in på andras rader — skrivs ut som ett
-   val i regelkommentaren, inte lämnas underförstått. Det gränsar till BIN-1167, som
-   inte byggs här.
-5. `{diff}` Emulatortest, inte mockade, och varje nekande-test seedar anroparens profil
-   (BIN-1127). Ett test per klausul, med en positiv tvilling — husets mönster i
-   `src/test/rules/firestore-rules.test.ts`.
-
-**Tier D (Needs you):** `firebase deploy --only firestore:rules`, samma deploy som
-batch B.
-
----
 
 ## Needs you (Tier D)
 
@@ -428,14 +423,12 @@ konfiguration med eget projekt-id och egen port (BIN-1153).
 
 ## Deviation log
 
-- [discovery] BATCH B: `src/lib/tabSession.ts`s huvudkommentar säger att gruppdokumentet
-  är läsbart för vilken inloggad användare som helst, och att arvtagaren därför får veta
-  dess namn och memberUids. Batch B gör den meningen FALSK, i en fil batchen inte rör —
-  precis BIN-1038:s form. Meningen är BIN-748:s motivering för hela mekanismen, så den
-  ska smalnas (namnet är fortfarande läsbart via det nya publika dokumentet, memberUids
-  inte), inte strykas. Sök hela trädet efter fler kopior av samma påstående innan den
-  rättas — flerradigt och blankstegsnormaliserat, samma mening radbryts olika i olika
-  filer.
+- [discovery] Den tidigare posten om `src/lib/tabSession.ts` är STRUKEN. Den sa att
+  batchen skulle göra filens mening om gruppdokumentets läsbarhet falsk — men BIN-1152
+  drogs ut i samma redigering som skrev om batch B, gruppens läsregel är orörd, och
+  meningen är alltså fortfarande sann. Lämnad som en anteckning i stället för raderad,
+  så nästa läsare inte smalnar en korrekt mening. Mätningen bor på BIN-1152.
+
 
 ---
 

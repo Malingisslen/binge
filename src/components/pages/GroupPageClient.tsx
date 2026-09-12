@@ -9,6 +9,7 @@ import AuthGuard from '@/components/AuthGuard';
 import { useAuth } from '@/hooks/useAuth';
 import { useGroup } from '@/hooks/useGroups';
 import { joinGroupViaToken, deleteGroup } from '@/lib/firebase/groups';
+import { joinAttemptFailed, joinLinkMessage } from '@/lib/groupDenialCopy';
 import { createSession, setSessionCandidates } from '@/lib/firebase/sessions';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import {
@@ -70,6 +71,9 @@ function GroupContent({ id }: { id: string }) {
 
   // Auto-join via invite link
   const [joinError, setJoinError] = useState<string | null>(null);
+  // BIN-1166: skilt fran `joinError`, som ocksa satts for 'Du ar redan medlem' — ett
+  // utfall dar den yttre texten om ett misslyckat forsok hade motsagt felrutan under.
+  const [joinFailed, setJoinFailed] = useState(false);
   const [joining, setJoining] = useState(false);
   const joinAttemptsRef = useRef(0);
   // En NY inbjudningslänk förtjänar en ny budget. Utan det här ignorerades en
@@ -96,11 +100,16 @@ function GroupContent({ id }: { id: string }) {
       // joinGroupViaToken fångar nätverksfel internt och resolvar, så före
       // 2026-07-20 landade de i den terminala grenen och användaren fick höra
       // att en fullt giltig länk dragits tillbaka.
+      const exhausted = joinAttemptsRef.current >= MAX_JOIN_ATTEMPTS;
+      // Textvalet ligger i `@/lib/groupDenialCopy`, inte har: valet ar hela BIN-1166,
+      // och ett val inbakat i en komponent utan testfil gar att byta tillbaka utan att
+      // nagot faller. Ett anrop tacker varje utfall, inte bara det terminala.
+      setJoinError(joinLinkMessage(res, exhausted));
+      // Sidans EGEN rubrik byter sa fort ett forsok faktiskt fallit, ocksa nar
+      // forsoken tagit slut pa ett tillfalligt fel — annars star "Be agaren om en
+      // inbjudningslank" kvar ovanfor en ruta som sager at en att ladda om.
+      setJoinFailed(joinAttemptFailed(res));
       if (!res.ok && res.reason === 'transient') {
-        const exhausted = joinAttemptsRef.current >= MAX_JOIN_ATTEMPTS;
-        setJoinError(exhausted
-          ? 'Kunde inte gå med i gruppen. Ladda om sidan och försök igen.'
-          : 'Kunde inte gå med i gruppen. Försöker igen…');
         if (exhausted) { setJoining(false); return; }
         setTimeout(() => setJoining(false), joinBackoffMs(attempt));
         return;
@@ -110,21 +119,11 @@ function GroupContent({ id }: { id: string }) {
       // grupp-prenumerationen hinner ikapp. Bränn budgeten så effekten inte
       // återfyrar.
       joinAttemptsRef.current = MAX_JOIN_ATTEMPTS;
-      // Nolla ett kvarhängande retry-fel — annars står "Försöker igen…" kvar
-      // som röd ruta efter att omförsöket faktiskt lyckats.
-      setJoinError(
-        res.ok
-          ? null
-          : res.reason === 'invalid_token'
-            ? 'Inbjudningslänken är ogiltig eller har dragits tillbaka.'
-            : res.reason === 'not_found'
-              ? 'Gruppen hittades inte.'
-              : 'Du är redan medlem.',
-      );
       setJoining(false);
     }).catch(() => {
       // Only a THROWN error (network/Firestore) is worth retrying.
       const exhausted = joinAttemptsRef.current >= MAX_JOIN_ATTEMPTS;
+      setJoinFailed(true);
       setJoinError(exhausted
         ? 'Kunde inte gå med i gruppen. Ladda om sidan och försök igen.'
         : 'Kunde inte gå med i gruppen. Försöker igen…');
@@ -151,10 +150,17 @@ function GroupContent({ id }: { id: string }) {
   if (!isMember) {
     return (
       <div>
+        {/* BIN-1166: den YTTRE texten är den primära på sidan, och "be ägaren om en
+            inbjudningslänk" är fel åtgärd när en giltig länk just har använts och
+            skrivningen nekades på sak. Den meningen står kvar för den som landar här
+            UTAN att ha försökt gå med — det vanliga fallet — och byts när ett
+            join-försök faktiskt har fallit. */}
         <NotFound
           crumb="Grupp"
           title={group.name}
-          body="Du är inte medlem i den här gruppen. Be ägaren om en inbjudningslänk."
+          body={joinFailed
+            ? 'Du är inte medlem i den här gruppen, och försöket att gå med gick inte igenom.'
+            : 'Du är inte medlem i den här gruppen. Be ägaren om en inbjudningslänk.'}
           action={<Link href="/grupper" className="btn btn-acc btn-sm no-underline">Mina grupper</Link>}
         />
         {joinError && (
