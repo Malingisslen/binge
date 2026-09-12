@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 595,
+  "patternCount": 596,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -568,7 +568,8 @@
         "scripts/check-workflow-map.mjs",
         "scripts/check-workflow-map.test.mjs",
         "scripts/prune-map-flag.mjs",
-        "scripts/prune-map-flag.test.mjs"
+        "scripts/prune-map-flag.test.mjs",
+        "tsconfig.json"
       ]
     },
     "26": {

@@ -629,12 +629,15 @@ Owns the process.
   gating them would put routine bookkeeping behind a review (the same call Malin
   made for `lessons-digest.md` in BIN-851).
   → `.claude/agents/binge-code-reviewer.md`, `.claude/agents/binge-security-reviewer.md`, `.claude/agents/binge-integration-reviewer.md`, `.claude/agents/binge-test-reviewer.md`, `.claude/hooks/freshness.mjs`, `.claude/hooks/freshness.test.mjs`, `.claude/hooks/preview-gate.mjs`, `.claude/hooks/preview-gate.test.mjs`
-- **Vad funktionsbygget kompilerar, och vad som typkontrollerar resten** (BIN-1110).
-  Byggets konfiguration avgjorde tidigare bada sakerna pa en gang, sa den enda platsen
-  ett typfel i en testfil syntes var i deployen — sist av allt, kord for hand. Satet
-  foljer storheten: det har ar en kvalitetsgrind pa vagen till produktion, inte
-  datalagret filerna rakar handla om.
-  → `functions/tsconfig.typecheck.json`, `functions/src/buildConfig.test.ts`, `functions/tsconfig.json`
+- **Vad funktionsbygget kompilerar, och vad som typkontrollerar resten** (BIN-1110,
+  utvidgad med rotens konfiguration i BIN-1130). Byggets konfiguration avgjorde tidigare
+  bada sakerna pa en gang, sa den enda platsen ett typfel i en testfil syntes var i
+  deployen — sist av allt, kord for hand. Satet foljer storheten: det har ar en
+  kvalitetsgrind pa vagen till produktion, inte datalagret filerna rakar handla om.
+  Rotens konfiguration avgor vad `npm run typecheck` ser, sa den hor till samma storhet och
+  samma sate; att lossa ett strict-flagga eller vidga ett undantag dar tystar en felklass i
+  appen.
+  → `functions/tsconfig.typecheck.json`, `functions/src/buildConfig.test.ts`, `functions/tsconfig.json`, `tsconfig.json`
 - **Funktionsrunetidens beroendemanifest** (BIN-1110). Vilka paket Cloud Functions kor
   med, och vilka skript bygget exponerar. Samma sate som byggkonfigurationen ovan, av
   samma skal: det ar vagen till produktion.

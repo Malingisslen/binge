@@ -354,11 +354,9 @@ export const TOOLING_CODE_FILES = new Set([
 // narrowing it to buy symmetry would trade a real guard for a cosmetic one.
 //
 // The cost, stated: a lockfile-only commit now routes `medium` and is stopped by a
-// reviewer. Neither lockfile has an OWNING role — they answer `unmapped-code` and seat
-// the #14 fallback — and that is left alone here on purpose. Ownership is a separate
-// decision (§25 declined it in BIN-919 and the sentence saying so is corrected in the
-// same commit as this one); what A1 requires is that the path reach a reviewer, and it now
-// does.
+// reviewer. What A1 requires is that the path reach a reviewer, and it now does.
+// Whether either lockfile has an owning role is not asserted here — derive it:
+//   node docs/org/route.mjs package-lock.json functions/package-lock.json
 const CODE_ROOT_FILES = new Set([
   'firestore.rules',
   'firestore.indexes.json',
@@ -370,6 +368,13 @@ const CODE_ROOT_FILES = new Set([
   'vitest.setup.ts',
   'package.json',
   'package-lock.json',
+  // BIN-1130: the root typecheck configuration. It decides what `npm run typecheck` sees
+  // for the whole app, and before this it answered `no-code-paths` while its sibling under
+  // functions/ answered `owned` — so loosening a strict flag here reached no reviewer and
+  // no owning role. Added in the same commit as the blocking pattern in
+  // .claude/shared-plugin.json: this list ADVISES, that one BLOCKS, and widening either
+  // has never widened the other (BIN-830).
+  'tsconfig.json',
 ]);
 const CODE_EXT_RE = /\.(ts|tsx|js|jsx|mjs|cjs|css|json|rules)$/;
 
