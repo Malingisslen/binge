@@ -1,8 +1,10 @@
 {
-  "lastRun": "2026-09-07",
-  "dossiersRefreshed": 0,
+  "lastRun": "2026-09-12",
+  "dossiersRefreshed": 18,
   "worldWatchRoles": 1,
-  "retroDue": true,
+  "retroFired": true,
   "acceptRate": null,
-  "notes": "Dossier-staleness dir absent (local/gitignored), skipped; world-watch scanned Security Architect — confirmed already patched against two critical Next.js RCE advisories; full org-retro overdue by 44 days."
+  "scratchCleared": 0,
+  "healthChecks": null,
+  "notes": "Step 1: 18 open markers under .claude/state/dossier-stale (roleOrg.stalenessDir) audited — the SKILL text names docs/org/dossier-staleness/*.stale, which does not exist here, which is why 2026-09-07 reported the dir absent and read none of them. 3 false statements struck (role 15 provider-page count; role 27 hasOnly field count; role 27 'collectUserDataSnapshots swallows errors' — the function has no try/catch). Role 21's marker left OPEN: docs/recaps/RUNBOOK.md has no owning role and adding one changes review routing — founder call. Step 2: no role due; retried the 3 EGRESS_BLOCKED Security Architect sources via WebSearch, all clean, fallback now recorded in state.json. Step 3: first FULL org-retro logged. Step 4: tools/cost_per_accepted_change.py not present — not instrumented in this repo. Step 4.5: no roleOrg.healthChecks key. Step 4.7: memory curation SKIPPED — curator preflight R9/R11 (memory git tree dirty, ~210 uncommitted files; concurrent session live). Step 4.8: fanout in-sync, configs valid, state backup 5 days old (under the 8-day floor). Step 4.9: no knowledge file over 2x its cap; binge-test-reviewer.knowledge.md is at 79831 of 80000 chars. Step 5: nothing safe to delete — the 4 files over 14 days old in .claude/state are all live hook state or plan files with unchecked items."
 }

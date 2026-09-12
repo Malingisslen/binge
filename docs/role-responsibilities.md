@@ -416,7 +416,9 @@ Owns acquisition and the top of the funnel.
   eviction) and the committed seed of ids Google already had indexed. A change that
   shrinks either de-indexes real pages (BIN-823).
   → `src/lib/tmdb/selectionManifest.ts`, `src/lib/seo/selectionSeed.ts`
-- 12 curated provider landing pages ("Vad streamar på Netflix i Sverige"); the curated
+- Curated provider landing pages ("Vad streamar på Netflix i Sverige") — the roster is
+  SEO_PROVIDER_IDS in src/lib/tmdb/seoCoverage.ts, and generateStaticParams in
+  src/app/provider/[id]/page.tsx maps it one page per entry; the curated
   genre landing pages (BIN-461); the franchise "billigaste"/"vad försvinner" pages
   (BIN-178); the guides hub-of-hubs; and the shared JSON-LD escaper those pages inject
   with.
@@ -722,9 +724,9 @@ findings here too.
   overrides; the failure mode where a feature ships a query whose index isn't
   deployed.
   → `firestore.indexes.json`
-- **Field whitelist enforcement** — the `hasOnly()` field contract (22 allowlisted
-  watchlist fields); a new field omitted from the whitelist silently `permission-denied`s
-  client writes.
+- **Field whitelist enforcement** — the `hasOnly()` field contract in
+  isValidWatchlistItem; a new field omitted from the whitelist silently
+  `permission-denied`s client writes.
   → `firestore.rules`, `src/test/rules/firestore-rules.test.ts`
 - **The value bounds a producer must stay inside** (BIN-1134). The rules cap profile
   fields by length, and a producer that writes past the cap does not get a truncated
@@ -787,8 +789,6 @@ findings here too.
   migration completeness or alerts when `migrateStatus()` hits its default case.
 - 🟠 `effectiveVisibility` can go **stale** if a user changes `defaultVisibility`
   without touching any title; reads fall back, but nothing detects the divergence.
-- 🟡 `collectUserDataSnapshots` reads 25 collections in parallel and **swallows
-  errors without re-throwing** — a partial export/deletion could fail silently.
 - **Engångsmigreringar på skarp data** (BIN-1063 steg 2). Backfillen som skriver
   motpartens uid som ett fält på `friends` och `friendRequestsSent`. Den sitter här
   därför att den är ett schemainstrument: den ändrar formen på befintliga rader så
