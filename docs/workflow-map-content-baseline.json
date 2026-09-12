@@ -1,7 +1,7 @@
 {
   "comment": "Per-flow content baseline (description + step-payload char count) for scripts/check-workflow-map.mjs check 5 (BIN-470). The linter fails if any flow shrinks below its baseline or a baselined flow disappears — catching net prose-loss the absolute floor (check 4) misses. Regenerate + commit when you intentionally shorten or remove a flow: node scripts/check-workflow-map.mjs --update-baseline",
   "flows": {
-    "flow1": 11122,
+    "flow1": 13757,
     "flow2": 564,
     "flow3": 837,
     "flow4": 6127,
@@ -11,7 +11,7 @@
     "flow-profile": 1762,
     "flow-feed": 1857,
     "flow-friends": 1158,
-    "flow-groups": 4224,
+    "flow-groups": 5360,
     "flow-tillsammans": 3130,
     "flow-episodes": 1994,
     "flow-available": 6610,

@@ -801,6 +801,13 @@
           "verified": true
         },
         {
+          "from": "auth-context",
+          "to": "auth-context",
+          "payload": "BIN-1163, and it is about OTHER tabs rather than this one. firestore.rules' isOwnIdentity compares the displayName/username a write carries against the LIVE users/{uid} value, while every writer sends the copy AuthContext read at sign-in — so once BIN-1154 made the name editable, renaming in one tab left every other open tab denied on its next review, review comment, episode reaction, friend request and group invite until it reloaded. updateDisplayName and updateUsername now post {uid, displayName, username} on a same-origin BroadcastChannel (src/lib/profileIdentityChannel.ts) AFTER the Firestore write resolves — never before, because a name the server refused would arrive in a sibling tab and get ITS next write denied, moving the defect rather than closing it. The receiver is opened once per provider and compares the message's uid against its own auth.currentUser read in the moment, since the channel is scoped to the ORIGIN and not to the session: a second account signed in beside this one sits on the same channel. Nothing is written to disk, so there is no flag to retire (ADR 0019). Still open: a session in another browser or on another device holds its stale copy until it reloads.",
+          "transport": "BroadcastChannel",
+          "verified": true
+        },
+        {
           "from": "web-app",
           "to": "firebase-auth",
           "payload": "signIn (email / Google)",
@@ -1588,6 +1595,13 @@
           "from": "auth-context",
           "to": "firestore",
           "payload": "BIN-184: on a myProviders/providerCosts/providerCampaigns profile edit, refreshMyHouseholdContributions(uid, fields) fans out a dirty-checked rewrite to every group the user has already opted into — same best-effort per-group pattern as the pre-existing updateMemberProviders fan-out",
+          "transport": "Firestore write (fan-out)",
+          "verified": true
+        },
+        {
+          "from": "auth-context",
+          "to": "firestore",
+          "payload": "BIN-1162: a rename fans out to each group's own copy of the name. publishIdentityChange runs AFTER the users/{uid} write resolves, then queries groups where memberUids array-contains uid — bounded by MY_GROUPS_LIMIT, the constant imported from groups.ts rather than re-declared — and calls updateMemberIdentity(groupId, uid, {displayName, username}) per group. That write is a two-key updateDoc, never memberFields() and never a merge set: the caller has no authoritative source for a member's per-group role, and omitting joinedAt is what satisfies the rule's immutability check, while updateDoc's not-found failure is what stops the fan-out recreating a row the deletion cascade already took. Each group is caught on its own (captureError kind identityFanOut-group; a failed import or query is identityFanOut-query), so a group whose write fails keeps the OLD name until the next rename or rejoin — there is no reconciliation pass, and that residual is a dated entry in accepted-deviations.md. Tillsammans participants are deliberately untouched: a session seat can be anonymous, so there is no account to resolve a current name from.",
           "transport": "Firestore write (fan-out)",
           "verified": true
         }
