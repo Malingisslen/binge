@@ -94,6 +94,7 @@ import {
   joinGroupViaToken,
   acceptGroupInvite,
   inviteMemberByUid,
+  updateMemberIdentity,
   MY_GROUPS_LIMIT,
 } from './groups';
 
@@ -910,5 +911,49 @@ describe('inbjudningens faltuppsattning ar pinnad mot regeln (BIN-1127)', () => 
       ([ref]) => (ref as { _path: string })._path === 'users/target-pin/groupInvites/g-pin',
     );
     expect((call![1] as { groupId: string }).groupId).toBe('g-pin');
+  });
+});
+
+// BIN-1162. Fan-outen efter ett namnbyte skriver MIN egen medlemsrad i varje grupp
+// jag ar med i. Bada halvorna nedan ar bindande villkor ur panelen 2026-09-12
+// (#27 DBA, #6 DPO) och ingendera gar att se i ett test som bara hamnar att
+// funktionen anropades.
+describe('updateMemberIdentity — smal patch, aldrig ett helt medlemsdokument', () => {
+  it('skriver EXAKT displayName och username, ingenting annat', async () => {
+    updateDocMock.mockClear();
+    await updateMemberIdentity('g1', 'u1', { displayName: 'Malin G', username: 'malin_g' });
+
+    expect(updateDocMock).toHaveBeenCalledTimes(1);
+    const [ref, payload] = updateDocMock.mock.calls[0] as [{ _path: string }, Record<string, unknown>];
+    expect(ref._path).toBe('groups/g1/members/u1');
+    // Nycklarna raknas upp. `role`, `photoURL`, `providers` och `notifications` ags
+    // inte av den har anroparen, och `joinedAt` ar oforanderlig sedan BIN-1063 steg 1
+    // — den halls orord just genom att UTELAMNAS ur patchen, sa regelns
+    // `get(...,null)`-jamforelse pa update blir trivialt uppfylld.
+    expect(Object.keys(payload).sort()).toEqual(['displayName', 'username']);
+    expect(payload).toEqual({ displayName: 'Malin G', username: 'malin_g' });
+  });
+
+  it('bar ett saknat anvandarnamn som null i stallet for att utelamna det', async () => {
+    updateDocMock.mockClear();
+    await updateMemberIdentity('g1', 'u1', { displayName: 'Malin', username: null });
+
+    const [, payload] = updateDocMock.mock.calls[0] as [unknown, Record<string, unknown>];
+    // Att utelamna faltet hade lamnat ett gammalt anvandarnamn kvar pa raden efter
+    // att kontot slappt det. Null skriver over.
+    expect(Object.keys(payload).sort()).toEqual(['displayName', 'username']);
+    expect(payload.username).toBeNull();
+  });
+
+  it('anvander updateDoc, aldrig setDoc — en fan-out far inte aterskapa en raderad rad', async () => {
+    updateDocMock.mockClear();
+    setDocMock.mockClear();
+    await updateMemberIdentity('g1', 'u1', { displayName: 'Malin', username: null });
+
+    // Bada formerna misslyckas om raderingskaskaden hunnit ta raden, men bara
+    // updateDoc misslyckas RENT med not-found. En merge-skrivning hade blivit en
+    // create och fallit pa `joinedAt == request.time` — ratt utfall, av en slump.
+    expect(setDocMock).not.toHaveBeenCalled();
+    expect(updateDocMock).toHaveBeenCalledTimes(1);
   });
 });

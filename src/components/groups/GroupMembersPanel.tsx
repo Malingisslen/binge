@@ -60,7 +60,16 @@ export function GroupMembersPanel({
                   : m.displayName}
                 {m.uid === myUid && <span className="text-xxs text-ink-3 ml-1">(du)</span>}
               </div>
+              {/* BIN-1162, Malins beslut 2026-09-12 mot #18 Community Managers
+                  blockering: användarnamnet står som TEXT, inte bara som länkmål.
+                  Före den biljetten var namnkopian på medlemsraden fryst vid
+                  inträdet; live-propagering gör ett namnbyte till något som syns
+                  här direkt.
+                  RESTEN, mätt: två medlemmar UTAN användarnamn kan fortfarande
+                  rendera identiskt. `tryAutoClaimUsername` i AuthContext gör det
+                  sällsynt, inte omöjligt. */}
               <div className="text-xxs text-ink-3">
+                {m.username && <span className="text-ink-3">@{m.username} · </span>}
                 {m.uid === ownerUid ? 'Ägare' : 'Medlem'} · {m.providers.length} tjänster
               </div>
             </div>

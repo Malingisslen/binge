@@ -595,6 +595,41 @@ export async function updateMemberProviders(
   });
 }
 
+/**
+ * BIN-1162: skriv om MIN egen medlemsrads identitetsfält efter ett namnbyte.
+ *
+ * Exakt två nycklar, via `updateDoc` — medvetet, och båda halvorna är bindande
+ * villkor ur panelen 2026-09-12:
+ *
+ * `memberFields()` hade varit den uppenbara återanvändningen och är fel här. Den
+ * kräver ett `role`, och anroparen (`AuthContext`) har ingen auktoritativ källa för
+ * vilken roll uid:t har i en viss grupp — en omskrivning genom den kunde degradera en
+ * ägare till `member` och samtidigt stampa över `photoURL`, `providers` och
+ * `notifications` med värden anroparen inte äger. `joinedAt` hålls orörd av att den
+ * utelämnas: regelns `get(...,null)`-jämförelse på update är då trivialt uppfylld.
+ *
+ * `updateDoc` och inte `setDoc(..., { merge: true })`: båda formerna misslyckas om
+ * raden hunnit raderas av kontoraderingens kaskad, men bara `updateDoc` misslyckas
+ * RENT, med not-found. Merge-formen hade blivit en create och fallit på
+ * `joinedAt == request.time` — rätt utfall, men av en slump, och en fan-out får
+ * aldrig kunna återuppliva en rad kaskaden redan tagit.
+ *
+ * Anroparen fångar per grupp: en grupp som fallerar behåller det gamla namnet tills
+ * nästa namnbyte eller omjoin. Det är ett daterat val i
+ * `.claude/rules/accepted-deviations.md`, inte en förbisedd brist.
+ */
+export async function updateMemberIdentity(
+  groupId: string,
+  uid: string,
+  identity: { displayName: string; username: string | null },
+): Promise<void> {
+  const { db, doc, updateDoc } = await fsdb();
+  await updateDoc(doc(db, 'groups', groupId, 'members', uid), {
+    displayName: identity.displayName,
+    username: identity.username,
+  });
+}
+
 export async function setMemberRating(params: {
   groupId: string;
   mediaType: MediaType;

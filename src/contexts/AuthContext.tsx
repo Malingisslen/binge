@@ -38,6 +38,7 @@ import { mergeUserDoc, assertProfileWritable } from '@/lib/firebase/userDocWrite
 import { REQUIRES_RECENT_LOGIN, STALE_SESSION_PREFLIGHT, markHandedOff, markCascadePartial } from '@/lib/authErrors';
 import { useOptimisticMirrorField } from '@/hooks/useOptimisticMirrorField';
 import { clampToCodeUnits, MAX_DISPLAY_NAME } from '@/lib/clampText';
+import { openProfileIdentityChannel, type ProfileIdentityChannel } from '@/lib/profileIdentityChannel';
 import type { ItemVisibility, UserProfile } from '@/types';
 
 
@@ -80,8 +81,10 @@ interface AuthState {
   resumeProvider: (providerId: number) => Promise<void>;
   updateUsername: (username: string) => Promise<void>;
   /**
-   * BIN-1154. Namnet bor i TVA lagringar: `users/{uid}.displayName` och Firebase
-   * Auth-postens egen kopia. Den har skriver bada, i den ordningen. Ett tomt
+   * BIN-1154. Namnet bor pa flera stallen - `users/{uid}.displayName` ar det
+   * auktoritativa, Firebase Auth-posten bar en egen kopia, och sedan BIN-1162
+   * skrivs gruppmedlemsraderna om. Skrivordningen ar ett beslut och star vid
+   * varje anrop nedan. Ett tomt
    * namn och en nekad FIRESTORE-skrivning kastar - samma kanal som varje annan
    * faltuppdaterare har - medan en fallerad Auth-skrivning rapporteras och
    * slapper igenom, se accepted-deviations. Anroparen gatar sin bekraftelse pa
@@ -789,6 +792,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('storage', onStorage);
   }, [uid]);
 
+  // BIN-1163: ta emot ett namnbyte gjort i en ANNAN flik i samma webbläsare.
+  // Utan det här skriver den här fliken vidare med den kopia den laddade vid
+  // inloggningen, och `isOwnIdentity` nekar varje recension, kommentar, reaktion,
+  // vänförfrågan och gruppinbjudan härifrån tills fliken laddas om.
+  //
+  // uid-KONTROLLEN ÄR INTE DEKORATIV. En BroadcastChannel är scopad på ORIGIN, inte
+  // på session: ett andra konto inloggat i en annan flik i samma webbläsare sitter
+  // på samma kanal. Utan kontrollen hade den fliken adopterat ett främmande namn i
+  // sitt eget `user`-state — och dess nästa egna skrivning hade nekats av exakt den
+  // regel den här biljetten finns för att sluta utlösa. `auth.currentUser` läses här
+  // i stunden, aldrig ur en stängning, så svaret är det som gäller vid mottagandet.
+  // (#4 Security Architect + #6 DPO, oberoende, blinda kritiker 2026-09-12.)
+  const identityChannel = useRef<ProfileIdentityChannel | null>(null);
+  useEffect(() => {
+    const channel = openProfileIdentityChannel(message => {
+      if (message.uid !== auth.currentUser?.uid) return;
+      setUser(prev => prev
+        ? { ...prev, displayName: message.displayName, username: message.username }
+        : null);
+    });
+    identityChannel.current = channel;
+    return () => {
+      channel.close();
+      identityChannel.current = null;
+    };
+  }, []);
+
   // BIN-23: Firebase fire:ar inte onAuthStateChanged vid silent token-refresh,
   // så emailVerified fastnar på false tills man loggar ut/in. Vanligaste flödet
   // är att man klickar verifierings-länken i en ANNAN flik och återvänder hit —
@@ -1011,6 +1041,69 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       snap.docs.map(d => updateMemberProviders(d.id, uid, providers).catch(() => {})),
     );
   }, [updateUserField, uid]);
+  /**
+   * BIN-1163 + BIN-1162: one place that publishes a changed identity, called after
+   * the write that changed the field. Derive the call sites rather than counting them
+   * here — `grep -n "publishIdentityChange(" src/contexts/AuthContext.tsx`; note that
+   * `claimUsername` also has a caller that does NOT publish (`tryAutoClaimUsername`),
+   * which the deviation entry records. Both halves are best-effort and NEITHER may fail
+   * the rename — the name is already saved in `users/{uid}` by the time we get here,
+   * and the user is looking at it on screen.
+   *
+   * ORDER IS THE WHOLE POINT, and it is a binding condition from two seats: this runs
+   * only AFTER the Firestore write that changed the field has resolved. Broadcasting
+   * optimistically would hand another tab a name the server never accepted, and that
+   * tab's own next write would then be denied by `isOwnIdentity` — the defect this
+   * code exists to remove, relocated rather than fixed.
+   *
+   * THE FAN-OUT QUERIES LIVE, never through `myGroupsCache`. `updateProviders` above
+   * is the sibling that does it right; `syncProgressToGroups`, in
+   * `src/lib/firebase/groups.ts`, is the one that consults the 5-minute TTL cache.
+   * Copying that one would put a rename behind a cache whose staleness window is the
+   * question, and the answer is not "never" — derive the invalidation points rather
+   * than trusting a sentence:
+   *   grep -n "invalidateMyGroupsCache(" src/lib/firebase/groups.ts
+   * (#27 DBA, blocking condition.)
+   *
+   * THE WRITE IS A TWO-KEY PATCH, not `memberFields()`. Why that shape, and why
+   * `updateDoc` rather than a merge, is written once beside the mechanism — read it
+   * at `updateMemberIdentity` in `src/lib/firebase/groups.ts`.
+   *
+   * TILLSAMMANS IS DELIBERATELY NOT REWRITTEN (Malin, 2026-09-12). A session seat can
+   * be anonymous — `firestore.rules` admits a participant with `uid == null` on a
+   * token-shaped path — so there is no account to resolve a current name from, and
+   * sessions expire after 7 days anyway. What a user actually SEES because of this:
+   * someone who is both a group member and a participant in an open session reads
+   * their new name in the group's member list and their old one in that session's
+   * participant list, possibly in the same tab switch. That is known and intended, not a missed
+   * spot (#18 Community Manager).
+   *
+   * A group whose row fails keeps the old name until the next rename or rejoin; there
+   * is no reconciliation pass. That residual is a dated decision with its own re-open
+   * trigger in `.claude/rules/accepted-deviations.md` — do not re-file it, and do not
+   * silence the report it rests on.
+   */
+  const publishIdentityChange = useCallback(async (identity: {
+    displayName: string;
+    username: string | null;
+  }) => {
+    if (!uid) return;
+    identityChannel.current?.post({ uid, ...identity });
+    try {
+      const { updateMemberIdentity, MY_GROUPS_LIMIT } = await import('@/lib/firebase/groups');
+      const { db, collection: col, getDocs: get, query: q, where, limit: lim } = await fsdb();
+      const snap = await get(q(col(db, 'groups'), where('memberUids', 'array-contains', uid), lim(MY_GROUPS_LIMIT)));
+      await Promise.all(snap.docs.map(d => updateMemberIdentity(d.id, uid, identity).catch(err => {
+        console.error('gruppmedlemsraden behöll det gamla namnet:', err);
+        captureError(err, { scope: 'auth', kind: 'identityFanOut-group' });
+      })));
+    } catch (err) {
+      // Importen eller själva frågan föll — ingen grupp hanns ens försökas.
+      console.error('namnbytet nådde inga gruppmedlemsrader:', err);
+      captureError(err, { scope: 'auth', kind: 'identityFanOut-query' });
+    }
+  }, [uid]);
+
   const updateDefaultView = useCallback((view: 'table' | 'grid' | 'cards') => updateUserField('defaultView', view), [updateUserField]);
   const updateProviderCosts = useCallback((costs: Record<number, number>) => updateUserField('providerCosts', costs), [updateUserField]);
   // BIN-172: hemkommun = "jag har ett lånekort i {kommun}". null rensar fältet.
@@ -1164,9 +1257,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await batch.commit();
     setUser(prev => prev ? { ...prev, providerPauses: next } : null);
   }, [uid, user]);
-  // BIN-1154: visningsnamnet far en redigeringsyta. Till skillnad fran varje
-  // annan faltuppdaterare har ror den TVA lagringar av samma personuppgift,
-  // och ordningen mellan dem ar ett beslut, inte en slump.
+  // BIN-1154: visningsnamnet far en redigeringsyta. Den ror flera lagringar av
+  // samma personuppgift, och ordningen mellan dem ar ett beslut, inte en slump.
   //
   // FIRESTORE FORST, Auth-posten bara om den gick igenom. Skalet ar inte
   // estetiskt: `mergeUserDoc`/`assertProfileWritable` ar den enda sparren som
@@ -1191,14 +1283,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // som framgang med en loggad avvikelse. Att kasta hade sagt "sparades inte"
     // om ett namn som ar sparat och som anvandaren ser pa skarmen.
     const current = auth.currentUser;
-    if (!current) return;
-    try {
-      await updateProfile(current, { displayName: clamped });
-    } catch (err) {
-      console.error('displayName: Auth-posten kom efter Firestore-kopian:', err);
-      captureError(err, { scope: 'auth', kind: 'updateDisplayName-authSync' });
+    if (current) {
+      try {
+        await updateProfile(current, { displayName: clamped });
+      } catch (err) {
+        console.error('displayName: Auth-posten kom efter Firestore-kopian:', err);
+        captureError(err, { scope: 'auth', kind: 'updateDisplayName-authSync' });
+      }
     }
-  }, [updateUserField]);
+    // BIN-1163/BIN-1162, SIST och utanfor if-satsen ovan. Villkoret ar uppfyllt sa
+    // snart Firestore-skrivningen resolvat, men SENARE ar battre an tidigare: ligger
+    // fan-outen fore, vantar `updateProfile` pa upp till MY_GROUPS_LIMIT
+    // dokumentskrivningar, och en uppkoppling som dor daremellan lamnar Auth-posten
+    // oskriven UTAN ens avvikelseraden ovan. Att den ligger utanfor `if (current)`
+    // ar ocksa medvetet: en session utan `auth.currentUser` har anda andrat faltet,
+    // och da ska syskonflikarna och gruppraderna fa veta det.
+    //
+    // Vardet ar det KLAMPADE, samma strang som gick till dokumentet - aldrig ett
+    // omharlett. Medlemsdokumentet har ingen egen langdgrans i reglerna att falla
+    // tillbaka pa; harled det med
+    //   awk '/match \/members\/\{memberUid\}/,/^      \}/' firestore.rules
+    // (#27 DBA).
+    await publishIdentityChange({ displayName: clamped, username: user?.username ?? null });
+  }, [updateUserField, publishIdentityChange, user?.username]);
 
   const updateBio = useCallback((bio: string) => updateUserField('bio', bio), [updateUserField]);
 
@@ -1277,7 +1384,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { claimUsername } = await import('@/lib/firebase/username');
     await claimUsername(uid, username, user.username);
     setUser(prev => prev ? { ...prev, username } : null);
-  }, [uid, user]);
+    // BIN-1163: `isOwnIdentity` binder BADA falten, sa ett anvandarnamn som bara
+    // andras i den har fliken lamnar syskonflikarna lika nekade som ett namnbyte
+    // gjorde. Kor forst efter att `claimUsername` resolvat: ett upptaget eller
+    // ogiltigt anvandarnamn ska ge noll gruppfragor (#27 DBA).
+    await publishIdentityChange({ displayName: user.displayName, username });
+  }, [uid, user, publishIdentityChange]);
 
   /**
    * The irreversible half, extracted so `deleteAccount` can wrap exactly the

@@ -1040,3 +1040,102 @@ faller nu pa vanlig anvandning. Filat som **BIN-1163**; mekanismen och
 atgardsalternativen star dar, inte har. Vinka inte igenom det med den har
 posten som stod.
 
+
+---
+
+## BIN-1162: en gruppmedlemsrad kan behålla det gamla namnet, och ingen städar den — 2026-09-12
+
+Ett beslut, inte en öppen brist. Fila inte "fan-outen är best-effort" eller
+"namnet kan bli inaktuellt i en grupp", och föreslå INTE en avstämningskörning
+som jagar drift.
+
+**MEKANISMEN.** `updateDisplayName` och `updateUsername` skriver om MIN egen
+`groups/{g}/members/{uid}`-rad i varje grupp jag är med i, genom samma bundna
+fråga som `updateProviders` redan använder. De två är också de enda som sänder —
+härled anroparna hellre än att tro på meningen, och notera att
+`tryAutoClaimUsername` inte är en av dem:
+
+```
+grep -n "publishIdentityChange(" src/contexts/AuthContext.tsx
+```
+
+Härled formen:
+
+```
+grep -n "publishIdentityChange" src/contexts/AuthContext.tsx
+grep -n "MY_GROUPS_LIMIT" src/contexts/AuthContext.tsx src/lib/firebase/groups.ts
+```
+
+Faller skrivningen mot en enskild grupp — nätverk, en regeländring, raden hunnit
+raderas — behåller just den gruppens rad det gamla namnet. Det finns ingen
+avstämningspass och ingen flagga som `visibilitySyncPending` (BIN-587), så raden
+läker först vid nästa namnbyte, en omjoin, eller någon annan skrivning som råkar
+röra dokumentet.
+
+**ACCEPTERAT:** att grupprader blir inaktuella — både en enskild rad som fallerar
+(`identityFanOut-group`) och fallet där importen eller frågan faller så att INGEN
+rad ens försöks för det namnbytet (`identityFanOut-query`). Båda har samma form och
+samma botemedel: nästa namnbyte. Den syns för användaren —
+medlemslistan renderar namnet från medlemsdokumentet, även för raden som är ens
+egen — så det här är en synlig inaktualitet utan egen felnotis, inte en osynlig
+drift. **Why:** namnet ÄR sparat i `users/{uid}` och den publika
+projektionen följer med; det som fallerar är en kosmetisk kopia.
+Alternativet — att fälla namnbytet på en
+grupprad — hade sagt "sparades inte" om ett namn användaren ser på skärmen, och
+det är precis det fel BIN-1154:s Auth-post-avvikelse avgjorde åt andra hållet en
+biljett tidigare. Samma avvägning, samma svar.
+
+**NOT accepterat, fortfarande fileable:**
+
+1. **Att rapporten tas bort.** Sentry-raden är den kanal som går att BEVAKA;
+   `console.error` bredvid den når ingen som inte redan sitter med konsolen öppen,
+   och ett gammalt namn i en lista ser inte ut som ett fel för den som råkar se det.
+   Samma gräns som `communityRatingMaintain`-postens punkt 2.
+2. **Ett SYSTEMATISKT nekande** av medlemsskrivningen — en regelregression, eller
+   en klientbugg som gör varje patch ogiltig. Då slutar varje namnbyte nå varje
+   grupp, och den smala accepten säger ingenting om det breda fallet.
+3. **Att fan-outen börjar skriva fler fält än de två.** Accepten gäller att en
+   tvåfältspatch får fallera, inte att patchen får växa. `role`, `photoURL`,
+   `providers` och `notifications` ägs inte av den anroparen, och `joinedAt` hålls
+   oföränderlig just genom att utelämnas (BIN-1063 steg 1).
+4. **Tillsammans-deltagarnas namn.** De rörs inte alls, och det är en egen
+   avgränsning (Malin 2026-09-12): en sessionsplats kan vara anonym — reglerna tar
+   emot en deltagare med `uid == null` — så det finns inget konto att läsa ett
+   aktuellt namn ur, och sessioner går ut efter 7 dagar. Vad användaren SER:
+   den som är både gruppmedlem och deltagare i en öppen session läser sitt nya
+   namn i gruppens medlemslista och sitt gamla i sessionens deltagarlista. Känt och
+   avsett.
+
+**Två smalare rester i samma mekanism**, båda accepterade på samma grund som ovan,
+och ingen ny mekanism byggs för någon av dem:
+
+* Två flikar som byter namn SAMTIDIGT kan leverera sina meddelanden i en annan
+  ordning än Firestore committade skrivningarna, så en mottagande flik kan
+  kortvarigt hålla det äldre av två namn. Det kräver att en och samma person
+  aktivt byter namn från två öppna flikar.
+* Ett meddelande som landar medan den mottagande flikens EGEN profilladdning är i
+  luften skrivs över av den laddningens `setUser(profile)`, så fliken står kvar
+  med den inaktuella kopian. Samma form som raderingsmarkörens kapplöpning som
+  `AuthContext` redan dokumenterar bredvid, men dess åtgärd — att läsa om källan
+  vid appliceringen — finns inte här: kanalen ÄR källan, den gör med flit ingen
+  läsning. Fönstret är en profilladdning brett.
+
+Båda läker vid nästa namnbyte eller omladdning.
+
+**BIN-1163 ÄR BYGGD, och det SMALNAR en paragraf längre upp i den här filen — det
+stänger den inte.** BIN-1154-postens avsnitt "Kvarvarande oppet arbete" beskriver
+den inaktuella flikens nekade skrivningar som öppet arbete, märkt "INTE accepterat,
+fortfarande fileable". Den posten är ett beslutsprotokoll och står ordagrant kvar.
+
+Vad som täcks nu: andra flikar i SAMMA webbläsare. Mekanismen är en
+`BroadcastChannel`, och den räckvidden är direkt läsbar ur konstruktorn i
+`src/lib/profileIdentityChannel.ts` — den upprepas inte här.
+
+Vad som INTE täcks, och alltså fortfarande är öppet arbete precis som BIN-1154-posten
+säger: en session i en ANNAN webbläsare eller på en annan enhet. Den håller kvar sin
+kopia och får sina skrivningar nekade tills den laddas om, exakt som före den här
+biljetten. Skriv inte av den halvan.
+
+**RE-OPEN WHEN:** `kind: 'identityFanOut-group'` eller `kind: 'identityFanOut-query'`
+dyker upp i Sentry-scopet `auth`. En enstaka träff är väntad och godartad;
+återkommande träffar betyder punkt 2 och är en annan fråga än den här posten.

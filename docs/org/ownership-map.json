@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 589,
+  "patternCount": 592,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -300,6 +300,8 @@
         "src/hooks/useOptimisticMirrorField.test.ts",
         "src/hooks/useOptimisticMirrorField.ts",
         "src/lib/assertNever.ts",
+        "src/lib/profileIdentityChannel.test.ts",
+        "src/lib/profileIdentityChannel.ts",
         "src/lib/sessionTiming.test.ts",
         "src/lib/sessionTiming.ts",
         "src/lib/tabSession.test.ts",
@@ -385,6 +387,7 @@
       "slug": "community-manager",
       "patterns": [
         "src/app/feed/page.tsx",
+        "src/components/groups/GroupMembersPanel.test.tsx",
         "src/components/groups/GroupMembersPanel.tsx",
         "src/components/groups/GroupSessionHistoryPanel.tsx",
         "src/components/groups/GroupSettingsModal.tsx",

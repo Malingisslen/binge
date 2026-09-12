@@ -226,8 +226,17 @@ vi.mock('@/lib/firebase/groupHandover', () => ({
   // this string against the real one in functions/src/groupHandover/logic.ts.
   HANDOVER_PARTIAL: 'binge/handover-partial',
 }));
+// BIN-1162: hoisted, unlike its two neighbours below, for the reason every other
+// hoisted spy in this file carries — the load-bearing assertions are about the
+// PAYLOAD (exactly two keys, never a member-doc rebuild) and about it NOT being
+// reached when the rename itself failed. An inline vi.fn() in the factory can
+// express neither.
+const groupsIdentity = vi.hoisted(() => ({
+  updateMemberIdentity: vi.fn(async () => {}),
+}));
 vi.mock('@/lib/firebase/groups', () => ({
   updateMemberProviders: vi.fn(async () => {}),
+  updateMemberIdentity: groupsIdentity.updateMemberIdentity,
   refreshMyHouseholdContributions: vi.fn(async () => {}),
   // BIN-536: real value re-declared here (not re-exported from the actual
   // module) since @/lib/firebase/groups is fully mocked in this file —
@@ -268,6 +277,41 @@ import { AuthProvider, useAuth } from './AuthContext';
 import { REQUIRES_RECENT_LOGIN, STALE_SESSION_PREFLIGHT, classifyDeletionFailure } from '@/lib/authErrors';
 import { HANDOVER_PARTIAL } from '@/lib/firebase/groupHandover';
 import { CURRENT_TERMS_VERSION } from '@/lib/legal';
+import { openProfileIdentityChannel, PROFILE_IDENTITY_CHANNEL } from '@/lib/profileIdentityChannel';
+
+// BIN-1163: a real cross-tab bus, not a spy. The whole mechanism is "does the
+// OTHER tab end up holding the new name", and a mocked module could only prove
+// that post() was called — the form of the call, never its effect. This fake
+// implements the one semantic the production code leans on: a channel never
+// delivers to the object that posted, which is what makes a tab ignore its own
+// message without any echo-suppression logic.
+class FakeBroadcastChannel {
+  static open: FakeBroadcastChannel[] = [];
+  closed = false;
+  private listeners: ((e: MessageEvent) => void)[] = [];
+  constructor(public name: string) { FakeBroadcastChannel.open.push(this); }
+  addEventListener(_type: string, cb: (e: MessageEvent) => void) { this.listeners.push(cb); }
+  removeEventListener(_type: string, cb: (e: MessageEvent) => void) {
+    this.listeners = this.listeners.filter(l => l !== cb);
+  }
+  postMessage(data: unknown) {
+    for (const other of FakeBroadcastChannel.open) {
+      if (other === this || other.closed || other.name !== this.name) continue;
+      other.listeners.forEach(l => l({ data } as MessageEvent));
+    }
+  }
+  close() {
+    this.closed = true;
+    FakeBroadcastChannel.open = FakeBroadcastChannel.open.filter(c => c !== this);
+  }
+}
+
+/** Stand in for a second tab: receives what the provider posts, and can post to it. */
+function openSecondTab() {
+  const received: unknown[] = [];
+  const channel = openProfileIdentityChannel(m => { received.push(m); });
+  return { received, channel };
+}
 
 // --- Harness -----------------------------------------------------------------
 
@@ -315,6 +359,9 @@ function userDocWrites() {
 }
 
 beforeEach(() => {
+  FakeBroadcastChannel.open = [];
+  (window as unknown as { BroadcastChannel: unknown }).BroadcastChannel = FakeBroadcastChannel;
+  groupsIdentity.updateMemberIdentity.mockClear();
   reconsentFlagRenders.length = 0;
   // BIN-909: default every test to a brand-new account, so only the tests that
   // deliberately age it reach the gate.
@@ -967,6 +1014,172 @@ describe('AuthContext — updateProviders group query bound (BIN-536)', () => {
 
     expect(limitCalls).toContain(100);
     expect(getDocsMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+// BIN-1163 + BIN-1162. `isOwnIdentity` in firestore.rules compares the name a write
+// carries against the LIVE users/{uid} value, and every writer sends AuthContext's
+// in-memory copy — loaded once per auth event. Once BIN-1154 made the name editable,
+// a rename in one tab left every other tab's reviews, comments, reactions, friend
+// requests and group invites DENIED until it reloaded.
+describe('AuthContext — ett namnbyte når andra flikar och gruppmedlemsraderna (BIN-1163/BIN-1162)', () => {
+  function groupDoc(id: string): FakeDoc {
+    return { id, ref: { _path: `groups/${id}` }, data: () => ({}) };
+  }
+
+  it('sänder det nya namnet till en annan flik, med exakt nyckeluppsättningen', async () => {
+    renderAuth();
+    await login({ displayName: 'Malin', username: 'malin' });
+    const tab2 = openSecondTab();
+
+    await act(async () => { await ctx!.updateDisplayName('Malin G'); });
+
+    expect(tab2.received).toHaveLength(1);
+    // Nycklarna RÄKNAS UPP, inte bara kontrolleras för närvaro: ett fjärde fält ska
+    // kräva ett eget beslut, inte glida in genom ett redan öppet rör (#4/#5/#6).
+    expect(Object.keys(tab2.received[0] as object).sort()).toEqual(['displayName', 'uid', 'username']);
+    expect(tab2.received[0]).toEqual({ uid: 'u1', displayName: 'Malin G', username: 'malin' });
+    tab2.channel.close();
+  });
+
+  it('ett meddelande för MITT uid byter namnet i den mottagande fliken', async () => {
+    renderAuth();
+    await login({ displayName: 'Malin', username: 'malin' });
+    expect(ctx!.user!.displayName).toBe('Malin');
+
+    // Hela förloppet, inte bara att en lyssnare finns: en annan flik sänder, den
+    // här tar emot, och contextens värde ska ha bytts när renderingen landat.
+    const tab2 = openProfileIdentityChannel(() => {});
+    await act(async () => {
+      tab2.post({ uid: 'u1', displayName: 'Nytt namn', username: 'nyttnamn' });
+    });
+
+    expect(ctx!.user!.displayName).toBe('Nytt namn');
+    expect(ctx!.user!.username).toBe('nyttnamn');
+    tab2.close();
+  });
+
+  it('ignorerar ett meddelande för ett ANNAT konto i samma webbläsare', async () => {
+    renderAuth();
+    await login({ displayName: 'Malin', username: 'malin' });
+
+    // Kanalen är scopad på ORIGIN, inte på session. Utan uid-kontrollen hade den
+    // här fliken adopterat ett främmande namn — och dess nästa egna skrivning
+    // hade nekats av exakt den regel biljetten finns för att sluta utlösa.
+    const otherAccount = openProfileIdentityChannel(() => {});
+    await act(async () => {
+      otherAccount.post({ uid: 'nagon-annan', displayName: 'Inkräktare', username: 'x' });
+    });
+
+    expect(ctx!.user!.displayName).toBe('Malin');
+    expect(ctx!.user!.username).toBe('malin');
+    otherAccount.close();
+  });
+
+  it('skriver om medlemsraden med exakt två nycklar, aldrig ett helt medlemsdokument', async () => {
+    getDocsMock.mockImplementation(async () => ({ docs: [groupDoc('g1'), groupDoc('g2')] }));
+    renderAuth();
+    await login({ displayName: 'Malin', username: 'malin' });
+
+    await act(async () => { await ctx!.updateDisplayName('Malin G'); });
+
+    expect(groupsIdentity.updateMemberIdentity).toHaveBeenCalledTimes(2);
+    const [groupId, uid, identity] = groupsIdentity.updateMemberIdentity.mock.calls[0] as unknown as
+      [string, string, Record<string, unknown>];
+    expect(groupId).toBe('g1');
+    expect(uid).toBe('u1');
+    // `role`, `photoURL`, `providers`, `notifications` och `joinedAt` ägs inte av den
+    // här anroparen. En uppräkning av nycklarna är det enda som fäller en framtida
+    // omskrivning genom memberFields() (#27 DBA).
+    expect(Object.keys(identity).sort()).toEqual(['displayName', 'username']);
+    expect(identity).toEqual({ displayName: 'Malin G', username: 'malin' });
+  });
+
+  it('ett avvisat användarnamn ger noll gruppfrågor och ingen sändning', async () => {
+    renderAuth();
+    await login({ displayName: 'Malin', username: 'malin' });
+    const tab2 = openSecondTab();
+    getDocsMock.mockClear();
+    claimUsername.mockImplementationOnce(async () => { throw new Error('username-taken'); });
+
+    await act(async () => {
+      await expect(ctx!.updateUsername('upptaget')).rejects.toThrow('username-taken');
+    });
+
+    // Fan-outen är gatad på DEN skrivning som ändrade fältet, inte på anropet.
+    expect(getDocsMock).not.toHaveBeenCalled();
+    expect(groupsIdentity.updateMemberIdentity).not.toHaveBeenCalled();
+    expect(tab2.received).toHaveLength(0);
+    tab2.channel.close();
+  });
+
+  it('en fallerad namnskrivning sänder ingenting och når ingen grupp', async () => {
+    renderAuth();
+    await login({ displayName: 'Malin', username: 'malin' });
+    const tab2 = openSecondTab();
+    getDocsMock.mockClear();
+    setDoc.mockImplementationOnce(async () => { throw new Error('write-refused'); });
+
+    await act(async () => {
+      await expect(ctx!.updateDisplayName('Malin G')).rejects.toThrow('write-refused');
+    });
+
+    // Att sända optimistiskt hade gett en annan flik ett namn servern aldrig tog
+    // emot — och DEN flikens nästa egna skrivning hade nekats av `isOwnIdentity`.
+    // Defekten flyttad i stället för lagad (#4 Security, #27 DBA).
+    expect(tab2.received).toHaveLength(0);
+    expect(getDocsMock).not.toHaveBeenCalled();
+    expect(groupsIdentity.updateMemberIdentity).not.toHaveBeenCalled();
+    tab2.channel.close();
+  });
+
+  it('ett namnbyte bär BÅDA fälten även när bara användarnamnet ändrats', async () => {
+    renderAuth();
+    await login({ displayName: 'Malin', username: 'malin' });
+    const tab2 = openSecondTab();
+
+    await act(async () => { await ctx!.updateUsername('malin_g'); });
+
+    // `isOwnIdentity` binder båda fälten, så ett användarnamnsbyte som bara bar
+    // halva paret hade lämnat syskonflikarna lika nekade som ett namnbyte gjorde.
+    expect(tab2.received).toEqual([{ uid: 'u1', displayName: 'Malin', username: 'malin_g' }]);
+    tab2.channel.close();
+  });
+
+  it('en fallerad gruppskrivning rapporteras men fäller inte namnbytet', async () => {
+    getDocsMock.mockImplementation(async () => ({ docs: [groupDoc('g1')] }));
+    groupsIdentity.updateMemberIdentity.mockImplementationOnce(async () => {
+      throw new Error('permission-denied');
+    });
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    renderAuth();
+    await login({ displayName: 'Malin', username: 'malin' });
+
+    await act(async () => { await ctx!.updateDisplayName('Malin G'); });
+
+    // Namnet ÄR sparat i users/{uid} och användaren ser det på skärmen; att kasta
+    // här hade sagt "sparades inte" om något som är sparat. Tyst svaljning vore
+    // det tredje felet — därför rapporteras det (BIN-957-konventionen).
+    expect(ctx!.user!.displayName).toBe('Malin G');
+    expect(captureErrorMock).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({ scope: 'auth', kind: 'identityFanOut-group' }),
+    );
+    errSpy.mockRestore();
+  });
+
+  it('stänger kanalen när providern avmonteras', async () => {
+    const view = renderAuth();
+    await login({ displayName: 'Malin', username: 'malin' });
+    const providerChannel = FakeBroadcastChannel.open.find(c => c.name === PROFILE_IDENTITY_CHANNEL);
+    expect(providerChannel).toBeDefined();
+
+    view.unmount();
+
+    // Spionera på just det här handtaget, inte på en global räknare: React och
+    // React Query håller orelaterade resurser vid liv, så ett aggregat kan inte
+    // bevisa att DEN HÄR kanalen stängdes (BIN-790-familjen).
+    expect(providerChannel!.closed).toBe(true);
   });
 });
 
@@ -2307,7 +2520,7 @@ describe('AuthContext — reconsent gate for a returning account (BIN-909)', () 
   });
 });
 
-// BIN-1154: visningsnamnet far en redigeringsyta, och den ror TVA lagringar av
+// BIN-1154: visningsnamnet far en redigeringsyta, och den ror flera lagringar av
 // samma personuppgift. Ordningen mellan dem ar ett beslut - Firestore forst,
 // Auth-posten bara om den gick igenom - och den ordningen ar vad de har fallen
 // pinnar. Utan dem gar bade chokepoint-villkoret och klampningen att radera med

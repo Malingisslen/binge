@@ -48,6 +48,18 @@ node docs/org/route.mjs --md src/app/grupper/page.tsx src/components/groups/Grou
 
 → `⚠ Unowned code path(s)` för alla tre, panel seatad på #14-fallbacken.
 
+**NAMNGE BASLINJEN, annars mäter nästa läsare fel.** Utfallet ovan gäller ägarkartan
+FÖRE den här batchen. När batchen väl är committad är den kartan `HEAD~1`, inte `HEAD`,
+och ett försök att reproducera mot `HEAD` ger det åtgärdade läget och ser ut som ett
+fabricerat protokoll. En granskare gjorde precis det misstaget 2026-09-12. Härled i
+stället utan att röra trädet — `fore=0` i vänsterkolumnen är premissen:
+
+```
+for p in src/app/grupper/page.tsx src/components/groups/GroupMembersPanel.tsx src/app/tillsammans/ny/page.tsx; do
+  echo "$p fore=$(git show 301ee15~1:docs/org/ownership-map.json | grep -c "\"$p\"") efter=$(git show 301ee15:docs/org/ownership-map.json | grep -c "\"$p\"")"
+done
+```
+
 Sätet följer vad filen HANDLAR om, inte vilken katalog den ligger i (BIN-613):
 
 * `src/app/grupper/page.tsx` och `src/components/groups/GroupMembersPanel.tsx` → **§18
@@ -177,6 +189,86 @@ Acceptanskriterier:
    går att skriva om får inte få användaren att tro att namnbytet misslyckades
    (`updateProviders`' bäst-möjliga form). Men ett fel rapporteras — tyst svaljning är
    det tredje felet (BIN-957-konventionen: `console.error` + `captureError`).
+
+### Panelens bindande villkor (full panel, 2026-09-12)
+
+Fem blinda kritiker: #4 Security Architect, #5 Legal/GDPR, #6 DPO, #27 DBA, #18 Community
+Manager. Routningen efter att `GroupMembersPanel.tsx` lades till (villkor 12) ger samma
+fem — ingen omkörning behövdes. Villkoren nedan är ACCEPTANSKRITERIER, inte råd.
+
+1. **Nyttolastens nyckeluppsättning är exakt `{uid, displayName, username}`**, pinnad av ett
+   test som räknar upp NYCKLARNA — inte av ett test som bara hävdar att de två fälten finns.
+   Ett tredje fält ska kräva ett eget beslut, inte glida in genom ett redan öppet rör.
+   (#4 blockerande, #5 blockerande, #6 blockerande.)
+2. **Mottagaren jämför meddelandets `uid` mot sitt EGET inloggade uid**, läst färskt, innan
+   något appliceras. `BroadcastChannel` är scopad på origin, inte på session: ett andra
+   konto i en annan flik i samma webbläsare skulle annars adoptera främmande namn — och
+   dess nästa egna skrivning nekas av `isOwnIdentity`, alltså exakt den defekt BIN-1163
+   finns för, flyttad ett steg. (#4 blockerande, #6 rådgivande.)
+3. **Sändningen sker först EFTER att Firestore-skrivningen resolvat**, aldrig optimistiskt
+   och aldrig om den kastar. Samma ordning som `updateDisplayName` redan har mot Auth-posten.
+   (#4 blockerande, #27 blockerande.)
+4. **Ingenting av nyttolasten skrivs till disk** — inte `localStorage`, `sessionStorage`,
+   IndexedDB eller någon cache. Bevisat av ett test, inte av prosan. BIN-817 är precedensen:
+   profilfält låg i `localStorage` i klartext utan utgång. (#6 blockerande.)
+5. **Fan-outen frågar LIVE, aldrig via `myGroupsCache`.** `updateProviders` är syskonet som
+   gör rätt; `syncProgressToGroups` är det som läser cachen. Härled var de bor och när
+   cachen rivs, i stället för att lita på en mening:
+   `grep -rn "const updateProviders" src`, `grep -rn "function syncProgressToGroups" src`,
+   `grep -n "invalidateMyGroupsCache(" src/lib/firebase/groups.ts`. (#27 blockerande.)
+6. **Fan-outen är gatad på just den skrivning som ändrade fältet.** För namnet: efter att
+   `updateUserField('displayName', …)` resolvat, oberoende av Auth-synken, som enligt
+   BIN-1154 får fallera utan att fälla namnbytet. För användarnamnet: efter att
+   `claimUsername` resolvat. Ett avvisat användarnamn ska ge NOLL gruppläsningar.
+   (#27 blockerande.)
+7. **Medlemsskrivningen är en smal patch av exakt `{displayName, username}`** via
+   `updateDoc`, aldrig `memberFields()` och aldrig `setDoc`. `memberFields()` kräver ett
+   `role` som `AuthContext` inte har någon auktoritativ källa för — en omskrivning genom den
+   hade kunnat nollställa en medlems roll och stampa över `photoURL`, `providers` och
+   `notifications`. Det är också det som håller `joinedAt` orörd: ett fält som utelämnas ur
+   patchen uppfyller regelns `get(...,null)`-jämförelse trivialt. (#27 blockerande,
+   #6 blockerande.)
+8. **`updateDoc`, inte `setDoc(..., {merge:true})`** — båda formerna fallerar säkert om
+   medlemsraden hunnit raderas, men bara `updateDoc` fallerar RENT. Merge-formen skulle
+   förlita sig på create-grenens `joinedAt`-villkor som en oavsiktlig sista utväg.
+   (#27 rådgivande, #6 blockerande: en fan-out får aldrig återuppliva en rad
+   raderingskaskaden redan tagit.)
+9. **Värdet som skrivs är det REDAN klampade**, samma sträng som gick till `users/{uid}` —
+   inte ett omhärlett eller omläst värde. Medlemsdokumentet har ingen egen längdgräns i
+   reglerna förrän batch C, så det finns inget skyddsnät under. (#27 rådgivande.)
+10. **Restens av en halvfärdig fan-out skrivs ned som ett daterat val i
+    `.claude/rules/accepted-deviations.md`**, med en re-open-utlösare knuten till ett
+    specifikt `captureError`-`kind`. Ett nätverksfel på någon grupp lämnar just de raderna
+    med gamla namnet tills nästa namnbyte eller omjoin, och det finns ingen
+    avstämningskörning. Samma disciplin som `communityRatingMaintain` redan tvingades till
+    av samma säte: tystnad är inget beslut. Posten bär också #27:s punkt 6 — två flikar som
+    byter namn SAMTIDIGT kan leverera händelserna i annan ordning än Firestore committade,
+    ett smalare återfall av samma klass, självläkande vid nästa namnbyte. (#27 blockerande.)
+11. **Kommentaren vid kanalen skriver ut att ingen ändring av integritetspolicyn behövs**,
+    med skälet: nyttolasten lämnar aldrig enheten, lagras aldrig, och `isOwnIdentity` läser
+    alltid det live-värdet — kanalen är aldrig en auktoritetskälla, bara en kosmetisk
+    synk. Annars får nästa granskare härleda om det. (#5 rådgivande.)
+12. **Medlemslistan visar användarnamnet som TEXT** (Malins beslut 2026-09-12, mot #18:s
+    blockering). Före den här buntens fan-out var namnkopian fryst vid inträdet;
+    live-propagering gör ett namnbyte till något som slår igenom i medlemslistan direkt.
+    MedlemsRADEN bar redan användarnamnet, men bara som länkmål — komponentens
+    inbjudningslista visar det redan som text. En medlem utan användarnamn visar
+    ingenting extra, och två sådana kan fortfarande rendera identiskt; resten står i
+    komponentens egen kommentar.
+13. **Kommentaren vid Tillsammans-avgränsningen beskriver det SYNLIGA symptomet**, inte bara
+    det mekaniska skälet: den som är både gruppmedlem och deltagare i en öppen session ser
+    sitt nya namn i gruppens medlemslista och sitt gamla i sessionens deltagarlista, potentiellt i
+    samma flikbyte. Då läses det som känt och avsiktligt i stället för som en missad fläck.
+    (#18 rådgivande.)
+
+**Följdbiljetter panelen namngav — filas i fas 3, byggs INTE här:**
+
+* Medlemsraden `groups/{g}/members/{uid}` ingår inte i artikel 20-exporten;
+  `buildUserExport` exporterar toppdokumentet `groups/{g}`, aldrig raden. Luckan är
+  förbefintlig, men den här buntens fan-out gör fältet till en UNDERHÅLLEN kopia i stället
+  för en bortglömd, vilket är den naturliga utlösaren att fila den. (#5.)
+* `users/{uid}/groupInvites/{groupId}.fromDisplayName` och `friendRequests*.fromDisplayName`
+  fryser avsändarens namn vid utskick och rörs inte av fan-outen. (#6 och #18 oberoende.)
 
 **Tier D (Needs you):** ingen. Batch A rör inte `firestore.rules`.
 
@@ -336,6 +428,14 @@ konfiguration med eget projekt-id och egen port (BIN-1153).
 
 ## Deviation log
 
+- [discovery] BATCH B: `src/lib/tabSession.ts`s huvudkommentar säger att gruppdokumentet
+  är läsbart för vilken inloggad användare som helst, och att arvtagaren därför får veta
+  dess namn och memberUids. Batch B gör den meningen FALSK, i en fil batchen inte rör —
+  precis BIN-1038:s form. Meningen är BIN-748:s motivering för hela mekanismen, så den
+  ska smalnas (namnet är fortfarande läsbart via det nya publika dokumentet, memberUids
+  inte), inte strykas. Sök hela trädet efter fler kopior av samma påstående innan den
+  rättas — flerradigt och blankstegsnormaliserat, samma mening radbryts olika i olika
+  filer.
 
 ---
 
