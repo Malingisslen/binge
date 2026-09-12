@@ -35,9 +35,14 @@ export async function createSession(params: {
   expiresAt.setDate(expiresAt.getDate() + SESSION_TTL_DAYS);
 
   const { db, collection, doc, setDoc, addDoc, serverTimestamp, Timestamp } = await fsdb();
-  // BIN-1156: bara deltagar-doc:ens displayName har ett tak i reglerna. Klampas bara den, lyckas
-  // session-doc:ens hostName anda med en godtyckligt lang etikett i sessionslistan
-  // — halva fixen, och den halvan syns inte i nagot permission-denied.
+  // BIN-1156 klampar etiketten sa att appen aldrig skickar en for lang. BIN-1165 lade
+  // ett tak i `firestore.rules` ocksa, sa en FOR LANG eller feltypad etikett som gar
+  // forbi den har funktionen nekas i stallet for att lyckas — en laglig etikett skriven
+  // nagon annan vag gar fortfarande igenom, och reglerna sager exakt vad de binder.
+  // Klampningen halls kvar for att en tyst forkortning ar ett battre anvandarmote an
+  // ett permission-denied. Harled de tva taken hellre an att lita pa den har meningen:
+  //   grep -n "hostName.size()" firestore.rules
+  //   grep -n "MAX_SESSION_DISPLAY_NAME" src/lib/clampText.ts
   const hostName = clampToCodeUnits(params.hostName, MAX_SESSION_DISPLAY_NAME);
   const sessionRef = await addDoc(collection(db, 'sessions'), {
     hostUid: params.hostUid,

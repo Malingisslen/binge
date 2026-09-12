@@ -52,9 +52,13 @@ import { fileURLToPath } from 'node:url';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..');
 
-// Raise by hand when the suite grows. The suite counted 519 when this landed; derive it
-// rather than trusting that number: npm run test:rules -- --port 8123
-export const MIN_TESTS = 500;
+// Raise by hand when the suite grows. Derive the current count rather than trusting any
+// number written here: npm run test:rules -- --port 8123
+//
+// BIN-1165, 2026-09-12: raised 500 → 556, which is what `numTotalTests` reported on the
+// commit that added the sessions hostName tests. The value is the suite's measured size,
+// not a margin below it, so removing a single test fails the floor — that is the point.
+export const MIN_TESTS = 556;
 
 const VITEST_ARGS = ['run', '--config', 'vitest.rules.config.ts'];
 

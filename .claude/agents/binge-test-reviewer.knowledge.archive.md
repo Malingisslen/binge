@@ -28226,3 +28226,155 @@ one nobody checks** (a `season`/`tmdbId` skew changes `episodeReactionKey(tmdbId
 and collides two threads). **A stakeholder condition recorded in a code comment IS an
 acceptance criterion** — grep staged comments for "reviewed by / godkänd", COUNT THE CLAUSES,
 mutate the literal each names.
+
+## 2026-09-12 — BIN-1165 re-review: block-comment "every fixture" quantifier falsified by its own last test
+
+**Diff reviewed**: staged set `docs/org/metrics/events.jsonl`, `firestore.rules`,
+`scripts/run-rules-tests.mjs`, `src/lib/firebase/sessions.clamp.test.ts`,
+`src/lib/firebase/sessions.ts`, `src/test/rules/firestore-rules.test.ts` at
+`firestore.rules` sha `021114e30ed942a0ec90c822390f21f66c039672`. Re-review after a prior
+pass ended `pass (0 blocking)` with one non-blocking finding (acted on: three fixes landed
+— at-limit boundary tests, a list-shaped fixture on both branches, and a struck false
+clause in `sessions.clamp.test.ts`'s test title).
+
+**Verification performed, all independently reproduced, none inherited**:
+- Index/worktree hash loop over all 6 staged paths at start: all matched (no split state).
+- Full `npm run test:rules` control run (offset port 8321, port 8080 held by a sibling):
+  556/556 green, 7/7 files — matches the claimed count and the `MIN_TESTS` floor exactly.
+- Six independent mutations against a scratchpad-snapshotted `firestore.rules`
+  (hash-verified `021114e3…` before AND after every mutation, restored via `cp` from
+  snapshot, never `git checkout --`):
+  1. Update branch `hostName is string` deleted → exactly 1 failure: "update is denied
+     when hostName is changed to a list that satisfies the length bound".
+  2. Create branch `<= 80` → `< 80` → exactly 1 failure: "create is allowed when
+     hostName is exactly at the bound".
+  3. Update branch `<= 80` → `< 80` → exactly 1 failure: "update is allowed when
+     hostName is exactly at the bound".
+  4. Create branch `is string` deleted → exactly 1 failure: "create is denied when
+     hostName is a list that satisfies the length bound" (the number-case test stayed
+     green, confirming the comment's claim that a number alone cannot pin `is string`).
+  5. Create branch's entire length clause deleted (`&& hostName.size() <= 80` removed,
+     semicolon moved onto the `is string` line) → exactly 1 failure: "create is denied
+     when hostName exceeds the bound".
+  6. Counterfactual: `it.skip`'d the new "update is denied … list …" test, THEN deleted
+     `is string` from the update branch → suite went fully green (555 passed, 1 skipped,
+     exit 0) — independently reproducing the security review's claimed pre-fix gap
+     ("with only the create test, removing `is string` from update alone left the whole
+     suite green").
+  - Reproduced the pre-batch baseline literally: ran the suite against
+    `git show HEAD:src/test/rules/firestore-rules.test.ts` → 544/544 green.
+    (A clause stood here and is STRUCK, on the whole-diff reviewer's finding: it
+    published a `grep -c` over the whole staged diff beside the number 12, and that
+    command returns 13 at these bytes — the extra match is this batch's own
+    retitled test in `src/lib/firebase/sessions.clamp.test.ts`. No replacement count is
+    written: a rewrite would need both a new number and a narrowing pathspec, i.e. two
+    fresh unmeasured claims. A second sentence stood here and is struck too — it
+    described what the batch removed from `scripts/run-rules-tests.mjs`, and the
+    whole-diff reviewer measured that the committed diff carries no such wording; it
+    existed only in an intermediate working tree nothing pins.)
+  - Every mutation restored from the scratchpad snapshot and re-verified by
+    `git hash-object` before the next step; final control run after all six mutations:
+    556/556 green, `git status --porcelain` showed only the original staged diff.
+
+**Finding (blocking)**: `src/test/rules/firestore-rules.test.ts`'s new
+`describe('sessions/{id} — hostName typ- och längdtak (BIN-1165)', ...)` opens with:
+"Every fixture below keeps `hostUid` equal to the signed-in uid, so the earlier clause in
+the same &&-chain always passes and a denial can only come from the length or type
+clause." The block's OWN last test, "a non-host cannot create a session claiming another
+uid as host", uses `otherDb()` (auth uid `other_uid`) against `validSession()`'s default
+`hostUid: OWNER` — i.e. it deliberately does NOT keep `hostUid` equal to the signed-in
+uid, and its denial comes from the EARLIER (`hostUid`) clause, not the length/type clause
+the comment describes. The claim is a checkable "every fixture" quantifier and it is
+false as stated for the block's own last member. Not a masking risk (the test's own name
+is accurate and nobody is misled about what it proves) but exactly the false-universal
+class this repo keeps re-finding in comments. Remedy: scope the sentence (e.g. move it to
+sit only above the length/type denial tests, or add the one-clause exception) — strike
+the unscoped "every", do not leave it standing.
+
+**Other checklist items, all clean**:
+- All 12 new tests checked for seed-satisfies-earlier-clauses attributability: create
+  fixtures use `ownerDb()` + `hostUid: OWNER` (matches); update fixtures seed via a real
+  `setDoc` through the actual create branch (`ownerDb()`, no `withSecurityRulesDisabled`
+  anywhere in the new block — grepped and confirmed) and always seed a value DIFFERENT
+  from the later assertion's interesting value (e.g. `'Filmkvall'` seeded, then updated
+  to `AT_LIMIT`/`TOO_LONG`/`LIST_HOSTNAME`/`'Nytt namn'` — never pre-seeded at the
+  interesting value).
+- `AT_LIMIT`/`LIST_HOSTNAME` shared consts: each of the two tests sharing a const targets
+  a DIFFERENT `allow` branch on a DIFFERENT doc id, and each is independently
+  mutation-killed by its own branch's mutation only (see mutations 2/3 and 1/4 above) —
+  no masking.
+- `sessions.clamp.test.ts`'s title strike ("— etiketten har inget tak i reglerna alls"
+  removed, replaced by an explanatory comment saying the test proves client-side
+  clamping only) is a correctly-scoped strike-not-reword: the struck clause was made
+  false BY THIS SAME BATCH's rules change, and the replacement comment asserts nothing
+  new and unmeasured.
+- `sessions.ts`'s comment rewrite (old "halva fixen" comment → new comment describing
+  BIN-1165's rules-side bound) is comment maintenance describing a behavior that changed
+  in the same diff, not a correction of a previously-wrong claim — legitimate. Its
+  published command (`grep -n "hostName.size()" firestore.rules`) verified to return 2
+  matching lines.
+- No absence assertions in the new tests (all `assertSucceeds`/`assertFails` plus
+  `.length` equality checks in the clamp test) — nothing for a destroyed measurement to
+  vacuously satisfy.
+- BIN-1175 (the wider `hostUid`-pin/no-`hasOnly()` hole) confirmed genuinely absent from
+  `firestore.rules`' `sessions/{sessionId}` block — correctly excluded per task framing,
+  not filed here.
+
+**Verdict**: fail (1 blocking) — the false "every fixture" quantifier above.
+
+## Relocated 2026-09-12b — entry 97 (cap trim, paid for the BIN-1165 block-comment-quantifier addition above)
+
+Verbatim, moved out of the active file to hold the 80k cap:
+
+**From the "test whose NAME lies" bullet**, BIN-1107's `WIRED` test: said it "names every
+script the argument scan considers a caller" while a genuine third caller
+(`backfill-mirror-uid.mjs`) was left out — true in aggregate (sibling test), false as
+stated. Closed by widening `WIRED` to 3 AND deriving `callers` from `git ls-files` on the
+same predicate for a membership `toEqual` — `WIRED.length` alone only catches a SHORT
+roster, not a WRONG one; dropping one entry failed membership first.
+
+**From the "UI CONFIRMATION restates a write decision" bullet**, BIN-1166's
+`AcceptInviteResult`/`JoinViaTokenResult` (`ok`/`refused`/`invite_invalid`/`transient`)
+got a thorough bidirectional `groups.test.ts` describe block (every `isPermissionDenied`
+branch probed both ways) while THREE separate page components that each select their own
+toast/label text and persist a `blocked`/`joinFailed` state keyed on the discriminant
+(`src/app/grupper/page.tsx`, `src/app/grupper/ny/page.tsx`,
+`src/components/pages/GroupPageClient.tsx`) had no test file at all — on the very ticket
+whose point was to stop misattributing one outcome's text to another.
+
+**From the Admin-SDK-orchestrator bullet**, BIN-1147: 2 of 3 client-SDK harness copies
+only drove `runGroupHandover`, never the new `eraseSentInvites`, so throwing stubs there
+left 471/471 green — verify "real, not stubs" PER HARNESS. Separately, `fromDisplayName:
+fromUid` is a field-selection mutant equivalent only until the field is swapped and
+redness confirmed.
+
+**From the GDPR deletion-cascade bullet**, BIN-1063 steg 3's handover finds a group by
+`ownerUid`/`memberUids array-contains`, and a state-swap changes both fields the find
+query reads — so erasing AFTER the swap strands the departing member's rows unreachable
+by any retry. Swapping the two blocks and requiring the "still findable when the erasure
+fails" test to redden catches it (2 of 22 tests, together with the race case, which
+short-circuits before the erasure under the old order).
+
+**From the dual-guard fail-safes bullet**: a pre-existing duplicate-of-self pad fixture
+(`['x','x']` vs a one-member old list) satisfies a size clause too (dup counts twice) and
+isolates `hasAll(old)` identically to the intended isolating fixture — struck, not
+reworded (2026-09-09).
+
+**From the source-scan-guard-wiring bullet**: the exact-text anchor defeated by a
+defanged live branch (`if (false) { …verbatim block… }`) plus an unreachable decoy
+holding an identical copy elsewhere in the file was live-verified on BIN-1107's
+`projectRefusal` wiring test (10/10 green, real check dead); the same anchor is also
+defeated across syntax by a `#`-commented lefthook.yml block matching the same regex
+(BIN-1110).
+
+**From the boundary-completeness bullet**: mirroring the DERIVED-fixture-size defect one
+layer out — when a diff extracts every pure predicate of a destructive sweep into an
+admin-free sibling but leaves the blast-radius CEILING inline in the firebase-admin
+entrypoint, the constant's test degenerates to a range assertion that cannot tell whether
+the ceiling is enforced at all, nor `>` from `>=` — don't wave that through on the
+untestable-entrypoint precedent when the file's OWN convention was followed four times
+and skipped once, on the guard with the largest blast radius.
+
+**From the BIN-1165 re-review entry above** (2026-09-12 — BIN-1165 re-review): the block
+comment's exact false claim and its exact counterexample are recorded in full in that
+entry; not repeated here.

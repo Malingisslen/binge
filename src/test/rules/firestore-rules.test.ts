@@ -1633,6 +1633,160 @@ const ANON1 = '0123456789abcdef0123456789abcdef';
 const ANON2 = 'fedcba9876543210fedcba9876543210';
 const ANON_UNSEEDED = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; // token-shaped, never seeded
 
+// BIN-1165 — the session DOCUMENT's own hostName bound. Before this, the create and
+// update branches bound only WHO writes (`hostUid`), never the label's content, on a
+// document that is `allow read: if true`.
+//
+// ATTRIBUTION. A denial test that fails an earlier clause in the same &&-chain proves
+// nothing about the clause it names (the BIN-1127 lesson). Each hostName denial test
+// below therefore writes as `ownerDb()` against `validSession()`'s `hostUid: OWNER`, so
+// `hostUid == request.auth.uid` passes and only the type or length clause can be what
+// denies. The last test in the block is the deliberate exception and says so in its own
+// name — it is about the `hostUid` clause, not about hostName.
+describe('sessions/{id} — hostName typ- och längdtak (BIN-1165)', () => {
+  // Mirrors createSession's write shape in src/lib/firebase/sessions.ts. Derive it
+  // rather than trusting this list:
+  //   sed -n '/addDoc(collection(db, .sessions.)/,/});/p' src/lib/firebase/sessions.ts
+  function validSession(overrides: Record<string, unknown> = {}) {
+    return {
+      hostUid: OWNER,
+      hostName: 'Filmkvall',
+      groupId: null,
+      config: { providers: [] },
+      status: 'active',
+      candidates: [],
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      expiresAt: Timestamp.fromDate(new Date(Date.now() + 7 * 24 * 3600 * 1000)),
+      ...overrides,
+    };
+  }
+  // A STRING that only breaks the length clause — never a wrong type, so the two
+  // halves of the clause stay separately attributable.
+  const TOO_LONG = 'x'.repeat(81);
+
+  it('host can create a session with a normal hostName', async () => {
+    await assertSucceeds(setDoc(doc(ownerDb(), 'sessions', 's_ok'), validSession()));
+  });
+
+  it('create is denied when hostName exceeds the bound', async () => {
+    await assertFails(setDoc(
+      doc(ownerDb(), 'sessions', 's_long'),
+      validSession({ hostName: TOO_LONG }),
+    ));
+  });
+
+  // The bound is inclusive, and nothing else in this block would notice if it stopped
+  // being: a `<= 80` → `< 80` mutation only ever rejects a legitimate label, so every
+  // deny test stays green. One per branch, since the two are independent
+  // `allow` statements.
+  const AT_LIMIT = 'x'.repeat(80);
+
+  it('create is allowed when hostName is exactly at the bound', async () => {
+    await assertSucceeds(setDoc(
+      doc(ownerDb(), 'sessions', 's_edge'),
+      validSession({ hostName: AT_LIMIT }),
+    ));
+  });
+
+  it('update is allowed when hostName is exactly at the bound', async () => {
+    await assertSucceeds(setDoc(doc(ownerDb(), 'sessions', 's_edge_upd'), validSession()));
+    await assertSucceeds(updateDoc(
+      doc(ownerDb(), 'sessions', 's_edge_upd'),
+      { hostName: AT_LIMIT, updatedAt: serverTimestamp() },
+    ));
+  });
+
+  // The `is string` half needs BOTH of these, and the pair is the whole point.
+  //
+  // A NUMBER is denied even without the type clause: `.size()` on a number errors, and
+  // an erroring rule denies. So the number case alone cannot pin `is string` — a
+  // mutation run on 2026-09-12 neutralised that clause and the suite stayed green.
+  //
+  // A LIST is the case that does pin it. A list HAS `.size()`, so with the type clause
+  // gone `size() <= 80` would bound the element COUNT instead of a string's length, and
+  // `hostName: [<80 long strings>]` would be accepted onto a document that is
+  // `allow read: if true`. Found by the security review's own probe against the
+  // neutralised rule, not by this suite — which is why the case exists now.
+  it('create is denied when hostName is a number', async () => {
+    await assertFails(setDoc(
+      doc(ownerDb(), 'sessions', 's_num'),
+      validSession({ hostName: 42 }),
+    ));
+  });
+
+  const LIST_HOSTNAME = ['x'.repeat(500), 'y'.repeat(500)];
+
+  it('create is denied when hostName is a list that satisfies the length bound', async () => {
+    await assertFails(setDoc(
+      doc(ownerDb(), 'sessions', 's_list'),
+      validSession({ hostName: LIST_HOSTNAME }),
+    ));
+  });
+
+  // The update branch needs its OWN list case, not just the create one. The security
+  // review measured the gap: with only the create test, removing `is string` from the
+  // UPDATE branch alone left the whole suite green — the same one-branch-at-a-time
+  // regression BIN-1153 was filed about, on this very block, and the comment in
+  // firestore.rules claims a denial test per branch is what holds these clauses.
+  it('update is denied when hostName is changed to a list that satisfies the length bound', async () => {
+    await assertSucceeds(setDoc(doc(ownerDb(), 'sessions', 's_list_upd'), validSession()));
+    await assertFails(updateDoc(
+      doc(ownerDb(), 'sessions', 's_list_upd'),
+      { hostName: LIST_HOSTNAME, updatedAt: serverTimestamp() },
+    ));
+  });
+
+  // The branch BIN-1153's test review named: a requirement can be removed from the
+  // update branch alone while the whole suite stays green. The document is seeded
+  // through the REAL create branch, not an admin bypass, so the update is a genuine
+  // merge against an existing doc.
+  it('update is denied when hostName is changed to one over the bound', async () => {
+    await assertSucceeds(setDoc(doc(ownerDb(), 'sessions', 's_upd'), validSession()));
+    await assertFails(updateDoc(
+      doc(ownerDb(), 'sessions', 's_upd'),
+      { hostName: TOO_LONG, updatedAt: serverTimestamp() },
+    ));
+  });
+
+  it('update that patches hostName within the bound is allowed', async () => {
+    await assertSucceeds(setDoc(doc(ownerDb(), 'sessions', 's_rename'), validSession()));
+    await assertSucceeds(updateDoc(
+      doc(ownerDb(), 'sessions', 's_rename'),
+      { hostName: 'Nytt namn', updatedAt: serverTimestamp() },
+    ));
+  });
+
+  // The clause is UNCONDITIONAL on update, so the patches that never mention
+  // hostName are the ones that would break if `request.resource.data` were the patch
+  // rather than the merged document. These two shapes mirror the session patches in
+  // src/lib/firebase/sessions.ts; which of them the app reaches today is a separate
+  // question, and the command answers it rather than a sentence here:
+  //   git grep -n "setSessionCandidates(\|setSessionStatus(" -- src functions
+  it('update that never touches hostName still succeeds (candidates patch)', async () => {
+    await assertSucceeds(setDoc(doc(ownerDb(), 'sessions', 's_cand'), validSession()));
+    await assertSucceeds(updateDoc(
+      doc(ownerDb(), 'sessions', 's_cand'),
+      { candidates: [{ tmdbId: 603, mediaType: 'movie' }], updatedAt: serverTimestamp() },
+    ));
+  });
+
+  it('update that never touches hostName still succeeds (status patch)', async () => {
+    await assertSucceeds(setDoc(doc(ownerDb(), 'sessions', 's_stat'), validSession()));
+    await assertSucceeds(updateDoc(
+      doc(ownerDb(), 'sessions', 's_stat'),
+      { status: 'resolved', updatedAt: serverTimestamp() },
+    ));
+  });
+
+  it('a non-host cannot create a session claiming another uid as host', async () => {
+    await assertFails(setDoc(
+      doc(otherDb(), 'sessions', 's_spoof'),
+      validSession(),
+    ));
+  });
+});
+
 // BIN-24 — Tillsammans participant uid anti-spoof. Anonymous participation stays
 // allowed (uid null), but a signed-in writer may only set their OWN uid, and an
 // anonymous writer may not carry a non-null uid (identity misattribution).

@@ -65,7 +65,8 @@ beforeEach(() => {
 });
 
 describe('createSession klampar bada falten den matar (BIN-1156)', () => {
-  it('sessions/{id}.hostName kapas — etiketten har inget tak i reglerna alls', async () => {
+  // Det har testet provar klampningen i klienten, och det ar allt det pastar.
+  it('sessions/{id}.hostName kapas', async () => {
     getDocMock.mockResolvedValue({ exists: () => false });
     await createSession({
       hostUid: 'u1', hostName: TOO_LONG, hostProviders: [],

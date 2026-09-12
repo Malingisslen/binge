@@ -1098,9 +1098,46 @@ service cloud.firestore {
     // (tidigare tillät null hostUid — skräp- och abuse-vektor).
     match /sessions/{sessionId} {
       allow read: if true;
+
+      // BIN-1165: `hostName`s typ och längd. Före den här klausulen band ingen gren
+      // i blocket något om fältets INNEHÅLL — bara om vem som skriver. Fältet visas
+      // i sessionslistor och popover, och dokumentet är `allow read: if true`.
+      //
+      // BIN-1156 klampar fältet i `createSession` innan skrivningen, men en klampning
+      // binder vad APPEN skriver; en regel binder vad som går att skriva. Ett skript
+      // eller vem som helst som skriver direkt mot Firestore med sina egna uppgifter
+      // gick förbi klampningen. Samma skillnad som BIN-1141/1153.
+      //
+      // Talet är SAMMA tal som deltagardokumentets `displayName` redan pinnas mot en
+      // bit ner i filen, och som `MAX_SESSION_DISPLAY_NAME` i src/lib/clampText.ts.
+      // Regelspråket har ingen delad konstant, så de måste flytta i samma redigering.
+      // Härled det, lita inte på den här meningen:
+      //   grep -n "displayName.size()" firestore.rules
+      //   grep -n "MAX_SESSION_DISPLAY_NAME" src/lib/clampText.ts
+      //
+      // Klausulen ligger INLINE på båda grenarna och inte i en delad funktion: de är
+      // två oberoende `allow`-satser, och #7:s kritik pinnar att ett krav går att ta
+      // bort ur update-grenen ensam medan hela sviten står grön (BIN-1153). Ett
+      // nekande-test per gren är det som håller dem.
+      //
+      // `is string` bär sin egen vikt och är inte dekoration: ett värde som SJÄLVT har
+      // `size()` — en lista — skulle utan den klausulen prövas på antalet element i
+      // stället för på stränglängden, så `hostName: [<80 långa strängar>]` gick igenom
+      // på ett dokument som är `allow read: if true`. Ett tal nekas däremot även utan
+      // klausulen, eftersom `size()` på ett tal fel-ut och ett fel nekar. Test finns för
+      // båda fallen, och bara list-fallet pinnar typkravet.
+      //
+      // Kravet är OVILLKORLIGT på update, inte `!('hostName' in ...)`-villkorat: vid
+      // en update är `request.resource.data` hela dokumentet EFTER skrivningen.
+      // Två patchvägar som inte rör fältet har egna test som visar att de
+      // fortfarande går igenom.
       allow create: if isSignedIn()
-        && request.resource.data.hostUid == request.auth.uid;
-      allow update: if isSignedIn() && resource.data.hostUid == request.auth.uid;
+        && request.resource.data.hostUid == request.auth.uid
+        && request.resource.data.hostName is string
+        && request.resource.data.hostName.size() <= 80;
+      allow update: if isSignedIn() && resource.data.hostUid == request.auth.uid
+        && request.resource.data.hostName is string
+        && request.resource.data.hostName.size() <= 80;
       allow delete: if isSignedIn() && resource.data.hostUid == request.auth.uid;
 
       // BIN-509: anonyma deltagar-id:n kommer ALLTID från generateSecureToken()
