@@ -1808,3 +1808,33 @@ falt skrivaren skriver - den andrades aldrig. Commitens faktiska union byter dar
 **Regel:** allt efter den bärande skrivningen ska vara bäst-möjliga och rapporteras separat, aldrig kastas vidare. Och lås tillstånd på något som kan SKRIVAS OM: en nyckel som bara är dokument-id:t sitter kvar när dokumentet återskapas.
 
 **Exempel:** `acceptGroupInvite` avslutade med `await deleteDoc(groupInvites/{groupId})` utanför varje try, efter att medlemskapet redan etablerats. Ett tappat nätverk där kastade förbi utfallet och gränssnittet sa "kunde inte acceptera" om något Firestore tagit emot — BIN-1025:s klass omvänd: där bekräftades en vägran, här nekades en framgång. Samma runda: inbjudningsradens spärr nycklades bara på `groupId`, medan en ny inbjudan skriver om SAMMA dokument-id och listkomponenten aldrig avmonteras — en nekad rad låstes för resten av sessionen, också mot en färsk giltig inbjudan. Spärren bär nu inbjudans tidsstämpel.
+
+---
+
+### [Workflow] Den enda strykning som håller citerar, markerar struket, namnger ETT kommando — och förklarar ingenting
+
+**Trigger:** du skriver en rättelse av ett falskt påstående, i en kommentar, ett commitmeddelande eller en rättelserad.
+
+**Regel:** formen som håller har fyra delar och ingen femte: citera den strukna strängen ordagrant, säg att den är struken, namnge ett kommando som svarar på frågan, och sluta. Skriv inget stödjande tal inne i mätningen, och ingen motivering till radens egen karvhet. Det är i den femte delen felet sitter — det är där du slutar citera och börjar förklara, och en förklaring är ett nytt omätt påstående.
+
+**Exempel:** BIN-1165 tog nitton granskningsvarv över fem granskare, varav sju push-grindsvarv. ETT blockerande fynd satt i koden; resten var påståenden i min egen prosa, och nästan varje varvs fynd satt inne i rättelsen av det föregående. Den karva raden som till slut höll strök fyra påståenden utan att ersätta något — och fälldes ändå på två ställen, båda i de meningar som gick utöver vad ett kommando svarar: ett stödjande tal om hur många systerhärledningar som fanns (falskt trädvitt, och en av dem var dessutom ankrad), och motiveringen "varje varv har producerat ett falskt påstående inne i föregående varvs rättelse" (första varvet är ett motexempel — dess fynd gällde buntens egna commitar, inte en rättelse). Grövsta enskilda fallet: ett tal jag skrev för att stryka ett falskt tal räknade den strykande raden själv som en av sina träffar.
+
+---
+
+### [Workflow] Ett publicerat härledningskommando kan vara OSUNT på ett sätt som ser rätt ut — pröva avgränsningen med ett planterat lockbete
+
+**Trigger:** du publicerar ett `awk`-intervall eller motsvarande bredvid en mening, så att läsaren ska kunna motsäga meningen.
+
+**Regel:** att kommandot ger rätt svar i dag bevisar inte att det är avgränsat. Ett `awk`-intervall vars STARTregex inte matchar någon kodrad matchar i stället kommentarsraden som bär kommandot självt, och sveper sedan vidare tills något råkar stänga det — svaret blir rätt bara för att ingenting annat i svepet råkar nämna det du grepar efter. Ankra på den faktiska nästlade raden OCH på dess egen klammer med samma indrag, och bevisa avgränsningen genom att plantera en lockbetesträff i systerblocket i en KOPIA och se att kommandot ignorerar den. Mät också intervallets längd: `| wc -l` avslöjar ett svep som är hundratals rader djupt.
+
+**Exempel:** fyra försök på EN kommentarsrad i BIN-1165. v1 var ett tal; v2 ett grep över fem samlingar som inte kunde avgränsa sitt subjekt; v3 ett `awk`-intervall som såg riktigt ut och svepte förbi två systerblock — säkerhetsgranskaren fällde det med ett lockbete. v4 är ankrad, och samma lockbetesmetod visar att den håller. Samma osunda form står kvar i `src/lib/clampText.ts` med ett 388 rader djupt svep (BIN-1177).
+
+---
+
+### [Workflow] En KRYMPANDE stageuppsättning kan dra IN en roll som inte sett någonting
+
+**Trigger:** du delar en bunt i flera commitar, så att en senare commits filuppsättning är mindre än buntens.
+
+**Regel:** BIN-1050/1052 skrev regeln för en union som växer och för biljetter som faller bort. Den tredje formen är en commit-splittring: varje delcommit routas på SIN uppsättning, och en mindre uppsättning kan byta ut roller i båda riktningarna. Kör routern på `git diff --cached --name-only` före VARJE commit, inte en gång per bunt, och sammankalla den roll som är ny — commit-msg-grinden `check_staged_routing` fäller annars, vilket är rätt.
+
+**Exempel:** BIN-1165:s sista commitar rörde bara `firestore.rules` och metrikloggen. Buntens panel var #27, #5, #4, #6, #7; den krympta uppsättningen gav #4, #6, #27 och **#21 Technical Writer** — #5 och #7 föll bort och #21 kom in, på en commit som helt handlade om ett dokumentationskommando. Rollen hade inte sett en rad, och dess kritik mätte fram att samma osunda kommandoform stod kvar i en annan fil och att talet bodde på ett tredje ställe utan något kommando alls. Utan omroutningen hade ingendera hittats.

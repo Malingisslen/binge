@@ -1,3 +1,270 @@
+# Sprint 2026-09-12 — gruppens medlemslista blir privat, och tre fältlås
+
+Urval: 6 av 45 backlog-biljetter (+ BIN-1152 som redan låg i Todo). Rent träd vid start
+(`git status --porcelain` tomt), allt på main, `npm run typecheck` rent och `npm test`
+grönt: 291 filer, 4974 test. Basen härleds med `git merge-base --fork-point @{u} HEAD`,
+aldrig ur en sha skriven här.
+
+**Routningen körs på de FAKTISKA filuppsättningarna.** Kommandot står vid varje batch.
+Kör om det (a) före varje kritik, (b) om en kritik vidgar eller krymper omfånget, och
+(c) mot `git diff --cached --name-only` omedelbart före varje commit (BIN-1050/1052/1122).
+
+## Kända hinder i verktygen (inte biljetter)
+
+Port 8080 hålls av ett annat projekts emulator (en syskonsession äger processen — döda
+den INTE). Regeltesterna körs därför mot en egen port:
+`npm run test:rules -- --port 8123`. Det är skriptets egen dokumenterade väg ut, inte en
+kringgång; `buildAltConfig` härleder konfigurationen ur repots `firebase.json` så inget
+om vilken regelfil som kördes kan glida.
+
+## Mätt i produktion (2026-09-12, föregående sprint, projektet namngivet `binge-nu`)
+
+```
+groups: 0   sessions: 0   users: 4   publicProfiles: 2
+```
+
+Noll grupper och noll sessioner. **Ingen åtstramning i den här sprinten kan gå sönder
+för någon befintlig rad, och ingen migrering behövs.** Det svaret åldras — kör om det
+innan någon lutar sig mot det en tredje gång. Kommandot ligger i
+`scratchpad/count-prod.mjs` (Admin SDK, projektet namngivet i anropet per BIN-1063).
+
+## Inte valda, med skäl
+
+- **BIN-1158** (npm test inte stabilt grön, High) — PARKERAD i sin egen tråd. Beviskravet
+  är tio raka rena körningar av hela `npm test` (~30 min ren körtid, ett `kind: run`-
+  kriterium), och release-ansvarige lämnade EN obesvarad fråga till Malin: räknas ett
+  per-test-undantag från timeouten som samma sak som att höja den. Byggs inte förrän hon
+  svarat. (Sviten var grön i den här sprintens baslinjekörning — flaken är intermittent.)
+- **BIN-1097** (spöke-medlem går inte att reparera) — mätt 2026-09-06 och medvetet lämnad
+  öppen: noll grupper i produktion, alltså inget spöke. Rekommendationen i tråden är
+  "låt den ligga, men behåll den öppen". Respekterad.
+- **BIN-1118** (lämna över en grupp du äger) och **BIN-521** (bundle-rådgivare) — bär
+  etiketten `Feature`/`idea`. Produktval, listas för Malin, byggs aldrig av en sprint.
+- **BIN-1144** (är App Check påslaget för Firestore?) — Tier D, konsolfråga.
+- **BIN-454 / BIN-402** (tmdbFieldsSweep) — stående förbud: `mutateEnabled` flippas
+  aldrig av en sprint.
+- **BIN-1113** (raderingspass för friends/friendRequestsSent) — en helt ny sopmodul under
+  `functions/`, större än ett batch-slot i den här sprinten. Lämnad i Backlog.
+- **BIN-1131** (falsk mening i AuthContext) — en ren prosastrykning i en high-stakes-fil.
+  Lardomsloggen är entydig: en bunt som nästan bara är prosa konvergerar inte. Tas i en
+  egen körning, inte bredvid tre regeländringar.
+
+---
+
+## Batch A — gruppens medlemslista blir privat [Tier C] — BIN-1152
+
+> **UTFALL: INTE BYGGD.** Ingen kod skriven, ingenting att återställa. Hela
+> panelen är körd och dess tretton bindande villkor står på BIN-1152 tillsammans med
+> läsställesinventeringen. Nästa pass routar om på den faktiska unionen — den växte med
+> serversopningens fil under functions/ — och bygger därifrån.
+
+Routning (körs om mot den faktiska unionen före kritiken och före commit):
+`node docs/org/route.mjs --md firestore.rules src/lib/firebase/groups.ts ...`
+
+Disposition: **build**. Malins beslut 2026-09-11 ligger i tråden: *"gör medlemslistan
+privat. Bara gruppnamnet ska vara läsbart för den som inte är medlem... Själva
+gruppdokumentet, med `ownerUid` och `memberUids`, blir läsbart bara för medlemmar."*
+Handbromsen är lyft och mönstret är utpekat: ett eget litet dokument för den publika
+delen, som `publicProfiles` gör för profiler (BIN-505).
+
+Vad som är fel i dag: `firestore.rules:1325` är `allow read: if isSignedIn();` på
+`match /groups/{groupId}`. Varje inloggat konto kan alltså läsa varje grupps `memberUids`
+och `ownerUid` — vem som är med i vems grupp går att räkna upp.
+
+Acceptanskriterier:
+- [ ] Ett inloggat icke-medlemskonto NEKAS läsning av `groups/{g}`. Emulatortest per
+      gren: ägaren läser, en medlem läser, en främling nekas. *(diff)*
+- [ ] Gruppens NAMN är fortfarande läsbart för den som inte är medlem, genom ett eget
+      projektionsdokument, och inbjudnings-/join-skärmen visar det. *(diff)*
+- [ ] Varje läsställe inventeringen namnger är antingen redan medlem vid den punkten
+      eller flyttat till projektionen. Ingen skärm läser `groups/{g}` som icke-medlem. *(diff)*
+- [ ] Projektionen följer gruppen: den skrivs vid skapande, följer ett namnbyte, och
+      raderas när gruppen raderas. Ett test per de tre vägarna. *(diff)*
+- [ ] Muteringen som återställer `allow read: if isSignedIn()` fäller minst ett
+      regeltest — körd, med utfallet nedskrivet. *(diff)*
+- [ ] INTE: ingen profilläsning inne i `firestore.rules`. BIN-609 är CANCELED och den
+      fail-open-läsningen är accepterad — föreslå den aldrig igen. *(diff)*
+- [ ] INTE: projektionen bär bara namnet. Ingen medlemsräknare, ingen ägare, ingen bild
+      — allt sådant är exakt den uppräkning biljetten stänger. *(diff)*
+
+**Tier D (Needs you):** `firebase deploy --only firestore:rules` efter push.
+
+---
+
+## Batch B — sessionsetikettens tak [Tier C] — BIN-1165 (BIN-1170 utdragen)
+
+> **UTFALL: SHIPPAD.** Åtta commitar, 6f55b35 → d54e4c7, pushade. BIN-1170 drogs ut vid
+> urvalet; skälet och det härledda fältunderlaget står på den biljetten. Nitton
+> granskningsvarv över fem granskare, ETT blockerande fynd i koden. Följdbiljetter:
+> BIN-1175, BIN-1177. Tier D kvar: regeldeployen.
+
+Routning: `node docs/org/route.mjs --md firestore.rules src/lib/firebase/sessions.ts ...`
+
+Disposition: **build** båda. Korrekthetsfixar i samma form som BIN-1153/1155 redan
+shippat: en gren som binder VEM som får skriva men inte VAD.
+
+BIN-1165: `sessions/{id}` create/update kontrollerar bara `hostUid == request.auth.uid`.
+`hostName` har ingen typ- eller längdgräns i reglerna alls — klampningen är bara
+klientsidig. Systergrenen `participants/{pid}` kräver redan
+`displayName is string && displayName.size() <= 80`.
+
+BIN-1170: `isValidList` och `isValidComment` har noll `hasOnly`-anrop. Härled, lita inte
+på meningen: `awk '/^ *function isValidList/,/^ *}/' firestore.rules`.
+
+Acceptanskriterier:
+- [ ] `sessions/{id}` create OCH update kräver `hostName is string` och en längdgräns.
+      Talet är SAMMA tal som `participants.displayName` redan pinnas mot, inte en andra
+      siffra — de två måste flytta i samma redigering. *(diff)*
+- [ ] Emulatortest: ett för långt `hostName` nekas; en vanlig sessionsskapning går
+      igenom; en vanlig `hostName`-uppdatering går igenom. *(diff)*
+- [ ] `isValidList` och `isValidComment` får `keys().hasOnly([...])` + typkontroll per
+      fält, härledda ur de vägar som FAKTISKT skriver dokumenten (kommandot skrivs
+      bredvid listan i regelfilen, och körs före meningen). *(diff)*
+- [ ] Emulatortest per validator: en okänd nyckel nekas, och varje skrivväg koden
+      faktiskt har går fortfarande igenom — en test per väg. *(diff)*
+- [ ] Mutering PER lås (hostName-gränsen, `isValidList`s nyckellista, `isValidComment`s
+      nyckellista) fäller minst ett test. Körd en i taget, utfallen nedskrivna. *(diff)*
+- [ ] Strykningen i `createSession`s kommentar i `src/lib/firebase/sessions.ts` som
+      BIN-1165:s egen tråd begär görs i samma pass. *(diff)*
+- [ ] INTE: de fyra ägar-egna underkatalogerna (`pauseHistory`, `blocked`,
+      `notifications`, `fcmTokens`) rörs inte. De har sitt eget omfång i BIN-1170:s
+      tråd och skulle vidga den här buntens panel. *(diff)*
+
+**Tier D (Needs you):** samma regeldeploy som batch A — en deploy täcker båda.
+
+---
+
+## Batch C — din egen medlemsrad kommer med i exporten [Tier C] — BIN-1172
+
+> **UTFALL: INTE BYGGD, tillbaka i Backlog.** Premissen är mätt om vid HEAD och
+> biljettens "att avgöra" är besvarad på biljetten. Panelen är INTE körd.
+
+Routning: `node docs/org/route.mjs --md src/lib/firebase/dataExport.ts src/lib/firebase/userData.ts`
+→ Tier **top** · #5 Legal/GDPR, #27 DBA, #6 DPO, #4 Säkerhet, #18 Community
+
+Disposition: **build**. Raderingen NÅR raden, exporten gör det inte — kontrakten är
+alltså inte spegelbilder för data som är personuppgifter. `buildUserExport`s
+`groupMemberships` exporterar toppdokumentet `groups/{g}`, aldrig
+`groups/{g}/members/{myUid}`, medan `accountDeletion.ts` läser just den raden för
+kaskaden. Raden bär visningsnamn, användarnamn, bild, tjänstelista och när du gick med.
+
+Biljettens "att avgöra" är en FORM-fråga, inte ett produktval: kostnaden är en läsning per
+gruppmedlemskap, exakt samma läsning raderingskaskaden redan gör. Med noll grupper i
+produktion är kostnaden i dag noll, och taket rörs inte.
+
+Acceptanskriterier:
+- [ ] Exporten innehåller den anropande användarens egen `groups/{g}/members/{uid}`-rad
+      för varje grupp hon är med i. *(diff)*
+- [ ] Ett test visar att den exporterade JSON:en bär radens fält — inte bara att nyckeln
+      finns. *(diff)*
+- [ ] `docs/data-export-format.md` beskriver den nya nyckeln, och beskrivningen härleds
+      ur koden i stället för att räkna fält i prosa. *(diff)*
+- [ ] Ingen annan användares medlemsrad kan hamna i exporten. Ett test som fäller om
+      frågan vidgas. *(diff)*
+
+---
+
+## Batch D — rotens tsconfig.json får en ägare och en granskare [Tier A] — BIN-1130
+
+> **UTFALL: SHIPPAD OCH DONE.** ddfc445, pushad och deployad.
+
+Routning: `node docs/org/route.mjs --md tsconfig.json .claude/shared-plugin.json docs/role-responsibilities.md docs/org/ownership-map.json`
+→ Tier **medium** · #25 Engineering Manager / Release Manager
+
+Disposition: **build** (ren bokföring). Mätt, med biljettens egna kommandon:
+`node docs/org/route.mjs tsconfig.json` svarar `tier: skip, reasonCode: no-code-paths`
+och filen står i `unmapped`, medan `functions/tsconfig.json` svarar `medium` / `[25]`.
+Rotens tsconfig står inte i `ACCEPTED_ASYMMETRIES` heller, så det är ingen avgjord
+avvikelse — det är ett hål.
+
+Acceptanskriterier — biljettens fyra, plus #25:s sex bindande villkor ur den blinda
+kritiken. Rollens villkor 1–4 avgör FORMEN och är därför skrivna som egna rader; de
+syns inte i biljetten.
+
+- [x] `node docs/org/route.mjs tsconfig.json` svarar inte längre `no-code-paths`; den
+      namnger en ägande roll. *(diff)* → svarar `medium` / `owned` / `[25]`.
+- [x] En stagead diff som bara rör `tsconfig.json` NEKAS av commit-grinden med en
+      granskare namngiven. Båda riktningarna körda på samma bytes (med mönstret, och
+      med det borttaget). *(diff)* → med mönstret nekade grinden och namngav
+      `binge-integration-reviewer`; utan det passerade samma stageade bytes rent och
+      grinden namngav ingen. Filen återställd efteråt och verifierad med
+      `git hash-object`.
+- [x] `docs/org/gate-symmetry.test.mjs` är grön UTAN en ny accepterad avvikelse —
+      en tystnad där vore hålet en gång till. *(diff)* → `npx vitest run docs/org/`
+      grön, ingen ny post i `ACCEPTED_ASYMMETRIES`.
+- [x] Båda halvorna i SAMMA commit (routern rådger, grinden blockerar; att vidga den ena
+      har aldrig vidgat den andra — BIN-830). *(diff)*
+- [x] #25 villkor 1: sätet läggs i §25:s BEFINTLIGA typkontrollsbullet, inte som en ny
+      bullet — samma säte och samma storhet som `functions/tsconfig.json`. Ägarkartan
+      regenererad i samma commit. *(diff)*
+- [x] #25 villkor 2: mönstret läggs i `patterns`, inte i `exact` eller `keyed`. `keyed`
+      finns för en fil där bara EN toppnivånyckel ska grinda; den här filen har ingen
+      sådan uppdelning. *(diff)*
+- [x] #25 villkor 3: `binge-integration-reviewer`, inte `binge-security-reviewer` —
+      filen avgör bygg- och typkontrollsomfång, samma klass som `eslint.config.mjs`
+      och `lefthook.yml`. *(diff)*
+- [x] #25 villkor 4: ankrat exakt `^tsconfig\.json$`, aldrig ett katalogprefix eller en
+      glob som också skulle svepa `functions/tsconfig.json` eller en framtida nästlad. *(diff)*
+- [x] #25 villkor 5: routern körd om mot `git diff --cached --name-only` omedelbart före
+      commit, inte ärvd ur kritiken — att sätta #25 är i sig en omfångsändring. *(diff)*
+- [x] #25 villkor 6: båda riktningarna prövade på identiska stageade bytes, och
+      symmetritestet kört efteråt. *(diff)*
+
+Granskningsvarv: TRE underkända innan pass. Varje gång satt varje blockerande fynd i
+MIN egen prosa och inte i mekaniken, och andra varvets båda fynd satt inne i rättelsen av
+första varvets fynd — det mönster lärdomsloggen kallar buntens farligaste prosa. Varv 1:
+ett framtidsdatum i noten; "separately-owned" om en fil som ägs av samma roll; och
+`package.json` åberopad som precedens för att INTE sätta säkerhetsgranskaren, när
+`_note19` gör precis det motsatta för just den filen. Varv 2: en strykning som vidgade ett
+sant påstående om ROTENS låsfil till ett falskt om båda, och en pekare till en "blind
+spot" vars rubrik säger att den är stängd och beskriver en annan form. Varv 3: den
+parentes jag skrev för att BOKFÖRA varv 2:s strykning berättade ett utkastsförlopp som
+filens egen historik motsäger — de två meningarna om låsfilerna stod bredvid varandra vid
+HEAD, ingen ersatte den andra, vilket `git show HEAD:docs/org/route.mjs` visar. Parentesen
+är struken i sin helhet; processberättelsen hör hit, till planen, och inte till koden
+(BIN-766/941). Allt struket, inget omformulerat.
+
+Följdbiljetter filade ur granskningen: **BIN-1176** (symmetritestets huvud lovar en
+framåtblickande kostnad regeln inte har — förbefintligt, och den här buntens ändring är
+beviset).
+
+---
+
+## Batch E — de tre emulatorportarna härleder raderingslistan [Tier A] — BIN-1123
+
+> **UTFALL: UTDRAGEN VID URVALET.** Tillbaka i Backlog; premissen är mätt om på
+> biljetten så nästa pass inte behöver göra det.
+
+Routning: körs mot de faktiska filerna före kritiken.
+
+Disposition: **build** (test-gap). Mätt: `git grep -n "memberTraceWrites"` träffar bara
+`functions/src/groupHandover/{adminIo.ts,logic.ts}` och aldrig en testfil, medan de tre
+emulatorportarna (`src/test/rules/account-deletion.test.ts`,
+`group-handover-orchestrator.test.ts`, `retention-cleanup-orchestrator.test.ts`) var och
+en bär en identisk handkopierad batch-mock. En sjätte kategori i `memberTraceWrites` blir
+alltså tyst otäckt i alla tre.
+
+Biljettens andra halva (den dubblerade `TraceErasure`-typen) är REDAN lagad —
+`logic.ts:17` importerar typen från `runHandover`, en enda deklaration. Bara den första
+halvan byggs.
+
+Acceptanskriterier:
+- [ ] Mekanismen FÄLLER när en kategori läggs till i `memberTraceWrites` utan att de tre
+      portarna följer med. Prövad genom att faktiskt lägga till en kategori och köra,
+      med utfallet nedskrivet. *(diff)*
+- [ ] Härledningen är inte så total att den blir vakuös: de tre portarna påstår
+      fortfarande något om VILKA rader som raderas, inte bara att listorna är lika. *(diff)*
+- [ ] `npm run test:rules -- --port 8123` grön, med antalet körda test läst ur utfallet
+      (golvet i `scripts/run-rules-tests.mjs` gör en tyst nolla hörbar). *(diff)*
+
+---
+
+## Deviation log
+
+---
+
+# Arkiv — tidigare sprintar
+
 # Sprint 2026-09-12 — namnbytet, gruppens privatliv, och tystnaden när en join nekas
 
 Urval: 6 av 46 backlog-biljetter. Rent träd (`git status --porcelain` tomt) och allt på
@@ -438,7 +705,6 @@ konfiguration med eget projekt-id och egen port (BIN-1153).
 
 ---
 
-# Arkiv — tidigare sprintar
 
 # Sprint 2026-09-11b — sex biljetter
 
