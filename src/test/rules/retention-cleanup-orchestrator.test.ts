@@ -1100,6 +1100,9 @@ describe('retentionCleanup orchestrator — the FIELD-owned half (BIN-1063 steg 
     expect(summary.fieldOwnedRefused).toBe(0);
     expect(await exists(db, 'groups/solo')).toBe(true);
     expect(await exists(db, 'groups/solo/members/latecomer')).toBe(true);
+    // BIN-1183: the name projection lives outside the group subtree. A spared group
+    // keeps it.
+    expect(await exists(db, 'publicGroups/solo')).toBe(true);
   });
 
   it('counts what it did, so a zero cannot mean three things', async () => {

@@ -135,7 +135,11 @@ function GroupContent({ id }: { id: string }) {
       //
       // Utan bumpen ser den som nyss använt en fullt giltig länk skärmen "du är
       // inte medlem i den här gruppen" tills hen laddar om sidan.
-      if (res.ok) resubscribe();
+      //
+      // BIN-1181: `already_member` startar också om. Utfallet betyder att servern
+      // redan räknar kontot som medlem, så läsregeln släpper igenom nu. Budgeten är
+      // redan bränd ovan, så omstarten kan inte återfyra joinet.
+      if (res.ok || res.reason === 'already_member') resubscribe();
     }).catch(() => {
       // Only a THROWN error (network/Firestore) is worth retrying.
       const exhausted = joinAttemptsRef.current >= MAX_JOIN_ATTEMPTS;
