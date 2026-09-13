@@ -1838,3 +1838,53 @@ falt skrivaren skriver - den andrades aldrig. Commitens faktiska union byter dar
 **Regel:** det NYA här är orsaken, inte riktningen — en commit-SPLITTRING krymper uppsättningen utan att någon biljett faller bort och utan att något beslut ändras. Varje delcommit routas på SIN uppsättning, och en mindre uppsättning kan byta ut roller i båda riktningarna. Kör routern på `git diff --cached --name-only` före VARJE commit, inte en gång per bunt, och sammankalla den roll som är ny — commit-msg-grinden `check_staged_routing` fäller annars, vilket är rätt.
 
 **Exempel:** commit `2806db5` i BIN-1165 rörde bara `firestore.rules` och metrikloggen. Buntens panel var #27, #5, #4, #6, #7; den commitens uppsättning gav #4, #6, #27 och **#21 Technical Writer** — #5 och #7 föll bort och #21 kom in, på en commit som helt handlade om ett dokumentationskommando. Rollen hade inte sett en rad, och dess kritik mätte fram att en osund härledning av samma familj stod kvar i en annan fil och att talet bodde på ett tredje ställe utan något kommando alls. Utan omroutningen hade ingendera hittats.
+
+---
+
+### [Workflow] En granskare som kontrollerar bytes med SKALKOMMANDON lämnar inget spår — ledgern bokför bara `Read`
+
+**Trigger:** en granskare rapporterar pass och säger att den verifierade de oförändrade filerna med `git diff --cached --stat`, `git show` eller en innehållsjämförelse i skalet i stället för att öppna dem igen.
+
+**Regel:** det är god sparsamhet för en människa och NOLL bevis för commit-grinden. `reviewProof: "ledger"` bokför `Read`-verktyget och ingenting annat, så en fil som verifierats genom Bash registreras som oläst — och grinden namnger den. Instruera varje granskare att öppna VARJE skyldig fil med `Read`, också de den är säker på inte har flyttat sig, och budgetera det: en granskare som läser om nio filer kostar ett varv, en commit som nekas kostar tre.
+
+**Exempel:** sprinten 2026-09-13. Fyra granskare rapporterade pass; grinden nekade commiten och namngav tre filer som "reviewed the PRE-CHANGE version" eller "reviewed, then changed". Granskarna hade kontrollerat dem noggrant — en av dem påpekade till och med att `--stat`s stapelkolumn skalar med terminalbredden och är oduglig som likhetstest — men genom skalet. Och det var inte formalia: `src/app/integritet/page.tsx` HADE ändrats sedan kodgranskaren läste den, och granskaren behandlade den som orörd i två varv. Samma runda fälldes en granskare för `src/lib/firebase/groups.ts` med skälet att versionen den läst låg före ändringen helt.
+
+---
+
+### [Workflow] `git add -A && git commit` stagear ingenting när en PreToolUse-grind nekar
+
+**Trigger:** du kedjar staging och commit i ett Bash-anrop, och commiten nekas av en grind.
+
+**Regel:** grinden är en PreToolUse-hook på HELA Bash-anropet, så `git add` kör aldrig. Indexet står kvar på de gamla bytes, och nästa grindkörning läser dem — vilket ger ett IDENTISKT felmeddelande som citerar text du vet att du har tagit bort. Det ser ut som att din rättelse inte fungerade. Stagea i ett eget anrop, verifiera med `git diff --name-only` (tomt = indexet matchar trädet) och commita sedan.
+
+**Exempel:** sprinten 2026-09-13. `claim-lint` nekade commiten för tjugo universella kvantifikatorer. Jag rättade alla, körde `git add -A && git commit`, och fick tillbaka exakt samma tjugo rader — inklusive meningar som inte längre fanns i trädet. Grinden hade rätt: indexet var orört. `git diff --name-only` visade åtta filer som skilde sig mellan index och träd, vilket var hela svaret.
+
+---
+
+### [Workflow] Att ta bort en kvantifikator kan flytta vad meningen PEKAR PÅ
+
+**Trigger:** `claim-lint` eller en granskare fäller ett "den enda"/"the only" och du tar bort orden.
+
+**Regel:** fråga vad orden GJORDE innan du stryker dem. En kvantifikator som avgränsar mot en grannkonstruktion bär information som försvinner med den, och det som blir kvar kan peka på fel sak — värre än det omätta talet, eftersom en läsare nu får ett tydligt och felaktigt svar. Namnge i stället det du menar med något som går att kontrollera: en funktion, ett `kind`-värde, ett testnamn.
+
+**Exempel:** `createGroup` i BIN-1152 har två `catch`-grenar efter varandra. Kommentaren sa "projektionen skrivs FÖRE medlemsdokumentet, så rollback-grenen nedan är den enda plats som behöver städa den". Jag strök "är den enda plats som behöver" → "städar den", och därmed pekade meningen på NÄRMASTE gren — som är den som fyrar när projektionsskrivningen själv fallerar och därför inte har någon projektion att städa. Två granskare hade läst raden och godkänt den, båda för att de kontrollerade vad koden gör och inte vad prosan pekar på; push-grinden läste antecedenten. Lydelsen som höll namnger grenen via dess `reportGroupWriteError`-kind (`createGroup-memberDoc`), vilket är ett grep bort från att gå att motsäga.
+
+---
+
+### [Workflow] Svep på KONSEKVENSEN, inte på mekanismen — den halvan överlever varje omformulering
+
+**Trigger:** ett falskt påstående hittas på ett ställe och du letar efter systerkopior.
+
+**Regel:** varje granskare sveper på den lydelse DEN har sett, och lydelsen skiljer sig per fil, så en fras-grep hittar en delmängd. Mekanismhalvan skrivs om; KONSEKVENSHALVAN gör det inte. Sök på följden ("namn utan grupp", "halvtillstånd", "världsläsbart") snarare än på premissen ("senare chunk", "först i listan"), och sök i HELA trädet, inte bara i filerna granskaren namngav.
+
+**Exempel:** sprinten 2026-09-13, tre gånger i en bunt. Meningen att gruppdokumentet är läsbart för varje inloggat konto bodde på fler ställen än den första granskningen namngav — ett av dem i produktionskod (`src/components/AuthGuard.tsx`) — och en kopia stod kvar i `firestore.rules` under den nya läsregeln; den raden bar varken `grupp`, `memberUids` eller `publicGroups`, så tre olika svep missade den av tre olika mekaniska skäl. Samma sak hände med ordningsinvarianten (rättad i en fil, kvar i systerfilen) och med rollback-pekaren (rättad i källan, kvar i testfilen). Det som stängde det var push-grindens svep på konsekvenshalvan.
+
+---
+
+### [Testing] En nekad `onSnapshot` är DÖD — och ett test som mockar prenumerationen kan inte se det
+
+**Trigger:** du strammar åt en läsregel så att en lyssnare kan få permission-denied, och något senare ger samma läsare åtkomst.
+
+**Regel:** Firestore avslutar lyssnaren vid permission-denied och startar den inte om när reglerna senare släpper igenom. Varje skrivning som ÄNDRAR regelutfallet — att gå med i en grupp, att opta in — måste därför riva och återstarta prenumerationen, inte bara nollställa tillståndet. Och ett test som mockar `subscribe*`-funktionen kan fyra success-callbacken för hand, vilket en riktig lyssnare inte kan efter ett nekande: det pinnar tillståndsmaskinen och är strukturellt blint för buggen. Pinna att en NY prenumeration öppnas, och att den gamla revs.
+
+**Exempel:** BIN-1152 band gruppdokumentets läsning till medlemskap. Följden av min egen åtstramning: den som nyss använt en fullt giltig inbjudningslänk fick "du är inte medlem i den här gruppen" tills sidan laddades om, eftersom auto-joinet lyckades men lyssnaren var död. Mitt test "ett dokument som landar EFTER ett nekande tar tillbaka nekandet" var grönt hela tiden — det mockade `subscribeToGroup` och kallade `onDoc` själv. Mönstret låg redan en fil bort: `useGroupHousehold` bumpar en `epoch` runt opt-in av exakt samma skäl. Muteringen som tar bort `epoch` ur beroendelistan fäller nu två test, och den som tar bort anropet på sidan fäller ett tredje — de två halvorna behöver var sitt test, för en `resubscribe` ingen anropar är en permanent no-op med hela sviten grön.
