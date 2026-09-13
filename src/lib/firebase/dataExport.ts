@@ -28,7 +28,10 @@ import type { QuerySnapshot } from 'firebase/firestore';
 //     carry a `uid` field holding the counterparty's uid. It duplicates the doc `id`;
 //     it exists so a collection-group query can find the row, which the id alone
 //     cannot answer. No field changed meaning.
-export const SCHEMA_VERSION = '2.1' as const;
+// 2.2 (BIN-1172, 2026-09-13): additive — new `groupMemberRows` array (your own
+//     groups/{gid}/members/{uid} row per group; id = groupId). The account deletion
+//     already erased that row; the export never carried it.
+export const SCHEMA_VERSION = '2.2' as const;
 
 export interface ExportDoc {
   id: string;
@@ -73,6 +76,8 @@ export interface BingeExport {
   // BIN-184: mina hushålls-bidrag (delade kostnadsdata), ett per grupp där jag
   // opt:at in — id är groupId (doc-id:t i gruppen är alltid min egen uid).
   householdContributions: ExportDoc[];
+  // BIN-1172: min egen medlemsrad i varje grupp. id är groupId.
+  groupMemberRows: ExportDoc[];
 }
 
 const README_TEXT = `Detta är en komplett GDPR Art. 20-export av dina personuppgifter från Binge.nu.
@@ -103,6 +108,7 @@ Filen innehåller:
 - Listor du följer (listFollows)
 - Tillsammans-sessioner du är värd för (sessions)
 - Grupper du är medlem i (groupMemberships)
+- Din egen medlemsrad i varje grupp, som gruppens medlemmar kan läsa (groupMemberRows)
 
 Datumfält serialiseras som Firestore-timestamps; om du re-importerar måste
 de konverteras tillbaka. Schema-version framgår i "schemaVersion".
@@ -134,17 +140,32 @@ export async function buildUserExport(uid: string): Promise<BingeExport> {
   // per grupp jag är medlem i; bara existerande (opt-in) docs exporteras.
   // Dynamisk ./db-import: laddas bara när det finns grupper, så modulgrafen
   // förblir Firebase-fri för test/miljöer som mockar userData (BIN-328-guarden).
+  //
+  // BIN-1172: min egen medlemsrad hämtas på samma sätt, här och inte i den delade
+  // hjälparen.
+  //
+  // Sökvägens sista segment är alltid `uid`, den inloggade användarens eget. Reglerna
+  // låter en medlem läsa VARJE medlems rad, så det är den här raden som håller
+  // exporten till ens egen. En rad som saknas (en spökmedlem, BIN-1097) eller en
+  // läsning som fallerar hoppas över i stället för att fälla hela exporten.
   const householdContributions: ExportDoc[] = [];
+  const groupMemberRows: ExportDoc[] = [];
   if (s.groupsSnap.docs.length > 0) {
     const { fsdb } = await import('./db');
     const { db, doc, getDoc } = await fsdb();
-    const householdSnaps = await Promise.all(
-      s.groupsSnap.docs.map(g => getDoc(doc(db, 'groups', g.id, 'household', uid))),
-    );
+    const [householdSnaps, memberSnaps] = await Promise.all([
+      Promise.all(s.groupsSnap.docs.map(g => getDoc(doc(db, 'groups', g.id, 'household', uid)))),
+      Promise.all(s.groupsSnap.docs.map(g =>
+        getDoc(doc(db, 'groups', g.id, 'members', uid)).catch(() => null))),
+    ]);
     s.groupsSnap.docs.forEach((g, i) => {
       const snap = householdSnaps[i];
       if (snap.exists()) {
         householdContributions.push({ id: g.id, data: snap.data() as Record<string, unknown> });
+      }
+      const member = memberSnaps[i];
+      if (member?.exists()) {
+        groupMemberRows.push({ id: g.id, data: member.data() as Record<string, unknown> });
       }
     });
   }
@@ -182,6 +203,7 @@ export async function buildUserExport(uid: string): Promise<BingeExport> {
     sessions: toExportDocs(s.sessionsSnap),
     groupMemberships: toExportDocs(s.groupsSnap),
     householdContributions,
+    groupMemberRows,
   };
 }
 

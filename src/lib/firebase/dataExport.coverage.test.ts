@@ -150,14 +150,24 @@ vi.mock('./userData', () => ({
 // BIN-184: buildUserExport fetches group-scoped household contributions inline
 // (dynamic import('./db')) — mock the kit so the export path flows without
 // Firebase and the fake contribution surfaces in the payload.
+// BIN-1172: `getDoc` is hoisted so a test can see WHICH paths were read, and answers
+// by path — the member row carries member-shaped data, everything else the household
+// seed the BIN-184 assertion below expects.
+const dbMock = vi.hoisted(() => ({ getDoc: vi.fn() }));
+const MEMBER_ROW = {
+  uid: 'test-uid', displayName: 'Malin', username: 'malin', photoURL: null, providers: [8],
+};
+function answerByPath(ref: { path: string }) {
+  return ref.path.includes('/members/')
+    ? { exists: () => true, data: () => MEMBER_ROW }
+    : { exists: () => true, data: () => ({ seeded: 'household' }) };
+}
+
 vi.mock('./db', () => ({
   fsdb: vi.fn(async () => ({
     db: {},
     doc: vi.fn((_db: unknown, ...segs: string[]) => ({ path: segs.join('/') })),
-    getDoc: vi.fn(async () => ({
-      exists: () => true,
-      data: () => ({ seeded: 'household' }),
-    })),
+    getDoc: dbMock.getDoc,
   })),
 }));
 
@@ -166,12 +176,26 @@ vi.mock('./db', () => ({
 // fetched inline in buildUserExport, deleted via literal refs in the
 // accountDeletion groups-loop (emulator-asserted in account-deletion.test.ts).
 // Adding a key here is a reviewable widening, same discipline as the skip-sets.
-const GROUP_SCOPED_EXPORT_KEYS = new Set<keyof BingeExport>(['householdContributions']);
+// BIN-1172 adds `groupMemberRows`: groups/{gid}/members/{uid}, fetched inline.
+const GROUP_SCOPED_EXPORT_KEYS = new Set<keyof BingeExport>(['householdContributions', 'groupMemberRows']);
+
+function snapsWithGroups(groupIds: string[]): UserDataSnapshots {
+  return Object.fromEntries(
+    coverageKeys.map(k => [
+      k,
+      (k === 'profileSnap' || k === 'publicProfileSnap') ? fakeDocSnap()
+        : k === 'groupsSnap'
+          ? ({ docs: groupIds.map(id => ({ id, data: () => ({ name: id }) })) } as unknown as QuerySnapshot)
+          : fakeQuerySnap(),
+    ]),
+  ) as unknown as UserDataSnapshots;
+}
 
 describe('GDPR export/delete completeness (BIN-328)', () => {
   let exported: BingeExport;
 
   beforeAll(async () => {
+    dbMock.getDoc.mockImplementation(async (ref: { path: string }) => answerByPath(ref));
     const fakeSnaps = Object.fromEntries(
       coverageKeys.map(k => [
         k,
@@ -285,5 +309,48 @@ describe('GDPR export/delete completeness (BIN-328)', () => {
     for (const key of actualSkip) {
       expect(COVERAGE[key].deleteSkipReason, `${key} delete-skip needs a documented reason`).toBeTruthy();
     }
+  });
+});
+
+describe('BIN-1172: your own group member row is in the export', () => {
+  beforeAll(() => {
+    dbMock.getDoc.mockImplementation(async (ref: { path: string }) => answerByPath(ref));
+  });
+
+  it('carries the row FIELDS, keyed by group id', async () => {
+    vi.mocked(collectUserDataSnapshots).mockResolvedValueOnce(snapsWithGroups(['g1']));
+
+    const out = await buildUserExport('test-uid');
+
+    expect(out.groupMemberRows).toEqual([{ id: 'g1', data: MEMBER_ROW }]);
+  });
+
+  // The rules let a member read EVERY member's row, so the code is what keeps the
+  // export to the exporting user's own. Pin the paths that were actually read: a
+  // switch to listing the members collection, or to another id, fails here.
+  it('reads only the exporting uid’s row in each group', async () => {
+    vi.mocked(collectUserDataSnapshots).mockResolvedValueOnce(snapsWithGroups(['g1', 'g2']));
+    dbMock.getDoc.mockClear();
+
+    await buildUserExport('test-uid');
+
+    const memberPaths = dbMock.getDoc.mock.calls
+      .map(([ref]) => (ref as { path: string }).path)
+      .filter(p => p.includes('/members/'));
+    expect(memberPaths.sort()).toEqual(['groups/g1/members/test-uid', 'groups/g2/members/test-uid']);
+  });
+
+  it('skips a missing row and a failed read, and still completes', async () => {
+    vi.mocked(collectUserDataSnapshots).mockResolvedValueOnce(snapsWithGroups(['has', 'ghost', 'broken']));
+    dbMock.getDoc.mockImplementation(async (ref: { path: string }) => {
+      if (ref.path === 'groups/ghost/members/test-uid') return { exists: () => false, data: () => undefined };
+      if (ref.path === 'groups/broken/members/test-uid') throw new Error('permission-denied');
+      return answerByPath(ref);
+    });
+
+    const out = await buildUserExport('test-uid');
+
+    expect(out.groupMemberRows.map(r => r.id)).toEqual(['has']);
+    expect(out.householdContributions.map(r => r.id)).toEqual(['has', 'ghost', 'broken']);
   });
 });

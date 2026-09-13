@@ -7,7 +7,7 @@ Filen är en JSON med följande top-level-struktur (se
 
 ```jsonc
 {
-  "schemaVersion": "2.1",
+  "schemaVersion": "2.2",
   "exportedAt": "2026-04-24T10:30:00.000Z",
   "userId": "firebase-uid",
   "readme": "…",
@@ -38,7 +38,8 @@ Filen är en JSON med följande top-level-struktur (se
   "editableLists":   [ … ],
   "sessions":        [ … ],
   "groupMemberships":[ … ],
-  "householdContributions": [ … ]
+  "householdContributions": [ … ],
+  "groupMemberRows": [ … ]
 }
 ```
 
@@ -72,6 +73,7 @@ Filen är en JSON med följande top-level-struktur (se
 | `sessions` | `sessions/{sessionId}` (where hostUid==me) | Tillsammans-sessioner du är värd för |
 | `groupMemberships` | `groups/{groupId}` (array-contains me) | Grupper du är medlem i + gruppdata |
 | `householdContributions` | `groups/{groupId}/household/{uid}` (endast grupper du opt:at in i, BIN-184) | Ditt delade hushålls-bidrag per grupp: providerIds, providerCosts (kr/tjänst, ordinarie pris — inga tier-namn), providerCampaigns (kampanjpris + slutdatum), activeProviderIds (tjänster med minst en osedd backlog-titel — usage-härlett, inte självrapporterat), updatedAt |
+| `groupMemberRows` | `groups/{groupId}/members/{uid}` (bara din egen rad, BIN-1172) | Raden om dig som gruppens medlemmar kan läsa, med alla fält den bär |
 
 ## Datumserialisering
 
@@ -148,3 +150,7 @@ Dokumentera ändringar i CHANGELOG.md-sektionen nedan.
   `id` — men det är ett nytt fält, alltså minor-bump 2.0 → 2.1. Syftet är att en
   serversidig städning ska kunna HITTA raderna när motparten raderar sitt konto;
   utan fältet går de inte att fråga efter.
+- **2.2 (2026-09-13, BIN-1172)** — Lade till `groupMemberRows` (din egen
+  medlemsrad i varje grupp du är med i, `groups/{groupId}/members/{uid}`, med
+  `id` = groupId). Kontoraderingen raderade redan raden; exporten tog inte med den.
+  Additivt fält → minor-bump 2.1 → 2.2.

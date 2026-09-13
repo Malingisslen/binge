@@ -22,8 +22,7 @@ export type SnapshotReadKit = Pick<
  *
  * Anmärkning: per-review-followups (likes/comments på MINA reviews) och
  * per-group-followups (members/watchlist för grupper jag äger) är INTE
- * med här — de gör vi bara vid radering och kräver snapshots vi redan
- * har. Den här helpern hämtar bara "top-level"-datan.
+ * med här. Den här helpern hämtar bara "top-level"-datan.
  *
  * BIN-329: `groups/{id}/joinAttempts/{myUid}` hör också till radering-bara-
  * klassen — det raderas inline i `deleteAccount`s grupp-loop (per grupp jag är
