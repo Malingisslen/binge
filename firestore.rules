@@ -1200,8 +1200,7 @@ service cloud.firestore {
       //   git grep -n "collection(db, 'sessions')\|doc(db, 'sessions', sessionId)" -- src
       // `hostName` står i listan för BIN-1165:s test som patchar etiketten.
       // `candidates` och `status` typkontrolleras bara när skrivningen ändrar dem, så en
-      // rad med ett felaktigt värde i det ena fältet kan fortfarande patchas i det andra
-      // — samma val som BIN-1155 gjorde för medlemsraden.
+      // rad med ett felaktigt värde i det ena fältet kan fortfarande patchas i det andra.
       allow create: if isSignedIn()
         && request.resource.data.hostUid == request.auth.uid
         && request.resource.data.hostName is string

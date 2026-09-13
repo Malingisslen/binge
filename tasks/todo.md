@@ -159,7 +159,7 @@ placeringen och faller bort med den. Routa om på den faktiska unionen före com
 - [deviation] BIN-1175, testgranskningen (fail, 1 blockerande): typkraven på `candidates` och
   `status` på update gällde hela det sammanslagna dokumentet, så en rad med ett felaktigt värde
   i det ena fältet hade aldrig gått att patcha i det andra — utan att något test visade att det
-  var avsiktligt. BIN-1155 valde det villkorade läget för medlemsraden. → villkorade på att
+  var avsiktligt. → villkorade på att
   skrivningen ändrar fältet, två test för läkningsvägen, mutanter i båda riktningarna.
 - [deviation] verifieringarna fällde också prosa: en attributionsmening i regeltestet, en mening
   om nyckellistan i legacy-testet, en förklaring i `dataExport.ts` om vad raderingen läser, en

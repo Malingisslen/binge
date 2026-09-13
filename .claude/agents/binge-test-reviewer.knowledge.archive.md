@@ -28555,3 +28555,13 @@ relocating an unrelated bullet — the live file was at 80,036 chars (Node UTF-1
 in the coverage-test file (verified via `grep -c '  it('` against `git show HEAD:...`); the two
 claimed mutations reproduce exactly as described; the `mockClear` ordering is load-bearing, not
 accidental or order-fragile in a way that hides a gap.
+
+## 2026-09-13 — superseded: the "BIN-1155 precedent" in the BIN-1175 entries above
+
+Three places in the BIN-1175 entries above say the conditional update type guard matches a
+BIN-1155 precedent: the entry heading "matching BIN-1155", "The BIN-1155 precedent this diff
+explicitly follows", and "matching this repo's own BIN-1155 precedent". Struck here, not
+reworded. The member row does not make that choice: `isValidGroupMember` runs on the whole
+merged document on update. Only its identity binding (`keepsOrOwnsIdentity`) is conditional,
+and that is not a type check. Found by the push-gate integration review. The live bullet in
+binge-test-reviewer.knowledge.md was changed in place in the same commit.
