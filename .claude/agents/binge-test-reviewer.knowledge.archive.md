@@ -28378,3 +28378,180 @@ and skipped once, on the guard with the largest blast radius.
 **From the BIN-1165 re-review entry above** (2026-09-12 — BIN-1165 re-review): the block
 comment's exact false claim and its exact counterexample are recorded in full in that
 entry; not repeated here.
+
+## Relocated 2026-09-13 — entry 98 (cap trim, paid for the BIN-1175 affectedKeys-conditional addition below)
+
+Verbatim, moved out of the active file to hold the 80k cap:
+
+**A ref mirroring state purely so an ASYNC CONTINUATION can see it** (BIN-617) is unpinned
+by every ORDERED fixture: land the sign-out BETWEEN the call's start and its settlement —
+deferred rejection, fire `authCallback(null)`, then settle. Pair with the per-tab cap:
+mutate the guard to `false`, `>=`→`>`, and the per-uid `Map` key to one shared key — all
+three flip once a SECOND account is appended. A counter incremented only inside `.catch`
+needs the SUPERSEDED outcome to separate count-on-attempt from count-on-failure.
+
+## 2026-09-13 — BIN-1175 re-review: candidates/status type guard conditioned on affectedKeys, matching BIN-1155
+
+**Task:** re-review the staged `git diff --cached` in `C:\binge` for BIN-1175 after a prior
+pass filed one blocking finding: the sessions `update` branch's `candidates is list` /
+`status is string` clauses were unconditional across the whole merged document — a row
+already holding a bad value in one of those fields could never be patched via the OTHER,
+opposite to the conditional choice this repo already made for the group member row
+(BIN-1155). Read-only pass: no emulator runs, no mutations, per the dispatching
+instruction (memory tight, a suite run and a security review were in flight against the
+same files). Read every staged file with `Read`, plus `.claude/rules/accepted-deviations.md`
+in full (1174 lines, two pages) and this knowledge file in full (two pages).
+
+**Staged diff (4 files):** `firestore.rules`, `scripts/run-rules-tests.mjs`,
+`src/test/rules/firestore-rules.test.ts`, `tasks/todo.md`. (`docs/data-export-format.md`,
+`docs/workflow-map.html`, `src/lib/firebase/dataExport.coverage.test.ts`,
+`src/lib/firebase/dataExport.ts`, `src/lib/firebase/userData.ts` were modified but NOT
+staged — Bunt C work-in-progress, out of scope for this commit.)
+
+**The fix, read against the prior finding:**
+```
+&& (!('candidates' in request.resource.data.diff(resource.data).affectedKeys())
+    || request.resource.data.candidates is list)
+&& (!('status' in request.resource.data.diff(resource.data).affectedKeys())
+    || request.resource.data.status is string)
+&& request.resource.data.updatedAt is timestamp;
+```
+`updatedAt` stays unconditional (every write path sets it — verified against the new
+test block's every fixture, all of which include `updatedAt: serverTimestamp()`).
+`hostName is string && .size() <= 80` also stays unconditional, but that predates this
+diff (BIN-1165) and has its own dedicated legacy-row test asserting the answer is
+unchanged before/after BIN-1175 — read that comment against the code, matches.
+
+**New tests read for attribution and non-vacuity:**
+- `a row with a malformed status still accepts a candidates patch` / `a row with
+  malformed candidates still accepts a status patch` — both seed via
+  `testEnv.withSecurityRulesDisabled` (correct: the create branch's own type guards would
+  refuse the malformed seed), then patch the OTHER field and `assertSucceeds`. Reasoned
+  through both directions by hand (no live mutation run this pass): removing the
+  conditional wrapper entirely (making the check unconditional again) would require the
+  FINAL merged doc's candidates/status to satisfy the type, which the malformed seed does
+  not — so these two tests go red under exactly the reverted mutant, and green under the
+  fix. Removing the guard clause altogether (no type check at all) does not touch these
+  two tests (they never exercise a wrong-type WRITE) but does redden the pre-existing
+  `update is denied when %s is changed to the wrong type` `it.each` rows for `candidates`
+  and `status` — so the two mutants the sprint's report claims (`type check removed` vs.
+  `made unconditional`) each have a distinct, correctly-attributed test, consistent with
+  the report's claim. This reasoning was NOT verified against a live emulator run this
+  pass (read-only per dispatch); flag for the next round that runs one to confirm live.
+- `host can create a group-started session` / `host cannot re-point groupId to another
+  group` / `host cannot delete groupId` / unlink test — read against `deleteGroup` in
+  `src/lib/firebase/groups.ts` and `startSession` in `GroupPageClient.tsx`; both call
+  sites named in the rules comment and the todo.md discovery log actually exist
+  (`git grep` not re-run this pass, comment cross-checked against
+  `.claude/rules/data-model.md` and the rules file's own surrounding context, which is
+  internally consistent).
+- `MIN_TESTS` raised 556 → 601 in `scripts/run-rules-tests.mjs`, same convention as the
+  BIN-1165 commit that introduced the constant (measured count, not a margin). Not
+  independently verified this pass (a full `npm run test:rules` run was stated as
+  in-flight and gating the commit separately) — this is a documented reliance on the
+  sprint's own stated commit gate, not a verified number.
+
+**Accepted-deviations.md:** read in full; no entry references `sessions/{id}`'s update
+branch or this shape guard. The BIN-1155 precedent this diff explicitly follows is
+recorded there (member row, conditioned on the write actually changing the field) and is
+consistent with the choice made here.
+
+**Knowledge-file update made in this pass:** folded a new bullet into the existing
+"Field OMISSION is distinct from wrong-TYPE" bullet in the Firestore rules testing
+section — an update-branch type guard on a field only sometimes touched must condition on
+`affectedKeys()` membership rather than checking the whole merged doc, matching this
+repo's own BIN-1155 precedent, provable by two mutants each naming a different test. Paid
+for by relocating the BIN-617 async-ref-mirror bullet to this archive as entry 98 (cap was
+at 79831/80000 before this pass).
+
+**Verdict:** pass (0 blocking). The fix correctly conditions both clauses on the diff,
+matches the cited precedent, is covered by two new tests whose attribution reasons out
+correctly by hand, and no unrelated assertion in the diff was weakened, skipped, or
+rewritten to match buggy output. The two reliance points noted above (live mutation
+confirmation, live `MIN_TESTS` count) are the sprint's own stated pending steps, not gaps
+in this diff.
+
+## 2026-09-13 — BIN-1172: groupMemberRows export, mockClear order-dependence checked
+
+**Diff reviewed:** `src/lib/firebase/dataExport.ts`, `src/lib/firebase/dataExport.coverage.test.ts`,
+`src/lib/firebase/userData.ts`, `docs/data-export-format.md` (staged, BIN-1172). Adds the
+exporting user's own `groups/{gid}/members/{uid}` row to the GDPR Art. 20 export as
+`groupMemberRows`, read inline in `buildUserExport` alongside the existing `householdContributions`
+fetch, with a per-read `.catch(() => null)` and `member?.exists()` guard. `dataExport.coverage.test.ts`
+was upgraded from a `getDoc` mock that always returned one hardcoded household payload to a
+`vi.hoisted` `dbMock.getDoc` that answers by path (`/members/` → `MEMBER_ROW`, else the BIN-184
+household seed), plus `GROUP_SCOPED_EXPORT_KEYS` gaining `'groupMemberRows'` and a new
+`describe('BIN-1172: ...')` with three tests.
+
+**Task given:** check whether the path-aware mock or `mockClear`/`mockImplementation` ordering
+made any test pass for the wrong reason (state leaking between the pre-existing BIN-328 describe
+and the new BIN-1172 describe; the own-uid test passing with zero member reads).
+
+**Mutations run, one at a time, snapshot-restore-verify each (`cp` to scratchpad,
+`git hash-object` match after restore):**
+
+1. `doc(db, 'groups', g.id, 'members', uid)` → `doc(db, 'groups', g.id, 'members', g.id)`
+   (line 159). Ran `npx vitest run src/lib/firebase/dataExport.coverage.test.ts`:
+   ```
+   Tests  2 failed | 8 passed (10)
+   × reads only the exporting uid's row in each group
+   × skips a missing row and a failed read, and still completes
+   ```
+   Exactly the two named tests failed, with the expected/received diff showing `groups/g1/members/g1`
+   vs `groups/g1/members/test-uid`. The "carries the row FIELDS, keyed by group id" test (single
+   group `g1`) did NOT catch it — `answerByPath` dispatches on `path.includes('/members/')` alone,
+   true for either uid, so that test is not the one pinning the id. Restored; `git hash-object`
+   matched the pre-mutation blob.
+
+2. Removed `.catch(() => null)` (same line). Result: `1 failed | 9 passed` — only "skips a missing
+   row and a failed read" failed, with an unhandled `Error: permission-denied` thrown out of
+   `buildUserExport`, exactly matching the fixture's `broken` group. Restored, hash matched.
+
+Both match the mutation evidence handed down in the task description; independently reproduced
+rather than taken on faith (per this file's own "verify, never inherit" bullet).
+
+**Order-dependence probe (the actual open question):** temporarily deleted the
+`dbMock.getDoc.mockClear()` line inside "reads only the exporting uid's row in each group" (test 2
+of 3 in the new describe) and reran. Result: the test FAILED, not passed — `memberPaths` came back
+as 5 entries including two leftover `groups/doc1/members/test-uid` calls from the earlier
+"carries the row FIELDS" test (test 1) and the outer BIN-328 describe's `beforeAll`/tests, all of
+which share the same `vi.hoisted({ getDoc: vi.fn() })` mock with no `clearMocks`/`resetMocks` in
+`vitest.config.ts`. This is the correct outcome: the `mockClear()` is load-bearing, not decorative,
+and removing it produces an honest, loud failure (contaminated array) rather than a false pass —
+so there is no vacuity here, only a test that would break loudly if a future edit dropped the
+clear. Restored `dataExport.coverage.test.ts` from the scratchpad snapshot; hash matched
+`3481aece2fb0b835cce439258c383963c407d65d` (the staged blob) before and after.
+
+Separately mutated `GROUP_SCOPED_EXPORT_KEYS` (dropped `'groupMemberRows'` from the `Set`) to
+confirm the "every collection field ... has a backing snap" orphan-field test would catch a
+regression there too: it failed with `BingeExport.groupMemberRows has no backing UserDataSnapshots
+key`, as expected. Restored, hash matched.
+
+**Cross-checks against firestore.rules and accountDeletion.ts (not mutated, read only):**
+- `firestore.rules` `match /members/{memberUid} { allow read: if isSignedIn() && request.auth.uid
+  in get(.../groups/$(groupId)).data.memberUids; }` — confirms the code comment's claim that ANY
+  group member can read ANY member's row, which is why "reads only the exporting uid's row" is the
+  security-relevant test (the rule doesn't narrow it, the client-side path choice does).
+- `accountDeletion.ts` lines 181/215 already delete every `groups/{g}/members/{uid}` doc the account
+  touches (pre-existing, not part of this diff) — confirms the ticket's framing ("Kontoraderingen
+  raderade redan raden; exporten tog inte med den") is accurate: this is export-only catch-up work,
+  no new deletion gap.
+- `userData.ts`'s comment edit strikes the clause "de gör vi bara vid radering och kräver
+  snapshots vi redan har" rather than rewording it (per the strike-don't-reword convention); grepped
+  the repo for other copies of that Swedish phrase — the only other hit is `tasks/todo.md` describing
+  this exact planned strike, so no stray copy was left standing elsewhere.
+- `accepted-deviations.md` read in full (two-part Read due to size); nothing in it covers
+  `groupMemberRows`, member-row reads, or this export path — no accepted deviation to re-flag.
+
+**Knowledge-file update made in this pass:** folded a new clause into the existing "uncleared mock"
+bullet (arkiv 07) — the inverse case of an inline `mockClear()` (no `beforeEach`) needing the same
+delete-and-rerun trust check, since a shared `vi.hoisted` mock's call log crosses sibling `describe`
+blocks with no config-level reset. Kept it short (one sentence) to stay under the 80k cap without
+relocating an unrelated bullet — the live file was at 80,036 chars (Node UTF-16 length, the metric
+`scripts/check-knowledge-caps.mjs` actually uses) after the first draft of the addition, trimmed to
+79,700.
+
+**Verdict:** pass (0 blocking). No assertion weakened, skipped, or rewritten; test count grew 7→10
+in the coverage-test file (verified via `grep -c '  it('` against `git show HEAD:...`); the two
+claimed mutations reproduce exactly as described; the `mockClear` ordering is load-bearing, not
+accidental or order-fragile in a way that hides a gap.
