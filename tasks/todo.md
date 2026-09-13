@@ -1,3 +1,180 @@
+# Sprint 2026-09-13b — sessionens värdskap pinnas, gruppens döda lyssnare, exporten får medlemsraden
+
+Rent träd vid start, allt på main. Baslinje mätt vid start: `npm run typecheck` rent,
+`npx vitest run` grönt. Talen står i körningens utdata, inte här.
+
+Routningen körs på buntens FAKTISKA filuppsättning före varje kritik och mot
+`git diff --cached --name-only` före varje commit.
+
+## Inte valda, med skäl
+
+- **BIN-1182** (radera `getGroupOnce`) — `src/lib/firebase/groups.ts` ensam routar `top`;
+  full panel för en radering av en död funktion. Tas när ett annat pass rör filen.
+- **BIN-1150** (skickade inbjudningar i avsändarens export) — tolkningsfrågan ställs till
+  #5/#6 i bunt C:s kritik. Bygger bara om svaret är entydigt, se bunt C.
+- **BIN-1180** (svepets omkontroll) — en tredje regel/funktions-bunt med egen panel; budgeten
+  räcker inte till fyra paneler. Lämnad i Backlog.
+- **BIN-1179** — kräver en produktionsräkning som nekades förra körningen.
+- **BIN-1158** — parkerad med en obesvarad fråga till Malin.
+- **BIN-1118 / BIN-521** — etiketten `Feature`/`idea`.
+- **BIN-454 / BIN-402** — stående förbud.
+- Prosabiljetterna (BIN-1178/1177/1176/1138/1136/1131/1103) — tas inte bredvid kodändringar.
+
+---
+
+## Bunt A — sessionsdokumentet binder vad som får skrivas [Tier C] — BIN-1175
+
+**Disposition: build.** Routning (`node docs/org/route.mjs --md firestore.rules
+src/test/rules/firestore-rules.test.ts src/lib/firebase/sessions.ts`): `top` · #27, #5, #4,
+#6, #7. Panelen konvenerad blint. Ingen block, ingen konflikt som kräver Malin.
+
+**Konflikt löst i planen:** #27 ville ha en nyckellista per skrivväg; #7 och #4 påpekade att
+`request.resource.data` på update är hela dokumentet. Båda tillgodoses: `keys().hasOnly` över
+hela fältmängden på båda grenarna, plus `diff(resource.data).affectedKeys().hasOnly([...])` på
+update för det som får ändras. #4 kallade typkrav utanför omfånget, #27 krävde dem — tas med,
+det konservativa valet.
+
+**Oföränderligheten uttrycks av `affectedKeys`, inte av en separat `hostUid ==`-klausul.** En
+explicit klausul bredvid vore en likvärdig mutant som ingen test kan fälla. Muteringen "ta bort
+oföränderligheten" är därför att ta bort `affectedKeys`-klausulen.
+
+### Acceptanskriterier (bindande)
+
+1. Värden nekas att peka om `hostUid` på update; fixturen är i övrigt giltig. *(diff)*
+2. `deleteField()` på `hostUid` på update nekas. *(diff)* — #4, #7
+3. `createdAt`, `expiresAt` och `config` går inte att ändra på update; ett nekande-test per
+   fält. `groupId` får nollas (`deleteGroup`s avlänkning går igenom) men inte pekas om eller
+   tas bort. *(diff)* — #27, ändrat efter utfallsverifieringen
+4. En okänd extra nyckel nekas på create OCH på update. *(diff)* — #7, #6
+5. Typkrav: create binder `groupId` sträng-eller-null, `config` map, `status` sträng,
+   `candidates` lista, tidsfälten tidsstämplar; update binder `candidates`, `status`,
+   `updatedAt`. Ett `expiresAt` som inte är en tidsstämpel nekas på create. *(diff)* — #27
+6. Varje verklig skrivväg går igenom: `createSession`s form, kandidatpatchen, statuspatchen,
+   etikettpatchen. BIN-1165:s befintliga test står oförändrade. *(diff)* — biljetten, #4, #5
+7. En icke-värd nekas fortfarande update. *(diff)* — #4
+8. En rad seedad förbi reglerna med ett `hostName` över taket: en kandidatpatch nekas, och
+   testet säger att det gäller före och efter. *(diff)* — biljettens tillägg, #7
+9. Muteringar en i taget, mutanten hävdad före och efter i samma kommando, återställd ur egen
+   ögonblicksbild och verifierad med `git hash-object`: `affectedKeys`-klausulen bort; create:s
+   `hasOnly` bort; update:s `hasOnly` bort; varje typkrav bort. Var och en fäller minst ett test.
+   *(diff)* — biljetten, #7, #27
+10. Fixturerna är syntetiska. Ingen ändring i integritetssidan. *(diff)* — #5, #6
+11. Raderingskaskaden hittar värdens sessioner på `hostUid` som förut. *(diff)* — #6
+
+- [x] Regeländring
+- [x] Emulatortest per kriterium
+- [x] Muteringar. Körda mot en egen emulator med sviten filtrerad till de två sessionsblocken,
+  en kontrollkörning grön först. Varje mutant fällde just det test som namnger klausulen;
+  `affectedKeys`-mutanten fällde oföränderlighets-, borttagnings- och nyckeltesten på update.
+  Filen återställd och verifierad med hash. Utfallet står i körningens JSON, inte räknat här.
+- [x] Omroutning på den byggda unionen gav #13, som inte satt i panelen; #13 konvenerad blint,
+  support utan villkor.
+- [ ] Regeldeploy efter push
+
+## Bunt B — den förlorande fliken startar om sin lyssnare, två testskärpningar [Tier A] — BIN-1181, BIN-1183
+
+**Disposition: build.** Routning utan `groups.ts` (`node docs/org/route.mjs --md
+src/components/pages/GroupPageClient.tsx
+src/components/pages/GroupPageClient.joinResubscribe.test.tsx
+src/test/rules/retention-cleanup-orchestrator.test.ts src/app/grupper/page.tsx`): `medium` · #26.
+Kritiken konvenerad. #26: support-with-conditions.
+
+### Acceptanskriterier (bindande)
+
+**BIN-1181**
+1. `already_member` startar om prenumerationen; `invalid_token` och `transient` gör det inte. *(diff)*
+2. Testet driver hela övergången och hävdar att fliken LANDAR i gruppvyn, inte bara att
+   `resubscribe` anropades. *(diff)* — #26
+3. Omstarten återfyrar inte joinet. *(diff)* — biljetten
+4. Muteringen som tar bort `|| res.reason === 'already_member'` fäller det nya testet och
+   inget annat. *(diff)*
+
+**BIN-1183**
+1. Muteringen `groupIdOf` → `path.split('/')[0]` fäller omkontrolltestet. *(diff)*
+2. ~~Muteringen `??` → `||` fäller minst ett test.~~ **Inte byggd**, se avvikelseloggen. *(diff)*
+
+- [x] BIN-1181 kod + test; muteringen körd: det nya testet föll, de andra i filen stod gröna,
+  filen återställd byte-identisk.
+- [x] BIN-1183 del 1 + mutering. **Kriterium 1 är INTE uppfyllt som det står.** Muteringen
+  `groupIdOf` → `path.split('/')[0]` fällde andra test i filen men inte omkontrolltestet,
+  kontrollkörningen grön först, filen återställd byte-identisk. Mekanismen: mutanten gör att
+  svepet sparar MER, och en assertion om att projektionen överlever kan inte se det. Det är
+  vad BIN-1152:s testgranskning redan sa — fullständighet, inte täckning. Assertionen står kvar
+  för att den är sann; biljetten går till In Review med utfallet.
+
+## Bunt C — din egen gruppmedlemsrad ingår i exporten [Tier C] — BIN-1172 (+ BIN-1150 villkorat)
+
+**Disposition: build.** Routning (`node docs/org/route.mjs --md src/lib/firebase/dataExport.ts
+src/lib/firebase/userData.ts docs/data-export-format.md`): `top` · #5, #27, #6, #4, #21.
+Kritiken konvenerad. Ingen block. BIN-1150:s fråga besvarad (b) av både #5 och #6.
+
+**Placering ändrad av kritiken:** #27 och #6 flyttade oberoende läsningen från
+`collectUserDataSnapshots` till `buildUserExport`, samma mönster som hushållsbidragen —
+raderingen läser aldrig radens innehåll. #21:s strykningar i `userData.ts` gällde den första
+placeringen och faller bort med den. Routa om på den faktiska unionen före commit.
+
+### Acceptanskriterier (bindande)
+
+1. Exporten bär radens FÄLT under ett nytt fält, med `id` = groupId. *(diff)* — biljetten
+2. Läsningen görs bara mot den exporterande användarens egen rad; ett test fäller en övergång
+   till att lista samlingen eller till ett annat id. *(diff)* — #4, #5, #27
+3. En saknad rad och en fallerande läsning hoppas över; exporten fullföljs. *(diff)* — #27, #4
+4. Läsningen ligger i `buildUserExport`, inte i den delade hjälparen. *(diff)* — #27, #6
+5. Inga fält läggs till utöver de raden bär. *(diff)* — #5, #4
+6. `SCHEMA_VERSION` minor-bump med daterad changelog-rad och en rad i README-texten. *(diff)* — #5, #21, #27
+7. Nyckeln klassas i täckningstestets grupp-scopade mängd. *(diff)* — #6
+8. `docs/data-export-format.md` får fältraden. *(diff)* — #6
+9. Tidsstämplar serialiseras råa via `data()`, som övriga. *(diff)* — #27
+
+- [x] Kod + test + dokument
+- [x] Muteringar: sökvägen till ett annat id fällde egen-uid-testet och överhoppningstestet;
+  borttagen `.catch` fällde överhoppningstestet. Filen återställd byte-identisk.
+
+## Deviation log
+
+- [deviation] BIN-1175: planen sa en explicit `hostUid ==`-klausul → `affectedKeys` uttrycker
+  oföränderligheten → ingen separat klausul, och ingen `keys().hasOnly` på update eftersom
+  `affectedKeys` redan nekar en ny nyckel.
+- [deviation] BIN-1183: del 2 (`??` → `||`) → #26 visade att ett tomt projicerat gruppnamn
+  renderas som en tom rad, och reglerna har inget golv på namnet → att pinna `??` låser ett
+  synligt val → inte byggd; biljetten tillbaka med #26:s resonemang.
+- [deviation] BIN-1172: planen sa den delade hjälparen → kritiken flyttade läsningen till
+  exporten → byggd där.
+- [discovery] BIN-1175: `MIN_TESTS` i `scripts/run-rules-tests.mjs` höjdes av BIN-1165 till
+  sviten uppmätta storlek i samma commit som lade till testen → samma sak görs här, och
+  filen routas om före commit.
+- [discovery] helsvit: `scripts/prune-map-flag.test.mjs` föll på timeout i en körning medan
+  emulatorn och muteringarna gick samtidigt, och var grön ensam direkt efter. BIN-1158:s
+  klass; ingen av buntens filer rör skriptet.
+- [discovery] BIN-1175, utfallsverifieringen: `deleteGroup` i `src/lib/firebase/groups.ts`
+  avlänkar värdens sessioner med `groupId: null` före gruppens egna raderingar. Den första
+  regelversionen gjorde `groupId` oföränderlig och hade stoppat en värd från att radera sin
+  grupp. Varken planen, panelen eller #13 hittade skrivvägen; regelkommentarens härledning sökte
+  bara i `sessions.ts`. → `groupId` får nollas men inte pekas om, test för avlänkningen,
+  ompekningen och borttagningen, nya muteringar. Kriterium 3 ändrat därefter.
+- [discovery] BIN-1175, andra muteringsvarvet: mutanten som tog bort likhetsledet i
+  `groupId`-klausulen överlevde — inget test patchade en gruppstartad session. Det är vägen
+  `startSession` i `GroupPageClient` tar före `setSessionCandidates`. Test tillagt;
+  `MIN_TESTS` följer sviten.
+- [deviation] BIN-1175, testgranskningen (fail, 1 blockerande): typkraven på `candidates` och
+  `status` på update gällde hela det sammanslagna dokumentet, så en rad med ett felaktigt värde
+  i det ena fältet hade aldrig gått att patcha i det andra — utan att något test visade att det
+  var avsiktligt. BIN-1155 valde det villkorade läget för medlemsraden. → villkorade på att
+  skrivningen ändrar fältet, två test för läkningsvägen, mutanter i båda riktningarna.
+- [deviation] verifieringarna fällde också prosa: en attributionsmening i regeltestet, en mening
+  om nyckellistan i legacy-testet, en förklaring i `dataExport.ts` om vad raderingen läser, en
+  rad i täckningstestets huvud, fältraden i exportdokumentet (kommandot nådde inte `joinedAt`),
+  en bisats i `GroupPageClient.tsx` och ett motsatsled i omkontrolltestet. Alla strukna. Frasen
+  "de gör vi bara vid radering" i `userData.ts` struken, så filen går in i bunt C.
+- [discovery] BIN-1181, verifieringen: kontrollen att joinet inte återfyras låg efter bytet till
+  medlemsvyn, där medlemskollen stoppar ett nytt join ändå. Flyttad till medan vyn är nekad;
+  muteringen som tar bort budgetbränningen fäller nu testet.
+- [deviation] bunt A: `docs/workflow-map.html` bar meningen att `hostUid`-omskrivningen var
+  BIN-1175 och öppen → struken och ersatt med vad regeln binder → kartan committas för sig.
+
+
+---
+
 # Sprint 2026-09-13 — gruppens medlemslista blir privat, sessionens värdskap pinnas, exporten speglar raderingen
 
 Urval: 4 av 46 backlog-biljetter (BIN-1152 låg redan i Todo). Rent träd vid start

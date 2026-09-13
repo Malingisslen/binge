@@ -1643,24 +1643,26 @@ const ANON_UNSEEDED = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; // token-shaped, never
 // `hostUid == request.auth.uid` passes and only the type or length clause can be what
 // denies. The last test in the block is the deliberate exception and says so in its own
 // name — it is about the `hostUid` clause, not about hostName.
+// Mirrors createSession's write shape in src/lib/firebase/sessions.ts. Derive it
+// rather than trusting this list:
+//   sed -n '/addDoc(collection(db, .sessions.)/,/});/p' src/lib/firebase/sessions.ts
+// Shared by the BIN-1165 and BIN-1175 blocks below.
+function validSession(overrides: Record<string, unknown> = {}) {
+  return {
+    hostUid: OWNER,
+    hostName: 'Filmkvall',
+    groupId: null,
+    config: { providers: [] },
+    status: 'active',
+    candidates: [],
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    expiresAt: Timestamp.fromDate(new Date(Date.now() + 7 * 24 * 3600 * 1000)),
+    ...overrides,
+  };
+}
+
 describe('sessions/{id} — hostName typ- och längdtak (BIN-1165)', () => {
-  // Mirrors createSession's write shape in src/lib/firebase/sessions.ts. Derive it
-  // rather than trusting this list:
-  //   sed -n '/addDoc(collection(db, .sessions.)/,/});/p' src/lib/firebase/sessions.ts
-  function validSession(overrides: Record<string, unknown> = {}) {
-    return {
-      hostUid: OWNER,
-      hostName: 'Filmkvall',
-      groupId: null,
-      config: { providers: [] },
-      status: 'active',
-      candidates: [],
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      expiresAt: Timestamp.fromDate(new Date(Date.now() + 7 * 24 * 3600 * 1000)),
-      ...overrides,
-    };
-  }
   // A STRING that only breaks the length clause — never a wrong type, so the two
   // halves of the clause stay separately attributable.
   const TOO_LONG = 'x'.repeat(81);
@@ -1783,6 +1785,178 @@ describe('sessions/{id} — hostName typ- och längdtak (BIN-1165)', () => {
     await assertFails(setDoc(
       doc(otherDb(), 'sessions', 's_spoof'),
       validSession(),
+    ));
+  });
+});
+
+// BIN-1175 — the session document's SHAPE. Before this, the update branch bound only
+// who writes, so the current host could re-point `hostUid` at another account and
+// write any key of any type onto a document that is `allow read: if true`.
+describe('sessions/{id} — nyckelmängd, typer och oföränderliga fält (BIN-1175)', () => {
+  async function seeded(id: string) {
+    await assertSucceeds(setDoc(doc(ownerDb(), 'sessions', id), validSession()));
+    return doc(ownerDb(), 'sessions', id);
+  }
+
+  it('host cannot re-point hostUid to another account', async () => {
+    const ref = await seeded('s_repoint');
+    await assertFails(updateDoc(ref, { hostUid: 'other_uid', updatedAt: serverTimestamp() }));
+  });
+
+  it('host cannot delete hostUid', async () => {
+    const ref = await seeded('s_delhost');
+    await assertFails(updateDoc(ref, { hostUid: deleteField(), updatedAt: serverTimestamp() }));
+  });
+
+  it.each([
+    ['config', { providers: [8] }],
+    ['createdAt', Timestamp.fromDate(new Date(0))],
+    ['expiresAt', Timestamp.fromDate(new Date(Date.now() + 365 * 24 * 3600 * 1000))],
+  ])('update cannot change %s', async (field, value) => {
+    const ref = await seeded(`s_immut_${field}`);
+    await assertFails(updateDoc(ref, { [field]: value, updatedAt: serverTimestamp() }));
+  });
+
+  // groupId may be cleared but never re-pointed. The unlink patch mirrors deleteGroup's
+  // batch.update in src/lib/firebase/groups.ts, which runs before the group's own
+  // deletes — refusing it would stop a host from deleting a group they started a
+  // session in.
+  it('host can unlink groupId the way deleteGroup does', async () => {
+    await assertSucceeds(setDoc(doc(ownerDb(), 'sessions', 's_unlink'), validSession({ groupId: 'g1' })));
+    await assertSucceeds(updateDoc(
+      doc(ownerDb(), 'sessions', 's_unlink'),
+      { status: 'expired', groupId: null, updatedAt: serverTimestamp() },
+    ));
+  });
+
+  // candidates and status are type-checked on update only when the write changes them,
+  // so a row stored with a bad value in one (past the rules) can still be patched in
+  // the other. Seeded with rules disabled, since the create branch refuses that shape.
+  it('a row with a malformed status still accepts a candidates patch', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'sessions', 's_bad_status'), validSession({ status: 1 }));
+    });
+    await assertSucceeds(updateDoc(
+      doc(ownerDb(), 'sessions', 's_bad_status'),
+      { candidates: [{ tmdbId: 603, mediaType: 'movie' }], updatedAt: serverTimestamp() },
+    ));
+  });
+
+  it('a row with malformed candidates still accepts a status patch', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'sessions', 's_bad_cand'), validSession({ candidates: 'x' }));
+    });
+    await assertSucceeds(updateDoc(
+      doc(ownerDb(), 'sessions', 's_bad_cand'),
+      { status: 'resolved', updatedAt: serverTimestamp() },
+    ));
+  });
+
+  // A group-started session keeps its groupId through every ordinary patch; this is
+  // the path GroupPageClient's startSession takes before setSessionCandidates.
+  it('a group-started session still accepts a candidates patch', async () => {
+    await assertSucceeds(setDoc(doc(ownerDb(), 'sessions', 's_group_cand'), validSession({ groupId: 'g1' })));
+    await assertSucceeds(updateDoc(
+      doc(ownerDb(), 'sessions', 's_group_cand'),
+      { candidates: [{ tmdbId: 603, mediaType: 'movie' }], updatedAt: serverTimestamp() },
+    ));
+  });
+
+  it('host cannot re-point groupId to another group', async () => {
+    await assertSucceeds(setDoc(doc(ownerDb(), 'sessions', 's_regroup'), validSession({ groupId: 'g1' })));
+    await assertFails(updateDoc(
+      doc(ownerDb(), 'sessions', 's_regroup'),
+      { groupId: 'g2', updatedAt: serverTimestamp() },
+    ));
+  });
+
+  it('host cannot delete groupId', async () => {
+    await assertSucceeds(setDoc(doc(ownerDb(), 'sessions', 's_delgroup'), validSession({ groupId: 'g1' })));
+    await assertFails(updateDoc(
+      doc(ownerDb(), 'sessions', 's_delgroup'),
+      { groupId: deleteField(), updatedAt: serverTimestamp() },
+    ));
+  });
+
+  it('create is denied when it carries an unknown key', async () => {
+    await assertFails(setDoc(
+      doc(ownerDb(), 'sessions', 's_extra_create'),
+      validSession({ extra: 'x' }),
+    ));
+  });
+
+  it('update is denied when it adds an unknown key', async () => {
+    const ref = await seeded('s_extra_update');
+    await assertFails(updateDoc(ref, { extra: 'x', updatedAt: serverTimestamp() }));
+  });
+
+  it.each([
+    ['groupId', 42],
+    ['config', 'providers'],
+    ['status', 1],
+    ['candidates', 'not-a-list'],
+    ['createdAt', 'yesterday'],
+    ['updatedAt', 'now'],
+    ['expiresAt', 'next week'],
+  ])('create is denied when %s has the wrong type', async (field, value) => {
+    await assertFails(setDoc(
+      doc(ownerDb(), 'sessions', `s_type_create_${field}`),
+      validSession({ [field]: value }),
+    ));
+  });
+
+  it.each([
+    ['candidates', 'not-a-list'],
+    ['status', 1],
+    ['updatedAt', 'now'],
+  ])('update is denied when %s is changed to the wrong type', async (field, value) => {
+    const ref = await seeded(`s_type_update_${field}`);
+    const patch: Record<string, unknown> = { updatedAt: serverTimestamp(), [field]: value };
+    await assertFails(updateDoc(ref, patch));
+  });
+
+  // A group-started session writes a string groupId; the fixture's null covers the
+  // other half of that clause.
+  it('host can create a group-started session', async () => {
+    await assertSucceeds(setDoc(
+      doc(ownerDb(), 'sessions', 's_group'),
+      validSession({ groupId: 'g1' }),
+    ));
+  });
+
+  // The ordinary host flow end to end: create, rename, set candidates, end. The
+  // single-field patches mirror setSessionCandidates and setSessionStatus.
+  it('a normal host flow still succeeds', async () => {
+    const ref = await seeded('s_flow');
+    await assertSucceeds(updateDoc(ref, { hostName: 'Fredagsfilm', updatedAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(ref, {
+      candidates: [{ tmdbId: 603, mediaType: 'movie' }],
+      updatedAt: serverTimestamp(),
+    }));
+    await assertSucceeds(updateDoc(ref, { status: 'resolved', updatedAt: serverTimestamp() }));
+  });
+
+  // This is about the existing host clause, and asserts the new clauses did not open a
+  // path for someone else.
+  it('a non-host still cannot update the session', async () => {
+    await seeded('s_nonhost');
+    await assertFails(updateDoc(
+      doc(otherDb(), 'sessions', 's_nonhost'),
+      { status: 'resolved', updatedAt: serverTimestamp() },
+    ));
+  });
+
+  // BIN-1165's push gate: a row stored with an over-bound hostName — written before
+  // that clause, or past the rules — refuses every update, because the update branch
+  // checks hostName on the merged document. This change does not alter that: the
+  // hostName clause is untouched, so the answer is the same before and after it.
+  it('a legacy row with an over-bound hostName refuses a candidates patch', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'sessions', 's_legacy'), validSession({ hostName: 'x'.repeat(81) }));
+    });
+    await assertFails(updateDoc(
+      doc(ownerDb(), 'sessions', 's_legacy'),
+      { candidates: [{ tmdbId: 603, mediaType: 'movie' }], updatedAt: serverTimestamp() },
     ));
   });
 });

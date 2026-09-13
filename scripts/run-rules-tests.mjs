@@ -58,7 +58,10 @@ const REPO = resolve(HERE, '..');
 // BIN-1165, 2026-09-12: raised 500 → 556, which is what `numTotalTests` reported on the
 // commit that added the sessions hostName tests. The value is the suite's measured size,
 // not a margin below it, so removing a single test fails the floor — that is the point.
-export const MIN_TESTS = 556;
+//
+// BIN-1175, 2026-09-13: raised to what `numTotalTests` reported with the session key-list,
+// type and groupId tests in place.
+export const MIN_TESTS = 601;
 
 const VITEST_ARGS = ['run', '--config', 'vitest.rules.config.ts'];
 
