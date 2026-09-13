@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { Plus } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import AuthGuard from '@/components/AuthGuard';
-import { fsdb } from '@/lib/firebase/db';
 import { useSenderProfile } from '@/hooks/useSenderProfile';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { useAuth } from '@/hooks/useAuth';
@@ -19,6 +18,7 @@ import {
   type InviteBlock,
 } from '@/lib/groupDenialCopy';
 import { useMyGroups, useMyGroupInvites } from '@/hooks/useGroups';
+import { getPublicGroupName } from '@/lib/firebase/groups';
 import type { GroupInvite } from '@/lib/firebase/groups';
 
 export default function GrupperPage() {
@@ -193,11 +193,17 @@ function useInviteIdentity(invite: GroupInvite) {
   const groupQuery = useQuery({
     queryKey: ['invite-group-name', invite.groupId],
     queryFn: async () => {
+      // BIN-1152: läsningen går mot den publika projektionen, inte mot
+      // gruppdokumentet. Gruppdokumentet är låst till medlemmar sedan biljetten,
+      // och mottagaren av en inbjudan är per definition inte medlem — den gamla
+      // läsningen hade nekats varje gång och alltid fallit tillbaka.
+      //
+      // Fallbacken på `invite.groupName` nedan står kvar och bär nu mer: en grupp
+      // som skapades före biljetten har ingen projektion, och det denormaliserade
+      // namnet på inbjudan är då vad som finns kvar att visa. Det är panelens villkor 9 —
+      // en saknad projektion får inte visas som ett fel.
       try {
-        const { db, doc, getDoc } = await fsdb();
-        const snap = await getDoc(doc(db, 'groups', invite.groupId));
-        if (!snap.exists()) return null;
-        return (snap.data().name as string | undefined) ?? null;
+        return await getPublicGroupName(invite.groupId);
       } catch {
         return null;
       }

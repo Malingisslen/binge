@@ -801,6 +801,57 @@ service cloud.firestore {
       allow delete: if isOwner(uid);
     }
 
+    // ---- publicGroups ----
+    // BIN-1152: gruppnamnets publika projektion. `groups/{groupId}` var
+    // `allow read: if isSignedIn()` fram till den här biljetten — en "unlisted
+    // link"-modell som lät varje inloggat konto läsa `ownerUid` och hela
+    // `memberUids` för vilket grupp-id det kunde gissa, alltså räkna upp vem som
+    // är med i vems grupp. Malins beslut 2026-09-11: medlemslistan blir privat,
+    // och bara NAMNET blir läsbart utanför gruppen, så förhandsvisningen av en
+    // inbjudan fortsätter fungera. Samma mönster som `publicProfiles` ovan gör
+    // för profiler (BIN-505): en egen smal projektion i stället för en bred
+    // läsregel på källdokumentet.
+    //
+    // Nyckellistan är `['name']` och ingenting annat. Att bara binda ägaren
+    // (`get(...).data.ownerUid == request.auth.uid`) hade lämnat dokumentet öppet
+    // för godtyckliga fält upp mot dokumentgränsen på något varje inloggat konto
+    // kan läsa — det är samma hål BIN-1140 stängde på gruppdokumentet, och
+    // panelens villkor 4 kräver listan just därför.
+    //
+    // Talet 48 är samma tal som andra fält i den här filen pinnas mot, och
+    // regelspråket har ingen delad konstant, så de måste flytta i samma
+    // redigering. Härled vilka de är, lita inte på den här meningen:
+    //   grep -niE "name\.size\(\) <= 48" firestore.rules
+    //
+    // Versaler ingår med flit. En tidigare lydelse här publicerade samma kommando
+    // utan `-i` och räknade upp de två andra ställena i prosa; utfallet motsade
+    // meningen — `groupName.size()` har stort N och nåddes aldrig av mönstret,
+    // alltså namngav meningen ett ställe dess egen härledning inte kunde visa.
+    //
+    // `get()` på ett saknat gruppdokument FEL-ut, och ett fel nekar — så en
+    // projektion för en grupp som inte finns kan inte skapas. Det är villkor 4:s
+    // andra halva, och det är också varför delete-grenen nedan behöver sin
+    // `!exists`-utgång.
+    //
+    // DELETE-GRENEN HAR EN UTGÅNG NÄR GRUPPEN ÄR BORTA, med flit. Är
+    // gruppdokumentet redan raderat kan ingen ägarbindning längre auktorisera
+    // raderingen av projektionen, och den hade då blivit världsläsbar för alltid
+    // — #4 Säkerhet och #6 DPO:s villkor 2, ett läge en krasch mellan två
+    // batchar räcker för att nå. Priset är att vilket inloggat konto som helst
+    // får radera en FÖRÄLDRALÖS projektion; det är städning av ett dokument
+    // ingen längre äger, aldrig en väg till en levande grupps namn.
+    match /publicGroups/{groupId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn()
+        && request.resource.data.keys().hasOnly(['name'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() <= 48
+        && get(/databases/$(database)/documents/groups/$(groupId)).data.ownerUid == request.auth.uid;
+      allow delete: if isSignedIn()
+        && (!exists(/databases/$(database)/documents/groups/$(groupId))
+          || get(/databases/$(database)/documents/groups/$(groupId)).data.ownerUid == request.auth.uid);
+    }
+
     // ---- usernames ----
     // Username lookup — anyone can read, owner can create/delete.
     // Path-segment username must be normalized (lowercase, 3-30, [a-z0-9_]).
@@ -1333,7 +1384,6 @@ service cloud.firestore {
     }
 
     // ---- Permanenta grupper (Fas 2) ----
-    // Group-doc: läsbar för inloggade (unlisted-link-modell — gruppe-ID är 20 tecken).
     // Subcollections är låsta till medlemmar.
     //
     // SÄKERHETSMODELL för invite-tokens:
@@ -1355,19 +1405,40 @@ service cloud.firestore {
     //    Bara joiner själv kan skriva eller radera sin egen attempt-doc.
     //
     // 4. Members + watchlist subcollections är låsta till faktiska medlemmar.
-    //    Group-doc:et självt (namn, memberUids, hash, defaults) är
-    //    fortfarande läsbart för alla inloggade — det är medvetet "unlisted
-    //    link"-modell för att invite-preview ska kunna visa gruppnamn.
+    //    Group-doc:et självt är sedan BIN-1152 låst till medlemmar också; det
+    //    publika namnet bor i `publicGroups/{groupId}` längre upp i filen.
     match /groups/{groupId} {
-      allow read: if isSignedIn();
+      // BIN-1152: läsningen är bunden till medlemskap. Fram till den här
+      // biljetten var den `isSignedIn()` — se resonemanget i `publicGroups`-
+      // blocket ovan för vad det öppnade och varför namnet flyttade dit.
+      //
+      // `resource.data` finns inte på en läsning av ett SAKNAT dokument, så ett
+      // sådant get() nekas i stället för att svara "finns inte". Följden är att
+      // klienten inte kan skilja "finns inte" från "du är inte medlem" ur
+      // nekandet självt, och det är projektionen som svarar på den frågan i
+      // stället (`getPublicGroupName` i src/lib/firebase/groups.ts).
+      //
+      // LISTFRÅGORNA ÄR ORÖRDA, och skälet är en EGENSKAP hos frågan, inte en
+      // uppräkning av anropare: varje fråga över `groups` filtrerar på
+      // `where('memberUids', 'array-contains', <egna uid>)`, så varje returnerat
+      // dokument uppfyller villkoret av konstruktion. Härled dem och läs igenom
+      // att det gäller varenda en — en fråga utan det filtret nekas nu:
+      //   git grep -nE "col(lection)?\(db, 'groups'\)" -- src ':!*.test.*' ':!src/test'
+      //
+      // Alias-formen `col(` ingår med flit: `AuthContext` destrukturerar
+      // `collection` under det namnet, så ett mönster på bara `collection(` missar
+      // två av ställena. En tidigare lydelse här namngav två anropare och kallade
+      // dem de enda — kommandot motsäger det, och meningen är struken utan att ett
+      // nytt tal skrivs i dess ställe. Filtret står ibland på raden EFTER träffen,
+      // så läs omgivningen, inte bara träffraden.
+      allow read: if isSignedIn() && request.auth.uid in resource.data.memberUids;
 
       // BIN-1140/BIN-1128: dokumentets nyckelmängd och `name`s form.
       //
       // Före den här funktionen ställde ingen gren i hela blocket någon fråga om
       // vilka nycklar dokumentet får ha. Varje skrivare som
       // passerade någon gren kunde alltså lägga till toppnivåfält upp mot
-      // dokumentgränsen, på ett dokument `allow read: if isSignedIn()` gör
-      // läsbart för varje inloggat konto och som läses om vid varje
+      // dokumentgränsen, på ett dokument som läses om vid varje
       // medlemskapskontroll. `name` hade heller ingen typ- eller längdgräns i
       // någon gren; formulärens 48 tecken är en UI-hint, inte en spärr.
       //

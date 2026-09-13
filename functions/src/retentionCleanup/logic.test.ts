@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   isExpiredSession,
   isStaleNotification,
@@ -14,6 +17,11 @@ import {
   GET_USERS_BATCH,
   revokedUidsInBatches,
 } from './logic';
+
+// Anchored on THIS file rather than on the working directory, the same form
+// `groupHandover/logic.test.ts` uses: a source-reading test that resolves against
+// `process.cwd()` can pass by reading the wrong tree.
+const HERE = join(fileURLToPath(import.meta.url), '..');
 
 const now = 1_000_000_000_000; // fixed "now" for deterministic boundaries
 
@@ -300,5 +308,50 @@ describe('revokedUidsInBatches (BIN-848)', () => {
     );
 
     expect(revoked).toEqual([]);
+  });
+});
+
+// ── BIN-1152: gruppnamnets publika projektion i svepets raderingsplan ────────
+//
+// `publicGroups/{gid}` ligger UTANFÖR gruppens underträd, så `groupSubtreePaths`
+// kan inte nå den — den måste namnges för hand i `planGroupHandover`. Utan det
+// raderar svepet gruppen och lämnar ett namn läsbart för varje inloggat konto
+// kvar för alltid, vilket är det läge #4 Säkerhet och #6 DPO blockerade på.
+//
+// Testet läser KÄLLAN och inte ett portanrop, av två skäl. Emulatorsviten har en
+// egen andra implementation av samma port, så en assertion där kan vara grön
+// medan produktionen saknar raden. Och riktningen — projektionen FÖRE
+// gruppdokumentet — är en ordning i en literal, inte ett beteende en mock kan
+// observera.
+describe('BIN-1152: svepet raderar projektionen, och gor det fore gruppen', () => {
+  const INDEX = readFileSync(join(HERE, 'index.ts'), 'utf8');
+
+  // Raden som faktiskt bygger listan for en TOM grupp. Ankaret ar `toDelete.push(`
+  // och inget bredare: filen namner `publicGroups` ocksa i kommentarer, och en
+  // assertion som bara letar efter strangen hade varit uppfylld av prosan om den.
+  const pushLine = INDEX.split('\n').find((line) => line.includes('toDelete.push('));
+
+  it('namnger projektionen i raderingsplanen', () => {
+    expect(pushLine).toBeDefined();
+    expect(pushLine).toContain('publicGroups/${group.ref.id}');
+  });
+
+  it('satter projektionen FORE gruppdokumentets egen sokvag', () => {
+    // Listan committas i chunkar, och ett ref tidigare i listan hamnar aldrig i
+    // en senare chunk. Det overlevbara halvtillstandet ar "gruppen finns,
+    // projektionen ar borta" — forhandsvisningen faller tillbaka pa det
+    // denormaliserade namnet — aldrig "namn utan grupp".
+    const line = pushLine as string;
+    const proj = line.indexOf('publicGroups/${group.ref.id}');
+    const group = line.indexOf('group.ref.path');
+
+    // BADA indexen pinnas som FUNNA innan de jamfors, och det ar inte
+    // omstandligt: muteringen som tar bort projektionen ur raden ger `proj`
+    // vardet -1, och `-1 < n` ar sant — testet hade da varit gront om exakt den
+    // defekt det finns for. Uppmatt: den forsta versionen av det har testet
+    // overlevde muteringen medan grannen fallde den.
+    expect(proj).toBeGreaterThanOrEqual(0);
+    expect(group).toBeGreaterThanOrEqual(0);
+    expect(proj).toBeLessThan(group);
   });
 });

@@ -24,6 +24,11 @@ const mocks = vi.hoisted(() => {
   });
   const getDocMock = vi.fn();
   const getDocsMock = vi.fn();
+  // BIN-1152: `onSnapshot` var `vi.fn(() => () => {})`, alltsa en mock som slangde
+  // bort sina argument. Det gjorde `subscribeToGroup`s error-callback omojlig att
+  // observera — och uppmatt: muteringen som tar bort den overlevde hela sviten,
+  // eftersom hook-testet mockar just den funktion som bar fixen.
+  const onSnapshotMock = vi.fn((_ref: unknown, _next: unknown, _err?: unknown) => () => {});
   const queryMock = vi.fn((coll: unknown, ...constraints: unknown[]) => ({ _coll: coll, _constraints: constraints }));
   const whereMock = vi.fn((field: string, op: string, value: unknown) => ({ _type: 'where', field, op, value }));
   const limitMock = vi.fn((n: number) => ({ _type: 'limit', n }));
@@ -39,7 +44,7 @@ const mocks = vi.hoisted(() => {
   });
   return {
     setMock, deleteMock, updateMock, commitMock, writeBatchMock, setDocMock, updateDocMock, deleteDocMock, addDocMock,
-    getDocMock, getDocsMock,
+    getDocMock, getDocsMock, onSnapshotMock,
     queryMock, whereMock, limitMock, orderByMock, docMock,
   };
 });
@@ -78,17 +83,20 @@ vi.mock('firebase/firestore', () => ({
   deleteField: vi.fn(() => 'DELETE_FIELD'),
   arrayUnion: vi.fn((...vals: unknown[]) => ({ _type: 'arrayUnion', vals })),
   arrayRemove: vi.fn((...vals: unknown[]) => ({ _type: 'arrayRemove', vals })),
-  onSnapshot: vi.fn(() => () => {}),
+  onSnapshot: (...args: unknown[]) => mocks.onSnapshotMock(args[0], args[1], args[2]),
   Timestamp: { fromDate: vi.fn((d: Date) => d) },
 }));
 
 const {
-  setMock, writeBatchMock, commitMock, setDocMock, updateDocMock, deleteDocMock, addDocMock, getDocMock, getDocsMock,
-  queryMock, limitMock, docMock,
+  setMock, deleteMock, writeBatchMock, commitMock, setDocMock, updateDocMock, deleteDocMock, addDocMock, getDocMock, getDocsMock,
+  onSnapshotMock, queryMock, limitMock, docMock,
 } = mocks;
 
 import {
   createGroup,
+  deleteGroup,
+  updateGroup,
+  getPublicGroupName,
   addToGroupWatchlist,
   syncProgressToGroups,
   subscribeToMyGroups,
@@ -96,6 +104,7 @@ import {
   refreshMyHouseholdContributions,
   joinGroupViaToken,
   acceptGroupInvite,
+  subscribeToGroup,
   inviteMemberByUid,
   updateMemberIdentity,
   GROUP_WRITE_REFUSED,
@@ -111,8 +120,20 @@ function groupsQueryConstraints() {
 const docFixtures = new Map<string, unknown>();
 function seedDoc(path: string, snap: unknown) { docFixtures.set(path, snap); }
 
+// Ett SERVERNEKANDE, till skillnad från ett infrastrukturfel. `isPermissionDenied`
+// läser bara `code`, så formen här är hela skillnaden — och den skillnaden avgör
+// varje gren BIN-1152 lade till. Modul-scope med flit: en kopia per describe-block
+// är en kopia som kan glida isär, och ett `denied` som inte finns i scope kastar ett
+// ReferenceError INUTI mocken, vilket en gren som fångar brett tar emot som vilket
+// fel som helst — ett test som blir grönt av fel skäl.
+function permissionDenied(): Error {
+  return Object.assign(new Error('denied'), { code: 'permission-denied' });
+}
+
 beforeEach(() => {
   setMock.mockClear();
+  deleteMock.mockClear();
+  onSnapshotMock.mockClear();
   writeBatchMock.mockClear();
   commitMock.mockClear();
   setDocMock.mockReset();
@@ -171,8 +192,17 @@ describe('createGroup (BIN-532 REVERTED: sequential writes, not an atomic batch)
     expect((groupColl as { _path: string })._path).toBe('groups');
     expect(groupPayload).toMatchObject({ ownerUid: 'owner-1', memberUids: ['owner-1'] });
 
-    expect(setDocMock).toHaveBeenCalledTimes(1);
-    const [memberRef, memberPayload] = setDocMock.mock.calls[0];
+    // BIN-1152: TVÅ setDoc — den publika namnprojektionen först, ägarens
+    // medlemsdokument sedan. Ordningen är pinnad, inte bara antalet: projektionens
+    // skrivregel kräver att gruppdokumentet finns och att skrivaren är dess
+    // `ownerUid`, så den kan inte ligga före addDoc — och den ligger före
+    // medlemsdokumentet, så att `createGroup-memberDoc`s rollback-gren städar den.
+    expect(setDocMock).toHaveBeenCalledTimes(2);
+    const [projRef, projPayload] = setDocMock.mock.calls[0];
+    expect((projRef as { _path: string })._path).toBe(`publicGroups/${result.groupId}`);
+    expect(projPayload).toEqual({ name: 'Filmkvällarna' });
+
+    const [memberRef, memberPayload] = setDocMock.mock.calls[1];
     expect((memberRef as { _path: string })._path).toBe(`groups/${result.groupId}/members/owner-1`);
     // BIN-1155: `role` skrivs inte langre (Malins beslut 2026-09-12 — inget last
     // det, och medlemsraden ar lasbar for hela gruppen). Nyckeluppsattningen som
@@ -201,9 +231,19 @@ describe('createGroup (BIN-532 REVERTED: sequential writes, not an atomic batch)
   // and strip it out of the owner's own array-contains query at the same time,
   // making it unfindable.
   describe('BIN-555: ägarlöst grupp-doc rullas tillbaka om member-writen failar', () => {
+    // BIN-1152: felet riktas på SÖKVÄG, inte på anropsordning. `createGroup` gör
+    // sedan biljetten två setDoc, och ett `mockRejectedValueOnce` hade fällt den
+    // FÖRSTA — projektionen — så de här två testerna hade fortsatt vara gröna
+    // medan de slutade pröva det de heter efter.
+    function rejectMemberDocWith(err: Error) {
+      setDocMock.mockImplementation(async (ref: unknown) => {
+        if (/\/members\//.test((ref as { _path: string })._path)) throw err;
+      });
+    }
+
     it('raderar grupp-doc:et, kastar felet vidare, och rör inte memberUids', async () => {
       const boom = new Error('network lost');
-      setDocMock.mockRejectedValueOnce(boom);
+      rejectMemberDocWith(boom);
 
       await expect(createGroup({
         ownerUid: 'owner-1',
@@ -215,10 +255,13 @@ describe('createGroup (BIN-532 REVERTED: sequential writes, not an atomic batch)
         defaults: { providerMode: 'intersect', aggregation: 'least_misery', mediaType: 'both' },
       })).rejects.toThrow('network lost');
 
-      // Grupp-doc:et som just skapades är borta igen.
-      expect(deleteDocMock).toHaveBeenCalledTimes(1);
+      // Grupp-doc:et som just skapades är borta igen — och med det projektionen,
+      // som annars hade blivit ett världsläsbart namn till en grupp som inte
+      // finns. BIN-1152: projektionen FÖRST, medan gruppdokumentet fortfarande
+      // finns och kan auktorisera raderingen via sin `ownerUid`.
       const groupId = (await addDocMock.mock.results[0].value as { id: string }).id;
-      expect((deleteDocMock.mock.calls[0][0] as { _path: string })._path).toBe(`groups/${groupId}`);
+      expect(deleteDocMock.mock.calls.map(c => (c[0] as { _path: string })._path))
+        .toEqual([`publicGroups/${groupId}`, `groups/${groupId}`]);
 
       // INTE sibling-flödenas arrayRemove — det hade lämnat kvar doc:et.
       expect(updateDocMock).not.toHaveBeenCalled();
@@ -228,8 +271,8 @@ describe('createGroup (BIN-532 REVERTED: sequential writes, not an atomic batch)
 
     it('kastar ORIGINALFELET även när rollback-raderingen själv failar, så anroparen aldrig får ett id till en grupp som inte finns', async () => {
       const boom = new Error('network lost');
-      setDocMock.mockRejectedValueOnce(boom);
-      deleteDocMock.mockRejectedValueOnce(new Error('rollback failed too'));
+      rejectMemberDocWith(boom);
+      deleteDocMock.mockRejectedValue(new Error('rollback failed too'));
 
       await expect(createGroup({
         ownerUid: 'owner-1',
@@ -241,7 +284,54 @@ describe('createGroup (BIN-532 REVERTED: sequential writes, not an atomic batch)
         defaults: { providerMode: 'intersect', aggregation: 'least_misery', mediaType: 'both' },
       })).rejects.toThrow('network lost');
 
-      expect(deleteDocMock).toHaveBeenCalledTimes(1);
+      expect(deleteDocMock).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  // BIN-1152. Projektionen ligger FÖRE medlemsdokumentet, så dess egen
+  // felgren är en annan än BIN-555:s och behöver sitt eget test: faller den
+  // finns ingen grupp någon kan hitta namnet till, och en grupp utan ägarens
+  // medlemsdokument är just den ägarlösa rest BIN-555 städar.
+  describe('BIN-1152: projektionens egen felgren rullar tillbaka gruppen', () => {
+    it('raderar grupp-doc:et och skriver aldrig medlemsdokumentet när projektionen failar', async () => {
+      setDocMock.mockImplementation(async (ref: unknown) => {
+        if (/^publicGroups\//.test((ref as { _path: string })._path)) throw new Error('network lost');
+      });
+
+      await expect(createGroup({
+        ownerUid: 'owner-1',
+        ownerDisplayName: 'Malin',
+        ownerUsername: 'malin',
+        ownerPhotoURL: null,
+        ownerProviders: [8],
+        name: 'Filmkvällarna',
+        defaults: { providerMode: 'intersect', aggregation: 'least_misery', mediaType: 'both' },
+      })).rejects.toThrow('network lost');
+
+      const groupId = (await addDocMock.mock.results[0].value as { id: string }).id;
+      expect(deleteDocMock.mock.calls.map(c => (c[0] as { _path: string })._path))
+        .toEqual([`groups/${groupId}`]);
+      // Medlemsdokumentet nåddes aldrig — bara projektionsskrivningen gjordes.
+      expect(setDocMock.mock.calls.map(c => (c[0] as { _path: string })._path))
+        .toEqual([`publicGroups/${groupId}`]);
+    });
+
+    it('ett NEKANDE på projektionen kastas som GROUP_WRITE_REFUSED, inte som ett nätverksfel', async () => {
+      setDocMock.mockImplementation(async (ref: unknown) => {
+        if (/^publicGroups\//.test((ref as { _path: string })._path)) {
+          throw Object.assign(new Error('denied'), { code: 'permission-denied' });
+        }
+      });
+
+      await expect(createGroup({
+        ownerUid: 'owner-1',
+        ownerDisplayName: 'Malin',
+        ownerUsername: 'malin',
+        ownerPhotoURL: null,
+        ownerProviders: [8],
+        name: 'Filmkvällarna',
+        defaults: { providerMode: 'intersect', aggregation: 'least_misery', mediaType: 'both' },
+      })).rejects.toThrow(GROUP_WRITE_REFUSED);
     });
   });
 });
@@ -1076,17 +1166,217 @@ describe('nekande skiljs fran infrastruktur (BIN-1166)', () => {
     );
   });
 
-  it('createGroup: ett nekande kastas som GROUP_WRITE_REFUSED, ett natverksfel kastas ratt igenom', async () => {
-    setDocMock.mockRejectedValueOnce(denied());
+  // BIN-1152: felet riktas på SÖKVÄG. `createGroup` gör två setDoc sedan
+  // biljetten, och ett `mockRejectedValueOnce` hade träffat projektionen medan
+  // testet heter efter medlemsdokumentet. Projektionens egen gren har sina två
+  // test i BIN-1152-blocket längre upp.
+  function rejectMemberDocWith(err: unknown) {
+    setDocMock.mockImplementation(async (ref: unknown) => {
+      if (/\/members\//.test((ref as { _path: string })._path)) throw err;
+    });
+  }
+
+  it('createGroup: ett nekande pa MEDLEMSDOKUMENTET kastas som GROUP_WRITE_REFUSED, ett natverksfel kastas ratt igenom', async () => {
+    rejectMemberDocWith(denied());
     await expect(createGroup({
       ownerUid: 'o1', ownerDisplayName: 'Malin', ownerUsername: 'malin',
       ownerPhotoURL: null, ownerProviders: [], name: 'G', defaults: { providerMode: 'intersect', aggregation: 'least_misery', mediaType: 'both' },
     })).rejects.toThrow(GROUP_WRITE_REFUSED);
 
-    setDocMock.mockRejectedValueOnce(new Error('network'));
+    rejectMemberDocWith(new Error('network'));
     await expect(createGroup({
       ownerUid: 'o1', ownerDisplayName: 'Malin', ownerUsername: 'malin',
       ownerPhotoURL: null, ownerProviders: [], name: 'G', defaults: { providerMode: 'intersect', aggregation: 'least_misery', mediaType: 'both' },
     })).rejects.toThrow('network');
+  });
+});
+
+// ── BIN-1152: gruppnamnets publika projektion ────────────────────────────────
+describe('BIN-1152: projektionen foljer gruppen', () => {
+  it('deleteGroup raderar projektionen FORE gruppdokumentet, aldrig efter', async () => {
+    getDocsMock.mockImplementation(async () => ({ docs: [] }));
+
+    await deleteGroup('g-del', 'owner-1');
+
+    // Listan committas i chunkar, och ett ref tidigare i listan hamnar aldrig i
+    // en senare chunk. Projektionen står FÖRST och gruppdokumentet SIST: kraschar en
+    // körning mellan två chunkar är utfallet "gruppen finns, namnet är borta" —
+    // förhandsvisningen faller tillbaka på det denormaliserade namnet. Den
+    // omvända ordningen lämnar ett världsläsbart namn utan någon ägarbindning
+    // som kan auktorisera en radering, vilket är det #4 och #6 blockerade på.
+    const deleted = deleteMock.mock.calls.map(c => (c[0] as { _path: string })._path);
+    const proj = deleted.indexOf('publicGroups/g-del');
+    const group = deleted.indexOf('groups/g-del');
+    expect(proj).toBeGreaterThanOrEqual(0);
+    expect(group).toBeGreaterThanOrEqual(0);
+    expect(proj).toBeLessThan(group);
+  });
+
+  it('updateGroup skriver om projektionen nar NAMNET byts', async () => {
+    await updateGroup('g-name', { name: 'Nytt namn' });
+
+    expect(setDocMock).toHaveBeenCalledTimes(1);
+    expect((setDocMock.mock.calls[0][0] as { _path: string })._path).toBe('publicGroups/g-name');
+    expect(setDocMock.mock.calls[0][1]).toEqual({ name: 'Nytt namn' });
+  });
+
+  it('updateGroup skriver INTE projektionen for en ren defaults-patch', async () => {
+    await updateGroup('g-name', { defaults: { providerMode: 'intersect', aggregation: 'least_misery', mediaType: 'both' } });
+
+    expect(updateDocMock).toHaveBeenCalledTimes(1);
+    expect(setDocMock).not.toHaveBeenCalled();
+  });
+
+  it('ett fel pa projektionen fäller INTE namnbytet — det rapporteras', async () => {
+    setDocMock.mockImplementation(async () => { throw permissionDenied(); });
+
+    // Den bärande skrivningen har redan landat, så ett kast här hade sagt
+    // "sparades inte" om ett namn användaren ser på skärmen.
+    await expect(updateGroup('g-name', { name: 'Nytt namn' })).resolves.toBeUndefined();
+    expect(captureErrorMock).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({ kind: 'updateGroup-publicGroup' }),
+    );
+  });
+
+  it('getPublicGroupName ger namnet, och null nar ingen projektion finns', async () => {
+    seedDoc('publicGroups/g-yes', { exists: () => true, data: () => ({ name: 'Filmkvallarna' }) });
+    seedDoc('publicGroups/g-no', { exists: () => false, data: () => undefined });
+
+    await expect(getPublicGroupName('g-yes')).resolves.toBe('Filmkvallarna');
+    // Null betyder "vi vet inte", inte "gruppen finns inte" — en grupp skapad
+    // fore biljetten har ingen projektion. Anroparen faller tillbaka.
+    await expect(getPublicGroupName('g-no')).resolves.toBeNull();
+  });
+});
+
+describe('BIN-1152: forhandslasningarna overlever ett NEKANDE, som ar den normala vagen', () => {
+
+  it('joinGroupViaToken gar vidare nar gruppläsningen nekas', async () => {
+    // Icke-medlem: gruppdokumentet är inte läsbart. Före biljetten var
+    // förhandsläsningen ovillkorlig, så det här kastade och inget join fungerade.
+    getDocMock.mockImplementation(async (ref: unknown) => {
+      const path = (ref as { _path: string })._path;
+      if (path === 'groups/g-join') throw permissionDenied();
+      if (/\/members\//.test(path)) return { exists: () => false, data: () => undefined };
+      return { exists: () => true, data: () => ({ memberUids: [] }) };
+    });
+
+    const res = await joinGroupViaToken({
+      groupId: 'g-join', token: 't', uid: 'u-new', displayName: 'Malin',
+      username: 'malin', photoURL: null, providers: [8],
+    });
+
+    expect(res).toEqual({ ok: true });
+    // Steg 1 (joinAttempt) och medlemsdokumentet skrevs, alltså gick flödet hela vägen.
+    expect(setDocMock.mock.calls.map(c => (c[0] as { _path: string })._path))
+      .toEqual(['groups/g-join/joinAttempts/u-new', 'groups/g-join/members/u-new']);
+  });
+
+  it('joinGroupViaToken svarar transient nar forhandslasningen faller pa natverket', async () => {
+    getDocMock.mockImplementation(async (ref: unknown) => {
+      if ((ref as { _path: string })._path === 'groups/g-join') throw new Error('offline');
+      return { exists: () => true, data: () => ({ memberUids: [] }) };
+    });
+
+    const res = await joinGroupViaToken({
+      groupId: 'g-join', token: 't', uid: 'u-new', displayName: 'Malin',
+      username: 'malin', photoURL: null, providers: [8],
+    });
+
+    // Ett transient fel far INTE tolkas som "inte medlem" — da hade en riktig
+    // medlem med dalig uppkoppling skickats in i join-flodet mot sin egen grupp.
+    expect(res).toEqual({ ok: false, reason: 'transient' });
+    expect(setDocMock).not.toHaveBeenCalled();
+  });
+
+  it('acceptGroupInvite gar vidare nar gruppläsningen nekas', async () => {
+    getDocMock.mockImplementation(async (ref: unknown) => {
+      const path = (ref as { _path: string })._path;
+      if (path === 'groups/g-acc') throw permissionDenied();
+      if (/\/members\//.test(path)) return { exists: () => false, data: () => undefined };
+      return { exists: () => true, data: () => ({ memberUids: [] }) };
+    });
+
+    const res = await acceptGroupInvite({
+      groupId: 'g-acc', uid: 'u-new', displayName: 'Malin',
+      username: 'malin', photoURL: null, providers: [8],
+    });
+
+    // Fore biljetten var det har en ohanterad rejection pa den NORMALA vagen:
+    // `?? []` klarar ett saknat dokument men inte ett nekat.
+    expect(res).toEqual({ ok: true });
+  });
+
+  it('acceptGroupInvite svarar transient nar forhandslasningen faller pa natverket', async () => {
+    getDocMock.mockImplementation(async (ref: unknown) => {
+      if ((ref as { _path: string })._path === 'groups/g-acc') throw new Error('offline');
+      return { exists: () => true, data: () => ({ memberUids: [] }) };
+    });
+
+    const res = await acceptGroupInvite({
+      groupId: 'g-acc', uid: 'u-new', displayName: 'Malin',
+      username: 'malin', photoURL: null, providers: [8],
+    });
+
+    expect(res).toEqual({ ok: false, reason: 'transient' });
+    expect(updateDocMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('subscribeToGroup lamnar over nekandet, inte bara dokumentet (BIN-1152)', () => {
+  /** Vantar in `lazySubscribe`s egen dynamiska import innan argumenten lases. */
+  async function attach(...args: Parameters<typeof subscribeToGroup>) {
+    subscribeToGroup(...args);
+    await vi.waitUntil(() => onSnapshotMock.mock.calls.length > 0);
+    const [, next, onErr] = onSnapshotMock.mock.calls[0];
+    return {
+      next: next as (snap: unknown) => void,
+      onErr: onErr as ((err: unknown) => void) | undefined,
+    };
+  }
+
+  it('skickar en error-callback till onSnapshot — utan den flippar loading aldrig', async () => {
+    // Mekanismen bakom #26:s villkor 1, och den ar INTE nabar fran hook-testet:
+    // det mockar `subscribeToGroup`, sa muteringen som tar bort callbacken
+    // overlevde dar. Uppmatt: hela sviten var gron med den borttagen.
+    const { onErr } = await attach('g-sub', () => {}, () => {}, () => {});
+    expect(typeof onErr).toBe('function');
+  });
+
+  it('ett NEKANDE gar till onDenied, aldrig till onError', async () => {
+    const denied = vi.fn();
+    const errored = vi.fn();
+    const { onErr } = await attach('g-sub', () => {}, denied, errored);
+
+    onErr?.(permissionDenied());
+
+    expect(denied).toHaveBeenCalledTimes(1);
+    expect(errored).not.toHaveBeenCalled();
+  });
+
+  it('ett TRANSIENT fel gar till onError, aldrig till onDenied', async () => {
+    const denied = vi.fn();
+    const errored = vi.fn();
+    const { onErr } = await attach('g-sub', () => {}, denied, errored);
+
+    onErr?.(new Error('offline'));
+
+    // Delningen ar hela skillnaden mellan "du ar inte medlem" och "natet slog
+    // till". Ett transient fel som dirigerades till `onDenied` hade visat en
+    // icke-medlemsskarm for en MEDLEM med dalig uppkoppling.
+    expect(errored).toHaveBeenCalledTimes(1);
+    expect(denied).not.toHaveBeenCalled();
+  });
+
+  it('ett saknat dokument ar fortfarande null pa den vanliga callbacken', async () => {
+    const seen: unknown[] = [];
+    const { next } = await attach('g-sub', g => seen.push(g));
+
+    next({ exists: () => false });
+
+    // "Finns inte" kommer fortfarande genom dokumentvagen, inte genom nekandet —
+    // det ar de tva skarmarnas ena halva.
+    expect(seen).toEqual([null]);
   });
 });

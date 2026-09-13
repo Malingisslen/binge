@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 596,
+  "patternCount": 598,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -403,6 +403,7 @@
         "src/hooks/useFollowList.ts",
         "src/hooks/useFriends.ts",
         "src/hooks/useFriendsWhoSaw.ts",
+        "src/hooks/useGroup.denied.test.tsx",
         "src/hooks/useGroupHousehold.ts",
         "src/hooks/useGroupMemberProgress.ts",
         "src/hooks/useGroups.ts",
@@ -603,6 +604,7 @@
         "src/components/pages/DynamicRouter.tsx",
         "src/components/pages/ForsvinnerListClient.tsx",
         "src/components/pages/FriendsPageClient.tsx",
+        "src/components/pages/GroupPageClient.joinResubscribe.test.tsx",
         "src/components/pages/GroupPageClient.tsx",
         "src/components/pages/HomePageClient.test.tsx",
         "src/components/pages/HomePageClient.tsx",

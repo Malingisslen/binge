@@ -352,7 +352,14 @@ function makeIo(db: Firestore, auth: FakeAuth, overrides: Partial<CleanupIo> = {
         const memberUids = (g.data().memberUids as string[] | undefined) ?? [];
         const paths = await groupSubtreePaths(db, g.ref);
         if (isEmptyExcept(memberUids, uid)) {
-          toDelete.push(...paths, g.ref.path);
+          // BIN-1152: `publicGroups/{gid}` lives OUTSIDE the group subtree, so
+          // `groupSubtreePaths` cannot reach it and it is named by hand — here as
+          // in production, and in the same position: FIRST, never after the group
+          // document. This port is a second implementation of the same port, so
+          // the mirroring is deliberate; what stops the two drifting is the
+          // source-pin in `functions/src/retentionCleanup/logic.test.ts`, which
+          // reads production's own push line.
+          toDelete.push(`publicGroups/${g.ref.id}`, ...paths, g.ref.path);
           continue;
         }
         handoverDocs += handoverEstimate(paths, uid);
@@ -969,6 +976,12 @@ async function seedFieldOwned(db: Firestore): Promise<void> {
   await setDoc(doc(db, 'groups', 'shared', 'watchlist', 'movie_7'), { addedBy: 'consoled' });
   await setDoc(doc(db, 'groups', 'solo'), { ownerUid: 'consoled', memberUids: ['consoled'] });
   await setDoc(doc(db, 'groups', 'solo', 'members', 'consoled'), { uid: 'consoled', joinedAt: ts(NOW - 2000) });
+  // BIN-1152: the world-readable name projection, one per group. Seeded for BOTH
+  // so the pair below can tell "deleted with its group" from "wiped the
+  // collection" — the handed-over group must KEEP its projection, because the
+  // group lives on under a new owner and its name must stay readable.
+  await setDoc(doc(db, 'publicGroups', 'shared'), { name: 'Filmklubben' });
+  await setDoc(doc(db, 'publicGroups', 'solo'), { name: 'Ensamklubben' });
 }
 
 const ONE_DAY = 24 * 60 * 60 * 1000;
@@ -1048,6 +1061,15 @@ describe('retentionCleanup orchestrator — the FIELD-owned half (BIN-1063 steg 
 
     expect(await exists(db, 'groups/solo')).toBe(false);
     expect(await exists(db, 'groups/solo/members/consoled')).toBe(false);
+    // BIN-1152: the name projection goes with it. It lives outside the group
+    // subtree, so nothing in the path walk reaches it — left standing it would be
+    // a name readable by every signed-in account, for a group that no longer
+    // exists and whose `ownerUid` can no longer authorize a delete.
+    expect(await exists(db, 'publicGroups/solo')).toBe(false);
+    // And the HANDED-OVER group keeps its own: it still exists, under a new
+    // owner, so its name must stay readable. This is the pair that separates
+    // "deleted with its group" from "wiped the collection".
+    expect(await exists(db, 'publicGroups/shared')).toBe(true);
   });
 
   // The re-verify, driven for real: `solo` is empty when the plan is made, and
@@ -1090,7 +1112,11 @@ describe('retentionCleanup orchestrator — the FIELD-owned half (BIN-1063 steg 
     // is satisfied by the other categories alone, so the top-up could be
     // deleted green. Re-derive with the probe rather than trusting the number:
     // set it to -1 and read what the failure reports.
-    expect(summary.fieldOwnedDocs).toBe(16);
+    // BIN-1152 raised this by one: the empty group's name projection is a
+    // document this run now deletes. Measured, not adjusted to fit — the run
+    // reported 17 against the old 16, and `publicGroups/solo` is the one path
+    // added to the plan.
+    expect(summary.fieldOwnedDocs).toBe(17);
     expect(summary.fieldOwnedRefused).toBe(0);
   });
 
@@ -1121,6 +1147,43 @@ describe('retentionCleanup orchestrator — the FIELD-owned half (BIN-1063 steg 
     expect(await exists(db, 'reviews/rev-consoled')).toBe(true);
     expect(await exists(db, 'users/consoled')).toBe(true);
     expect(await exists(db, 'orphanWatch/consoled')).toBe(true);
+  });
+
+  // BIN-1152, panelens villkor 7: ett test som fäller MELLAN de två raderingarna.
+  //
+  // Positionstesterna är bevis om KODEN — ett ref tidigare i listan hamnar aldrig
+  // i en senare chunk än gruppdokumentets — men inget av dem prövar vad som händer
+  // när körningen faktiskt dör mitt emellan. Det här driver avbrottet: raderingen
+  // kastar precis när gruppdokumentets egen chunk ska committas, så projektionen
+  // har landat och gruppen står kvar.
+  //
+  // Riktningen är hela poängen. Det utfallet är det ÖVERLEVBARA — namnet skrivs
+  // tillbaka av ägarens nästa namnbyte. Byt ordningen i `planGroupHandover` och
+  // samma avbrott ger det omvända: gruppen borta och ett namn läsbart för varje
+  // inloggat konto kvar, utan någon ägarbindning som kan auktorisera en radering.
+  // Det är läget #4 Säkerhet och #6 DPO blockerade på.
+  it('ett avbrott MELLAN de tva raderingarna lamnar gruppen, aldrig namnet', async () => {
+    const db = adminLikeDb();
+    const auth = makeAuth(ORPHAN_DATA_ACCOUNTS);
+    await seedOrphanData(db);
+    await seedFieldOwned(db);
+    await runRetentionCleanup(makeIo(db, auth));
+    const later = NOW + ORPHAN_DATA_MIN_OBSERVED_MS + ONE_DAY;
+
+    const base = makeIo(db, auth, { now: () => later });
+    await runRetentionCleanup({
+      ...base,
+      deleteDocs: async (paths) => {
+        // Bara gruppDOKUMENTETS chunk kastar. Allt fore den — projektionen
+        // inkluderad, eftersom den ligger tidigare i listan — committas.
+        if (paths.includes('groups/solo')) throw new Error('chunk commit failed');
+        return base.deleteDocs(paths);
+      },
+    });
+
+    // Projektionen landade; gruppen star kvar. Ett foraldralost NAMN finns inte.
+    expect(await exists(db, 'publicGroups/solo'), 'projektionen raderades forst').toBe(false);
+    expect(await exists(db, 'groups/solo'), 'gruppen star kvar efter avbrottet').toBe(true);
   });
 
   // The erasure is all-or-nothing per uid, so a failed chunk must THROW here.

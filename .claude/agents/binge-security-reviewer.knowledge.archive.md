@@ -11015,3 +11015,60 @@ rejected for exactly that reason) since the unchanged branch is untouched.
   doc is genuinely unnecessary, matching the ticket's own claim.
 
 **Verdict: fail (1 blocking).**
+
+### 2026-09-13 — BIN-1152: my own knowledge file carried a rule that no longer exists
+
+Routed to me by the coordinator from the whole-batch integration reviewer, who correctly
+declined to edit `.claude/agents/binge-security-reviewer.knowledge.md` themselves and named
+the precedent at `binge-test-reviewer.knowledge.archive.md:26128` — the owning reviewer
+supersedes their own bullet in place, and the trace goes here.
+
+**The false sentence**, in the "Social-graph mirror-write trust boundaries" bullet (BIN-1063
+steg 3 origin, itself corrected once already in the 2026-09-07 r6b entry above): "...since the
+clauses granting the most are the ones keyed on `ownerUid` (group `delete`, `sessionHistory`
+delete) and the group doc's own `read` asks for nothing but `isSignedIn()`." True when written
+(and true again when r6b re-verified it against `firestore.rules:1137` on 2026-09-07). False as
+of this batch: `match /groups/{groupId}` now reads `allow read: if isSignedIn() && request.auth.uid
+in resource.data.memberUids;` (BIN-1152, reviewed by me the same day this correction was
+written). The clause I reviewed and passed is exactly the one that falsified my own file.
+
+**Verified against the file, not the coordinator's message.** `grep -n "group doc's own" .claude/agents/binge-security-reviewer.knowledge.md`
+before editing, and read `firestore.rules`'s current `groups/{groupId}` block directly (I had
+already `Read` it in full for the BIN-1152 review this same round).
+
+**Superseded IN PLACE**, not struck bare — the `*.knowledge.md` carve-out. The bullet's
+surrounding argument (an ex-member's roll entry outliving her membership, `ownerUid` granting
+`delete`/`members/*` write/`household/*` delete with no membership test) is untouched: it
+never depended on what the group doc's OWN read clause required, only on what the
+`ownerUid`-keyed write clauses required. The replacement names no quantity and no new
+requirement — it points at the rule ("read it directly from `firestore.rules` rather than
+assume its shape") rather than restating what the rule now says, per the archived precedent
+this correction was pointed at: a described shape is exactly the kind of claim BIN-1152 itself
+just falsified one commit later than the description that preceded it.
+
+**Swept for siblings, per the coordinator's second question.** No other line in
+`binge-security-reviewer.knowledge.md` describes the group document as world-readable-to-signed-in
+or places the group's name on the group document (`grep -niE "unlisted|group.*isSignedIn|groupName|world-readable"` —
+no hits). Two archive entries do describe the pre-BIN-1152 `isSignedIn()`-only read
+(2026-09-07 r6b above, and an earlier ~2026-08 entry noting the "unlisted link" model as a
+non-blocking residual on a different ticket): both are dated, append-only history of a review
+done before this batch shipped, correctly describing the code as it stood that day. Per this
+file's own convention the archive is never edited for this — a dated entry is corrected
+forward, not backward — and neither entry asserts the shape as CURRENT fact the way the
+knowledge.md bullet did.
+
+**Re-read `src/lib/firebase/groups.ts` and `src/lib/firebase/accountDeletion.ts` at HEAD**
+per the coordinator's note that six blocking prose findings were struck since my pass, two in
+these files. Confirmed both are comment-only corrections — the code I reviewed is
+byte-identical in logic: `PUBLIC_GROUPS_COLLECTION`'s doc comment now says its own derive
+command reaches only this file and points at a second command for the rest, in place of two
+struck counts (one that misnamed a nonexistent symbol, one that miscounted the hand-spelled
+sites); `accountDeletion.ts`'s owner-branch comment strikes "en tredje väg"/"tre vägar" and
+replaces them with the same two-command derivation, noting in passing that the counts were
+wrong on the facts too (`createGroup`'s own rollback is a further path deleting a group doc +
+projection, uncounted by either ordinal). Neither strike touches `refs.push(doc(db,
+'publicGroups', groupDoc.id))`'s position (still first in the group's own refs, still ahead of
+`groupDoc.ref`) or `PUBLIC_GROUPS_COLLECTION`'s value. My prior verdict rested on the ORDERING
+and the WRITE SHAPE, not on either struck count, so it stands on the current bytes.
+
+**Verdict: pass (0 blocking).**

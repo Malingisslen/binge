@@ -7,7 +7,7 @@ import {
   assertFails, assertSucceeds, initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, deleteField, serverTimestamp, writeBatch, Timestamp } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, deleteField, serverTimestamp, writeBatch, query, where, limit, Timestamp } from 'firebase/firestore';
 
 const PROJECT_ID = 'binge-rules-test';
 const OWNER = 'owner_uid';
@@ -4140,5 +4140,198 @@ describe('groups household — opt-in delade kostnadsdata (BIN-184)', () => {
     await seedGroup({ memberUids: [OWNER] });
     await seedContribution(MEMBER);
     await assertSucceeds(deleteDoc(doc(memberDb(), 'groups', GROUP, 'household', MEMBER)));
+  });
+});
+
+// ── BIN-1152: gruppens medlemslista ar privat, namnet har en egen projektion ──
+//
+// Fore biljetten var `match /groups/{groupId}` `allow read: if isSignedIn()`, sa
+// varje inloggat konto kunde lasa `ownerUid` och hela `memberUids` for vilket
+// grupp-id det kunde gissa. Malins beslut 2026-09-11: lasningen binds till
+// medlemskap, och bara NAMNET nar utanfor gruppen, via `publicGroups/{groupId}`.
+describe('groups/{id} lasningen ar bunden till medlemskap (BIN-1152)', () => {
+  const GROUP = 'g-priv';
+  async function seedGroup(memberUids: string[]) {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'groups', GROUP), {
+        name: 'Filmklubben',
+        ownerUid: OWNER,
+        memberUids,
+        defaults: { region: 'SE' },
+        inviteTokenHash: 'a'.repeat(64),
+        inviteTokenRotatedAt: serverTimestamp(),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    });
+  }
+
+  it('en MEDLEM kan lasa gruppdokumentet', async () => {
+    await seedGroup([OWNER, 'other_uid']);
+    await assertSucceeds(getDoc(doc(otherDb(), 'groups', GROUP)));
+  });
+
+  it('en icke-medlem nekas — det ar hela biljetten', async () => {
+    await seedGroup([OWNER]);
+    await assertFails(getDoc(doc(otherDb(), 'groups', GROUP)));
+  });
+
+  it('en oinloggad nekas', async () => {
+    await seedGroup([OWNER]);
+    await assertFails(getDoc(doc(anonDb(), 'groups', GROUP)));
+  });
+
+  // POSITIV KONTROLL for FORMEN pa varje lasvag appen har over `groups` utanfor
+  // en enskild grupp: de filtrerar pa `array-contains` mot det egna uid:t, sa
+  // varje returnerat dokument uppfyller villkoret av konstruktion. Utan det har
+  // testet hade atstramningen kunnat doda hela "mina grupper"-listan.
+  //
+  // Testet pinnar formen, inte en lista med anropare. Forsta lydelsen av den har
+  // kommentaren namngav tva av dem och kallade uppraekningen uttommande; det ar struket. Vilka
+  // de ar harleds i `firestore.rules`-blockets egen kommentar, med ett kommando.
+  it('array-contains-fragan pa memberUids gar fortfarande igenom', async () => {
+    await seedGroup([OWNER, 'other_uid']);
+    await assertSucceeds(getDocs(query(
+      collection(otherDb(), 'groups'),
+      where('memberUids', 'array-contains', 'other_uid'),
+      limit(100),
+    )));
+  });
+
+  it('samma fraga for ett uid som INTE ar medlem nekas', async () => {
+    await seedGroup([OWNER]);
+    await assertFails(getDocs(query(
+      collection(otherDb(), 'groups'),
+      where('memberUids', 'array-contains', OWNER),
+      limit(100),
+    )));
+  });
+
+  // Token-join maste fortsatta fungera for en icke-medlem, som nu inte kan LASA
+  // gruppen. Grenarna anvander `resource.data` (dokumentet FORE skrivningen) och
+  // ror darfor inte lasregeln — men det ar precis den sorts pastaende som ar vart
+  // ett test, eftersom hela inbjudningsflodet dor om det ar fel.
+  it('en icke-medlem kan fortfarande ga med via inbjudan trots att lasningen nekas', async () => {
+    await seedGroup([OWNER]);
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', 'other_uid', 'groupInvites', GROUP), {
+        groupId: GROUP, groupName: 'Filmklubben', fromUid: OWNER,
+        fromDisplayName: 'Malin', invitedAt: serverTimestamp(),
+      });
+    });
+    await assertFails(getDoc(doc(otherDb(), 'groups', GROUP)));
+    await assertSucceeds(updateDoc(doc(otherDb(), 'groups', GROUP), {
+      memberUids: [OWNER, 'other_uid'],
+      updatedAt: serverTimestamp(),
+    }));
+    // Och efterat ar dokumentet lasbart — samma gren, nytt medlemskap.
+    await assertSucceeds(getDoc(doc(otherDb(), 'groups', GROUP)));
+  });
+});
+
+describe('publicGroups/{id} — namnprojektionen (BIN-1152)', () => {
+  const GROUP = 'g-proj';
+  const NAME_MAX = 48;
+
+  async function seedGroup(ownerUid = OWNER) {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'groups', GROUP), {
+        name: 'Filmklubben',
+        ownerUid,
+        memberUids: [ownerUid],
+        defaults: { region: 'SE' },
+        inviteTokenHash: 'a'.repeat(64),
+        inviteTokenRotatedAt: serverTimestamp(),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    });
+  }
+
+  it('agaren kan skriva projektionen, och ett inloggat icke-medlem kan LASA den', async () => {
+    await seedGroup();
+    await assertSucceeds(setDoc(doc(ownerDb(), 'publicGroups', GROUP), { name: 'Filmklubben' }));
+    // Detta ar hela syftet: forhandsvisningen av en inbjudan visar gruppnamnet
+    // innan mottagaren ar medlem.
+    await assertSucceeds(getDoc(doc(otherDb(), 'publicGroups', GROUP)));
+  });
+
+  it('en oinloggad kan inte lasa projektionen', async () => {
+    await seedGroup();
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'publicGroups', GROUP), { name: 'Filmklubben' });
+    });
+    // Integritetssidan sager "lasbart for varje INLOGGAT konto". Det talet ar
+    // regeln, och det har testet ar det som haller meningen sann.
+    await assertFails(getDoc(doc(anonDb(), 'publicGroups', GROUP)));
+  });
+
+  it('en ANNAN an agaren kan inte skriva projektionen', async () => {
+    await seedGroup();
+    await assertFails(setDoc(doc(otherDb(), 'publicGroups', GROUP), { name: 'Kapad' }));
+  });
+
+  it('ett okant falt nekas — nyckellistan ar name och inget annat', async () => {
+    await seedGroup();
+    // Utan listan hade dokumentet kunnat baras upp mot dokumentgransen med
+    // godtyckliga falt, pa nagot varje inloggat konto kan lasa. Samma hal
+    // BIN-1140 stangde pa gruppdokumentet.
+    await assertFails(setDoc(doc(ownerDb(), 'publicGroups', GROUP), {
+      name: 'Filmklubben', memberUids: [OWNER],
+    }));
+    await assertFails(setDoc(doc(ownerDb(), 'publicGroups', GROUP), {
+      name: 'Filmklubben', evil: 'x'.repeat(5000),
+    }));
+  });
+
+  it('ett namn pa exakt gransen slapps igenom, ett over nekas', async () => {
+    await seedGroup();
+    await assertSucceeds(setDoc(doc(ownerDb(), 'publicGroups', GROUP), { name: 'g'.repeat(NAME_MAX) }));
+    await assertFails(setDoc(doc(ownerDb(), 'publicGroups', GROUP), { name: 'g'.repeat(NAME_MAX + 1) }));
+  });
+
+  it('ett icke-strang-namn nekas', async () => {
+    await seedGroup();
+    // En LISTA, inte ett tal: `.size()` pa ett tal fel-ut och nekar av sig sjalvt,
+    // sa en numerisk fixtur kan inte skilja `is string` fran dess franvaro.
+    await assertFails(setDoc(doc(ownerDb(), 'publicGroups', GROUP), { name: ['x', 'y'] }));
+  });
+
+  it('en projektion for en grupp som INTE finns kan inte skapas', async () => {
+    // Ingen seedad grupp. `get()` pa ett saknat dokument fel-ut, och ett fel nekar.
+    await assertFails(setDoc(doc(ownerDb(), 'publicGroups', 'g-nonexistent'), { name: 'Spoke' }));
+  });
+
+  it('agaren kan radera projektionen medan gruppen finns', async () => {
+    await seedGroup();
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'publicGroups', GROUP), { name: 'Filmklubben' });
+    });
+    await assertSucceeds(deleteDoc(doc(ownerDb(), 'publicGroups', GROUP)));
+  });
+
+  it('en icke-agare kan INTE radera projektionen sa lange gruppen finns', async () => {
+    await seedGroup();
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'publicGroups', GROUP), { name: 'Filmklubben' });
+    });
+    await assertFails(deleteDoc(doc(otherDb(), 'publicGroups', GROUP)));
+  });
+
+  // #4 Sakerhet och #6 DPO:s villkor 2. Ar gruppdokumentet borta kan ingen
+  // agarbindning langre auktorisera raderingen, och projektionen hade blivit
+  // varldslasbar for alltid — ett lage en krasch mellan tva batchar racker for.
+  it('en FORALDRALOS projektion gar att radera nar gruppen ar borta', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'publicGroups', 'g-orphan'), { name: 'Kvarglomd' });
+    });
+    await assertSucceeds(deleteDoc(doc(otherDb(), 'publicGroups', 'g-orphan')));
+  });
+
+  it('en oinloggad kan inte radera ens en foraldralos projektion', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'publicGroups', 'g-orphan'), { name: 'Kvarglomd' });
+    });
+    await assertFails(deleteDoc(doc(anonDb(), 'publicGroups', 'g-orphan')));
   });
 });

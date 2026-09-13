@@ -228,6 +228,14 @@ export default function IntegritetPage() {
           <li><strong>Din kontroll</strong> — sluta dela när som helst med ett tryck; din data raderas då omedelbart. Den raderas också automatiskt om du lämnar gruppen, blir borttagen ur den, eller tar bort ditt konto.</li>
           <li><strong>Export</strong> — dina hushålls-bidrag ingår i din dataexport (se §7).</li>
         </ul>
+        <p>
+          <strong>Vem som ser att gruppen finns.</strong> Gruppens
+          <strong> namn</strong> är läsbart för varje inloggat konto — det är vad
+          som gör att en inbjudan kan visa vilken grupp den gäller innan du
+          tackat ja. Allt annat om gruppen, inklusive
+          <strong> vilka som är medlemmar</strong>, är läsbart bara för gruppens
+          medlemmar.
+        </p>
       </section>
 
       <section>

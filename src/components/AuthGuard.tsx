@@ -67,7 +67,9 @@ export default function AuthGuard({ children }: { children: ReactNode }) {
       // the departing user's private URL to whoever signs in next on a shared
       // device, and a remembered path outlives onboarding (BIN-669), so a
       // brand-new account gets routed straight into it. `/grupper/<id>/` then
-      // discloses the group's name and memberUids. The clear above still runs
+      // discloses the group's name — `and memberUids` is struck as of BIN-1152,
+      // which bound the group doc to membership; the name still reaches a
+      // non-member through the `publicGroups` projection. The clear above still runs
       // either way: leaving, if anything, invalidates an older intent too.
       if (signedOutAtFirstVerdict.current) {
         rememberNextPath(window.location.pathname + window.location.search);

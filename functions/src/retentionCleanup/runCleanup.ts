@@ -654,7 +654,17 @@ async function deleteAllOrThrow(
   }
 }
 
-/** The group id in `groups/{gid}/...`, so a re-verify can name the group. */
+/**
+ * The group id in `groups/{gid}/...`, so a re-verify can name the group.
+ *
+ * BIN-1152 added a second path shape to the same delete list, `publicGroups/{gid}`
+ * — the world-readable name projection, which lives outside the group subtree.
+ * Segment 1 is the group id in BOTH shapes, so the still-empty re-verify below
+ * filters and keeps it with its own group rather than dropping it. That is a
+ * property of the two paths, not a coincidence to rely on silently: a third shape
+ * that does not carry the id there needs this function changed, not just a new
+ * `push`.
+ */
 function groupIdOf(path: string): string {
   return path.split('/')[1] ?? '';
 }

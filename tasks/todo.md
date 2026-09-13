@@ -1,3 +1,477 @@
+# Sprint 2026-09-13 — gruppens medlemslista blir privat, sessionens värdskap pinnas, exporten speglar raderingen
+
+Urval: 4 av 46 backlog-biljetter (BIN-1152 låg redan i Todo). Rent träd vid start
+(`git status --porcelain` tomt), allt på main.
+
+**Baslinje, mätt vid start:** `npm run typecheck` rent. `npm test` grönt — 291 filer,
+4974 test, 4 hoppade. Basen härleds med `git merge-base --fork-point @{u} HEAD`, aldrig
+ur en sha skriven här.
+
+**Routningen körs på de FAKTISKA filuppsättningarna.** Kommandot står vid varje batch.
+Kör om det (a) före varje kritik, (b) om en kritik vidgar eller krymper omfånget, och
+(c) mot `git diff --cached --name-only` omedelbart före varje commit
+(BIN-1050/1052/1122/1165).
+
+## Kända hinder i verktygen (inte biljetter)
+
+**Produktionsräkningen gick inte att köra.** Behörighetsklassificeraren nekade
+`node scratchpad/count-prod.mjs` med skälet `[Production Reads]`. Försöket gjordes en
+gång och upprepas inte. Senaste mätningen är därför föregående sprints, 2026-09-12,
+projektet namngivet `binge-nu`:
+
+```
+groups: 0   sessions: 0   users: 4   publicProfiles: 2
+```
+
+Det talet är en dag gammalt och **ingen acceptans i den här sprinten lutar sig mot det**
+— båda regeländringarna nedan är byggda så att de håller även om en grupp eller en
+session har tillkommit sedan dess. Se batch A:s kriterium 9 och batch B:s kriterium 4.
+Att kunna köra räkningen igen står under "Needs you".
+
+Port 8080 kan hållas av ett annat projekts emulator. Regeltesterna körs då mot en egen
+port: `npm run test:rules -- --port 8123`. Det är skriptets egen dokumenterade väg ut;
+`buildAltConfig` härleder konfigurationen ur repots `firebase.json`.
+
+## Inte valda, med skäl
+
+- **BIN-1170** (fler regelgrenar binder vem men inte vad, Low) — fyra `isOwner`-grenar
+  plus två valideringsfunktioner, alla i `firestore.rules`. Buntens omfång blir större än
+  batch A:s och priorieten är Low; de fyra `isOwner`-grenarna ligger dessutom i ägarens
+  eget träd, så ingen främling kan skriva dit. Lämnad i Backlog.
+- **BIN-1158** (npm test inte stabilt grön, High) — PARKERAD i sin egen tråd med EN
+  obesvarad fråga till Malin. Byggs inte förrän hon svarat. Handbromsen respekteras.
+- **BIN-1097** (spöke-medlem) — mätt 2026-09-06 och medvetet lämnad öppen enligt tråden.
+- **BIN-1118** (lämna över en grupp) och **BIN-521** (bundle-rådgivare) — etiketten
+  `Feature`/`idea`. Produktval, byggs aldrig av en sprint.
+- **BIN-1144** (är App Check påslaget?) — Tier D, konsolfråga.
+- **BIN-454 / BIN-402** (tmdbFieldsSweep) — stående förbud: `mutateEnabled` flippas
+  aldrig av en sprint.
+- **BIN-1178 / BIN-1131 / BIN-1176 / BIN-1177 / BIN-1138 / BIN-1136 / BIN-1103** — rena
+  prosabiljetter. Lärdomsloggen är entydig: en bunt som nästan bara är prosa konvergerar
+  inte (BIN-1028: 41 blockerande fynd över nio varv, noll i koden). De tas i en egen
+  körning, inte bredvid tre kodändringar.
+
+---
+
+## Batch A — gruppens medlemslista blir privat [Tier C] — BIN-1152
+
+**Disposition: build.** Malins beslut 2026-09-11 ligger på biljetten: medlemslistan blir
+privat, bara gruppnamnet läsbart för icke-medlemmar, mönstret är ett eget litet
+projektionsdokument som `publicProfiles`. Handbromsen är lyft.
+
+**Routning, kört på den faktiska unionen:**
+
+```
+node docs/org/route.mjs --md firestore.rules src/lib/firebase/groups.ts \
+  src/app/grupper/page.tsx src/components/pages/GroupPageClient.tsx \
+  functions/src/retentionCleanup/index.ts src/app/integritet/page.tsx \
+  docs/data-retention-policy.md src/test/rules/firestore-rules.test.ts
+→ Tier top · #27 DBA, #6 DPO, #5 Legal/GDPR, #4 Säkerhet, #26 Informationsarkitekt
+```
+
+**Panelen är KÖRD** — på exakt den unionen, i sprinten 2026-09-12, och dess tretton
+bindande villkor står på BIN-1152 tillsammans med läsställesinventeringen. Ingen roll
+blockerade. Den konvenerades inte om: utfallet ovan är identiskt med det panelen kördes
+på. Villkoren är fästa som acceptanskriterier nedan.
+
+### Acceptanskriterier
+
+1. Gruppdokumentet (`ownerUid`, `memberUids`) är läsbart bara för medlemmar; ett eget
+   projektionsdokument bär bara gruppnamnet och är läsbart för varje inloggat konto.
+   Emulatortest i båda riktningarna. *(kind: diff)*
+2. Projektionens skrivregel har `keys().hasOnly(['name'])` plus ett längdkrav — aldrig
+   bara ägarbindningen — och en projektion för en grupp som inte finns nekas på create.
+   *(kind: diff)*
+3. En NEKAD gruppläsning ger skärmen "du är inte medlem", aldrig en oändlig spinner.
+   `subscribeToGroup` får `onDenied`/`onError` i samma form som
+   `subscribeToGroupHousehold` redan har. *(kind: diff)*
+4. "Finns inte" och "finns men du är inte medlem" förblir TVÅ skilda skärmar.
+   *(kind: diff)*
+5. Förhandsläsningens nekande gatas på `isPermissionDenied` — aldrig en bar catch — och
+   rapporteras via `reportGroupWriteError`. `acceptGroupInvite`s
+   `groupSnap.data()?.memberUids ?? []` klarar ett SAKNAT dokument men inte ett NEKAT;
+   den normala vägen får inte ge en ohanterad rejection. *(kind: diff)*
+6. Projektionen raderas på BÅDA raderingsvägarna: klientkaskaden och
+   `planGroupHandover` i `functions/src/retentionCleanup/index.ts`. Raderingsgrenen i
+   reglerna släpper igenom en projektion vars gruppdokument inte längre finns, så en
+   krasch mitt i raderingen inte kan lämna en världsläsbar projektion ingen får radera.
+   *(kind: diff)*
+7. RaderingsORDNINGEN är pinnad av ett test som fallerar MELLAN de två raderingarna.
+   *(kind: diff)*
+8. `src/app/integritet/page.tsx` säger att gruppnamnet är läsbart för varje inloggat
+   konto; `docs/data-retention-policy.md` får projektionens raderingssteg. *(kind: diff)*
+9. En grupp som saknar projektionsdokument (skapad före ändringen) bryter ingenting:
+   inbjudningsförhandsvisningen faller tillbaka på det denormaliserade
+   `invite.groupName`, och en saknad projektion visas aldrig som ett fel. Test.
+   *(kind: diff)*
+10. Tre muteringar fäller var för sig minst ett test, körda EN i taget, med
+    `grep -c MUTANT` före OCH efter sviten i samma kommando, återställda från en
+    scratchpad-ögonblicksbild av ARBETSTRÄDET och verifierade med `git hash-object`:
+    (a) läsåtstramningen borttagen, (b) `hasOnly` borttagen ur projektionen,
+    (c) projektionsraderingen borttagen ur serversopningen. Utfallen skrivs ned.
+    *(kind: diff)*
+
+### Uppgifter
+
+- [ ] Steg 0: läs `match /groups/{groupId}`-blocket, `src/lib/firebase/groups.ts`,
+      `useGroups.ts`, `GroupPageClient.tsx`, `src/app/grupper/page.tsx` och
+      `planGroupHandover`. Härled projektionens skrivare.
+- [ ] Regeländring: gruppdokumentets `read` bindes till medlemskap; ny
+      `match /publicGroups/{groupId}` (eller motsvarande namn — härled mönstret ur
+      `publicProfiles`) med `hasOnly(['name'])`, längd, och en raderingsgren som
+      fungerar när gruppen är borta.
+- [ ] Klienthalvan: skriv/uppdatera/radera projektionen där gruppen skrivs; `onDenied`
+      i `subscribeToGroup`; förhandsläsningarna gatade på `isPermissionDenied`.
+- [ ] Serversopningen: `planGroupHandover` raderar projektionen, ordningen pinnad.
+- [ ] Emulatortest + enhetstest per kriterium ovan.
+- [ ] Prosahalvan: integritetssidan + `docs/data-retention-policy.md`.
+- [ ] Muteringar (a)(b)(c), en i taget, utfall nedskrivna.
+
+## Batch B — sessionens värdskap går inte att skriva om [Tier C] — BIN-1175
+
+**Disposition: build.** En säkerhetslucka, inte ett produktval: `update`-grenen läser
+bara dokumentet FÖRE skrivningen, så den som är värd får skriva om hela dokumentet
+inklusive `hostUid` till ett godtyckligt uid.
+
+**Routning:**
+
+```
+node docs/org/route.mjs --md firestore.rules src/lib/firebase/sessions.ts \
+  src/test/rules/firestore-rules.test.ts
+→ Tier top · #27 DBA, #5 Legal/GDPR, #4 Säkerhet, #6 DPO, #7 QA
+```
+
+**Panelen är INTE körd.** Den konvaneras blint per roll omedelbart före bygget, och
+routern körs då om på den union batchen faktiskt fått — inte på den här. Villkoren fästs
+som bindande acceptanskriterier.
+
+### Acceptanskriterier
+
+1. `hostUid` går inte att ändra på en update. Emulatortest: värden pekar om `hostUid`
+   till ett annat uid och nekas. *(kind: diff)*
+2. En nyckellista på efterdokumentet, härledd med ett kommando vars utfall skrivs i
+   biljetten. Varje skrivväg koden faktiskt har går fortfarande igenom — en test per
+   väg. *(kind: diff)*
+3. Ett dokument som redan ligger lagrat med ett `hostName` över taket — seedat FÖRBI
+   reglerna med `withSecurityRulesDisabled` — visar vad en vanlig patch gör med det,
+   före och efter fixen. *(kind: diff)*
+4. Ett vanligt värdflöde (skapa session → byta etikett → avsluta) går igenom oförändrat,
+   och kriterium 2:s nyckellista är härledd ur skrivvägarna i koden så att en befintlig
+   session inte kan låsas ut. *(kind: diff)*
+5. Muteringen som tar bort oföränderligheten och muteringen som tar bort nyckellistan
+   fäller var för sig minst ett test, körda EN i taget med `grep -c MUTANT` före och
+   efter i samma kommando. *(kind: diff)*
+
+### Uppgifter
+
+- [ ] Kritik: konvenera panelen blint (sonnet, låg ansträngning), en roll per agent.
+- [ ] Härled sessionsdokumentets fältunion ur VARJE skrivväg i
+      `src/lib/firebase/sessions.ts`, inte ur biljettens uppräkning.
+- [ ] Regeländring: `hostUid`-oföränderlighet + `hasOnly` på efterdokumentet.
+- [ ] Emulatortest per kriterium.
+- [ ] Muteringar, en i taget.
+
+## Batch C — exporten speglar raderingen [Tier C] — BIN-1172, BIN-1150
+
+**Disposition: BIN-1172 build; BIN-1150 build-review.** BIN-1172:s enda öppna fråga är
+besvarad på biljetten och är inget produktval — kostnaden är samma läsning
+raderingskaskaden redan gör. BIN-1150 bär däremot en genuin juridisk tolkning
+("avsändarens andel är namnet, som hen redan har"), så den byggs bara om panelens
+Legal- och DPO-roller är eniga; blir de oeniga byggs den INTE och båda sidor skrivs ut
+på biljetten för Malin.
+
+**Routning:**
+
+```
+node docs/org/route.mjs --md src/lib/firebase/dataExport.ts \
+  src/lib/firebase/userData.ts docs/data-export-format.md
+→ Tier top · #5 Legal/GDPR, #27 DBA, #6 DPO, #4 Säkerhet, #21 Technical Writer
+```
+
+**Panelen är INTE körd.** Konvaneras blint omedelbart före bygget, routern körs om på
+den faktiska unionen då.
+
+### Acceptanskriterier
+
+1. `collectUserDataSnapshots` hämtar den egna gruppmedlemsraden, och båda flödena —
+   exporten och raderingskaskaden — läser samma hämtning. Ingen ny fråga per grupp
+   utöver den kaskaden redan gör. *(kind: diff)*
+2. Den exporterade JSON:en bär medlemsradens FÄLT, inte bara nyckeln. Test.
+   *(kind: diff)*
+3. Ett test fäller om frågan vidgas så att någon ANNANS medlemsrad kan komma med.
+   *(kind: diff)*
+4. `docs/data-export-format.md` får raden, härledd ur koden, och versionskonventionen
+   bumpas. *(kind: diff)*
+5. BIN-1150: antingen ett `groupInvitesSent`-fält i exporten med test och dokumentrad,
+   ELLER ett daterat skrivet beslut i `.claude/rules/accepted-deviations.md` att
+   avsändarens andel inte är personuppgifter som behöver speglas — vilket av de två
+   avgörs av panelen, inte av bygget. *(kind: diff)*
+
+### Uppgifter
+
+- [ ] Kritik: konvenera panelen blint.
+- [ ] Steg 0: läs `buildUserExport`, `collectUserDataSnapshots`, `accountDeletion.ts`.
+- [ ] Koppla in medlemsradsläsningen i den delade hjälparen.
+- [ ] Test per kriterium; `docs/data-export-format.md`.
+- [ ] BIN-1150 enligt panelens svar.
+
+## Needs you (Tier D)
+
+1. **Produktionsräkningen.** `node scratchpad/count-prod.mjs` nekades av
+   behörighetsklassificeraren (`[Production Reads]`). Inget i sprinten lutar sig mot
+   talet, men det är värt att kunna köra: lägg en Bash-behörighetsregel för
+   Admin-SDK-läsningar, eller kör kommandot själv med `!` i prompten.
+2. **Regeldeploy.** Batch A och B ändrar `firestore.rules`. `deploy.yml` deployar bara
+   hosting, så reglerna kräver `firebase deploy --only firestore:rules` — du har stående
+   tillstånd, så jag kör den efter pushen och rapporterar utfallet.
+3. **BIN-1158** väntar fortfarande på ditt svar: räknas ett per-test-undantag från
+   5-sekunderstimeouten som samma sak som att höja den?
+
+## Deviation log
+
+- [needs-human] Produktionsräkningen: planen sa "mät om före bygget" → klassificeraren
+  nekade `node scratchpad/count-prod.mjs` med `[Production Reads]` → försökte EN gång,
+  upprepade inte, och byggde i stället så att ingen acceptans lutar sig mot talet
+  (batch A:s kriterium 9). Står under "Needs you".
+- [discovery] Muteringen som tar bort `subscribeToGroup`s error-callback ÖVERLEVDE i
+  första omgången: `useGroup.denied.test.tsx` mockar just den funktion som bär fixen,
+  så hook-testet kan inte se den. Åtgärd: ett direkt test på `subscribeToGroup` i
+  `groups.test.ts` som gör `onSnapshot`-mocken observerbar (den slängde bort sina
+  argument). Muteringen fäller nu tre test. Samma klass som lärdomen om att fråga
+  vilken rad PRODUCERAR signalen man börjat konsumera.
+- [discovery] Mitt EGET ordningstest var vakuöst: `indexOf(...)` ger `-1` när mätningen
+  förstörs, och `-1 < n` är sant — så testet var grönt för exakt den mutering det fanns
+  för. Uppmätt, inte resonerat: mutering C fällde granntestet och inte det. Åtgärd:
+  båda indexen pinnas som FUNNA före jämförelsen.
+- [deviation] `src/test/rules/retention-cleanup-orchestrator.test.ts` har en EGEN andra
+  implementation av samma port, så en ändring bara i produktionen hade varit osynlig
+  där. Åtgärd: fixturen speglar produktionen, OCH ett källkodsläsande test i
+  `functions/src/retentionCleanup/logic.test.ts` pinnar produktionens egen push-rad så
+  de två inte kan glida isär.
+- [deviation] `fieldOwnedDocs` i orkestreringstestet gick 16 → 17. Mätt, inte justerat
+  för att passa: körningen rapporterade 17, och `publicGroups/solo` är den enda sökväg
+  som lagts till i planen.
+- [deviation] Två BIN-555-test riktade sitt fel på ANROPSORDNING
+  (`mockRejectedValueOnce`). `createGroup` gör två `setDoc` nu, så de hade tyst börjat
+  pröva projektionen medan de heter efter medlemsdokumentet. Åtgärd: felet riktas på
+  SÖKVÄG, och projektionens egen felgren fick sina två egna test.
+- [discovery] `getGroupOnce` har noll anropare (`git grep -n "getGroupOnce" -- src
+  functions`) och en signatur som numera ljuger för en icke-medlem. Inte raderad —
+  en radering av en exporterad funktion hör till en annan ändring. Kommentar på plats,
+  filad som BIN-1179 tillsammans med backfill-frågan.
+
+### Kodgranskningen fällde en ÄKTA regression — den enda i bunten
+
+- [deviation] **En `onSnapshot` som fått permission-denied är DÖD.** Den startar inte
+  om när reglerna senare släpper igenom samma läsare — och det är precis vad ett lyckat
+  join gör: skrivningen ändrar regelutfallet, inget snapshot-event gör det. Följden av
+  MIN egen ändring: den som nyss använt en fullt giltig inbjudningslänk fick skärmen
+  "du är inte medlem i den här gruppen" tills hen laddade om sidan. Kommentaren jag
+  skrivit intill påstod tvärtom att "ett lyckat join behöver bara att
+  grupp-prenumerationen hinner ikapp" — den hinner aldrig ikapp. Struken.
+- [discovery] Mönstret och skälet låg redan i repot, en fil bort: `useGroupHousehold`
+  bumpar en `epoch` runt opt-in/opt-out mot share-to-see-reglerna, av exakt samma skäl.
+  Åtgärd: `useGroup` får samma epoch och exponerar `resubscribe`, som sidan anropar på
+  `res.ok`.
+- [discovery] **Mitt befintliga test kunde inte se buggen**, och det är lärdomen värd
+  att spara: `useGroup.denied.test.tsx`s "ett dokument som landar EFTER ett nekande"
+  mockar `subscribeToGroup` och fyrar `onDoc` för hand — något en riktig lyssnare inte
+  kan göra efter ett nekande. Det pinnar tillståndsmaskinen och är strukturellt blint
+  för om lyssnaren någonsin når det läget. Åtgärd: två test på hooken (en NY
+  prenumeration öppnas, den gamla rivs) OCH ett eget test på sidan att anropet görs —
+  en `resubscribe` ingen anropar är en permanent no-op med hela sviten grön (BIN-776:s
+  form). Muteringarna fäller båda halvorna var för sig.
+
+### Utfallsverifieringen underkände tre kriterier — alla tre åtgärdade
+
+Verifieraren fick bara kriterierna, den skurna diffen och testerna. Den fällde 3 av 10.
+Ett av fynden var en ÄKTA koddefekt, och den hade gått till main utan den.
+
+- [deviation] **En TREDJE raderingsväg fanns, och bunten missade den.** Planen och
+  panelens villkor 6 namngav två — `deleteGroup` och `planGroupHandover`. Men
+  `handOverOwnedGroups` lämnar över bara en grupp som HAR medlemmar kvar, så en ägd
+  grupp med ingen annan i den når ägar-grenen i `collectDeletionRefs`
+  (`src/lib/firebase/accountDeletion.ts`), som raderade gruppdokumentet och aldrig
+  projektionen. `grep -c publicGroups src/lib/firebase/accountDeletion.ts` gav 0.
+  Utfallet var exakt det #4 och #6 blockerade på: gruppen borta, namnet kvar. Åtgärd:
+  projektionen först i den gruppens refs, plus ett emulatortest med en SOLO-grupp
+  (`mygroup` kan inte pröva det — den lämnas över) och muteringen som tar bort raden
+  fäller det.
+- [deviation] **Villkor 7 var obyggt.** Positionstesterna bevisar KODEN men inget av dem
+  drev avbrottet. Åtgärd: ett test som får raderingen att kasta precis på
+  gruppdokumentets chunk och visar att projektionen landat och gruppen står kvar. Den
+  omvända ordningen fäller det.
+- [deviation] **Retentionsdokumentets egen mening var falsk** — den räknade upp två
+  vägar och vägen ovan är en tredje. Struken, inte omformulerad: ingen uppräkning, inget
+  tal, och backstoppen (regelns `!exists`-utgång) namngiven i stället.
+- [deviation] Tre av mina egna publicerade härledningskommandon var osunda, alla mätta
+  av verifieraren: `grep -n "name.size() <= 48"` missar `groupName.size()` (stort N) och
+  matchar sin egen kommentarsrad; `grep "writePublicGroupName(\|publicGroupRef("`
+  namngav en symbol som inte finns i repot och missade varje raderingsställe; och
+  `collection(db, 'groups')` missar `AuthContext`, som destrukturerar den som `col`.
+  Alla tre bytta mot kommandon jag KÖRT och läst utdatan från.
+- [deviation] Två falska uppräkningar av "den enda läsvägen" (regelkommentaren och
+  regeltestets kommentar) — verifieraren mätte fler tvärgruppsläsare än jag namngav.
+  Strukna; testet pinnar nu FORMEN (`array-contains` mot eget uid), inte en lista.
+- [deviation] Den nya testfilen är en ägarkartshändelse (BIN-1013) och fällde två test i
+  `docs/org/gen-ownership-map.test.mjs` — men först EFTER `git add`, eftersom kollen
+  läser `git ls-files`. Åtgärd: sätet hos #18 Community Manager, där hooken den testar
+  redan sitter, och baslinjen regenererad — aldrig `--update-gaps`. Routern kördes om
+  efter flytten och gav samma panel.
+
+### Push-grinden: sex blockerande fynd, alla i filer bunten inte rorde
+
+Det ar precis klassen den finns for, och ingen per-fil-granskare kunde se nagot av det.
+Fyra granskare hade redan passerat pa exakt de bytes som gick ut.
+
+- [deviation] **Meningen att gruppdokumentet ar lasbart for varje inloggat konto bodde
+  pa fler stallen an den forsta granskningen namngav, och ett av dem i PRODUKTIONSKOD
+  (`src/components/AuthGuard.tsx`).** Tre tal ar strukna ur den har raden; inget skrivs
+  i deras stalle, for jag kan inte skriva ett som ett kommando kan kontrollera — vad som
+  raknas som "ett stalle" skiljer sig at beroende pa om man raknar forekomster, filer,
+  eller tar med kartan och kunskapsfilen, och ingen lasning gjorde alla talen sanna
+  samtidigt. Lydelsen skiljer sig dessutom per fil, sa en enkelradig grep pa en fras
+  hittar en delmangd: svepet som fungerade gick pa `memberUids` plus ett andra ord, och
+  en kopia stod anda kvar i `firestore.rules`, under den nya lasregeln — den raden bar
+  varken `grupp` eller `memberUids` eller `publicGroups`, sa tre olika svep missade den
+  av tre olika mekaniska skal. Struket overallt: klausulen om
+  MEKANISMEN och orden "and memberUids". Det som overlever ar att en arvd returvag
+  laker gruppens NAMN, vilket fortfarande ar sant — via projektionen — sa BIN-669/732:s
+  motivering star kvar.
+- [deviation] **Rubriken i `firestore.rules` sa motsatsen till raden 22 rader ner.**
+  "Group-doc: lasbar for inloggade (unlisted-link-modell)" stod kvar medan samma diff
+  band lasningen till medlemskap i samma fil. Struken; grannraden om subkollektionerna
+  ar sann och star ensam.
+- [deviation] **Integritetssidan lovade en forutsattning regeln inte har.** Den sa
+  "lasbart for varje inloggat konto SOM HAR GRUPP-LANKEN". Regeln ar `isSignedIn()` utan
+  nagot lankvillkor, och att kanna id:t ar inte atkomstkontroll i det har repot — det ar
+  vad hela biljetten handlar om. Struket. Tre systrar sa redan den sanna lydelsen
+  (retentionsdokumentet, regeltestet och buntens eget kriterium 8), sa den var dessutom
+  motsagd internt.
+- [deviation] **Mitt eget tal motsades av mitt eget kommando, igen.** Kommentaren sa att
+  strangsvepet nar "de tva stallen som stavar samlingen for hand" och namngav dem;
+  kommandot tva rader under returnerar handstavade forekomster i sju filer till,
+  daribland emulatorporten som ATERIMPLEMENTERAR sopningens raderingsplan. Struket, utan
+  nytt tal.
+- [deviation] **Tva ordningstal i `accountDeletion.ts`** ("en tredje vag", "tre vagar")
+  lastes som en inventering och var fel i sak: `createGroup`s rollback raderar ocksa ett
+  gruppdokument och sin projektion. Strukna, och den harledning som forst stod dar kunde
+  anda bara se tva av vagarna — dess pathspec var `-- src`, och sopningen bor under
+  `functions/`.
+- [deviation] **Sakerhetsgranskarens EGEN kunskapsfil pastod att gruppdokumentets
+  `read` inte fragar efter nagot mer an `isSignedIn()`.** Helhetsgranskningen vagrade
+  med flit att rora den: `*.knowledge.md` ar ett av strykregelns tre undantag och
+  supersederas PA PLATS av agande granskare, med en daterad post i arkivfilen. Den
+  agande granskaren gjorde det, och svepte samtidigt sina systerpaastaenden.
+- [needs-human] `docs/workflow-map.html` ar osparad och bar TRE konkreta fel (det falska
+  lasbarhetspaastaendet; en `createGroup`-nyttolast som raknar tva skrivningar dar det nu
+  ar tre, och positionen daremellan ar load-bearing; och svepets lista over det som
+  ligger utanfor gruppens undertrad, som namnger bara `publicProfiles/{uid}`). Flaggan
+  `.claude/state/workflow-map-stale.json` namnger sju av buntens filer. Tas i EGEN commit
+  efter funktionskoden — lardomen 2026-07-10: en funktionsrevert tappar tyst kartprosa
+  som ligger i samma commit, och tackningslintern haller sig gron.
+
+  Push-grinden godkande uppdelningen men UNDERKANDE att skulden bara fanns i den
+  gitignorerade flaggan: blir foljdcommiten inte av forsvinner arbetsordern med maskinen
+  och main bar en falsk flodesbeskrivning medan lintern star gron. Det skulle ha blivit
+  en egen biljett — `create_issue` svarade att Linears GRATISTAK ar natt (requestId
+  a3a29d307a6ab7a8). Hela fyndet ligger darfor som en fullstandig kommentar pa BIN-1152,
+  som LAMNAS I IN REVIEW just for att bara statusen kan bara signalen nu. Taket ar en
+  Needs-you-punkt.
+- [discovery] En smal lucka i sopningens omkontroll: `isStillEmptyGroup` svarar `false`
+  bade nar gruppen fick en medlem OCH nar gruppdokumentet redan ar borta, och i det
+  andra fallet filtreras projektionen bort tillsammans med allt annat — varefter uid:t
+  aldrig aterkommer. Nara onabar (gruppen maste forsvinna mellan planen och skrivningen
+  medan agarens Auth-konto redan ar raderat). Granskningen markte den som valfri. Filad
+  som BIN-1180 i stallet for byggd: att skilja de tva fallen ar en beteendeandring i ett
+  raderingssvep, alltsa Tier C med panel, natt i femte granskningsvarvet.
+
+### Kriterium 10: de tre muteringarnas utfall, nedskrivna
+
+Villkoret kraver att utfallen SKRIVS NED, inte bara att muteringarna kordes.
+Push-grinden pekade ut att ingen sadan uppteckning fanns i buntens filer. Var korning
+asserterade mutanten fore OCH efter sviten i samma kommando, aterstallde fran en
+ogonblicksbild av arbetstradet och verifierade med `git hash-object`.
+
+| # | Mutering | Utfall |
+|---|---|---|
+| a | `groups`-lasningen tillbaka till `allow read: if isSignedIn()` | 3 fallda av 573: "en icke-medlem nekas", "en oinloggad nekas", "samma fraga for ett uid som INTE ar medlem nekas" |
+| b | `keys().hasOnly(['name'])` borttagen ur `publicGroups` | 1 falld: "ett okant falt nekas" (bade `memberUids`-fixturen och den 5000 byte langa `evil`) |
+| c | `publicGroups`-raderingen borttagen ur serversopningens plan | 2 fallda i `logic.test.ts`: den som namnger projektionen och den som pinnar ordningen |
+
+Elva ytterligare muteringar kordes utover de tre. De som ar vart att minnas:
+
+| Mutering | Utfall |
+|---|---|
+| Ordningen omvand i sopningens plan (projektionen sist) | Falld — ordningstestet |
+| Ordningen omvand i `deleteGroup`s refs | Falld — `groups.test.ts`s positionstest |
+| Ordningen omvand i sopningens FIXTUR (kortid, inte kalla) | Falld — avbrottstestet mellan de tva raderingarna |
+| `publicGroups`-raderingen borttagen ur kaskaden | Falld — emulatortestet med SOLO-gruppen |
+| `subscribeToGroup`s error-callback borttagen | **Overlevde forsta forsoket.** Hook-testet mockar just den funktion som bar fixen. Efter ett direkt test pa `subscribeToGroup`: 3 fallda |
+| Delningen nekande/transient kollapsad till ett nekande | Falld — "ett TRANSIENT fel gar till onError" |
+| Bar catch pa `joinGroupViaToken`s forhandslasning | Falld — "svarar transient nar forhandslasningen faller pa natverket" |
+| `updateGroup` slutar skriva projektionen | 2 fallda |
+| `epoch` ur `useGroup`s beroendelista | 2 fallda — bada resubscribe-testen |
+| `if (res.ok) resubscribe()` borttaget | Falld — sidans anropsstallestest |
+| `||` -> `&&` i projektionens delete-gren | 5 fallda, bl.a. bada grenarna i `publicGroups`-blocket |
+
+Tva av fjorton overlevde inte forsta forsoket, och de tva ar hela lardomen: en mockad
+granne kan gora fixen osynlig, och `indexOf` ger `-1` sa att `-1 < n` haller ett
+ordningstest gront over precis den defekt det finns for.
+
+### Granskningsvarven, och vad de kostade
+
+Fyra granskare, plus utfallsverifieringen. Utfallet per varv:
+
+- **Utfallsverifieringen:** 3 av 10 kriterier underkanda. ETT var en akta koddefekt (den
+  tredje raderingsvagen), tva var obyggda eller falska pastaenden. Alla tre atgardade.
+- **Kodgranskningen:** 1 blockerande, och det var den enda akta regressionen i bunten —
+  den doda lyssnaren. Omkord efter fixen: pass.
+- **Sakerhetsgranskningen:** pass, 0 blockerande. Den harledde sin egen skyldiga
+  fillista och matte SJU filer dar mitt uppdrag sa sex — mitt tal var inaktuellt,
+  eftersom jag stageade `accountDeletion.ts` efter att jag raknat. Ett omatt tal i min
+  egen prosa, i ett uppdrag till en granskare vars hela poang ar att inte lita pa
+  uppdraget. Den gjorde ratt och matte sjalv.
+- **Testgranskningen:** pass, 0 blockerande. Den raknade om `fieldOwnedDocs` 16 -> 17 for
+  hand och landade pa samma tal (och redovisade att dess FORSTA rakning var fel, for att
+  den glomde att `arrayStrips` raknas mot budgeten).
+
+Fyra ytterligare muteringar foreslogs av testgranskningen. Utfallet:
+
+1. `||` -> `&&` i projektionens delete-gren. **Kord.** Fallde fem test, daribland bada
+   grenarna i `publicGroups`-blocket. Tradet aterstallt byte-identiskt
+   (`git hash-object` mot ogonblicksbilden) och kontrollkorningen gron: 574.
+2. `deleteGroup`s projektion flyttad fran forst till sist. **Redan kord** i den har
+   buntens egen muteringsrunda (mutering E) — den fallde ordningstestet.
+3. En saknad assertion i "spares a group that gained a member", plus en mutering av
+   `groupIdOf`. **Inte gjord:** den kraver en NY assertion, alltsa en kodandring efter
+   att tre granskare passerat pa exakt de bytes som gar ut. Filad i stallet — sen
+   putsning ogiltigforklarar ledgern.
+4. `??` -> `||` i inbjudningsforhandsvisningens fallback. **Inte gjord**, samma skal.
+   Filad.
+
+Summa: fjorton muteringar, en i taget, mutanten asserterad fore OCH efter varje korning i
+samma kommando, aterstalld fran en ogonblicksbild av ARBETSTRADET och verifierad med
+`git hash-object`. Alla fjorton fallde. Tva fallde inte pa forsta forsoket, och de tva ar
+det varda att spara: den som tar bort `subscribeToGroup`s error-callback (hook-testet
+mockar just den funktion som bar fixen) och mitt eget ordningstest (`indexOf` ger `-1`,
+och `-1 < n` ar sant).
+
+## Post-sprint
+
+- [ ] Full `npm run typecheck`.
+- [ ] Full `npm test` + `npm run test:rules`.
+- [ ] Följdbiljetter filade FÖRE commit.
+- [ ] Granskare per `reviewGates` på den stageade diffen; ledgern är beviset.
+- [ ] Routa om mot `git diff --cached --name-only` före VARJE commit.
+- [ ] Push (= deploy av hosting), sedan regeldeploy.
+- [ ] Linear-övergångar parvis med varje commit, aldrig i ett samlat slutsteg.
+- [ ] Fold back: lärdomar → `tasks/lessons.md` + digesten i samma redigering.
+
+---
+
+# Arkiv — tidigare sprintar
+
 # Sprint 2026-09-12 — gruppens medlemslista blir privat, och tre fältlås
 
 Urval: 6 av 45 backlog-biljetter (+ BIN-1152 som redan låg i Todo). Rent träd vid start

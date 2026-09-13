@@ -59,7 +59,7 @@ export default function GroupPageClient({ id }: { id: string }) {
 
 function GroupContent({ id }: { id: string }) {
   const { user, uid } = useAuth();
-  const { group, members, watchlist, loading, notFound } = useGroup(id);
+  const { group, members, watchlist, loading, notFound, denied, publicName, resubscribe } = useGroup(id);
   // X5: gruppnamnet i dokumenttiteln när det laddats (rör inte indexability —
   // catch-all-shellets noindex-default lämnas orörd).
   usePageMeta({ title: group?.name ?? 'Grupp' });
@@ -81,8 +81,14 @@ function GroupContent({ id }: { id: string }) {
   // — klick på den nya länken är bara en SPA-navigering, komponenten monteras
   // aldrig om, så ref:en satt kvar på MAX.
   useEffect(() => { joinAttemptsRef.current = 0; }, [inviteParam]);
+  // BIN-1152: `denied` är med i villkoret, och det är det som håller
+  // inbjudningslänken vid liv. Effekten krävde tidigare ett laddat `group`, och
+  // sedan gruppdokumentet är låst till medlemmar får en icke-medlem aldrig ett —
+  // alltså hade auto-joinet aldrig fyrat för någon som faktiskt behöver det.
   useEffect(() => {
-    if (!inviteParam || !uid || !user || !group || isMember || joining) return;
+    if (!inviteParam || !uid || !user || joining) return;
+    if (!group && !denied) return;
+    if (isMember) return;
     if (joinAttemptsRef.current >= MAX_JOIN_ATTEMPTS) return;
     const attempt = joinAttemptsRef.current;
     joinAttemptsRef.current = attempt + 1;
@@ -114,12 +120,22 @@ function GroupContent({ id }: { id: string }) {
         setTimeout(() => setJoining(false), joinBackoffMs(attempt));
         return;
       }
-      // Övriga resolved-utfall är terminala: en trasig token förblir trasig, en
-      // saknad grupp förblir saknad, och ett lyckat join behöver bara att
-      // grupp-prenumerationen hinner ikapp. Bränn budgeten så effekten inte
-      // återfyrar.
+      // Övriga resolved-utfall är terminala: en trasig token förblir trasig och en
+      // saknad grupp förblir saknad. Bränn budgeten så effekten inte återfyrar.
       joinAttemptsRef.current = MAX_JOIN_ATTEMPTS;
       setJoining(false);
+
+      // BIN-1152: ett lyckat join måste STARTA OM grupp-prenumerationen. Den här
+      // raden stod tidigare som "ett lyckat join behöver bara att
+      // grupp-prenumerationen hinner ikapp", och det är struket: sedan
+      // gruppdokumentet är låst till medlemmar har lyssnaren redan fått
+      // permission-denied, och en `onSnapshot` som fått det är död. Den hinner
+      // aldrig ikapp — den startar inte om när reglerna senare släpper igenom
+      // samma läsare, vilket är exakt vad det här joinet just gjorde.
+      //
+      // Utan bumpen ser den som nyss använt en fullt giltig länk skärmen "du är
+      // inte medlem i den här gruppen" tills hen laddar om sidan.
+      if (res.ok) resubscribe();
     }).catch(() => {
       // Only a THROWN error (network/Firestore) is worth retrying.
       const exhausted = joinAttemptsRef.current >= MAX_JOIN_ATTEMPTS;
@@ -130,24 +146,24 @@ function GroupContent({ id }: { id: string }) {
       if (exhausted) { setJoining(false); return; }
       setTimeout(() => setJoining(false), joinBackoffMs(attempt));
     });
-  }, [inviteParam, uid, user, group, isMember, joining, id]);
+  }, [inviteParam, uid, user, group, denied, isMember, joining, id, resubscribe]);
 
   if (loading) {
     return <LoadingView variant="detail" label="Laddar grupp…" />;
   }
 
-  if (notFound || !group) {
-    return (
-      <NotFound
-        crumb="Grupp"
-        title="Gruppen hittades inte"
-        body="Länken kan vara felaktig eller så har gruppen tagits bort."
-        action={<Link href="/grupper" className="btn btn-acc btn-sm no-underline">Mina grupper</Link>}
-      />
-    );
-  }
-
-  if (!isMember) {
+  // BIN-1152: TVÅ skärmar, och de förblir två — panelens villkor 4. Före
+  // biljetten svarade gruppdokumentet självt på båda frågorna; nu nekas läsningen
+  // för en icke-medlem utan att skilja "finns inte" från "du får inte se den", så
+  // det är projektionens namn som skiljer dem. Ett namn betyder att gruppen finns.
+  //
+  // `denied` utan namn faller AVSIKTLIGT igenom till "hittades inte" nedan: det är
+  // svaret för ett felstavat id — det vanliga fallet — och det är också vad en
+  // grupp utan projektion (en som skapades före biljetten) får. Att i stället visa
+  // "du är inte medlem" för varje gissat id hade bekräftat att id:t existerar,
+  // vilket är precis den uppräkning biljetten stänger.
+  const nonMemberName = denied ? publicName : (group && !isMember ? group.name : null);
+  if (nonMemberName !== null) {
     return (
       <div>
         {/* BIN-1166: den YTTRE texten är den primära på sidan, och "be ägaren om en
@@ -157,7 +173,7 @@ function GroupContent({ id }: { id: string }) {
             join-försök faktiskt har fallit. */}
         <NotFound
           crumb="Grupp"
-          title={group.name}
+          title={nonMemberName}
           body={joinFailed
             ? 'Du är inte medlem i den här gruppen, och försöket att gå med gick inte igenom.'
             : 'Du är inte medlem i den här gruppen. Be ägaren om en inbjudningslänk.'}
@@ -169,6 +185,17 @@ function GroupContent({ id }: { id: string }) {
           </div>
         )}
       </div>
+    );
+  }
+
+  if (notFound || denied || !group) {
+    return (
+      <NotFound
+        crumb="Grupp"
+        title="Gruppen hittades inte"
+        body="Länken kan vara felaktig eller så har gruppen tagits bort."
+        action={<Link href="/grupper" className="btn btn-acc btn-sm no-underline">Mina grupper</Link>}
+      />
     );
   }
 

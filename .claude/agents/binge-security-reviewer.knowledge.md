@@ -236,8 +236,9 @@ Cap: 80k chars — pay for an addition with a cut, and move what you cut verbati
   `joinedAt`). As first written it elected from `groups/{gid}/members/*` while `firestore.rules`
   decides MEMBERSHIP from `groups/{gid}.memberUids`. Say it that way and not "every access clause keys on
   memberUids" — that quantifier is false in the direction that matters here, since the clauses granting the
-  most are the ones keyed on `ownerUid` (group `delete`, `sessionHistory` delete) and the group doc's own
-  `read` asks for nothing but `isSignedIn()`. The group-doc leave branch removes a uid from the array and touches no
+  most are the ones keyed on `ownerUid` (group `delete`, `sessionHistory` delete). The group doc's own
+  `read` clause is not one of them — it has changed since (BIN-1152) — so read it directly from
+  `firestore.rules` rather than assume its shape. The group-doc leave branch removes a uid from the array and touches no
   member doc, and after leaving the member-doc `delete` rule's self-branch (`uid in memberUids`) no longer
   admits her — so an ex-member's roll entry is permanent AND carries the earliest `joinedAt`, electing her
   owner of a group she left. `ownerUid` then grants group `delete`, `members/*` write and `household/*`

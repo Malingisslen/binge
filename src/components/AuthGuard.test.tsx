@@ -141,8 +141,10 @@ describe('AuthGuard — a session ending is a handover, not a bounce (BIN-669/73
     // user's own page still mounted. Remembering it hands their private URL to
     // whoever signs in next on a shared device — and because a remembered path
     // now outlives onboarding, a brand-new account gets routed straight into it.
-    // `/grupper/<id>/` is not even a denied read: the group doc allows any
-    // signed-in read, so the inheritor learns the group's name and memberUids.
+    // `/grupper/<id>/` still leaks the group's NAME to the inheritor, through
+    // the `publicGroups` projection. (BIN-1152 struck the rest: this said the
+    // read is "not even denied" because the group doc allows any signed-in
+    // read, and that the inheritor learns memberUids. Neither holds now.)
     await signedInThenOut('/grupper/g-hemlig-123/');
 
     expect(stored()).toBeNull();
@@ -213,10 +215,11 @@ describe('AuthGuard — a tab that BOOTS into a just-ended session (BIN-748)', (
   }
 
   it('remembers NOTHING when this tab had already shown a session on this page', async () => {
-    // `/grupper/<id>/` is the sharp case: the group doc allows any signed-in
-    // read, so an inherited return path tells the next account the group's name
-    // and memberUids — and a remembered path outlives onboarding, so even a
-    // brand-new account gets routed straight into it.
+    // `/grupper/<id>/` is the sharp case: an inherited return path tells the
+    // next account the group's NAME, through the `publicGroups` projection —
+    // and a remembered path outlives onboarding, so even a brand-new account
+    // gets routed straight into it. (BIN-1152 struck the mechanism clause "the
+    // group doc allows any signed-in read" and "and memberUids".)
     window.sessionStorage.setItem(TAB_KEY, '/grupper/g-hemlig-123');
     await bootSignedOut('/grupper/g-hemlig-123/');
 

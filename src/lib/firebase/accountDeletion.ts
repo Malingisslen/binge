@@ -153,6 +153,30 @@ export async function collectDeletionRefs(
     const data = groupDoc.data();
     const ownerUid = data.ownerUid as string | undefined;
     if (ownerUid === id) {
+      // BIN-1152: gruppnamnets publika projektion. Den ligger UTANFÖR gruppens
+      // underträd, så ingenting i insamlingen ovan når den.
+      //
+      // DEN HÄR VÄGEN BLEV MISSAD, och det är skälet raden står här. Biljetten
+      // byggdes mot gruppsidans raderaknapp och mot serversopningen:
+      // `handOverOwnedGroups` kör FÖRE kaskaden men lämnar över bara en grupp som
+      // har medlemmar kvar, så en ägd grupp med ingen annan i den når hit och
+      // raderas av kaskaden. Utan raden blir utfallet exakt det #4 Säkerhet och
+      // #6 DPO blockerade på: gruppen borta, ett namn läsbart för varje inloggat
+      // konto kvar, och ingen ägarbindning som längre kan auktorisera en radering.
+      //
+      // ORDNINGSTAL ÄR STRUKNA HÄR ("en tredje", "tre vägar"), och med dem en
+      // härledning vars pathspec var `-- src` och därför inte kunde se
+      // serversopningen alls. Talen var dessutom fel i sak: `createGroup`s
+      // rollback raderar också ett gruppdokument och sin projektion. Räkna inte —
+      // svep brett och läs utdatan:
+      //   git grep -n "publicGroups" -- src functions firestore.rules
+      //
+      // FÖRST i den här gruppens refs, inte strax före gruppdokumentet: listan
+      // committas i chunkar, så position är den enda ordningsgaranti som finns.
+      // Tidigare i arrayen betyder aldrig en senare chunk. Det överlevbara
+      // halvtillståndet är "gruppen finns, namnet är borta"; det omvända är det som
+      // inte går att städa.
+      refs.push(doc(db, 'publicGroups', groupDoc.id));
       const [membersSnap, groupWatchlistSnap, sessionHistorySnap] = await Promise.all([
         getDocs(collection(db, 'groups', groupDoc.id, 'members')),
         getDocs(collection(db, 'groups', groupDoc.id, 'watchlist')),

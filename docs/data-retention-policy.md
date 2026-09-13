@@ -158,6 +158,28 @@ När användaren raderas:
 
   Finns INGEN annan medlem kvar raderas gruppen som förut. En efterträdare går
   inte att uppfinna.
+- **Gruppnamnets publika projektion raderas med gruppen** (BIN-1152, Malins
+  beslut 2026-09-11). `publicGroups/{gid}` bär gruppens namn och ingenting annat,
+  och är läsbart för varje inloggat konto — det är den yta som gör att en inbjudan
+  kan visa vilken grupp den gäller innan mottagaren är medlem. Gruppdokumentet
+  självt, med `ownerUid` och `memberUids`, är läsbart bara för medlemmar.
+
+  Projektionen ligger UTANFÖR gruppens underträd, så den nås inte av en
+  underträdsradering: varje väg som raderar ett gruppdokument måste namnge den
+  för hand, och raderar den FÖRE gruppdokumentet. Ordningen är vald, inte
+  slumpad: listorna committas i chunkar, och ett ref som ligger tidigare i listan
+  hamnar aldrig i en senare chunk. Halvtillståndet som går att leva med är en
+  grupp utan sitt namn (ägarens nästa namnbyte skriver tillbaka det).
+
+  Backstoppen mot det omvända halvtillståndet står i `firestore.rules`:
+  `publicGroups`-blockets delete-gren har en utgång för en projektion vars
+  gruppdokument är borta — utan den kan ingen ägarbindning längre auktorisera
+  raderingen. Utgången gör en föräldralös projektion RADERBAR, av vilket inloggat
+  konto som helst; den får den inte raderad. Ingenting i appen räknar upp
+  samlingen, så en sådan rad blir liggande tills någon tar bort den på id.
+
+  En ÖVERLÄMNAD grupp behåller projektionen, eftersom gruppen lever vidare under
+  en ny ägare.
 - **Inbjudningar jag har SKICKAT raderas ur mottagarnas träd** (BIN-1147, Malins
   beslut 2026-09-10). En inbjudan ligger på `users/{mottagare}/groupInvites/{gid}`
   och bär mitt uid och mitt namn. Den gäller varje konto som raderar sig, inte

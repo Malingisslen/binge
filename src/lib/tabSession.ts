@@ -15,8 +15,12 @@
  * signed-in one — while still pointed at the departing user's URL. Its first
  * verdict is `null`, nothing in memory contradicts that, so the guard read it as
  * a genuine bounce and stored `/grupper/<id>/` as the next sign-in's landing
- * page. That group doc is readable by any signed-in user, so the inheritor
- * learns its name and memberUids.
+ * page. The inheritor then learns the group's NAME — through the `publicGroups`
+ * projection, which is readable by any signed-in account. (BIN-1152 struck the
+ * rest of this sentence: it said the group DOC is readable by any signed-in user
+ * and that the inheritor learns its memberUids. The doc is bound to membership
+ * now; the name is what still leaks, so the corner this file exists for is
+ * unchanged.)
  *
  * `sessionStorage`, and that IS the mechanism: it is scoped to one browsing
  * context and it survives a reload of that context. So the marker answers for

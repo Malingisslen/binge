@@ -1450,9 +1450,11 @@ describe('AuthContext + AuthGuard — a tab that BOOTS mid-sign-out (BIN-748)', 
 
   it('the guard reads the marker the PREVIOUS page load left behind', async () => {
     // THE regression. The previous load of this tab left the marker; the session
-    // is already gone by the time this one asks. `/grupper/<id>/` is readable by
-    // any signed-in user, so an inherited return path discloses the group's name
-    // and memberUids to whoever signs in next on a shared device.
+    // is already gone by the time this one asks. An inherited `/grupper/<id>/`
+    // discloses the group's NAME to whoever signs in next on a shared device,
+    // through the `publicGroups` projection. (BIN-1152 struck "is readable by
+    // any signed-in user" and "and memberUids" — the group doc is bound to
+    // membership now.)
     window.sessionStorage.setItem(TAB_KEY, '/grupper/g-hemlig-123');
     window.sessionStorage.setItem(NEXT_KEY, '/tv/1399/'); // an earlier tap's path
     await bootWithNoSession('/grupper/g-hemlig-123/');

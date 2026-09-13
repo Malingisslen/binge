@@ -121,6 +121,64 @@ function reportGroupWriteError(kind: string, err: unknown): void {
   captureError(err, { scope: 'groups', kind });
 }
 
+/**
+ * BIN-1152: gruppnamnets publika projektion.
+ *
+ * `groups/{groupId}` är sedan den biljetten läsbart bara för medlemmar, så det som
+ * behöver nå en icke-medlem — namnet, för en inbjudningsförhandsvisning och för att
+ * kunna säga "du är inte medlem i X" i stället för "gruppen hittades inte" — bor i
+ * ett eget dokument. Samma mönster som `publicProfiles` (BIN-505).
+ *
+ * Fältet är ett, och det är `name`; `firestore.rules`' `publicGroups`-block binder
+ * nyckellistan, så en växande payload nekas av regeln och inte bara av den här
+ * kommentaren.
+ *
+ * Varje ställe i repot som rör projektionen härleds med konstantens namn, som varje
+ * sådant ställe i DEN HÄR filen går genom:
+ *   git grep -n "PUBLIC_GROUPS_COLLECTION" -- src
+ *
+ * Det kommandot når bara den här filen. Andra filer stavar samlingen för hand, så
+ * det andra svepet är på strängen — kör det och läs utdatan:
+ *   git grep -n "publicGroups" -- src functions firestore.rules
+ *
+ * Båda behövs. Strukna lydelser här, och den sista är skälet
+ * `firestore.rules` står i sökvägslistan: en publicerade ETT kommando som namngav
+ * en symbol (`publicGroupRef(`) som inte finns i repot; nästa räknade de
+ * handstavade ställena till två och namngav dem, vilket kommandot motsäger; och den
+ * tredje sopade `-- src functions`, alltså förbi regelfilen, som är ett handstavat
+ * ställe — och det är regelfilen som avgör vad de andra får göra. Ingen ny
+ * uppräkning skrivs i deras ställe.
+ */
+export const PUBLIC_GROUPS_COLLECTION = 'publicGroups';
+
+/**
+ * Skriv (över) projektionen. Regeln kräver att gruppdokumentet finns OCH att
+ * anroparen är dess `ownerUid`, så den här funktionen är bara laglig för ägaren och
+ * bara efter att gruppen skapats.
+ */
+async function writePublicGroupName(
+  kit: Pick<FirestoreKit, 'db' | 'doc' | 'setDoc'>,
+  groupId: string,
+  name: string,
+): Promise<void> {
+  await kit.setDoc(kit.doc(kit.db, PUBLIC_GROUPS_COLLECTION, groupId), { name });
+}
+
+/**
+ * Namnet en icke-medlem får se, eller null när ingen projektion finns.
+ *
+ * Null betyder INTE "gruppen finns inte": en grupp som skapades före BIN-1152 har
+ * ingen projektion, och den läker först när ägaren nästa gång byter namn. Anroparen
+ * måste därför falla tillbaka på vad den redan har (`invite.groupName`) i stället
+ * för att visa ett fel — det är panelens villkor 9.
+ */
+export async function getPublicGroupName(groupId: string): Promise<string | null> {
+  const { db, doc, getDoc } = await fsdb();
+  const snap = await getDoc(doc(db, PUBLIC_GROUPS_COLLECTION, groupId));
+  if (!snap.exists()) return null;
+  return (snap.data().name as string | undefined) ?? null;
+}
+
 export async function createGroup(params: {
   ownerUid: string;
   ownerDisplayName: string;
@@ -155,6 +213,21 @@ export async function createGroup(params: {
   //
   // deleteDoc, inte deleteGroup(): gruppen kan omöjligt ha hunnit få
   // subkollektioner, och deleteGroup:s städning kostar läsningar i onödan.
+  // BIN-1152: projektionen skrivs FÖRE medlemsdokumentet, så det är
+  // medlemsdokumentets rollback-gren (`createGroup-memberDoc`) som städar den —
+  // inte grenen omedelbart nedan, som fyrar när projektionsskrivningen SJÄLV
+  // fallerar och därför inte har någon projektion att städa. Regeln kräver att
+  // gruppdokumentet finns och att vi är dess ägare — båda är sanna här.
+  try {
+    await writePublicGroupName({ db, doc, setDoc }, groupRef.id, params.name);
+  } catch (err) {
+    reportGroupWriteError('createGroup-publicGroup', err);
+    await deleteDoc(doc(db, 'groups', groupRef.id)).catch(rollbackErr => {
+      console.error('rollback of the group doc ALSO failed — an ownerless group remains, needs manual Firestore fix', rollbackErr);
+    });
+    throw isPermissionDenied(err) ? new Error(GROUP_WRITE_REFUSED) : err;
+  }
+
   try {
     // Bar create, med flit: gruppen skapades med addDoc raden ovan, så id:t är
     // nytt och medlemsdokumentet kan omöjligt redan finnas. Läsningen
@@ -177,6 +250,13 @@ export async function createGroup(params: {
     });
   } catch (err) {
     reportGroupWriteError('createGroup-memberDoc', err);
+    // BIN-1152: projektionen FÖRST, gruppdokumentet sedan. Ordningen är
+    // load-bearing: raderingsregeln auktoriserar via gruppens `ownerUid`, och är
+    // gruppen borta först får vilket inloggat konto som helst städa upp — en
+    // svagare grind än den vi kan använda medan gruppen finns kvar.
+    await deleteDoc(doc(db, PUBLIC_GROUPS_COLLECTION, groupRef.id)).catch(projErr => {
+      console.error('rollback of the publicGroups projection failed — a name-only doc remains, harmless but orphaned', projErr);
+    });
     await deleteDoc(doc(db, 'groups', groupRef.id)).catch(rollbackErr => {
       console.error('rollback of the group doc ALSO failed — an ownerless group remains, needs manual Firestore fix', rollbackErr);
     });
@@ -198,11 +278,29 @@ export async function updateGroup(
   groupId: string,
   patch: Partial<Pick<Group, 'name' | 'defaults'>>,
 ): Promise<void> {
-  const { db, doc, updateDoc, serverTimestamp } = await fsdb();
+  const { db, doc, setDoc, updateDoc, serverTimestamp } = await fsdb();
   await updateDoc(doc(db, 'groups', groupId), {
     ...patch,
     updatedAt: serverTimestamp(),
   });
+
+  // BIN-1152: namnbytet följer med till den publika projektionen — och bara när
+  // namnet faktiskt ändras, så en ren `defaults`-patch inte kostar en skrivning
+  // mot 25 SEK-taket.
+  //
+  // BEST-EFFORT, med rapport. Den bärande skrivningen är gruppdokumentet, och den
+  // har redan landat här: att kasta efteråt hade sagt "sparades inte" om ett namn
+  // användaren ser på skärmen. Faller den här skrivningen behåller projektionen
+  // det gamla namnet, vilket icke-medlemmar ser i en inbjudningsförhandsvisning
+  // tills nästa namnbyte. Samma avvägning, och samma svar, som BIN-1162:s
+  // identitets-fan-out en biljett tidigare.
+  if (typeof patch.name === 'string') {
+    try {
+      await writePublicGroupName({ db, doc, setDoc }, groupId, patch.name);
+    } catch (err) {
+      reportGroupWriteError('updateGroup-publicGroup', err);
+    }
+  }
 }
 
 // Roterar inbjudningstoken: genererar ny plaintext, lagrar ny hash, returnerar
@@ -275,16 +373,47 @@ export async function joinGroupViaToken(params: {
 }): Promise<JoinViaTokenResult> {
   const { db, doc, getDoc, setDoc, updateDoc, deleteDoc, arrayUnion, arrayRemove, serverTimestamp } = await fsdb();
   const ref = doc(db, 'groups', params.groupId);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) return { ok: false, reason: 'not_found' };
-  const data = snap.data();
-  const memberUids: string[] = data.memberUids ?? [];
-  // Gruppregelns token-join-gren kräver att uid INTE redan står i memberUids,
-  // så den vägen är stängd för den som redan är medlem. Spöke-medlemmen
-  // (memberUids satt, medlemsdokument saknas) är ett olöst tillstånd, med sitt
-  // omfång mätt i BIN-1097.
-  if (memberUids.includes(params.uid)) return { ok: false, reason: 'already_member' };
-  if (!data.inviteTokenHash) return { ok: false, reason: 'invalid_token' };
+
+  // BIN-1152: förhandsläsningen är sedan den biljetten NEKAD för en icke-medlem —
+  // alltså för precis den som håller på att gå med. Den var ovillkorlig innan, så
+  // utan det här blocket kastar den normala inbjudningsvägen ett permission-denied
+  // och inget join fungerar längre.
+  //
+  // Nekandet gatas på `isPermissionDenied` och inte en bar catch: ett transient
+  // fel som tolkades som "inte medlem" hade skickat en riktig medlem vidare in i
+  // join-flödet mot sin egen grupp. #4:s villkor på formen, och samma delning som
+  // `subscribeToGroupHousehold` och `subscribeToGroup` gör.
+  //
+  // Det nekandet KOSTAR en distinktion, med flit: går läsningen inte igenom kan vi
+  // inte skilja "gruppen finns inte" från "du är inte medlem", eftersom
+  // `resource.data` saknas i båda fallen. Vi låter därför reglerna avgöra i steg 1
+  // nedan, där ett `get()` på en saknad grupp fel-ut och nekar — en saknad grupp
+  // rapporteras alltså som `invalid_token` i stället för `not_found` när läsningen
+  // nekades. Båda är terminala och båda leder användaren till ägaren; att i stället
+  // förlita sig på projektionen hade gjort varje grupp UTAN projektion (en som
+  // skapades före den här biljetten) till en "finns inte", vilket är fel svar om en
+  // grupp som finns.
+  let data: Record<string, unknown> | null = null;
+  try {
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return { ok: false, reason: 'not_found' };
+    data = snap.data();
+  } catch (err) {
+    if (!isPermissionDenied(err)) {
+      reportGroupWriteError('joinGroupViaToken-preread', err);
+      return { ok: false, reason: 'transient' };
+    }
+  }
+
+  if (data) {
+    const memberUids: string[] = (data.memberUids as string[] | undefined) ?? [];
+    // Gruppregelns token-join-gren kräver att uid INTE redan står i memberUids,
+    // så den vägen är stängd för den som redan är medlem. Spöke-medlemmen
+    // (memberUids satt, medlemsdokument saknas) är ett olöst tillstånd, med sitt
+    // omfång mätt i BIN-1097.
+    if (memberUids.includes(params.uid)) return { ok: false, reason: 'already_member' };
+    if (!data.inviteTokenHash) return { ok: false, reason: 'invalid_token' };
+  }
 
   // Steg 1 — skriv joinAttempt. Rule:n hashar params.token server-side och
   // verifierar att den matchar lagrad inviteTokenHash. Vid invalid token får
@@ -505,8 +634,26 @@ export async function acceptGroupInvite(params: {
   // lyckas arrayUnion, och det är writeMemberDoc som håller den skrivningen laglig.
   //
   // Samma enda läsning av gruppdoc:et som joinGroupViaToken redan gör.
-  const groupSnap = await getDoc(groupRef);
-  const existingMemberUids: string[] = groupSnap.data()?.memberUids ?? [];
+  //
+  // BIN-1152: läsningen är NEKAD för en icke-medlem sedan den biljetten, alltså på
+  // den normala accept-vägen. `?? []` klarade ett SAKNAT dokument men inte ett
+  // nekat — ett nekat `getDoc` kastar — så utan den här catchen blev varje accept
+  // en ohanterad rejection. #26:s villkor 5.
+  //
+  // Ett nekande betyder att vi inte är medlem, vilket är exakt förutsättningen för
+  // att fortsätta: spärren nedan finns bara för att kortsluta ett ANDRA accept.
+  // Gatat på `isPermissionDenied` så ett transient fel inte tolkas som "inte
+  // medlem" och kortsluter bort spärren tyst.
+  let existingMemberUids: string[] = [];
+  try {
+    const groupSnap = await getDoc(groupRef);
+    existingMemberUids = (groupSnap.data()?.memberUids as string[] | undefined) ?? [];
+  } catch (err) {
+    if (!isPermissionDenied(err)) {
+      reportGroupWriteError('acceptGroupInvite-preread', err);
+      return { ok: false, reason: 'transient' };
+    }
+  }
   if (existingMemberUids.includes(params.uid)) {
     // Är uid redan medlem finns två olika tillstånd, och bara ett av dem är
     // ett avslutat medlemskap. Saknas medlemsdokumentet är detta en
@@ -650,6 +797,23 @@ export async function deleteGroup(groupId: string, currentUid: string): Promise<
   householdUids.add(currentUid);
 
   const refs = [
+    // BIN-1152: projektionen ligger UTANFÖR gruppens underträd, så den måste
+    // namnges här — och den står FÖRST, inte sist.
+    //
+    // Ordningen är load-bearing och riktningen är vald, inte slumpad. Listan
+    // committas i chunkar, och vilken chunk ett ref hamnar i följer av dess
+    // position: först i listan betyder alltid första chunken, alltså aldrig
+    // senare än gruppdokumentet, som är sist. Kraschar körningen mellan två
+    // chunkar är utfallet därför "gruppen finns, projektionen är borta" —
+    // förhandsvisningen faller tillbaka på det denormaliserade `invite.groupName`
+    // och ägarens nästa namnbyte skriver projektionen igen.
+    //
+    // Den omvända ordningen ger det läge #4 Säkerhet och #6 DPO blockerade på:
+    // gruppdokumentet borta och det världsläsbara namnet kvar, utan någon
+    // ägarbindning som kan auktorisera en radering. Delete-grenens
+    // `!exists`-utgång finns för att det ändå ska gå att städa, men en utgång är
+    // inte ett skäl att styra dit.
+    doc(db, PUBLIC_GROUPS_COLLECTION, groupId),
     ...membersSnap.docs.map(d => d.ref),
     ...watchlistSnap.docs.map(d => d.ref),
     ...sessionHistorySnap.docs.map(d => d.ref),
@@ -1037,15 +1201,39 @@ export function watchlistDocToObject(id: string, data: Record<string, unknown>):
 
 // ---- Subscriptions / fetchers ----
 
+/**
+ * BIN-1152: `onDenied`/`onError` är inte valfri putsning — utan dem hänger sidan.
+ *
+ * Gruppdokumentet är sedan den biljetten läsbart bara för medlemmar, så en
+ * icke-medlem som besöker `/grupper/{id}` får ett permission-denied på den här
+ * prenumerationen. Den här funktionen hade ingen error-callback alls, och
+ * `lazySubscribe` lägger inte till någon, så `loading` flippade aldrig: det som
+ * före biljetten var en ändlig "gruppen hittades inte"-skärm hade blivit en evig
+ * spinner — SÄMRE än utgångsläget. #26 Informationsarkitektens villkor 1, och
+ * fixmönstret satt redan i grannen `subscribeToGroupHousehold`.
+ *
+ * Delningen mellan `onDenied` och `onError` är densamma som där: bara
+ * permission-denied betyder "du är inte medlem". Ett transient fel som dirigerades
+ * dit hade visat en icke-medlemsskärm för en medlem med dålig uppkoppling.
+ */
 export function subscribeToGroup(
   groupId: string,
   cb: (group: Group | null) => void,
+  onDenied?: () => void,
+  onError?: () => void,
 ): () => void {
   return lazySubscribe(({ db, doc, onSnapshot }) =>
-    onSnapshot(doc(db, 'groups', groupId), snap => {
-      if (!snap.exists()) { cb(null); return; }
-      cb(groupDocToObject(snap.id, snap.data()));
-    }));
+    onSnapshot(
+      doc(db, 'groups', groupId),
+      snap => {
+        if (!snap.exists()) { cb(null); return; }
+        cb(groupDocToObject(snap.id, snap.data()));
+      },
+      err => {
+        if (isPermissionDenied(err)) onDenied?.();
+        else onError?.();
+      },
+    ));
 }
 
 export function subscribeToGroupMembers(
@@ -1200,6 +1388,17 @@ export function subscribeToMyGroups(
     ));
 }
 
+/**
+ * BIN-1152: läsningen är bunden till medlemskap, så den här funktionen KASTAR för
+ * en icke-medlem i stället för att svara null — och den svarar inte på frågan en
+ * icke-medlem faktiskt har. `getPublicGroupName` är den funktionen.
+ *
+ * Den behölls trots att den inte hade någon anropare vid biljetten (härled hellre
+ * än att tro på meningen: `git grep -n "getGroupOnce" -- src functions`), eftersom
+ * en tystlåten radering av en exporterad funktion hör till en annan ändring. Det
+ * som ändrades är att signaturen nu ljuger för hälften av sina möjliga anropare,
+ * och det står här så att nästa som når för den läser det först.
+ */
 export async function getGroupOnce(groupId: string): Promise<Group | null> {
   const { db, doc, getDoc } = await fsdb();
   const snap = await getDoc(doc(db, 'groups', groupId));

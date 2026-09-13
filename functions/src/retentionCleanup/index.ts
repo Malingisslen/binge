@@ -327,7 +327,23 @@ const adminIo: CleanupIo = {
 
       if (isEmptyExcept(memberUids, uid)) {
         // Nobody left: a successor cannot be invented, so this sweep deletes it.
-        toDelete.push(...paths, group.ref.path);
+        //
+        // BIN-1152: `publicGroups/{id}` — the world-readable name projection —
+        // lives OUTSIDE the group subtree, so `groupSubtreePaths` cannot reach it
+        // and it has to be named here. Without this the sweep would delete the
+        // group and leave a signed-in-readable name behind for good: #4 Security
+        // and #6 DPO blocked on exactly that state, and the client rules' `!exists`
+        // escape hatch cannot help a document nobody thinks to look for.
+        //
+        // BEFORE the group document, not after. The delete list is committed in
+        // chunks, and a ref earlier in the list never lands in a later chunk —
+        // so the survivable half-state is "group without its projection" (the invite
+        // preview falls back to the denormalized name), never "name without its
+        // group".
+        //
+        // A HANDED-OVER group keeps its projection on purpose: the group lives on
+        // under a new owner, so its name must stay readable.
+        toDelete.push(`publicGroups/${group.ref.id}`, ...paths, group.ref.path);
         continue;
       }
       // Handed over. The group document and the departing member's own rows —

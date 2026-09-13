@@ -703,9 +703,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // never called `signOut`, and so it stored the departing user's page
           // as the next account's return path. On a shared device the next
           // person inherits it, and a remembered path outlives onboarding —
-          // `/grupper/<id>/` then discloses the group's name and memberUids
-          // (firestore.rules allows any signed-in read on the group doc; the
-          // "Firestore denies it anyway" reassurance was never true there).
+          // `/grupper/<id>/` then discloses the group's name. (Two clauses are
+          // struck here as of BIN-1152: `and memberUids`, and the mechanism
+          // `firestore.rules allows any signed-in read on the group doc`. The
+          // group doc is now bound to membership; the NAME still reaches a
+          // non-member, through the `publicGroups` projection, so the guard's
+          // reason survives the strike.)
           // Listening to the TRANSITION covers every tab and every cause,
           // including a revoked or expired session. The cost is that such a
           // session-loss also forgets where the visitor was — accepted: the

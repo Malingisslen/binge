@@ -294,6 +294,22 @@ async function seedFullAccount() {
     await set(['groups', 'mygroup', 'members', OTHER], { uid: OTHER });
     await set(['groups', 'mygroup', 'household', OTHER], { providerIds: [337], providerCosts: { 337: 109 }, providerCampaigns: {}, activeProviderIds: [] });
 
+    // BIN-1152: en ägd grupp med INGEN annan medlem kvar. Den lämnas inte över —
+    // en efterträdare går inte att uppfinna — så den når ägar-grenen i
+    // `collectDeletionRefs`, som är en TREDJE raderingsväg utöver gruppsidans
+    // raderaknapp och serversopningen. Biljetten missade den, och den hittades av
+    // utfallsverifieringen: utan en projektionsrad i den grenen blir utfallet
+    // gruppen borta och namnet kvar, läsbart för varje inloggat konto, utan någon
+    // ägarbindning som längre kan auktorisera en radering.
+    //
+    // `mygroup` kan inte pröva det: den HAR en kvarvarande medlem och lämnas över,
+    // så dess projektion ska tvärtom stå kvar. Paret är det som skiljer "raderad
+    // med sin grupp" från "hela samlingen svepad".
+    await set(['groups', 'sologroup'], { ownerUid: ME, memberUids: [ME], name: 'Solo', defaults: {} });
+    await set(['groups', 'sologroup', 'members', ME], { uid: ME });
+    await set(['publicGroups', 'sologroup'], { name: 'Solo' });
+    await set(['publicGroups', 'mygroup'], { name: 'Mine' });
+
     await set(['groups', 'othergroup'], { ownerUid: OTHER, memberUids: [OTHER, ME], name: 'Theirs', defaults: {} });
     await set(['groups', 'othergroup', 'members', ME], { uid: ME });
     await set(['groups', 'othergroup', 'watchlist', 'w2'], { tmdbId: 2 });
@@ -377,6 +393,13 @@ describe('GDPR account-deletion erasure (BIN-347 Part 2)', () => {
     // Ägar-grenen raderade förut hela samlingen, alltså även andras data.
     expect(await exists(['groups', 'mygroup', 'household', ME]), 'my household contribution erased').toBe(false);
     expect(await exists(['groups', 'mygroup', 'household', OTHER]), "the successor's household contribution survives").toBe(true);
+    // BIN-1152: den ägda SOLO-gruppen raderas — och namnprojektionen går med.
+    // Den ligger utanför gruppens underträd, så ingenting i insamlingen når den
+    // av sig självt. Den överlämnade gruppens projektion står kvar: gruppen lever
+    // vidare under en ny ägare, så dess namn måste förbli läsbart.
+    expect(await exists(['groups', 'sologroup']), 'solo owned group erased').toBe(false);
+    expect(await exists(['publicGroups', 'sologroup']), 'its name projection erased with it').toBe(false);
+    expect(await exists(['publicGroups', 'mygroup']), "the handed-over group KEEPS its name").toBe(true);
     expect(await exists(['groups', 'othergroup']), 'member group survives').toBe(true);
     expect(await exists(['groups', 'othergroup', 'members', ME]), 'my member doc removed').toBe(false);
     expect(await exists(['groups', 'othergroup', 'joinAttempts', ME]), 'my joinAttempt erased (BIN-329)').toBe(false);
