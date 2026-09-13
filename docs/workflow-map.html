@@ -1621,7 +1621,7 @@
         {
           "from": "tillsammans-new-page",
           "to": "firestore",
-          "payload": "createSession — addDoc sessions/{id} {hostUid,hostName,groupId:null,config,status:'active',candidates:[],expiresAt:+7d} + set sessions/{id}/participants/{hostPid} {isHost:true,vetoRemaining:1} BIN-1165: firestore.rules now bounds hostName itself — create AND update require `hostName is string && size() <= 80`, the same number the participants row's displayName is pinned to and the same as MAX_SESSION_DISPLAY_NAME. Before it, a script or a direct Firestore write with its own credentials could store an arbitrarily long label on a document that is `allow read: if true`. The type half is load-bearing rather than decorative: a list also has size(), so without it the bound would measure element count. The clause is inline on both branches (BIN-1153), with a denial test per branch, and it is unconditional on update because request.resource.data there is the whole post-write document. What else the update branch lets a host rewrite, including hostUid itself, is BIN-1175 and still open.",
+          "payload": "createSession — addDoc sessions/{id} {hostUid,hostName,groupId:null,config,status:'active',candidates:[],expiresAt:+7d} + set sessions/{id}/participants/{hostPid} {isHost:true,vetoRemaining:1} BIN-1165: firestore.rules now bounds hostName itself — create AND update require `hostName is string && size() <= 80`, the same number the participants row's displayName is pinned to and the same as MAX_SESSION_DISPLAY_NAME. Before it, a script or a direct Firestore write with its own credentials could store an arbitrarily long label on a document that is `allow read: if true`. The type half is load-bearing rather than decorative: a list also has size(), so without it the bound would measure element count. The clause is inline on both branches (BIN-1153), with a denial test per branch, and it is unconditional on update because request.resource.data there is the whole post-write document. BIN-1175: the create branch also binds the document's key set and each field's type, and the update branch may change only candidates, status, updatedAt, hostName and groupId — groupId only to null, which is deleteGroup's unlink — so hostUid, config, createdAt and expiresAt cannot be rewritten after create, and a new key is refused. Read it in the `match /sessions/{sessionId}` block of firestore.rules.",
           "transport": "Firestore write",
           "verified": true
         },
@@ -2599,6 +2599,13 @@
           "from": "data-export-lib",
           "to": "firestore",
           "payload": "BIN-184: householdContributions (schema 1.2) — per group I'm a member of, inline getDoc groups/{gid}/household/{myUid}; only opted-in (existing) docs are included",
+          "transport": "firestore-query",
+          "verified": true
+        },
+        {
+          "from": "data-export-lib",
+          "to": "firestore",
+          "payload": "BIN-1172: groupMemberRows (schema 2.2) — per group I'm a member of, inline getDoc groups/{gid}/members/{myUid}, alongside the household read. The path's last segment is always the exporting uid: the members rule lets any member read every member's row, so the code is what keeps the export to my own. A missing row or a failed read is skipped rather than failing the export",
           "transport": "firestore-query",
           "verified": true
         },
