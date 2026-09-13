@@ -138,6 +138,8 @@ placeringen och faller bort med den. Routa om på den faktiska unionen före com
 - [deviation] BIN-1183: del 2 (`??` → `||`) → #26 visade att ett tomt projicerat gruppnamn
   renderas som en tom rad, och reglerna har inget golv på namnet → att pinna `??` låser ett
   synligt val → inte byggd; biljetten tillbaka med #26:s resonemang.
+- [deviation] BIN-1150: avvikelseposten som #5 och #6 svarade för skrevs inte i den här
+  sprinten. Svaret står som kommentar på biljetten, som ligger kvar i Backlog.
 - [deviation] BIN-1172: planen sa den delade hjälparen → kritiken flyttade läsningen till
   exporten → byggd där.
 - [discovery] BIN-1175: `MIN_TESTS` i `scripts/run-rules-tests.mjs` höjdes av BIN-1165 till
