@@ -210,6 +210,8 @@ Console, i den här ordningen:
     §5f är en försenad Art. 17-begäran som ska loggas. Accepten i ADR 0022 vilar
     på att sådana fall faktiskt syns, och den enda vägen dit är att någon här
     märker skillnaden.
+- **(a) med loggraden `groupHandover: sent-invite erasure refused`** hjälper inget
+  omförsök — gå till §5g.
 - **(c)** städas automatiskt: `retentionCleanup` raderar Auth-konton utan
   `users/{uid}` som är äldre än 7 dygn, och frigör deras användarnamn i **samma
   körning** (sopningarna kör sekventiellt just därför). Behöver inget
@@ -392,6 +394,38 @@ vidare om du ser den i skarpt läge; det är en efterlevnadspost appen hittat p�
 någon som just bett att få lämna.
 
 ---
+
+### 5g. "Jag kan inte radera mitt konto" — vägran på skickade gruppinbjudningar
+
+BIN-1151. Loggraden i Cloud Functions-loggen för `handOverOwnedGroups`:
+`groupHandover: sent-invite erasure refused`, med `uid` och `found`.
+
+**Vad den betyder:** kontot har skickat fler gruppinbjudningar än
+`SENT_INVITE_BATCH_LIMIT` (`functions/src/groupHandover/logic.ts`), och raderingen
+skrev ingenting. `found` är antalet den hittade. Varje nytt försök från appen vägrar
+på samma sätt, så kontot kan inte radera sig självt förrän inbjudningarna är färre.
+
+**Vänta inte på sopningen.** `retentionCleanup`s kategori `groupInvitesSent` rör bara
+uid som redan saknas i Firebase Auth, och det här kontot kommer aldrig dit: den
+anropbara kastar innan kontot raderas. Höj inte taket i förbigående — se
+BIN-1147-posten i `.claude/rules/accepted-deviations.md`.
+
+**Gör för hand:**
+
+1. Bekräfta att begäran kommer från kontoinnehavaren, på samma sätt som en
+   Art. 17-begäran.
+2. Skriv ett engångsskript mot Admin SDK som namnger projektet `binge-nu` och skriver
+   ut det före första läsningen. Hitta dokumenten med exakt samma fråga som
+   funktionen — härled den:
+   `grep -n -A 3 "sentInvitePaths" functions/src/groupHandover/adminIo.ts`
+   Radera aldrig en mottagares hela `groupInvites`-samling: den bär inbjudningar från
+   andra avsändare.
+3. Torrkör först: räkna träffarna och jämför med `found` i loggraden. Stämmer de inte,
+   stanna och ta reda på varför innan något raderas.
+4. Radera i omgångar under Firestores gräns för en batch. Dog skriptet halvvägs: kör
+   torrkörningen igen och fortsätt, innan användaren försöker på nytt.
+5. Be användaren trycka på radera igen i appen. Kör inte kaskaden själv.
+6. Skriv en rad i §12 Loggbok: datum, antal raderade, vem som körde.
 
 ## 6. "Bygget failar i CI"
 

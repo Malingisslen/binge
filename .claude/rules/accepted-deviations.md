@@ -1171,3 +1171,30 @@ BIN-1162-posten vilar på.
 
 **Re-open when:** ett fält läggs tillbaka på medlemsdokumentet. Då flyttar både
 `memberFields()` och regelns nyckellista, i samma commit.
+
+---
+
+## BIN-1180: svepets omkontroll skiljer "fick en medlem" från "gruppen är borta" — 2026-09-14
+
+Efterföljare till en punkt i BIN-1063 steg 3 bunt 3-posten (2026-09-07). Den står kvar
+ordagrant; den här posten säger vad som inte längre gäller i den.
+
+Bunt 3-posten säger att omkontrollen "svarar nej ocksa nar gruppDOKUMENTET ar borta, sa dess
+redan planerade undertrad hoppas over och blir kvar utan agare". Då följde namnprojektionen
+`publicGroups/{gid}` med i det som hoppades över, och den är läsbar för varje inloggat konto.
+
+**Vad som ändrades.** Omkontrollen har tre svar i stället för två. Härled dem:
+
+```
+grep -n "PlannedGroupState" functions/src/retentionCleanup/runCleanup.ts
+```
+
+På "borta" raderas projektionen. På "fick en medlem" raderas ingenting, som förut.
+
+**Vad som fortfarande är accepterat, oförändrat:** de planerade undertradsraderna under ett
+försvunnet gruppdokument raderas inte. Det är bunt 3-postens prisade läge, och det gäller rader
+under ett dokument som inte finns, inte ett namn andra kan läsa. En egen medlemskontroll före en
+sådan radering övervägdes av #27 och valdes bort här som det mindre konservativa valet.
+
+**Re-open when:** en rapport om föräldralösa gruppRADER utan gruppdokument, som bunt 3-posten
+redan säger.

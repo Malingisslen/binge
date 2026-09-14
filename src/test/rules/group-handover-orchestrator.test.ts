@@ -6,7 +6,12 @@ import {
   type Firestore,
 } from 'firebase/firestore';
 
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+
 import { eraseSentInvites, runGroupHandover, type HandoverIo } from '../../../functions/src/groupHandover/runHandover';
+import { SENT_INVITE_BATCH_LIMIT } from '../../../functions/src/groupHandover/logic';
+import { rosterMismatches } from './memberTraceRoster';
 
 /**
  * BIN-1063 steg 3 — the group-handover ORCHESTRATOR against a real Firestore
@@ -526,7 +531,45 @@ describe('eraseSentInvites — against a live emulator (BIN-1147)', () => {
     expect((await getDoc(doc(db(), 'users', 'invitee', 'groupInvites', 'g-stranger'))).exists()).toBe(true);
   });
 
-  // The over-the-ceiling case is NOT driven here: it needs more seeded documents
-  // than the limit, which is slow against an emulator. It is covered against the
-  // decision in logic.test.ts, and BIN-1148 carries the end-to-end half.
+  // BIN-1148. Above the ceiling NOTHING is deleted — not a prefix. A mock cannot tell
+  // that from a run that deleted some and then threw; only a real query over more
+  // documents than the ceiling can. A live account's invite rides along as the control.
+  it('erases nothing at all when the leaver sent more than the ceiling', async () => {
+    const over = SENT_INVITE_BATCH_LIMIT + 1;
+    const d = db();
+    for (let start = 0; start < over; start += 400) {
+      const batch = writeBatch(d);
+      for (let i = start; i < Math.min(start + 400, over); i++) {
+        batch.set(doc(d, 'users', `r${i}`, 'groupInvites', 'g-owner'), {
+          groupId: 'g-owner', groupName: 'Filmklubben', fromUid: 'owner', fromDisplayName: 'stranger',
+        });
+      }
+      await batch.commit();
+    }
+    await seedInvite('invitee', 'g-stranger', 'stranger');
+    const sentByOwner = async () =>
+      (await getDocs(query(collectionGroup(db(), 'groupInvites'), where('fromUid', '==', 'owner')))).size;
+    expect(await sentByOwner()).toBe(over);
+
+    await expect(eraseSentInvites(clientIo(), 'owner')).rejects.toThrow(/Ingenting raderades/);
+
+    expect(await sentByOwner()).toBe(over);
+    expect((await getDoc(doc(db(), 'users', 'invitee', 'groupInvites', 'g-stranger'))).exists()).toBe(true);
+  });
+});
+
+describe('eraseMemberTraces — held to memberTraceWrites (BIN-1123)', () => {
+  it('group-handover-orchestrator port writes exactly what memberTraceWrites decides', async () => {
+    expect(await rosterMismatches((fn) => fn(db()), clientIo().eraseMemberTraces)).toEqual([]);
+  });
+
+  // The roster only holds a port whose file calls it. Every file that implements the
+  // port must, so a fourth port cannot join without being held.
+  it('every emulator port of eraseMemberTraces runs the roster', () => {
+    const files = execFileSync('git', ['grep', '-l', 'eraseMemberTraces', '--', 'src/test'], { encoding: 'utf8' })
+      .split('\n').map((f) => f.trim()).filter((f) => f.endsWith('.test.ts'));
+    expect(files.length).toBeGreaterThan(0);
+    const silent = files.filter((f) => !readFileSync(f, 'utf8').includes('rosterMismatches('));
+    expect(silent, 'a port of eraseMemberTraces that the roster does not hold').toEqual([]);
+  });
 });

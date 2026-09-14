@@ -816,7 +816,7 @@ findings here too.
   ligger i en callable i stället för i en regelgren är ett datalagerbeslut —
   `ownerUid` är pinnad på varje regelgren och reglerna kan inte iterera
   medlemsraderna.
-  → `functions/src/groupHandover/index.ts`, `functions/src/groupHandover/runHandover.ts`, `functions/src/groupHandover/adminIo.ts`, `src/lib/firebase/groupHandover.ts`, `src/test/rules/group-handover-orchestrator.test.ts`
+  → `functions/src/groupHandover/index.ts`, `functions/src/groupHandover/runHandover.ts`, `functions/src/groupHandover/adminIo.ts`, `src/lib/firebase/groupHandover.ts`, `src/test/rules/group-handover-orchestrator.test.ts`, `src/test/rules/memberTraceRoster.ts`
 - **Admin-SDK-skrivarna mot recap-cachen** (BIN-1013-sätet). Skripten som skriver och
   inventerar dokumenten i `recaps/`. Samma skäl som backfillen ovan: de kör med Admin SDK
   mot en samling klienten bara får läsa, så det är datalagrets skrivväg som avgör sätet.

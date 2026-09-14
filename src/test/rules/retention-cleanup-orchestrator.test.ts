@@ -9,6 +9,7 @@ import {
 
 import { runGroupHandover, type HandoverIo } from '../../../functions/src/groupHandover/runHandover';
 import { isEmptyExcept } from '../../../functions/src/groupHandover/logic';
+import { rosterMismatches } from './memberTraceRoster';
 import {
   FIELD_OWNED_CATEGORIES,
   FIELD_OWNED_MAX_DOCS_PER_UID,
@@ -372,11 +373,11 @@ function makeIo(db: Firestore, auth: FakeAuth, overrides: Partial<CleanupIo> = {
       return { failed: summary.failed, toDeleteIds: summary.toDeleteIds, attempted: summary.attempted };
     },
 
-    isStillEmptyGroup: async (groupId, uid) => {
+    recheckPlannedGroup: async (groupId, uid) => {
       const snap = await getDoc(doc(db, 'groups', groupId));
-      if (!snap.exists()) return false;
+      if (!snap.exists()) return 'gone';
       const memberUids = (snap.data().memberUids as string[] | undefined) ?? [];
-      return isEmptyExcept(memberUids, uid);
+      return isEmptyExcept(memberUids, uid) ? 'still-empty' : 'gained-member';
     },
 
     ...overrides,
@@ -464,6 +465,13 @@ function handoverIo(db: Firestore): HandoverIo {
     },
   };
 }
+
+describe('eraseMemberTraces — held to memberTraceWrites (BIN-1123)', () => {
+  it('retention-cleanup-orchestrator port writes exactly what memberTraceWrites decides', async () => {
+    const db = adminLikeDb();
+    expect(await rosterMismatches((fn) => fn(db), handoverIo(db).eraseMemberTraces)).toEqual([]);
+  });
+});
 
 /** Every document under one group, excluding the group document itself. */
 async function groupSubtreePaths(
@@ -1103,6 +1111,38 @@ describe('retentionCleanup orchestrator — the FIELD-owned half (BIN-1063 steg 
     // BIN-1183: the name projection lives outside the group subtree. A spared group
     // keeps it.
     expect(await exists(db, 'publicGroups/solo')).toBe(true);
+  });
+
+  // BIN-1180: the other answer the re-check can give. The group DOCUMENT vanishes in
+  // the same window (a console or script delete), so there is no member list to
+  // read. The name projection must go anyway — this run deletes `users/consoled`, the
+  // uid never comes back, and nothing else would ever look for it. The planned subtree
+  // rows are NOT deleted: a third party's row is seeded under the vanished group, and
+  // it has to survive.
+  it('deletes only the name projection of a group whose document vanished before the write', async () => {
+    const db = adminLikeDb();
+    const auth = makeAuth(ORPHAN_DATA_ACCOUNTS);
+    await seedOrphanData(db);
+    await seedFieldOwned(db);
+    await runRetentionCleanup(makeIo(db, auth));
+    const later = NOW + ORPHAN_DATA_MIN_OBSERVED_MS + ONE_DAY;
+
+    const io = makeIo(db, auth, { now: () => later });
+    const summary = await runRetentionCleanup({
+      ...io,
+      commitGroupHandover: async (uid) => {
+        await deleteDoc(doc(db, 'groups', 'solo'));
+        await setDoc(doc(db, 'groups', 'solo', 'members', 'latecomer'), { uid: 'latecomer', joinedAt: ts(later) });
+        return io.commitGroupHandover(uid);
+      },
+    });
+
+    expect(summary.fieldOwnedRefused).toBe(0);
+    expect(await exists(db, 'publicGroups/solo'), 'the projection of a vanished group must go').toBe(false);
+    expect(await exists(db, 'groups/solo/members/latecomer'), 'a third party row under the vanished group').toBe(true);
+    expect(await exists(db, 'groups/solo/members/consoled'), 'planned subtree rows are left, not deleted').toBe(true);
+    // The handed-over group is not touched by this branch at all.
+    expect(await exists(db, 'publicGroups/shared')).toBe(true);
   });
 
   it('counts what it did, so a zero cannot mean three things', async () => {

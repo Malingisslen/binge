@@ -359,11 +359,11 @@ const adminIo: CleanupIo = {
     return { failed: summary.failed, toDeleteIds: summary.toDeleteIds, attempted: summary.attempted };
   },
 
-  isStillEmptyGroup: async (groupId, uid) => {
+  recheckPlannedGroup: async (groupId, uid) => {
     const snap = await getFirestore().doc(`groups/${groupId}`).get();
-    if (!snap.exists) return false;
+    if (!snap.exists) return 'gone';
     const memberUids = (snap.get('memberUids') as string[] | undefined) ?? [];
-    return isEmptyExcept(memberUids, uid);
+    return isEmptyExcept(memberUids, uid) ? 'still-empty' : 'gained-member';
   },
 };
 

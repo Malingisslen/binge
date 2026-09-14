@@ -14,6 +14,7 @@ vi.mock('../../lib/firebase/db', () => ({ fsdb: vi.fn() }));
 import { collectUserDataSnapshots, KNOWN_USER_SUBCOLLECTIONS } from '../../lib/firebase/userData';
 import { collectDeletionRefs, applyDeletionPlan } from '../../lib/firebase/accountDeletion';
 import { runGroupHandover, type HandoverIo } from '../../../functions/src/groupHandover/runHandover';
+import { rosterMismatches } from './memberTraceRoster';
 
 /**
  * BIN-347 Part 2 — the load-bearing erasure proof.
@@ -326,6 +327,19 @@ async function seedFullAccount() {
     });
   });
 }
+
+describe('eraseMemberTraces — held to memberTraceWrites (BIN-1123)', () => {
+  it('account-deletion port writes exactly what memberTraceWrites decides', async () => {
+    const rulesOff = async <T>(fn: (db: fsMod.Firestore) => Promise<T>): Promise<T> => {
+      let out!: T;
+      await testEnv.withSecurityRulesDisabled(async ctx => {
+        out = await fn(ctx.firestore() as unknown as fsMod.Firestore);
+      });
+      return out;
+    };
+    expect(await rosterMismatches(rulesOff, handoverIo().eraseMemberTraces)).toEqual([]);
+  });
+});
 
 describe('GDPR account-deletion erasure (BIN-347 Part 2)', () => {
   it('erases every owner-owned subcollection while the documented carve-outs survive', async () => {

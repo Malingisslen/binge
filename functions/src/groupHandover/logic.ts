@@ -263,8 +263,9 @@ export function refusalForHandover(
  * ceiling sits under it rather than at it.
  *
  * Exceeding it erases NOTHING and refuses loudly. That is the deliberate
- * direction: a refusal is retryable and leaves a true message, a partial
- * erasure is neither.
+ * direction: a refusal leaves a true message, a partial erasure does not.
+ * A retry from the app refuses the same way while the count stays above the
+ * ceiling; the manual path is docs/RUNBOOK.md §5g.
  */
 export const SENT_INVITE_BATCH_LIMIT = 450;
 

@@ -109,6 +109,9 @@ export interface CleanupLogger {
  * Firestore or Auth operation the real sweep performs, so a port implementation
  * has nowhere to hide a decision.
  */
+/** See `CleanupIo.recheckPlannedGroup`. */
+export type PlannedGroupState = 'still-empty' | 'gained-member' | 'gone';
+
 export interface CleanupIo {
   /** Docs per scan page. Prod passes the real PAGE_SIZE; tests page smaller. */
   readonly pageSize: number;
@@ -227,14 +230,18 @@ export interface CleanupIo {
   }>;
 
   /**
-   * Is this group still empty of everyone but `uid`?
+   * What became of a group the plan scheduled for deletion?
    *
    * Asked immediately before deleting it. Between the plan and the write a member
    * can join, and the paths being deleted then include a LIVE third party's
    * household and progress rows — the worst outcome available to this sweep, and
    * one nothing else guards.
+   *
+   * `gone` is its own answer, not a kind of "not empty" (BIN-1180): the group
+   * document has vanished, and the name projection outside its subtree would
+   * otherwise stay readable with nothing left to delete it.
    */
-  isStillEmptyGroup(groupId: string, uid: string): Promise<boolean>;
+  recheckPlannedGroup(groupId: string, uid: string): Promise<PlannedGroupState>;
 }
 
 /** Uids per `deleteUsers` call — the Admin API's own ceiling. */
@@ -769,12 +776,21 @@ async function eraseFieldOwned(
       // Re-verify each group is STILL empty. Between the plan and here a member
       // can have joined, and these paths would then include a live third party's
       // household and progress rows.
-      const stillEmpty = new Set<string>();
+      const deletable = new Set<string>();
       for (const groupId of new Set(found.deletePaths.map(groupIdOf))) {
-        if (await io.isStillEmptyGroup(groupId, uid)) stillEmpty.add(groupId);
-        else io.log.info('retentionCleanup: group gained a member since the plan — not deleting', { uid, groupId });
+        const state = await io.recheckPlannedGroup(groupId, uid);
+        if (state === 'still-empty') {
+          for (const path of found.deletePaths) if (groupIdOf(path) === groupId) deletable.add(path);
+        } else if (state === 'gone') {
+          // Only the projection. The planned subtree rows stay, as the dated
+          // BIN-1180 entry in .claude/rules/accepted-deviations.md records.
+          io.log.info('retentionCleanup: group document gone since the plan — deleting its name projection only', { uid, groupId });
+          deletable.add(`publicGroups/${groupId}`);
+        } else {
+          io.log.info('retentionCleanup: group gained a member since the plan — not deleting', { uid, groupId });
+        }
       }
-      await deleteAllOrThrow(io, found.deletePaths.filter((path) => stillEmpty.has(groupIdOf(path))), progress);
+      await deleteAllOrThrow(io, found.deletePaths.filter((path) => deletable.has(path)), progress);
       continue;
     }
 
