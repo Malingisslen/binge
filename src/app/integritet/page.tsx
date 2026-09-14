@@ -10,8 +10,8 @@ export default function IntegritetPage() {
   return (
     <LegalPageShell
       title="Integritetspolicy"
-      lastUpdated="2026-09-09"
-      version="1.3"
+      lastUpdated="2026-09-14"
+      version="1.4"
     >
       <section>
         <h2>1. Vem är ansvarig?</h2>
@@ -34,7 +34,7 @@ export default function IntegritetPage() {
           <li><strong>Användarnamn</strong> — om du valt ett publikt användarnamn för din profil.</li>
           <li><strong>Dina streamingtjänster</strong> — vilka tjänster du har, vilket abonnemang (nivå), pris, och eventuella pauser.</li>
           <li><strong>Din bevakningslista</strong> — titlar du följer, vill se eller har sett; betyg; anteckningar; egna taggar (fritext du själv anger); avsnitts-framsteg.</li>
-          <li><strong>Recensioner, listor och sociala kopplingar</strong> — recensioner, kommentarer och listor du skapat, samt vänner, följare och grupp-medlemskap.</li>
+          <li><strong>Recensioner, listor och sociala kopplingar</strong> — recensioner, kommentarer och listor du skapat, samt vänner, följare och grupp-medlemskap. Ditt medlemskap i en grupp bär ditt visningsnamn, användarnamn, din profilbild och vilka streamingtjänster du har (se §10).</li>
           <li><strong>Streamingrådgivaren-historik</strong> — dina pausa- och återuppta-beslut (sparbeslut) som rådgivaren sparar.</li>
           <li><strong>&quot;Inte intresserad&quot;-markeringar</strong> — titlar du gömt från rekommendationer.</li>
           <li><strong>Push-notistoken</strong> — om du aktiverat push-notiser sparar vi en enhetsspecifik token (Firebase Cloud Messaging) för att kunna skicka notiser.</li>
@@ -50,7 +50,7 @@ export default function IntegritetPage() {
       <section>
         <h2>3. Varför vi behandlar uppgifterna (rättslig grund)</h2>
         <ul>
-          <li><strong>Avtal (GDPR art. 6.1.b)</strong> — för att leverera tjänsten: spara din bevakningslista, visa rätt streaming-info, köra rådgivaren.</li>
+          <li><strong>Avtal (GDPR art. 6.1.b)</strong> — för att leverera tjänsten: spara din bevakningslista, visa rätt streaming-info, köra rådgivaren, och visa de grupper du är medlem i vilka streamingtjänster du har, eftersom det är så gruppen räknar ut vad ni kan se tillsammans (se §10).</li>
           <li><strong>Berättigat intresse (art. 6.1.f)</strong> — för driftlogg, felsökning, felövervakning, bot- och missbruksskydd, samt cookiefri och anonymiserad besöksstatistik (se §4).</li>
           <li><strong>Samtycke (art. 6.1.a)</strong> — för Hushåll, den frivilliga delningen av prenumerationskostnader i grupper (se §10), samt eventuella framtida inslag som kräver samtycke, t.ex. marknadsföring eller cookie-baserad spårning. Inga marknadsföringsinslag används idag.</li>
         </ul>
@@ -213,7 +213,20 @@ export default function IntegritetPage() {
       </section>
 
       <section>
-        <h2>10. Delning i grupper (Hushåll)</h2>
+        <h2>10. Delning i grupper</h2>
+        <p>
+          <strong>Din tjänstelista delas med gruppen.</strong> När du är medlem
+          i en grupp kan gruppens medlemmar se vilka streamingtjänster du har —
+          bara vilka tjänster, inte vad de kostar eller vilken abonnemangsnivå du
+          har. Det är gruppens kärnfunktion: utan varandras listor kan gruppen
+          inte räkna ut vad ni kan se tillsammans. Därför ingår det i
+          medlemskapet, och den rättsliga grunden är avtal (GDPR art. 6.1.b).
+          Listan kan läsas av varje medlem i gruppen, nuvarande och framtida,
+          men inte av någon utanför den, och varje medlem kan tekniskt läsa din
+          lista rad för rad. Den tas bort ur gruppen när du lämnar gruppen,
+          blir borttagen ur den eller tar bort ditt konto. Hushåll nedan är något annat: att dela vad
+          tjänsterna kostar är frivilligt och kräver ett eget samtycke.
+        </p>
         <p>
           Om du går med i en grupp kan du välja att aktivera <strong>Hushåll</strong> —
           en frivillig funktion där du delar dina prenumerationskostnader med de
@@ -242,7 +255,7 @@ export default function IntegritetPage() {
         <h2>11. Ändringar</h2>
         <p>
           Om vi gör materiella ändringar i denna policy uppdaterar vi
-          versionsnumret ovan och meddelar dig i appen. Mindre
+          versionsnumret ovan. Mindre
           redaktionella ändringar (t.ex. förtydliganden) kan ske utan
           särskild notis.
         </p>
