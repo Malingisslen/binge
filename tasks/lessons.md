@@ -1827,7 +1827,7 @@ falt skrivaren skriver - den andrades aldrig. Commitens faktiska union byter dar
 
 **Regel:** att kommandot ger rätt svar i dag bevisar inte att det är avgränsat. Ett `awk`-intervall vars STARTregex inte matchar någon kodrad matchar i stället kommentarsraden som bär kommandot självt, och sveper sedan vidare tills något råkar stänga det — svaret blir rätt bara för att ingenting annat i svepet råkar nämna det du grepar efter. Ankra på den faktiska nästlade raden OCH på dess egen klammer med samma indrag, och bevisa avgränsningen genom att plantera en lockbetesträff i systerblocket i en KOPIA och se att kommandot ignorerar den. Mät också intervallets längd: `| wc -l` avslöjar ett svep som är hundratals rader djupt.
 
-**Exempel:** fyra försök på EN kommentarsrad i BIN-1165. v1 var ett tal; v2 ett grep som inte kunde avgränsa sitt subjekt; v3 ett `awk`-intervall som såg riktigt ut och gav rätt svar av tur — säkerhetsgranskaren fällde det med ett lockbete. v4 är ankrad, och samma lockbetesmetod visar att den håller. En osund härledning av samma familj står kvar i `src/lib/clampText.ts`, där felet sitter i SLUTankaret i stället: dess klammermönster har fler blanksteg än blocket det ska stänga, så svepet löper vidare långt förbi. Mät det med `| wc -l` (BIN-1177).
+**Exempel:** fyra försök på EN kommentarsrad i BIN-1165. v1 var ett tal; v2 ett grep som inte kunde avgränsa sitt subjekt; v3 ett `awk`-intervall som såg riktigt ut och gav rätt svar av tur — säkerhetsgranskaren fällde det med ett lockbete. v4 är ankrad, och samma lockbetesmetod visar att den håller.
 
 ---
 
