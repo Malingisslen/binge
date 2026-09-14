@@ -4,6 +4,12 @@ service cloud.firestore {
 
     // ---- helpers ----
     function isSignedIn() { return request.auth != null; }
+
+    // BIN-1184: ett gruppnamn måste innehålla minst ett tecken som inte är blanksteg.
+    // Samma uttryck på gruppen, dess publika projektion och inbjudans kopia av namnet;
+    // härled användningarna med
+    //   grep -n "hasVisibleName(" firestore.rules
+    function hasVisibleName(n) { return n is string && n.matches('.*\\S.*'); }
     function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
     function isAdmin() {
       // Admin-flaggan (users/{uid}.isAdmin) får bara settas manuellt via
@@ -767,6 +773,7 @@ service cloud.firestore {
         && request.resource.data.invitedAt is timestamp
         && request.resource.data.groupName is string
         && request.resource.data.groupName.size() <= 48
+        && hasVisibleName(request.resource.data.groupName)
         && (request.resource.data.get('fromDisplayName', null) == null
           || (request.resource.data.fromDisplayName is string
             && request.resource.data.fromDisplayName.size() <= 80))
@@ -846,6 +853,7 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['name'])
         && request.resource.data.name is string
         && request.resource.data.name.size() <= 48
+        && hasVisibleName(request.resource.data.name)
         && get(/databases/$(database)/documents/groups/$(groupId)).data.ownerUid == request.auth.uid;
       allow delete: if isSignedIn()
         && (!exists(/databases/$(database)/documents/groups/$(groupId))
@@ -1515,6 +1523,7 @@ service cloud.firestore {
 
       allow create: if isSignedIn()
         && isValidGroupDoc()
+        && hasVisibleName(request.resource.data.name)
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.memberUids.hasOnly([request.auth.uid])
         && request.auth.uid in request.resource.data.memberUids;
@@ -1529,7 +1538,14 @@ service cloud.firestore {
       // oförändrad. Tillägg sker alltid genom att mål-användaren själv
       // accepterar en inbjudan (accept-branchen nedan). Detta stänger H1 där
       // ägaren tyst kunde lägga till vem som helst utan samtycke.
-      allow update: if isSignedIn() && isValidGroupDoc() && (
+      // BIN-1184: namngolvet gäller bara när skrivningen ändrar namnet. `isValidGroupDoc()`
+      // körs också när någon går med, lämnar eller accepterar en inbjudan, och de grenarna
+      // rör inte namnet; ett golv på hela dokumentet hade låst en grupp vars lagrade namn
+      // är tomt. Ett borttaget namn räknas som ändrat och prövas.
+      allow update: if isSignedIn() && isValidGroupDoc()
+        && (!('name' in request.resource.data.diff(resource.data).affectedKeys())
+          || hasVisibleName(request.resource.data.name))
+        && (
         (
           resource.data.ownerUid == request.auth.uid
           && resource.data.memberUids.hasAll(request.resource.data.memberUids)

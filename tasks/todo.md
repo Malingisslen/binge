@@ -1,3 +1,42 @@
+# 2026-09-14 — BIN-1184: tomma gruppnamn nekas i reglerna [Tier C]
+
+**Beslut:** Malin 2026-09-14, alternativ 3 på BIN-1184. BIN-1183 stängd samma dag.
+
+**Premiss, mätt:** `isValidGroupDoc`, `publicGroups` och `groupInvites.groupName` binder alla
+bara en övre gräns. Formulären vägrar redan ett tomt namn; reglerna gör det inte.
+
+Routning (`node docs/org/route.mjs --md firestore.rules src/test/rules/firestore-rules.test.ts`):
+`top` · #27, #4, #6, #7, #13. Panelen konvenerad blint, alla support-with-conditions, ingen
+konflikt.
+
+### Acceptanskriterier (bindande)
+
+1. Ett tomt namn och ett namn av bara blanksteg nekas vid create av gruppen, vid create och
+   update av `publicGroups`, och vid create av en inbjudan. *(diff)* — biljetten, #27, #4, #13
+2. Ett namn på ett tecken går igenom på varje yta. *(diff)* — #7
+3. Golvet på gruppens update gäller bara när skrivningen ändrar namnet. En grupp seedad förbi
+   reglerna med tomt namn går fortfarande att gå med i, lämna och ändra inställningar på;
+   ägaren kan radera den. Ett namnbyte TILL tomt nekas. *(diff)* — #27, #4, #6, #7
+4. `deleteField()` på namnet nekas. *(diff)* — #4, #7
+5. Samma golvuttryck på alla tre ytorna. *(diff)* — #4
+6. Muteringar en i taget, var och en fäller ett eget test: golvet borttaget på gruppens create,
+   på gruppens update, på projektionens create/update, på inbjudan; och villkoret gjort
+   ovillkorligt. *(diff)* — #7
+
+- [x] Kritik
+- [x] Regeländring
+- [x] Emulatortest per gren. Hela regelsviten grön; `MIN_TESTS` följer sviten. En första
+  körning dödades av minnesbrist och kördes om ensam.
+- [x] Muteringar en i taget mot en egen emulator, grön kontroll först, filen återställd och
+  hashverifierad. Varje mutant fällde minst ett eget test, också "gjort ovillkorligt" (de fyra
+  test som visar att en grupp med tomt namn fortfarande fungerar) och "storlek i stället för
+  synligt tecken" (blankstegsfallen).
+- [ ] Granskning, push, regeldeploy
+
+## Avvikelselogg
+
+---
+
 # Sprint 2026-09-13b — sessionens värdskap pinnas, gruppens döda lyssnare, exporten får medlemsraden
 
 Rent träd vid start, allt på main. Baslinje mätt vid start: `npm run typecheck` rent,

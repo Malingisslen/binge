@@ -61,7 +61,10 @@ const REPO = resolve(HERE, '..');
 //
 // BIN-1175, 2026-09-13: raised to what `numTotalTests` reported with the session key-list,
 // type and groupId tests in place.
-export const MIN_TESTS = 601;
+//
+// BIN-1184, 2026-09-14: raised to what `numTotalTests` reported with the group name floor
+// tests in place.
+export const MIN_TESTS = 622;
 
 const VITEST_ARGS = ['run', '--config', 'vitest.rules.config.ts'];
 

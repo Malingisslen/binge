@@ -4509,3 +4509,121 @@ describe('publicGroups/{id} — namnprojektionen (BIN-1152)', () => {
     await assertFails(deleteDoc(doc(anonDb(), 'publicGroups', 'g-orphan')));
   });
 });
+
+// BIN-1184 — a group name must contain a character that is not whitespace, on the
+// group, its public projection and an invite's copy. On the group's UPDATE branches
+// the floor applies only when the write changes `name`: join, leave and invite-accept
+// run through the same `isValidGroupDoc()` without touching the name, so a floor on the
+// whole document would lock a group whose stored name is already empty.
+describe('group name floor — empty and whitespace-only names are refused (BIN-1184)', () => {
+  function createPayload(name: unknown) {
+    return {
+      name, ownerUid: OWNER, memberUids: [OWNER], defaults: { region: 'SE' },
+      inviteTokenHash: 'a'.repeat(64), inviteTokenRotatedAt: serverTimestamp(),
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    };
+  }
+
+  it.each([
+    ['an empty', ''],
+    ['a whitespace-only', '   '],
+  ])('group create with %s name is denied', async (_label, name) => {
+    await assertFails(setDoc(doc(ownerDb(), 'groups', 'newgroup'), createPayload(name)));
+  });
+
+  it.each([
+    ['one character', 'a'],
+    ['a name padded with spaces', ' a '],
+  ])('group create with %s is allowed', async (_label, name) => {
+    await assertSucceeds(setDoc(doc(ownerDb(), 'groups', 'newgroup'), createPayload(name)));
+  });
+
+  it.each([
+    ['an empty', ''],
+    ['a whitespace-only', '   '],
+  ])('the owner cannot rename the group to %s name', async (_label, name) => {
+    await seedGroup({ memberUids: [OWNER] });
+    await assertFails(updateDoc(doc(ownerDb(), 'groups', GROUP), { name, updatedAt: serverTimestamp() }));
+  });
+
+  it('the owner can rename the group to a one-character name', async () => {
+    await seedGroup({ memberUids: [OWNER] });
+    await assertSucceeds(updateDoc(doc(ownerDb(), 'groups', GROUP), { name: 'a', updatedAt: serverTimestamp() }));
+  });
+
+  it('the owner cannot delete the group name', async () => {
+    await seedGroup({ memberUids: [OWNER] });
+    await assertFails(updateDoc(doc(ownerDb(), 'groups', GROUP), { name: deleteField(), updatedAt: serverTimestamp() }));
+  });
+
+  // A group stored with an empty name, past the rules. Every write path that does not
+  // change the name still works on it, and a rename heals it.
+  describe('a group already stored with an empty name', () => {
+    it('a member can still leave', async () => {
+      await seedGroup({ name: '', memberUids: [OWNER, 'other_uid'] });
+      await assertSucceeds(updateDoc(doc(otherDb(), 'groups', GROUP), { memberUids: [OWNER] }));
+    });
+    it('a joiner with a sealed attempt can still join', async () => {
+      await seedGroup({ name: '', memberUids: [OWNER] });
+      await sealJoinAttempt('other_uid');
+      await assertSucceeds(updateDoc(doc(otherDb(), 'groups', GROUP), { memberUids: [OWNER, 'other_uid'] }));
+    });
+    it('an invitee can still accept', async () => {
+      await seedGroup({ name: '', memberUids: [OWNER] });
+      await seedInvite('other_uid');
+      await assertSucceeds(updateDoc(doc(otherDb(), 'groups', GROUP), { memberUids: [OWNER, 'other_uid'] }));
+    });
+    it('the owner can still edit defaults', async () => {
+      await seedGroup({ name: '', memberUids: [OWNER] });
+      await assertSucceeds(updateDoc(doc(ownerDb(), 'groups', GROUP), {
+        defaults: { region: 'NO' }, updatedAt: serverTimestamp(),
+      }));
+    });
+    it('the owner can rename it to a visible name', async () => {
+      await seedGroup({ name: '', memberUids: [OWNER] });
+      await assertSucceeds(updateDoc(doc(ownerDb(), 'groups', GROUP), { name: 'Filmklubben', updatedAt: serverTimestamp() }));
+    });
+    it('the owner can delete it', async () => {
+      await seedGroup({ name: '', memberUids: [OWNER] });
+      await assertSucceeds(deleteDoc(doc(ownerDb(), 'groups', GROUP)));
+    });
+  });
+
+  it.each([
+    ['an empty', ''],
+    ['a whitespace-only', '   '],
+  ])('the projection cannot be created with %s name', async (_label, name) => {
+    await seedGroup({ memberUids: [OWNER] });
+    await assertFails(setDoc(doc(ownerDb(), 'publicGroups', GROUP), { name }));
+  });
+
+  it('the projection can be created with a one-character name', async () => {
+    await seedGroup({ memberUids: [OWNER] });
+    await assertSucceeds(setDoc(doc(ownerDb(), 'publicGroups', GROUP), { name: 'a' }));
+  });
+
+  it('an existing projection cannot be updated to an empty name', async () => {
+    await seedGroup({ memberUids: [OWNER] });
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'publicGroups', GROUP), { name: 'Filmklubben' });
+    });
+    await assertFails(updateDoc(doc(ownerDb(), 'publicGroups', GROUP), { name: '' }));
+  });
+
+  // The invite's groupName must also equal the group document's name, so each case
+  // seeds the group with the same name the invite carries: only the floor can deny.
+  it.each([
+    ['an empty', ''],
+    ['a whitespace-only', '   '],
+  ])('an invite with %s groupName is denied even when it matches the group', async (_label, name) => {
+    await seedGroup({ name });
+    await seedInviterProfile({ displayName: 'Agaren' });
+    await assertFails(writeInvite({ groupName: name }));
+  });
+
+  it('an invite with a one-character groupName matching the group is allowed', async () => {
+    await seedGroup({ name: 'a' });
+    await seedInviterProfile({ displayName: 'Agaren' });
+    await assertSucceeds(writeInvite({ groupName: 'a' }));
+  });
+});
