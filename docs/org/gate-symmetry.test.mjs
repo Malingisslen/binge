@@ -62,9 +62,12 @@
 //       case that feeds the rule an UNOWNED code path with no gate — synthetic verdicts,
 //       so it holds however the tree is seated today.
 //
-//       The cost is real and forward-looking: a NEW root-level config file (a .nvmrc, a
-//       renovate.json) that nobody owns and no gate matches now fails `npm test`, and
-//       therefore the deploy, until it gets one or the other. That brake is the point.
+//       A1 only reads paths `isCodePath()` accepts. A path it rejects is outside A1
+//       whatever its owner or gate, and A2 and B see it only if role #25 owns it or a
+//       gate stops it. Ask `isCodePath` directly:
+//         node -e "import('./docs/org/route.mjs').then(m=>console.log(m.isCodePath(process.argv[1])))" <path>
+//       The case named "a path isCodePath rejects, with no #25 owner and no gate, reaches
+//       none of the three rules" pins it (BIN-1176).
 //   A2  A path owned by role #25 Engineering Manager / Release Manager must reach a
 //       blocking reviewer, code or prose. #25 owns the process and the quality gates
 //       BY DEFINITION, so anything in that role's patterns decides how the repo is
@@ -222,7 +225,11 @@ export function a1Offenders(verdicts) {
 
 const advisedCodeWithoutGate = a1Offenders(VERDICTS);
 const gatekeeperPathsWithoutGate = VERDICTS.filter((v) => v.ownedByGatekeeper && v.gates.length === 0);
-const gatedButRoutedSkip = VERDICTS.filter((v) => v.gates.length > 0 && v.tier === 'skip');
+// Named for the same reason as `a1Offenders`: a case testing B must run the rule B runs.
+export function bOffenders(verdicts) {
+  return verdicts.filter((v) => v.gates.length > 0 && v.tier === 'skip');
+}
+const gatedButRoutedSkip = bOffenders(VERDICTS);
 
 const isAsymmetric = (path) =>
   [...advisedCodeWithoutGate, ...gatekeeperPathsWithoutGate, ...gatedButRoutedSkip].some(
@@ -408,6 +415,32 @@ describe('the exceptions and the inputs cannot rot quietly (BIN-880)', () => {
       { path: 'docs/org/route.mjs', tier: 'skip', reasonCode: 'doc-only', gates: [] },
       { path: 'docs/RUNBOOK.md', tier: 'medium', reasonCode: 'owned', gates: [] },
     ]), 'A1 is flagging paths it should not').toEqual([]);
+  });
+
+  it('a path isCodePath rejects, with no #25 owner and no gate, reaches none of the three rules', () => {
+    // BIN-1176. The limit stated under A1 in the header. The first assertion feeds A1 a
+    // verdict every other term admits, so only `isCodePath` can keep it out; the rest use
+    // the real router and the real gate model for the same path.
+    expect(
+      a1Offenders([{ path: 'renovate.json', tier: 'medium', reasonCode: 'owned', gates: [] }]),
+      'A1 reads a path isCodePath rejects',
+    ).toEqual([]);
+
+    const path = 'renovate.json';
+    expect(TRACKED, `${path} is tracked now — pick an untracked root file for this probe`).not.toContain(path);
+    const r = route([path]);
+    const verdict = {
+      path,
+      tier: r.tier,
+      reasonCode: r.reasonCode,
+      ownedByGatekeeper: r.roles.some((role) => role.num === GATEKEEPER_ROLE),
+      gates: blockingGates(path),
+    };
+    expect(isCodePath(path)).toBe(false);
+    expect(a1Offenders([verdict]), 'A1 reads a path isCodePath rejects').toEqual([]);
+    expect(verdict.ownedByGatekeeper, 'A2 would see it: #25 owns it').toBe(false);
+    expect(verdict.gates, 'a gate matches it, so B could see it').toEqual([]);
+    expect(bOffenders([verdict]), 'B reads it').toEqual([]);
   });
 
   it('the gate-matching helper subtracts excludes, like the real hook does', () => {

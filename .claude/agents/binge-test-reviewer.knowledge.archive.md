@@ -28565,3 +28565,87 @@ reworded. The member row does not make that choice: `isValidGroupMember` runs on
 merged document on update. Only its identity binding (`keepsOrOwnsIdentity`) is conditional,
 and that is not a type check. Found by the push-gate integration review. The live bullet in
 binge-test-reviewer.knowledge.md was changed in place in the same commit.
+
+## Relocated 2026-09-14 — entry 99 (cap trim, paid for the BIN-1176 negative-AND-term addition above)
+
+Verbatim, moved out of the active file to hold the 80k cap — the full version of the sentence
+now compressed in the "two shapes, one per AND-term" bullet:
+
+The same holds in the NEGATIVE direction, for a fixture proving a case is correctly EXCLUDED
+from an AND-gated offender list: if a second term already excludes it independently (e.g. a
+path's `tier` reads `'skip'` via an unrelated `reasonCode`, not via the term under test),
+deleting the target term won't redden that fixture — pick one where every OTHER term still
+admits and only the target term excludes. `gate-symmetry.test.mjs`'s BIN-1176 case fed
+`a1Offenders` a `renovate.json` verdict to pin the `isCodePath` term, but `renovate.json` is
+already `tier==='skip'` (reasonCode `no-code-paths`) independent of `isCodePath`;
+live-verified: deleting `isCodePath(v.path) &&` from `a1Offenders` leaves that case green
+while two PRE-EXISTING sibling tests in the same file (the real full-tree walk, and the
+`docs/RUNBOOK.md` synthetic negative) still catch it — so overall coverage held, but the new
+case's own comment claiming to be the paragraph's guard did not.
+
+## 2026-09-14 — BIN-1176 re-review: isCodePath probe + renamed case, one new vacuity found
+
+**Task:** re-review the staged `git diff --cached` in `C:\binge` for BIN-1176 after the
+integration reviewer failed an earlier version on two points: (1) the header paragraph under
+A1 published a `node docs/org/route.mjs <path>` command and claimed any `reasonCode` other
+than `no-code-paths` contradicts it (false — CLAUDE.md is non-code but routes `owned`),
+replaced with a direct `isCodePath` probe; (2) the new case's name promised more than its
+assertions, renamed to "a path isCodePath rejects, with no #25 owner and no gate, reaches
+none of the three rules". Read `.claude/rules/accepted-deviations.md` (in full, two pages)
+and this knowledge file (in full, two pages) first, then `Read` both staged files in full:
+`docs/org/gate-symmetry.test.mjs` (470 lines) and `docs/org/metrics/events.jsonl` (diff only
+— 7 new append-only rows, all well-formed `type:"review"` entries, no assertion-bearing
+content to mutate).
+
+**Verified the two claimed fixes directly, read-only:**
+- `node -e "import('./docs/org/route.mjs').then(m=>{console.log(m.isCodePath('renovate.json')); console.log(m.isCodePath('src/lib/clampText.ts'))})"` → `false` / `true`, matching the
+  header's own worked example. Traced why in `route.mjs`: `renovate.json` is in neither
+  `CODE_ROOT_FILES` nor under any `CODE_ROOTS` prefix (`src/`, `functions/`, `extension/`,
+  `shared/`), so `isCodePath` returns `false`; `route(['renovate.json'])` independently
+  returns `{tier:'skip', reasonCode:'no-code-paths'}`.
+- `git ls-files | grep -x renovate.json` → no match, confirming the new case's own guard
+  (`expect(TRACKED,...).not.toContain(path)`) holds today.
+- `npx vitest run docs/org/` → 1075 passed (8 files), matching the reported count.
+
+**Decisive mutation, run myself, restored and hash-verified:** in `a1Offenders`
+(`docs/org/gate-symmetry.test.mjs`), changed
+`isCodePath(v.path) && v.tier !== 'skip' && v.gates.length === 0` to
+`/* MUTANT-A1 */ v.tier !== 'skip' && v.gates.length === 0` (dropped the `isCodePath` term —
+exactly the term the new BIN-1176 case's docstring claims to pin: "Pins the limit stated
+under A1 in the header ... Red here means that paragraph needs reading again"). Confirmed
+`grep -c MUTANT-A1` = 1 before running. Result: `npx vitest run docs/org/gate-symmetry.test.mjs`
+→ 2 failed, 8 passed. The two failures were the PRE-EXISTING "A1: every CODE path the router
+does not clear reaches a blocking reviewer" (real-tree walk, newly flagged 10 prose paths
+incl. `docs/RUNBOOK.md`) and "A1 is keyed on the tier ... catches an UNOWNED code path"
+(synthetic negative half, `docs/RUNBOOK.md` fixture). **The new BIN-1176 case itself did NOT
+fail.** Reason, traced: `renovate.json` already has `tier==='skip'` via `reasonCode
+'no-code-paths'`, independent of `isCodePath` — so `a1Offenders([verdict])` returns `[]`
+whether or not the filter consults `isCodePath` at all, and `bOffenders([verdict])` is
+likewise trivially `[]` because `verdict.gates` is already empty. Only the case's own direct
+`expect(isCodePath(path)).toBe(false)` line exercises `isCodePath` for real; the two
+downstream `a1Offenders`/`bOffenders` assertions pass for a reason unrelated to the term the
+case's comment says it pins.
+
+Restored via `cp` from a scratchpad snapshot taken before the mutation (md5sum matched
+pre-mutation); confirmed `git hash-object docs/org/gate-symmetry.test.mjs` ==
+`git rev-parse :docs/org/gate-symmetry.test.mjs` == `26c0da6ddf8be35a34702d0d08784d3aa6710f17`
+(both the pre-mutation snapshot's hash and the staged blob's), and `git diff --stat` against
+the index was empty. Re-ran `npx vitest run docs/org/gate-symmetry.test.mjs` → 10/10 green.
+
+**Verdict: overall regression protection for the header's claim is intact** (two sibling
+tests independently catch the exact mutation), **but the new case's own docstring overclaims
+its role** — it is not what would go red if the isCodePath term were dropped, contrary to
+its comment ("pins it (BIN-1176)"). This is the AND-term vacuity class (a fixture that
+satisfies the target exclusion via a REDUNDANT other term), now folded into the existing
+"two shapes, one per AND-term" bullet in the live knowledge file, with the compressed
+sentence's full form relocated above (entry 99) to hold the 80k cap.
+
+**Finding filed:** `docs/org/gate-symmetry.test.mjs:420-438` (the new `it` block) and its
+matching header claim at lines 65-70 — reword or drop the "pins it (BIN-1176)" claim (it does
+not; two other tests do), or replace the fixture with one where `tier !== 'skip'` (an owned,
+non-code path in the shape of the existing `docs/RUNBOOK.md` fixture) so the `isCodePath` term
+is what actually discriminates the outcome, live-verified red-alone against the same mutation.
+Not a "weakened assertion" and not a missing-coverage gap in the FILE as a whole — a
+new test's claim about ITSELF that a decisive mutation shows is false.
+
+**Verdict: fail (1 blocking).**
