@@ -11072,3 +11072,11 @@ projection, uncounted by either ordinal). Neither strike touches `refs.push(doc(
 and the WRITE SHAPE, not on either struck count, so it stands on the current bytes.
 
 **Verdict: pass (0 blocking).**
+
+
+## 2026-09-14 — BIN-1180: rename recorded in the live file
+
+The live bullet on the plan/commit split named `isStillEmptyGroup`. BIN-1180 renamed it to
+`recheckPlannedGroup` and gave it a third answer, `gone`, on which only the group's
+`publicGroups/{gid}` projection is deleted. The bullet now carries the new name, with the old
+one in parentheses. Flagged as optional by the integration reviewer of that commit.

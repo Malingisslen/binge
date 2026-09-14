@@ -331,7 +331,7 @@ Cap: 80k chars — pay for an addition with a cut, and move what you cut verbati
   transition directions, not just the one whose failure mode is "destroys a live third party's data".**
   FOUND IN REVIEW, BIN-1063 steg 3 bunt 3 (r1, fixed before it shipped — full finding in the archive, dated
   2026-09-07): `eraseFieldOwned` guarded the GAINED-a-survivor direction twice (`commitGroupHandover`'s fresh
-  recompute, `isStillEmptyGroup` right before delete) and left the LOST-its-last-survivor direction
+  recompute, `recheckPlannedGroup` right before delete — named `isStillEmptyGroup` until BIN-1180) and left the LOST-its-last-survivor direction
   unguarded — a group empty only by commit-time resolves inside `runGroupHandover` to a `'delete'` outcome
   that performs no actual delete, and the caller only ever deleted paths from the stale plan-time list, so the
   group would have stood forever, owned by a uid the same run erases from Auth. The shipped fix diffs
