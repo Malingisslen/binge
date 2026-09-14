@@ -10,8 +10,8 @@ export default function CommunityGuidelinesPage() {
   return (
     <LegalPageShell
       title="Community-regler"
-      lastUpdated="2026-06-01"
-      version="1.0"
+      lastUpdated="2026-09-14"
+      version="1.1"
     >
       <section>
         <p className="text-ink-2">
@@ -100,7 +100,7 @@ export default function CommunityGuidelinesPage() {
         <h2>Ändringar</h2>
         <p>
           Vi kan komma att uppdatera dessa regler. Vid materiella
-          ändringar meddelar vi i appen.
+          ändringar bumpar vi versionsnumret ovan.
         </p>
       </section>
     </LegalPageShell>

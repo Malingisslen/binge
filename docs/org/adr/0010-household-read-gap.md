@@ -35,3 +35,6 @@ rules alone couldn't settle:
   contributions — coherent with the fairness rationale.
 - The disclosure sentence is a **binding** part of the consent copy (Legal #3);
   removing it later reopens this ADR.
+- 2026-09-14 (BIN-1173): the consent copy's "Det här delas" line gained the
+  clarification that which services you have is already visible to every group
+  member through the membership row. The disclosure sentence is unchanged.

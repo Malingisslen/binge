@@ -11,8 +11,8 @@ export default function VillkorPage() {
   return (
     <LegalPageShell
       title="Användarvillkor"
-      lastUpdated="2026-09-09"
-      version="1.1"
+      lastUpdated="2026-09-14"
+      version="1.2"
     >
       <section>
         <h2>1. Vad Binge är</h2>
@@ -147,9 +147,7 @@ export default function VillkorPage() {
         <h2>11. Ändringar av villkoren</h2>
         <p>
           Vi kan komma att uppdatera dessa villkor. Vid materiella
-          ändringar bumpar vi versionsnumret ovan och meddelar i appen.
-          Om du fortsätter använda Binge efter ändringen anses du ha
-          godkänt de nya villkoren.
+          ändringar bumpar vi versionsnumret ovan.
         </p>
       </section>
 

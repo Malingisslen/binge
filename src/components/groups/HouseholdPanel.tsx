@@ -65,9 +65,10 @@ export default function HouseholdPanel({ groupId }: { groupId: string }) {
           <p className="text-xs font-bold text-ink">Dela dina streamingkostnader med gruppen?</p>
           <ul className="text-xxs text-ink-2 leading-relaxed list-disc pl-4 space-y-1">
             <li>
-              <span className="font-semibold">Det här delas:</span> vilka tjänster du har,
-              vad du betalar per tjänst (inklusive kampanjpris och dess slutdatum) och
-              vilka tjänster som har titlar i din backlog. Aldrig vad du tittar på.
+              <span className="font-semibold">Det här delas:</span> vad du betalar per
+              tjänst (inklusive kampanjpris och dess slutdatum) och vilka tjänster som
+              har titlar i din backlog. Aldrig vad du tittar på. Alla i gruppen ser redan
+              vilka tjänster du har.
             </li>
             <li>
               <span className="font-semibold">Vilka ser det:</span> nuvarande och framtida

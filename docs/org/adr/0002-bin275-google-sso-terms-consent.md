@@ -59,6 +59,12 @@ rejected because Legal calls it actively harmful.
 > together (recommended), and (b) whether to also enforce/record the 13-year age check on
 > the Google path in the same change or as a fast-follow.
 
+## Note (2026-09-14, BIN-1173 follow-up)
+The "re-prompt-on-version flow that `termsVersion` enables" under Decision was never
+built: nothing reads a stored `termsVersion` to compare it with `CURRENT_TERMS_VERSION`.
+The Decision text above stands as recorded. The same day, the terms, privacy and
+community-guidelines pages stopped promising an in-app notice of changes.
+
 ## Decided by
 Stakeholder panel synthesis (autonomous, non-halt rule) for the park decision; **Human
 owner (Malin)** for the consent-model + age-gate questions above.

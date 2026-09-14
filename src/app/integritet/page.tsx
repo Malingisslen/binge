@@ -235,7 +235,7 @@ export default function IntegritetPage() {
           något sparas.
         </p>
         <ul>
-          <li><strong>Vad vi sparar</strong> — vilka streamingtjänster du har, vad de kostar dig (ordinarie pris, aldrig vilken abonnemangsnivå), eventuellt kampanjpris med slutdatum, samt vilka av tjänsterna som bär minst en osedd titel i din bevakningslista.</li>
+          <li><strong>Vad vi sparar</strong> — vilka streamingtjänster du har (det ser alla i gruppen redan, se ovan), vad de kostar dig (ordinarie pris, aldrig vilken abonnemangsnivå), eventuellt kampanjpris med slutdatum, samt vilka av tjänsterna som bär minst en osedd titel i din bevakningslista.</li>
           <li><strong>Syfte</strong> — att ge gruppen en samlad hushållsbild, t.ex. &quot;Disney+ betalas av 2 av er&quot;, så ni kan se om ni betalar dubbelt för samma tjänst.</li>
           <li><strong>Vem kan se det</strong> — andra medlemmar i gruppen (nuvarande och framtida), men bara de som själva delar sina egna kostnader. Appens gränssnitt visar bara summerade totaler, men tekniskt kan en delande medlem läsa din enskilda lista rad för rad — vi vill att du vet det innan du väljer att dela.</li>
           <li><strong>Din kontroll</strong> — sluta dela när som helst med ett tryck; din data raderas då omedelbart. Den raderas också automatiskt om du lämnar gruppen, blir borttagen ur den, eller tar bort ditt konto.</li>
@@ -255,9 +255,7 @@ export default function IntegritetPage() {
         <h2>11. Ändringar</h2>
         <p>
           Om vi gör materiella ändringar i denna policy uppdaterar vi
-          versionsnumret ovan. Mindre
-          redaktionella ändringar (t.ex. förtydliganden) kan ske utan
-          särskild notis.
+          versionsnumret ovan.
         </p>
       </section>
 

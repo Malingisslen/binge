@@ -1474,8 +1474,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // The consent stamps are written by `createProfileWithConsent` with `serverTimestamp()`
   // at this moment — never backdated from `metadata.creationTime`, which would reproduce
   // the manufactured record this ticket exists to remove (#6 Data Protection Officer's
-  // condition 2). `termsVersion` comes from `CURRENT_TERMS_VERSION`, so a later terms bump
-  // re-gates anyone who lands here again (#6's second concern).
+  // condition 2). `termsVersion` comes from `CURRENT_TERMS_VERSION`.
   //
   // Nothing here re-checks the age threshold: reaching this function at all means
   // `ensureUserProfile` already decided, and re-deriving the decision at a second site is
