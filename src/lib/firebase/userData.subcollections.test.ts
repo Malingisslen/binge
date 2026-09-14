@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 // userData.ts's only runtime dependency is fsdb() from ./db, which transitively
@@ -90,6 +90,66 @@ function helperCollectionGroupQueries(): { group: string; field: string }[] {
   return out;
 }
 
+/**
+ * BIN-1149 — the SERVER half of the erasure: the Admin-SDK collection-group queries
+ * the retention sweep and the group handover run. Same failure as the client half
+ * (the emulator never demands an index), and BIN-1147's `groupInvites` query would
+ * have shipped without one unnoticed.
+ *
+ * Scope is two directories:
+ *   git grep -n "collectionGroup(" -- functions/src/retentionCleanup functions/src/groupHandover
+ *
+ * Deliberately outside it:
+ *   - the notifiers and sweeps elsewhere in functions/src (availableNotify,
+ *     priceDropNotify, shared/followedSeries, streamingOffers, tmdbTosSweep, insights,
+ *     reclaimOrphanFollows). Several filter on two fields, whose index is a composite
+ *     in `indexes`, not a fieldOverride;
+ *   - a collection named by a variable (`collectionGroup(kind)`), which no regex can
+ *     read. The pattern below only matches a quoted name.
+ *
+ * A query with MORE than one `.where()`, or an `.orderBy()` after its filter, is not
+ * checked against fieldOverrides at all:
+ * a single-field override proves nothing about it. It is collected and must be named
+ * in COMPOSITE_QUERIES_OUT_OF_SCOPE, so one cannot enter the scope silently.
+ */
+const SERVER_ERASURE_DIRS = ['functions/src/retentionCleanup', 'functions/src/groupHandover'];
+const COMPOSITE_QUERIES_OUT_OF_SCOPE: Record<string, string> = {};
+
+function serverErasureFiles(): string[] {
+  return SERVER_ERASURE_DIRS.flatMap((dir) =>
+    readdirSync(join(process.cwd(), dir))
+      .filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'))
+      .map((f) => `${dir}/${f}`),
+  );
+}
+
+type ServerQueries = { single: { file: string; group: string; field: string }[]; composite: string[] };
+
+/** Classifies the quoted collection-group queries in one source text. */
+function classifyServerQueries(file: string, src: string, into: ServerQueries): ServerQueries {
+  const re = /collectionGroup\('([a-zA-Z]+)'\)((?:\s*\.where\(\s*'[a-zA-Z]+'[^)]*\))+)/g;
+  for (const m of src.matchAll(re)) {
+    const fields = [...m[2].matchAll(/\.where\(\s*'([a-zA-Z]+)'/g)].map((w) => w[1]);
+    // An orderBy after the filter needs a composite too, even behind a select().
+    const orderedAfter = /^\s*(?:\.select\([^)]*\)\s*)?\.orderBy\(/.test(src.slice(m.index + m[0].length));
+    if (fields.length > 1 || orderedAfter) into.composite.push(`${file}: ${m[1]}.${fields.join('+')}${orderedAfter ? '+orderBy' : ''}`);
+    else into.single.push({ file, group: m[1], field: fields[0] });
+  }
+  return into;
+}
+
+function serverCollectionGroupQueries(files: string[]): ServerQueries {
+  const out: ServerQueries = { single: [], composite: [] };
+  for (const file of files) classifyServerQueries(file, readFileSync(join(process.cwd(), file), 'utf8'), out);
+  return out;
+}
+
+function hasCollectionGroupOverride(indexes: typeof INDEXES, group: string, field: string): boolean {
+  return (indexes.fieldOverrides ?? []).some(
+    (o) => o.collectionGroup === group && o.fieldPath === field && o.indexes.some((i) => i.queryScope === 'COLLECTION_GROUP'),
+  );
+}
+
 const known = new Set<string>(KNOWN_USER_SUBCOLLECTIONS);
 
 describe('GDPR user-subcollection enumeration guard (BIN-347)', () => {
@@ -154,19 +214,68 @@ describe('GDPR user-subcollection enumeration guard (BIN-347)', () => {
     // any OTHER field needs an explicit COLLECTION_GROUP fieldOverride.
     const cgQueries = helperCollectionGroupQueries();
     expect(cgQueries.length, 'expected to find the helper collection-group queries').toBeGreaterThan(0);
-    const overrides = INDEXES.fieldOverrides ?? [];
     for (const { group, field } of cgQueries) {
       if (field === 'documentId()') continue; // auto-indexed __name__
-      const hasCgIndex = overrides.some(
-        o =>
-          o.collectionGroup === group &&
-          o.fieldPath === field &&
-          o.indexes.some(i => i.queryScope === 'COLLECTION_GROUP'),
-      );
       expect(
-        hasCgIndex,
+        hasCollectionGroupOverride(INDEXES, group, field),
         `collectionGroup('${group}').where('${field}') needs a COLLECTION_GROUP fieldOverride in firestore.indexes.json — deleting it would throw failed-precondition mid-deletion in prod`,
       ).toBe(true);
     }
+  });
+
+  describe('the server erasure paths (BIN-1149)', () => {
+    const files = serverErasureFiles();
+    const { single, composite } = serverCollectionGroupQueries(files);
+
+    it('reads both erasure directories and finds their single-field queries', () => {
+      expect(files.filter((f) => f.startsWith('functions/src/retentionCleanup/')).length).toBeGreaterThan(0);
+      expect(files.filter((f) => f.startsWith('functions/src/groupHandover/')).length).toBeGreaterThan(0);
+      // The queries BIN-1147 and BIN-1063 added, by name: a regex that broke would
+      // find none of them, and a floor on the count alone would not say which.
+      const found = new Set(single.map((q) => `${q.group}.${q.field}`));
+      for (const q of ['groupInvites.fromUid', 'likes.uid', 'comments.uid', 'reactions.uid']) {
+        expect(found, `the server parser no longer finds collectionGroup('${q.split('.')[0]}')`).toContain(q);
+      }
+    });
+
+    // No erasure query needs a composite today, so the live list above is empty and
+    // cannot show the classifier works. These literal sources can.
+    it.each([
+      ["db.collectionGroup('a').where('x', '==', u).select().get()", 1, []],
+      ["db.collectionGroup('a').where('x', '==', u).where('y', '==', v).get()", 0, ['f: a.x+y']],
+      ["db.collectionGroup('a').where('x', '==', u).orderBy('y').get()", 0, ['f: a.x+orderBy']],
+      ["db.collectionGroup('a').where('x', '==', u).select().orderBy('y')", 0, ['f: a.x+orderBy']],
+      ["db.collectionGroup(kind).where('x', '==', u).get()", 0, []],
+    ] as const)('classifies %s', (src, singles, composites) => {
+      const got = classifyServerQueries('f', src, { single: [], composite: [] });
+      expect(got.single).toHaveLength(singles);
+      expect(got.composite).toEqual(composites);
+    });
+
+    it('a query needing a composite index is named, never checked against a single-field override', () => {
+      expect(composite.sort()).toEqual(Object.keys(COMPOSITE_QUERIES_OUT_OF_SCOPE).sort());
+    });
+
+    it('every single-field server erasure query has a COLLECTION_GROUP override', () => {
+      const missing = single
+        .filter((q) => !hasCollectionGroupOverride(INDEXES, q.group, q.field))
+        .map((q) => `${q.file}: collectionGroup('${q.group}').where('${q.field}')`);
+      expect(missing, 'add a COLLECTION_GROUP fieldOverride in firestore.indexes.json — the emulator will not tell you').toEqual([]);
+    });
+
+    // The red proof, run on every test run rather than once by hand: take the entry
+    // away from a copy of the index file and the same check must name the query.
+    it.each([['groupInvites', 'fromUid'], ['likes', 'uid']])(
+      'removing the %s.%s override is caught',
+      (group, field) => {
+        const without = {
+          ...INDEXES,
+          fieldOverrides: (INDEXES.fieldOverrides ?? []).filter((o) => !(o.collectionGroup === group && o.fieldPath === field)),
+        };
+        expect(hasCollectionGroupOverride(INDEXES, group, field)).toBe(true);
+        expect(single.some((q) => q.group === group && q.field === field)).toBe(true);
+        expect(hasCollectionGroupOverride(without, group, field)).toBe(false);
+      },
+    );
   });
 });

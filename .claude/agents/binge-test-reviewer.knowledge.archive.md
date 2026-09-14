@@ -28649,3 +28649,113 @@ Not a "weakened assertion" and not a missing-coverage gap in the FILE as a whole
 new test's claim about ITSELF that a decisive mutation shows is false.
 
 **Verdict: fail (1 blocking).**
+
+## Relocated 2026-09-14b — entry 100 (cap trim, paid for the BIN-1149 composite/orderBy-vacuity + scoping-claim additions above)
+
+Verbatim text moved out of the "Firestore rules testing" bullet in `binge-test-reviewer.knowledge.md`, compressed there to a pointer at this entry:
+
+BIN-1127's "a non-owner cannot invite into a third party inbox" test named the group-ownership pin (`get(groups/{id}).data.ownerUid == request.auth.uid`, the LAST clause) but the caller's own profile was never seeded, so `isOwnIdentity`'s `get()` errored first — mutating the ownership pin to `true` left all 341 tests green.
+
+Also moved out of the "Extract-then-test & layering" bullet's "Three inverses" clause, compressed there to a names-only list pointing here:
+
+Three inverses: the fn's OWN test file exists but a behavior change lands zero cases there while a consumer's file picks up the coverage (BIN-618 stale-canonical-home — prove by mutating the fn, fix = mirror the cases back); the fn is exported, fully tested and simply UNREFERENCED while the consumer re-derives it inline (BIN-580); and a brand-new sibling function inherits none of the coverage its already-tested neighbours carry (BIN-656/686).
+
+---
+
+Also shortened in the same trim, moved here verbatim from HEAD (added by the BIN-1149 integration review):
+
+- line 25: **Same shape for a shared REFUSAL/guard helper**: a call-based test of the helper plus a source-scan of the call's argument text both stayed green after `main()`'s refusal-then-exit block was deleted from TWO of `projectRefusal`'s three call sites (`recap-upload.mjs`, `recap-coverage-manifest.mjs`) — the argument literal still spells `projectId`. Only the third site (`backfill-mirror-uid.mjs`) had a CODE-scan pinning it.
+- line 89: **A hand-enumerated uid-bearing FIELD set for an erasure owes a roster derived from the source, not a `grep` written in a comment** (BIN-1063's `TraceErasure`, missed `participantUids` until a reviewer caught it — repo shape: `userData.subcollections.test.ts`, derive from `firestore.rules`)
+
+## 2026-09-14 — BIN-1149 review: server-erasure index guard (userData.subcollections.test.ts)
+
+**Diff reviewed.** Staged (only staged file this pass): `src/lib/firebase/userData.subcollections.test.ts`,
++99/-1. Adds a "the server erasure paths (BIN-1149)" nested `describe` plus two helper
+functions (`serverErasureFiles`, `serverCollectionGroupQueries`) and a docblock. Everything
+else in `git status` (`functions/src/groupHandover/logic.ts`, `functions/src/retentionCleanup/
+{index,runCleanup}.ts`, `src/test/rules/*`, `docs/*`, `tasks/todo.md`, the new
+`src/test/rules/memberTraceRoster.ts`) was unstaged — later-batch work, out of scope, not
+mutated.
+
+**What it does.** Parses the two Admin-SDK "erasure" directories
+(`functions/src/retentionCleanup`, `functions/src/groupHandover`) for
+`collectionGroup('x').where('y', ...)` call shapes, classifies each as `single` (one `.where()`,
+no trailing `.orderBy()`) or `composite` (2+ `.where()`s, or an `.orderBy()` after the filter,
+even behind a `.select()`), and requires every `single` query to have a matching
+`COLLECTION_GROUP` `fieldOverride` in `firestore.indexes.json`. `composite` queries are named in
+an (empty) `COMPOSITE_QUERIES_OUT_OF_SCOPE` map instead of being checked.
+
+**Mutation run 1 — the four floor queries.** `npx vitest run` on the file: 10/10 green,
+25.99s cold / ~1.5s warm. Confirmed via `node -e` against the real `functions/src/**` sources
+that the parser finds exactly `groupInvites.fromUid` (×2, in
+`retentionCleanup/index.ts:303` and `groupHandover/adminIo.ts:32`), `likes.uid`,
+`comments.uid`, `reactions.uid` — matching the `it.each`/`toContain` floor. Confirmed all four
+have a `COLLECTION_GROUP` fieldOverride in `firestore.indexes.json` via a `node -e` dump.
+Confirmed the four `.select()`-only collectionGroup scans in `retentionCleanup/index.ts`
+(`notifications`, `joinAttempts`, `notified`, `fcmTokens`) have no `.where()` at all and are
+correctly invisible to the regex (they order by `__name__` only, which the file's own header
+comment says needs no index).
+
+**Mutation run 2 — live index-removal, groupInvites.fromUid.** Wrote a scratchpad copy of
+`firestore.indexes.json`, hashed it (`git hash-object` → `f23376a6…`), then removed the
+`groupInvites`/`fromUid` COLLECTION_GROUP override from the real file and re-ran. Result: 2
+failed — `every single-field server erasure query has a COLLECTION_GROUP override` (named BOTH
+`functions/src/retentionCleanup/index.ts` and `functions/src/groupHandover/adminIo.ts`) and
+`removing the groupInvites.fromUid override is caught` (its own line-264 self-sanity assertion
+failed first, since `INDEXES` is a module-level `readFileSync` snapshot and the mutation was on
+disk). Restored from the scratchpad snapshot, `git hash-object` matched `f23376a6…`,
+`git status --porcelain firestore.indexes.json` empty, re-ran: 10/10 green again.
+
+**Mutation run 3 — live index-removal, likes.uid.** Same protocol for the `likes`/`uid`
+override: `removing the likes.uid override is caught` failed as expected. Restored, hash
+verified, suite green again.
+
+**Mutation run 4 — orderBy/composite detector sample strings.** `node -e` against the exact
+regex+detector logic pulled from the file: `.where('f','==',1).orderBy('g')` → composite;
+`.where('f','==',1).select().orderBy('g')` → composite; `.where('f','==',1).select().get()` →
+single. All three matched the task brief's claimed results exactly.
+
+**Mutation run 5 — disabling the composite/orderBy branch entirely (new finding).**
+Snapshotted the staged blob (`git hash-object` → `3d6cbcc9…`). Edited the LIVE staged file,
+replacing the `fields.length > 1 || orderedAfter` condition with `if (false)` (composite
+detection permanently off). Ran the suite: **10/10 still green.** This proves the
+composite-exclusion mechanism — the one the docblock calls "so one cannot enter the scope
+silently" — has zero live coverage: production currently has no multi-`.where()`/`.orderBy()`
+collectionGroup query in either erasure directory, so the branch that is supposed to catch a
+NEW one silently entering unchecked is itself unexercised, and a regression in that regex
+(or its deletion) would ship invisibly. Restored from the pre-edit snapshot immediately after
+observing the result; `git hash-object` confirmed `3d6cbcc9…`, `git status --porcelain`
+showed the file staged unchanged, re-ran: 10/10 green.
+
+**Finding filed (blocking):** `src/lib/firebase/userData.subcollections.test.ts:135-136` — add
+a direct unit test of `serverCollectionGroupQueries` (or the regex it wraps) against literal
+synthetic source strings, asserting the composite/single split for at least: two `.where()`s;
+one `.where()` + `.orderBy()`; one `.where()` + `.select()` + `.orderBy()`; one `.where()` +
+`.select()` + `.get()` (single). This is exactly the sample-string protocol already run by hand
+per the task brief's own evidence section — it needs to live in the suite, not beside it.
+
+**Finding filed (blocking, comment accuracy):** `src/lib/firebase/userData.subcollections.test.ts:105`
+— "Deliberately outside it: ... reclaimOrphanFollows). They do not erase anything" is false.
+Read `functions/src/streamingOffers/index.ts:116,327` (`col.doc(id).delete()`, `legacyRef.delete()`),
+`functions/src/insights/rollup.ts:192` (`batch.delete(ref)` pruning expired history docs), and
+`functions/src/reclaimOrphanFollows/index.ts` (`deleteInBatches` removing orphaned
+`following`/`followers` docs) — all three batch-delete real documents. None of them are GDPR
+per-uid cascade erasures of a departing user's OWN tree (which is presumably the intended,
+narrower point), but the sentence as written is a blanket false claim, directly falsifiable by
+reading the three files. The load-bearing, TRUE boundary is already the `SERVER_ERASURE_DIRS`
+directory allowlist; the "they do not erase anything" clause adds nothing true and should be
+struck, not reworded (per the repo's own "wrong sentence gets struck" convention — this is
+directly readable from the code, no counting needed).
+
+**Verified clean, no findings:** floors present (both directories, all four named queries);
+composite/variable-name exclusion correctly wired (no variable-name `collectionGroup(kind)`
+call exists in either directory today); the "notifiers documented out of scope" docblock list
+is accurate as to WHICH modules have collectionGroup calls and WHICH filter on two fields with a
+composite (not fieldOverride) index (spot-checked `shared/followedSeries.ts` and
+`availableNotify/index.ts` against `firestore.indexes.json`'s `watchlist` composite entry —
+matches); the new file is not a NEW ownership-map entry (already listed twice in
+`docs/role-responsibilities.md`, lines 224 and 243) so no `gen-ownership-map` gap; `git status
+--porcelain` empty after every mutation restore; index and worktree hashes matched
+(`3d6cbcc9…`) throughout.
+
+**Verdict: fail (2 blocking).**

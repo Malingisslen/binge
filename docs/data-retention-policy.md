@@ -755,10 +755,8 @@ hänt en gång. Läs `FIELD_OWNED_CATEGORIES` i
 körningen och listan glider isär.
 
 En kategori som frågar med ett collection group-predikat behöver dessutom ett
-`fieldOverrides`-index i `firestore.indexes.json`. Ingenting fäller om det
-saknas — emulatorn indexerar automatiskt, så testsviten är grön ändå — och
-symptomet i drift är att frågan kastar och sopningen hoppar över det uid:t tills
-indexet byggts.
+`fieldOverrides`-index i `firestore.indexes.json`. Saknas det kastar frågan i drift
+och sopningen hoppar över det uid:t tills indexet byggts.
 
 **När en recension raderas följer ANDRAS likes och kommentarer under den med.**
 Frågan filtrerar inte på uid — den listar allt under recensionen. Det är
