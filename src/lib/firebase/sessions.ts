@@ -42,6 +42,7 @@ export async function createSession(params: {
   // Klampningen halls kvar for att en tyst forkortning ar ett battre anvandarmote an
   // ett permission-denied. Harled de tva taken hellre an att lita pa den har meningen:
   //   grep -n "hostName.size()" firestore.rules
+  //   grep -n "hostName is string" firestore.rules
   //   grep -n "MAX_SESSION_DISPLAY_NAME" src/lib/clampText.ts
   const hostName = clampToCodeUnits(params.hostName, MAX_SESSION_DISPLAY_NAME);
   const sessionRef = await addDoc(collection(db, 'sessions'), {

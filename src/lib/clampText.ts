@@ -39,12 +39,14 @@ export const MAX_DISPLAY_NAME = 80;
 export const MAX_BIO = 160;
 
 /**
- * Taket `firestore.rules` satter pa `sessions/{sessionId}/participants/{pid}.displayName`.
+ * Taket `firestore.rules` satter pa `sessions/{sessionId}.hostName` och pa
+ * `sessions/{sessionId}/participants/{pid}.displayName`.
  *
  * EGEN KONSTANT MED FLIT. Talet rakar vara detsamma som MAX_DISPLAY_NAME, men
  * det ar en ANNAN storhet: den ar profilens tak, den har ar Tillsammans-
- * deltagarens. Att importera profilens konstant hit hade citerat fel klausul, och
- * en framtida andring av den ena hade tyst flyttat den andra. Harled klausulen:
- *   awk '/match .participants.{pid}/,/^        }/' firestore.rules | grep -n displayName
+ * sessionens. Att importera profilens konstant hit hade citerat fel klausul, och
+ * en framtida andring av den ena hade tyst flyttat den andra. Klausulerna lases
+ * ur regelfilen och jamfors med konstanten:
+ *   npx vitest run src/lib/clampText.test.ts -t "sessionsetikettens tak"
  */
 export const MAX_SESSION_DISPLAY_NAME = 80;
