@@ -64,7 +64,10 @@ const REPO = resolve(HERE, '..');
 //
 // BIN-1184, 2026-09-14: raised to what `numTotalTests` reported with the group name floor
 // tests in place.
-export const MIN_TESTS = 622;
+//
+// BIN-1185, 2026-09-15: raised to what `numTotalTests` reported on 9e1ead6, with the
+// sprint 2026-09-14b rules tests and BIN-1113's friend-mirror tests in place.
+export const MIN_TESTS = 632;
 
 const VITEST_ARGS = ['run', '--config', 'vitest.rules.config.ts'];
 
