@@ -57,7 +57,10 @@ export function UsernameSection() {
           <div className="flex gap-2">
             <input
               id="username"
-              autoComplete="username"
+              // BIN-1169: `username` means the LOGIN identity in the autofill spec, and
+              // Binge logs in with email, so a password manager could fill the login
+              // email here. This is the public handle, which nothing should autofill.
+              autoComplete="off"
               aria-describedby={user.username ? 'username-help' : undefined}
               value={usernameInput}
               onChange={e => setUsernameInput(e.target.value.toLowerCase())}

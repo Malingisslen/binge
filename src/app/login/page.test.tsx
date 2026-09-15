@@ -220,3 +220,51 @@ describe('LoginPage — felkoder som inte ar natverksfel (BIN-1157)', () => {
     expect(text).toContain('Fel e-post eller lösenord.');
   });
 });
+
+// BIN-1169: Google-knappen far samma text som formularet for samma kod. Drivs genom
+// knappen, inte en hjalpfunktion, av samma skal som blocket ovan.
+describe('LoginPage — Google-inloggningens felkoder (BIN-1169)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    window.sessionStorage.clear();
+    auth.user = null;
+    auth.uid = null;
+    auth.profileLoading = false;
+    auth.loading = false;
+  });
+
+  async function googleWithCode(code: string) {
+    auth.signIn.mockRejectedValueOnce(Object.assign(new Error('x'), { code }));
+    const { getByRole, container } = render(<LoginPage />);
+    await act(async () => {
+      fireEvent.click(getByRole('button', { name: /google/i }));
+    });
+    return container.textContent ?? '';
+  }
+
+  it('ett avstangt konto far samma hedgade text som i formularet', async () => {
+    const text = await googleWithCode('auth/user-disabled');
+    expect(text).toContain('Om kontot finns är det inte tillgängligt just nu. Mejla hej@binge.nu om du behöver hjälp.');
+    expect(text).not.toContain('Försök igen om en stund');
+  });
+
+  it('en strypning far samma text som i formularet', async () => {
+    const text = await googleWithCode('auth/too-many-requests');
+    expect(text).toContain('För många försök. Vänta en stund och försök igen.');
+  });
+
+  it.each(['auth/popup-closed-by-user', 'auth/cancelled-popup-request'])(
+    'ett stangt eller avbrutet popupfonster (%s) behaller den generella texten',
+    async (code) => {
+      const text = await googleWithCode(code);
+      expect(text).toContain('Inloggningen misslyckades. Försök igen om en stund.');
+      expect(text).not.toContain('Om kontot finns');
+      expect(text).not.toContain('För många försök');
+    },
+  );
+
+  it('en okand kod faller igenom till den generella texten', async () => {
+    const text = await googleWithCode('auth/internal-error');
+    expect(text).toContain('Inloggningen misslyckades. Försök igen om en stund.');
+  });
+});

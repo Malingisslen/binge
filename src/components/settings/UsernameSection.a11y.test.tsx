@@ -63,8 +63,10 @@ describe('UsernameSection — falten har tillgangliga namn (BIN-1161)', () => {
     expect(group.querySelectorAll('input[type="radio"]').length).toBe(3);
   });
 
-  it('anvandarnamnsfaltet bar ratt autofyll-syfte', async () => {
+  // BIN-1169: det publika handtaget ar inte inloggningsidentiteten, sa en
+  // losenordshanterare ska inte fylla i inloggnings-e-posten har.
+  it('anvandarnamnsfaltet ber inte om autofyll', async () => {
     await renderSection();
-    expect(screen.getByLabelText('Användarnamn').getAttribute('autocomplete')).toBe('username');
+    expect(screen.getByLabelText('Användarnamn').getAttribute('autocomplete')).toBe('off');
   });
 });

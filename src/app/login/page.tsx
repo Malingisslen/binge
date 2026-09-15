@@ -11,6 +11,30 @@ import { CURRENT_TERMS_VERSION, MIN_AGE } from '@/lib/legal';
 import { takeNextPath } from '@/lib/nextPath';
 import { MAX_DISPLAY_NAME } from '@/lib/clampText';
 
+/**
+ * BIN-1169: the error codes whose text is the same whichever way the visitor signed in.
+ * Both the email form and the Google button read this, so there is one wording for each.
+ * Anything else returns null and the caller keeps its own generic text.
+ */
+function accountStateMessage(code: string): string | null {
+  if (code === 'auth/user-disabled') {
+    // BIN-1157: kontot är avstängt i konsolen. Att råda någon att kontrollera
+    // sin uppkoppling är aktivt vilseledande — den blir aldrig problemet.
+    //
+    // Lydelsen är HEDGAD med flit (#4 Security). Registreringsgrenen
+    // avslöjar redan att en adress har ett konto, men den kräver ett
+    // registreringsförsök; en obetingad "det här kontot är avstängt" skulle
+    // dessutom röja att ett KÄNT konto är avstängt utan att lösenordet bevisas.
+    // Vi kan inte läsa ur repot om Firebase returnerar koden före eller efter
+    // lösenordskontrollen, så texten antar det sämre fallet.
+    return 'Om kontot finns är det inte tillgängligt just nu. Mejla hej@binge.nu om du behöver hjälp.';
+  }
+  if (code === 'auth/too-many-requests') {
+    return 'För många försök. Vänta en stund och försök igen.';
+  }
+  return null;
+}
+
 export default function LoginPage() {
   const { user, uid, profileLoading, signIn, signInEmail, register, loading } = useAuth();
   const router = useRouter();
@@ -70,9 +94,10 @@ export default function LoginPage() {
     try {
       await signIn();
       trackEvent('signed_in', { method: 'google' });
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Google sign-in failed:', err);
-      setError('Inloggningen misslyckades. Försök igen om en stund.');
+      const code = (err as { code?: string })?.code ?? '';
+      setError(accountStateMessage(code) ?? 'Inloggningen misslyckades. Försök igen om en stund.');
     }
   }
 
@@ -107,19 +132,8 @@ export default function LoginPage() {
         setError('E-postadressen används redan.');
       } else if (code === 'auth/weak-password') {
         setError('Lösenordet måste vara minst 6 tecken.');
-      } else if (code === 'auth/user-disabled') {
-        // BIN-1157: kontot är avstängt i konsolen. Att råda någon att kontrollera
-        // sin uppkoppling är aktivt vilseledande — den blir aldrig problemet.
-        //
-        // Lydelsen är HEDGAD med flit (#4 Security). Registreringsgrenen ovan
-        // avslöjar redan att en adress har ett konto, men den kräver ett
-        // registreringsförsök; en obetingad "det här kontot är avstängt" skulle
-        // dessutom röja att ett KÄNT konto är avstängt utan att lösenordet bevisas.
-        // Vi kan inte läsa ur repot om Firebase returnerar koden före eller efter
-        // lösenordskontrollen, så texten antar det sämre fallet.
-        setError('Om kontot finns är det inte tillgängligt just nu. Mejla hej@binge.nu om du behöver hjälp.');
-      } else if (code === 'auth/too-many-requests') {
-        setError('För många försök. Vänta en stund och försök igen.');
+      } else if (accountStateMessage(code)) {
+        setError(accountStateMessage(code) as string);
       } else if (mode === 'register') {
         setError('Kunde inte skapa kontot. Kontrollera anslutningen och försök igen.');
       } else {
