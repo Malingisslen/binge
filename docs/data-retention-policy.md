@@ -671,6 +671,25 @@ så samma användare inte får en andra push för samma digitala släppdatum. Do
   nollställer sin egen klocka. Ingen `firestore.indexes.json`-post krävs (svepet
   pagesar på `__name__` via det automatiska collection-group-indexet, som de andra).
 
+### Spärr mot upprepade vänförfrågnings-pushar (BIN-1129, 2026-09-15) — 3-dygns svep
+
+`friendRequestPushes/{mottagarUid}_{avsändarUid}` — `{ lastPushedAt }`, skrivs av
+`onFriendRequestCreate`. Finns markören och är yngre
+än ett dygn skickas ingen ny push för samma par; förfrågan landar ändå.
+
+- **Vad den säger om en person:** att två konton har haft en vänförfrågan mellan sig.
+  Inget innehåll.
+- **Rättslig grund:** berättigat intresse (missbruksskydd), samma klass som integritets-
+  sidan redan beskriver. Integritetssidan ändras inte.
+- **Utanför exporten:** operationell metadata utan användarsynlig funktion, samma bucket
+  som dedup-markörerna ovan. Den ligger utanför `users/`, så varken exporten eller
+  klientens kontoradering når den — samlingen har ingen `firestore.rules`-match och
+  klienter nekas.
+- **Radering:** `retentionCleanup` raderar varje markör vars `lastPushedAt` är äldre än
+  `FRIEND_REQUEST_PUSH_MARKER_MAX_AGE_MS` i `functions/src/friendRequestPush/logic.ts`.
+  Maxåldern är längre än pushfönstret; ett test i `logic.test.ts` pinnar det, eftersom en
+  bortstädad markör läses som "aldrig pushat".
+
 ### Push-tokens för konton Auth inte längre erkänner (BIN-848, 2026-08-10)
 
 `users/{uid}/fcmTokens/*` för uid vars Auth-användare **saknas eller är spärrad**.
@@ -689,14 +708,11 @@ så samma användare inte får en andra push för samma digitala släppdatum. Do
   `getUsers()` i batchar om högst 100. Token-dokumenten raderas för uid som
   ligger i svarets `notFound`-lista, och för konton som returneras med
   `disabled: true`.
-- **Tre säkerhetsregler, alla avsiktliga.** Det här är det enda svepet vars
-  falska positiv förstör något ett LEVANDE konto använder:
+- **Säkerhetsregler, alla avsiktliga.**
   1. "Raderad" läses ur svarets egna `notFound`-lista — aldrig härlett ur att ett
      uid saknas i `users`. Spärrade konton returneras nämligen I `users`.
   2. En `getUsers()`-batch som kastar (nätfel, kvot, Auth-avbrott) raderar
      ingenting alls för den batchen. "Kunde inte verifiera" är inte "borta".
-  3. Svepet fångas separat i handlern, så ett Auth-avbrott aldrig svälter de fyra
-     Firestore-baserade svepen.
 - **Fördröjning:** upp till 24 timmar. Accepterat — notiserna gäller personens
   egen watchlist och egna vänner, inte tredje parts data, och token-dokumenten kan
   raderas direkt i konsolen om det brådskar.

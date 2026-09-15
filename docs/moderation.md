@@ -179,6 +179,17 @@ Filter sker klient-sidigt i:
 Admin behöver inte vidta åtgärd på blocks — de är symmetriska själv-
 kontrollverktyg.
 
+### Vänförfrågningar (BIN-1129, 2026-09-15)
+
+Vänförfrågningar är en egen yta för oönskad kontakt, och den har ingen
+anmälningsknapp (medvetet ej byggt). Två spärrar finns:
+
+- **Blockering stoppar en förfrågan.** Har mottagaren blockerat avsändaren nekar
+  `firestore.rules` att förfrågan skapas. Här är blockeringen alltså mer än ett
+  klientfilter. Avsändaren ser bara "Kunde inte skicka förfrågan.", samma text som
+  vid alla andra fel.
+- **Högst en push per dygn från samma person.** Förfrågan syns ändå i appen.
+
 ---
 
 ## 7. Loggning + evidens-backup

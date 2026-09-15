@@ -20,10 +20,11 @@
  */
 
 import { initializeApp } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { logger, setGlobalOptions } from 'firebase-functions/v2';
 import { sendPushToUser } from './push';
+import { friendRequestPushMarkerId, mayPushFriendRequest } from './friendRequestPush/logic';
 
 initializeApp();
 
@@ -61,6 +62,29 @@ export const onFriendRequestCreate = onDocumentCreated(
     const senderData = senderSnap.data();
     const fromDisplayName = (senderData?.displayName as string) || 'Någon';
     const fromUsername = (senderData?.username as string | null) ?? null;
+
+    // BIN-1129: högst en push per (mottagare, avsändare) per dygn. Förfrågan har
+    // redan landat; det här håller bara tillbaka notisen, oavsett om förra
+    // förfrågan avböjdes eller avbröts. Markören stämplas i samma transaktion som
+    // den läses, så två samtidiga skapanden kan inte båda släppas igenom. Den
+    // stämplas FÖRE pushen: en push som sedan fallerar håller fönstret ändå, vilket
+    // är den billiga felriktningen för en spärr mot notisspam.
+    const markerRef = db.collection('friendRequestPushes')
+      .doc(friendRequestPushMarkerId(recipientUid, event.params.fromUid));
+    const mayPush = await db.runTransaction(async (tx) => {
+      const last = (await tx.get(markerRef)).get('lastPushedAt') as Timestamp | undefined;
+      const nowMs = Date.now();
+      if (!mayPushFriendRequest(last ? last.toMillis() : null, nowMs)) return false;
+      tx.set(markerRef, { lastPushedAt: Timestamp.fromMillis(nowMs) });
+      return true;
+    });
+    if (!mayPush) {
+      logger.info('onFriendRequestCreate: push held back, same pair pushed within the window', {
+        recipientUid,
+        fromUid: event.params.fromUid,
+      });
+      return;
+    }
 
     // Klick på notif → vännernas-sidan med pending-fliken aktiv.
     // /friends/?tab=requests fungerar i appen via search-param-läsare.

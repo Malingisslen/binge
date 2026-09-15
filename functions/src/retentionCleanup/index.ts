@@ -16,6 +16,10 @@
  *     match), so the client account-deletion cascade cannot reach it — this sweep
  *     is its SOLE GDPR Art. 17 erasure path AND its growth bound, covering
  *     self-service, abandoned and Console-deleted accounts alike.
+ *   - friendRequestPushes/{recipient}_{sender} — older than
+ *     FRIEND_REQUEST_PUSH_MARKER_MAX_AGE_MS (BIN-1129): the repeat friend-request
+ *     push brake's marker. Admin-only (no firestore.rules match), outside users/,
+ *     so this sweep is its only erasure path.
  *   - users/{uid}/fcmTokens/* — for uids Auth no longer honours (BIN-848): the
  *     account was deleted or disabled from the Firebase Console, which leaves
  *     every Firestore doc in place, so sendPushToUser (which gates on the profile
@@ -124,6 +128,8 @@ function baseQuery(kind: ScanKind): Query {
     case 'releaseMarkers':
       // The age field here is `updatedAt` (what the marker stamps), not `createdAt`.
       return db.collectionGroup('notified').select('updatedAt');
+    case 'friendRequestPushMarkers':
+      return db.collection('friendRequestPushes').select('lastPushedAt');
     case 'fcmTokens':
       // `.select()` with no fields returns refs only — this scan never reads a
       // token value; the owner uid comes from the ref's own path.

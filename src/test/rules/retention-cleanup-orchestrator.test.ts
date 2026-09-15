@@ -10,6 +10,7 @@ import {
 import { runGroupHandover, type HandoverIo } from '../../../functions/src/groupHandover/runHandover';
 import { isEmptyExcept } from '../../../functions/src/groupHandover/logic';
 import { rosterMismatches } from './memberTraceRoster';
+import { FRIEND_REQUEST_PUSH_MARKER_MAX_AGE_MS } from '../../../functions/src/friendRequestPush/logic';
 import {
   FIELD_OWNED_CATEGORIES,
   FIELD_OWNED_MAX_DOCS_PER_UID,
@@ -179,6 +180,7 @@ const SCAN_SOURCE: Record<ScanKind, { group: boolean; id: string }> = {
   notifications: { group: true, id: 'notifications' },
   joinAttempts: { group: true, id: 'joinAttempts' },
   releaseMarkers: { group: true, id: 'notified' },
+  friendRequestPushMarkers: { group: false, id: 'friendRequestPushes' },
   fcmTokens: { group: true, id: 'fcmTokens' },
   usernames: { group: false, id: 'usernames' },
   orphanWatch: { group: false, id: 'orphanWatch' },
@@ -513,7 +515,7 @@ async function exists(db: Firestore, path: string): Promise<boolean> {
  * MUST reap and something each MUST leave alone. The BIN-1023 orphan-data sweep
  * is NOT among them — it has its own describe block with its own fixture.
  * #27's condition 1: a test that
- * drives only the four
+ * drives only the
  * harmless Firestore sweeps waves through exactly the code this ticket exists to
  * protect.
  */
@@ -537,6 +539,12 @@ async function seedEverything(db: Firestore): Promise<void> {
   // 4. Release-notify dedup markers — keyed on updatedAt, not createdAt.
   await setDoc(doc(db, 'releaseNotifyState', '550', 'notified', 'alive'), { updatedAt: ts(NOW - RELEASE_MARKER_MAX_AGE_MS - 1) });
   await setDoc(doc(db, 'releaseNotifyState', '551', 'notified', 'alive'), { updatedAt: ts(NOW - 1000) });
+  // BIN-1129: one friend-request push marker past its max age, one still inside
+  // the push window.
+  await setDoc(doc(db, 'friendRequestPushes', 'alive_old'), {
+    lastPushedAt: ts(NOW - FRIEND_REQUEST_PUSH_MARKER_MAX_AGE_MS - 1),
+  });
+  await setDoc(doc(db, 'friendRequestPushes', 'alive_fresh'), { lastPushedAt: ts(NOW - 1000) });
 
   // 5. Push tokens: a deleted account, a disabled one, a live one — plus a
   // collection-group match under the WRONG parent, which must never be attributed.
@@ -610,6 +618,12 @@ describe('retentionCleanup orchestrator — the sweeps this fixture seeds, in on
     expect(await exists(db, 'releaseNotifyState/550/notified/alive')).toBe(false);
     expect(await exists(db, 'releaseNotifyState/551/notified/alive')).toBe(true);
 
+    // ── Friend-request push markers (BIN-1129): the stale one goes, the one still
+    // holding back a push stays. The sweep is these markers' only erasure path.
+    expect(summary.deletedFriendRequestPushMarkers).toBe(1);
+    expect(await exists(db, 'friendRequestPushes/alive_old')).toBe(false);
+    expect(await exists(db, 'friendRequestPushes/alive_fresh')).toBe(true);
+
     // ── Push tokens (BIN-848): deleted AND disabled accounts lose them; the live
     // one keeps its, and the mis-parented collection-group match is never touched.
     expect(summary.revokedPushTokens).toBe(2);
@@ -661,6 +675,7 @@ describe('retentionCleanup orchestrator — the sweeps this fixture seeds, in on
     expect(second.deletedNotifications).toBe(0);
     expect(second.deletedJoinAttempts).toBe(0);
     expect(second.deletedReleaseMarkers).toBe(0);
+    expect(second.deletedFriendRequestPushMarkers).toBe(0);
     expect(second.deletedRevokedTokens).toBe(0);
     expect(second.deletedOrphanAuthAccounts).toBe(0);
     expect(second.deletedOrphanUsernames).toBe(0);
@@ -794,6 +809,7 @@ describe('retentionCleanup orchestrator — one broken category never takes the 
     expect(summary.deletedSessions).toBe(2);
     expect(summary.deletedJoinAttempts).toBe(1);
     expect(summary.deletedReleaseMarkers).toBe(1);
+    expect(summary.deletedFriendRequestPushMarkers).toBe(1);
     expect(summary.deletedRevokedTokens).toBe(2);
     expect(summary.deletedOrphanAuthAccounts).toBe(1);
     expect(summary.deletedOrphanUsernames).toBe(2);

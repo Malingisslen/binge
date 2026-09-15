@@ -43,6 +43,7 @@ import {
   chunkUids,
   type UserLookupResult,
 } from './logic';
+import { isStaleFriendRequestPushMarker } from '../friendRequestPush/logic';
 import {
   FIELD_OWNED_CATEGORIES,
   withinDocumentBudget,
@@ -71,6 +72,8 @@ export type ScanKind =
   | 'notifications'
   | 'joinAttempts'
   | 'releaseMarkers'
+  // BIN-1129: `friendRequestPushes/{recipient}_{sender}` — the repeat-push brake.
+  | 'friendRequestPushMarkers'
   | 'fcmTokens'
   | 'usernames'
   // BIN-1023: `orphanWatch/{uid}` holds `firstSeenAt` — the run-to-run memory
@@ -261,6 +264,8 @@ export interface CleanupSummary {
   deletedJoinAttempts: number;
   staleReleaseMarkers: number;
   deletedReleaseMarkers: number;
+  staleFriendRequestPushMarkers: number;
+  deletedFriendRequestPushMarkers: number;
   revokedPushTokens: number;
   deletedRevokedTokens: number;
   skippedAuthBatches: number;
@@ -345,7 +350,7 @@ async function collectExpiredSessions(io: CleanupIo, nowMs: number): Promise<str
 }
 
 /**
- * The three age-only scans (notifications, joinAttempts, release markers).
+ * The age-only scans.
  *
  * Shared because the shape is genuinely identical, but the KIND and the FIELD
  * are always passed as literals at the call site: #27's condition 3 warns that a
@@ -393,12 +398,10 @@ export function tokenOwnerUid(path: string): string | null {
  * notifications indefinitely. The client cannot fix it: by the time credentials
  * are revoked it has no permission to delete its own token doc.
  *
- * This is the only one of the five parallel scans whose false positive destroys
- * something a LIVE account is using, so it fails safe in every direction: a
+ * It fails safe: a
  * rejected lookup batch deletes nothing and leaves the work for tomorrow,
- * "deleted" is read from the response's own `notFound` list rather than inferred
- * from absence, and the other four scans are unaffected by an Auth outage because
- * this one is caught independently by the caller.
+ * and "deleted" is read from the response's own `notFound` list rather than inferred
+ * from absence.
  *
  * Cadence note (#27 DBA asked for weekly): kept daily because it lives in a daily
  * function whose stated job this already is. The scan is a projected collection
@@ -948,7 +951,14 @@ async function deleteAuthAccounts(
 export async function runRetentionCleanup(io: CleanupIo): Promise<CleanupSummary> {
   const nowMs = io.now();
 
-  const [expiredSessions, staleNotifications, staleJoinAttempts, staleReleaseMarkers, revokedPushTokens] =
+  const [
+    expiredSessions,
+    staleNotifications,
+    staleJoinAttempts,
+    staleReleaseMarkers,
+    staleFriendRequestPushMarkers,
+    revokedPushTokens,
+  ] =
     await Promise.all([
       collectExpiredSessions(io, nowMs).catch((err) => {
         io.log.error('retentionCleanup: sessions scan failed', err);
@@ -966,6 +976,12 @@ export async function runRetentionCleanup(io: CleanupIo): Promise<CleanupSummary
         io.log.error('retentionCleanup: releaseMarkers scan failed', err);
         return [] as string[];
       }),
+      collectStaleByField(
+        io, 'friendRequestPushMarkers', 'lastPushedAt', isStaleFriendRequestPushMarker, nowMs,
+      ).catch((err) => {
+        io.log.error('retentionCleanup: friendRequestPushMarkers scan failed', err);
+        return [] as string[];
+      }),
       collectRevokedPushTokens(io).catch((err) => {
         io.log.error('retentionCleanup: revoked push token scan failed', err);
         // -1, not 0: the whole scan died, so nothing was checked. A 0 here would
@@ -979,6 +995,7 @@ export async function runRetentionCleanup(io: CleanupIo): Promise<CleanupSummary
   const deletedNotifications = await deleteInBatches(io, staleNotifications);
   const deletedJoinAttempts = await deleteInBatches(io, staleJoinAttempts);
   const deletedReleaseMarkers = await deleteInBatches(io, staleReleaseMarkers);
+  const deletedFriendRequestPushMarkers = await deleteInBatches(io, staleFriendRequestPushMarkers);
   const deletedRevokedTokens = await deleteInBatches(io, revokedPushTokens.paths);
 
   // The sweeps above are done; say so BEFORE the ones below start. Those reach
@@ -994,6 +1011,8 @@ export async function runRetentionCleanup(io: CleanupIo): Promise<CleanupSummary
     deletedJoinAttempts,
     staleReleaseMarkers: staleReleaseMarkers.length,
     deletedReleaseMarkers,
+    staleFriendRequestPushMarkers: staleFriendRequestPushMarkers.length,
+    deletedFriendRequestPushMarkers,
     revokedPushTokens: revokedPushTokens.paths.length,
     deletedRevokedTokens,
   });
@@ -1100,6 +1119,8 @@ export async function runRetentionCleanup(io: CleanupIo): Promise<CleanupSummary
     deletedJoinAttempts,
     staleReleaseMarkers: staleReleaseMarkers.length,
     deletedReleaseMarkers,
+    staleFriendRequestPushMarkers: staleFriendRequestPushMarkers.length,
+    deletedFriendRequestPushMarkers,
     revokedPushTokens: revokedPushTokens.paths.length,
     deletedRevokedTokens,
     // >0: some uids went unchecked. -1: the scan itself died, nothing was checked
