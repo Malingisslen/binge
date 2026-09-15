@@ -1267,3 +1267,27 @@ Bara gruppens ägare kan sätta namnet. Följden för den som ser det är en rad
 
 **Re-open when:** en användarrapport om en grupp utan synligt namn, eller att golvet ändå rörs
 av annat skäl — då prövas U+00A0 och U+200B med emulatortest på alla tre ytorna i samma ändring.
+
+---
+
+## BIN-1129: blockering stoppar en vänförfrågan i reglerna — 2026-09-15
+
+Efterföljare till "[Security] Blocking is hygiene-level, not a security boundary" (2026-06),
+som står kvar ordagrant. Den här posten smalnar av den för EN skrivväg.
+
+**Vad som ändrades (Malins beslut 2026-09-15).** Skapandet av
+`users/{mottagare}/friendRequests/{avsändare}` nekas nu av `firestore.rules` när
+`users/{mottagare}/blocked/{avsändare}` finns. Härled klausulen:
+
+```
+grep -n "blocked/\$(request.auth.uid)" firestore.rules
+```
+
+**Vad som fortfarande är hygien, oförändrat:** blockering döljer recensioner, kommentarer och
+flödet genom filtrering i klienten, och den filtreringen går att kringgå. Den delen av
+2026-06-posten gäller fortfarande.
+
+**Inte byggt:** blockering stoppar inte gruppinbjudningar, och den tar inte bort en förfrågan
+som redan landat innan blockeringen.
+
+**Re-open when:** en rapport om att en blockerad person når någon via en annan yta.

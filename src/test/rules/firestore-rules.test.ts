@@ -1408,6 +1408,43 @@ describe('users/{uid}/friends/{targetUid} — forged-friendship guard', () => {
     ));
   });
 
+  // ---- BIN-1129: a blocked sender cannot send ----
+  describe('friendRequests and blocking (BIN-1129)', () => {
+    const validPayload = () => ({
+      fromUid: ATTACKER,
+      fromDisplayName: 'A',
+      fromPhotoURL: null,
+      fromUsername: 'a',
+      sentAt: serverTimestamp(),
+    });
+
+    it('a sender the recipient has blocked is denied', async () => {
+      await seedSenderProfile(ATTACKER, { displayName: 'A', username: 'a' });
+      await testEnv.withSecurityRulesDisabled(async (ctx) => {
+        await setDoc(doc(ctx.firestore(), 'users', VICTIM, 'blocked', ATTACKER), { blockedAt: serverTimestamp() });
+      });
+      await assertFails(setDoc(doc(attackerDb(), 'users', VICTIM, 'friendRequests', ATTACKER), validPayload()));
+    });
+
+    it('a block on somebody else does not stop this sender', async () => {
+      await seedSenderProfile(ATTACKER, { displayName: 'A', username: 'a' });
+      await testEnv.withSecurityRulesDisabled(async (ctx) => {
+        await setDoc(doc(ctx.firestore(), 'users', VICTIM, 'blocked', 'someone_else'), { blockedAt: serverTimestamp() });
+      });
+      await assertSucceeds(setDoc(doc(attackerDb(), 'users', VICTIM, 'friendRequests', ATTACKER), validPayload()));
+    });
+
+    // The direction matters: the SENDER having blocked the recipient is the
+    // sender's own choice and says nothing about whether the recipient wants it.
+    it('the sender having blocked the recipient does not stop the request', async () => {
+      await seedSenderProfile(ATTACKER, { displayName: 'A', username: 'a' });
+      await testEnv.withSecurityRulesDisabled(async (ctx) => {
+        await setDoc(doc(ctx.firestore(), 'users', ATTACKER, 'blocked', VICTIM), { blockedAt: serverTimestamp() });
+      });
+      await assertSucceeds(setDoc(doc(attackerDb(), 'users', VICTIM, 'friendRequests', ATTACKER), validPayload()));
+    });
+  });
+
   // ---- BIN-1119: value bounds ----
   //
   // `hasOnly` above caps the NUMBER of keys, never how much may sit inside them. A

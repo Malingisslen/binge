@@ -712,7 +712,12 @@ service cloud.firestore {
           request.resource.data.get('fromDisplayName', null),
           request.resource.data.get('fromUsername', null))
         && request.resource.data.keys().hasOnly(
-          ['fromUid', 'fromDisplayName', 'fromPhotoURL', 'fromUsername', 'sentAt']);
+          ['fromUid', 'fromDisplayName', 'fromPhotoURL', 'fromUsername', 'sentAt'])
+        // BIN-1129 (Malins beslut 2026-09-15): den mottagaren har blockerat kan inte
+        // skicka en förfrågan. Nekandet är samma `permission-denied` som varje annan
+        // klausul här ger. `exists()` utvärderas i regelmotorn; `blocked`-samlingens egen läsregel
+        // (bara ägaren) ändras inte. En läsning till per skriven förfrågan.
+        && !exists(/databases/$(database)/documents/users/$(uid)/blocked/$(request.auth.uid));
       allow update: if false;
       // Mottagaren kan radera (decline / vid accept). Avsändaren kan
       // också radera sin egen pending request (cancel).
