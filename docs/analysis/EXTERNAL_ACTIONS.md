@@ -162,7 +162,6 @@ Auth; `skippedAuthBatches: -1` means the whole scan died.
 - Denied? One `getUsers batch failed, skipping` error per batch with
   `auth/insufficient-permission`. Grant the runtime service account
   `roles/firebaseauth.viewer` (read-only, contains `firebaseauth.users.get`) and re-run.
-  The other four sweeps are unaffected — each is caught independently.
 
 ## Function secrets
 
