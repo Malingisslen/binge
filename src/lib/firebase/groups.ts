@@ -1388,24 +1388,6 @@ export function subscribeToMyGroups(
     ));
 }
 
-/**
- * BIN-1152: läsningen är bunden till medlemskap, så den här funktionen KASTAR för
- * en icke-medlem i stället för att svara null — och den svarar inte på frågan en
- * icke-medlem faktiskt har. `getPublicGroupName` är den funktionen.
- *
- * Den behölls trots att den inte hade någon anropare vid biljetten (härled hellre
- * än att tro på meningen: `git grep -n "getGroupOnce" -- src functions`), eftersom
- * en tystlåten radering av en exporterad funktion hör till en annan ändring. Det
- * som ändrades är att signaturen nu ljuger för hälften av sina möjliga anropare,
- * och det står här så att nästa som når för den läser det först.
- */
-export async function getGroupOnce(groupId: string): Promise<Group | null> {
-  const { db, doc, getDoc } = await fsdb();
-  const snap = await getDoc(doc(db, 'groups', groupId));
-  if (!snap.exists()) return null;
-  return groupDocToObject(snap.id, snap.data());
-}
-
 export interface GroupInvite {
   groupId: string;
   groupName: string;
