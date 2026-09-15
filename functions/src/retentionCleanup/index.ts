@@ -292,6 +292,21 @@ const adminIo: CleanupIo = {
           })(),
           arrayStrips: [],
         };
+      case 'friendMirrors':
+        // BIN-1113. Rows about this uid in OTHER people's friend trees. `uid` on
+        // `friends`/`friendRequestsSent` is pinned to the document id by
+        // firestore.rules since BIN-1063 steg 2 and was backfilled; `fromUid` on
+        // `friendRequests` is pinned on create. Each needs its COLLECTION_GROUP
+        // fieldOverride in firestore.indexes.json; without it the query throws and
+        // the sweep skips this uid.
+        return {
+          deletePaths: [
+            ...await paths(db.collectionGroup('friends').where('uid', '==', uid)),
+            ...await paths(db.collectionGroup('friendRequestsSent').where('uid', '==', uid)),
+            ...await paths(db.collectionGroup('friendRequests').where('fromUid', '==', uid)),
+          ],
+          arrayStrips: [],
+        };
       case 'groupInvitesSent':
         // The invitations this uid SENT, which live in other people's trees and
         // no path walk reaches. `fromUid` is pinned on create and immutable, so

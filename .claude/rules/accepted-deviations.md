@@ -1198,3 +1198,34 @@ sådan radering övervägdes av #27 och valdes bort här som det mindre konserva
 
 **Re-open when:** en rapport om föräldralösa gruppRADER utan gruppdokument, som bunt 3-posten
 redan säger.
+
+---
+
+## BIN-1113: vänspeglingarnas raderingspass är byggt — 2026-09-15
+
+Efterföljare till tre poster som står kvar ordagrant: BIN-1063 steg 2 (2026-09-06), steg 3
+bunt 3 (2026-09-07, punkten **Speglingarna**) och BIN-1147 (2026-09-10, punkt 3). Alla tre
+säger att raderingspasset för `friends` och `friendRequestsSent` inte är byggt. Det är det nu.
+
+**Vad som ändrades.** `retentionCleanup` har en kategori till i det fältägda svepet, med samma
+skyddsräcken som de andra och inget eget tak. Härled vad den frågar efter:
+
+```
+git grep -n -A 14 "case 'friendMirrors'" -- functions/src/retentionCleanup/index.ts
+```
+
+Den raderar tre sorters rader om ett uid som bekräftats borta, i andra användares träd:
+`friends` och `friendRequestsSent` på fältet `uid`, och inkommande `friendRequests` på
+`fromUid`. Den tredje fanns inte i biljetten. #27 krävde den: en kvarliggande förfrågan kan
+fortfarande accepteras, och accepten skriver en ny vänrad under det raderade uid:ts egen
+sökväg.
+
+**Före deploy mättes fältet** mot produktionen:
+`cd functions && node scripts/backfill-mirror-uid.mjs --project binge-nu --dry-run` gav
+2026-09-15 "0 row(s) need the field, 0 skipped, 3 scanned across friends + friendRequestsSent".
+
+**Fortfarande utanför, oförändrat:** `followers`, som `reclaimOrphanFollows` sveper.
+
+**Re-open when:** en rapport visar en kvarliggande `friends`-, `friendRequestsSent`- eller
+`friendRequests`-rad om ett konto som inte längre finns i Auth, efter en körning som passerat
+observationsgolvet.

@@ -800,10 +800,7 @@ tidigare kategorier redan raderade. Det som håller är att uid:t står kvar på
 böckerna — den privata halvan (`users/{uid}`-trädet) är orörd, bevakningsposten
 lever, och varje skrivning är idempotent — så omkörningen konvergerar.
 
-**Speglingarna** (`followers`, `friends`, `friendRequests*`) täcks inte här. De
-har egna vägar: `reclaimOrphanFollows` sveper följarna varje vecka, och steg 2
-gjorde vänskapsraderna frågebara — själva raderingspasset för dem är kvarvarande
-arbete, bokfört i `.claude/rules/accepted-deviations.md`.
+**`followers`** täcks inte här; `reclaimOrphanFollows` sveper följarna varje vecka.
 
 **Berör inte** det separat dokumenterade läget "delvis kaskaderad, Auth
 fortfarande vid liv" (ADR 0022) — andra förutsättningar, annat svep.

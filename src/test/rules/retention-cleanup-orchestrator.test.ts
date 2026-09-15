@@ -324,6 +324,16 @@ function makeIo(db: Firestore, auth: FakeAuth, overrides: Partial<CleanupIo> = {
           }
           return { deletePaths: [...nested, ...hosted.docs.map((d) => d.ref.path)], arrayStrips: [] };
         }
+        case 'friendMirrors':
+          // BIN-1113. Mirrors the Admin adapter's three collection-group queries.
+          return {
+            deletePaths: [
+              ...await pathsOf(query(collectionGroup(db, 'friends'), where('uid', '==', uid))),
+              ...await pathsOf(query(collectionGroup(db, 'friendRequestsSent'), where('uid', '==', uid))),
+              ...await pathsOf(query(collectionGroup(db, 'friendRequests'), where('fromUid', '==', uid))),
+            ],
+            arrayStrips: [],
+          };
         case 'groupInvitesSent':
           // Mirrors the Admin adapter's collection-group query on `fromUid`.
           // Without this branch the new category would return undefined here and
@@ -971,6 +981,16 @@ async function seedFieldOwned(db: Firestore): Promise<void> {
       fromDisplayName: uid === 'consoled' ? 'keeper' : 'consoled',
       invitedAt: ts(NOW - 3000),
     });
+    // BIN-1113: rows ABOUT this uid in a third party's friend tree. The incoming
+    // request's display name is swapped for the same reason as the invite above.
+    await setDoc(doc(db, 'users', 'pal', 'friends', uid), { uid, since: ts(NOW - 3000) });
+    await setDoc(doc(db, 'users', 'pal', 'friendRequestsSent', uid), { uid, sentAt: ts(NOW - 3000) });
+    await setDoc(doc(db, 'users', 'pal', 'friendRequests', uid), {
+      fromUid: uid, fromDisplayName: uid === 'consoled' ? 'keeper' : 'consoled',
+      fromPhotoURL: null, fromUsername: null, sentAt: ts(NOW - 3000),
+    });
+    // `followers` is `reclaimOrphanFollows`' to reap, never this sweep's.
+    await setDoc(doc(db, 'users', 'pal', 'followers', uid), { uid, since: ts(NOW - 3000) });
   }
   await setDoc(doc(db, 'reviews', 'rev-stranger'), { uid: 'stranger', text: 'annans' });
   // A list a stranger OWNS and the departing account merely co-edits. Deleting it
@@ -1019,6 +1039,9 @@ describe('retentionCleanup orchestrator — the FIELD-owned half (BIN-1063 steg 
     ['hosted sessions', 'sessions/sess-consoled', 'sessions/sess-keeper'],
     ['session participants', 'sessions/sess-consoled/participants/consoled', 'sessions/sess-keeper/participants/keeper'],
     ['sent group invites', 'users/invitee/groupInvites/g-consoled', 'users/invitee/groupInvites/g-keeper'],
+    ['a friend row in another tree', 'users/pal/friends/consoled', 'users/pal/friends/keeper'],
+    ['a request another account sent them', 'users/pal/friendRequestsSent/consoled', 'users/pal/friendRequestsSent/keeper'],
+    ['a friend request they sent', 'users/pal/friendRequests/consoled', 'users/pal/friendRequests/keeper'],
   ])('erases %s for the departed account and leaves the live one alone', async (_label, gone, kept) => {
     const db = adminLikeDb();
     await sweepPastTheFloor(db);
@@ -1035,8 +1058,29 @@ describe('retentionCleanup orchestrator — the FIELD-owned half (BIN-1063 steg 
   it('the table is checked against the list the run walks', () => {
     expect([...FIELD_OWNED_CATEGORIES]).toEqual([
       'reviews', 'foreignReviewUgc', 'reactions', 'lists', 'sessions',
-      'groupInvitesSent', 'groups',
+      'friendMirrors', 'groupInvitesSent', 'groups',
     ]);
+  });
+
+  // BIN-1113. Two rows the new category must NOT reach: a follower row about the
+  // departed account (another sweep's), and friend mirrors about a DISABLED
+  // account, which Auth still returns and this sweep therefore never picks.
+  it('leaves followers, and a disabled account’s friend mirrors, alone', async () => {
+    const db = adminLikeDb();
+    for (const [sub, data] of [
+      ['friends', { uid: 'banned', since: ts(NOW - 3000) }],
+      ['friendRequestsSent', { uid: 'banned', sentAt: ts(NOW - 3000) }],
+      ['friendRequests', { fromUid: 'banned', fromDisplayName: null, fromPhotoURL: null, fromUsername: null, sentAt: ts(NOW - 3000) }],
+    ] as const) {
+      await setDoc(doc(db, 'users', 'pal', sub, 'banned'), data);
+    }
+    await sweepPastTheFloor(db);
+
+    expect(await exists(db, 'users/pal/friends/consoled'), 'the sweep must have run').toBe(false);
+    expect(await exists(db, 'users/pal/followers/consoled')).toBe(true);
+    for (const sub of ['friends', 'friendRequestsSent', 'friendRequests']) {
+      expect(await exists(db, `users/pal/${sub}/banned`), `${sub} of a disabled account`).toBe(true);
+    }
   });
 
   it('strips the departed uid from a list a stranger owns, and keeps the list', async () => {
@@ -1159,7 +1203,10 @@ describe('retentionCleanup orchestrator — the FIELD-owned half (BIN-1063 steg 
     // document this run now deletes. Measured, not adjusted to fit — the run
     // reported 17 against the old 16, and `publicGroups/solo` is the one path
     // added to the plan.
-    expect(summary.fieldOwnedDocs).toBe(17);
+    // BIN-1113 raised it again, to the 20 the run reported: `seedFieldOwned` now
+    // seeds a `friends`, a `friendRequestsSent` and a `friendRequests` row about
+    // `consoled` under `users/pal`.
+    expect(summary.fieldOwnedDocs).toBe(20);
     expect(summary.fieldOwnedRefused).toBe(0);
   });
 

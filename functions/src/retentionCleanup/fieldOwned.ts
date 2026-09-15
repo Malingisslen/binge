@@ -22,6 +22,15 @@
  * regardless of who owns the group by then — putting it after would make the two
  * doors disagree about that, since the callable erases before its own handover.
  *
+ * BIN-1113: `friendMirrors` erases the rows about this uid that sit in OTHER
+ * people's friend trees — `friends` and `friendRequestsSent` (found on their
+ * `uid` field) and incoming `friendRequests` (found on `fromUid`). The incoming
+ * request is in scope, not only the two the ticket named: left standing, its
+ * recipient can still accept it, and the accept writes a fresh friend row back
+ * under the erased uid's own path. It sits before
+ * `groups` only because `groups` must be last; nothing here depends on the
+ * handover, and `followers` is not in it (`reclaimOrphanFollows` owns that).
+ *
  * Which categories are world-readable is not asserted here: it is a property of
  * `firestore.rules`, and a sentence about it goes stale the next time a match
  * block changes. Read the rules.
@@ -35,6 +44,7 @@ export const FIELD_OWNED_CATEGORIES = [
   'reactions',
   'lists',
   'sessions',
+  'friendMirrors',
   'groupInvitesSent',
   'groups',
 ] as const;

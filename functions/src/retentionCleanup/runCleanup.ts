@@ -104,14 +104,14 @@ export interface CleanupLogger {
   error(message: string, data?: unknown): void;
 }
 
+/** See `CleanupIo.recheckPlannedGroup`. */
+export type PlannedGroupState = 'still-empty' | 'gained-member' | 'gone';
+
 /**
  * The injected port. Deliberately primitive: every method maps 1:1 to ONE
  * Firestore or Auth operation the real sweep performs, so a port implementation
  * has nowhere to hide a decision.
  */
-/** See `CleanupIo.recheckPlannedGroup`. */
-export type PlannedGroupState = 'still-empty' | 'gained-member' | 'gone';
-
 export interface CleanupIo {
   /** Docs per scan page. Prod passes the real PAGE_SIZE; tests page smaller. */
   readonly pageSize: number;
