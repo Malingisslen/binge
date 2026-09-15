@@ -28759,3 +28759,11 @@ matches); the new file is not a NEW ownership-map entry (already listed twice in
 (`3d6cbcc9…`) throughout.
 
 **Verdict: fail (2 blocking).**
+
+
+## 2026-09-15 — BIN-1149 count corrected in the live file
+
+The "Read accepted-deviations" bullet said three of the seven excluded modules batch-delete
+documents. Measured by the push-gate integration review: insights/rollup.ts and
+reclaimOrphanFollows call batch.delete, streamingOffers deletes one document at a time, and
+tmdbTosSweep only clears fields. The bullet now says three of them delete documents.

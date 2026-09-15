@@ -17,7 +17,7 @@ import type { HandoverIo, TraceErasure } from '../../../functions/src/groupHando
  * cannot resolve, and it applies `memberTraceWrites` directly rather than copying it.
  *
  * Derive the ports this must cover rather than trusting a list:
- *   git grep -ln "eraseMemberTraces" -- src/test
+ *   git grep -ln "eraseMemberTraces" -- 'src/test/*.test.ts'
  */
 
 const GROUP = 'roster-group';

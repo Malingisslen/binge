@@ -563,8 +563,7 @@ describe('eraseMemberTraces — held to memberTraceWrites (BIN-1123)', () => {
     expect(await rosterMismatches((fn) => fn(db()), clientIo().eraseMemberTraces)).toEqual([]);
   });
 
-  // The roster only holds a port whose file calls it. Every file that implements the
-  // port must, so a fourth port cannot join without being held.
+  // The roster only holds a port whose file calls it.
   it('every emulator port of eraseMemberTraces runs the roster', () => {
     const files = execFileSync('git', ['grep', '-l', 'eraseMemberTraces', '--', 'src/test'], { encoding: 'utf8' })
       .split('\n').map((f) => f.trim()).filter((f) => f.endsWith('.test.ts'));
