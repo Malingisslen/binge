@@ -1229,3 +1229,41 @@ sökväg.
 **Re-open when:** en rapport visar en kvarliggande `friends`-, `friendRequestsSent`- eller
 `friendRequests`-rad om ett konto som inte längre finns i Auth, efter en körning som passerat
 observationsgolvet.
+
+---
+
+## BIN-1187 + BIN-1188: gruppnamnets golv har två kanter som inte byggs — 2026-09-15
+
+BIN-1184 (`568e506`) lade golvet `hasVisibleName` i `firestore.rules`.
+Ingen regeländring, ingen kodändring och ingen deploy följer av den här posten. Två skilda
+beslut med två skilda skäl; det ena skälet bär inte det andra.
+
+### BIN-1188: en grupp som redan är lagrad med tomt namn
+
+Om en sådan grupp finns ger en sparning av inställningarna en nekad projektionsskrivning
+(Sentry-brus medan skärmen säger att det gick), och en inbjudan nekas med det allmänna
+felbeskedet.
+
+**Skälet att inte bygga är en mätning, och den förfaller.** 2026-09-15 listades samlingarna i
+projektet `binge-nu` med Firebase MCP-verktyget `firestore_list_documents`
+(`parent: projects/binge-nu/databases/(default)/documents`): `groups` och `publicGroups` gav
+tomt svar, och kontrollsamlingen `users` gav dokument — läsvägen fungerade, så tomheten var
+verklig. Det är en ögonblicksbild. Den säger ingenting om grupper skrivna efter mätningen.
+
+**Re-open when:** en `updateGroup-publicGroup`-rapport i Sentry, eller en ny mätning som hittar
+en grupp vars `name` saknar synliga tecken.
+
+### BIN-1187: ett namn av bara osynliga tecken
+
+`hasVisibleName` kräver `\S`. I RE2:s syntax, som Firestore-reglerna använder, är `\s` bara
+ASCII-blanksteg, så hårt blanksteg (U+00A0) och nollbreddstecken (U+200B) räknas som synliga
+och ett namn av bara sådana tecken går igenom. **Det är läst ur RE2:s syntaxbeskrivning, inte
+prövat mot emulatorn** — inget test driver ett sådant namn.
+
+Bara gruppens ägare kan sätta namnet. Följden för den som ser det är en rad som ser tom ut, inte
+åtkomst till något. Att vidga golvet är en regeländring med full panel och manuell deploy.
+
+**Ingen automatisk upptäckt finns.** Skrivningen LYCKAS, så ingen felrapport kan fyra för den.
+
+**Re-open when:** en användarrapport om en grupp utan synligt namn, eller att golvet ändå rörs
+av annat skäl — då prövas U+00A0 och U+200B med emulatortest på alla tre ytorna i samma ändring.
