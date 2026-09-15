@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { Check } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useFriendStatus, useFriendActions } from '@/hooks/useFriends';
@@ -16,6 +17,7 @@ export default function FriendButton({ targetUid }: { targetUid: string }) {
   const { uid } = useAuth();
   const { data: status, isLoading } = useFriendStatus(targetUid);
   const { sendFriendRequest, cancelFriendRequest, acceptFriendRequest, removeFriend } = useFriendActions();
+  const [sendFailed, setSendFailed] = useState(false);
 
   if (!uid || uid === targetUid) return null;
   if (isLoading) return null;
@@ -59,12 +61,31 @@ export default function FriendButton({ targetUid }: { targetUid: string }) {
   }
 
   // status === 'none'
+  //
+  // BIN-1129: a send can be refused — among other reasons, because the recipient
+  // has blocked this account. Every refusal gets the same text on purpose: a
+  // separate message for a block would tell the sender they were blocked.
+  const send = async () => {
+    setSendFailed(false);
+    try {
+      await sendFriendRequest(targetUid);
+    } catch (err) {
+      console.error('sendFriendRequest failed:', err);
+      setSendFailed(true);
+    }
+  };
+
   return (
-    <button
-      onClick={() => sendFriendRequest(targetUid)}
-      className={`${baseClass} bg-surface text-acc-deep border-acc-deep hover:bg-acc-deep hover:text-white`}
-    >
-      Lägg till vän
-    </button>
+    <span className="inline-flex items-center gap-2">
+      <button
+        onClick={send}
+        className={`${baseClass} bg-surface text-acc-deep border-acc-deep hover:bg-acc-deep hover:text-white`}
+      >
+        Lägg till vän
+      </button>
+      {sendFailed && (
+        <span role="alert" className="text-xs text-danger-ink">Kunde inte skicka förfrågan.</span>
+      )}
+    </span>
   );
 }
