@@ -31,7 +31,7 @@
       "watchItems": [
         "New CVE/GHSA in Next.js, React, Firebase JS SDK, firebase-functions, or any lockfile dependency (esp. RSC/Server-Action RCE, middleware/proxy bypass, SSRF, cache-poisoning hitting App Router)",
         "Coordinated Next.js security releases forcing a version bump + secret rotation",
-        "Firestore Security Rules language changes affecting what the ~787-line ruleset / hasOnly can express",
+        "Firestore Security Rules language changes affecting what the ruleset / hasOnly can express",
         "reCAPTCHA Enterprise / App Check changes (site-key, provider init, API-key auth)",
         "Dependabot alert/grouping changes affecting how advisories reach the repo"
       ],

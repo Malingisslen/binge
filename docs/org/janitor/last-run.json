@@ -1,8 +1,10 @@
 {
-  "lastRun": "2026-09-14",
-  "dossiersRefreshed": 0,
-  "worldWatchRoles": 1,
-  "retroDue": false,
+  "lastRun": "2026-09-15",
+  "dossiersRefreshed": 12,
+  "worldWatchRoles": 0,
+  "retroFired": false,
   "acceptRate": null,
-  "notes": "No dossier-staleness dir (local state); Security Architect scanned (nothing material, next@16.3.3 still patched); full retro already logged 2026-09-12, not due again."
+  "scratchCleared": 0,
+  "healthChecks": null,
+  "notes": "Re-audited 12 stale dossiers (markers live in .claude/state/dossier-stale per roleOrg.stalenessDir; the 2026-09-14 run looked in the default path and missed them). Drift fixed in #4 (BIN-1152 member-bound group reads) and #27 (session-name cap); the other 10 were accurate. World-watch: none due. Retro: full already logged 2026-09-12. acceptRate null: tools/cost_per_accepted_change.py not in this repo. scratchCleared 0: old sprint patches in .claude/state are referenced by .claude/hooks/freshness.mjs, kept. Memory curation not re-run (last curation commit 2026-09-12). Not committed: a parallel sprint session holds the git index."
 }

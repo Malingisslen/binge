@@ -149,6 +149,11 @@ is the real boundary.
 - Admin-flag escalation prevention (Console-only).
 - SHA-256-hashed, rotatable invite tokens (plaintext never persisted).
   → `src/lib/firebase/groups.ts`, `src/lib/firebase/utils.ts`
+- Group-document reads are bound to membership (BIN-1152). Before it, any signed-in
+  account could read `ownerUid` and `memberUids` for a guessed group id. The group name
+  is readable outside membership through the `publicGroups/{groupId}` projection, whose
+  create/update requires the group's owner and `hasOnly(['name'])`.
+  → `firestore.rules`, `src/lib/firebase/groups.ts`
 - Distinguishing a server REFUSAL from infrastructure noise. Only `permission-denied`
   proves the server rejected a write on its merits; `unavailable`, `deadline-exceeded`
   and offline all go away on their own. Collapsing the two shipped once and was rolled
@@ -733,8 +738,9 @@ findings here too.
   value — it gets the whole write refused, which on the create path leaves an account
   with no profile at all. The module carries the caps and the clamp both sides
   share. Seated here rather than with the UI because the quantity it is about is
-  the field contract, not the form.
-  → `src/lib/clampText.ts`, `src/lib/clampText.test.ts`
+  the field contract, not the form. The module also carries a separate cap for
+  Tillsammans session names (BIN-1156), which `src/lib/firebase/sessions.ts` applies.
+  → `src/lib/clampText.ts`, `src/lib/clampText.test.ts`, `src/lib/firebase/sessions.ts`
 - **Lazy write-on-edit migration** — `migrateStatus()` normalizes legacy schemas at
   read-time; docs are rewritten only on user edit, never in bulk.
   → `src/lib/watchStatus.migration.ts`, `src/contexts/WatchlistContext.tsx`
