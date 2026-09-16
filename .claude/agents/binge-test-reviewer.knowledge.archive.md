@@ -1,6 +1,58 @@
 # Archived knowledge — relocated from binge-test-reviewer.knowledge.md.
 Append-only historical record. Entries are verbatim, original order.
 
+## 2026-09-15 — BIN-1129 part 2b: repeat friend-request push brake, test review
+
+**Task:** review staged test changes for the friend-request push brake — new
+`functions/src/friendRequestPush/logic.test.ts` + `logic.ts` (`mayPushFriendRequest`,
+`isStaleFriendRequestPushMarker`, `friendRequestPushMarkerId`), plus the
+`friendRequestPushMarkers` scan-kind additions to `src/test/rules/retention-cleanup-orchestrator.test.ts`.
+Read both test files whole with `Read`, plus `logic.ts`, the full staged diff (`functions/src/index.ts`,
+`retentionCleanup/index.ts`, `retentionCleanup/runCleanup.ts`), the two staged docs
+(`data-retention-policy.md`, `moderation.md`), and `.claude/rules/accepted-deviations.md` in full
+(two pages, 1294 lines) plus the whole `binge-test-reviewer.knowledge.md` (two pages).
+
+**Evidence run, not inherited:**
+- `npx vitest run functions/src/friendRequestPush/logic.test.ts` → 9/9 green.
+- `npm run test:rules -- --port 8124` (port 8080 held by a sibling session) → `Test Files 7
+  passed (7)` / `Tests 635 passed (635)`, matching the handed-down claim exactly. Grepped the
+  log for the specific test carrying the new assertion (`✓ reaps exactly what is past its
+  threshold and leaves every live neighbour alone`) to confirm it actually ran, not just that
+  the total matched.
+- Read-only `node -e` boundary probe (no tracked file touched, per the task's "shared tree"
+  instruction) reproduced both directions of the inclusive boundary: `>=`→`>` in
+  `mayPushFriendRequest` flips the at-window-edge fixture (true→false, caught); `<`→`<=` in
+  `isStaleFriendRequestPushMarker` flips the at-max-age fixture (false→true, caught). A third
+  candidate mutant — deleting the `=== null`/`!== null` guards — was NOT live-testable because
+  `functions/tsconfig.json` has `"strict": true`; arithmetic/comparison on a bare `number | null`
+  parameter is a compile error, so that "mutation" can never ship. This is the new principle
+  folded into the knowledge file in place (mutation-testing protocol bullet).
+- `git diff --cached -- docs/data-retention-policy.md docs/moderation.md` read in full; checked
+  the doc's "maxåldern är längre än pushfönstret, ett test i samma fil pinnar det" claim against
+  the actual test (`toBeGreaterThan`) — true — and the "samlingen har ingen firestore.rules-match"
+  claim against `grep -n "friendRequestPushes" firestore.rules` (zero hits, confirmed default-deny).
+
+**Findings:**
+1. Non-blocking completeness gap: the idempotency test ("a second run over the same data
+   deletes nothing more") asserts a zero on every OTHER TTL-scan kind seeded by `seedEverything`
+   (sessions, notifications, joinAttempts, releaseMarkers, revoked tokens, orphan auth, orphan
+   usernames) but not on `deletedFriendRequestPushMarkers`. Low risk — `collectStaleByField` +
+   `deleteInBatches` is shared, already-idempotent machinery exercised by every sibling kind —
+   but worth a one-line addition for parity.
+2. Judgment call (per the task's own framing): the untested surface in `functions/src/index.ts`'s
+   `onFriendRequestCreate` (the Admin-SDK transaction reading/writing the marker before deciding
+   whether to push) is an ACCEPTABLE, non-blocking gap. The decision logic is fully extracted and
+   boundary-tested; the residual is genuinely stuck Cloud Functions trigger I/O with no existing
+   harness pattern in this codebase for `onDocumentCreated` triggers (confirmed by grep: no test
+   file references either `onFriendRequestCreate` or its sibling `onSessionPickCreate`, and the
+   sibling trigger already ships with equivalent untested wiring and no incident record — the
+   BIN-856 precedent-citing shape). The one argument order NOT protected by TypeScript's types
+   (`friendRequestPushMarkerId(recipientUid, fromUid)`, both `string`) has a single call site, so
+   a swap would be internally consistent and functionally inert.
+
+**Verdict:** pass, 0 blocking. Filed no ticket — both findings are non-blocking notes, and the
+task explicitly asked for a judgment on the second rather than a fresh gap.
+
 ## 2026-09-10 — BIN-1147 re-review: the "four tests" claim was a sum across two files, not one predicate
 
 **Task:** re-review the staged BIN-1147 diff (`git diff --cached`) after two prior passes
@@ -28767,3 +28819,77 @@ The "Read accepted-deviations" bullet said three of the seven excluded modules b
 documents. Measured by the push-gate integration review: insights/rollup.ts and
 reclaimOrphanFollows call batch.delete, streamingOffers deletes one document at a time, and
 tmdbTosSweep only clears fields. The bullet now says three of them delete documents.
+
+## Relocated 2026-09-15 — entry 101 (cap trim, paid for the BIN-1129 retry-reset addition below)
+
+Verbatim text moved out of the "React IDENTITY contract" bullet in
+`binge-test-reviewer.knowledge.md` (Fixture-ordering / hooks section), compressed there to a
+names-only pointer at this entry:
+
+**Same shape for a RE-READ effect (`useEffect(() => setX(pureRead()), [id, trigger])`)** — the
+term that isn't the primary key is easy to skip because no fixture changes it (BIN-844:
+`[uid, busyKeys]` → `[uid]` left the file green, leaving a checkbox stale until reload).
+
+## 2026-09-15 — BIN-1129 part 2a review: FriendButton.test.tsx (send-error handling)
+
+**Diff reviewed.** Staged in `C:/binge`: `docs/org/metrics/events.jsonl` (+1 review row),
+`src/components/social/FriendButton.tsx` (+useState `sendFailed`, a `send()` wrapper with
+try/catch around `sendFriendRequest`, an `role="alert"` span shown on failure with the fixed
+text "Kunde inte skicka förfrågan."), and new `src/components/social/FriendButton.test.tsx`
+(+59, 3 tests). Comment in the production file: "BIN-1129: a send can be refused — among
+other reasons, because the recipient has blocked this account. Every refusal gets the same
+text on purpose: a separate message for a block would tell the sender they were blocked."
+
+Read `.claude/rules/accepted-deviations.md` in full (1294 lines) before filing. Found the
+paired entry: "## BIN-1129: blockering stoppar en vänförfrågan i reglerna — 2026-09-15" —
+the rules-side deny this client code reacts to. No conflict: that entry covers
+`firestore.rules`; this diff covers the client's handling of the resulting rejection. Also
+noted (non-blocking, out of scope for this file): the same metrics batch's review row for
+this ticket records a condition to file a follow-up (BIN-1192) for the button's other three
+states (`sent`/`received`/`friends`) still lacking equivalent error handling — a real gap,
+but not one this diff's acceptance criteria cover, and it is already tracked.
+
+**Mutation run.** Built a scratch pair inside the repo (`FriendButton.mutant.tsx` +
+`FriendButton.mutant.test.tsx`, sed-renamed import, both untracked, never staged) so the
+mutation could run without touching the two tracked files mid-review. Control run first:
+`npx vitest run src/components/social/FriendButton.mutant.test.tsx` → 3/3 green. Then, in
+order, restoring to the clean copy between mutants and re-hashing the tracked files against
+`git rev-parse :<f>` after cleanup:
+
+1. Removed the try/catch entirely (rejection propagates unhandled). Result: 2 failed / 1
+   passed. Both error-path tests ("says the request could not be sent",
+   "shows the same text whatever the error was") failed via an unhandled-rejection report
+   (`Serialized Error: { code: 'permission-denied' }` / `{ code: 'unavailable' }`); the
+   success test stayed green. Exactly the claimed kill.
+2. Made the alert text branch on `err.code` (`permission-denied` → the real string, anything
+   else → "Något gick fel. Försök igen."). Result: 1 failed / 2 passed — only "shows the same
+   text whatever the error was" (the `unavailable` fixture) failed, with the exact
+   `AssertionError: expected 'Något gick fel...' to be 'Kunde inte skicka förfrågan.'`. The
+   `permission-denied` fixture and the success fixture stayed green, confirming the two
+   error fixtures use genuinely different `err.code`s and together pin "identical text for
+   every error", not just "identical text for one error tried twice".
+3. Made the alert render unconditionally (dropped the `sendFailed &&` guard). Result: 1
+   failed / 2 passed — only "shows nothing when the send succeeds" failed
+   (`expected <span role="alert">... to be null`). The two error-path tests stayed green.
+
+All three named claims in the task (catch removed / text differs per error / alert shows on
+success) are each killed by exactly the test named for it, with the other two staying green
+— no cross-contamination, no vacuity.
+
+**Gap found and reported non-blocking.** A fourth mutation (not one of the three asked
+about, checked because the per-outcome fixture shape suggested it): dropped
+`setSendFailed(false)` at the top of `send()` (the reset before each retry attempt). Result:
+3/3 green — the mutant survives. None of the three fixtures call `send` more than once, so a
+fail-then-succeed sequence (which would leave the alert stuck after a successful retry) is
+unpinned. Folded into the live knowledge file (React-identity/re-read-effect bullet, freeing
+space by relocating the BIN-844 clause above to this entry) rather than filed as blocking,
+since it is outside the three behaviors this diff's task named and the residual (a stale
+error banner surviving a successful retry) is a minor UX rather than a data-safety defect.
+
+**Cleanup verified.** `rm` of both scratch files; `git status --porcelain` showed only the
+original staged/unstaged set (no scratch residue); `git hash-object` of both tracked
+`FriendButton.tsx`/`FriendButton.test.tsx` matched `git rev-parse :<path>` before and after
+the whole run (`45ea373...` / `abbc5ef...`).
+
+**Verdict: pass (0 blocking).** One non-blocking gap reported (retry-reset fixture,
+suggested follow-up, not required by the ticket's stated acceptance criteria).

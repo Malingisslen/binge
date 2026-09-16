@@ -11080,3 +11080,51 @@ The live bullet on the plan/commit split named `isStillEmptyGroup`. BIN-1180 ren
 `recheckPlannedGroup` and gave it a third answer, `gone`, on which only the group's
 `publicGroups/{gid}` projection is deleted. The bullet now carries the new name, with the old
 one in parentheses. Flagged as optional by the integration reviewer of that commit.
+
+## 2026-09-15 — BIN-1113 + BIN-1186: friend-mirror sweep, no findings
+
+`retentionCleanup`'s field-owned sweep gained a `friendMirrors` category (Admin SDK,
+`functions/src/retentionCleanup/index.ts` + `fieldOwned.ts`). It deletes, for a uid confirmed
+gone from Auth, three row kinds sitting in OTHER users' trees: `friends`/`friendRequestsSent`
+on their `uid` field, and incoming `friendRequests` on `fromUid`.
+
+**Verified, not assumed:**
+- The loop in `runCleanup.ts` (`for (const category of FIELD_OWNED_CATEGORIES) ... await
+  io.findFieldOwned(category, uid)`) is generic — the new category inherits the same
+  confirmed-Auth-absence gate, the shared `FIELD_OWNED_MAX_DOCS_PER_UID` budget (unchanged at
+  5000, no per-category ceiling added) and the observation floor as every sibling category,
+  with no special-casing anywhere in the diff.
+- All three `uid`/`fromUid` fields the new queries filter on are pinned in `firestore.rules`
+  against the WRITER's own auth uid or the doc-id path segment (`friends`/`friendRequestsSent`
+  since BIN-1063 steg 2, `friendRequests.fromUid == request.auth.uid` pre-existing) — so the
+  predicate is sound for every document the collections have ever held, not just ones written
+  after a convention.
+- No collection-group leaf-name collision: `git grep` for `friends`/`friendRequestsSent`/
+  `friendRequests` as literal path segments finds exactly one owner each, all under
+  `users/{uid}/...`.
+- The three `firestore.indexes.json` COLLECTION_GROUP overrides these queries need already
+  existed (added ahead of time in BIN-1063 steg 2 / BIN-1106) — nothing in this diff is a
+  rules or index change requiring a fresh manual deploy beyond the functions deploy itself.
+- The included third row kind (incoming `friendRequests` by `fromUid`) closes a real gap the
+  ticket as scoped would have left: without it, a stale request from an erased sender could
+  still be accepted by its recipient, which writes a fresh `friends` row back under the
+  erased uid's own path — reintroducing exactly the row the sweep exists to remove. Correctly
+  called out as a binding panel condition (#27) rather than built silently.
+- Test coverage (`retention-cleanup-orchestrator.test.ts`) seeds a live sibling in the SAME
+  third-party tree for every new category, pins that `followers` and a DISABLED (Auth-present)
+  account's mirrors are left alone, and the `fieldOwnedDocs` count (17→20) is measured against
+  the actual 3 new rows the fixture adds for the departed uid, not asserted from arithmetic.
+- `docs/data-retention-policy.md`'s stale claim that the friend-mirror deletion pass "is not
+  built" was struck (not reworded) in the same commit that makes it false, and the superseding
+  `accepted-deviations.md` entry points at a `git grep` derivation rather than repeating counts.
+- No write path introduced: the new category is delete-only (`arrayStrips: []`), so none of
+  the write-shape/`hasOnly` classes in this file's Admin-SDK-sweep section apply — Admin
+  bypasses rules regardless, and there is no payload here for a forged field to hide in.
+
+No PoC attempted; nothing here crosses a boundary a live-PoC would test (no new rules branch,
+no new client-reachable write). Full diff also touched `runCleanup.ts` (BIN-1186: pure
+relocation of the `PlannedGroupState` type above `CleanupIo`'s doc comment, confirmed via
+`git diff` — no logic change) and `docs/org/metrics/events.jsonl` (an appended review-log line
+for BIN-1186 itself).
+
+**Verdict: pass (0 blocking).**
