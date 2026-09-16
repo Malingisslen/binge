@@ -396,7 +396,23 @@ Det är en känd, oavslutad punkt — inte något den här texten påstår är l
 medlemsutträdesfasen kan användarens uid ligga kvar i `memberUids` på andra
 användares grupper och i `editors` på delade listor. Ett omförsök städar det
 (uppdateringarna byggs om från Firestore), men den som aldrig återvänder lämnar
-dem kvar. Ingen sopning täcker den här luckan i dag.
+dem kvar. De två halvorna har olika svar, och båda går att härleda ur koden.
+
+`editors` på andras listor når fältsvepet. `FIELD_OWNED_CATEGORIES` i
+`functions/src/retentionCleanup/fieldOwned.ts` innehåller `lists`, och kategorins insamlare i
+`functions/src/retentionCleanup/index.ts` lägger varje lista där uid:t står i `editors` utan att
+äga dokumentet i `arrayStrips`. Två förutsättningar hör till: svepet kör för ett uid som är
+bekräftat borta ur Firebase Auth, och `FIELD_OWNED_MAX_DOCS_PER_UID` är ett
+allt-eller-inget-tak per uid — ett konto över taket får ingenting struket.
+
+`memberUids` på andras grupper når det inte, och det är ett avgjort och permanent undantag
+snarare än en punkt som väntar på en fix: frågan ställs på `ownerUid`. Beslutet är bokfört i
+`.claude/rules/accepted-deviations.md` under BIN-1063 steg 3, bunt 3 (2026-09-07). Supporten
+ska alltså inte utlova en kommande rättning för det läget.
+
+```
+grep -n "ownedGroupIds" functions/src/groupHandover/adminIo.ts functions/src/groupHandover/runHandover.ts
+```
 
 ### Skrivvägar som vägrar under en pågående radering (BIN-1025, 2026-08-27)
 
