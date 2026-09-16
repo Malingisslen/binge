@@ -411,7 +411,7 @@ snarare än en punkt som väntar på en fix: frågan ställs på `ownerUid`. Bes
 ska alltså inte utlova en kommande rättning för det läget.
 
 ```
-grep -n "ownedGroupIds" functions/src/groupHandover/adminIo.ts functions/src/groupHandover/runHandover.ts
+grep -n "ownerUid" functions/src/groupHandover/adminIo.ts
 ```
 
 ### Skrivvägar som vägrar under en pågående radering (BIN-1025, 2026-08-27)
