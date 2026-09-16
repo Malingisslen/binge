@@ -74,8 +74,15 @@ function runScript(projectDir) {
   return res;
 }
 
-beforeEach(() => { dir = makeRepo(); });
-afterEach(() => { rmSync(dir, { recursive: true, force: true }); });
+/**
+ * BIN-1158: called only by the describe blocks that read `dir`. Each repo costs several git
+ * spawns, and building one for every test in the file — including the ones handed a stubbed
+ * git or no git at all — added process volume that pushed tests past the timeout under load.
+ */
+function useRepo() {
+  beforeEach(() => { dir = makeRepo(); });
+  afterEach(() => { rmSync(dir, { recursive: true, force: true }); });
+}
 
 describe('pruneTriggers — grenarna', () => {
   it('SLÄPPER en trigger som varken syns i trädet eller i någon commit sedan stämplingen', () => {
@@ -149,6 +156,8 @@ describe('pruneTriggers — grenarna', () => {
 });
 
 describe('git-frågorna mot ett riktigt repo', () => {
+  useRepo();
+
   it('ser en commit som ligger inom SAMMA minut som stämplingen', () => {
     // BIN-1050:s fotangel: `%cI` bär en lokal offset, så en naiv strängjämförelse mellan
     // stämpeln och commitens datum glider med tidszonen. Här stämplas 12:00:00Z och
@@ -176,6 +185,8 @@ describe('git-frågorna mot ett riktigt repo', () => {
 });
 
 describe('skriptet som lefthook faktiskt kör', () => {
+  useRepo();
+
   // Enhetstesterna ovan når bara de exporterade hjälparna. `freshness.test.mjs` lärde sig
   // det dyrt: hela `stampDossier(...)`-anropet gick att radera ur `main()` med sviten grön,
   // eftersom ingenting drev inkopplingen. Därför spawnas skriptet här.
@@ -364,6 +375,8 @@ describe('isHeldSince — gränsen', () => {
 });
 
 describe('en HÅLLEN bunt är inget spöke (BIN-1082)', () => {
+  useRepo();
+
   function writePatchFile(root, name, paths, mtimeIso) {
     const pdir = join(root, '.claude', 'state', 'sprint-patches');
     mkdirSync(pdir, { recursive: true });
@@ -514,6 +527,8 @@ describe('en HÅLLEN bunt är inget spöke (BIN-1082)', () => {
 });
 
 describe('den billiga vägen är verkligen billig', () => {
+  useRepo();
+
   it('kör NOLL git-subprocesser när flaggan saknas — RÄKNADE, inte lästa ur källan', () => {
     // Den tidiga returen är vad som ersätter glob-gaten, så den är värd ett test: en
     // `git rev-parse` per commit på varje maskin är precis den sortens avgift
