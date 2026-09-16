@@ -161,20 +161,28 @@ Plötslig spike i rapport-volymen.
 
 ### 5b. Om kontot raderades av misstag
 
-**Om inom 7 dagar OCH vi är på Blaze med PITR aktiverat:**
+**Kontrollera FÖRST om PITR är påslaget.** Läs statusraden för Firestore PITR i
+`docs/analysis/EXTERNAL_ACTIONS.md`. Står den som obekräftad är det svaret du ger
+användaren — att vi inte vet om en återställning är möjlig — inte att den är det.
+
+**Är PITR påslaget och raderingen inom 7 dagar** är återställningen ändå ett
+övervägande, aldrig en förstahandsåtgärd: `gcloud firestore import` läser in
+databasen, inte det ena kontot. Den återuppväcker de raderingskaskader som kört
+sedan säkerhetskopians tidpunkt — också konton vars ägare bett om radering under
+samma fönster. Det är ett beslut för den som bär raderingsskyldigheterna.
 
 ```bash
-# List backup-points (kräver gcloud + Blaze)
+# List backup-points (kräver gcloud)
 gcloud firestore backups list --project=binge-nu
 
-# Restore from a specific timestamp
+# Restore from a specific timestamp — läser in databasen, se varningen ovan
 gcloud firestore import \
   --project=binge-nu \
   --database="(default)" \
   gs://your-bucket/backups/<timestamp>
 ```
 
-**Om Spark eller utanför 7-dagars-fönstret:** Vi kan inte återställa.
+**Utanför 7-dagars-fönstret:** Vi kan inte återställa.
 Tvärtom — `deleteAccount`-cascaden är designad för att vara irreversibel
 (GDPR-krav). Beklaga och guidar användaren till att börja om.
 

@@ -455,9 +455,8 @@ uttryckligen anropas, och de två sorterna städas olika:
 - **localStorage, forts. (BIN-844, 2026-08-10)** — två nycklar till städas nu, och en
   tredje sak görs som INTE är en localStorage-fråga:
   - `binge:groupInvite:{groupId}` — svepas med prefix av `clearAllInviteTokens()` vid
-    **radering**, inte vid utloggning. Enbart hygien: bara en grupps ÄGARE cachar
-    klartexten, och kaskaden raderar hela den ägda gruppen, så nyckeln pekar på något
-    som inte längre finns. Att svepa vid utloggning övervägdes och valdes bort av Malin
+    **radering**, inte vid utloggning. Bara en grupps ÄGARE cachar klartexten.
+    Att svepa vid utloggning övervägdes och valdes bort av Malin
     mot en delad panel: appen visar värdet bara för ägaren, medan svepet hade kostat
     ägaren den egna länken — enda vägen tillbaka är "Generera ny", som ogiltigförklarar
     länken som redan delats med folk som inte klickat än.
