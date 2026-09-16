@@ -52,8 +52,7 @@ vid kontoradering. Export och radering läser samma helper
 (`src/lib/firebase/userData.ts`), så listorna hålls i synk: lägger man till en
 ny user-owned subcollection måste helpern uppdateras så båda flödena får med den.
 
-Inga återhämtningsbara referenser till datan finns efter radering,
-förutom Firestore PITR inom 7 dagar (administrativt bara).
+Inga återhämtningsbara referenser till datan finns efter radering.
 
 #### Per-titel-borttagning ("Ta bort" i biblioteket)
 
@@ -433,9 +432,6 @@ men:
 
 - `firestore.indexes.json` har redan single-field collection-group-index
   på `comments.uid` + `likes` documentId — behövs för delete-queryn.
-- Firestore PITR ger 7-dagars recovery om användaren ångrar sig (men
-  bara via admin). Vi dokumenterar inte detta i UI eftersom "pseudo-
-  radering" skulle förvirra GDPR-kraven.
 
 ### Enhetslokal data vid radering (localStorage)
 

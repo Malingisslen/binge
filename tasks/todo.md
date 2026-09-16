@@ -186,7 +186,7 @@ inte härledd, och en lista smalare än vad skrivarna skriver nekar varje riktig
 5. Mutering av varje ny klausul fäller test, asserterad före OCH efter körningen i ETT kommando. *(diff)*
 6. Regler deployade manuellt och verifierade. *(run)*
 
-**Panelens villkor (invikta; #27, #4, #6, #7 körda blint före bygget — #13 utestående).**
+**Panelens villkor (invikta; kritikerna körda blint före bygget).**
 
 *Rättelser till planen, mätta av flera roller oberoende:*
 7. **Båda unionerna är BEKRÄFTADE korrekta mot HEAD** av #27, #6 och #4 var för sig, var och en

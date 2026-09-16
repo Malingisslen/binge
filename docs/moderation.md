@@ -84,9 +84,8 @@ Admin-triage sker via Firebase Console med din ägar-inloggning.
   - **Om barnporr (CSAM):** rapportera till NCMEC CyberTipline
     (https://report.cybertip.org/) — kräver snabb reaktion (lagkrav i USA,
     vilket Firebase-datan lyder under)
-  - **Om hot mot specifik person:** överväg polisanmälan, behåll evidence
-    via Firebase PITR (7 dagar — snapshot:a rapporten + target-docen innan
-    radering)
+  - **Om hot mot specifik person:** överväg polisanmälan, ta en lokal kopia
+    av rapporten och target-docen innan radering
   - Stäng användarens konto direkt
 
 ### `pii`
