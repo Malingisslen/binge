@@ -488,7 +488,14 @@ Owns every Swedish word.
   flagga som avgör vilken rad som får visa felet bor på ett ställe i stället för ett per fil.
   Samma säte och samma skäl som `groupDenialCopy.ts` ovan: det är den sociala ytans
   avslagstext, inte sidans komposition.
-  → `src/lib/friendActionText.ts`, `src/lib/friendActionText.test.ts`, `src/hooks/useFriendActionAlert.ts`
+  → `src/lib/friendActionText.ts`, `src/lib/friendActionText.test.ts`, `src/hooks/useFriendActionAlert.ts`, `src/components/social/FriendButton.tsx`, `src/components/social/FriendButton.test.tsx`
+- **Följ-knappen och profilens statistikpanel** (BIN-1206). De blev ägarlösa syskon i samma
+  katalog i det ögonblick `FriendButton.tsx` fick ett säte ovan, och ägarkartans spärr fäller
+  ett nytt ägarlöst syskon i stället för att låta routern gissa på grannen. Sätena följer vad
+  filerna handlar om, inte vilken katalog de ligger i: följ-knappen driver följ-grafen via
+  `useFollow`, och statistikpanelen renderar `computeProfileStats` ur `src/lib/taste/` — båda
+  storheter den här rollen redan äger i punkterna ovan.
+  → `src/components/social/FollowButton.tsx`, `src/components/social/ProfileStatsPanel.tsx`
 - **Filer som saknade en ägande roll** (BIN-871). Sociala ytor: flöde, vänner, grupper, sessioner och reaktioner.
   → `src/components/groups/GroupMembersPanel.test.tsx`, `src/components/groups/GroupMembersPanel.tsx`, `src/components/groups/GroupSessionHistoryPanel.tsx`, `src/components/groups/GroupSettingsModal.tsx`, `src/components/groups/GroupSidePanels.tsx`, `src/components/groups/GroupWatchlistTable.tsx`, `src/components/groups/HouseholdPanel.tsx`, `src/hooks/useEpisodeReactions.ts`, `src/hooks/useFollowList.helpers.test.ts`, `src/hooks/useFollowList.helpers.ts`, `src/hooks/useFollowList.ts`, `src/hooks/useFriends.ts`, `src/hooks/useFriendsWhoSaw.ts`, `src/hooks/useGroup.denied.test.tsx`, `src/hooks/useGroupHousehold.ts`, `src/hooks/useGroupMemberProgress.ts`, `src/hooks/useGroups.ts`, `src/hooks/useMySessions.ts`, `src/hooks/useNotifications.ts`, `src/hooks/useReviews.ts`, `src/hooks/useSenderProfile.ts`, `src/hooks/useSession.ts`, `src/hooks/useSessionTasteVectors.ts`, `src/hooks/useUserSearch.ts`, `src/lib/feedTrending.test.ts`, `src/lib/feedTrending.ts`, `src/lib/firebase/friends.test.ts`, `src/lib/groupInviteCache.test.ts`, `src/lib/groupInviteCache.ts`, `src/lib/groupDenialCopy.test.ts`, `src/lib/groupDenialCopy.ts`, `src/lib/groupInviteToken.test.ts`, `src/lib/groupInviteToken.ts`, `src/lib/groupProgress.test.ts`, `src/lib/groupProgress.ts`, `src/types/social.ts`
 
@@ -794,9 +801,9 @@ findings here too.
   The real residual is that there is still **no health metric** for last-run /
   docs-deleted: a sweep that silently stops running raises no alert. Closest thing
   today is the per-run `retentionCleanup done` log line, which must be read by hand.
-- 🔴 **PITR + scheduled backups are not yet enabled** (Blaze-gated); there is no
+- 🔴 **PITR + scheduled backups are not yet enabled**; there is no
   scripted backup-health check, no restore dry-run, and no post-restore validation
-  playbook. Pre-Blaze data loss is effectively irreversible.
+  playbook. Data loss is effectively irreversible.
 - 🟠 **No `schemaVersion` stamp anywhere.** Indexes, the field whitelist, mutation
   payloads, and `buildUserExport` must be kept in sync by hand; nothing audits
   migration completeness or alerts when `migrateStatus()` hits its default case.
