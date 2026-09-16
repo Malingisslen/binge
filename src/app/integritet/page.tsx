@@ -115,8 +115,6 @@ export default function IntegritetPage() {
             användare har till ditt konto kan vi av tekniska skäl inte radera i
             samma stund (de ägs av respektive följare) — de städas bort
             automatiskt av en återkommande rutin, normalt en gång i veckan.
-            Återställning är inte möjlig efter 7 dagar (Firestore
-            Point-in-Time Recovery-fönstret).
           </li>
           <li>
             <strong>Ett undantag från raderingen:</strong> om du har anmält

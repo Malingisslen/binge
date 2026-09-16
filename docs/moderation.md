@@ -199,9 +199,8 @@ av rapport + target-doc till en lokal säker fil. Behövs för:
 - Revision vid tvist ("varför togs mitt innehåll bort?")
 - GDPR-dokumentation (art. 5.1(e) — om vi anonymiserar/behåller vs raderar)
 
-**PITR räcker INTE som evidens-policy** — fönstret är bara 7 dagar (och
-kräver Blaze-plan som vi inte har aktiverat än). Ta lokala kopior vid
-allvarliga beslut.
+**PITR räcker INTE som evidens-policy** — fönstret är bara 7 dagar. Ta
+lokala kopior vid allvarliga beslut.
 
 ---
 

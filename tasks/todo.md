@@ -169,6 +169,15 @@ fallbacken för ägarlös kod. Krympt union = ny panel, precis som en vidgad (BI
 
 ## Bunt E — BIN-1170: `isValidList` och `isValidComment` binder vad som får skrivas [Tier C] · build
 
+**Disposition: panelen kördes, koden byggdes INTE i den här sprinten.** Biljetten står kvar
+öppen — den är varken levererad eller utdragen ur urvalet. Kritiken är bokförd som en
+`review`-rad för BIN-1170 i `docs/org/metrics/events.jsonl`, med utfallet och de invikta
+villkoren; raden säger uttryckligen att koden inte byggdes, så den kan inte läsas som en
+leverans. Skälet att stanna här: regeländringen kräver emulatorkörningar med en muterad
+klausul i taget, ett höjt testgolv och en manuell regeldeploy, och sprintens granskningsvarv
+hade redan kostat långt mer än buntarnas storlek. Det dyraste arbetet är gjort och sparat —
+fyra roller mätte oberoende fram samma två fältunioner ur de faktiska skrivvägarna.
+
 Router (`firestore.rules`, `firestore-rules.test.ts`): `top` · panel #27 DBA, #4 Security Architect,
 #6 DPO, #7 QA, #13 Data/Integrations. Full panel körs före bygget. Manuell regeldeploy efter push.
 

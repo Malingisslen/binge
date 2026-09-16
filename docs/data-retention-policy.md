@@ -52,8 +52,6 @@ vid kontoradering. Export och radering läser samma helper
 (`src/lib/firebase/userData.ts`), så listorna hålls i synk: lägger man till en
 ny user-owned subcollection måste helpern uppdateras så båda flödena får med den.
 
-Inga återhämtningsbara referenser till datan finns efter radering.
-
 #### Per-titel-borttagning ("Ta bort" i biblioteket)
 
 "Ta bort" på en titel raderar watchlist-docen men lämnar medvetet kvar
@@ -821,8 +819,6 @@ fortfarande vid liv" (ADR 0022) — andra förutsättningar, annat svep.
 - **Gamla Tillsammans-sessioner** — bör delete:as efter 30 dagar via
   cron (kräver Cloud Functions, sprint 6 + 10)
 - **Gamla notifikationer** — bör delete:as efter 90 dagar (samma)
-- **Härvarande PITR** — Firebase cappar på 7 dagar, ingen ytterligare
-  konfiguration behövs
 
 Dessa är dokumenterade i FUTURE_ROADMAP.md sprint 6 (B34).
 
