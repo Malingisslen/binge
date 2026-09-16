@@ -1302,7 +1302,7 @@
         {
           "from": "list-page-client",
           "to": "uselists-hook",
-          "payload": "owner/co-editor adds/removes a title from the list page itself → addItemToList/removeItemFromList, optimistic queryClient cache patch first",
+          "payload": "owner/co-editor adds/removes a title from the list page itself → addItemToList/removeItemFromList, optimistic queryClient cache patch first. BIN-1195 (2026-09-16): the co-editor's update branch in firestore.rules now also requires request.resource.data.items is list. Before it that branch gated only on WHICH KEYS change — affectedKeys().hasOnly(['items','updatedAt']) — never on content, and isValidList does not name items at all, so a co-editor could store the field as a string, a number or a map; docToList maps straight over it. It binds the TYPE and nothing else: element shape is not inspectable in the rules language, and the element COUNT has no ceiling on this branch — BIN-1207 designs one for the owner branch, create and this branch together, which is Malin's call after #4 Security and #27 DBA split on whether a cap belonged in the same change. The owner's update branch and create still bind nothing on items; they route through isValidList (BIN-1170). The two write shapes this flow actually sends are an arrayUnion transform and a filtered literal array, and both have a rules test proving they still pass. Derive the branches rather than trusting this line: git grep 'affectedKeys().hasOnly' firestore.rules",
           "transport": "method call",
           "verified": true
         },
