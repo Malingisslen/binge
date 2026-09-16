@@ -1460,7 +1460,7 @@
         {
           "from": "friend-button",
           "to": "firestore",
-          "payload": "sendFriendRequest(toUid) — batch: set users/{toUid}/friendRequests/{myUid} + set users/{myUid}/friendRequestsSent/{toUid}. BIN-1106 pinned the key set with hasOnly, so the fields are read off sendFriendRequest and the rule, never enumerated here. BIN-1129: the create is denied when the recipient has blocked the sender (users/{toUid}/blocked/{myUid}); the whole batch fails and FriendButton shows the same generic error it shows for any failure",
+          "payload": "sendFriendRequest(toUid) — batch: set users/{toUid}/friendRequests/{myUid} + set users/{myUid}/friendRequestsSent/{toUid}. BIN-1106 pinned the key set with hasOnly, so the fields are read off sendFriendRequest and the rule, never enumerated here. BIN-1129: the create is denied when the recipient has blocked the sender (users/{toUid}/blocked/{myUid}); the whole batch fails, and the SEND button shows the same text it shows for any other failure of the send, so a block is not distinguishable from a network error. BIN-1192 gave the button's other three modes their own texts; derive which writes the blocked-list actually gates with: git grep -n blocked/ -- firestore.rules",
           "transport": "Firestore batch write",
           "verified": true
         },
