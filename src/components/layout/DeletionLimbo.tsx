@@ -14,9 +14,14 @@ import { classifyDeletionFailure } from '@/lib/authErrors';
  * explain. `firestore.rules`' `isOwner(uid)` never requires `users/{uid}` to
  * exist — it only checks that `request.auth.uid` matches the path — so a session
  * that survives a partial deletion can keep writing new watchlist items and
- * reviews, and the server sweep looks for accounts with no profile document and
- * therefore can never see what that session wrote. Every failed retry was a
- * chance for the data to grow rather than shrink.
+ * reviews. Every failed retry was a chance for the data to grow rather than
+ * shrink.
+ *
+ * BIN-1131: the clause that used to close that sentence, saying the server sweep
+ * looks for accounts with no profile document and can therefore never see what
+ * that session wrote, is STRUCK rather than reworded. The sweep it names reaps
+ * the Auth account itself, and a uid confirmed gone from Auth is what BIN-1023's
+ * later sweep enumerates before deleting the tree.
  *
  * Replacing the whole shell is what makes the block real. Gating N write paths
  * would leave the N+1st, which is the same objection the panel raised against

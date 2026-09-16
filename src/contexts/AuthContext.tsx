@@ -778,9 +778,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // could start in tab A while tab B kept the full shell — and everything
   // mounted ABOVE `AppShell` (`WatchlistProvider` above all) kept writing
   // owner-scoped documents, which `isOwner(uid)` permits with no profile
-  // document in existence. Those writes then survive both the cascade and the
-  // server sweep, which is personal data outliving an Art. 17 request rather
-  // than merely an untidy screen (security review, 2026-08-13).
+  // document in existence. Those writes are personal data outliving an Art. 17
+  // request rather than merely an untidy screen (security review, 2026-08-13).
+  //
+  // BIN-1131: the clause that used to stand here, saying those writes survive
+  // both the cascade and the server sweep, is STRUCK rather than reworded.
+  // BIN-1023's sweep reaches the whole `users/{uid}` tree for a uid Auth no
+  // longer knows, which is what a finished cascade leaves.
   //
   // `storage` fires in every OTHER tab on the origin, which is exactly the set
   // that needs telling. A `null` key means the whole store was cleared, so

@@ -2203,8 +2203,9 @@ describe('AuthContext — an aborted deletion is not resurrected (BIN-816)', () 
   it('another tab starting a deletion reaches this one through storage', async () => {
     // A tab already rendering the app never re-runs ensureUserProfile, so without
     // this listener it kept the full shell — and WatchlistProvider, which mounts
-    // ABOVE AppShell, kept writing owner-scoped documents that outlive both the
-    // cascade and the server sweep (security review, 2026-08-13).
+    // ABOVE AppShell, kept writing owner-scoped documents (security review,
+    // 2026-08-13). BIN-1131 struck the clause about those writes surviving both
+    // the cascade and the server sweep; see AuthContext.tsx for why.
     await signedInProvider();
     expect(ctx!.deletionInProgress).toBe(false);
 
