@@ -162,6 +162,27 @@ next one. Do not file "the limbo screen is too aggressive" or "block writes at t
 site instead". `deleteAccount()` and its retry are never gated — that part is ADR 0019
 condition 3 and is separately tested. — 2026-08-13
 
+### [Security/UX] Daterad efterföljare till posten ovan: BIN-1023:s svep, och vad det inte avgör
+Posten ovan motiverar spärren bland annat med att serversopningen `can never see them`.
+Originalposten står kvar oförändrad — den är ett beslutsprotokoll, och strykregelns carve-out
+säger att den ersätts av en daterad efterföljare, inte av en granskares strykning.
+
+Vad som har tillkommit sedan den skrevs: BIN-1023:s svep landade 2026-08-30. Kedjan är två steg.
+Svepet som samlar konton utan profildokument (`collectOrphanedAuthAccounts`) raderar ingen
+Firestore-data. För ett uid som är bekräftat borta ur Auth plockar `collectOrphanedUserData` upp
+det via `listUserUids()`, som använder `listDocuments()` just för att fånga en spökref där
+`users/{uid}` är borta men undersamlingarna står kvar, och `deleteUserTree` kör
+`recursiveDelete` över trädet.
+
+Hur långt det räcker för just den här postens läge avgörs inte här. Posten från 2026-08-15 och
+ADR 0022 behandlar en enhet utan markör som återskapar `users/{uid}` bara genom att ladda en
+inloggad sida, och vad det gör med kandidatmängden. Läs dem; skriv ingen sammanfattning av dem
+här.
+
+Vad efterföljaren INTE säger: att fönstret mellan de två stegen är godtagbart, och inte heller
+vad beslutet i posten ovan vilar på. Ingendera prövas här, så en granskare som hittar något om
+dem har inte hittat något som redan är avgjort. — 2026-09-16
+
 ### [Data/Cost] communityRatingMaintain swallows transaction failures — a TRANSIENT one is accepted
 `functions/src/communityRatings/runAggregate.ts` catches every transaction error, logs it
 and returns normally, so Cloud Functions records a successful delivery.

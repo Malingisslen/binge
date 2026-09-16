@@ -233,6 +233,26 @@ in force regardless of how the three questions above are answered:
 
 This review advises. Nothing was built, committed or deployed.
 
+## Daterad efterföljare 2026-09-16 — Säkerhets finding om vad sopningen kan se
+
+Stycket under punkt 3 ovan redovisar #4 Säkerhetsarkitektens finding och innehåller klausulen
+`the reaper's precondition can never see them`. Originalstycket står kvar oförändrat — ett
+beslutsprotokoll ersätts av en daterad efterföljare, aldrig av en granskares strykning.
+
+Vad som har tillkommit sedan panelen satt: BIN-1023:s svep landade 2026-08-30. Kedjan är två
+steg. Svepet som samlar konton utan profildokument (`collectOrphanedAuthAccounts`) raderar ingen
+Firestore-data. För ett uid som är bekräftat borta ur Auth plockar `collectOrphanedUserData` upp
+det via `listUserUids()`, som använder `listDocuments()` just för att fånga en spökref där
+`users/{uid}` är borta men undersamlingarna står kvar, och `deleteUserTree` kör
+`recursiveDelete` över trädet.
+
+Hur långt det räcker för det läge stycket beskriver avgörs inte här. ADR 0022 och posten från
+2026-08-15 i `.claude/rules/accepted-deviations.md` behandlar en enhet utan markör som
+återskapar `users/{uid}`. Läs dem i stället för en sammanfattning.
+
+Vad efterföljaren INTE säger: att fönstret mellan de två stegen är godtagbart, och inte heller
+vad ADR 0019 villkor 4 vilar på. Ingendera prövas här.
+
 ## Decided by
 
 Panel convened 2026-08-13 by Malin in an attended session, after the 2026-08-13 sprint
