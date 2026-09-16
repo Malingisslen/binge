@@ -42,7 +42,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { initializeApp, applicationDefault } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
-import { projectFrom, projectRefusal } from './projectArg.helpers.mjs';
+import { projectFrom, projectRefusal, stripProjectArgs } from './projectArg.helpers.mjs';
 import {
   invalidRecapReason,
   invalidSeasonRecapReason,
@@ -116,10 +116,8 @@ async function main() {
   if (refusal) { console.error(refusal); process.exit(1); }
   const projectId = projectFrom(args);
   // Strip BOTH tokens before the positional read below, or `--project` lands in inputPath.
-  {
-    const i = args.indexOf('--project');
-    args = args.slice(0, i).concat(args.slice(i + 2));
-  }
+  // BIN-1117: the stripping lives beside the refusal so a test can CALL it.
+  args = stripProjectArgs(args);
 
   // --force: overwrite a season doc that already exists (ordinarily written once). Has no
   // effect on boundary docs, which are always overwritten (that's how a regeneration pass works).

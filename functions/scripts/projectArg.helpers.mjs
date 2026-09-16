@@ -47,3 +47,39 @@ export function projectRefusal(argv) {
   }
   return null;
 }
+
+/**
+ * `argv` without the `--project` flag and its value, so a POSITIONAL read further down
+ * does not pick up either token. A script that reads `args[0]` as a file path gets the
+ * path the operator typed rather than the string `--project`.
+ *
+ * BIN-1117. This lived inline in recap-upload.mjs, where no test could call it — the
+ * same reason `projectRefusal` was moved here one line up, applied one line further in.
+ *
+ * Two behaviours worth naming, because both are decisions rather than fallout:
+ *
+ * 1. **No `--project` returns argv unchanged.** The inline version indexed without
+ *    guarding, so an absent flag gave `-1` and the surrounding slice arithmetic dropped
+ *    the last token while duplicating another. Nothing reached it, because every caller
+ *    gated on `projectRefusal` first — and moving the code here is precisely what removes
+ *    that caller discipline.
+ * 2. **A following token that looks like a flag is not consumed**, the same test
+ *    `projectFrom` applies to decide it is not an id. So the two functions read one
+ *    argv the same way instead of two ways, and a real flag is never eaten as a value.
+ *
+ * Every occurrence goes, not only the first. `projectFrom` answers from the FIRST one, so
+ * a repeated flag already has a decided project; leaving the later pair in place would put
+ * `--project` back into the positional slot this function exists to clear.
+ */
+export function stripProjectArgs(argv) {
+  const out = [];
+  for (let i = 0; i < argv.length; i += 1) {
+    if (argv[i] !== '--project') {
+      out.push(argv[i]);
+      continue;
+    }
+    const value = argv[i + 1];
+    if (value !== undefined && !value.startsWith('--')) i += 1;
+  }
+  return out;
+}

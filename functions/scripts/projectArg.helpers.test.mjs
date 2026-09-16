@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { projectFrom, projectRefusal } from './projectArg.helpers.mjs';
+import { projectFrom, projectRefusal, stripProjectArgs } from './projectArg.helpers.mjs';
 
 const HERE = join(fileURLToPath(import.meta.url), '..');
 const REPO = join(HERE, '..', '..');
@@ -51,6 +51,58 @@ describe('projectRefusal', () => {
 
   it('lets a run with a named project through', () => {
     expect(projectRefusal(['--project', 'binge-nu', '--apply'])).toBeNull();
+  });
+});
+
+// BIN-1117. The stripping used to live inline in recap-upload.mjs, where nothing could call
+// it: that file imports firebase-admin, which the root install does not provide. A reviewer
+// traced the argument orders BY HAND and concluded no constructible case writes against the
+// wrong project. That was a reading. These are the same orders, driven.
+//
+// The mutation the ticket names is the skip of the VALUE token — the old `slice(i + 2)`
+// becoming `slice(i + 1)`, and here the `i += 1` inside the loop. Removing it leaves the
+// project id sitting in the positional slot, which is the defect the block exists to prevent.
+describe('stripProjectArgs', () => {
+  it('removes the flag and its value wherever the pair sits', () => {
+    expect(stripProjectArgs(['--project', 'binge-nu', 'recaps.json'])).toEqual(['recaps.json']);
+    expect(stripProjectArgs(['--force', '--project', 'binge-nu', 'recaps.json']))
+      .toEqual(['--force', 'recaps.json']);
+    expect(stripProjectArgs(['--project', 'binge-nu', '--index-only', 'recaps.json']))
+      .toEqual(['--index-only', 'recaps.json']);
+    expect(stripProjectArgs(['--season-only', 'recaps.json', '--project', 'binge-nu']))
+      .toEqual(['--season-only', 'recaps.json']);
+  });
+
+  // The guard that makes this function safe to call on its own. The inline version indexed
+  // without checking, so an absent flag gave -1 and the slice arithmetic dropped the last
+  // token while duplicating another. Assert the IDENTITY, not merely that nothing throws —
+  // "it did not throw" is also true of the corrupting version.
+  it('returns the arguments unchanged when no --project is present', () => {
+    expect(stripProjectArgs(['--force', '--season-only', 'recaps.json']))
+      .toEqual(['--force', '--season-only', 'recaps.json']);
+    expect(stripProjectArgs(['recaps.json'])).toEqual(['recaps.json']);
+    expect(stripProjectArgs([])).toEqual([]);
+  });
+
+  // `projectFrom` refuses to read a following FLAG as the id. Strip the same way, so the two
+  // functions read one argv the same way rather than two ways — otherwise a real flag is
+  // eaten as though it were a project id.
+  it('does not consume a following token that is itself a flag', () => {
+    expect(stripProjectArgs(['--project', '--force', 'recaps.json'])).toEqual(['--force', 'recaps.json']);
+    expect(stripProjectArgs(['--force', '--project'])).toEqual(['--force']);
+    expect(stripProjectArgs(['--project'])).toEqual([]);
+  });
+
+  // The decided answer for a repeated flag, rather than an undocumented one. `projectFrom`
+  // uses the FIRST occurrence, so the project is already settled; removing every pair keeps
+  // argv consistent with that choice. Leaving the later pair in place would put the literal
+  // string `--project` into the positional slot this function exists to clear — which is
+  // what the inline single-pair version did.
+  it('removes every --project pair, not only the first', () => {
+    expect(stripProjectArgs(['--project', 'binge-nu', '--project', 'other', 'recaps.json']))
+      .toEqual(['recaps.json']);
+    expect(projectFrom(['--project', 'binge-nu', '--project', 'other', 'recaps.json']))
+      .toBe('binge-nu');
   });
 });
 
