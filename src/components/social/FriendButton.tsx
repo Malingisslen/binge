@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
 import { Check } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useFriendStatus, useFriendActions } from '@/hooks/useFriends';
+import { useFriendActionAlert } from '@/hooks/useFriendActionAlert';
+import { FRIEND_FAILURE_TEXT, type FriendAction } from '@/lib/friendActionText';
 
 // BIN-1192. Each mode's write can be refused, and each says so next to its own
 // button. The texts differ by ACTION, never by cause: within one action every
@@ -14,14 +15,10 @@ import { useFriendStatus, useFriendActions } from '@/hooks/useFriends';
 // cancel, accept and remove carry no block check on any branch. So there is no
 // refusal on those three that a block could explain, and naming the wrong action
 // in the message would cost clarity to buy a secrecy they do not need.
-type FriendAction = 'send' | 'cancel' | 'accept' | 'remove';
-
-const FAILURE_TEXT: Record<FriendAction, string> = {
-  send: 'Kunde inte skicka förfrågan.',
-  cancel: 'Kunde inte avbryta förfrågan.',
-  accept: 'Kunde inte acceptera förfrågan.',
-  remove: 'Kunde inte ta bort vännen.',
-};
+//
+// BIN-1196 moved the texts and the failed-write guard out of this file: the same
+// actions are offered by the friends page and the topbar popover, and a copy per
+// file is a wording per file.
 
 // Knapp med 4 olika lägen baserat på relation:
 // - 'none'     → "Lägg till vän"      (skickar förfrågan)
@@ -35,58 +32,24 @@ export default function FriendButton({ targetUid }: { targetUid: string }) {
   const { uid } = useAuth();
   const { data: status, isLoading } = useFriendStatus(targetUid);
   const { sendFriendRequest, cancelFriendRequest, acceptFriendRequest, removeFriend } = useFriendActions();
-  const [failedAction, setFailedAction] = useState<FriendAction | null>(null);
-
-  // Which click the on-screen message is allowed to describe. Bumped SYNCHRONOUSLY
-  // on every click and on every relation change, so a write that settles after
-  // either one can tell that it has been abandoned.
-  //
-  // Without it, a rejection that arrives late blames whatever button is showing
-  // NOW: the status can leave 'sent' and come back to 'sent' while a cancel is
-  // still in flight, and the catch — which closed over the ORIGINAL action —
-  // would then report a failure against a second, unrelated request that never
-  // failed. Comparing against `status` at settle time is not enough, because a
-  // round trip returns it to the same value; a counter distinguishes them.
-  const attemptRef = useRef(0);
 
   // The message belongs to the button that produced it. When the relation changes
   // — the other person accepted in another tab, a request arrived — this button
   // becomes a DIFFERENT action, and an error about the previous one is no longer
-  // about anything on screen. Clearing on the transition rather than merely hiding
-  // it is what stops the alert reappearing if that mode comes back later; hiding
-  // alone left exactly that stale banner behind on the send path.
-  useEffect(() => {
-    attemptRef.current += 1;
-    setFailedAction(null);
-  }, [status]);
+  // about anything on screen. Passing `status` as the reset key is what clears it
+  // rather than merely hiding it, which is what stops the alert reappearing if
+  // that mode comes back later; hiding alone left exactly that stale banner
+  // behind on the send path.
+  const { failedAction, run } = useFriendActionAlert(status);
 
   if (!uid || uid === targetUid) return null;
   if (isLoading) return null;
 
   const baseClass = 'px-3 py-[3px] border rounded-sm text-xs font-[inherit] cursor-pointer';
 
-  // Every mode goes through here, so no mode can be given an unhandled rejection
-  // by being added later. `write` is awaited, so the catch sees a refused write
-  // rather than a resolved promise.
-  const run = (action: FriendAction, write: () => Promise<void>) => async () => {
-    attemptRef.current += 1;
-    const attempt = attemptRef.current;
-    setFailedAction(null);
-    try {
-      await write();
-    } catch (err) {
-      console.error(`${action}FriendRequest failed:`, err);
-      // A newer click, or a relation change, happened while this write was in
-      // flight. The failure is real but it is no longer about anything the user
-      // is looking at, so it is logged and not shown.
-      if (attemptRef.current !== attempt) return;
-      setFailedAction(action);
-    }
-  };
-
   const alertFor = (action: FriendAction) =>
     failedAction === action ? (
-      <span role="alert" className="text-xs text-danger-ink">{FAILURE_TEXT[action]}</span>
+      <span role="alert" className="text-xs text-danger-ink">{FRIEND_FAILURE_TEXT[action]}</span>
     ) : null;
 
   if (status === 'friends') {

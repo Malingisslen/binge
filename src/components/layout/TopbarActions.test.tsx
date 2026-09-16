@@ -1,6 +1,6 @@
 // src/components/layout/TopbarActions.test.tsx
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, act, fireEvent } from '@testing-library/react';
+import { render, screen, act, fireEvent, within } from '@testing-library/react';
 import TopbarActions from './TopbarActions';
 
 // BIN-668: the topbar's "Logga in" used to call signIn() directly. A first-time
@@ -34,17 +34,28 @@ vi.mock('next/navigation', () => {
   const router = { push };
   return { useRouter: () => router };
 });
+// BIN-1196: ONE object each, hoisted, rather than a fresh literal per call. A per-call
+// factory hands every render new identities and makes any assertion that spans two
+// renders — or any mock rejection set up before one — pass for the wrong reason.
+const notif = vi.hoisted(() => ({
+  notifications: [] as unknown[],
+  friendRequests: [] as { fromUid: string; fromDisplayName: string; fromPhotoURL: string | null }[],
+  recentPicks: [] as unknown[],
+  unreadCount: 0,
+  friendRequestsCount: 0,
+  providerUnreadCount: 0,
+  recentPicksCount: 0,
+  markRead: vi.fn(),
+  markAllRead: vi.fn(),
+}));
+const friendActions = vi.hoisted(() => ({
+  acceptFriendRequest: vi.fn(async (_uid: string) => {}),
+  declineFriendRequest: vi.fn(async (_uid: string) => {}),
+}));
+
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => auth }));
-vi.mock('@/hooks/useNotifications', () => ({
-  useNotifications: () => ({
-    notifications: [], friendRequests: [], recentPicks: [],
-    unreadCount: 0, friendRequestsCount: 0, providerUnreadCount: 0, recentPicksCount: 0,
-    markRead: vi.fn(), markAllRead: vi.fn(),
-  }),
-}));
-vi.mock('@/hooks/useFriends', () => ({
-  useFriendActions: () => ({ acceptFriendRequest: vi.fn(), declineFriendRequest: vi.fn() }),
-}));
+vi.mock('@/hooks/useNotifications', () => ({ useNotifications: () => notif }));
+vi.mock('@/hooks/useFriends', () => ({ useFriendActions: () => friendActions }));
 vi.mock('@/hooks/useMySessions', () => ({ useMySessions: () => [] }));
 vi.mock('@/hooks/useClickOutside', () => ({ useClickOutside: () => {} }));
 vi.mock('@/hooks/useSenderProfile', () => ({ useSenderProfile: () => ({ data: null }) }));
@@ -103,5 +114,104 @@ describe('TopbarActions — signing in from the topbar (BIN-668)', () => {
     await act(async () => { render(<TopbarActions />); });
 
     expect(screen.queryByRole('button', { name: 'Logga in' })).toBeNull();
+  });
+});
+
+// BIN-1196. The popover's Accept/Decline call the same writes FriendButton does, and
+// had no catch: a refused write was an unhandled rejection with nothing on screen, in a
+// panel the user opened precisely to act on the request.
+describe('TopbarActions — a refused friend-request write says so, on its own row', () => {
+  const request = (uid: string, name: string) => ({
+    fromUid: uid,
+    fromDisplayName: name,
+    fromPhotoURL: null,
+  });
+
+  /** Sign in, seed the requests, open the bell. */
+  async function openBell(requests: ReturnType<typeof request>[]) {
+    auth.user = { displayName: 'Malin' };
+    auth.uid = 'me';
+    notif.friendRequests = requests;
+    notif.friendRequestsCount = requests.length;
+    let view!: ReturnType<typeof render>;
+    await act(async () => { view = render(<TopbarActions />); });
+    await act(async () => {
+      fireEvent.click(view.getByRole('button', { name: /Notiser/ }));
+    });
+    return view;
+  }
+
+  /** The `.friend-req` row that renders `name`, so an assertion can be scoped to it. */
+  function rowFor(view: ReturnType<typeof render>, name: string) {
+    const row = view.getByText(name).closest('.friend-req');
+    if (!row) throw new Error(`no request row for ${name}`);
+    return row as HTMLElement;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    notif.notifications = [];
+    notif.friendRequests = [];
+    notif.recentPicks = [];
+    notif.unreadCount = 0;
+    notif.friendRequestsCount = 0;
+    notif.recentPicksCount = 0;
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  it('a refused accept says so, naming the accept', async () => {
+    friendActions.acceptFriendRequest.mockRejectedValueOnce(
+      Object.assign(new Error('x'), { code: 'permission-denied' }),
+    );
+    const view = await openBell([request('a', 'Anna')]);
+
+    await act(async () => { fireEvent.click(view.getByText('Acceptera')); });
+
+    expect(friendActions.acceptFriendRequest).toHaveBeenCalledWith('a');
+    expect(view.getByRole('alert').textContent).toBe('Kunde inte acceptera förfrågan.');
+  });
+
+  it('a refused decline says so, naming the decline', async () => {
+    friendActions.declineFriendRequest.mockRejectedValueOnce(new Error('x'));
+    const view = await openBell([request('a', 'Anna')]);
+
+    await act(async () => { fireEvent.click(view.getByText('Avböj')); });
+
+    expect(friendActions.declineFriendRequest).toHaveBeenCalledWith('a');
+    expect(view.getByRole('alert').textContent).toBe('Kunde inte avböja förfrågan.');
+  });
+
+  // Same action, a different cause: the text may not change, or the sender could read
+  // the reason out of it.
+  it('shows the same text whatever the error was', async () => {
+    friendActions.acceptFriendRequest.mockRejectedValueOnce(
+      Object.assign(new Error('x'), { code: 'unavailable' }),
+    );
+    const view = await openBell([request('a', 'Anna')]);
+
+    await act(async () => { fireEvent.click(view.getByText('Acceptera')); });
+
+    expect(view.getByRole('alert').textContent).toBe('Kunde inte acceptera förfrågan.');
+  });
+
+  it('says nothing when the write succeeds', async () => {
+    const view = await openBell([request('a', 'Anna')]);
+
+    await act(async () => { fireEvent.click(view.getByText('Acceptera')); });
+
+    expect(view.queryByRole('alert')).toBeNull();
+  });
+
+  // The popover lists up to five requests. A flag held above the rows would pass every
+  // test above and still print Annas failure under Bertils name.
+  it('leaves the other rows alone when one accept fails', async () => {
+    friendActions.acceptFriendRequest.mockRejectedValueOnce(new Error('x'));
+    const view = await openBell([request('a', 'Anna'), request('b', 'Bertil')]);
+
+    const annaRow = rowFor(view, 'Anna');
+    await act(async () => { fireEvent.click(within(annaRow).getByText('Acceptera')); });
+
+    expect(within(annaRow).getByRole('alert').textContent).toBe('Kunde inte acceptera förfrågan.');
+    expect(within(rowFor(view, 'Bertil')).queryByRole('alert')).toBeNull();
   });
 });

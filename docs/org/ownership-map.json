@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 599,
+  "patternCount": 603,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -401,6 +401,7 @@
         "src/hooks/useFollowList.helpers.test.ts",
         "src/hooks/useFollowList.helpers.ts",
         "src/hooks/useFollowList.ts",
+        "src/hooks/useFriendActionAlert.ts",
         "src/hooks/useFriends.ts",
         "src/hooks/useFriendsWhoSaw.ts",
         "src/hooks/useGroup.denied.test.tsx",
@@ -420,6 +421,8 @@
         "src/lib/feedTrending.ts",
         "src/lib/firebase/friends.test.ts",
         "src/lib/firebase/friends.ts",
+        "src/lib/friendActionText.test.ts",
+        "src/lib/friendActionText.ts",
         "src/lib/groupDenialCopy.test.ts",
         "src/lib/groupDenialCopy.ts",
         "src/lib/groupInviteCache.test.ts",
@@ -603,6 +606,7 @@
         "src/components/pages/DiscoverPageClient.tsx",
         "src/components/pages/DynamicRouter.tsx",
         "src/components/pages/ForsvinnerListClient.tsx",
+        "src/components/pages/FriendsPageClient.test.tsx",
         "src/components/pages/FriendsPageClient.tsx",
         "src/components/pages/GroupPageClient.joinResubscribe.test.tsx",
         "src/components/pages/GroupPageClient.tsx",

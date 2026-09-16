@@ -119,10 +119,14 @@ describe('FriendButton — a refused write says so, per mode', () => {
     expect(view.queryByRole('alert')).toBeNull();
   });
 
-  // The relation can change under the button — the other person accepts in another
-  // tab, or a request arrives. The old error is then about an action this button no
-  // longer offers.
-  it('drops the alert when the relation changes the button underneath it', async () => {
+  // BIN-1197: this test is named for what it CAN fail on, which is not the transition
+  // its first name described. The banner renders on `failedAction === action`, so a
+  // 'send' flag is unrenderable the moment the relation leaves 'none' whether or not
+  // the reset in the effect runs — measured: with that reset removed this stayed green.
+  // The sibling below, 'does not bring the alert back when the original mode returns',
+  // is the one that carries the transition. What this pins is the KEYING: a component
+  // that rendered the banner regardless of which action failed fails here.
+  it('keys the alert to the action, so a failed send cannot surface in another mode', async () => {
     actions.sendFriendRequest.mockRejectedValueOnce(new Error('x'));
     const view = await clickIn(MODES[0]);
     expect(view.getByRole('alert').textContent).toBe('Kunde inte skicka förfrågan.');

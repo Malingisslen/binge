@@ -8,6 +8,8 @@ import { useFollowing } from '@/hooks/useFollow';
 import { useFriends, useFriendRequests, useFriendActions } from '@/hooks/useFriends';
 import { useAuth } from '@/hooks/useAuth';
 import { useSenderProfile } from '@/hooks/useSenderProfile';
+import { useFriendActionAlert } from '@/hooks/useFriendActionAlert';
+import { FRIEND_FAILURE_TEXT } from '@/lib/friendActionText';
 import type { FriendRequest, FriendUser } from '@/lib/firebase/friends';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { usePageMeta } from '@/hooks/usePageMeta';
@@ -118,9 +120,13 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
   );
 }
 
+// BIN-1196. The alert lives in the ROW, not in the page: these are lists, and a flag
+// held one level up would show the failure from removing this friend next to the next
+// friend's name.
 function FriendRow({ friend }: { friend: FriendUser }) {
   const { uid: myUid } = useAuth();
   const { removeFriend } = useFriendActions();
+  const { failedAction, run } = useFriendActionAlert();
   const isMe = friend.uid === myUid;
   const profileLink = friend.username ? `/user/${friend.username}/` : null;
   return (
@@ -137,12 +143,17 @@ function FriendRow({ friend }: { friend: FriendUser }) {
         {friend.username && <div className="text-xxs text-ink-3">@{friend.username}</div>}
       </div>
       {!isMe && (
-        <button
-          onClick={() => removeFriend(friend.uid)}
-          className="px-2 py-[2px] text-xxs border border-rule bg-surface text-ink-2 rounded-sm cursor-pointer font-[inherit] hover:bg-bg-2"
-        >
-          Ta bort
-        </button>
+        <div className="flex flex-col items-end gap-1">
+          <button
+            onClick={run('remove', () => removeFriend(friend.uid))}
+            className="px-2 py-[2px] text-xxs border border-rule bg-surface text-ink-2 rounded-sm cursor-pointer font-[inherit] hover:bg-bg-2"
+          >
+            Ta bort
+          </button>
+          {failedAction === 'remove' && (
+            <span role="alert" className="text-xs text-danger-ink">{FRIEND_FAILURE_TEXT.remove}</span>
+          )}
+        </div>
       )}
     </li>
   );
@@ -150,6 +161,7 @@ function FriendRow({ friend }: { friend: FriendUser }) {
 
 function RequestRow({ request }: { request: FriendRequest }) {
   const { acceptFriendRequest, declineFriendRequest } = useFriendActions();
+  const { failedAction, run } = useFriendActionAlert();
   const { data: sender } = useSenderProfile(request.fromUid);
   // Föredra namn/användarnamn från avsändarens egen profil; fall tillbaka till
   // de denormaliserade request-fälten om profilen inte är läsbar.
@@ -169,19 +181,28 @@ function RequestRow({ request }: { request: FriendRequest }) {
         )}
         {username && <div className="text-xxs text-ink-3">@{username}</div>}
       </div>
-      <div className="flex gap-1">
-        <button
-          onClick={() => acceptFriendRequest(request.fromUid)}
-          className="px-2 py-[2px] text-xxs border border-acc-deep bg-acc-deep text-white rounded-sm cursor-pointer font-[inherit]"
-        >
-          Acceptera
-        </button>
-        <button
-          onClick={() => declineFriendRequest(request.fromUid)}
-          className="px-2 py-[2px] text-xxs border border-rule bg-surface text-ink-2 rounded-sm cursor-pointer font-[inherit] hover:bg-bg-2"
-        >
-          Avböj
-        </button>
+      {/* Both buttons are live at once, unlike FriendButton's single mode. The alert
+          names the action of the LATEST click: every click clears the flag first, so a
+          second click while the first is in flight abandons the first rather than
+          racing it for the banner. */}
+      <div className="flex flex-col items-end gap-1">
+        <div className="flex gap-1">
+          <button
+            onClick={run('accept', () => acceptFriendRequest(request.fromUid))}
+            className="px-2 py-[2px] text-xxs border border-acc-deep bg-acc-deep text-white rounded-sm cursor-pointer font-[inherit]"
+          >
+            Acceptera
+          </button>
+          <button
+            onClick={run('decline', () => declineFriendRequest(request.fromUid))}
+            className="px-2 py-[2px] text-xxs border border-rule bg-surface text-ink-2 rounded-sm cursor-pointer font-[inherit] hover:bg-bg-2"
+          >
+            Avböj
+          </button>
+        </div>
+        {failedAction && (
+          <span role="alert" className="text-xs text-danger-ink">{FRIEND_FAILURE_TEXT[failedAction]}</span>
+        )}
       </div>
     </li>
   );

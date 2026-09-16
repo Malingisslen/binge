@@ -11,6 +11,8 @@ import { useClickOutside } from '@/hooks/useClickOutside';
 import { useSenderProfile } from '@/hooks/useSenderProfile';
 import { getProvider } from '@/lib/tmdb/providers';
 import { useSignedOutRedirect } from '@/hooks/useSignedOutRedirect';
+import { useFriendActionAlert } from '@/hooks/useFriendActionAlert';
+import { FRIEND_FAILURE_TEXT } from '@/lib/friendActionText';
 import type { FriendRequest } from '@/lib/firebase/friends';
 
 // Right-hand cluster of the new topbar: sessions popover, notifications bell
@@ -330,16 +332,20 @@ export default function TopbarActions() {
   );
 }
 
+// BIN-1196. The popover lists up to five requests, so the failed-write flag belongs to
+// the ROW: held one level up it would put the failure from accepting one person's
+// request under the next person's name.
 function FriendRequestRow({
   request,
   onAccept,
   onDecline,
 }: {
   request: FriendRequest;
-  onAccept: () => void;
-  onDecline: () => void;
+  onAccept: () => Promise<void>;
+  onDecline: () => Promise<void>;
 }) {
   const { data: sender } = useSenderProfile(request.fromUid);
+  const { failedAction, run } = useFriendActionAlert();
   const displayName = sender?.displayName ?? request.fromDisplayName;
   const username = sender?.username ?? request.fromUsername;
   return (
@@ -347,13 +353,20 @@ function FriendRequestRow({
       <div className="popover-row-title">{displayName}</div>
       {username && <div className="popover-row-meta">@{username}</div>}
       <div className="popover-actions">
-        <button onClick={onAccept} className="btn btn-sm btn-acc">
+        <button onClick={run('accept', onAccept)} className="btn btn-sm btn-acc">
           Acceptera
         </button>
-        <button onClick={onDecline} className="btn btn-sm btn-ghost">
+        <button onClick={run('decline', onDecline)} className="btn btn-sm btn-ghost">
           Avböj
         </button>
       </div>
+      {/* Both buttons are live at once. The alert names the LATEST click's action:
+          every click clears the flag first, so a second click abandons the first. */}
+      {failedAction && (
+        <div role="alert" className="text-xs text-danger-ink">
+          {FRIEND_FAILURE_TEXT[failedAction]}
+        </div>
+      )}
     </div>
   );
 }
