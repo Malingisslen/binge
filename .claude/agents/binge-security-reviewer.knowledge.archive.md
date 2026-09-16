@@ -11127,4 +11127,65 @@ relocation of the `PlannedGroupState` type above `CleanupIo`'s doc comment, conf
 `git diff` — no logic change) and `docs/org/metrics/events.jsonl` (an appended review-log line
 for BIN-1186 itself).
 
+## 2026-09-16 — BIN-1117: `stripProjectArgs` extracted so a test can call it; pass
+
+`recap-upload.mjs`'s inline `--project`-stripping block (`const i = args.indexOf('--project');
+args = args.slice(0, i).concat(args.slice(i + 2));`) moves into the admin-free
+`projectArg.helpers.mjs` as `stripProjectArgs(argv)`, same family as BIN-1107's `projectFrom`/
+`projectRefusal` extraction — an admin-SDK entrypoint can't be imported by the root runner, so
+the old block could only be verified by reading it.
+
+**Verified by running, not by reading.**
+1. `npx vitest run functions/scripts/projectArg.helpers.test.mjs` → 15/15.
+2. Mutation-proved the exact defect the ticket names: deleted the `if (value !== undefined &&
+   !value.startsWith('--')) i += 1;` skip (snapshotted the staged blob first,
+   `git hash-object` before/after in the same command as the restore). 2 of 15 red — both in
+   `describe('stripProjectArgs')`, including `['--project','binge-nu','recaps.json'] →
+   ['binge-nu','recaps.json']` instead of `['recaps.json']`: the project id lands back in the
+   positional slot the function exists to clear. Restored, hash matched the staged blob
+   (`cc5e245d…`), suite green again (15/15).
+
+**The three settled questions, measured rather than reasoned:**
+- **Never leaks `--project`/its value into the positional slot.** Traced by hand and confirmed
+  by the mutation above: a real value (non-flag-shaped) is dropped along with the flag
+  (`i += 1` inside the branch plus the loop's own increment skips both); a missing or
+  flag-shaped value drops only the flag token itself, never the flag's neighbour.
+- **A following flag-shaped token survives, `--project` never does.** `['--project','--force',
+  'recaps.json']` → `['--force','recaps.json']` (the flag is preserved because `projectFrom`
+  would also refuse to read it as an id); `['--force','--project']` → `['--force']` (the
+  trailing bare `--project` is still dropped, not left dangling). Mirrors `projectFrom`'s "a
+  flag is never an id" rule so the two functions read one argv the same way.
+- **`projectFrom` (first occurrence) and `stripProjectArgs` (every pair) can't disagree about
+  which project opens.** `main()` computes `projectId = projectFrom(args)` *before* reassigning
+  `args = stripProjectArgs(args)`, so the value actually passed to `initializeApp` is locked in
+  off the first `--project` pair; stripping every pair afterward only prevents a second,
+  unused pair from being misread as positional input — it can't change which project was
+  already chosen. `stripProjectArgs(['--project','binge-nu','--project','other','recaps.json'])`
+  → `['recaps.json']` while `projectFrom` of the same array → `'binge-nu'`, consistent with
+  that ordering.
+
+**Not weakened.** Diffed `projectArg.helpers.test.mjs`: purely additive (one new `describe`
+block plus the import line), so the `WIRED` roster test and the unnamed-`initializeApp`
+source-scan lower in the file are untouched — confirmed via `git diff --cached`, not assumed.
+
+**Downstream in `recap-upload.mjs`:** the old inline block's `slice(0,i).concat(slice(i+2))`
+had two dormant bugs the header comment already names (`i === -1` drops the last positional
+token; an unconditional `+2` would eat a following flag as if it were the value) — both were
+unreachable because every caller gates on `projectRefusal` first, which requires a real
+(non-flag) value after `--project` before the block is ever reached. The new function doesn't
+rely on that caller discipline at all, so it stays correct if reused by a script with a looser
+gate. `--force`/`--season-only`/`--index-only` filtering downstream operates on
+`stripProjectArgs`'s output exactly as it did on the old slice's output for every reachable
+input.
+
+**No other writer needed to move.** `git grep` for the old `indexOf('--project')`/
+`slice(i + 2)` idiom outside this file returns nothing; `recap-coverage-manifest.mjs` (the
+other script with `projectRefusal` wiring) does no positional-arg read at all
+(`args[0]`/`argv[0]` absent from the file), so it never had this class of defect to fix.
+
+No PoC needed — no rules boundary, no client-reachable write; the trust boundary here is
+operator-tool-only (which Firestore project a locally-run Admin-SDK script opens).
+
+**Verdict: pass (0 blocking).**
+
 **Verdict: pass (0 blocking).**

@@ -1,3 +1,606 @@
+# Sprint 2026-09-16 — 7 biljetter, 6 buntar
+
+Rent träd vid start: bokföringen från 2026-09-15 (granskarnas kunskapsfiler) committad först;
+`scripts/prune-map-flag.test.mjs` visade sig oförändrad (`git hash-object` = `git rev-parse HEAD:<fil>`,
+tom diff). `tasks/todo.md` står i `cleanTreeIgnore`. I fas med origin. Todo och In Progress tomma.
+
+Routningen nedan är körd vid URVALET. Den körs om på buntens faktiska filuppsättning före varje
+kritik och mot `git diff --cached --name-only` före varje commit — aldrig ärvd härifrån.
+
+## Mätt vid urvalet
+
+- **BIN-1158:s hållna patch lever.** `.claude/state/sprint-patches/2026-09-15-BIN-1158-useRepo.patch`,
+  `git hash-object` = `097e4de70c027becddbe2cfe76ccf69cd93438ae`, `git apply --check` går rent mot HEAD.
+  Samma hash som biljettens kommentar anger.
+- **BIN-1179 halva 2 är obsolet.** `git grep -n "getGroupOnce" -- src functions` ger tom utdata;
+  funktionen raderades i `87c2b18` under BIN-1182. Halva 1 kräver en produktionsmätning → Tier D.
+- **BIN-624 halva 1 ligger på main.** `canonicalSwipeDocId` finns i `firestore.rules` och gatar
+  `sessions/{id}/swipes/{tmdbId}` `allow create`. Halva 2 är spärrad av Malins bindande förutsättning
+  (nollräkning på skarp data, aldrig körd) → Tier D.
+- **BIN-1170 är delvis härledd redan.** Kommentaren 2026-09-12 bär unionen för `isValidList` och
+  `isValidComment`. De fyra `isOwner`-underkatalogerna är INTE härledda och ligger utanför omfånget.
+
+## Bunt A — BIN-1158: `npm test` faller på git-spawnande test [Tier A] · build
+
+Router (`scripts/prune-map-flag.test.mjs`): `medium` · #25 Engineering Manager.
+Applicera den hållna patchen; bygg inte om blint — läs den hunk för hunk mot trädet först.
+
+1. Git-repo-fixturen byggs bara i de describe-block som använder den. *(diff)*
+2. Ingen timeout höjd, ingen assertion rörd, inget per-test-timeoutundantag. *(diff)*
+3. Antalet test i icke-repo-block härleds med biljettens eget kommando, ärvs inte. *(diff)*
+4. Tio raka gröna körningar av hela `npm test` på en tyst maskin. *(run)*
+
+**Bindande negativt villkor (#7 QA, från kritiken 2026-09-11):** en spärr som görs tyst är värre
+än en som fäller ibland. Höjd timeout = underkänd bunt.
+
+**#25:s villkor (invikta, kritik körd före bygget):**
+5. En röd körning bland de tio loggas med FILNAMN, TESTNAMN och felsort (timeout eller
+   assertion). Ett bart pass/fail-tal är inget bevis — precis den här patchen gav en oförklarad
+   röd körning i isolering 2026-09-15 som aldrig diagnosticerades. *(run)*
+6. Att ingen annan `npm test`-, vitest- eller emulatorprocess kör samtidigt BEKRÄFTAS, inte
+   antas, för varje körning. En röd körning nollställer räknaren. *(run)*
+7. Innan hela tio-körningsbudgeten spenderas: kör `scripts/prune-map-flag.test.mjs` ensam ett
+   par gånger i rad och logga utfallet. Det är vad den här ändringen faktiskt styr över. *(run)*
+8. **`.claude/hooks/freshness.test.mjs` har en EGEN, orörd timeout-mekanism.** En röd körning
+   som går att härleda dit motbevisar inte den här bunten — och en ren svit bevisar inte att
+   `npm test` är stabilt grön, eftersom bara den ena av minst två kända orsaker är lagad.
+   Avslutsnoteringen säger det rakt ut i stället för att räkna hem det. *(diff)*
+
+**Utfall, mätt 2026-09-16.** Patchen applicerad (`git apply`, gick rent). Premisskollen före
+applicering: de describe-block som läser `dir` är exakt de block patchen utrustar med `useRepo()`
+— inget dir-läsande block lämnas utan fixtur. Efter applicering: `grep -c useRepo` ger 5 (en
+definition plus fyra anropsställen), `grep -c "^beforeEach"` ger 0, alltså ingen filbred fixtur
+kvar. Tre raka isolerade körningar av `npx vitest run scripts/prune-map-flag.test.mjs` gav
+33/33 vardera.
+
+**Kriterium 4 är `awaiting-run`, inte uppfyllt och inte fällt.** Beviset kräver tio raka gröna
+körningar av HELA `npm test` på en maskin utan annan last, och #25:s villkor 6 kräver att
+frånvaron av samtidiga vitest-/emulatorprocesser BEKRÄFTAS. Den här sessionen kör subagenter, så
+villkoret går inte att uppfylla här — det vore precis den förorenade mätning villkoret finns för
+att stoppa. Går till "Needs you" i stället för att redovisas som klart.
+
+## Bunt B — BIN-1117: `recap-upload.mjs` strippar `--project` inline [Tier A] · build
+
+Router (`projectArg.helpers.mjs`, `.test.mjs`, `recap-upload.mjs`): `medium` · #27 DBA.
+
+1. Strippningen bor i den admin-fria modulen och anropas av skriptet. *(diff)*
+2. Ett test driver ordningarna granskaren räknade upp och asserterar vad som blir kvar i `argv`. *(diff)*
+3. Muteringen `slice(i + 2)` → `slice(i + 1)` fäller minst ett test. *(diff)*
+4. Ett dubblerat `--project` har ett bestämt, testat utfall. *(diff)*
+
+**#27:s villkor (invikta, kritik körd före bygget):**
+5. `stripProjectArgs` får inte förstöra `argv` när `--project` SAKNAS. Dagens block ger `i = -1`,
+   alltså `slice(0, -1).concat(slice(1))` — sista token faller bort och en mitten-token dubbleras.
+   Vägen är oåtkomlig i dag bara för att `projectRefusal` hinner avsluta först; extraktionen tar
+   bort just den anropardisciplinen. Vakta `i === -1` och returnera `argv` oförändrat, med ett test
+   som pinnar identiteten — inte bara att inget kastar. *(diff)*
+6. Utfallet för dubblerat `--project` VÄLJS uttryckligen och pinnas: antingen strippas varje par,
+   eller så strippas första paret och det resulterande felet pinnas. Inte lämnas odokumenterat. *(diff)*
+7. Ingen annan skrivare behöver flyttas i dag (`grep -rn "indexOf('--project')" functions/scripts/*.mjs`
+   ger `projectArg.helpers.mjs` och `recap-upload.mjs`). Noteras som framåtriktad vägledning i
+   modulens huvud, utan rosterkrav — det byggs först när ett andra skript får ett positionsargument. *(diff)*
+
+## Bunt C — BIN-1146 + BIN-1111: två handhållna listor härleds ur reglerna [Tier A] · build
+
+Router (`firestore-rules.test.ts`, `groups.test.ts`, `retentionCleanup/index.ts`,
+`groupHandover/adminIo.ts`, `accountDeletion.ts`, `retention-cleanup-orchestrator.test.ts`):
+`medium` · #27 DBA. Reglerna ändras INTE i den här bunten — bara testerna som läser dem.
+
+1. BIN-1146: `groupInvites`-nyckellistan härleds ur `firestore.rules` som text; en omdöpning på
+   regelsidan fäller testet. *(diff)*
+2. BIN-1146: båda riktningarna prövade — vidgad regellista fäller, krympt testlista fäller. *(diff)*
+3. BIN-1111: en rosterkoll härleder gruppens undersamlingsnamn ur `firestore.rules` och kräver att
+   de listor som räknar upp en grupps undersamlingar för att radera HELA underträdet nämner dem
+   alla — `groupSubtreePaths` i `functions/src/retentionCleanup/index.ts` och dess kopia i
+   `src/test/rules/retention-cleanup-orchestrator.test.ts`. *(diff)*
+4. BIN-1111: båda riktningarna prövade — en tillagd regelvakt fäller, en borttagen post fäller. *(diff)*
+
+**Omfånget rättat efter mätning (se avvikelseloggen).** Biljetten säger "fyra oberoende kopior av
+samma lista". De fyra gör olika saker, så ett krav att alla fyra nämner varje undersamling vore
+falskt för två av dem. Testets egen kommentar namnger de uteslutna och varför, så nästa granskare
+inte återupptäcker dem som missade konsumenter:
+- `eraseMemberTraces` raderar EN medlems rader, inte en undersamling, och hålls redan mot
+  `memberTraceWrites` av `src/test/rules/memberTraceRoster.ts` (BIN-1123).
+- `accountDeletion.ts` raderar den raderande användarens EGNA rader; dess `joinAttempts`-rad ligger
+  före ägar/medlem-förgreningen och gäller därför båda grenarna.
+- `deleteGroup` är utesluten med skäl och egen biljett (BIN-1194).
+
+Krympt union omroutad före bygget — `node docs/org/route.mjs --md src/test/rules/firestore-rules.test.ts
+src/lib/firebase/groups.test.ts functions/src/retentionCleanup/index.ts
+src/test/rules/retention-cleanup-orchestrator.test.ts` ger `medium` · #27, samma roll som
+kritiserade urvalets bredare union. Ingen ny kritik är skyldig.
+5. Rosterkravet ligger UTANFÖR varje `describe.each`-loop — en tömd lista ska fälla, inte tystna
+   (BIN-1048). *(diff)*
+
+**#27:s villkor (invikta, kritik körd före bygget):**
+6. **Det finns en FEMTE konsument biljetten inte räknar:** `deleteGroup` i
+   `src/lib/firebase/groups.ts` (ägarens raderaknapp i gruppvyn) upprepar samma roster men
+   utelämnar `joinAttempts`. Den namnges och avgörs uttryckligen i testets egen kommentar i
+   stället för att tigas ihjäl — den UTESLUTS här, med skälet: best-effort-klientväg, och
+   `joinAttempts` har ett eget åldersbaserat TTL-svep som når raden oavsett om gruppdokumentet
+   finns kvar, så resten är tidsbegränsad snarare än permanent. Att ta in den hade vidgat
+   bunten förbi test-only och krävt en omroutning mitt i bygget (BIN-1050/1048). Egen
+   följdbiljett i stället. *(diff)*
+7. **Golvet måste ligga på VARJE parsad mängd, inte bara utanför loopen.** Kriterium 5 stoppar
+   en tömd lista-av-listor; det stoppar inte ett enskilt extraktionsregex som slutar matcha och
+   jämför `[] == []`. `toBeGreaterThan(0)` med ett eget felmeddelande per mängd — den
+   regelhärledda OCH varje handskriven — FÖRE varje jämförelse. Formen finns redan i
+   `src/lib/firebase/userData.subcollections.test.ts` (BIN-347); följ den. *(diff)*
+
+## Bunt D — BIN-1192: vänknappens tre andra lägen [Tier B] · build
+
+Router (`FriendButton.tsx`, `FriendButton.test.tsx`, `useFriends.ts`): `medium` · #18 Community
+Manager. ⚠ `FriendButton.tsx` och `.test.tsx` har ingen ägande roll — ägarfrågan lyfts till Malin,
+ingen ägare tilldelas i den här bunten.
+
+1. Ett misslyckat avbryt, acceptera och ta bort visar en text bredvid knappen. *(diff)*
+2. Komponenttest per läge, inklusive en fall-och-lyckas-fixtur som pinnar återställningen av
+   felflaggan (muteringsluckan testgranskaren hittade 2026-09-15). *(diff)*
+3. ~~Samma text för varje orsak~~ — se #18:s villkor 1 nedan, som mätte bort det här kriteriet.
+4. `sendFailed` nollställs när status lämnar `none`. *(diff)*
+
+**#18:s villkor (invikta, kritik körd före bygget):**
+5. **Återanvänd INTE "Kunde inte skicka förfrågan." för de tre andra lägena.** Rollen mätte i
+   `firestore.rules` att blockeringsklausulen sitter på `friendRequests` create och ingenting
+   annat: `friends` create/delete, `friendRequestsSent` create/delete och `friendRequests`
+   delete bär ingen blockeringskontroll. Ett nekande på avbryt, acceptera eller ta bort kan
+   alltså aldrig orsakas av en blockering — det finns ingenting att läcka. En delad text
+   namnger i stället FEL handling för användaren. Varje läge får sin egen text, fortfarande
+   oberoende av felorsak inom det läget. *(diff)*
+6. Nollställningsregeln gäller SYMMETRISKT för alla fyra flaggorna — var och en nollställs när
+   status lämnar det läge vars knapp den hör till. Annars återkommer precis den bugg BIN-1129
+   lagade för skicka-vägen, på de tre andra, samma dag det här shippar. *(diff)*
+7. `useFriends.ts`s tysta `return` när profilen inte laddats rör BARA `sendFriendRequest` —
+   de tre andra gatar enbart på `uid`. Den lämnas till sin egen biljett och viks INTE in här. *(diff)*
+
+**#14:s villkor (invikta).** Routningen flyttade sig mellan kritiken och commiten: urvalets
+filuppsättning bar `src/hooks/useFriends.ts`, som har en ägande roll och satte #18. Den filen
+ändrades aldrig (villkor 7 ovan), så den STAGEADE unionen krympte och routar till #14 på
+fallbacken för ägarlös kod. Krympt union = ny panel, precis som en vidgad (BIN-1050/1052), så
+#14 kritiserade de stageade bytes före commit.
+
+8. **En skrivning som landar EFTER att relationen lämnat läget och kommit tillbaka får inte
+   skylla på knappen som visas nu.** `run`s catch slöt om den URSPRUNGLIGA handlingen, så ett
+   sent avslag på ett avbrutet klick hade rapporterat ett fel mot en andra, orelaterad förfrågan
+   som aldrig misslyckats. Att jämföra mot `status` vid landningen räcker inte — en tur och retur
+   ger samma värde — så en räknare bumpas synkront vid varje klick OCH vid varje statusändring,
+   och catchen visar bara om räknaren står kvar. Samma form som `useGroupHousehold`s epoch-bump.
+   Pinnas med en styrbar promise; en färdig mock kan inte återskapa fönstret alls. *(diff)*
+
+## Bunt E — BIN-1170: `isValidList` och `isValidComment` binder vad som får skrivas [Tier C] · build
+
+Router (`firestore.rules`, `firestore-rules.test.ts`): `top` · panel #27 DBA, #4 Security Architect,
+#6 DPO, #7 QA, #13 Data/Integrations. Full panel körs före bygget. Manuell regeldeploy efter push.
+
+**Omfånget är avsiktligt smalt:** bara de två validatorerna. De fyra `isOwner`-underkatalogerna
+(`pauseHistory`, `blocked`, `notifications`, `fcmTokens`) ligger UTANFÖR — deras skrivvägsunion är
+inte härledd, och en lista smalare än vad skrivarna skriver nekar varje riktig skrivning.
+
+1. `isValidList` får `hasOnly` över den härledda unionen; unionen räknas om mot HEAD, ärvs inte
+   ur kommentarstråden. *(diff)*
+2. `isValidComment` får `hasOnly` över sin härledda union. *(diff)*
+3. Ett update-fall per gren i testerna — ett typkrav får inte gå att ta bort från enbart
+   update-grenen med sviten grön (BIN-1153). *(diff)*
+4. De två `lists/{listId}`-update-grenar som gatar via `diff().affectedKeys()` mäts, och det sägs
+   uttryckligen om de är i eller utanför omfånget. *(diff)*
+5. Mutering av varje ny klausul fäller test, asserterad före OCH efter körningen i ETT kommando. *(diff)*
+6. Regler deployade manuellt och verifierade. *(run)*
+
+**Panelens villkor (invikta; #27, #4, #6, #7 körda blint före bygget — #13 utestående).**
+
+*Rättelser till planen, mätta av flera roller oberoende:*
+7. **Båda unionerna är BEKRÄFTADE korrekta mot HEAD** av #27, #6 och #4 var för sig, var och en
+   mot de faktiska skrivvägarna. Ingen roll hittade ett fält en skrivare skriver och unionen
+   utelämnar. Båda scheman har dessutom bara växt sedan första commiten, så ingen lagrad rad
+   väntas bära ett fält utanför unionen. *(diff)*
+8. **`isValidComment` har ingen update-gren alls** — kommentarer är create + delete. Kriterium 3
+   kan alltså inte uppfyllas "per gren" för kommentarer, och ett uppfunnet update-test vore ett
+   test av en väg som inte finns. Kommentarer bidrar med ett create-fall. *(diff)*
+9. **Kriterium 4 besvaras: de två `diff().affectedKeys()`-grenarna på `lists` anropar aldrig
+   `isValidList`** och är alltså OBERÖRDA av den nya nyckellistan — den når create och ägarens
+   update-gren. Det SKRIVS UT i commitmeddelandet i stället för att underförstås. #27 lade till
+   en tredje anropare av självborttagningsgrenen: `applyDeletionPlan` i `accountDeletion.ts`,
+   som testfixturen ska spegla. *(diff)*
+10. **Min egen brief till #6 påstod att `lists` bär `displayName`/`username`. Det är falskt** och
+    rollen mätte bort det: `UserList` har inget identitetsfält, `editors` är uid:n. Identitets-
+    frågan gäller kommentarer och ingenting annat. Ingen identitetsbindning läggs på `lists` —
+    `uid` är redan pinnat på både create och update, och #4 säger uttryckligen att ett sådant
+    fynd vore falskt. *(diff)*
+
+*Tillkommande arbete:*
+11. **#4: `items` har NOLL validering i dag** — `hasOnly` binder nyckelmängden, inte typen, så
+    en publik lista kan få `items` skrivet som vilken typ som helst och klienten castar rakt av.
+    En typkontroll (`d.items is list`) läggs till i `isValidList` i den här bunten, med ett
+    typfelstest på ägarens update-gren. *(diff)*
+12. **#4: samredigerarens `items`-gren förblir otypad och obegränsad** oavsett den här fixen.
+    Det sägs rakt ut som kvarstående, aldrig som stängt. Egen följdbiljett. *(diff)*
+13. **#7: `MIN_TESTS` i `scripts/run-rules-tests.mjs` höjs** till sviten faktiska `numTotalTests`
+    i samma commit. `npm test` kör inte den här sviten — `vitest.config.ts` utesluter
+    `src/test/rules/**`; den kör bara bakom `npm run test:rules`. *(diff)*
+14. **#7: varje nekandefixtur för `isValidComment` som sätter `displayName`/`username` måste så
+    `users/{anroparens uid}`** — `isOwnIdentity` gör ett `get()` på den, och ett `get()` mot ett
+    dokument som inte finns KASTAR och nekar hela regeln före `hasOnly` ens nås. Ett nekande av
+    fel skäl bevisar ingenting. `isValidList` gör inget `get()` och har inte fällan. *(diff)*
+15. **#7: muteringsprotokollet** — en klausul i taget, aldrig två samtidigt; markören räknas före
+    OCH efter körningen i SAMMA skalkommando; återställning från en scratchpad-ögonblicksbild,
+    verifierad med `git hash-object`, aldrig `git checkout --`. *(diff)*
+16. **#7: läggs en `describe.each` till** byggs rostret utanför loopen och storleken asserteras
+    utanför loopkroppen — en tömd lista rapporteras annars som PASS med noll fall körda. *(diff)*
+17. **#4: en `deleteField()`-mutering körs på de två genuint valfria fälten** (`description`,
+    `editors`) så att ett borttaget fält inte misstas för en uppfylld valfrihetsgrind. *(diff)*
+18. **#13: typkontrollen på `items` stannar vid `d.items is list`** — regelspråket kan inte
+    inspektera elementens form, så ingen per-element-validering försöks, och ett senare varv får
+    inte återinföra försöket. Varje skrivare skickar redan en lista, så kontrollen kan inte neka
+    en äkta skrivning. *(diff)*
+19. **#13 bekräftade skrivarinventeringen oberoende** med egna kommandon, inklusive att inget
+    skript under `functions/scripts/` eller `scripts/` rör någon av de två samlingarna, och att
+    exportvägen läser hela dokument utan fältlista — en skrivsidesspärr kan alltså inte svälta
+    den. Fjärde rollen som mäter samma union till samma svar. *(diff)*
+
+## Bunt F — BIN-1136: driftboken låter operatören välja ett läge som är avgjort [Tier A] · build
+
+Router (`RUNBOOK.md`, `data-retention-policy.md`): `medium` · #6 DPO.
+
+1. Valet mellan Spark och Blaze i återställningsläget är STRUKET, inte omformulerat. *(diff)*
+2. Meningen i `data-retention-policy.md` vars skäl överlämningen inverterade är struken. *(diff)*
+3. Ingen ny kvantifikator och inget nytt tal införs av rättelsen. *(diff)*
+
+**#6:s villkor (invikta, kritik körd före bygget):**
+4. **En TILLAGD mening i §5b — inte en strykning, för det här är ett påstående som SAKNAS.**
+   Återställningen i §5b är ett `gcloud firestore import` av HELA databasen, inte av det ena
+   kontot. Körs den för att rädda ett konto som raderats av misstag återuppstår varje
+   raderingskaskad som kört sedan säkerhetskopians tidpunkt — inklusive konton som utövat sin
+   rätt till radering i samma fönster. Driftboken säger i dag ingenting om det, mitt i en
+   incident. Texten ska namnge mekanismen (helhetsåterställning, kan återuppliva andras
+   raderade data) så att steget blir ett övervägande och inte en förstahandsåtgärd. *(diff)*
+5. §5b:s rubrik förutsätter i dag att PITR ÄR påslaget. `docs/analysis/EXTERNAL_ACTIONS.md`
+   markerar det som obekräftat. Att bara stryka den döda Spark-grenen lämnar kommandona
+   stående som en tillgänglig procedur. Rubriken ersätts med en kontrollera-status-först-
+   anvisning som pekar på den statusraden. *(diff)*
+6. I `data-retention-policy.md` stryks **"Enbart hygien:"** i SAMMA redigering som det
+   inverterade skälet. Klassificeringen vilade på att nyckeln pekar på ingenting; stryks bara
+   skälet står ordet kvar utan grund — exakt BIN-1154:s form. Ingen ny allvarlighetsetikett
+   sätts i stället; kvar blir vem som cachar nyckeln och när den sopas. *(diff)*
+
+## Needs you (Tier D) — inte försökta
+
+- **BIN-624** halva 2: kräver nollräkning på skarp data. Din bindande förutsättning 2026-09-03;
+  ett annat svar än noll är ett STOPP tillbaka till dig.
+- **BIN-1179** halva 1: backfill av gruppnamnsprojektioner kräver en produktionsräkning som
+  behörighetsklassificeraren nekar.
+- **BIN-1144** (App Check i konsolen), **BIN-1121** (produktionsfråga om `ownerUid`),
+  **BIN-1114** (`REFRESH_DERIVE_TIMEOUT_MS` mot verklig data), **BIN-1164** (webbläsarmätning).
+
+## Inte valda, med skäl
+
+- **BIN-1118** (`Feature`), **BIN-521** (`idea`) — etikett, produktval.
+- **BIN-454 / BIN-402** — stående förbud (`mutateEnabled` är din konsolåtgärd).
+- **BIN-959** — kräver redigering av delad plugin-infra från en session som startar subagenter.
+- **BIN-1139, BIN-1159, BIN-1133, BIN-1097, BIN-559, BIN-1120** — produkt-, design- eller juridikval.
+- **BIN-1160** — exportformatet drar in Legal och DPO, och biljetten ber om ett VAL mellan två svar.
+  Kommenterad med rekommendation i stället för byggd.
+- Övriga Low — utrymme.
+
+## Deviation log
+
+- [discovery] BIN-1111: #27:s kritik hittade en FEMTE konsument av gruppens underkataloglista —
+  `deleteGroup` i `src/lib/firebase/groups.ts`, som utelämnar `joinAttempts`. Att ta in den hade
+  vidgat bunten förbi test-only och krävt omroutning mitt i bygget → konservativt val: den
+  utesluts med skälet skrivet i testets egen kommentar, och en följdbiljett filas före commit.
+- [discovery] BIN-1170: #4 fann att `items` på `lists` saknar all typvalidering. Det ligger i
+  samma funktion bunten redan ändrar → viks in som villkor 11, inte som en ny bunt.
+- [deviation] BIN-1192: planen sa "samma text för varje orsak" för alla fyra lägen. #18 mätte att
+  blockeringsklausulen bara gatar `friendRequests` create → de tre andra lägena får egna texter.
+- [deviation] BIN-1136: #6 fann att §5b:s återställning är en HELDATABAS-import som kan
+  återuppliva andras genomförda raderingar. Det är en SAKNAD mening, inte en falsk → ett tillägg,
+  vilket strykregeln inte täcker.
+- [discovery] BIN-1170: min egen brief till #6 påstod att `lists` bär `displayName`/`username`.
+  Falskt, mätt av rollen. Struket ur planen, ingen identitetsbindning läggs på `lists`.
+- [deviation] BIN-1192: kodgranskaren hittade en kosmetisk miss i en utvecklarlogg —
+  `${action}FriendRequest failed:` blir "removeFriendRequest failed:" för ta-bort-läget, där
+  funktionen heter `removeFriend`. INTE lagad i den här bunten: att redigera en stagead fil efter
+  en godkänd granskning ogiltigförklarar granskningsloggen för den filen och kostar ett helt
+  omkörningsvarv (samma skäl som gav BIN-1117 sin existens). Strängen når ingen användare. Noteras
+  på biljetten i stället.
+- [discovery] BIN-1111: biljettens premiss — "fyra oberoende kopior av samma lista" — håller inte
+  när man läser vad de fyra GÖR. Mätt: `groupSubtreePaths` och dess testkopia räknar upp en grupps
+  undersamlingar för att radera HELA underträdet; `eraseMemberTraces` raderar EN medlems rader och
+  hålls redan mot `memberTraceWrites` av `src/test/rules/memberTraceRoster.ts` (BIN-1123);
+  `accountDeletion.ts` raderar den RADERANDE användarens egna rader, och dess `joinAttempts`-rad
+  ligger före ägar/medlem-förgreningen så den gäller båda. Ett rosterkrav som tvingar alla fyra att
+  nämna varje undersamling vore alltså falskt för två av dem. → Bunten krymper till de två listor
+  som faktiskt delar begrepp, plus `deleteGroup` som redan är utesluten med skäl (BIN-1194).
+  Krympt union routas om före kritiken; en krympande union flyttar panelen precis som en vidgad
+  (BIN-1050/1052).
+
+---
+
+# 2026-09-15 kväll — Malins beslut: BIN-1169 (samma text) och BIN-1129 (blockering + notisspärr) [Tier C]
+
+BIN-1187/1188 stängda som accepterad risk (Malin: ok). BIN-1169 byggd, granskas.
+
+## BIN-1129 — plan (panel #27 #5 #4 #6 #7, oenig om spärren; Malin valde notisspärren)
+
+**Vad användaren märker:** den du har blockerat kan inte längre skicka dig en vänförfrågan, och
+samma person kan bara ge dig en push-notis om vänförfrågan per dygn. Förfrågan syns fortfarande
+i appen. Den som försöker skicka till någon som blockerat hen ser bara "Kunde inte skicka
+förfrågan." — samma text som vid vilket annat fel som helst.
+
+1. **Regel:** `friendRequests` create kräver `!exists(users/{mottagare}/blocked/{avsändare})`.
+   Emulatortest: blockerad avsändare nekas, oblockerad godkänns, båda med sådd avsändarprofil så
+   bara den nya klausulen skiljer; mutering av klausulen fäller exakt det nya testet.
+2. **Klient:** `FriendButton` fångar ett fel från `sendFriendRequest` och visar en allmän text utan
+   gren för blockering. Test i komponenten.
+3. **Notisspärr:** `onFriendRequestCreate` läser/stämplar en Admin-only markör
+   `friendRequestPushes/{mottagare}_{avsändare}` `{lastPushedAt}` i en transaktion; inom 24 h
+   skickas ingen push, förfrågan landar ändå. Beslutet i en ren funktion i
+   `functions/src/friendRequestPush/logic.ts` med enhetstest (gräns åt båda håll). Ingen regel för
+   samlingen (default-neka). Gäller oavsett om förra förfrågan avböjdes eller avbröts.
+4. **Städning:** ny svepkategori i `retentionCleanup` som raderar markörer äldre än 3 dygn;
+   emulatortest med en färsk och en gammal markör. Markören ligger utanför `users/`, så exporten och
+   klientens kontoradering når den inte — svepet är raderingsvägen (samma form som `releaseNotifyState`).
+5. **Dokument:** post i `docs/data-retention-policy.md` (fält, fönster, varför utanför export);
+   `docs/moderation.md` nämner vänförfrågningar som yta; daterad efterföljare till "Blocking is
+   hygiene-level" i avvikelseloggen; integritetssidan orörd. Flödeskartan i egen commit.
+6. **Sist:** `MIN_TESTS` höjs till uppmätt värde; functions-deploy + regeldeploy efter push.
+
+Acceptanskriterier (diff): 1–5 ovan med test gröna; (run): funktion och regler deployade.
+
+**#25:s villkor (invikta):** commitar splittade och routade var för sig mot stagead mängd; en roll
+utanför panelen som routningen sätter (troligen #14 för de nya ägarlösa filerna) får en blind
+kritik före den commiten; efterföljaren är additiv och gäller exakt `friendRequests`-create;
+`MIN_TESTS` mäts om och höjs i egen commit sist; ingen ny ägare tilldelas nu — `npm test`
+(`gen-ownership-map`, `gate-symmetry`) körs efter att de nya filerna stagats, och blir något rött
+lyfts ägarfrågan till Malin; regler + functions deployas manuellt och verifieras före hosting via
+workflow_dispatch.
+
+**Status:** BIN-1169 `fa63695`. BIN-1129: regler `9d7d4dd`, knapp `0c9a2f8`, notisspärr + svep
+`a262884`, karta `7a9a9d6`, golv 635 `772b322`, driftbok `46d2b46`. Pushat 14d75ed..46d2b46, regler +
+`onFriendRequestCreate` + `retentionCleanup` deployade, sajt via workflow_dispatch 35023911196 (grön),
+cache tömd, BIN-1169 och BIN-1129 Done. Följdbiljetter
+BIN-1192 (knappens andra lägen) och BIN-1193 (förbefintliga "enda svepet"-meningar). Kvar: push-grind,
+push, regel- och functions-deploy, hosting via workflow_dispatch, cache.
+
+Rent träd vid start (bara `tasks/todo.md`, som står i `cleanTreeIgnore`), i fas med origin
+`0d3fb3e`. Routningen körs på buntens faktiska filuppsättning före kritiken och mot
+`git diff --cached --name-only` före varje commit.
+
+## Mätt vid urvalet
+
+- Produktionen (`binge-nu`, läst med `firestore_list_documents`): `groups` och `publicGroups`
+  svarar tomt, `users` svarar med dokument — läsvägen fungerar, så tomheten är verklig.
+  BIN-1187/1188 är därför teoretiska och prisas i stället för byggs.
+- BIN-1171: `git grep -n "deleteBatchSize" -- src/test` visar att orkestratortestet sätter en
+  liten batchstorlek; om båda looparna redan fälls av en gränsmutering stängs biljetten som
+  obsolet med muteringsutfallet som bevis.
+
+## Inte valda, med skäl
+
+- **BIN-1129, BIN-1169** — produktval (anmälningsknapp; ny text). Kommenterade med rekommendation.
+- **BIN-1118 / BIN-521** — etikett `Feature`/`idea`. **BIN-454 / BIN-402** — stående förbud.
+- **BIN-1139, BIN-1133, BIN-1097, BIN-559, BIN-1160** — produkt-/juridikval eller egen design.
+- **BIN-1144, BIN-1121, BIN-1179, BIN-1164, BIN-1114** — konsol- eller produktionsmätning.
+- **BIN-959** — kräver redigering av delad plugin-infra från en session som startar subagenter.
+- Övriga Low — utrymme.
+
+## Bunt A — BIN-1113 + BIN-1186 + BIN-1171: retentionCleanup [Tier C] · build
+Router (fieldOwned.ts, fieldOwned.test.ts, index.ts, runCleanup.ts, retention-cleanup-orchestrator.test.ts,
+accepted-deviations.md): `medium` · [27]. Functions-deploy efter push.
+1. BIN-1113: ett borta kontos rader i `friends` och `friendRequestsSent` raderas hos varje motpart. *(diff)*
+2. BIN-1113: levande och `disabled` kontons rader rörs inte; `followers` rörs inte. *(diff)*
+3. BIN-1113: inget nytt tak; samma dokumentbudget och observationsgolv. *(diff)*
+4. BIN-1113: daterad efterföljare i avvikelseloggen. *(diff)* Deployad funktion. *(run)*
+5. BIN-1186: portens kommentar står direkt ovanför `export interface CleanupIo`; typkontroll ren. *(diff)*
+6. BIN-1171: en gränsmutering i varje raderingsloop fäller ett test (mätt), annars byggs testet. *(diff)*
+
+## Bunt B — BIN-1182: radera `getGroupOnce` [Tier A] · build
+Router (groups.ts): `top` · [4, 27, 5, 6, 18].
+1. `git grep -n "getGroupOnce" -- src functions` ger tom utdata; kommentarsblocket går med. *(diff)*
+2. `npm run typecheck` och berörda test rena. *(diff)*
+
+## Bunt C — BIN-1187 + BIN-1188: prisas i avvikelseloggen [Tier A] · build-review
+Router (accepted-deviations.md): `medium` · [25].
+1. En daterad post prisar båda, grundad i produktionsmätningen ovan, med ett kommando som återskapar den. *(diff)*
+2. Ingen regel- eller kodändring. *(diff)*
+3. Parkeras In Review — Malin avgör om prissättningen håller. *(run)*
+
+## Bunt D — BIN-1158: flakiga git-test [Tier A] · build
+Router (prune-map-flag.test.mjs, freshness.test.mjs): `medium` · [25].
+1. Test som aldrig rör ett repo bygger inget repo. *(diff)*
+2. Ingen timeout höjd, ingen assertion rörd, inget per-test-undantag. *(diff)*
+3. Tio raka gröna körningar av hela `npm test`, utfallet ordagrant i planen. *(diff)*
+
+## Bunt E — BIN-1185: regelsvitens golv [Tier A] · build (SIST, efter A)
+Router (run-rules-tests.mjs): `medium` · [7].
+1. `MIN_TESTS` lika med `numTotalTests` från en körning på den committade trädet; talet och kommandot i commit-meddelandet. *(diff)*
+2. Inget tal i filen utan kommando bredvid. *(diff)*
+
+## Kritikernas villkor (bindande)
+
+- **A (#27):** inkommande `friendRequests` (på `fromUid`) raderas i samma pass — annars kan en
+  kvarliggande förfrågan från ett raderat konto accepteras och återskapa en vänrad under det
+  raderade uid:t; varje ny kategori motiverar sin plats i ordningen; båda rosterlistorna
+  (`fieldOwned.test.ts`, orkestratortestet) uppdateras i samma commit; produktionsgranskning att
+  inga speglingsrader saknar `uid` före deploy (gjord: `cd functions && node
+  scripts/backfill-mirror-uid.mjs --project binge-nu --dry-run` → "0 row(s) need the field, 0
+  skipped, 3 scanned across friends + friendRequestsSent", 2026-09-15); BIN-1171:s mutering körs på
+  riktigt i båda looparna med rått utfall; efterföljaren är additiv och namnger `friends`,
+  `friendRequestsSent` och `friendRequests`.
+- **B (#4, #27, #5, #6, #18):** alla stöder. Bara `groups.ts` i diffen; `getPublicGroupName` orörd;
+  `git grep -n "getGroupOnce" -- src functions` tom omedelbart före commit; typkontroll ren.
+- **C (#25):** produktionsmätningen motiverar bara BIN-1188, aldrig BIN-1187 (två separata stycken);
+  regex-påståendet om U+00A0/U+200B provas eller märks oprovat; BIN-1187 får en egen
+  upptäcktsväg (ingen Sentry-rad kan fyra för en skrivning som LYCKAS); mätningen ordagrant, daterad,
+  med att den förfaller vid första skrivna grupp; uttryckligen ingen regel- eller deployändring.
+- **D (#25):** logga att inget annat `npm test`/emulator kör före körning 1; ett rött varv nollställer
+  räknaren; ange `test.retry` i vitest-konfigen; kontrollera de andra git-spawnande testfilerna
+  och skriv ned om de bygger repo per test; skriv om timeouten någonsin setts i CI.
+- **E (#7):** mät efter att A:s test ligger i trädet; rensa vitests transformcache; ange både
+  `numTotalTests` och `numFailedTests` och kommandot i commit-meddelandet; ingen ändring under
+  `src/test/rules/**` eller i `firestore.rules` mellan mätning och commit; egen commit; explicit `--port`.
+
+## Status
+
+- [x] B: BIN-1182 committad `87c2b18` (full panel stödde; kod-, säkerhets- och helhetsgranskare pass).
+- [~] A: byggd. Första emulatorkörningen: `1 failed | 631 passed (632)` — `fieldOwnedDocs` rapporterade
+  20 mot 17; fixturen sår tre nya rader om `consoled`, assertionen satt till uppmätt värde. Ren
+  körning därefter `632 passed (632)`. Säkerhet och test pass; helhetsgranskningen fällde ett trasigt
+  kommando i avvikelseposten (rättat) — omgranskning pågår.
+- [x] BIN-1171: stängd som inaktuell utan kod. Gränsmutant i `deleteAllOrThrow` → `5 failed | 627 passed`,
+  i `deleteInBatches` → `4 failed | 628 passed`; filen återställd, hash verifierad.
+- [!] D: BIN-1158 byggd men INTE committad — maskinen belastad av andra sessioner (filen ensam:
+  `1 failed | 32 passed`, sedan "Timeout waiting for worker to respond"). Sparad som
+  `.claude/state/sprint-patches/2026-09-15-BIN-1158-useRepo.patch` (hash `097e4de…`), tillbakadragen ur
+  trädet, biljetten tillbaka till Backlog med kommentar.
+- [x] A committad `9e1ead6` (security/test/helhet pass efter en rättelse av ett trasigt kommando),
+  kartan i egen commit `7b563bc`.
+- [x] C committad `948e105` efter att helhetsgranskningen fällt fem meningar — alla strukna.
+- [x] E committad `bc4c5fa`: `MIN_TESTS` 622 → 632, mätt på `9e1ead6` (numTotalTests 632, numFailedTests 0).
+- [x] Push 0d3fb3e..bc4c5fa efter push-grindens helhetsgranskning (andra körningen; första lästes i
+  bitar och bokfördes inte). Deployskyddet rödade push-körningen med flit; `retentionCleanup`
+  deployad; hosting skickad med workflow_dispatch (körning 35009631527).
+- [x] Linear: 1113/1182/1185/1186 Done, 1171 Canceled, 1187/1188 In Review, 1158 Backlog med patch.
+
+## Avvikelselogg
+
+- [deviation] BIN-1113: biljetten nämnde `friends` och `friendRequestsSent` → #27 krävde också
+  inkommande `friendRequests` → tagen med i samma kategori `friendMirrors`.
+- [deviation] BIN-1113: `docs/data-retention-policy.md` sa att raderingspasset är kvarvarande arbete →
+  meningen struken; kvar står bara att `followers` sveps av `reclaimOrphanFollows`.
+- [discovery] BIN-1158: `.claude/hooks/freshness.test.mjs` har ingen top-level `beforeEach`; dess
+  enstaka timeout är en annan mekanism och rörs inte.
+
+---
+
+# Sprint 2026-09-14b — tre tysta spärrar, två testluckor, ett raderingssvep
+
+Rent träd vid start, i fas med origin. BIN-1184 (förra planen nedan) är klar: pushad
+`568e506`, regeldeployad, Done.
+
+Routningen körs på buntens FAKTISKA filuppsättning före varje kritik och mot
+`git diff --cached --name-only` före varje commit. Uppföljningar filas som kommentarer:
+Linears gratistak nekade nya biljetter 2026-09-14.
+
+## Inte valda, med skäl
+
+- **BIN-1118 / BIN-521** — etiketten `Feature`/`idea`.
+- **BIN-454 / BIN-402** — stående förbud.
+- **BIN-1158** — parkerad med en obesvarad fråga.
+- **BIN-1139, BIN-1133** — bär ett produktval (publicerad juridik; vad en förfrågan från en privat
+  avsändare visar).
+- **BIN-1097** — tre vägar, ingen vald, och biljetten kräver en produktionsräkning först.
+- **BIN-559** — kräver egen design.
+- **BIN-1144, BIN-1121, BIN-1179, BIN-1164** — konsol- eller produktionsmätning.
+- **BIN-1113, BIN-1170** — nya raderings-/regelpass; får egen körning.
+- Övriga Low utan säkerhetsetikett — utrymme.
+
+## Bunt A — BIN-1177: symmetritest för sessionsetikettens tak [Tier A] · build
+Router (clampText.ts, clampText.test.ts, sessions.ts): `medium` · [27].
+1. Ett test fäller när regelns `hostName`-tak eller deltagarradens `displayName`-tak skiljer sig
+   från `MAX_SESSION_DISPLAY_NAME`; mutering per tal nedskriven. *(diff)*
+2. Det osunda `awk`-kommandot i `clampText.ts` ersätts av något som når båda klausulerna och kan
+   motsäga meningen. *(diff)*
+3. `sessions.ts`-kommentarens typhalva får sitt kommando. *(diff)*
+4. Flödeskartans kopia i en egen commit; inget nytt oräknat tal i prosan. *(diff)*
+
+## Bunt B — BIN-1149: indexspärren läser serverns frågor [Tier A] · build
+Router (userData.subcollections.test.ts): `medium` · [5]. Rör den `firestore.indexes.json`
+blir den `top` — då dras den delen ur.
+1. Spärrens källmängd omfattar serverns collection group-frågor, härledd, inte handlistad. *(diff)*
+2. Borttagen `groupInvites`-post i indexfilen fäller testet (prövat). *(diff)*
+3. Ett golv hindrar att en trasig regex gör spärren tom. *(diff)*
+
+## Bunt C — BIN-1123 + BIN-1148: emulatorportarna hålls till skrivlistan, och taket prövas skarpt [Tier A] · build
+Router (tre portar + ev. delad hjälpfil): `medium` · [27].
+1. En femte kategori i `memberTraceWrites` fäller ett test som namnger varje port. *(diff)*
+2. Borttagen befintlig kategori fäller fortfarande. *(diff)*
+3. Över taket raderar `eraseSentInvites` ingenting mot riktig emulator — inte ett prefix. *(diff)*
+4. Ingen mening räknar portarna. *(diff)*
+
+## Bunt D — BIN-1176: symmetritestets falska huvudmening [Tier A] · build
+Router (gate-symmetry.test.mjs): `medium` · [25].
+1. Meningen struken, inget kvantifierat i dess ställe. *(diff)*
+2. Regeln vidgas inte; huvudet säger vad A1 inte ser, med ett kommando som kan motsäga. *(diff)*
+3. `npx vitest run docs/org/` grön. *(diff)*
+
+## Bunt E — BIN-1151: driftbok för ett konto över inbjudningstaket [Tier A] · build
+Router (RUNBOOK.md, groupHandover/logic.ts): `medium` · [27].
+1. Driftboken har en post: vad loggraden betyder, att kontot sitter fast, vad man gör för hand. *(diff)*
+2. "retryable" i `logic.ts` struket eller avgränsat till mekanismen. *(diff)*
+3. Taket höjs inte. *(diff)*
+
+## Bunt F — BIN-1180: omkontrollen skiljer "fick en medlem" från "är borta" [Tier C] · build
+Router (runCleanup.ts, index.ts, retention-cleanup-orchestrator.test.ts, accepted-deviations.md):
+`medium` · [27]. Functions-deploy efter push.
+1. En grupp som fått en medlem raderas inte — oförändrat. *(diff)*
+2. En grupp vars dokument är borta får sin `publicGroups`-projektion raderad. *(diff)*
+3. Emulatortest för båda fallen; mutering som kollapsar dem fäller. *(diff)*
+4. Daterad efterföljare i avvikelseloggen. *(diff)*
+5. Deployad funktion. *(run)*
+
+## Kritikernas villkor (bindande, invikta 2026-09-14)
+
+- **A (#27):** extraktionen ankras på `match /sessions/{sessionId}`- och `match /participants/{pid}`-
+  blocken, aldrig på indrag eller ett filbrett svep; golv utanför loopen på exakt de förväntade
+  ställena; varje tal jämförs och muteras för sig; profilens `displayName`/`bio` och
+  `fromDisplayName` påverkar inte utfallet (prövat med ett planterat avvikande värde); textbaserat
+  test i vitests include; typgrepet i `sessions.ts` visar båda grenarna.
+- **B (#5):** raderingsvägarnas serverfiler i omfång med härledningskommando i testet; frågor med
+  två eller fler `where` och variabla samlingsnamn undantas uttryckligen med skäl; notifierarna
+  dokumenterade som utanför; golv på både filer och frågor; rödprov på `groupInvites` och en till
+  post; #27 läser composite-skillnaden före commit.
+- **C (#27):** rostertest, inte härledda portar — varje ports emulatortillstånd jämförs mot en
+  förväntan härledd ur `memberTraceWrites` utfall, inte ur portens egen kod; femte och borttagen
+  kategori fäller med portens namn; ingen mening räknar portarna; att Admin-porten står utanför
+  skrivs ned. BIN-1148: seeda över taket, injicera inte taket.
+- **D (#25):** stryk utan omformulering (grep hela filen efter kopior); ersättningen namnger
+  `isCodePath()`, ingen exempellista; kommando med vad som motsäger; ett syntetiskt testfall som
+  pinnar att en icke-kodfil i roten inte når reglerna; inga absoluta ord.
+- **E (#27):** svepet hjälper inte (kontot når aldrig Auth-radering); manuell radering bara med
+  `fromUid`-predikatet; namngivet projekt, torrkörning jämförd mot loggradens `found`; chunkat under
+  batchtaket; användaren gör om raderingen själv; åtgärden loggas i driftbokens loggbok;
+  identitetskontroll före; `neither` får inte dingla.
+- **F (#27):** på "borta" raderas projektionen ovillkorligt och frikopplat; undertradet bara efter
+  en egen medlemskontroll som faller stängd; ingen budgetändring; emulatortest med en tredje parts
+  medlemsrad som överlever; daterad efterföljare som skiljer bunt 3:s prisade rader från
+  projektionen; projektionen är läsbar för inloggade, inte för världen.
+
+## Status (2026-09-15)
+
+- [x] Commitar: 1e3d8f1 (D), 52603d8 (A), 5538273 (lärdom), 4673d70 (B), 09da969 (C+E+F),
+  b6fb8ab (karta), d96a8b5 (kunskapsfil). `npm test` och regelsviten gröna.
+- [x] Push-grindens rättelser `0d3fb3e`; pushat 1515279..0d3fb3e. Fem biljetter Done
+  (1177, 1149, 1123, 1148, 1176, 1151); BIN-1180 väntar på functions-deployen.
+- [x] (arkiv) Push-grindens rättelser, en commit: stryk portmeningen i
+  `src/test/rules/group-handover-orchestrator.test.ts` (fyndet: räknar portarna, motsäger
+  Admin-porten), rätta härledningskommandot i `src/test/rules/memberTraceRoster.ts` till
+  testfilerna, rätta talet i testgranskarens kunskapsfil. Test-, kod- och push-granskning om.
+- [x] Push, functions-deploy av `retentionCleanup` (2026-09-15), BIN-1180 Done, sajten
+  skickad med workflow_dispatch (körning 34931941984, grön) efter deploy-skyddets avsiktliga
+  röda, Cloudflare-cachen tömd, rapport öppnad.
+
+## Avvikelselogg
+
+- [deviation] BIN-1177: #27 ville ha testet som `docs/org/*.test.mjs` → en ny fil där är en
+  ägarkartshändelse → testet läggs i befintliga `src/lib/clampText.test.ts`, textbaserat och i
+  include, bredvid konstanten.
+- [deviation] BIN-1180: #27 tillät att undertradet raderas efter en egen medlemskontroll → det
+  konservativa valet är att på "borta" radera BARA projektionen; raderna står kvar som bunt 3
+  redan prisade. Villkor 2 och 5 hålls (ingen undertradsradering, tredje partens rad överlever).
+- [discovery] BIN-1177: regelfilens radkommentarer bär kommandon med klammerparenteser, så
+  blockextraktionen rensar `//`-kommentarer först.
+- [discovery] BIN-1148: `db()` ger en ny Firestore-instans per anrop i harnesket; en batch
+  måste bygga sina referenser på samma instans.
+- [deviation] BIN-1123: en ny delad hjälpfil (`src/test/rules/memberTraceRoster.ts`) kräver en
+  ägare i `docs/role-responsibilities.md` och en regenererad ägarkarta → läggs i bunt C:s commit.
+- [discovery] Regelsviten växte med sex test; `MIN` i `scripts/run-rules-tests.mjs` är ett golv
+  och håller, men höjs inte i den här sprinten.
+- [deviation] BIN-1123: "ett test som namnger alla portar" → ett delat rosterhjälpmedel körs i
+  varje portfil med portens namn i testnamnet, plus en textkontroll att varje fil som
+  `git grep -ln eraseMemberTraces -- src/test` hittar anropar det.
+
+---
+
 # 2026-09-14 — BIN-1184: tomma gruppnamn nekas i reglerna [Tier C]
 
 **Beslut:** Malin 2026-09-14, alternativ 3 på BIN-1184. BIN-1183 stängd samma dag.

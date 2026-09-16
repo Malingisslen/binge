@@ -1,6 +1,92 @@
 # Archived knowledge — relocated from binge-test-reviewer.knowledge.md.
 Append-only historical record. Entries are verbatim, original order.
 
+## 2026-09-16 — BIN-1146 + BIN-1111: derived key-list/subtree-roster guards, test-only batch C
+
+**Task:** review the staged diff (`src/lib/firebase/groups.test.ts`,
+`src/lib/firebase/userData.subcollections.test.ts`, `docs/org/metrics/events.jsonl`), test-only,
+no production code changed. Security reviewer had already passed the same bytes. Read both test
+files whole with `Read`, `firestore.rules`' `groupInvites` and `groups` blocks, `functions/src/
+retentionCleanup/index.ts`, `src/test/rules/retention-cleanup-orchestrator.test.ts`,
+`functions/src/groupHandover/adminIo.ts` + `logic.ts`, `src/lib/firebase/accountDeletion.ts`,
+`src/lib/firebase/groups.ts`'s `deleteGroup`, `.claude/rules/accepted-deviations.md` (both pages)
+and the full `binge-test-reviewer.knowledge.md` (two pages).
+
+**BIN-1146.** `groups.test.ts` replaces a hand-copied 5-field expected array for the
+`groupInvites` create payload with `ruleInviteKeys()`, which reads `firestore.rules`, blanks
+`{wildcard}` tokens, brace-walks from `match /users/<>/groupInvites/<> {` to its own closing
+brace, and regexes the `hasOnly([...])` list inside that bounded slice. A new floor test
+(`'harledningen ur regeln ar inte tom'`) asserts the parse found something before the writer-key
+comparison runs.
+
+**BIN-1111.** `userData.subcollections.test.ts` adds a roster guard: `rulesGroupSubcollections()`
+brace-walks `firestore.rules`' `match /groups/<> {` block (excluding `progress`, nested one level
+deeper inside `watchlist`) and requires both `functions/src/retentionCleanup/index.ts`'s
+`groupSubtreePaths` and its orchestrator-test copy to name every group subcollection the rules
+declare. Scope is explicitly narrower than the ticket's wording — `eraseMemberTraces` (per-member,
+not subtree, already held by `memberTraceRoster.ts`/BIN-1123) and `collectDeletionRefs`
+(departing-user rows only, `joinAttempts` read above the owner/member branch) are named OUT with a
+stated reason; `deleteGroup` omitting `joinAttempts` is named as a real gap filed separately
+(BIN-1194) rather than folded into this test-only batch.
+
+**Mutations run, each snapshotted first, marker/hash checked before AND after, restored via
+`cp` from the scratchpad snapshot, `git hash-object` + `git status --porcelain` confirmed clean
+after every restore:**
+
+1. Rename `'fromUid'` → `'fromUserId'` inside the `groupInvites` `hasOnly([...])` array only
+   (`firestore.rules`). Result: exactly `inviteMemberByUid skriver exakt de fem falt regeln
+   tillater` fails (1 failed / 55 passed); the floor stays green. Restored, hash
+   `dfe8613...` confirmed.
+2. Break the block anchor (`match /groups/{groupId} {` → `match  /groups/{groupId} {`, extra
+   space). Result: `'the guard is not inert'` fails with "rules parser found zero
+   groups/{groupId}/* subcollections", not a vacuous pass; the two `it.each` cases over an
+   empty `inRules` do pass (nothing-to-compare), but the suite as a whole reddens on the floor.
+   Restored, hash confirmed.
+3. Insert a new group subcollection (`match /pollResults/{pollId} { allow read: if
+   isSignedIn(); }`) before `match /household/{householdUid}`. Result: BOTH
+   `'retention sweep' names every group subcollection` and `'orchestrator test copy' names
+   every group subcollection` fail, each naming `pollResults`. Restored, hash confirmed.
+4. Delete the `groupInvites` block's own `hasOnly([...])` clause (five-line statement,
+   including the `keys().hasOnly(` prefix). Result: BOTH the floor (`'harledningen ur regeln
+   ar inte tom'`, empty list) and the writer-key test fail — the bounded walk returns `[]`
+   rather than silently reading a LATER block's `hasOnly()` (the exact failure mode an
+   unbounded end-of-file slice would have had). Restored, hash confirmed.
+5. Remove `'joinAttempts'` from `functions/src/retentionCleanup/index.ts`'s
+   `groupSubtreePaths` loop array. Result: only `'retention sweep' names every group
+   subcollection` fails; the orchestrator-test-copy case stays green (it wasn't touched).
+   Restored via scratchpad snapshot, `git hash-object` confirmed `a8c836655...` matched.
+6. Shrink `GROUP_SUBTREE_SOURCES` (in the staged test file itself, worktree confirmed
+   matching the index first via `git diff` + `git rev-parse :<path>`) from 2 entries to 1.
+   Result: `'names every source that enumerates the group subtree'`
+   (`toHaveLength(2)`) fails loudly; it does NOT let the `it.each` silently register one
+   fewer case with everything green. Restored from scratchpad snapshot, hash
+   `39fc2976...` confirmed, `git diff` empty.
+
+Ran only the two staged files both times (75 tests, both green on the clean tree).
+
+**Findings, all non-blocking:**
+- The derived `ruleInviteKeys()` can no longer independently pin the SPECIFIC five field
+  names the way the old hand-copied literal array did: a synchronized change removing the
+  same field from both the rule's `hasOnly()` and the writer's payload would now pass
+  silently. This is the stated, deliberate trade-off of the ticket (rule becomes the single
+  source of truth) and is strictly BETTER at the drift class BIN-1146 was filed for (rule
+  changes alone, writer unchanged) — reported as a named trade-off, not filed as a gap.
+- Both new helpers' wildcard-blanking regex (`\{[a-zA-Z]+\}`) is letters-only. A future group
+  or groupInvites wildcard containing a digit or underscore (none exist today — checked every
+  wildcard token in `firestore.rules`) would fail the subcollection-name regex
+  (`/^match \/([a-zA-Z]+)\/<>/`) and silently drop out of `inRules`, so the roster guard would
+  never demand it be enumerated. Not exploitable today, same limitation the pre-existing
+  BIN-347 sibling function already carries — reported as documented, non-blocking.
+- Scope-exclusion comments (`eraseMemberTraces`/`collectDeletionRefs`/`deleteGroup`) checked
+  against the actual source (`memberTraceWrites` in `functions/src/groupHandover/logic.ts`,
+  `accountDeletion.ts` line 152, `groups.ts`'s `deleteGroup`) and found accurate on every claim.
+
+**Verdict:** pass (0 blocking). Knowledge-file bullet on rules-derived key lists (the
+"No rules-test update is owed…" bullet, Firestore rules testing section) extended in place
+to cover the brace-walk-derivation pattern, the non-inert-floor requirement, the bounded-vs-
+unbounded borrowing failure mode, and the "what a derivation no longer pins" question — this
+entry is its full trace.
+
 ## 2026-09-15 — BIN-1129 part 2b: repeat friend-request push brake, test review
 
 **Task:** review staged test changes for the friend-request push brake — new
@@ -28893,3 +28979,58 @@ the whole run (`45ea373...` / `abbc5ef...`).
 
 **Verdict: pass (0 blocking).** One non-blocking gap reported (retry-reset fixture,
 suggested follow-up, not required by the ticket's stated acceptance criteria).
+
+## Relocated 2026-09-16 — entry 102 (cap trim, paid for the BIN-1146/1111 rules-derivation addition above)
+
+Moved verbatim from the active file to hold the 80k cap. Three passages, all condensed to
+pointers in place:
+
+**From the "Firestore rules testing" bullet (`groupInvites` key-list derivation, folded into
+the "No rules-test update is owed…" bullet):**
+
+> **A hand-copied `hasOnly()` key list replaced by one DERIVED from `firestore.rules` via a
+> brace-walk needs two things verified live, not read off the file**: a non-inert floor
+> asserting the parse found something BEFORE any set comparison (else a broken anchor
+> compares `[]` to `[]` and stays green), and the walk BOUNDED to its own `match` block — an
+> unbounded scan silently borrows a LATER block's `hasOnly()` when the block's own clause is
+> deleted, so the vacuity just moves one level and the floor alone won't catch it. Verified
+> live (BIN-1146/1111): a field renamed on the rules side alone reddens only the writer-key
+> comparison; a broken block anchor reddens the floor instead of comparing nothing to
+> nothing; deleting the block's own `hasOnly()` clause reddens BOTH under a properly bounded
+> walk, and stays green under an unbounded one. The wildcard-blanking regex (`\{[a-zA-Z]+\}`)
+> is itself letters-only — a future wildcard with a digit or underscore silently drops out of
+> the parse rather than erroring; not exploitable while every current wildcard name is
+> letters-only, report as a documented non-blocking residual rather than a fresh gap. And
+> name what the derivation NO LONGER pins: a hand-copied literal array independently proved
+> the SPECIFIC field names, so a synchronized change to both the rule and the writer (the
+> same field dropped from both) now passes silently — the accepted cost of moving to one
+> source of truth, not a defect.
+
+Full mutation trace behind this: `## 2026-09-16 — BIN-1146 + BIN-1111` entry at the top of
+this file.
+
+**From the `hasOnly()` allowlist-binding bullet:**
+
+> **SCOPE THE ASK BY THE RULE, not by the collection's neighbours, and RE-DERIVE it the
+> moment a sibling's create rule gains a `hasOnly`** — a sibling with no `hasOnly` needs no
+> key-set pin, but that verdict expires the instant the rule starts pinning the set.
+> `friendRequests` was the no-pin example until BIN-1106 added exactly that `hasOnly`, making
+> `friends.test.ts`'s exact-key-set `toEqual` owed — grep the rule's OWN text for `hasOnly`
+> before citing a collection as exempt.
+
+**From the Admin-SDK-orchestrator bullet:**
+
+> **A test titled "writes X BEFORE deleting Y" that captures order via a fake ATOMIC port
+> method cannot pin an order existing only inside that opaque function** — split the port or
+> LABEL the residual (BIN-565). Source-scan and template-literal-interpolation blind spots (a
+> chained-call/broken-across-lines regex miss, and a `${…}` inside a template literal being
+> executable code a blanket blanker cannot see) are archived verbatim rather than restated.
+> **A stubbed port-boundary return (e.g. a `CleanupIo`-style `attempted` count) tests the
+> CALLER's crediting, not the port's own accumulation — check for a sibling suite proving the
+> port's mechanism before filing "proves only the shape."** (BIN-1063 bunt 3, closed).
+
+**From the dual-guard fail-safes bullet (branch-coverage detail, shortened not dropped —
+the `groups/{groupId}` owner-edit-branch example stays in place, condensed):**
+
+> `groups/{groupId}`'s owner-edit branch has that test, join/accept don't (pre-existing gap,
+> 2026-09-09).

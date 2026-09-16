@@ -1888,3 +1888,23 @@ falt skrivaren skriver - den andrades aldrig. Commitens faktiska union byter dar
 **Regel:** Firestore avslutar lyssnaren vid permission-denied och startar den inte om när reglerna senare släpper igenom. Varje skrivning som ÄNDRAR regelutfallet — att gå med i en grupp, att opta in — måste därför riva och återstarta prenumerationen, inte bara nollställa tillståndet. Och ett test som mockar `subscribe*`-funktionen kan fyra success-callbacken för hand, vilket en riktig lyssnare inte kan efter ett nekande: det pinnar tillståndsmaskinen och är strukturellt blint för buggen. Pinna att en NY prenumeration öppnas, och att den gamla revs.
 
 **Exempel:** BIN-1152 band gruppdokumentets läsning till medlemskap. Följden av min egen åtstramning: den som nyss använt en fullt giltig inbjudningslänk fick "du är inte medlem i den här gruppen" tills sidan laddades om, eftersom auto-joinet lyckades men lyssnaren var död. Mitt test "ett dokument som landar EFTER ett nekande tar tillbaka nekandet" var grönt hela tiden — det mockade `subscribeToGroup` och kallade `onDoc` själv. Mönstret låg redan en fil bort: `useGroupHousehold` bumpar en `epoch` runt opt-in av exakt samma skäl. Muteringen som tar bort `epoch` ur beroendelistan fäller nu två test, och den som tar bort anropet på sidan fäller ett tredje — de två halvorna behöver var sitt test, för en `resubscribe` ingen anropar är en permanent no-op med hela sviten grön.
+
+---
+
+### [Workflow] En granskares domrad spelas in bara om den är sista PLAINTEXT-raden
+
+**Trigger:** en granskare rapporterar `pass`, läsningarna finns i loggen, och commit-grinden nekar ändå med "read, but no `<agent>` run ended on REVIEW-VERDICT".
+
+**Regel:** domens halva av grinden är en `SubagentStop`-hook som läser subagentens `last_assistant_message` och matchar `REVIEW-VERDICT:`. Når slutsatsen föräldern bara inne i en hand-back eller ett sammanfattningsanrop står ingen `t:"verdict"`-rad i loggen, medan `t:"read"`-raderna landar som vanligt — så det SER ut som att granskningen var ofullständig fast den var komplett. Lägg instruktionen ÖVERST i varje granskardispatch: sista turen ska vara vanlig assistenttext vars sista rad är domraden, och den raden får inte finnas bara inuti ett verktygsanrop. Verifiera i loggen på granskarens EGET id i stället för att tro på dess rapport — fältet heter `"t":"verdict"`, inte en `verdict`-nyckel, så en grep på `"verdict":` ger noll träffar och ser ut som att hooken är död när den inte är det.
+
+**Exempel:** sprinten 2026-09-16, BIN-1117. Säkerhets- och testgranskaren gick båda igenom på sak — mutationstestade den nya koden, noll blockerande fynd — och båda lämnade full läsningstäckning med shan som matchade det stageade. Ingen av dem spelade in en dom. Omkörning med instruktionen ovan spelade in den på första försöket, på annars identiska bytes. Kostnaden var två extra granskarvarv. Åtgärda ALDRIG genom att redigera pluginet eller skriva loggen för hand: loggen har en egen vakt som nekar varje verktygsskrivning, och delad plugin-infra är utanför räckhåll från en session som startar subagenter.
+
+---
+
+### [Workflow] Kontrollera loggen EFTER varje granskarkörning, inte bara när commiten nekas
+
+**Trigger:** en granskare rapporterar pass och du går vidare till nästa grind.
+
+**Regel:** grinden kräver att SAMMA körning både läste varje skyldig fil vid den stageade shan OCH avslutade på en dom. Täckning utan dom läses som "aldrig granskad", och en dom utan täckning duger inte heller. Granskarens egen rapport svarar på ingendera frågan — den har varit fel åt båda hållen. Greppa loggen på granskarens EGET agent-id direkt när den rapporterar, jämför läsraddernas sha mot `git rev-parse :<fil>`, och kör om innan du går vidare. Instruktionen om domraden hjälper men garanterar inte: håll granskarens sista tur kort, och behandla varje körning som obokförd tills du sett raden.
+
+**Exempel:** sprinten 2026-09-16, bunt C. En körning rapporterade att den läst båda de stageade testfilerna "in full"; loggen hade ingen läsrad alls för den ena, och commit-grinden namngav just den filen. Senare körningar avslutade på rätt domrad utan att någon dom bokfördes, medan de korta, verktygssnåla körningarna bokfördes. Bunten kostade långt fler granskarvarv än sin storlek — varje varv korrekt utfört, flera osynliga för grinden. Att kontrollera loggen kostar ett grep; att upptäcka det vid commiten kostar ett helt varv.
