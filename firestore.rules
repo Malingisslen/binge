@@ -1131,7 +1131,16 @@ service cloud.firestore {
       // editors[], uid, title or description, so they can't escalate or hijack.
       allow update: if isSignedIn()
         && request.auth.uid in resource.data.get('editors', [])
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['items', 'updatedAt']);
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['items', 'updatedAt'])
+        // BIN-1195: binder items till en lista på just den här grenen. VAD DET STÄNGER: en
+        // samredigerare kunde skriva items som en sträng, ett tal eller en map, och docToList
+        // i src/hooks/useLists.ts mappar rakt över fältet. VAD DET INTE
+        // GÖR: elementens form prövas inte (regelspråket kan inte inspektera element inuti en
+        // array), och antalet element har inget tak här. Att items saknar den size()-gräns som
+        // isValidList ger editors och isValidTagDoc ger tags är Malins beslut 2026-09-16 —
+        // taket designas för ägarens gren och den här samtidigt, i BIN-1207. Ägarens
+        // update-gren och create binder fortfarande ingenting på items; det är BIN-1170.
+        && request.resource.data.items is list;
       // BIN-149: a co-editor may remove ONLY THEMSELVES from editors[] — the
       // account-deletion cascade strips a leaving user from others' lists so a
       // deleted account doesn't linger as a write-authorized ghost editor.

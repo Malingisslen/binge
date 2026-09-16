@@ -70,7 +70,10 @@ const REPO = resolve(HERE, '..');
 //
 // BIN-1129, 2026-09-15: raised to what `numTotalTests` reported with the friend-request
 // blocking tests in place.
-export const MIN_TESTS = 635;
+// BIN-1195, 2026-09-16: raised to what `numTotalTests` reported with the co-editor items
+// type gate's tests in place — three negative type cases plus the two shapes production
+// actually writes (an arrayUnion transform and a filtered literal array).
+export const MIN_TESTS = 640;
 
 const VITEST_ARGS = ['run', '--config', 'vitest.rules.config.ts'];
 

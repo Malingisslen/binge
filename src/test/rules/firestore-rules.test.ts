@@ -7,7 +7,7 @@ import {
   assertFails, assertSucceeds, initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, deleteField, serverTimestamp, writeBatch, query, where, limit, Timestamp } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, deleteField, serverTimestamp, writeBatch, query, where, limit, Timestamp, arrayUnion } from 'firebase/firestore';
 
 const PROJECT_ID = 'binge-rules-test';
 const OWNER = 'owner_uid';
@@ -4146,6 +4146,47 @@ describe('lists collaborative editing (BIN-100)', () => {
     // other_uid is not in editors[] → the `uid in editors` guard blocks the branch
     await assertFails(updateDoc(doc(otherDb(), 'lists', 'cl10'),
       { editors: [], updatedAt: serverTimestamp() }));
+  });
+
+  // BIN-1195 — samredigerarens items-gren binder items till en lista.
+  //
+  // Fixturen uppfyller grenens tidigare klausuler: anroparen är inloggad, uid:t står i
+  // editors[], och de ändrade nycklarna ligger inom ['items','updatedAt']. Därför är
+  // typklausulen den som nekar, och inte en klausul som fanns långt före den här
+  // biljetten. Seed och anropare är desamma som i de gröna syskonen cl2/cl2b.
+  //
+  // Ett negativt fall per feltyp: sträng, tal och map. Ingen av dem prövar elementens
+  // form — det går inte i regelspråket.
+  it('editor CANNOT write items as a string (BIN-1195)', async () => {
+    await seedCollabList('cl11', { isPublic: true, editors: ['other_uid'] });
+    await assertFails(updateDoc(doc(otherDb(), 'lists', 'cl11'),
+      { items: 'not-a-list', updatedAt: serverTimestamp() }));
+  });
+  it('editor CANNOT write items as a number (BIN-1195)', async () => {
+    await seedCollabList('cl12', { isPublic: true, editors: ['other_uid'] });
+    await assertFails(updateDoc(doc(otherDb(), 'lists', 'cl12'),
+      { items: 5, updatedAt: serverTimestamp() }));
+  });
+  it('editor CANNOT write items as a map (BIN-1195)', async () => {
+    await seedCollabList('cl13', { isPublic: true, editors: ['other_uid'] });
+    await assertFails(updateDoc(doc(otherDb(), 'lists', 'cl13'),
+      { items: { tmdbId: 1 }, updatedAt: serverTimestamp() }));
+  });
+
+  // De två formerna produktionskoden faktiskt skickar måste fortsätta gå igenom.
+  // addItemToList skickar en arrayUnion-TRANSFORM, removeItemFromList en filtrerad
+  // literal array (src/hooks/useLists.ts). Transformen hade aldrig prövats mot den här
+  // grenen — det negativa testet ovan hade förblivit grönt även om typklausulen stängde
+  // produktionsvägen, så utan de här två bevisar bunten bara halva kontraktet.
+  it('editor can still add via arrayUnion — the real addItemToList shape (BIN-1195)', async () => {
+    await seedCollabList('cl14', { isPublic: true, editors: ['other_uid'] });
+    await assertSucceeds(updateDoc(doc(otherDb(), 'lists', 'cl14'),
+      { items: arrayUnion({ tmdbId: 7, mediaType: 'movie' }), updatedAt: serverTimestamp() }));
+  });
+  it('editor can still write a filtered literal array — the real removeItemFromList shape (BIN-1195)', async () => {
+    await seedCollabList('cl15', { isPublic: true, editors: ['other_uid'] });
+    await assertSucceeds(updateDoc(doc(otherDb(), 'lists', 'cl15'),
+      { items: [{ tmdbId: 9, mediaType: 'tv' }], updatedAt: serverTimestamp() }));
   });
 });
 
