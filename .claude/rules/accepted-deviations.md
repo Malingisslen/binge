@@ -1291,3 +1291,79 @@ flödet genom filtrering i klienten, och den filtreringen går att kringgå. Den
 som redan landat innan blockeringen.
 
 **Re-open when:** en rapport om att en blockerad person når någon via en annan yta.
+
+---
+
+## BIN-1194: `deleteGroup` rör inte `joinAttempts`, och svepet är mekanismen — 2026-09-16
+
+Malins beslut 2026-09-16, efter att full panel mätt att den planerade fixen inte gick att
+bygga. Fila inte "ägarens raderaknapp lämnar kvar inbjudningsspåren" eller "gruppens
+undersamlingslista är ofullständig i `deleteGroup`". Ingen kod ändrades; det här är
+bokföringen av att ingen ska ändras.
+
+**VARFÖR DEN INTE KAN BYGGAS KLIENTSIDIGT.** `firestore.rules` ger
+`groups/{groupId}/joinAttempts/{uid}` `allow read: if false` och
+`allow delete: if isSignedIn() && uid == request.auth.uid`. Härled båda:
+
+```
+grep -n -A22 "match /joinAttempts" firestore.rules
+```
+
+Ägaren kan alltså varken lista undersamlingen eller radera någon annans rad. Mönstret som
+`deleteGroup` använder för `members`, `watchlist` och `sessionHistory` — ett `getDocs` in i
+samma `Promise.all` — kan inte återanvändas här. Och eftersom en lyckad join självraderar
+sin egen rad tillhör de rader som FINNS kvar vid en gruppradering så gott som alltid en
+annan uid än ägarens, så den enda radering reglerna tillåter är i praktiken en no-op.
+
+Värre än verkningslös: Firestore-batchar är atomära, och `deleteGroup` committar i chunkar om
+450. Ett nekande fäller hela chunken, alltså potentiellt raderingen av medlemmar, watchlist,
+den publika projektionen OCH gruppdokumentet. `GroupPageClient.tsx` anropar
+`void deleteGroup(...).then(...)` utan `.catch`, så användaren hade sett knappen göra
+ingenting. Det är en regression mot dagens läge, inte en förbättring.
+
+**MEKANISMEN SOM TÄCKER DET.** `retentionCleanup` kör
+`db.collectionGroup('joinAttempts').select('createdAt')` och reapar via `isStaleJoinAttempt`.
+En collection group-fråga ser barndokument oavsett om föräldern finns, så svepet når raden
+vare sig gruppen står kvar eller är raderad. Härled frågan och golvet:
+
+```
+grep -n -A2 "case 'joinAttempts'" functions/src/retentionCleanup/index.ts
+grep -n "JOIN_ATTEMPT_MAX_AGE_MS =" functions/src/retentionCleanup/logic.ts
+```
+
+**ACCEPTERAT:** att raden ligger kvar fram till svepets nästa körning. Det är SAMMA fönster
+som redan gäller varje `joinAttempts`-rad — en övergiven join, ett konto raderat i konsolen —
+och den här posten skapar alltså inget eget. Läs fönstret ur golvet plus svepets `onSchedule`;
+skriv inte ett tal här, det vore ett nytt omätt påstående om något golvet och schemat redan
+svarar på.
+
+**Vad raden innehåller under fönstret:** `token` och `createdAt`, inget annat — regelns
+`hasOnly` binder nyckelmängden. `read: if false` gäller permanent, så ingen klient kan läsa
+den; det här är alltså en fråga om dataminimering, att en förbrukad hemlighet ligger kvar
+lite längre än den behöver, inte om läsbarhet.
+
+**Why:** alternativen är en regeländring som öppnar läsning eller radering av en rad som bär
+ett inbjudningstoken i klartext — full panel och manuell deploy — eller en ny anropbar
+serverfunktion att underhålla. Båda för att korta en väntan som redan är bunden av golvet
+och schemat, på rader ingen kan läsa, i en grupp som just raderats. Priset står inte i
+proportion.
+
+**INTE accepterat, alltså fortfarande fileable — tre saker:**
+1. **Att svepets fråga någonsin villkoras på förälder-gruppens existens.** Det är precis den
+   egenskap accepten vilar på. Blir `joinAttempts`-grenen en fråga under ett gruppdokument i
+   stället för en collection group-fråga, faller hela beslutet.
+2. **Att den här posten citeras för något ANNAT som `deleteGroup` missar.** Den gäller
+   `joinAttempts` och ingenting annat.
+3. **Att fönstret växer utöver golvet plus svepets schema** utan ett eget beslut. En höjning
+   av endera konstanten är en ändring av den här accepten, inte en justering bredvid den.
+
+**RE-OPEN WHEN:** raden `retentionCleanup: joinAttempts scan failed` dyker upp i Cloud
+Functions-loggarna. Den kanalen behövs därför att scanet sväljer sitt fel och returnerar en
+tom lista — en trasig körning ser annars ut som en frisk. Utlösaren är medvetet INTE en
+rapport om en läst token: `read: if false` gör den observationen onåbar, och en accept vars
+utlösare ingen kan nå är permanent by construction, samma fälla som BIN-590-posten skriver
+ut. Raden gäller scanet; en raderingsomgång som fallerar loggar sin egen, mindre specifika
+rad i `deleteInBatches`.
+
+`docs/data-retention-policy.md` ändras INTE av det här beslutet. En ny mening där hade varit
+en oprövad formulering i ett dokument av en annan klass.

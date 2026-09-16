@@ -304,9 +304,9 @@ describe('GDPR user-subcollection enumeration guard (BIN-347)', () => {
  *         DEPARTING USER's own rows. Its `joinAttempts` ref sits above the owner/member
  *         branch, so it covers both branches rather than enumerating a subtree.
  *   OUT — `deleteGroup` (src/lib/firebase/groups.ts), the owner's delete button, which
- *         omits `joinAttempts`. A real gap, filed as BIN-1194 rather than fixed here:
- *         taking it in would widen this change past test-only and re-route its critique
- *         mid-build. Named here so a later reader does not rediscover it as an oversight.
+ *         does not touch `joinAttempts`. That is a decided deviation, not an oversight:
+ *         see the BIN-1194 entry in `.claude/rules/accepted-deviations.md` for the rules
+ *         constraint that makes it unbuildable here and the sweep that covers it.
  *
  * Every parsed set is asserted non-empty BEFORE any comparison, exactly as the BIN-347
  * guard above does: a regex that silently stops matching would otherwise compare nothing
