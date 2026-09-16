@@ -10,7 +10,7 @@ varje kritik och mot `git diff --cached --name-only` före VARJE commit — aldr
 
 - **BIN-1206 håller.** `node docs/org/route.mjs src/components/social/FriendButton.tsx` svarar
   `unmapped-code`, panel `[14]`, och `git show @{u}:docs/org/ownership-map.json | grep -c FriendButton`
-  ger `0` — hålet är förbefintligt.
+  gav `0` vid urvalet — hålet är förbefintligt.
 - **BIN-1200 håller.** `grep -n "Pre-Blaze" docs/role-responsibilities.md` ger träff vid urvalet.
 - **BIN-1204 håller.** `grep -n "Ingen sopning täcker" docs/data-retention-policy.md` ger träff vid urvalet.
 - **BIN-1203 håller.** `grep -rn "can never see" docs/org/adr .claude/rules` namnger de två
@@ -35,12 +35,6 @@ Den är mätt nu, och båda halvorna går att härleda med ett kommando:
 - `memberUids` på andras grupper SVEPS INTE. `groups`-kategorin returnerar tomt och lämnar över
   till `commitGroupHandover`; `runGroupHandover` räknar upp grupper via `io.ownedGroupIds`, som är
   `db.collection('groups').where('ownerUid', '==', uid)`. En grupp någon ANNAN äger besöks aldrig.
-
-Härledningen, som ska stå i dokumentet i stället för en mening någon måste tro på:
-
-```
-grep -n "ownedGroupIds" functions/src/groupHandover/adminIo.ts functions/src/groupHandover/runHandover.ts
-```
 
 ## Bunt A — BIN-1206 + BIN-1200: två ändringar i rolldokumentet [Tier A] · build
 
