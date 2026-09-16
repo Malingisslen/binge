@@ -1908,3 +1908,43 @@ falt skrivaren skriver - den andrades aldrig. Commitens faktiska union byter dar
 **Regel:** grinden kräver att SAMMA körning både läste varje skyldig fil vid den stageade shan OCH avslutade på en dom. Täckning utan dom läses som "aldrig granskad", och en dom utan täckning duger inte heller. Granskarens egen rapport svarar på ingendera frågan — den har varit fel åt båda hållen. Greppa loggen på granskarens EGET agent-id direkt när den rapporterar, jämför läsraddernas sha mot `git rev-parse :<fil>`, och kör om innan du går vidare. Instruktionen om domraden hjälper men garanterar inte: håll granskarens sista tur kort, och behandla varje körning som obokförd tills du sett raden.
 
 **Exempel:** sprinten 2026-09-16, bunt C. En körning rapporterade att den läst båda de stageade testfilerna "in full"; loggen hade ingen läsrad alls för den ena, och commit-grinden namngav just den filen. Senare körningar avslutade på rätt domrad utan att någon dom bokfördes, medan de korta, verktygssnåla körningarna bokfördes. Bunten kostade långt fler granskarvarv än sin storlek — varje varv korrekt utfört, flera osynliga för grinden. Att kontrollera loggen kostar ett grep; att upptäcka det vid commiten kostar ett helt varv.
+
+---
+
+### [Workflow] En KRYMPANDE union kan dra in en roll som aldrig kritiserat — och den rollen ser precis det krympningen blottade
+
+**Trigger:** du lyfter ut en fil ur en bunt under bygget, till exempel för att en biljett säger att den ska tas separat.
+
+**Regel:** BIN-1050/1052 skrev regeln för en VIDGAD union och BIN-1122 för ett byte av säte. Den här formen är den tredje: att TA BORT en fil byter också panel, och den nya rollen har per definition inte sett bunten. Kör routern på den union du är på väg att committa, jämför med panelen som faktiskt kritiserade, och konvenera skillnaden FÖRE commit — inte vid grinden, där den enda kvarvarande åtgärden är att kasta färdig kod. Räkna med att den nya rollen har något att säga: den är ägande roll just för den mängd du har kvar.
+
+**Exempel:** BIN-1131, sprinten 2026-09-16b. Kritiken konvenerades på `AuthContext.tsx` + testfilen + `DeletionLimbo.tsx` och gav panel `[5,27,2,19,26]`. Biljetten sa uttryckligen "ta INTE DeletionLimbo.tsx i samma ändring", så den lämnades orörd — och den krympta unionen routade `[5,27,2,14,1]`. #14 Software Architect konvenerades före commit och BLOCKERADE på exakt det som krympningen blottade: samma falska slutsats stod kvar i den filen, i en annan lydelse. Att lämna den hade varit den halva åtgärd strykregeln handlar om. Rollerna var dessutom äkta oeniga i sak — #5 läste meningen som blandad, säkerhetsgranskaren som ett annat fall där uid:t aldrig blir kandidat, #14 som en fortsatt kedja — och det avgjordes genom att läsa `functions/src/retentionCleanup/` själv, varpå säkerhetsgranskaren mätte om och drog tillbaka sin egen slutsats. Efter invikningen är unionen tre filer igen och routningen tillbaka på den panel som kritiserade, vilket är varför commit-grindens routningskoll passerade.
+
+---
+
+### [Workflow] En granskningsrad i metrikloggen kan VÄNDAS av en senare kritik — och då motsäger loggen commiten
+
+**Trigger:** en blind kritik ger ett villkor, raden skrivs, och en senare kritik i samma bunt vänder just det villkoret.
+
+**Regel:** `docs/org/metrics/events.jsonl` är append-only och är det enda spåret av att en kritik ägt rum. Vänds ett villkor blir raden ett påstående som den pushade commiten motsäger, och den auktoriserande kritiken finns ingenstans. Lägg till EN daterad `correction`-rad som namnger vändningen och bär commit-shan; redigera aldrig originalraden, som är en korrekt bokföring av den första kritiken vid sin tidpunkt. Skriv `measured`-fältet i en form som kan MOTSÄGA raden — `git show --name-only <sha>` listar filerna, medan pathspec-formen skriver ut noll bytes för en commit som inte rörde filen och passerar "kör kommandot" utan att bevisa något.
+
+**Exempel:** BIN-1131, sprinten 2026-09-16b. Raden bar villkoret "rör inte DeletionLimbo.tsx — filad separat"; commiten `cacc742` stryker satsen i just den filen. Ingen av de fyra per-bunts-grindarna kunde se det: de läser den stageade diffen, inte granskningsloggen. Push-grindens helhetsvarv läser båda i samma körning och var det som hittade det. Åtgärdat med en `correction`-rad i `69796ef`.
+
+---
+
+### [Workflow] Kartlinterns spärr mot krympande prosa fäller varje strykning — och har en egen anvisad väg
+
+**Trigger:** du stryker en falsk mening ur ett flöde i `docs/workflow-map.html` och lintern blir röd.
+
+**Regel:** `scripts/check-workflow-map.mjs` jämför varje flödes prosalängd mot `docs/workflow-map-content-baseline.json` och fäller en nettominskning. En strykning ÄR en nettominskning, så spärren fyrar på rätt sak av fel skäl. Lintern anvisar själv en baslinjeregenerering för den avsiktliga minskningen, och baslinjen ska committas i samma commit som strykningen. Förväxla den inte med ägarkartans motsvarande flagga, som lärdomarna förbjuder: den här spärren finns för att fånga tyst förlorad dokumentation, den andra skulle göra ett ägarlöst hål permanent.
+
+**Exempel:** BIN-1202, sprinten 2026-09-16b. Strykningen av 92 tecken falsk prosa ur flödet "Sign in & hydrate" gav "prose shrank (13713 < baseline 13805)". Kartfilerna routar `skip`/`doc-only` och matchar ingen post i `reviewGates`, så commiten gick utan granskare — och låg för sig själv, eftersom en revert av funktionskod annars tyst tar med sig orelaterad flödesdokumentation.
+
+---
+
+### [Workflow] Ett `-n` inne i ett commit-meddelande fäller no-verify-vakten och blockerar HELA anropet
+
+**Trigger:** du skriver ett commit-meddelande som citerar ett kommando med `-n`, till exempel `grep -n`.
+
+**Regel:** vakten som förbjuder `git commit --no-verify`/`-n` läser hela Bash-anropet som en sträng, inklusive heredoc-kroppen. En träff blockerar anropet innan något körs — `log_event`, `git add` och commiten, alla tre. Symptomet är förvillande: indexet står kvar oförändrat och nästa försök ger ett identiskt fel. Skriv meddelandet till en fil i scratchpad och committa med `-F <sökväg>`, eller citera kommandot utan flaggan. Kontrollera efteråt med `git status --porcelain` att ingenting halvkördes.
+
+**Exempel:** sprinten 2026-09-16b, kartans commit. Meddelandet publicerade två härledningskommandon med `grep -n`; vakten fällde hela anropet, och metrikraden som skulle ha skrivits först skrevs aldrig. Samma familj som lärdomen om att en grind nekar hela Bash-anropet så att `git add` aldrig kör.

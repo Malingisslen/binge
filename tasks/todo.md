@@ -1,3 +1,202 @@
+# Sprint 2026-09-16b — 6 biljetter, 4 buntar
+
+Rent träd vid start (`git status --porcelain` tomt), i fas med origin, Todo och In Progress tomma.
+Inga obockade uppgifter ovanför förra sprintens arkivseparator.
+
+Routningen nedan är körd vid URVALET på varje bunts faktiska filuppsättning. Den körs om före
+varje kritik och mot `git diff --cached --name-only` före VARJE commit — aldrig ärvd härifrån.
+
+## Mätt vid urvalet (grep-of-main, före klassning)
+
+- **BIN-1196 håller.** `git grep -n "removeFriend\|acceptFriendRequest\|declineFriendRequest" -- src/components`
+  ger anropsställen i `TopbarActions.tsx` (rad 131–132) och `FriendsPageClient.tsx` (rad 141, 174, 180),
+  alla utan catch.
+- **BIN-1197 håller.** Båda testnamnen finns i `src/components/social/FriendButton.test.tsx`.
+- **BIN-1194 håller.** `deleteGroup` läser `members`, `watchlist`, `sessionHistory`, `sessions` —
+  ingen `joinAttempts`. Rosterkommentaren står i `src/lib/firebase/userData.subcollections.test.ts`.
+- **BIN-1198 håller.** `docs/analysis/EXTERNAL_ACTIONS.md` rubriken "Blaze vs Spark" öppnar med att
+  Spark täcker nuvarande Firestore-användning; `docs/RUNBOOK.md` och `CLAUDE.md` säger Blaze.
+- **BIN-1131 har KRYMPT.** `git grep -n "nothing ever finds it"` och
+  `git grep -n "Auth accounts WITHOUT a profile"` ger båda tom utdata — kopiorna i
+  `WatchlistContext.test.tsx` och `docs/workflow-map.html` är redan tagna. Kvar: `AuthContext.tsx`
+  och `AuthContext.test.tsx`. Kriterium 3 (egen commit för kartan) är därmed föremålslöst.
+- **BIN-1138 håller.** `node docs/org/route.mjs functions/package-lock.json` svarar `owned`, panel `[25]`;
+  rotens svarar `unmapped-code`, panel `[14]`.
+
+## Bunt A — BIN-1196 + BIN-1197: vän-åtgärder utanför knappen [Tier B] · build
+
+Router (`FriendsPageClient.tsx`, `TopbarActions.tsx`, `TopbarActions.test.tsx`, `FriendButton.test.tsx`):
+`medium` · panel `[26]` Information Architect. `dropped: [1, 2, 16, 19]`.
+
+BIN-1196:
+1. Varje anropsställe fångar sitt fel och visar en text på den ytan. *(diff)*
+2. Test per yta och handling. *(diff)*
+3. Ingen text som avslöjar orsaken bakom ett nekande — olika text per HANDLING, samma text
+   oavsett ORSAK inom en handling. *(diff)*
+
+BIN-1197:
+4. Testnamnet beskriver det testet kan fälla på (nyckelbindningen på handling, inte läget). *(diff)*
+5. Kommentaren namnger syskontestet som bär övergången. *(diff)*
+6. Ingen assertion ändras. *(diff)*
+
+## Bunt B — BIN-1194: deleteGroup utelämnar joinAttempts [Tier C] · build
+
+Router (`groups.ts`, `groups.test.ts`, `userData.subcollections.test.ts`): `top` · `high-stakes` ·
+panel `[27, 5, 6, 4, 18]`.
+
+1. `deleteGroup` raderar `joinAttempts` tillsammans med de övriga undersamlingarna. *(diff)*
+2. Rosterkollen från BIN-1111 utvidgas till `deleteGroup`, och kommentaren om att den är
+   utesluten stryks i samma ändring. *(diff)*
+3. Ordningen i `refs` är oförändrad i sak: projektionen först, gruppdokumentet sist. *(diff)*
+
+## Bunt C — BIN-1198 + BIN-1138: två inaktuella beslutstexter [Tier A] · build
+
+Router (`EXTERNAL_ACTIONS.md`, `RUNBOOK.md`, `route.mjs`, `.claude/shared-plugin.json`):
+`medium` · panel `[8]` DevOps/SRE. `dropped: [20, 21, 23, 25, 27]`.
+
+BIN-1198:
+1. Avsnittet påstår inte längre något om vilken plan projektet ligger på. *(diff)*
+2. Pekaren i `docs/RUNBOOK.md` §5b landar på text som svarar på statusfrågan. *(diff)*
+3. Inga kvarvarande kopior i trädet, härlett med ett kommando — sök på KONSEKVENSEN, inte på
+   ordet `Spark`. *(diff)*
+
+BIN-1138:
+4. `node docs/org/route.mjs package-lock.json` och `… functions/package-lock.json` svarar likadant
+   som det som står skrivet. *(diff)*
+5. Ingen av de två befintliga meningarna är omskriven; det som tillkommer är en daterad
+   efterföljare. *(diff)*
+6. Frågan om funktionernas låsfil ska ha en ägare är besvarad, inte bara bokförd. *(diff)*
+7. Ingen ny mening som räknar upp vilka filer som har ägare — peka på kommandot. *(diff)*
+
+## Bunt D — BIN-1131: den falska meningen i AuthContext [Tier C] · build
+
+Router (`AuthContext.tsx`, `AuthContext.test.tsx`, `DeletionLimbo.tsx`): `top` · `high-stakes` ·
+panel `[5, 27, 2, 19, 26]`.
+
+1. `git grep -n "server sweep"` svarar bara med de ställen som är avsiktligt kvar. *(diff)*
+2. Ingen ny mening om vad som hittar raden har skrivits någonstans — STRYK, formulera inte om. *(diff)*
+3. `DeletionLimbo.tsx` är läst och besvarad — ändrad eller lämnad med skäl. *(diff)*
+4. `accepted-deviations.md` och `*.knowledge*.md` rörs INTE (carve-outs i strykregeln). *(diff)*
+
+## Needs you (Tier D / produktmässigt hennes)
+
+- BIN-1199, BIN-1144, BIN-1121, BIN-1114 — mätningar i Firebase Console eller mot skarp data.
+- BIN-1118, BIN-521 — bär `Feature`/`idea`-etikett, alltså ett produktval.
+- BIN-454, BIN-402 — `mutateEnabled`-flippen, aldrig en sprint.
+
+## Utfall per bunt
+
+**Bunt A — BIN-1196 + BIN-1197: BYGGD.** Typkontroll ren, 43/43 gröna i de fyra berörda
+testfilerna, hela sviten 297 filer / 5083 test grön.
+
+#26:s kritik fällde en riktig defekt i planen före bygget: BIN-1192:s mönster nycklar
+banderollen på HANDLINGEN, vilket håller för en knapp som renderar en relation men inte för
+en LISTA — en flagga ovanför raderna hade visat felet från att ta bort Anna vid Bertils namn.
+Flaggan ligger därför i raden. Tre test driver just det fallet.
+
+Omfånget vidgades med två nya filer — `src/lib/friendActionText.ts` (texterna, en per
+handling, delade av alla fyra ytor) och `src/hooks/useFriendActionAlert.ts` (flaggan plus
+avbrottsräknaren). Routern kördes om på den faktiska unionen inklusive dem: panelen är
+oförändrad `[26]`, så ingen ny roll blev oskuldad. `FriendButton.tsx` använder nu samma hook
+med `status` som återställningsnyckel; dess egen svit passerar oförändrad, vilket är beviset
+för att semantiken är bevarad.
+
+**Bunt B — BIN-1194: UTDRAGEN FÖRE BYGGET, ingenting byggt, ingenting committat.**
+Fyra av fem paneldeltagare mätte oberoende fram att `firestore.rules` ger ägaren varken
+`list` (`allow read: if false`) eller `delete` på andras `joinAttempts`-rader. Verifierat av
+mig själv med `grep -n -A22 "match /joinAttempts" firestore.rules`. Den planerade fixen är
+antingen en tyst no-op eller — om uid:n gissas ur medlemslistan — ett nekande som fäller hela
+den atomära chunken och därmed raderingen av medlemmar, watchlist, projektionen och
+gruppdokumentet. `GroupPageClient.tsx` saknar `.catch`, så användaren hade sett knappen göra
+ingenting. Tre vägar och en rekommendation står på biljetten; valet är Malins.
+
+**Bunt C — BIN-1198 + BIN-1138: BYGGD.** #8:s blockerande villkor invikt: rubriken
+`## Blaze vs Spark` står kvar (`docs/RUNBOOK.md` namnger den), och PITR-raden i
+"Open infra items" — det §5b faktiskt läser — är orörd. Påståendet om vilken plan projektet
+ligger på är struket, inte omformulerat, och ersatt av ett kommando som kan motsäga det som
+står bredvid.
+
+`docs/RUNBOOK.md` RÖRS INTE av bunten — filen är byte-identisk med HEAD, kontrollerat med
+`git hash-object` mot `git rev-parse HEAD:<fil>`. Ett första försök strök pekaren i §2c och
+blev fällt av helhetsgranskningen: `events.jsonl` rad 255 bokför att #20 Manual/Release QA
+2026-09-02 (BIN-1067) ställde som villkor att pekaren ska NAMNGE rubriken i stället för att
+strykas till en dinglande filhänvisning, eftersom det är raden en jourhavande följer. Den
+rollen ligger i `dropped` för den här buntens union, så ingen mekanisk grind hade sett
+omprövningen. Två meningar som bara bar upp varandra ströks i samma rättelse.
+
+BIN-1138:s fråga är besvarad, inte bara bokförd: låsfilens innehåll är samma storhet som
+manifestet och sitter hos #25 — `docs/role-responsibilities.md` seatade redan
+`functions/package-lock.json` där i BIN-1110, så divergensen är avsedd. Rotens låsfil stannar
+på #14-fallbacken. Båda de gamla meningarna står ordagrant kvar med en daterad efterföljare
+bredvid.
+
+**Bunt D — BIN-1131: BYGGD, och VIDGAD under bygget.** Panelen smalnade strykningen: bara
+satsen om att skrivningarna överlever både kaskaden och svepet stryks; Art. 17-motiveringen
+står kvar och är mätt sann. Kopian i `WatchlistContext.test.tsx` är läst av mig själv och
+lämnad — den saknar permanenssatsen och gör inget anspråk på vad som hittar raden. Rollerna
+delade sig om den: #19 ville stryka den, #26 och #5 läste den som ett annat och fortfarande
+sant påstående. Jag läste den själv och lämnade den. Kriterium 3 i biljetten är föremålslöst,
+`docs/workflow-map.html` bär ingen kopia längre.
+
+**Filuppsättningen rörde sig i BÅDA riktningarna, och båda gångerna flyttade det panelen.**
+Kritiken konvenerades på `AuthContext.tsx` + testfilen + `DeletionLimbo.tsx` → `[5, 27, 2, 19,
+26]`. `DeletionLimbo.tsx` lämnades sedan orörd, och den KRYMPTA unionen routade
+`[5, 27, 2, 14, 1]` — två roller som aldrig sett bunten. De konvenerades före commit, och #14
+Software Architect BLOCKERADE: samma falska slutsats stod kvar i `DeletionLimbo.tsx`, i en
+annan lydelse. Att lämna den är den halva åtgärd BIN-1050/1052-lärdomen handlar om. Satsen är
+struken där också, unionen är åter tre filer, och routningen är tillbaka på
+`[5, 27, 2, 19, 26]` — alltså den panel som faktiskt kritiserade.
+
+**En äkta oenighet mellan roller, avgjord mot koden.** #5 läste `DeletionLimbo.tsx`s mening som
+blandad (watchlist-halvan falsk, reviews-halvan sann). Säkerhetsgranskaren läste den som ett
+helt annat fall: en radering som aldrig fullbordas, där Auth-kontot lever och uid:t därför
+aldrig blir kandidat. #14 läste kedjan som fortsatt. Mätt i
+`functions/src/retentionCleanup/orphans.ts` och `runCleanup.ts` håller #14: svepet meningen
+själv namnger raderar Auth-KONTOT, och ett uid bekräftat borta ur Auth är exakt vad
+BIN-1023-svepet räknar upp innan trädet raderas. Ordet "aldrig" är falskt. Säkerhetsgranskaren
+kördes om med sin egen premiss ifrågasatt i uppdraget.
+
+BIN-1201, som jag filade för att hålla den meningen utanför bunten, absorberas därmed här och
+stängs med commiten. `accepted-deviations.md` bär samma lydelse en tredje gång inne i en
+avgjord post och rörs INTE — ett beslutsprotokoll ersätts av en daterad efterföljare, aldrig av
+en granskares strykning. Står kvar som öppet arbete.
+
+## Deviation log
+
+- discovery BIN-1131: biljettens filuppsättning hade KRYMPT sedan den skrevs. `git grep -n
+  "nothing ever finds it"` och `git grep -n "Auth accounts WITHOUT a profile"` ger båda tom
+  utdata — kopiorna i `WatchlistContext.test.tsx` och `docs/workflow-map.html` togs av
+  BIN-1112. Kvar var två.
+- deviation bunt A: planen sa tre filer, bygget blev sju. De två nya delade modulerna är
+  #26:s villkor om en och samma text per handling, mekaniskt i stället för i prosa. Routern
+  kördes om; panelen oförändrad.
+- needs-human BIN-1194: reglerna tillåter inte den planerade fixen. Utdragen, tre vägar
+  skrivna på biljetten.
+- discovery BIN-1198: #8 hittade en fjärde kopia av samma defekt utanför buntens
+  filuppsättning, `docs/role-responsibilities.md` rad 792 ("Pre-Blaze data loss"). Filad som
+  BIN-1200 i stället för att vidga unionen och routa om panelen mitt i bygget.
+- deviation BIN-1131: #14 blockerade på att `DeletionLimbo.tsx` bar samma falska slutsats.
+  Den är INVIKT och struken i bunten — unionen vidgades från två filer till tre, routningen
+  kördes om, och grindgranskarna kördes om på den nya mängden.
+- needs-human BIN-1131: #4 blockerade på en kopia till, i `docs/org/adr/0020-*.md`. Den
+  lagas INTE här: en ADR är ett beslutsprotokoll och hör till strykregelns carve-out, så den
+  ersätts av en daterad efterföljare — en egen handling med en egen filuppsättning och en
+  egen panel. Filad som BIN-1203 tillsammans med den femte kopian i
+  `accepted-deviations.md`, som BIN-1131:s biljettext uttryckligen förbjuder att stryka.
+
+## Post-sprint
+
+- [ ] Full `npm run typecheck`.
+- [ ] Full `npm test`.
+- [ ] Följdbiljetter filade FÖRE commit.
+- [ ] Granskare per `reviewGates` på den stageade diffen; ledgern är beviset.
+- [ ] Routa om mot `git diff --cached --name-only` före VARJE commit.
+- [ ] Push (= deploy av hosting).
+- [ ] Linear-övergångar parvis med varje commit.
+- [ ] Fold back: lärdomar → `tasks/lessons.md` + digesten i samma redigering.
+
+---
+
 # Sprint 2026-09-16 — 7 biljetter, 6 buntar
 
 Rent träd vid start: bokföringen från 2026-09-15 (granskarnas kunskapsfiler) committad först;
