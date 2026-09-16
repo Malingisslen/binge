@@ -1948,3 +1948,63 @@ falt skrivaren skriver - den andrades aldrig. Commitens faktiska union byter dar
 **Regel:** vakten som förbjuder `git commit --no-verify`/`-n` läser hela Bash-anropet som en sträng, inklusive heredoc-kroppen. En träff blockerar anropet innan något körs — `log_event`, `git add` och commiten, alla tre. Symptomet är förvillande: indexet står kvar oförändrat och nästa försök ger ett identiskt fel. Skriv meddelandet till en fil i scratchpad och committa med `-F <sökväg>`, eller citera kommandot utan flaggan. Kontrollera efteråt med `git status --porcelain` att ingenting halvkördes.
 
 **Exempel:** sprinten 2026-09-16b, kartans commit. Meddelandet publicerade två härledningskommandon med `grep -n`; vakten fällde hela anropet, och metrikraden som skulle ha skrivits först skrevs aldrig. Samma familj som lärdomen om att en grind nekar hela Bash-anropet så att `git add` aldrig kör.
+
+---
+
+### [Workflow] En härledning som ÄRVS ur en tidigare commit är ett omätt påstående
+
+**Trigger:** en rollkritik eller en biljett säger åt dig att återanvända en tidigare commits lydelse ordagrant, för att undvika att en mekanism beskrivs på tre sätt.
+
+**Regel:** ett sådant villkor skyddar mot DRIFT, inte mot FEL. Mät varje funktionsnamn och varje sökväg i den ärvda lydelsen innan du för den vidare — `git grep -n "function <namn>"` — och skriv hellre funktionsnamnet UTAN sökväg: namnet går att härleda, sökvägen blir inaktuell. En ärvd mening sprids snabbare än den mäts, eftersom var och en som ser den antar att någon tidigare mätte den.
+
+**Exempel:** BIN-1203, sprinten 2026-09-16c. Efterföljarna skulle använda `cacc742`:s lydelse, och just den bar två falska påståenden: att `collectOrphanedAuthAccounts` ligger i `orphans.ts` (den är definierad i `runCleanup.ts`) och att steget "reapar Auth-KONTOT och rör ingen Firestore-data" (den SAMLAR kandidater, raderingen ligger i `deleteAuthAccounts`, och steget läser Firestore via `confirmedMissingProfiles`). Lydelsen hade passerat granskarna i den commiten, stod i biljettexten, och upprepades av den roll som krävde att den återanvändes.
+
+---
+
+### [Workflow] Ett datum är ett påstående som commiten själv kan motsäga
+
+**Trigger:** du daterar en efterföljare, en regelkommentar, ett testgolv eller en ny biljett.
+
+**Regel:** läs dagens datum ur sessionen i stället för att anta att klockan gått över midnatt. En daterad efterföljare som bär ett datum EFTER sin egen commit motsäger det enda som gör supersede-carve-outen meningsfull, och felet sprider sig till varje fil samma runda rör.
+
+**Exempel:** sprinten 2026-09-16c daterade två efterföljare, en regelkommentar, ett testgolv, sprintplanen och två nya biljetter till 2026-09-17 på en dag som var 2026-09-16. Helhetsgranskningen fällde det; ingen annan grind kunde se det.
+
+---
+
+### [Workflow] Att ge EN fil ett säte i ägarkartan kan göra dess SYSKON nyupptäckt ägarlösa
+
+**Trigger:** du lägger till en sökväg under en roll i `docs/role-responsibilities.md` och regenererar ägarkartan.
+
+**Regel:** spärren fäller ett NYTT ägarlöst syskon i en katalog kartan listar fil för fil, så ett nytt säte kan få regenereringen att vägra med exit 1 mitt i bunten. `--update-gaps` gör hålet permanent och är fel svar. Ge grannarna ett säte i stället, valt efter vad filerna HANDLAR om och inte efter katalogen de ligger i. Budgetera för att omfånget växer med ett par filer, och kör hela sviten efteråt: ägarbaslinjen läses som indata av test i filer bunten inte rör.
+
+**Exempel:** BIN-1206, sprinten 2026-09-16c. Att seata `FriendButton.tsx` gjorde `FollowButton.tsx` och `ProfileStatsPanel.tsx` till nya ägarlösa syskon. Båda fick säte hos samma roll — följknappen driver följgrafen via `useFollow`, statistikpanelen renderar `computeProfileStats` ur `src/lib/taste/` — och `ownership-gaps.json` lämnades orörd.
+
+---
+
+### [Testing] En sökning som slår i tidsgränsen ger TOM utdata, oskiljbart från "inga träffar"
+
+**Trigger:** du sveper hela trädet efter kvarvarande kopior av en struken mening.
+
+**Regel:** en konsekvenssökning är precis den sortens fråga där tomt läses som klartecken, så en körning som dör på tidsgränsen ser ut som ett friskt svar. Använd `git grep` med avgränsade pathspecs — den hoppar dessutom över ignorerade filer av sig själv — och LÄS utdatan i stället för att lita på att kommandot hann klart. Samma familj som "ett publicerat kommando kan KÖRA och ändå säga ingenting". Kedja aldrig ett `grep -c` med `&&`: noll träffar ger exit 1 och tystar resten av raden.
+
+**Exempel:** BIN-1200, sprinten 2026-09-16c. Ett `grep -rn` över hela trädet flyttades till bakgrunden vid 120 s och rapporterade noll kopior; `git grep` med pathspecs gav fyra träffar, varav en var den rad biljetten handlade om.
+
+---
+
+### [Testing] En fixtur som seedar ett TOMT men rätt-typat fält gör den tysta muteringen högljudd
+
+**Trigger:** du lägger en typklausul på efter-dokumentet i `firestore.rules` och ska pröva den.
+
+**Regel:** pröva uttryckligen FÖRE-vs-EFTER-förväxlingen (`resource.data.X` i stället för `request.resource.data.X`). Den ser rätt ut vid läsning och är den som oftast shippas av misstag. Om fixturen seedar fältet tomt men rätt-typat blir den muteringen vakuöst sann och testerna fäller den; saknas fältet i seeden är muteringen tyst.
+
+**Exempel:** BIN-1195, sprinten 2026-09-16c. `seedCollabList` seedar `items: []`, alltså en lista, så swappen gav `3 failed | 637 passed` — samma utfall som att ta bort klausulen helt.
+
+---
+
+### [Workflow] Granskningsloggen är domen, och två av tre granskartyper bokförde ingen dom alls
+
+**Trigger:** en granskare rapporterar `pass (0 blocking)` och du tänker gå vidare till commiten.
+
+**Regel:** greppa loggen på granskarens EGET agent-id direkt när den rapporterar, inte när commiten nekas. Fältet är `"t":"verdict"`, så en grep på `"verdict":` ger noll och ser ut som en död hook. Att lägga kravet först i utskicket räcker inte — det måste också sägas att sista raden ska vara vanlig assistenttext och att svaret inte får levereras enbart via en hand-back. Följdfälla: `grep`/`wc` mot loggens sökväg NEKAS av dess egen vakt, som inte skiljer läsning från skrivning, så läs den med Read- eller Grep-verktyget.
+
+**Exempel:** sprinten 2026-09-16c, bunt D. `binge-security-reviewer` och `binge-test-reviewer` gav fullständig lästäckning och `pass` i vardera två körningar utan en enda `t:"verdict"`-rad, medan `binge-integration-reviewer` bokförde sin dom i båda sina körningar, inklusive den som slutade `fail`. Två bokföringskörningar till löste det.

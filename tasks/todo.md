@@ -1,3 +1,196 @@
+# Sprint 2026-09-16c — 5 biljetter, 4 buntar
+
+Rent träd vid start (`git status --porcelain` tomt), i fas med origin, Todo och In Progress tomma.
+Inga obockade uppgifter ovanför förra sprintens arkivseparator.
+
+Routningen nedan är körd vid URVALET på varje bunts faktiska filuppsättning. Den körs om före
+varje kritik och mot `git diff --cached --name-only` före VARJE commit — aldrig ärvd härifrån.
+
+## Mätt vid urvalet (grep-of-main, före klassning)
+
+- **BIN-1206 håller.** `node docs/org/route.mjs src/components/social/FriendButton.tsx` svarar
+  `unmapped-code`, panel `[14]`, och `git show @{u}:docs/org/ownership-map.json | grep -c FriendButton`
+  ger `0` — hålet är förbefintligt.
+- **BIN-1200 håller.** `grep -n "Pre-Blaze" docs/role-responsibilities.md` ger rad 799.
+- **BIN-1204 håller.** `grep -n "Ingen sopning täcker" docs/data-retention-policy.md` ger rad 399.
+- **BIN-1203 håller.** `grep -rn "can never see" docs/org/adr .claude/rules` namnger de två
+  beslutsprotokollens kopior. Efter den här sprintens commit svarar samma kommando också med
+  efterföljarnas egna citat av klausulen.
+- **BIN-1195 håller, men dess premiss har KRYMPT.** Biljettens text förutsätter att BIN-1170 redan
+  gett `isValidList` en nyckellista och en typkontroll på `items`. BIN-1170 byggdes aldrig och
+  ligger i Backlog: `awk '/function isValidList\(/,/^    }/' firestore.rules` nämner inte `items`
+  alls. Defekten kvarstår oförändrad — samredigerarens gren gatar bara på `affectedKeys().hasOnly`
+  — men fixen får INTE beskrivas som att den kompletterar ägarens gren. Ägarens grenar förblir
+  otypade på `items`; det är BIN-1170:s omfång.
+
+### Mätning som BIN-1204 begärde och som är gjord före bygget
+
+Biljetten säger att `memberUids`-halvan är omätt och att ingen rättelse får påstå något om den.
+Den är mätt nu, och båda halvorna går att härleda med ett kommando:
+
+- `editors` på andras listor SVEPS. `FIELD_OWNED_CATEGORIES` i
+  `functions/src/retentionCleanup/fieldOwned.ts` innehåller `lists`, och kategorins insamlare i
+  `functions/src/retentionCleanup/index.ts` lägger varje lista där uid:t står i `editors` men inte
+  äger dokumentet i `arrayStrips`.
+- `memberUids` på andras grupper SVEPS INTE. `groups`-kategorin returnerar tomt och lämnar över
+  till `commitGroupHandover`; `runGroupHandover` räknar upp grupper via `io.ownedGroupIds`, som är
+  `db.collection('groups').where('ownerUid', '==', uid)`. En grupp någon ANNAN äger besöks aldrig.
+
+Härledningen, som ska stå i dokumentet i stället för en mening någon måste tro på:
+
+```
+grep -n "ownedGroupIds" functions/src/groupHandover/adminIo.ts functions/src/groupHandover/runHandover.ts
+```
+
+## Bunt A — BIN-1206 + BIN-1200: två ändringar i rolldokumentet [Tier A] · build
+
+Router (`docs/role-responsibilities.md`, `docs/org/ownership-map.json`): `skip` · doc-only ·
+ingen panel. De ligger i samma bunt för att de rör samma fil; de committas ändå var för sig om
+routningen mot `git diff --cached --name-only` skiljer sig åt.
+
+BIN-1206:
+1. `node docs/org/route.mjs src/components/social/FriendButton.tsx` svarar `owned` med en namngiven
+   roll. *(diff)*
+2. Ägarkartan är regenererad med `node docs/org/gen-ownership-map.mjs` — **aldrig** `--update-gaps`,
+   som baslinjerar hålet permanent. *(diff)*
+3. Routerns utfall före och efter är kört och klistrat in här, inte sammanfattat. *(diff)*
+4. Hela `npm test` är körd: `docs/org/gen-ownership-map.test.mjs` läser ägarbaslinjen som INDATA,
+   så en ny ägarrad kan fälla test i en fil bunten inte rör. *(diff)*
+
+BIN-1200:
+5. Raden påstår inte längre något om vilken plan projektet ligger på. *(diff)*
+6. Den bärande halvan — att PITR och schemalagda säkerhetskopior inte är påslagna — står kvar. *(diff)*
+7. Ingen ny mening om planen har skrivits någonstans. *(diff)*
+8. Sökningen på KONSEKVENSEN (inte på ordet "Spark") ger inga kvarvarande kopior i trädet,
+   härledd med ett kommando som körs före meningen skrivs. *(diff)*
+
+## Bunt B — BIN-1204: retentionspolicyns universella mening [Tier A] · build
+
+Router (`docs/data-retention-policy.md`): `medium` · panel `[6]` Data Protection Officer.
+Blind kritik före bygget.
+
+1. Meningen påstår inte längre att ingen sopning täcker luckan. *(diff)*
+2. `editors`-halvan är beskriven med fil- och funktionsnamn, inte med en omskrivning. *(diff)*
+3. `memberUids`-halvan är beskriven som osvept, med den härledning som står under "Mätt vid
+   urvalet" — mätt i samma ändring, inte gissad. *(diff)*
+4. Ingen kvantifikator över "alla svep" eller "den enda sopningen" någonstans i ändringen. *(diff)*
+
+## Bunt C — BIN-1203: daterade efterföljare i två beslutsprotokoll [Tier A] · build
+
+Router (`docs/org/adr/0020-username-release-and-partial-cascade-signal.md`,
+`.claude/rules/accepted-deviations.md`): `medium` · panel `[25]` Engineering Manager.
+Blind kritik före bygget.
+
+1. En daterad efterföljare per fil. De befintliga styckena är oförändrade — strykregelns carve-out
+   för beslutsprotokoll gäller. *(diff)*
+2. Efterföljarna namnger tvåstegskedjan med fil- och funktionsnamn (`isOrphanCandidate` /
+   `collectOrphanedAuthAccounts` respektive `collectOrphanedUserData` / `deleteUserTree` i
+   `functions/src/retentionCleanup/`). *(diff)*
+3. Efterföljarna daterar BÅDA ändarna: när raden var sann och vilken ändring som gjorde den falsk
+   (#4:s kommentar på biljetten, tillagt som femte kriterium). *(diff)*
+4. Inget tal om hur lång fördröjningen är, om det inte räknas ur konstanterna i samma ändring. *(diff)*
+5. `.claude/rules/accepted-deviations.md` är INTE undantagen från claim-lint — varje kvantifikator
+   i efterföljaren är därför en spärr som kan fälla commiten. *(diff)*
+
+## Bunt D — BIN-1195: samredigerarens items-gren [Tier C] · build
+
+Router (`firestore.rules`, `src/test/rules/firestore-rules.test.ts`): `top` · `high-stakes` ·
+panel `[27, 4, 6, 7, 13]`. Full blind panel före bygget.
+
+1. Samredigerarens `items`-gren binder `items` till en lista. *(diff)*
+2. Ett typfelstest på just den grenen, skilt från ägarens, i `describe('lists collaborative
+   editing (BIN-100)')`. *(diff)*
+3. Ingen per-element-validering försöks — regelspråket kan inte inspektera elementens form. *(diff)*
+4. Ingen mening som påstår att ägarens grenar nu är typade på `items`. De är det inte; det är
+   BIN-1170:s omfång. *(diff)*
+5. Muteringen prövas i BÅDA riktningarna mot en ögonblicksbild av ARBETSTRÄDET, och mutanten
+   kontrolleras med `grep -c MUTANT` både före och efter sviten i ETT kommando. *(diff)*
+6. Regler deployade manuellt efter push. *(kind: run)*
+
+## Behöver dig (Tier D)
+
+Inget i den här sprinten kräver konsol, nycklar eller butiksåtgärd. Regeldeployen i bunt D ligger
+under det stående deploytillståndet och körs av sessionen efter push.
+
+## Panelens bindande villkor, infällda som acceptanskriterier
+
+Kritikerna kördes blint och samtidigt, före bygget, var och en grundad i sitt eget avsnitt i
+`docs/role-responsibilities.md`.
+
+**Bunt B — #6 DPO, support-with-conditions.**
+- B-a: `editors`-halvan får inte skrivas obunden. Svepet kör för ett uid som är bekräftat borta
+  ur Firebase Auth, och `FIELD_OWNED_MAX_DOCS_PER_UID` är ett allt-eller-inget-tak per uid.
+  Utan de förbehållen är rättelsen en smalare version av samma defekt den lagar. *(infällt)*
+- B-b: `memberUids`-halvan ska läsas som ett avgjort och permanent undantag, bokfört i
+  `accepted-deviations.md` (BIN-1063 steg 3, bunt 3), inte som en punkt som väntar på en fix —
+  annars kan supporten utlova en rättning som aldrig kommer. *(infällt)*
+
+**Bunt C — #25 Engineering Manager, support-with-conditions.**
+- C-a: efterföljarna använder SAMMA härledning som commit `cacc742`, inte en tredje omskrivning.
+  Ingen "sju dygn" utan en namngiven konstant. *(delvis ÖVERSPELAT — se avvikelseloggen:
+  commit `cacc742`:s egen härledning visade sig bära två felaktiga påståenden, så efterföljarna
+  namnger funktionerna utan sökväg och citerar inte den commiten som sin härledning)*
+- C-b: båda datumen, verifierade av rollen mot `git log`: sann 2026-08-13, falsk 2026-08-30. *(infällt)*
+- C-f (helhetsgranskningens sju blockerande fynd, alla i min egen prosa): funktionerna namnges
+  utan sökväg, `collectOrphanedAuthAccounts` beskrivs som det den gör (samlar kandidater, raderar
+  ingen Firestore-data) i stället för som "reapar kontot", kvantifikatorerna `snarare än
+  utebliven` och uppräkningen av konstanter är strukna, och datumet är buntens eget. *(infällt)*
+- C-c: ingen siffra för fördröjningens längd — den summerar två konstanter som ändras var för sig. *(infällt)*
+- C-d: `accepted-deviations.md`-efterföljaren har en högre precisionströskel än ADR:ns, eftersom
+  filen styr vad en FRAMTIDA granskare får avfärda. Den får inte läsa som att fönstret mellan de
+  två stegen också är prövat. *(infällt)*
+- C-e: båda filerna i EN commit. ADR:n matchar ingen `reviewGates`-post; splittrad når den noll
+  blockerande granskare, medan `accepted-deviations.md` drar in helhetsgranskaren. *(infällt)*
+
+**Bunt D — full panel `[27, 4, 6, 7, 13]`, alla support-with-conditions, EN äkta oenighet.**
+- Oenigheten: #4 krävde ett `items.size()`-tak i samma commit; #27, som äger `firestore.rules`,
+  krävde att taket INTE läggs asymmetriskt här. Båda hade rätt från sitt säte. En fälla ingen av
+  dem vägde in: ett tak bara på samredigerarens gren låser ute samredigerare permanent om ägaren
+  växer listan förbi taket, även från att ta bort element.
+- **Malins beslut 2026-09-16:** bygg typkontrollen nu, designa taket separat för båda grenarna.
+  Filad som BIN-1207. Ingen syntes som döljer oenigheten — båda sidorna står på biljetten.
+- D-a (#4): ärlig avgränsning i regelkommentaren och commitmeddelandet — vad klausulen stänger
+  och vad den inte gör. Ingen mening om att `items` är validerat. *(infällt)*
+- D-b (#27 + #13): de positiva testerna kör de VERKLIGA skrivformerna — `arrayUnion`
+  (`addItemToList`) och den filtrerade literala arrayen (`removeItemFromList`). Ingen av dem hade
+  prövats mot den här grenen förut. *(infällt)*
+- D-c (#7): fixturen uppfyller grenens tidigare klausuler så typklausulen är den som nekar.
+  Muteringarna körs i båda riktningarna, inklusive den TYSTA: `resource.data.items` i stället för
+  `request.resource.data.items` gör klausulen tom eftersom fixturen seedar `items: []`. *(infällt)*
+- D-d (#7): `MIN_TESTS` höjs till uppmätt `numTotalTests`. `npm test` kör INTE den filen —
+  `vitest.config.ts` utesluter `src/test/rules/**`, så beviset kräver en egen emulatorkörning. *(infällt)*
+- D-e (#6): residualen — samredigerarens innehåll saknar upphovsmärkning och raderas aldrig —
+  filad som BIN-1208, inte tyst lämnad. *(infällt)*
+
+## Mätt under bygget
+
+- Regelsviten: `npm run test:rules -- --port 8123` (port 8080 hölls av ett annat repos emulator)
+  rapporterade **640** körda test. `MIN_TESTS` höjd 635 → 640, uppmätt och inte gissad.
+- Hela sviten: `npm test` — 297 filer, 5083 gröna, 4 skippade.
+- Ägarkartan: routern svarade `unmapped-code` / panel `[14]` för `FriendButton.tsx` före, och
+  `owned` / panel `[18]` efter. `docs/org/ownership-gaps.json` är oförändrad.
+
+## Avvikelselogg
+
+- [discovery] BIN-1206: att ge `FriendButton.tsx` ett säte gjorde `FollowButton.tsx` och
+  `ProfileStatsPanel.tsx` till NYA ägarlösa syskon, så regenereringen vägrade med exit 1.
+  `--update-gaps` är uttryckligen förbjudet i biljetten (det gör hålet permanent), så båda fick
+  ett säte hos samma roll, motiverat av vad filerna handlar om och inte av katalogen de ligger i.
+  Omfånget växte med två filer; unionen routar fortfarande `skip`.
+- [deviation] BIN-1200: biljetten pekar ut `Pre-Blaze`-ledet. Samma rad bar också `(Blaze-gated)`,
+  som implicerar samma sak. Båda är strukna i samma ändring.
+  `docs/analysis/EXTERNAL_ACTIONS.md` bär en snarlik formulering som är en annan sak — den säger
+  att FUNKTIONEN kräver Blaze och att den inte är bekräftat påslagen, vilket BIN-1199 mäter — och
+  lämnas därför orörd i stället för att svepas in och routa om bunten.
+- [discovery] BIN-1195:s premiss hade krympt: biljetten förutsätter att BIN-1170 redan typat
+  `items` för create och ägarens gren. BIN-1170 byggdes aldrig. Defekten kvarstår, men fixen får
+  inte beskrivas som att den kompletterar ägarens gren.
+- [discovery] Den första konsekvenssökningen för BIN-1200 kördes över hela trädet, slog i
+  tidsgränsen och gav TOM utdata — vilket ser likadant ut som "inga kopior kvar". Om körd med
+  `git grep` och avgränsade sökvägar i stället.
+
+---
+
 # Sprint 2026-09-16b — 6 biljetter, 4 buntar
 
 Rent träd vid start (`git status --porcelain` tomt), i fas med origin, Todo och In Progress tomma.
