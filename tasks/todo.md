@@ -76,8 +76,7 @@ Router (`projectArg.helpers.mjs`, `.test.mjs`, `recap-upload.mjs`): `medium` · 
    som pinnar identiteten — inte bara att inget kastar. *(diff)*
 6. Utfallet för dubblerat `--project` VÄLJS uttryckligen och pinnas: antingen strippas varje par,
    eller så strippas första paret och det resulterande felet pinnas. Inte lämnas odokumenterat. *(diff)*
-7. Ingen annan skrivare behöver flyttas i dag (`grep -rn "indexOf('--project')" functions/scripts/*.mjs`
-   ger `projectArg.helpers.mjs` och `recap-upload.mjs`). Noteras som framåtriktad vägledning i
+7. Ingen annan skrivare behöver flyttas i dag. Noteras som framåtriktad vägledning i
    modulens huvud, utan rosterkrav — det byggs först när ett andra skript får ett positionsargument. *(diff)*
 
 ## Bunt C — BIN-1146 + BIN-1111: två handhållna listor härleds ur reglerna [Tier A] · build
