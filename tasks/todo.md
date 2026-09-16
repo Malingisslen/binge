@@ -11,8 +11,8 @@ varje kritik och mot `git diff --cached --name-only` före VARJE commit — aldr
 - **BIN-1206 håller.** `node docs/org/route.mjs src/components/social/FriendButton.tsx` svarar
   `unmapped-code`, panel `[14]`, och `git show @{u}:docs/org/ownership-map.json | grep -c FriendButton`
   ger `0` — hålet är förbefintligt.
-- **BIN-1200 håller.** `grep -n "Pre-Blaze" docs/role-responsibilities.md` ger rad 799.
-- **BIN-1204 håller.** `grep -n "Ingen sopning täcker" docs/data-retention-policy.md` ger rad 399.
+- **BIN-1200 håller.** `grep -n "Pre-Blaze" docs/role-responsibilities.md` ger träff vid urvalet.
+- **BIN-1204 håller.** `grep -n "Ingen sopning täcker" docs/data-retention-policy.md` ger träff vid urvalet.
 - **BIN-1203 håller.** `grep -rn "can never see" docs/org/adr .claude/rules` namnger de två
   beslutsprotokollens kopior. Efter den här sprintens commit svarar samma kommando också med
   efterföljarnas egna citat av klausulen.
