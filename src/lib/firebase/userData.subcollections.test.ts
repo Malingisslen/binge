@@ -279,3 +279,123 @@ describe('GDPR user-subcollection enumeration guard (BIN-347)', () => {
     );
   });
 });
+
+/**
+ * BIN-1111 — the GROUP subtree roster, the same shape as the user-subcollection guard
+ * above and for the same reason.
+ *
+ * Which subcollections a group has is written out in places that do not know about each
+ * other. They agree today — measured, not assumed — but one added later lands silently
+ * outside the retention sweep's deletion, and those documents become unreachable for
+ * good: the same run deletes `users/{uid}`, and that uid never returns in
+ * `listUserUids()`. `users/` has KNOWN_USER_SUBCOLLECTIONS for exactly this. Groups had
+ * no equivalent.
+ *
+ * SCOPE IS NARROWER THAN THE TICKET'S WORDING, deliberately. BIN-1111 calls four places
+ * "copies of the same list". They are not copies: they do different jobs, and a
+ * requirement that all four name every subcollection would be FALSE for two of them.
+ *
+ *   IN  — the lists that enumerate a group's subcollections in order to delete the WHOLE
+ *         subtree. Those are the sources below.
+ *   OUT — `eraseMemberTraces` (functions/src/groupHandover/adminIo.ts) deletes ONE
+ *         member's rows, not a subcollection, and is already held to the writes
+ *         `memberTraceWrites` decides, by src/test/rules/memberTraceRoster.ts (BIN-1123).
+ *   OUT — `collectDeletionRefs` (src/lib/firebase/accountDeletion.ts) deletes the
+ *         DEPARTING USER's own rows. Its `joinAttempts` ref sits above the owner/member
+ *         branch, so it covers both branches rather than enumerating a subtree.
+ *   OUT — `deleteGroup` (src/lib/firebase/groups.ts), the owner's delete button, which
+ *         omits `joinAttempts`. A real gap, filed as BIN-1194 rather than fixed here:
+ *         taking it in would widen this change past test-only and re-route its critique
+ *         mid-build. Named here so a later reader does not rediscover it as an oversight.
+ *
+ * Every parsed set is asserted non-empty BEFORE any comparison, exactly as the BIN-347
+ * guard above does: a regex that silently stops matching would otherwise compare nothing
+ * to nothing and stay green.
+ */
+const GROUP_SUBTREE_SOURCES = [
+  { label: 'retention sweep', path: 'functions/src/retentionCleanup/index.ts' },
+  { label: 'orchestrator test copy', path: 'src/test/rules/retention-cleanup-orchestrator.test.ts' },
+] as const;
+
+/**
+ * Direct `groups/{groupId}/<name>` subcollections declared in firestore.rules.
+ *
+ * NOT the same shape as its user-side twin above, and the difference is the whole reason
+ * the non-inert floor below exists: `users/{uid}/…` subcollections are written as FULL
+ * paths, so a single anchored regex reads them. The group ones are written RELATIVE and
+ * NESTED inside `match /groups/{groupId}`, so the same regex matches nothing at all — the
+ * first version of this function scored zero and the floor caught it. A comparison
+ * against an empty set would otherwise have been green forever.
+ *
+ * So this walks braces instead. Wildcard tokens are blanked first (`{groupId}` and friends
+ * are not block delimiters, and counting them corrupts the depth), then a child `match` is
+ * recorded only while exactly one level inside the group block. `progress`, which sits one
+ * level deeper inside `watchlist`, is therefore excluded — it is not a group subcollection.
+ */
+function rulesGroupSubcollections(): Set<string> {
+  const stripped = RULES.replace(/\{[a-zA-Z]+\}/g, '<>');
+  const found = new Set<string>();
+  const start = stripped.indexOf('match /groups/<> {');
+  if (start === -1) return found;
+
+  let depth = 0;
+  for (let i = start; i < stripped.length; i += 1) {
+    const c = stripped[i];
+    if (c === '{') {
+      depth += 1;
+    } else if (c === '}') {
+      depth -= 1;
+      if (depth === 0) break;
+    } else if (depth === 1) {
+      const m = /^match \/([a-zA-Z]+)\/<>/.exec(stripped.slice(i, i + 60));
+      if (m) found.add(m[1]);
+    }
+  }
+  return found;
+}
+
+/** The text of `groupSubtreePaths` in one source file, or '' when it cannot be found. */
+function groupSubtreeBody(path: string): string {
+  const src = readFileSync(join(process.cwd(), path), 'utf8');
+  const start = src.indexOf('function groupSubtreePaths(');
+  if (start === -1) return '';
+  const end = src.indexOf('\n}', start);
+  return end === -1 ? '' : src.slice(start, end);
+}
+
+describe('group subtree roster (BIN-1111)', () => {
+  const inRules = rulesGroupSubcollections();
+
+  it('the guard is not inert — the rules parse and every subtree list was located', () => {
+    expect(
+      inRules.size,
+      'rules parser found zero groups/{groupId}/* subcollections — the regex broke or firestore.rules moved',
+    ).toBeGreaterThan(0);
+    for (const s of GROUP_SUBTREE_SOURCES) {
+      expect(
+        groupSubtreeBody(s.path).length,
+        `could not find groupSubtreePaths in ${s.path} — it was renamed or moved`,
+      ).toBeGreaterThan(0);
+    }
+  });
+
+  // A roster floor OUTSIDE the loop. `it.each([])` registers nothing and reports PASS, so
+  // an emptied or halved SOURCES list would silence every case below without failing
+  // anything. The number is a LITERAL: derived from the array's length it would sink in
+  // lockstep and could never fail.
+  it('names every source that enumerates the group subtree', () => {
+    expect(GROUP_SUBTREE_SOURCES).toHaveLength(2);
+  });
+
+  it.each(GROUP_SUBTREE_SOURCES)(
+    '$label names every group subcollection the rules declare',
+    ({ path }) => {
+      const body = groupSubtreeBody(path);
+      const missing = [...inRules].filter((name) => !body.includes(`'${name}'`)).sort();
+      expect(
+        missing,
+        `${path} does not name these, so a group subtree would be left unreachable after its owner is erased`,
+      ).toEqual([]);
+    },
+  );
+});

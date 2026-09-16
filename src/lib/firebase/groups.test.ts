@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 // vi.hoisted körs tillsammans med vi.mock-fabriken (hoistas till toppen).
 // Krävs eftersom vanliga modul-nivå-variabler inte är tillgängliga när
@@ -975,14 +977,61 @@ describe('medlemsdokumentets fältuppsättning är delad mellan createGroup och 
 });
 
 
-describe('inbjudningens faltuppsattning ar pinnad mot regeln (BIN-1127)', () => {
-  // `firestore.rules`' create-gren for users/{uid}/groupInvites/{groupId} kraver
-  // `keys().hasOnly` over exakt de har fem nycklarna. Regeltesterna skriver sin
-  // EGEN payload for hand och ar darfor blinda for den har filen: doper vi om ett
-  // falt har, eller lagger till ett sjatte, nekas varje inbjudan i produktion med
-  // hela sviten gron. Den har testen ar den enda kopplingen mellan skrivaren och
-  // regeln.
-  it('inviteMemberByUid skriver exakt de fem falt regeln tillater', async () => {
+/**
+ * BIN-1146. The key list `firestore.rules` allows on a groupInvites create, read out of
+ * the rules file itself.
+ *
+ * It used to be hand-copied here. A hand-copied expectation cannot catch the drift it
+ * exists to catch: rename a field on the rules side and the copy still agrees with the
+ * writer, while the server refuses the write.
+ *
+ * The extraction is BOUNDED to that match block, by walking braces to its close, rather
+ * than slicing to end-of-file and taking the first `hasOnly(` found. The difference is not
+ * cosmetic: an unbounded slice still reads a list when the block's OWN `hasOnly` clause has
+ * been deleted — it silently picks up a later block's — and the non-empty floor below is
+ * satisfied by that borrowed list, so the guard stays green over precisely the change that
+ * lets production accept any field set. Wildcard tokens are blanked first because
+ * `{groupId}` is not a block delimiter and counting it corrupts the depth.
+ */
+function ruleInviteKeys(): string[] {
+  const stripped = readFileSync(join(process.cwd(), 'firestore.rules'), 'utf8')
+    .replace(/\{[a-zA-Z]+\}/g, '<>');
+  const start = stripped.indexOf('match /users/<>/groupInvites/<> {');
+  if (start === -1) return [];
+
+  let depth = 0;
+  let end = -1;
+  for (let i = start; i < stripped.length; i += 1) {
+    if (stripped[i] === '{') {
+      depth += 1;
+    } else if (stripped[i] === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        end = i;
+        break;
+      }
+    }
+  }
+  if (end === -1) return [];
+
+  const list = stripped.slice(start, end).match(/hasOnly\(\s*\[([^\]]*)\]/);
+  if (!list) return [];
+  return [...list[1].matchAll(/'([a-zA-Z]+)'/g)].map((m) => m[1]).sort();
+}
+
+describe('inbjudningens faltuppsattning ar pinnad mot regeln (BIN-1127, harledd i BIN-1146)', () => {
+  // Nyckellistan kommer fran `ruleInviteKeys()` ovan, som laser den ur regeln.
+
+  // Utan det har golvet jamfor testet nedan ingenting mot ingenting den dag
+  // extraktionen slutar matcha: en trasig regex ger en tom lista, och en tom lista
+  // mot en tom lista ar gron. Samma vakuitetsklass som BIN-347-vakten stanger.
+  it('harledningen ur regeln ar inte tom', () => {
+    expect(
+      ruleInviteKeys().length,
+      'hittade ingen hasOnly-lista i groupInvites-blocket — regexen gick sonder eller blocket flyttade',
+    ).toBeGreaterThan(0);
+  });
+  it('inviteMemberByUid skriver exakt de falt regeln tillater', async () => {
     setDocMock.mockClear();
     await inviteMemberByUid({
       groupId: 'g-invite',
@@ -995,13 +1044,7 @@ describe('inbjudningens faltuppsattning ar pinnad mot regeln (BIN-1127)', () => 
       ([ref]) => (ref as { _path: string })._path === 'users/target-invite/groupInvites/g-invite',
     );
     expect(call).toBeDefined();
-    expect(Object.keys(call![1] as Record<string, unknown>).sort()).toEqual([
-      'fromDisplayName',
-      'fromUid',
-      'groupId',
-      'groupName',
-      'invitedAt',
-    ]);
+    expect(Object.keys(call![1] as Record<string, unknown>).sort()).toEqual(ruleInviteKeys());
   });
 
   it('groupId i nyttolasten ar samma varde som dokumentets id', async () => {
