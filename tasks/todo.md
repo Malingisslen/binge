@@ -171,7 +171,11 @@ en granskares strykning. Står kvar som öppet arbete.
   #26:s villkor om en och samma text per handling, mekaniskt i stället för i prosa. Routern
   kördes om; panelen oförändrad.
 - needs-human BIN-1194: reglerna tillåter inte den planerade fixen. Utdragen, tre vägar
-  skrivna på biljetten.
+  skrivna på biljetten. **BESVARAD 2026-09-16: Malin valde väg 3** — bygg ingenting, bokför
+  svepet som mekanismen. Levererat som `50477e1`: en daterad post i
+  `.claude/rules/accepted-deviations.md` plus en rättad kommentar i rosterkollens testfil.
+  Bunt B:s acceptanskriterier ovan beskriver den fix som ALDRIG byggdes och står kvar som
+  historik, inte som öppet arbete.
 - discovery BIN-1198: #8 hittade en fjärde kopia av samma defekt utanför buntens
   filuppsättning, `docs/role-responsibilities.md` rad 792 ("Pre-Blaze data loss"). Filad som
   BIN-1200 i stället för att vidga unionen och routa om panelen mitt i bygget.
