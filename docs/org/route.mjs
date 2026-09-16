@@ -357,6 +357,25 @@ export const TOOLING_CODE_FILES = new Set([
 // reviewer. What A1 requires is that the path reach a reviewer, and it now does.
 // Whether either lockfile has an owning role is not asserted here — derive it:
 //   node docs/org/route.mjs package-lock.json functions/package-lock.json
+//
+// DATED SUCCESSOR, BIN-1138, 2026-09-16. The block above is a decision record and is left
+// verbatim; this paragraph is what describes the repo today. Its closing sentence declines
+// to say whether either lockfile has an owner — and by the time that was written the answer
+// had already diverged for the two files. Run the command it names:
+//
+//   node docs/org/route.mjs package-lock.json        → reasonCode "unmapped-code", panel [14]
+//   node docs/org/route.mjs functions/package-lock.json → reasonCode "owned", panel [25]
+//
+// THE QUESTION THE TICKET ASKED — whose mandate a lockfile belongs to — is answered, not
+// merely booked: its CONTENT is the dependency graph, the same quantity as the manifest
+// beside it, so it sits with whoever owns the manifest. That is #25, and
+// docs/role-responsibilities.md already seats `functions/package-lock.json` there (BIN-1110),
+// which is where the divergence came from — not from a stray arrow catching a neighbour.
+// The CI pipeline that runs `npm ci` is a different quantity and a different seat; deriving
+// ownership from which workflow touches the file would be ownership by proximity.
+// The root lockfile is deliberately left on the #14 fallback: the bullet declining it in
+// docs/role-responsibilities.md explains that merely naming it in backticks there would own
+// it. Read the ownership answer from the command above, never from a sentence here.
 const CODE_ROOT_FILES = new Set([
   'firestore.rules',
   'firestore.indexes.json',

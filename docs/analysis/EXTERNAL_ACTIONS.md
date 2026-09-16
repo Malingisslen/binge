@@ -229,7 +229,11 @@ so a non-`/commit` deploy is at most 10 min stale (browsers revalidate immediate
 
 ## Blaze vs Spark
 
-Spark (free) covers current Firestore usage, hosting, and auth. Blaze is needed for Cloud
-Functions (all the crons above), PITR/backups, and exceeding the free tier. At this traffic a
-solo app costs < 5 SEK/mån in practice; the 25 SEK/mån budget (50/90/100% alerts) is the
-fail-closed guard.
+**This section makes no claim about which plan the project is on.** BIN-1198: the sentence
+that used to open it did, and it named the wrong one. The claim is STRUCK rather than
+restated. Read the plan and the budget cap where they are stated rather than from a sentence
+here; derive where that is:
+
+```
+grep -rn "Blaze" CLAUDE.md docs/RUNBOOK.md
+```
