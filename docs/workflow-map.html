@@ -789,7 +789,7 @@
         {
           "from": "web-app",
           "to": "web-app",
-          "payload": "BIN-645 entry leg — a signed-out tap on a write control does NOT sign in inline. StatusButton (title pages, 306859b) and QuickAddButton (the + badge on every poster grid and rail, 71b404b) both route to /login/ instead, because a first-time Google sign-in CREATES the account and account creation stamps termsAcceptedAt + ageConfirmedAt — consent whose notice lives only on /login. Both key 'signed out' on `uid` (the auth verdict), never on `user` (the Firestore profile), since AuthContext deliberately keeps uid and nulls the profile when a profile read fails. STILL INLINE, same gap, tracked as BIN-668: TopbarActions and HomePageClient's landing CTA.",
+          "payload": "BIN-645 entry leg — a signed-out tap on a write control does NOT sign in inline. StatusButton (title pages, 306859b) and QuickAddButton (the + badge on every poster grid and rail, 71b404b) both route to /login/ instead, because a first-time Google sign-in CREATES the account and account creation stamps termsAcceptedAt + ageConfirmedAt — consent whose notice lives only on /login. Both key 'signed out' on `uid` (the auth verdict), never on `user` (the Firestore profile), since AuthContext deliberately keeps uid and nulls the profile when a profile read fails.",
           "transport": "router.push('/login/')",
           "verified": true
         },
