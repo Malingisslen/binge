@@ -4353,8 +4353,9 @@ describe('lists items cap (BIN-1207)', () => {
 
   // ---- självborttagningsgrenen (editors + updatedAt) ----
   // Den grenen är MEDVETET inte gatad på antalet element. Exakt den skrivningen är vad
-  // både klientens raderingskaskad och serverns fältägda svep producerar, så att grinda
-  // den på ett orelaterat fälts storlek hade stoppat en radering på en lång lista.
+  // klientens raderingskaskad producerar (`batch.update(ref, { editors, updatedAt })` i
+  // src/lib/firebase/accountDeletion.ts), så att grinda den på ett orelaterat fälts
+  // storlek hade stoppat en radering på en lång lista.
   it('en avgående samredigerare kan stryka sig själv ur en lista över taket', async () => {
     await seedCollabList('cap-s1', { isPublic: true, editors: ['other_uid'], itemCount: MAX_LIST_ITEMS + 5 });
     await assertSucceeds(updateDoc(doc(otherDb(), 'lists', 'cap-s1'),
