@@ -6,6 +6,9 @@ import { Plus, Search, X } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { getPublicProfileCard } from '@/lib/firebase/publicProfile';
 import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/contexts/ToastContext';
+import { captureError } from '@/lib/sentry';
+import { withItemAdded, withItemRemoved, withItemReinserted } from '@/lib/listItemsPatch';
 import { usePublicList, useListMutations, useListEditors, useListFollows } from '@/hooks/useLists';
 import { usePageMeta } from '@/hooks/usePageMeta';
 import { useSearch } from '@/hooks/useTMDB';
@@ -27,6 +30,7 @@ export default function ListPageClient({ listId }: { listId: string }) {
   const { addEditor, removeEditor } = useListEditors();
   const { isFollowing, followList, unfollowList } = useListFollows();
   const queryClient = useQueryClient();
+  const { show } = useToast();
   const [showPicker, setShowPicker] = useState(false);
 
   const isOwner = !!(uid && list && list.uid === uid);
@@ -60,9 +64,16 @@ export default function ListPageClient({ listId }: { listId: string }) {
     );
   }
 
-  // Optimistisk cache-uppdatering — undviker en extra getDoc per mutation. Om
-  // skrivningen failar i Firestore skulle UI:n driva i sär från servern; en
-  // toast + manuell refresh är acceptabelt för v1.
+  // Optimistisk cache-uppdatering — undviker en extra getDoc per mutation. BIN-1207 gav
+  // `lists.items` ett tak i `firestore.rules`, så en vanlig användare kan numera få sin
+  // skrivning NEKAD, och en patch som ligger kvar efter ett nekande är en stående lögn:
+  // sidan visar titeln som tillagd medan Firestore vägrat.
+  //
+  // Återställningen är den INVERSA operationen på det värde som gäller när den körs,
+  // aldrig en ögonblicksbild från före skrivningen. Ingen av handlarna inväntas av sin
+  // anropare, så två skrivningar kan ligga i luften samtidigt, och en gammal kopia hade
+  // raderat en SAMTIDIG lyckad skrivning ur vyn. Funktionerna och den egenskapen ligger
+  // i `src/lib/listItemsPatch.ts`, med test.
   const patchCache = (mutate: (items: UserListItem[]) => UserListItem[]) => {
     queryClient.setQueryData<UserList | null>(
       ['public-list', listId],
@@ -70,6 +81,12 @@ export default function ListPageClient({ listId }: { listId: string }) {
     );
   };
 
+  // Ett kast här hade blivit en ohanterad rejection som ingen ser, eftersom anroparen
+  // inte inväntar löftet. Felet fångas därför i handlaren och rapporteras — en tyst
+  // svälj gör ett systematiskt nekande osynligt.
+  //
+  // Toast-texten namnger inte orsaken: klienten kan inte skilja ett takavslag från något
+  // annat nekande, och en gissad orsak är ett nytt omätt påstående.
   const handleAdd = async (r: TMDBSearchResult & { media_type: 'movie' | 'tv' }) => {
     const item: UserListItem = {
       tmdbId: r.id,
@@ -78,13 +95,27 @@ export default function ListPageClient({ listId }: { listId: string }) {
       posterPath: r.poster_path,
       addedAt: new Date(),
     };
-    patchCache(items => [...items, item]);
-    await addItemToList(listId, item);
+    patchCache(items => withItemAdded(items, item));
+    try {
+      await addItemToList(listId, item);
+    } catch (err) {
+      patchCache(items => withItemRemoved(items, item.tmdbId));
+      captureError(err, { scope: 'lists', kind: 'addItemToList' });
+      show('Kunde inte lägga till titeln i listan.');
+    }
   };
 
   const handleRemove = async (tmdbId: number) => {
-    patchCache(items => items.filter(i => i.tmdbId !== tmdbId));
-    await removeItemFromList(listId, tmdbId);
+    const index = list.items.findIndex(i => i.tmdbId === tmdbId);
+    const removed = index >= 0 ? list.items[index] : null;
+    patchCache(items => withItemRemoved(items, tmdbId));
+    try {
+      await removeItemFromList(listId, tmdbId);
+    } catch (err) {
+      if (removed) patchCache(items => withItemReinserted(items, removed, index));
+      captureError(err, { scope: 'lists', kind: 'removeItemFromList' });
+      show('Kunde inte ta bort titeln från listan.');
+    }
   };
 
   return (

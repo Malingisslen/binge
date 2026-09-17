@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 607,
+  "patternCount": 609,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -651,6 +651,8 @@
         "src/hooks/useWatchlist.ts",
         "src/lib/libraryView.test.ts",
         "src/lib/libraryView.ts",
+        "src/lib/listItemsPatch.test.ts",
+        "src/lib/listItemsPatch.ts",
         "src/lib/markedSeen.test.ts",
         "src/lib/markedSeen.ts",
         "src/lib/seenDate.test.ts",

@@ -1478,3 +1478,44 @@ bär ingen `SCHEMA_VERSION`-bump, ingen fil under `src/lib/firebase/` ändras av
 **Re-open when:** en frågbar väg till skickade inbjudningar byggs i avsändarens eget träd
 av andra skäl — då finns läsvägen redan och invändningen ovan är borta — eller en
 registerutdragsbegäran efterfrågar tidpunkten för en skickad inbjudan.
+
+---
+
+## BIN-1207: taket på `lists.items` binder ANTAL, aldrig byte — 2026-09-17
+
+Ett omfångsbeslut, inte en öppen brist. Fila inte "taket löser inte kostnadsargumentet"
+eller "en samredigerare kan fortfarande svälla dokumentet".
+
+**Vad som byggdes.** `firestore.rules` binder antalet element i `lists.items` på create,
+på ägarens update-gren och på samredigerarens update-gren, genom en hjälpare som tar
+före-antalet som parameter. Härled talet och grenarna hellre än att lita på den här
+meningen:
+
+```
+grep -n "maxListItems\|itemsWithinCap" firestore.rules
+```
+
+**Vad taket INTE gör, och det är hela posten.** Regelspråket kan inte inspektera ett
+element inuti en array, så per-element-storlek går inte att binda. En samredigerare som
+skriver direkt mot SDK:t, förbi appens TMDB-härledda form, kan fylla varje element med
+långa strängar. Dokumentets övre gräns är då Firestores egen, precis som före taket.
+Taket binder alltså ORGANISK tillväxt genom appen; det sänker inte det värsta fall en
+motiverad samredigerare kan nå, och det säger ingenting om hur ofta dokumentet läses.
+
+**Why:** #4 Säkerhetsarkitektens villkor 3 i den blinda panelen 2026-09-17, som krävde
+att det skrivs ned daterat i stället för att taket shippas som en underförstådd
+fullständig lösning på kostnadsfrågan. Alternativet — att binda per-element-storlek —
+finns inte i regelspråket, och kretsen som kan skriva är inbjuden av ägaren.
+
+**INTE accepterat, alltså fortfarande fileable — tre saker:**
+1. **Att elementens FORM skulle vara oprövad i en yta som tar emot fritext.** Accepten
+   vilar på att det appen skriver är en TMDB-härledd titel. En notis per titel eller en
+   redigerbar beskrivning per element vänder beslutet, precis som BIN-1208:s post säger
+   om upphovsmärkning.
+2. **Att posten citeras för något annat än `lists.items`.** Den säger ingenting om något
+   annat fält och ingenting om titellängd, som är BIN-1170.
+3. **Att samredigering öppnas för någon ägaren inte har bjudit in.**
+
+**Re-open when:** någon av de tre ovan inträffar. Det finns ingen loggrad att bevaka —
+utlösaren är en produktändring, inte ett driftläge.
+

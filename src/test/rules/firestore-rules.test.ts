@@ -4086,12 +4086,43 @@ describe('sessions/{id}/participants — key list + displayName bound (BIN-1145,
 });
 
 // BIN-100: collaborative lists — owner manages editors[], editors edit items only.
-async function seedCollabList(listId: string, opts: { isPublic: boolean; editors: string[] }) {
+// BIN-1207. Taket bor i `firestore.rules`. Läs det DÄRIFRÅN i stället för att skriva av
+// talet: ett test som bär sin egen kopia av en delad konstant står kvar grönt när regeln
+// flyttar sig. Mönstret ankrar på DEKLARATIONEN, inte på värdet ensamt — en kommentar
+// som råkar nämna samma tal ska inte kunna uppfylla det.
+const MAX_LIST_ITEMS = (() => {
+  const m = /function maxListItems\(\)\s*\{\s*return\s+(\d+);\s*\}/
+    .exec(readFileSync(resolve(__dirname, '../../../firestore.rules'), 'utf8'));
+  return m ? Number(m[1]) : NaN;
+})();
+
+// Bygg arrayen programmatiskt — `seedCollabList` hårdkodade `items: []`, och ett TOMT
+// men rätt-typat fält gör den tysta muteringen tyst: `resource.data` i stället för
+// `request.resource.data` läser likadant när båda är tomma.
+function listItems(n: number, offset = 0) {
+  return Array.from({ length: n }, (_, i) => ({ tmdbId: offset + i + 1, mediaType: 'movie' }));
+}
+
+function listCreatePayload(extra: Record<string, unknown>) {
+  return {
+    uid: OWNER, title: 'Ny lista', description: '', isPublic: true,
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp(), ...extra,
+  };
+}
+
+async function seedCollabList(
+  listId: string,
+  opts: { isPublic: boolean; editors: string[]; itemCount?: number; omitItems?: boolean },
+) {
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
-    await setDoc(doc(ctx.firestore(), 'lists', listId), {
+    const base: Record<string, unknown> = {
       uid: OWNER, title: 'Delad lista', description: '', isPublic: opts.isPublic,
-      items: [], editors: opts.editors, createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
-    });
+      editors: opts.editors, createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    };
+    // `omitItems` seedar den legacy-form som saknar fältet helt. Utan den kan inget test
+    // visa att en ovillkorlig items-klausul hade låst ägaren ute för alltid.
+    if (!opts.omitItems) base.items = listItems(opts.itemCount ?? 0);
+    await setDoc(doc(ctx.firestore(), 'lists', listId), base);
   });
 }
 
@@ -4187,6 +4218,168 @@ describe('lists collaborative editing (BIN-100)', () => {
     await seedCollabList('cl15', { isPublic: true, editors: ['other_uid'] });
     await assertSucceeds(updateDoc(doc(otherDb(), 'lists', 'cl15'),
       { items: [{ tmdbId: 9, mediaType: 'tv' }], updatedAt: serverTimestamp() }));
+  });
+});
+
+// BIN-1207 — taket på ANTALET element i lists.items, på alla tre skrivvägarna.
+//
+// Taket binder antal. Det binder inte byte och inte elementens form; se posten daterad
+// 2026-09-17 i .claude/rules/accepted-deviations.md.
+//
+// Spärrhaken är `after <= tak || after <= before`. Den andra halvan är det som gör att en
+// lista som hunnit växa förbi taket fortfarande går att krympa OCH att få sina övriga
+// fält redigerade — ett strikt `<` hade låst ägaren ute från sin egen lista.
+describe('lists items cap (BIN-1207)', () => {
+  // Golvet körs FÖRE varje gränstest. Utan det ger ett regex som slutat matcha NaN, och
+  // varje jämförelse nedan blir meningslös i stället för högljudd.
+  it('taket går att läsa ur firestore.rules', () => {
+    expect(Number.isInteger(MAX_LIST_ITEMS)).toBe(true);
+    expect(MAX_LIST_ITEMS).toBeGreaterThan(0);
+  });
+
+  // ---- create ----
+  it('create MED exakt taket går igenom', async () => {
+    await assertSucceeds(setDoc(doc(ownerDb(), 'lists', 'cap-c1'),
+      listCreatePayload({ items: listItems(MAX_LIST_ITEMS) })));
+  });
+  it('create ETT över taket nekas', async () => {
+    await assertFails(setDoc(doc(ownerDb(), 'lists', 'cap-c2'),
+      listCreatePayload({ items: listItems(MAX_LIST_ITEMS + 1) })));
+  });
+  // Typkontrollen fanns före BIN-1207 bara på samredigerarens gren. De här två är alltså
+  // ny täckning på vägar som inte hade någon — utan dem kan `items is list` tas bort ur
+  // isValidList med hela sviten grön.
+  it('create med items som en sträng nekas', async () => {
+    await assertFails(setDoc(doc(ownerDb(), 'lists', 'cap-c3'),
+      listCreatePayload({ items: 'not-a-list' })));
+  });
+  it('create HELT utan items går igenom', async () => {
+    await assertSucceeds(setDoc(doc(ownerDb(), 'lists', 'cap-c4'), listCreatePayload({})));
+  });
+
+  // ---- ägarens update-gren ----
+  it('ägaren kan skriva exakt taket', async () => {
+    await seedCollabList('cap-o1', { isPublic: true, editors: [] });
+    await assertSucceeds(updateDoc(doc(ownerDb(), 'lists', 'cap-o1'),
+      { items: listItems(MAX_LIST_ITEMS), updatedAt: serverTimestamp() }));
+  });
+  it('ägaren nekas ett över taket', async () => {
+    await seedCollabList('cap-o2', { isPublic: true, editors: [] });
+    await assertFails(updateDoc(doc(ownerDb(), 'lists', 'cap-o2'),
+      { items: listItems(MAX_LIST_ITEMS + 1), updatedAt: serverTimestamp() }));
+  });
+  it('ägaren nekas items som en sträng', async () => {
+    await seedCollabList('cap-o3', { isPublic: true, editors: [] });
+    await assertFails(updateDoc(doc(ownerDb(), 'lists', 'cap-o3'),
+      { items: 'not-a-list', updatedAt: serverTimestamp() }));
+  });
+  // Spegeln av samredigerartestet längre ner. De två grenarna har var sitt eget
+  // före-antalsuttryck, så att den ena är rätt kopplad säger ingenting om den andra.
+  it('ägaren kan INTE växa en lista som redan ligger över taket', async () => {
+    await seedCollabList('cap-o4', { isPublic: true, editors: [], itemCount: MAX_LIST_ITEMS + 5 });
+    await assertFails(updateDoc(doc(ownerDb(), 'lists', 'cap-o4'),
+      { items: listItems(MAX_LIST_ITEMS + 6), updatedAt: serverTimestamp() }));
+  });
+  it('ägaren kan krympa en lista som ligger över taket', async () => {
+    await seedCollabList('cap-o5', { isPublic: true, editors: [], itemCount: MAX_LIST_ITEMS + 5 });
+    await assertSucceeds(updateDoc(doc(ownerDb(), 'lists', 'cap-o5'),
+      { items: listItems(MAX_LIST_ITEMS + 4), updatedAt: serverTimestamp() }));
+  });
+  // Låsningsfällan biljetten namnger: addEditor/removeEditor rör inte items, men regeln
+  // ser hela efterdokumentet, så after == before. Ett strikt `<` hade nekat det här.
+  it('ägaren kan ändra editors på en lista som ligger över taket', async () => {
+    await seedCollabList('cap-o6', { isPublic: true, editors: [], itemCount: MAX_LIST_ITEMS + 5 });
+    await assertSucceeds(updateDoc(doc(ownerDb(), 'lists', 'cap-o6'),
+      { editors: ['other_uid'], updatedAt: serverTimestamp() }));
+  });
+  it('ägaren kan fortfarande redigera ett dokument som saknar items helt', async () => {
+    await seedCollabList('cap-o7', { isPublic: true, editors: [], omitItems: true });
+    await assertSucceeds(updateDoc(doc(ownerDb(), 'lists', 'cap-o7'),
+      { title: 'Nytt namn', updatedAt: serverTimestamp() }));
+  });
+
+  // ---- samredigerarens update-gren ----
+  it('samredigeraren kan skriva exakt taket', async () => {
+    await seedCollabList('cap-e1', { isPublic: true, editors: ['other_uid'], itemCount: MAX_LIST_ITEMS - 1 });
+    await assertSucceeds(updateDoc(doc(otherDb(), 'lists', 'cap-e1'),
+      { items: listItems(MAX_LIST_ITEMS), updatedAt: serverTimestamp() }));
+  });
+  it('samredigeraren nekas ett över taket', async () => {
+    await seedCollabList('cap-e2', { isPublic: true, editors: ['other_uid'], itemCount: MAX_LIST_ITEMS });
+    await assertFails(updateDoc(doc(otherDb(), 'lists', 'cap-e2'),
+      { items: listItems(MAX_LIST_ITEMS + 1), updatedAt: serverTimestamp() }));
+  });
+  // arrayUnion är den form addItemToList faktiskt skickar. Transformen löses upp FÖRE
+  // regelutvärderingen, så den här vägen prövar taket mot produktionens egen skrivform
+  // i stället för mot en literal array.
+  it('samredigerarens arrayUnion nekas när den korsar taket', async () => {
+    await seedCollabList('cap-e3', { isPublic: true, editors: ['other_uid'], itemCount: MAX_LIST_ITEMS });
+    await assertFails(updateDoc(doc(otherDb(), 'lists', 'cap-e3'),
+      { items: arrayUnion({ tmdbId: 999001, mediaType: 'movie' }), updatedAt: serverTimestamp() }));
+  });
+  it('samredigerarens arrayUnion går igenom när den landar exakt på taket', async () => {
+    await seedCollabList('cap-e4', { isPublic: true, editors: ['other_uid'], itemCount: MAX_LIST_ITEMS - 1 });
+    await assertSucceeds(updateDoc(doc(otherDb(), 'lists', 'cap-e4'),
+      { items: arrayUnion({ tmdbId: 999002, mediaType: 'movie' }), updatedAt: serverTimestamp() }));
+  });
+  it('samredigeraren kan krympa en lista som ligger över taket', async () => {
+    await seedCollabList('cap-e5', { isPublic: true, editors: ['other_uid'], itemCount: MAX_LIST_ITEMS + 5 });
+    await assertSucceeds(updateDoc(doc(otherDb(), 'lists', 'cap-e5'),
+      { items: listItems(MAX_LIST_ITEMS + 4), updatedAt: serverTimestamp() }));
+  });
+  // Faller på `after == before`-sidan av spärrhaken. Utan det här testet överlever en
+  // mutering som drar åt undantaget till ett strikt `<`: samredigeraren kan då inte
+  // längre ordna om eller ersätta en lång delad lista, bara göra den kortare.
+  it('samredigeraren kan skriva en LIKA lång lista över taket (omordning)', async () => {
+    await seedCollabList('cap-e6', { isPublic: true, editors: ['other_uid'], itemCount: MAX_LIST_ITEMS + 5 });
+    await assertSucceeds(updateDoc(doc(otherDb(), 'lists', 'cap-e6'),
+      { items: listItems(MAX_LIST_ITEMS + 5, 500000), updatedAt: serverTimestamp() }));
+  });
+  // Samredigerargrenen krävde ett `items` som är en lista redan före taket, så en
+  // skrivning mot ett dokument utan fältet nekades även då. Den här grenen behåller det
+  // kravet — hjälparens frånvaro-tolerans finns för ägaren och create, inte här.
+  it('samredigeraren nekas på ett dokument som saknar items helt', async () => {
+    await seedCollabList('cap-e7', { isPublic: true, editors: ['other_uid'], omitItems: true });
+    await assertFails(updateDoc(doc(otherDb(), 'lists', 'cap-e7'),
+      { updatedAt: serverTimestamp() }));
+  });
+  // Utan kravet att fältet finns hade den delade hjälparens frånvaro-gren gjort det här
+  // till en NY skrivning samredigeraren får göra. Den nekades före taket och nekas nu.
+  it('samredigeraren kan inte radera hela items med deleteField', async () => {
+    await seedCollabList('cap-e8', { isPublic: true, editors: ['other_uid'], itemCount: 3 });
+    await assertFails(updateDoc(doc(otherDb(), 'lists', 'cap-e8'),
+      { items: deleteField(), updatedAt: serverTimestamp() }));
+  });
+
+  // ---- självborttagningsgrenen (editors + updatedAt) ----
+  // Den grenen är MEDVETET inte gatad på antalet element. Exakt den skrivningen är vad
+  // både klientens raderingskaskad och serverns fältägda svep producerar, så att grinda
+  // den på ett orelaterat fälts storlek hade stoppat en radering på en lång lista.
+  it('en avgående samredigerare kan stryka sig själv ur en lista över taket', async () => {
+    await seedCollabList('cap-s1', { isPublic: true, editors: ['other_uid'], itemCount: MAX_LIST_ITEMS + 5 });
+    await assertSucceeds(updateDoc(doc(otherDb(), 'lists', 'cap-s1'),
+      { editors: [], updatedAt: serverTimestamp() }));
+  });
+
+  // ---- typklausulen går inte runt via krympundantaget ----
+  // BIN-1195:s negativa typfall, körda mot en seed som redan ligger över taket. Utan dem
+  // kan krympundantaget skrivas så att det kortsluter typkontrollen: en sträng har
+  // ingen size(), men en gren som släpper igenom "allt som inte växer" hade aldrig
+  // frågat.
+  it('krympundantaget släpper inte igenom items som en sträng', async () => {
+    await seedCollabList('cap-t1', { isPublic: true, editors: ['other_uid'], itemCount: MAX_LIST_ITEMS + 5 });
+    await assertFails(updateDoc(doc(otherDb(), 'lists', 'cap-t1'),
+      { items: 'not-a-list', updatedAt: serverTimestamp() }));
+  });
+  it('krympundantaget släpper inte igenom items som ett tal', async () => {
+    await seedCollabList('cap-t2', { isPublic: true, editors: ['other_uid'], itemCount: MAX_LIST_ITEMS + 5 });
+    await assertFails(updateDoc(doc(otherDb(), 'lists', 'cap-t2'),
+      { items: 5, updatedAt: serverTimestamp() }));
+  });
+  it('krympundantaget släpper inte igenom items som en map', async () => {
+    await seedCollabList('cap-t3', { isPublic: true, editors: ['other_uid'], itemCount: MAX_LIST_ITEMS + 5 });
+    await assertFails(updateDoc(doc(otherDb(), 'lists', 'cap-t3'),
+      { items: { tmdbId: 1 }, updatedAt: serverTimestamp() }));
   });
 });
 

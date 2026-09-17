@@ -73,7 +73,14 @@ const REPO = resolve(HERE, '..');
 // BIN-1195, 2026-09-16: raised to what `numTotalTests` reported with the co-editor items
 // type gate's tests in place — three negative type cases plus the two shapes production
 // actually writes (an arrayUnion transform and a filtered literal array).
-export const MIN_TESTS = 640;
+// BIN-1207, 2026-09-17: raised to what `numTotalTests` reported with the lists items cap
+// tests in place — the write paths at the boundary, the shrink exemption on both update
+// branches, the departing co-editor's self-removal over the cap, the legacy documents
+// without an `items` field, BIN-1195's negative type cases re-run against an over-cap
+// seed, and the co-editor's `deleteField()` on `items`, which the branch refused before
+// the cap and must keep refusing. Measured with `npm run test:rules -- --port 8123`
+// (port 8080 is held by another project on this machine), not counted by hand.
+export const MIN_TESTS = 664;
 
 const VITEST_ARGS = ['run', '--config', 'vitest.rules.config.ts'];
 
