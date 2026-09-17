@@ -33,7 +33,9 @@ full panel, fyller anslaget.
   är vad `src/lib/watchlistWrites.ts:420` gör. Punkt 1–3 ligger i `C:/claude-plugins` och
   får inte röras från en session som spawnar granskare. Kommenteras, byggs inte.
 - **BIN-1211 är Malins val.** Biljetten säger själv "Byggs inte innan hon valt".
-  `git grep -n "UgcActionsMenu" -- src` ger två monteringar, båda i `ReviewList.tsx`.
+  I utdatan från `git grep -n "UgcActionsMenu" -- src` är två av träffarna monteringar,
+  båda i `ReviewList.tsx`; resten är importen, definitionen och ett omnämnande i en
+  kommentar.
   Needs-approval.
 - **BIN-1210 rör delad automation.** `claim-lint.mjs` ligger i `C:/claude-plugins` och delas
   med Synat. Samma spärr som BIN-959. Needs-you: egen session.
@@ -125,15 +127,15 @@ Acceptanskriterier:
 
 - [deviation] BIN-1193: planen räknade sex kopior. #27:s blinda kritik mätte fram två till,
   båda med lydelsen "the one sweep" i stället för "the only sweep" — `orphans.ts:167` och
-  `retention-cleanup-orchestrator.test.ts:875`. Åtta strukna. Härled med
-  `grep -rniE "(the )?(only|one) sweep" functions/src src/test --include=*.ts`.
+  `retention-cleanup-orchestrator.test.ts:875`. Vilka meningar som ströks står i
+  `git show 61a5d9d` och i den commitens egen bulletlista.
 - [deviation] BIN-1193: strykningen på `runCleanup.ts:943` tog HELA bisatsen, inte frasen
   — att bara stryka "cannot starve the rest" hade lämnat "so a single failure — an Auth
   outage, a missing index —" utan objekt. #27:s villkor 3.
 - [discovery] BIN-1193: ett nionde exklusivitetspåstående står kvar på `runCleanup.ts:1145`
-  ("the one sweep that recursively deletes a library"). `grep -rn "recursiveDelete"
-  functions/src/retentionCleanup` ger två anropsställen, ett på en session och ett på
-  `users/{uid}`. Sannolikt sant, oräknat, utanför biljettens uppräkning. Lämnat orört.
+  ("the one sweep that recursively deletes a library"). I utdatan från
+  `grep -rn "recursiveDelete" functions/src/retentionCleanup` är två av träffarna
+  anropsställen, ett på en session och ett på `users/{uid}`; resten är prosa och loggtext. Sannolikt sant, oräknat, utanför biljettens uppräkning. Lämnat orört.
 - [needs-human] Verktyget för att SKAPA Linear-biljetter är inte tillgängligt i den här
   sessionen. Följdfynden är därför skrivna som fullständiga kommentarer på närmaste öppna
   biljett i stället, och taket rapporteras till Malin. "Kunde inte filas" och "hittade
