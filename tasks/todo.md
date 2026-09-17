@@ -1,3 +1,139 @@
+# Sprint 2026-09-17 — 3 biljetter, 2 buntar
+
+Rent träd vid start (`git status --porcelain` tomt), i fas med origin, Todo och In Progress
+tomma, inga obockade uppgifter ovanför förra sprintens arkivseparator.
+
+Routningen nedan är körd vid URVALET på varje bunts faktiska filuppsättning. Den körs om
+före varje kritik och mot `git diff --cached --name-only` före VARJE commit — aldrig ärvd
+härifrån.
+
+## Varför bara tre biljetter
+
+Den bindande kostnaden i det här repot är granskningsvarven, inte
+bygget: push-grinden kräver EN körning som läst varje granskningsbar fil i hela intervallet,
+och den summeras inte av per-bunts-granskningar. Tre biljetter i två buntar, varav en med
+full panel, fyller anslaget.
+
+## Mätt vid urvalet (grep-of-main, före klassning)
+
+- **BIN-1209 håller.** `verdict()` i `scripts/run-rules-tests.mjs` grenar på `exitCode`,
+  `count` och `count < min`. Ingen gren nämner `numPendingTests`, och `main()` läser bara
+  `numTotalTests` ur rapporten.
+- **BIN-1150 håller, och dess tolkningsfråga är REDAN BESVARAD.** Kommentaren daterad
+  2026-09-13 bokför att #5 Legal/GDPR och #6 DPO båda svarade (b) blint och att ingen
+  eskalerade: leveransen är en daterad post i `.claude/rules/accepted-deviations.md`, inte
+  ett `groupInvitesSent`-fält. `grep -rn "groupInvites" src/lib/firebase/dataExport.ts`
+  visar att exporten fortfarande bara läser det egna trädet, alltså INKOMNA inbjudningar.
+  `grep -n "^## " .claude/rules/accepted-deviations.md` namnger ingen post för BIN-1150.
+- **BIN-1160 håller.** `grep -n "displayName" docs/data-export-format.md` träffar `profile`-
+  och `publicProfile`-raderna och ingen rad om Auth-postens egen kopia. `grep -rn
+  "updateProfile(" src` ger två skrivvägar i `src/contexts/AuthContext.tsx`.
+- **BIN-1199 är OBSOLET.** Biljetten ber om en mätning av om PITR är påslaget.
+  `grep -rn -i "PITR" docs/analysis/EXTERNAL_ACTIONS.md` svarar med ett mätt utfall daterat
+  i dag, landat i `a7d5efc`. Stängs med den shan, byggs inte.
+- **BIN-1179 §2 är byggd av någon annan biljett.** `git grep -n "getGroupOnce" -- src
+  functions` ger noll träffar; funktionen raderades i `87c2b18` under BIN-1182. §1 kvarstår
+  och kräver en produktionsräkning som behörighetsklassificeraren nekar — Needs-you, inte
+  en bunt.
+
+## Bunt A — BIN-1209: regelsvitens golv är blint för `.skip()` [Tier A] · build
+
+Router (`scripts/run-rules-tests.mjs`, `scripts/run-rules-tests.test.mjs`):
+**medium** · panel `#7 QA / Test Engineer (automated)` → EN blind kritik före bygget.
+
+Vad som byggs: `verdict()` får läsa antalet överhoppade test och fälla när det är skilt
+från noll, och `main()` matar in fältet ur samma JSON-rapport som antalet redan läses ur.
+
+Acceptanskriterier (biljettens egna, ordagrant):
+
+1. En körning där ett test är `.skip()`:at fälls, med ett meddelande som säger vilket fält
+   som fällde. *(diff)*
+2. Kontrollen drivs av `verdict()`s egen testsvit med fabricerad indata, utan emulator. *(diff)*
+3. Båda riktningarna prövas: en frisk körning passerar, en med ett överhoppat test faller. *(diff)*
+4. Ingen ny mening som påstår vad golvet i övrigt bevisar — skriptets huvud beskriver redan
+   sina andra blinda fläckar. *(diff)*
+
+Bindande tillägg från urvalet:
+
+5. Muteringen som tar bort den nya grenen fäller minst ett test i
+   `scripts/run-rules-tests.test.mjs`, och mutanten hävdas närvarande FÖRE och EFTER
+   svitkörningen i ETT kommando. *(diff)*
+6. `main()`s inläsning av det nya fältet är pinnad av ett källkodsskannande testfall som
+   ankrar på anropet, inte på fältnamnet ensamt — fältnamnet står också i prosan. *(diff)*
+
+## Bunt B — BIN-1150 + BIN-1160: två luckor i artikel 20-exporten [Tier A] · build
+
+Router (`.claude/rules/accepted-deviations.md`, `docs/data-export-format.md`,
+`src/lib/firebase/dataExport.ts`): **top** · `reasonCode: high-stakes` ·
+panel `[27, 5, 4, 6, 25]` → FULL PANEL, blint, före bygget.
+
+`src/lib/firebase/dataExport.ts` står i unionen därför att BIN-1160:s fråga är om filen
+ska ändras. Faller svaret ut åt "behövs inte" krymper unionen till de två dokumenten, och
+routningen körs då om före commit — en krympt union kan dra in en roll som inte kritiserat.
+
+De ligger i samma bunt för att de är samma fråga ställd om två fält i samma export, med
+samma roller. De committas var för sig om routningen mot `git diff --cached --name-only`
+skiljer sig åt.
+
+**BIN-1150** — beslutet är fattat, bara posten återstår:
+
+1. En daterad post i `.claude/rules/accepted-deviations.md` bokför att en SKICKAD
+   gruppinbjudan inte speglas i avsändarens export, med rollernas eget skäl: dokumentet
+   ligger i mottagarens träd och läsregeln binder `isOwner(uid)`. *(diff)*
+2. Posten namnger att både #5 och #6 svarade, eftersom #6:s villkor var medundertecknande. *(diff)*
+3. Ingen kod i `src/lib/firebase/` ändras för den här halvan. *(diff)*
+4. `SCHEMA_VERSION` bumpas inte av den här halvan. *(diff)*
+
+**BIN-1160** — frågan är öppen och avgörs av panelen:
+
+5. Antingen bär exporten Auth-postens `displayName` och `docs/data-export-format.md`
+   versionsbumpas, eller så står uteslutningen SKRIVEN i samma dokument på samma form som
+   de uteslutningar det redan listar. Inte underförstådd. *(diff)*
+6. Väljs uteslutningen anger den varför — det som gör den rimlig är att båda lagringarna
+   skrivs av samma väg sedan BIN-1154, och det ska gå att motsäga med ett kommando. *(diff)*
+7. Ingen mening räknar upp hur många lagringar, uteslutningar eller skrivvägar det finns. *(diff)*
+
+Panelens must-haves viks in här som bindande kriterier innan en rad skrivs.
+
+## Needs you — produktval som är dina (byggs inte)
+
+- **BIN-1139** — tre sidor lovar att en materiell ändring meddelas i appen; ingen sådan
+  mekanism finns. Tre vägar, och biljettens eget kriterium 4 kräver att du godkänner
+  lydelsen. Publicerad juridik.
+- **BIN-1211** — listor och användare går att anmäla i schemat och i admin, men ingen yta
+  i appen kan skapa en anmälan. Att bygga ytan är en ny kontroll.
+- **BIN-1207** — `lists.items` har inget tak på antal element. Panelen var genuint delad
+  och frågan eskalerades till dig; den ligger kvar där.
+- **BIN-1118** — ingen väg att lämna över en grupp utan att radera den. Märkt `Feature`.
+- **BIN-521** — bundle-rådgivaren. Märkt `idea`, och ditt eget beslut 2026-07-18 var att
+  den ska genom `/stakeholder-review` före kod.
+
+## Needs you (Tier D) — kräver konsol, produktionsdata eller din hand
+
+- **BIN-454** — `tmdbFieldsSweep`: flippen av `mutateEnabled` är din Firebase Console-
+  åtgärd, gatad på BIN-468 och pekad mot ~november. En sprint får aldrig göra den.
+- **BIN-1144** — är App Check faktiskt påslaget för Firestore? Går inte att läsa ur repot.
+- **BIN-1121** — finns det grupper där `ownerUid` inte står i `memberUids`? Produktionsläsning.
+- **BIN-1179 §1** — finns det grupper som saknar namnprojektion? Produktionsräkning;
+  behörighetsklassificeraren nekade den 2026-09-13.
+- **BIN-1114** — `REFRESH_DERIVE_TIMEOUT_MS` ska sättas med data från produktionsloggen.
+
+## Stängs utan kod
+
+- **BIN-1199** — obsolet, premissen borta. Stängs med `a7d5efc`.
+
+## Deviation log
+
+## Efterarbete
+
+- [ ] Följdbiljetter filade FÖRE commit
+- [ ] Granskningsloggen greppad på varje granskares EGET agent-id, per körning
+- [ ] Routern omkörd mot `git diff --cached --name-only` före VARJE commit
+- [ ] Push-grinden budgeterad som ett eget varv
+- [ ] Lärdomar + digest i samma redigering
+
+---
+
 # Sprint 2026-09-16c — 5 biljetter, 4 buntar
 
 Rent träd vid start (`git status --porcelain` tomt), i fas med origin, Todo och In Progress tomma.

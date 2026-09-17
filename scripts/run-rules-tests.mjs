@@ -88,8 +88,15 @@ const REPORT_REL = 'node_modules/.cache/rules-report.json';
  * `count` is `numTotalTests` from vitest's JSON reporter, or null when the report
  * could not be read or parsed. null is a FAILURE, never "no floor was broken" —
  * an unreadable report and a healthy run must not produce the same verdict.
+ *
+ * `pending` and `todo` are `numPendingTests` and `numTodoTests` from the same report.
+ * BIN-1209: `numTotalTests` is the count of tests DISCOVERED, so a `.skip()`-ed or
+ * `.todo()`-ed test is inside it. A floor read from that number alone is satisfied by a
+ * run in which the very test the floor was raised for never executed. They are two
+ * separate, non-overlapping fields in vitest's reporter, so both are read; an absent or
+ * non-integer value in either is a FAILURE for the same reason `count` is.
  */
-export function verdict({ exitCode, count, min = MIN_TESTS }) {
+export function verdict({ exitCode, count, pending, todo, min = MIN_TESTS }) {
   if (exitCode !== 0) {
     return { ok: false, reason: 'child-failed', message: `Regeltesterna avslutade med ${exitCode}.` };
   }
@@ -99,6 +106,27 @@ export function verdict({ exitCode, count, min = MIN_TESTS }) {
       reason: 'unreadable-report',
       message: 'Vitests JSON-rapport gick inte att lasa. En korning utan lasbart antal '
         + 'raknas som misslyckad — annars ar "korde inget" och "allt gront" samma utfall.',
+    };
+  }
+  if (!Number.isInteger(pending) || !Number.isInteger(todo)) {
+    return {
+      ok: false,
+      reason: 'unreadable-modes',
+      message: 'numPendingTests eller numTodoTests gick inte att lasa ur rapporten. Utan dem '
+        + 'sager antalet inget om hur manga test som faktiskt kordes.',
+    };
+  }
+  // Before the floor on purpose: with either of these above zero the count is inflated,
+  // so "the floor held" would be a verdict about a number that is not what it claims.
+  if (pending > 0 || todo > 0) {
+    const named = pending > 0
+      ? `numPendingTests = ${pending}`
+      : `numTodoTests = ${todo}`;
+    return {
+      ok: false,
+      reason: 'tests-not-run',
+      message: `${named}. Overhoppade test raknas in i ${count}, sa golvet bevisar inte att `
+        + 'testet det hojdes for kordes. Ta bort .skip()/.todo() eller ta bort testet.',
     };
   }
   if (count < min) {
@@ -206,11 +234,16 @@ function main(argv) {
   const output = `${run.stdout ?? ''}${run.stderr ?? ''}`;
   process.stdout.write(output);
 
-  let count = null;
-  try { count = JSON.parse(readFileSync(reportPath, 'utf8')).numTotalTests ?? null; }
-  catch { count = null; }
+  let report = null;
+  try { report = JSON.parse(readFileSync(reportPath, 'utf8')); }
+  catch { report = null; }
 
-  const v = verdict({ exitCode: run.status ?? 1, count });
+  const v = verdict({
+    exitCode: run.status ?? 1,
+    count: report?.numTotalTests ?? null,
+    pending: report?.numPendingTests ?? null,
+    todo: report?.numTodoTests ?? null,
+  });
   if (v.ok) {
     process.stdout.write(`\n[rules] ${v.message}\n`);
     return 0;

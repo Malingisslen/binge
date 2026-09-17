@@ -2008,3 +2008,13 @@ falt skrivaren skriver - den andrades aldrig. Commitens faktiska union byter dar
 **Regel:** greppa loggen på granskarens EGET agent-id direkt när den rapporterar, inte när commiten nekas. Fältet är `"t":"verdict"`, så en grep på `"verdict":` ger noll och ser ut som en död hook. Att lägga kravet först i utskicket räcker inte — det måste också sägas att sista raden ska vara vanlig assistenttext och att svaret inte får levereras enbart via en hand-back. Följdfälla: `grep`/`wc` mot loggens sökväg NEKAS av dess egen vakt, som inte skiljer läsning från skrivning, så läs den med Read- eller Grep-verktyget.
 
 **Exempel:** sprinten 2026-09-16c, bunt D. `binge-security-reviewer` och `binge-test-reviewer` gav fullständig lästäckning och `pass` i vardera två körningar utan en enda `t:"verdict"`-rad, medan `binge-integration-reviewer` bokförde sin dom i båda sina körningar, inklusive den som slutade `fail`. Två bokföringskörningar till löste det.
+
+---
+
+### [Testing] Ett muteringsharness vars RENA KONTROLL inte går att läsa gör "mutanten dödad" och "mätningen förstörd" till samma sträng
+
+**Trigger:** du skriver ett skript som applicerar en mutering, kör sviten och rapporterar utfallet.
+
+**Regel:** kör den rena kontrollen först och gör den till ett ABORT-villkor — utan den betyder ingen rad under den någonting. En rapportflagga som ändrar utdataformatet gör utfallsregexen tyst verkningslös, och då rapporteras varje mutering som fälld av exakt samma skäl som en frisk körning skulle vara. Läs exit-koden och antalet FÄLLDA test; en `passed`-siffra matchar gärna radraden om testfiler i stället för testraden, så den kan vara rätt sorts tal om fel storhet.
+
+**Exempel:** BIN-1209, sprinten 2026-09-17. Första harnesset körde med `--reporter=basic`; den rena kontrollen gav exit 1 och oläsbar utdata, och alla tre muteringarna såg identiska ut med den. Andra harnesset avbröt på kontrollen först, och samma tre muteringar gav då 3, 2 respektive 1 fällda test mot en grön kontroll.

@@ -7,11 +7,13 @@
 // an emulator would have to be broken on purpose to produce those states. The pure
 // `verdict()` boundary is what makes them reachable at all.
 //
-// Three mutations must fail this file. They are named next to the cases they belong
-// to, so a future reader can re-run them rather than trust this sentence:
-//   1. drop the `count < min` branch          → "a shrunken suite" goes green
-//   2. drop the `count === null` branch       → "an unreadable report" goes green
-//   3. return ok on a non-zero exit code      → "the child failed" goes green
+// The mutations that must fail this file are named next to the cases they belong to,
+// so a future reader can re-run them rather than trust this sentence:
+//   - drop the `count < min` branch           → "a shrunken suite" goes green
+//   - drop the `count === null` branch        → "an unreadable report" goes green
+//   - return ok on a non-zero exit code       → "the child failed" goes green
+//   - drop the `pending > 0 || todo > 0` branch → a skipped test goes green
+//   - drop the `Number.isInteger(pending)` branch → an absent field goes green
 
 import { test, expect, describe } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -22,41 +24,88 @@ import {
 } from './run-rules-tests.mjs';
 
 describe('verdict', () => {
+  // Every case below spells `pending` and `todo` out rather than leaning on a shared
+  // fixture: they are inputs the decision refuses to proceed without, so a case that
+  // omitted one would be testing the refusal instead of the branch it names.
+  const ran = { pending: 0, todo: 0 };
+
   test('a healthy run above the floor passes', () => {
-    expect(verdict({ exitCode: 0, count: MIN_TESTS + 13 })).toMatchObject({ ok: true, reason: 'passed' });
+    expect(verdict({ exitCode: 0, count: MIN_TESTS + 13, ...ran })).toMatchObject({ ok: true, reason: 'passed' });
   });
 
-  // Mutation 3: `if (exitCode !== 0)` removed.
+  // Mutation: `if (exitCode !== 0)` removed.
   test('a non-zero exit fails even when the count is healthy', () => {
-    expect(verdict({ exitCode: 1, count: MIN_TESTS + 13 })).toMatchObject({ ok: false, reason: 'child-failed' });
+    expect(verdict({ exitCode: 1, count: MIN_TESTS + 13, ...ran })).toMatchObject({ ok: false, reason: 'child-failed' });
   });
 
-  // Mutation 1: the floor comparison removed. This is the silent-zero: the emulator
+  // Mutation: the floor comparison removed. This is the silent-zero: the emulator
   // started, vitest ran, exited 0, and registered nothing.
   test('exit 0 with zero tests fails', () => {
-    expect(verdict({ exitCode: 0, count: 0 })).toMatchObject({ ok: false, reason: 'below-floor' });
+    expect(verdict({ exitCode: 0, count: 0, ...ran })).toMatchObject({ ok: false, reason: 'below-floor' });
   });
   test('one test below the floor fails', () => {
-    expect(verdict({ exitCode: 0, count: MIN_TESTS - 1 })).toMatchObject({ ok: false, reason: 'below-floor' });
+    expect(verdict({ exitCode: 0, count: MIN_TESTS - 1, ...ran })).toMatchObject({ ok: false, reason: 'below-floor' });
   });
   test('exactly the floor passes', () => {
-    expect(verdict({ exitCode: 0, count: MIN_TESTS })).toMatchObject({ ok: true });
+    expect(verdict({ exitCode: 0, count: MIN_TESTS, ...ran })).toMatchObject({ ok: true });
   });
 
-  // Mutation 2: the null branch removed. An unreadable report and a healthy run must
+  // Mutation: the null branch removed. An unreadable report and a healthy run must
   // never produce the same verdict — that equivalence IS the defect class.
   test('an unreadable report fails rather than passing for lack of a number', () => {
-    expect(verdict({ exitCode: 0, count: null })).toMatchObject({ ok: false, reason: 'unreadable-report' });
+    expect(verdict({ exitCode: 0, count: null, ...ran })).toMatchObject({ ok: false, reason: 'unreadable-report' });
   });
   test('a non-integer count fails', () => {
-    expect(verdict({ exitCode: 0, count: '513' })).toMatchObject({ ok: false, reason: 'unreadable-report' });
+    expect(verdict({ exitCode: 0, count: '513', ...ran })).toMatchObject({ ok: false, reason: 'unreadable-report' });
   });
 
   test('the floor is a literal, not derived from the run it is judging', () => {
     // A floor computed from the same run it grades is satisfied by any run at all.
     // Pinned on the declaration so a rename on the other side fails here.
     expect(Number.isInteger(MIN_TESTS)).toBe(true);
-    expect(verdict({ exitCode: 0, count: 1, min: MIN_TESTS })).toMatchObject({ ok: false });
+    expect(verdict({ exitCode: 0, count: 1, min: MIN_TESTS, ...ran })).toMatchObject({ ok: false });
+  });
+
+  // BIN-1209. `numTotalTests` counts tests DISCOVERED, not tests run, so a run in which
+  // the very test the floor was raised for never executed can still satisfy the floor.
+  // Both directions are driven: the healthy cases above pass with both fields at zero,
+  // these fail.
+  //
+  // Mutation: the `pending > 0 || todo > 0` branch removed → both of these go green.
+  test('a skipped test fails even when the count is above the floor', () => {
+    const v = verdict({ exitCode: 0, count: MIN_TESTS + 3, pending: 3, todo: 0 });
+    expect(v).toMatchObject({ ok: false, reason: 'tests-not-run' });
+    // Which field failed, not just that something did.
+    expect(v.message).toContain('numPendingTests');
+    expect(v.message).toContain('3');
+  });
+
+  // `.todo()` is a SECOND, non-overlapping field in the same report. A fix that read
+  // only the skipped one would leave this exact defect reachable through `.todo()`.
+  test('a todo test fails, and is named as its own field', () => {
+    const v = verdict({ exitCode: 0, count: MIN_TESTS + 1, pending: 0, todo: 1 });
+    expect(v).toMatchObject({ ok: false, reason: 'tests-not-run' });
+    expect(v.message).toContain('numTodoTests');
+  });
+
+  // The skipped check must outrank the floor: with a skipped test the count is inflated,
+  // so `below-floor` would be a verdict about a number that is not what it claims.
+  test('a skipped test below the floor reports the skip, not the floor', () => {
+    expect(verdict({ exitCode: 0, count: 1, pending: 1, todo: 0 }))
+      .toMatchObject({ ok: false, reason: 'tests-not-run' });
+  });
+
+  // Mutation: the `Number.isInteger(pending)` branch removed → these go green, and an
+  // older vitest that never writes the fields would silently stop being checked.
+  test('an absent skipped-count fails rather than reading as zero', () => {
+    expect(verdict({ exitCode: 0, count: MIN_TESTS, pending: undefined, todo: 0 }))
+      .toMatchObject({ ok: false, reason: 'unreadable-modes' });
+    expect(verdict({ exitCode: 0, count: MIN_TESTS, pending: 0, todo: undefined }))
+      .toMatchObject({ ok: false, reason: 'unreadable-modes' });
+  });
+  test('a non-integer skipped-count fails', () => {
+    expect(verdict({ exitCode: 0, count: MIN_TESTS, pending: '0', todo: 0 }))
+      .toMatchObject({ ok: false, reason: 'unreadable-modes' });
   });
 });
 
@@ -161,5 +210,20 @@ describe('main() runs the emulator CLI through npx with --no-install', () => {
 
   test('the spawn call carries the flag as its first argument', () => {
     expect(SOURCE).toContain("spawnSync('npx', ['--no-install', ...args]");
+  });
+
+  // BIN-1209, same shape one argument over: `verdict()` can be handed the report's
+  // count alone with every case above green, because they all call it directly. The
+  // anchor is the CALL, not the field names — those also appear in the JSDoc above
+  // the function, so asserting on `numPendingTests` alone is satisfied by prose.
+  //
+  // Three mutations must fail this case:
+  //   - drop `pending:` from the call   → the branch is reachable but never fed
+  //   - drop `todo:` from the call      → same, one field over
+  //   - feed a literal 0 instead of the report's value → the check is a no-op
+  test('main() feeds both mode counts from the report into the verdict', () => {
+    expect(SOURCE).toMatch(
+      /verdict\(\{[^}]*\bpending:[^,}]*numPendingTests[^,}]*,[^}]*\btodo:[^,}]*numTodoTests[^,}]*,/,
+    );
   });
 });

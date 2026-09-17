@@ -1429,3 +1429,52 @@ hämtar elementen ur TMDB-sökningen, så det som en samredigerare lägger till 
 **RE-OPEN WHEN:** någon av de tre ovan inträffar. Det finns ingen loggrad att bevaka här —
 utlösaren är en produktändring, inte ett driftläge, vilket är skälet till att den står
 utskriven som en egenskap hos listan och inte som ett larm.
+
+---
+
+## BIN-1150: en skickad gruppinbjudan speglas inte i avsändarens export — 2026-09-17
+
+**Avviker från** utgångspunkten att artikel 20-exporten bär de uppgifter kontot självt
+har lämnat ifrån sig. **Avvikelsen:** `BingeExport` får ingen `groupInvitesSent`-nyckel,
+och `src/lib/firebase/dataExport.ts` ändras inte. En inbjudan du SKICKAT raderas när ditt
+konto raderas — posten daterad 2026-09-10 ovan beskriver den raderingen — men den går
+inte att få ut. Den postens stycke **Kvar som oppet arbete** bokför just den
+här asymmetrin som olöst och namnger biljetten BIN-1150; det är det stycket den här
+posten avgör. Stycket
+står kvar orört, eftersom filen är append-only.
+
+**Vilka fält det gäller.** Inbjudan bär `groupId`, `groupName`, `fromUid`,
+`fromDisplayName` och `invitedAt`. Härled listan hellre än att lita på den här meningen:
+
+```
+git grep -n -A 18 "export async function inviteMemberByUid" -- src/lib/firebase/groups.ts
+```
+
+`invitedAt` säger NÄR du bjöd in någon. `groupMemberships` i ditt eget träd säger att du
+är medlem i gruppen, inte när du skickade en inbjudan.
+
+**Why:** dokumentet ligger i MOTTAGARENS träd, och läsregeln är
+`allow read: if isOwner(uid)` på `users/{uid}/groupInvites/{groupId}`. Avsändaren har
+ingen läsväg dit. Det är inte en kostnadsavvägning utan en förmåga klienten saknar —
+samma skäl som posten ovan ger för att raderingen ligger på servern. En export av
+skickade inbjudningar kräver alltså antingen en ny speglad samling i avsändarens eget
+träd eller en ny serversidig exportväg. En klientfråga skulle dessutom kräva en läsning
+filtrerad på ett DATAFÄLT över andras träd. Härled läsregeln:
+
+```
+grep -n -A 4 "match /users/{uid}/groupInvites/{groupId}" firestore.rules
+```
+
+**Vem som avgjorde.** Frågan ställdes blint till #5 Legal / GDPR Counsel och #6 Data
+Protection Officer den 2026-09-13. Båda svarade oberoende av varandra att en skriven post
+räcker, och ingen av dem eskalerade. #6:s villkor var att posten ska vara medundertecknad
+av #5 och inte vara ett ensidigt dataskyddsbeslut; det är uppfyllt av att båda svarade,
+och båda namnges här av just det skälet.
+
+**Omfång.** Gäller SKICKADE `groupInvites`. Inget annat exportfält berörs, den här posten
+bär ingen `SCHEMA_VERSION`-bump, ingen fil under `src/lib/firebase/` ändras av den, och
+`firestore.indexes.json` får ingen ny rad.
+
+**Re-open when:** en frågbar väg till skickade inbjudningar byggs i avsändarens eget träd
+av andra skäl — då finns läsvägen redan och invändningen ovan är borta — eller en
+registerutdragsbegäran efterfrågar tidpunkten för en skickad inbjudan.

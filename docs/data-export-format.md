@@ -93,8 +93,18 @@ Admin-SDK:s `Timestamp.fromMillis()`.
 - Andra användares data (t.ex. kommentarer du fått på dina recensioner —
   de är deras personuppgifter, inte dina).
 - Historiska versioner — vi sparar bara nuvarande state.
-- Auth-metadata (Firebase Auth-objekt) — den kontrolleras av Firebase
-  direkt, inte av vår app.
+- Firebase Auth-postens egna fält, inklusive dess kopia av `displayName`
+  (BIN-1160). Det visningsnamn exporten bär är `profile.displayName` ovan:
+  appens redigeringsyta skriver Firestore först och speglar sedan värdet till
+  Auth-posten, och en misslyckad spegling loggas i stället för att avbryta
+  (BIN-1154). Kopiorna kan därför skilja sig åt; exporten bär
+  Firestore-kopian. Härled speglingen:
+  `grep -rn "updateProfile(" src --include=*.ts --include=*.tsx`
+- Gruppinbjudningar du SKICKAT (BIN-1150). Inbjudan ligger i mottagarens
+  träd och läsregeln släpper bara in mottagaren, så du har ingen läsväg dit.
+  Tidpunkten då du skickade en inbjudan går därför inte att få ut. Härled
+  läsregeln:
+  `grep -n -A 4 "match /users/{uid}/groupInvites/{groupId}" firestore.rules`
 
 ## Vad du får ut
 
