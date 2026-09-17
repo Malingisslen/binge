@@ -2018,3 +2018,13 @@ falt skrivaren skriver - den andrades aldrig. Commitens faktiska union byter dar
 **Regel:** kör den rena kontrollen först och gör den till ett ABORT-villkor — utan den betyder ingen rad under den någonting. En rapportflagga som ändrar utdataformatet gör utfallsregexen tyst verkningslös, och då rapporteras varje mutering som fälld av exakt samma skäl som en frisk körning skulle vara. Läs exit-koden och antalet FÄLLDA test; en `passed`-siffra matchar gärna radraden om testfiler i stället för testraden, så den kan vara rätt sorts tal om fel storhet.
 
 **Exempel:** BIN-1209, sprinten 2026-09-17. Första harnesset körde med `--reporter=basic`; den rena kontrollen gav exit 1 och oläsbar utdata, och alla tre muteringarna såg identiska ut med den. Andra harnesset avbröt på kontrollen först, och samma tre muteringar gav då 3, 2 respektive 1 fällda test mot en grön kontroll.
+
+---
+
+### [Workflow] Kör biljettens EGNA härledningskommandon mot HEAD innan du formulerar frågan, inte bara innan du bygger
+
+**Trigger:** du klassar en biljett som `needs-approval` och tänker lägga dess alternativ framför Malin.
+
+**Regel:** urvalets grep-of-main-kontroll gäller lika mycket för en biljett som FLAGGAS som för en som byggs. En fråga är ett beslut hon får ansvara för, så premissen måste vara mätt vid HEAD — och det billigaste sättet att mäta den är att köra de kommandon biljetten själv publicerar. En biljett skriven för veckor sedan beskriver ett träd som inte finns längre, och ett alternativ hon väljer kan redan vara byggt. Läs också ett daterat beslutsprotokoll innan du frågar: svaret kan stå där.
+
+**Exempel:** BIN-1139, 2026-09-17. Jag lade tre alternativ om ett löfte i villkoren framför Malin; hon valde "skriv om meningen". Den ändringen låg redan på main sedan `1515279` (2026-09-14, hennes eget val), och biljettens andra halva var avgjord i en daterad notering i `docs/org/adr/0002`. Biljettens eget första kommando, `git grep -n "meddelar" -- src/app`, ger noll träffar och hade avslöjat det på en sekund. Andra gången samma fel efter BIN-1080; det som saknades var inte regeln utan att kontrollen bara kördes för de biljetter som byggdes.
