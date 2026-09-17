@@ -1388,3 +1388,44 @@ rad i `deleteInBatches`.
 
 `docs/data-retention-policy.md` ändras INTE av det här beslutet. En ny mening där hade varit
 en oprövad formulering i ett dokument av en annan klass.
+
+---
+
+## BIN-1208: en samredigerares listinnehåll får ingen upphovsmärkning — 2026-09-17
+
+Malins beslut 2026-09-17, efter #6 Dataskyddsombudets fynd i BIN-1195:s blinda panel.
+Biljetten är stängd som Canceled — inte byggd, med avsikt.
+
+**Läget, mätt före beslutet.** `UserListItem` i `src/types/domain.ts` bär `tmdbId`,
+`mediaType`, `title`, `posterPath` och `addedAt`. Härled att det saknas ett upphovsfält i
+stället för att tro på den här meningen:
+
+```
+grep -rn "addedBy" src/types/domain.ts src/hooks/useLists.ts
+```
+
+Raderingsvägarna säger samma sak oberoende av varandra: klientkaskaden i
+`src/lib/firebase/accountDeletion.ts` och fältsvepets `case 'lists'` i
+`functions/src/retentionCleanup/index.ts` stryker uid:t ur `editors` och rör inte `items`.
+
+**Vad som accepteras.** Att det en avgången samredigerare lade till står kvar i ägarens lista
+utan uppgift om vem som lade dit det.
+
+**Varför.** Elementen bär inget uid, så det som står kvar är redan oidentifierat — det finns
+ingen koppling till personen kvar att radera. Ett `addedBy` skulle SKAPA personuppgiften i
+stället för att ta bort den: ett uid per element på ett dokument som kan vara världsläsbart.
+Ägaren har redan vägar ut: ta bort elementet, ta bort redigeraren. Skrivvägen genom appen
+hämtar elementen ur TMDB-sökningen, så det som en samredigerare lägger till där är en titel.
+
+**INTE accepterat, alltså fortfarande fileable — tre saker:**
+1. **Att en delad lista får FRITEXT som en samredigerare kan skriva** — en notis per titel, en
+   redigerbar beskrivning. Då är det användarinnehåll, och accepten vilar på att det inte är
+   det. Det är den utlösare som vänder beslutet.
+2. **Att posten citeras för något annat än upphovsmärkning av `items`.** Den säger ingenting om
+   elementens form eller om deras antal.
+3. **Att samredigering öppnas för någon ägaren inte har bjudit in.** Accepten vilar på att
+   kretsen som kan skriva är inbjuden av ägaren.
+
+**RE-OPEN WHEN:** någon av de tre ovan inträffar. Det finns ingen loggrad att bevaka här —
+utlösaren är en produktändring, inte ett driftläge, vilket är skälet till att den står
+utskriven som en egenskap hos listan och inte som ett larm.
