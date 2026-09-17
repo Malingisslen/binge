@@ -28,9 +28,9 @@
  *     scan readable as "we do not know" rather than "we found nothing"
  *
  * An Auth double rather than the Auth emulator is deliberate (#27, condition 1):
- * the three newest sweeps (BIN-848/816/875) are the ones whose false positive
- * destroys a live account, and driving them needs precise control over what
- * `getUsers` answers — including a batch that throws, which no emulator offers.
+ * driving a sweep whose false positive destroys a live account needs precise
+ * control over what `getUsers` answers — including a batch that throws, which no
+ * emulator offers.
  */
 
 import {
@@ -940,8 +940,7 @@ async function deleteAuthAccounts(
 
 /**
  * One retentionCleanup invocation. Never throws: EVERY sweep is caught on its
- * own so a single failure — an Auth outage, a missing index — cannot starve the
- * rest. Returns the same record it logs.
+ * own. Returns the same record it logs.
  *
  * No count here on purpose: a number in this very sentence went stale when a
  * sweep was added and had to be struck. Read the body if you need the roster —

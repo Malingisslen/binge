@@ -30,7 +30,6 @@ initializeApp();
 
 // europe-west1 (Belgien) — närmaste GCP-region till Sverige som stödjer
 // alla tjänster. Lambda-cold-start blir ~150 ms mot ~250 ms från us-central1.
-// Memory + timeout default räcker — vi gör bara FCM-skick + Firestore-läs.
 setGlobalOptions({
   region: 'europe-west1',
   maxInstances: 10,

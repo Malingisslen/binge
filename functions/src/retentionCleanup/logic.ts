@@ -129,9 +129,8 @@ export function chunkUids(uids: string[], size: number = GET_USERS_BATCH): strin
  *
  * `disabled` accounts ARE returned in `users`, so absence from `users` must NEVER
  * be the deleted signal — read `notFound` explicitly. Inferring it from absence
- * would turn any response-shape surprise into a silent over-delete, and this is
- * the only sweep in this function whose false positive destroys something a LIVE
- * account is using.
+ * would turn any response-shape surprise into a silent over-delete of something a
+ * LIVE account is using.
  */
 export function revokedUidsFromLookup(result: {
   users: readonly { uid: string; disabled?: boolean }[];

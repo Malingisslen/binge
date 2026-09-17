@@ -128,9 +128,8 @@ describe('isStaleReleaseMarker (BIN-464)', () => {
   });
 });
 
-// BIN-848. This is the only sweep in retentionCleanup whose false positive
-// destroys something a LIVE account is using — a working push registration — so
-// the buckets are pinned individually rather than as one "revoked" blob.
+// BIN-848. A false positive here destroys a working push registration, so the
+// buckets are pinned individually rather than as one "revoked" blob.
 describe('revokedUidsFromLookup (BIN-848)', () => {
   it('takes a uid Auth does not know — read from notFound, not from absence', () => {
     expect(revokedUidsFromLookup({ users: [], notFound: [{ uid: 'gone' }] })).toEqual(['gone']);

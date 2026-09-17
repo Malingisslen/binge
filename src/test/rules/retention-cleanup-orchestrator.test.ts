@@ -56,11 +56,9 @@ import {
  * firebase-admin is not resolvable there). The loop under test is the real one.
  *
  * Auth is a hand-written double rather than the Auth emulator, per #27's
- * condition 1 of 2026-08-13: the three newest sweeps (BIN-848 push tokens,
- * BIN-816 orphaned auth accounts, BIN-875 released usernames) are the ones whose
- * false positive destroys a live person's account, and driving them needs exact
- * control over what `getUsers` answers — including a batch that THROWS, which no
- * emulator can be made to do.
+ * condition 1 of 2026-08-13: driving a sweep whose false positive destroys a live
+ * person's account needs exact control over what `getUsers` answers — including a
+ * batch that THROWS, which no emulator can be made to do.
  *
  * The emulator is opened with permissive rules on purpose: in production this
  * sweep runs as the Admin SDK, which bypasses security rules entirely. Pinning
@@ -872,7 +870,7 @@ describe('retentionCleanup orchestrator — one broken category never takes the 
     const summary = await runRetentionCleanup(io);
 
     // Push sweep: the batch is skipped and COUNTED — "could not verify" is not
-    // "gone", and this is the one sweep whose false positive breaks a live device.
+    // "gone", and a false positive here breaks a live device.
     expect(summary.skippedAuthBatches).toBe(1);
     expect(summary.checkedUids).toBe(3);
     expect(summary.revokedPushTokens).toBe(0);

@@ -163,9 +163,8 @@ export function isOrphanCandidate(
  *
  * Negated comparison, not `>=`: an unparseable `creationTime` yields NaN, and
  * NaN must mean "leave it alone" rather than riding a silent false through to a
- * deletion. Same shape as the client's own freshness gate, for the same reason
- * — this is the one sweep in this file whose false positive destroys a live
- * person's account.
+ * deletion. Same shape as the client's own freshness gate, and for the same
+ * reason: a false positive here destroys a live person's account.
  */
 export function isReapableOrphanAge(creationTimeMs: number | null, nowMs: number): boolean {
   if (creationTimeMs === null || Number.isNaN(creationTimeMs)) return false;
