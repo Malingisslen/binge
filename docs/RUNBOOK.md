@@ -161,30 +161,29 @@ Plötslig spike i rapport-volymen.
 
 ### 5b. Om kontot raderades av misstag
 
-**Kontrollera FÖRST om PITR är påslaget.** Läs statusraden för Firestore PITR i
-`docs/analysis/EXTERNAL_ACTIONS.md`. Står den som obekräftad är det svaret du ger
-användaren — att vi inte vet om en återställning är möjlig — inte att den är det.
+**Kontrollera FÖRST vilka fönster som gäller.** Läs statusraderna för Firestore
+PITR och för det schemalagda backupschemat i `docs/analysis/EXTERNAL_ACTIONS.md`
+under "Open infra items". De är två olika tal, och raderna bär kommandona som
+härleder dem om. Läs dem där, gissa inte.
 
-**Är PITR påslaget och raderingen inom 7 dagar** är återställningen ändå ett
-övervägande, aldrig en förstahandsåtgärd: `gcloud firestore import` läser in
-databasen, inte det ena kontot. Den återuppväcker de raderingskaskader som kört
-sedan säkerhetskopians tidpunkt — också konton vars ägare bett om radering under
-samma fönster. Det är ett beslut för den som bär raderingsskyldigheterna.
+**En återställning är ändå ett övervägande, aldrig en förstahandsåtgärd:** den
+läser in databasen, inte det ena kontot. Den återuppväcker de raderingskaskader
+som kört sedan säkerhetskopians tidpunkt — också konton vars ägare bett om
+radering under samma fönster. Det är ett beslut för den som bär
+raderingsskyldigheterna.
 
 ```bash
-# List backup-points (kräver gcloud)
-gcloud firestore backups list --project=binge-nu
-
-# Restore from a specific timestamp — läser in databasen, se varningen ovan
-gcloud firestore import \
-  --project=binge-nu \
-  --database="(default)" \
-  gs://your-bucket/backups/<timestamp>
+# Lista säkerhetskopior. --location måste vara databasens (eur3);
+# utan den listas ingenting, vilket mitt i en incident läser som "det finns inga".
+gcloud firestore backups list --location=eur3 --project=binge-nu
 ```
 
-**Utanför 7-dagars-fönstret:** Vi kan inte återställa.
-Tvärtom — `deleteAccount`-cascaden är designad för att vara irreversibel
-(GDPR-krav). Beklaga och guidar användaren till att börja om.
+Något återställningskommando publiceras inte här: inget har körts i projektet, och
+det som stod här pekade på en GCS-export i stället för på de säkerhetskopior
+kommandot ovan listar. Spårat i BIN-1212.
+
+`deleteAccount`-cascaden är designad för att vara irreversibel (GDPR-krav). När
+ingen återställning görs: beklaga och guida användaren till att börja om.
 
 ### 5c. Om user-doc existerar men watchlist är tom
 

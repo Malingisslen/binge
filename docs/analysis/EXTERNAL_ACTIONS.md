@@ -196,14 +196,22 @@ Firestore Console — rules forbid client writes to the field.
 | Item | Status | Blocker |
 |---|---|---|
 | Firestore region `eur3` (EU multi-region) | ✅ Verified — GDPR-compliant | — |
-| Firestore PITR (7-day recovery) | ❔ Blaze-gated; not confirmed enabled | billing decision |
-| Scheduled backups (14-week) | ❔ Blaze-gated; not confirmed enabled | billing decision |
+| Firestore PITR | ✅ `POINT_IN_TIME_RECOVERY_ENABLED`, `versionRetentionPeriod: 604800s` (mätt 2026-09-17) | — |
+| Scheduled backups | ✅ one `dailyRecurrence` schedule, `retention: 8467200s` (mätt 2026-09-17) | — |
 | UptimeRobot monitor on `https://binge.nu` | ❔ not confirmed | free, 5 min setup |
 | Official TMDB logo (replace `public/tmdb-logo.svg`) | ❔ placeholder | download from TMDB brand page |
 
-App Check (reCAPTCHA v3, monitoring mode) and Sentry are **live**. PITR/backups are enabled
-via Firebase Console → Firestore → Backups (`gcloud firestore databases update --enable-pitr`
-/ `backups schedules create --recurrence=daily --retention=14w`); set a budget alert first.
+App Check (reCAPTCHA v3, monitoring mode) and Sentry are **live**. De två raderna ovan
+härleds om med:
+
+```bash
+gcloud firestore databases describe --database='(default)' --project=binge-nu \
+  --format='value(pointInTimeRecoveryEnablement,versionRetentionPeriod)'
+gcloud firestore backups schedules list --database='(default)' --project=binge-nu
+gcloud firestore backups list --location=eur3 --project=binge-nu
+```
+
+`backups list` kräver databasens location (`eur3`), inte standardregionen.
 
 ## Cloudflare Cache Rule for HTML — as-built (recreate exactly)
 

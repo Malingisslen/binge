@@ -801,9 +801,10 @@ findings here too.
   The real residual is that there is still **no health metric** for last-run /
   docs-deleted: a sweep that silently stops running raises no alert. Closest thing
   today is the per-run `retentionCleanup done` log line, which must be read by hand.
-- 🔴 **PITR + scheduled backups are not yet enabled**; there is no
-  scripted backup-health check, no restore dry-run, and no post-restore validation
-  playbook. Data loss is effectively irreversible.
+- 🔴 **PITR och schemalagda backuper är påslagna** (mätt läge, datum och
+  härledningskommandon i `docs/analysis/EXTERNAL_ACTIONS.md`, "Open infra items");
+  det som saknas är en skriptad backup-hälsokoll, en restore-dry-run och en
+  playbook för validering efter återställning.
 - 🟠 **No `schemaVersion` stamp anywhere.** Indexes, the field whitelist, mutation
   payloads, and `buildUserExport` must be kept in sync by hand; nothing audits
   migration completeness or alerts when `migrateStatus()` hits its default case.
@@ -918,7 +919,7 @@ dir. Grounded findings, roughly by severity:
 
 | Gap | What's missing | Touches |
 |---|---|---|
-| **Backup / DR verification** | PITR + backups are documented as setup steps, but nothing confirms a backup landed, alerts on schedule failure, or tests restore. DR is runbook-only and untested. | DevOps (#8), Security (#4), DPO (#6), DBA (#27) |
+| **Backup / DR verification** | PITR och schemalagda backuper är påslagna (se `docs/analysis/EXTERNAL_ACTIONS.md`), men inget larmar om ett schema slutar köra, och ingen återställning har provats. DR is runbook-only and untested. | DevOps (#8), Security (#4), DPO (#6), DBA (#27) |
 | **No health metric for the retention sweeps** | `retentionCleanup` + `reclaimOrphanFollows` are deployed and running, but absent from `deploy.yml` by design (hosting-only) — so each functions change needs a manual targeted deploy, and nothing alerts if a sweep stops running or starts failing. The `retentionCleanup done` log line must be read by hand. | DevOps (#8), DPO (#6), Controller (#3), DBA (#27) |
 | **Schema-version safety** | No `schemaVersion` on Firestore docs — lazy migration can't prove completeness, and a stale legacy value can persist indefinitely undetected. | Architect (#14), QA (#7), DBA (#27) |
 | **Recommendation/taste drift** | Cascade + taste weights are frozen constants; no engagement tracking, A/B test, or drift detector validates them post-launch. | Data Analyst (#22), Architect (#14), Scoring (#28) |
