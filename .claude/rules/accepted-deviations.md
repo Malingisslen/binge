@@ -1519,3 +1519,50 @@ finns inte i regelspråket, och kretsen som kan skriva är inbjuden av ägaren.
 **Re-open when:** någon av de tre ovan inträffar. Det finns ingen loggrad att bevaka —
 utlösaren är en produktändring, inte ett driftläge.
 
+---
+
+## BIN-1205: driftbokens pekare till "Blaze vs Spark" får stå kvar — 2026-09-17
+
+Ett beslut, inte en öppen brist. Fila inte "pekaren går i ring" eller "jourhavande skickas
+tillbaka dit hen kom ifrån".
+
+**Läget.** `docs/RUNBOOK.md` §2c pekar vidare till rubriken "Blaze vs Spark" i
+`docs/analysis/EXTERNAL_ACTIONS.md`. Efter BIN-1198 svarar den rubriken inte längre på
+plan- eller takfrågan utan pekar tillbaka. Härled:
+
+```
+grep -n "Blaze vs Spark" docs/RUNBOOK.md docs/analysis/EXTERNAL_ACTIONS.md
+grep -n -A 8 "## Blaze vs Spark" docs/analysis/EXTERNAL_ACTIONS.md
+```
+
+Den första faller om pekaren slutar namnge rubriken. Den andra skriver ut avsnittets
+kropp, så ett avsnitt som börjat svara på plan- eller takfrågan igen syns i utdatan.
+
+**Varför det inte är blockerande.** §2c:s egen mening bär uppgiften INNAN pekaren — den
+som läser stycket har svaret utan att följa någon länk. Följd ändå tar pekaren slut på ett
+sant svar i `CLAUDE.md` i ett hopp; den dinglar inte och den snurrar inte vidare.
+
+**Varför den inte lagas.** #20 Manual/Release QA avvisade 2026-09-02 i BIN-1067 att
+pekaren stryks till en dinglande filhänvisning, med skälet att det är raden en jourhavande
+följer under rate-limit-spelboken. Det villkoret är fortfarande uppfyllt: pekaren NAMNGER
+rubriken. Att i stället rikta om §2c mot tabellen "Open infra items" prövades och avvisades
+av #8 DevOps/SRE i den blinda kritiken 2026-09-17 — den tabellen svarar inte på plan- eller
+takfrågan alls, så en jourhavande hade landat ännu längre från sitt svar.
+
+**Vad den här posten INTE gör:** den skriver ingen ny mening om vilken plan projektet
+ligger på, och den ändrar ingen av de två filerna.
+
+**Omfång.** Accepten gäller pekaren från `docs/RUNBOOK.md` §2c till rubriken "Blaze vs
+Spark" i `docs/analysis/EXTERNAL_ACTIONS.md`, och ingenting annat. Den får inte citeras för
+någon annan korsreferens mellan dokument i repot — varje sådan bedöms på sina egna
+förutsättningar.
+
+**INTE accepterat, alltså fortfarande fileable:**
+1. Att pekaren i `docs/RUNBOOK.md` slutar NAMNGE rubriken — då faller #20:s villkor och
+   det här beslutet med det.
+2. Att rubriken "Blaze vs Spark" raderas ur `docs/analysis/EXTERNAL_ACTIONS.md`.
+3. Att §2c:s egen mening — den som bär uppgiften före pekaren — stryks. Hela accepten
+   vilar på att läsaren har svaret utan att följa länken.
+
+**Re-open when:** någon av de tre ovan inträffar. Det finns ingen loggrad att bevaka;
+utlösaren är en dokumentändring.
