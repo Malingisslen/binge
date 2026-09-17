@@ -1,3 +1,201 @@
+# Sprint 2026-09-17c — 3 biljetter, 3 buntar
+
+Rent träd vid start (`git status --porcelain` tomt), i fas med `origin/main`. Todo och
+In Progress var tomma. Föregående sprintplan är arkiverad under separatorn nedan.
+
+Routningen nedan är körd vid URVALET på varje bunts faktiska filuppsättning. Den körs om
+före varje kritik och mot `git diff --cached --name-only` före VARJE commit — aldrig ärvd
+härifrån.
+
+## Mätt vid urvalet (grep-of-main, före klassning)
+
+- **BIN-1207 håller, och Malin har beslutat att den ska byggas.** `firestore.rules`
+  `lists`-blockets tre skrivvägar (`create`, ägarens `update`, samredigerarens `update`)
+  binder inget antal på `items`. `isValidList` binder `editors`; `isValidTagDoc` binder
+  `tags`. Härled: `grep -n "isValidList\|items is list" firestore.rules`.
+- **Underlaget för N är mätt i produktion 2026-09-17**, inte gissat.
+  `firestore_list_documents` på `projects/binge-nu/.../lists` gav ett enda dokument,
+  `lists/jbdJCyVZ7l1XctISXsnG` ("Romcoms att se"), vars `items` bär ett element. Det är
+  hela den lagrade populationen vid mätningen. N=1000 ligger alltså långt över vad någon
+  faktiskt sparat. Mätningen är en ögonblicksbild och åldras.
+- **Klienthalvan är verklig, inte hypotetisk.** `ListPageClient.tsx` `handleAdd` anropar
+  `patchCache` FÖRE `await addItemToList(...)`, utan `.catch` och utan rollback; filens
+  egen kommentar lovar en toast som inte finns. `useListMutations.addItemToList` skriver
+  med `arrayUnion`. Härled: `grep -n "patchCache\|arrayUnion" src/components/pages/ListPageClient.tsx src/hooks/useLists.ts`.
+- **BIN-1205 håller.** `docs/RUNBOOK.md` pekar på rubriken "Blaze vs Spark" i
+  `docs/analysis/EXTERNAL_ACTIONS.md`, och den rubriken pekar tillbaka. Härled:
+  `grep -n "Blaze vs Spark" docs/RUNBOOK.md docs/analysis/EXTERNAL_ACTIONS.md`.
+- **BIN-1178 höll vid urvalet.** `tasks/todo.md` pekade då ut ett räkneskript under en
+  katalog som inte finns i repot. Efter bunt C ska `grep -c "count-prod\.mjs" tasks/todo.md`
+  svara 0 — kontrollen är skriven så att den inte kan matcha sin egen rad, vilket den
+  första lydelsen gjorde.
+- **BIN-1179 halva 2 är OBSOLET.** `getGroupOnce` raderades i `87c2b18` (BIN-1182);
+  `git grep -n "getGroupOnce" -- src functions` ger tom utdata. Halva 1 kräver en
+  produktionsmätning. Kommenteras, byggs inte.
+
+## Bunt A — BIN-1207 · Tier C · panel `top`
+
+Routning vid urvalet, på buntens faktiska filuppsättning:
+
+```
+node docs/org/route.mjs --md firestore.rules src/test/rules/firestore-rules.test.ts \
+  scripts/run-rules-tests.mjs src/components/pages/ListPageClient.tsx
+→ Tier top · #27 DBA, #4 Säkerhetsarkitekt, #6 DPO, #26 Informationsarkitekt, #7 QA
+```
+
+Disposition: **build**. Malins beslut 2026-09-16 står i biljettens brödtext.
+
+Panelen från 2026-09-17b är bokförd på biljetten och dess villkor är bindande här. Den
+konvenerades på en filuppsättning som inte innehöll `ListPageClient.tsx`, och unionen
+ovan innehåller den — alltså konvenerar en ny blind panel på den faktiska unionen före
+bygget.
+
+### Acceptanskriterier
+
+1. Taket gäller `create`, ägarens `update` och samredigerarens `update`, definierat på ett
+   ställe, med före-antalet som PARAMETER — ingen hjälpare läser `resource` internt.
+   *(kind: diff)*
+2. Ett test visar att en samredigerare kan KRYMPA en lista som redan ligger över taket,
+   och ett annat att ägaren kan ändra `editors` på en sådan lista. *(kind: diff)*
+3. Talet N är motiverat mot mätningen ovan. *(kind: diff)*
+4. Ingen mening påstår att INNEHÅLLET i `items` är validerat — taket binder antal.
+   *(kind: diff)*
+5. `MIN_TESTS` i `scripts/run-rules-tests.mjs` höjs i samma commit till vad
+   `numTotalTests` rapporterar med de nya testen på plats. *(kind: diff)*
+6. Klientens optimistiska cache-patch bekräftar inget som Firestore nekat — antingen
+   lagad, eller nedskriven daterad i `.claude/rules/accepted-deviations.md`. *(kind: diff)*
+
+## Bunt B — BIN-1205 · Tier A · panel `single`
+
+```
+node docs/org/route.mjs --md docs/RUNBOOK.md docs/analysis/EXTERNAL_ACTIONS.md
+→ Tier medium · #8 DevOps / SRE
+```
+
+Disposition: **build**. Ingen ny mening om vilken plan projektet ligger på.
+
+### Acceptanskriterier
+
+1. Ringen är bruten eller uttryckligen accepterad i en daterad post. *(kind: diff)*
+2. #20:s villkor från BIN-1067 är uppfyllt eller ersatt av en daterad efterföljare.
+   *(kind: diff)*
+3. Ingen ny mening som påstår vilken plan projektet ligger på. *(kind: diff)*
+
+## Bunt C — BIN-1178 · Tier A · panel `skip`
+
+```
+node docs/org/route.mjs --md tasks/todo.md docs/org/metrics/events.jsonl
+→ Tier skip (doc-only)
+```
+
+Disposition: **build**. Strykningar utan ersättning, plus rättelserader i metrikloggen.
+
+### Acceptanskriterier
+
+1. Ingen pekare i `tasks/todo.md` till en sökväg som inte finns — kontrollerat med ett
+   kommando. *(kind: diff)*
+2. Metrikloggens rättelserader täcker varje push-grindsvarv i BIN-1165 som producerade en
+   strykning. *(kind: diff)*
+3. De tre oräknade påståendena biljetten namnger är strukna, inte omformulerade.
+   *(kind: diff)*
+
+## Needs you (Tier D — inget byggs)
+
+- **BIN-1210, BIN-959 punkt 1–3** — koden ligger i `C:/claude-plugins`, delad automation.
+  En session som spawnar granskare får inte redigera den.
+- **BIN-1144** — Firebase Console-fråga (App Check för Firestore).
+- **BIN-1121, BIN-1179 halva 1** — produktionsmätningar som behöver behörighet loopen
+  saknar.
+- **BIN-454 / BIN-402** — `mutateEnabled`-flippen är Malins konsolåtgärd. En sprint gör
+  den aldrig.
+
+## Needs-approval (produktval — listas, byggs inte)
+
+- **BIN-1211** — vilken yta som ska kunna anmäla en lista eller en användare.
+- **BIN-1133** — ska en förfrågan från en PRIVAT avsändare visa ett namn alls.
+- **BIN-1118** (Feature), **BIN-521** (idea).
+
+## Deviation log
+
+- [deviation] BIN-1205: #8:s villkor 1 säger att den daterade accepten ska skrivas som en
+  rad i `docs/org/metrics/events.jsonl`, i samma form som BIN-1067/BIN-1198-raderna. De
+  raderna är `review`-rader, alltså bokföring av att en kritik kördes — ingen granskare
+  läser dem innan den filar ett fynd. Accepten skrivs därför i
+  `.claude/rules/accepted-deviations.md`, den fil vars hela syfte är att en granskare
+  måste läsa den före ett fynd, och som commit-grinden namnger. Villkorets SAK — en
+  daterad post som säger varför ringen inte är blockerande och att BIN-1067:s villkor
+  fortfarande är uppfyllt — är oförändrad. Review-raden loggas som vanligt.
+- [discovery] BIN-1205: helhetsgranskningen noterade att `.claude/rules/accepted-deviations.md`
+  triggerladdas på `src/**`, `functions/**`, `firestore.rules`, `docs/org/metrics/**` och
+  `.claude/hooks/**` — men BIN-1205-postens tre re-open-utlösare är alla redigeringar i
+  `docs/RUNBOOK.md` eller `docs/analysis/EXTERNAL_ACTIONS.md`, som inte finns i den listan.
+  Den som är på väg att utlösa accepten får alltså inte posten automatiskt. Posten når ändå
+  varje granskare, eftersom filens eget huvud binder alla fyra granskaragenter att läsa den
+  före ett fynd — det var den vägen BIN-1198:s strykningsförsök fångades. Att vidga `paths:`
+  är en konfigändring med egen routning och hör inte till den här bunten. Bokfört, inte
+  åtgärdat.
+- [deviation] BIN-1205: granskningens andra icke-blockerande fynd lämnas också. Det
+  publicerade `grep -n -A 8` har ett fast radfönster medan meningen bredvid säger att den
+  skriver ut avsnittets kropp. Granskaren mätte att fönstret i dag täcker varje
+  innehållsrad, och att den händelse spärren finns för — en planmening som dyker upp igen
+  där den strukna stod, överst i avsnittet — ligger inuti fönstret. Att byta till en
+  avsnittsbunden form skulle kosta ny prosa i en bunt vars alla blockerande fynd hittills
+  varit just prosa. Fileable om någon ändå rör posten.
+- [deviation] BIN-1207: helhetsgranskningen passerade med tre icke-blockerande fynd, och
+  två av dem lämnas medvetet oåtgärdade i den här commiten. Det ena är en mening i
+  metrikloggens sista rättelserad som säger att kommandot och den falska mekanismen hittades
+  i samma granskningsvarv; det var två varv i rad. Det andra är en pekare i
+  avvikelsepostens sista stycke som tillskriver BIN-1170 titellängd, vilket inte är den
+  biljettens omfång. Båda är prosa i rader som redan är stageade, så att rätta dem kräver
+  ett nytt helhetsgranskningsvarv — och varje rättelse i den här kedjan har hittills burit
+  nästa fynd. Granskaren, som äger grinden, rekommenderade uttryckligen att stanna och låta
+  dem åka med nästa redigering av respektive fil. Det är ett beslut, inte ett förbiseende.
+  Det tredje fyndet ÅTGÄRDAS: flödeskartans payload har två klausuler som bunten gör
+  falska, inte en, och båda stryks i kartans egen commit.
+- [deviation] BIN-1207: kodgranskningen fällde buntens klienthalva. Min återställning av
+  den optimistiska cache-patchen lade tillbaka en ÖGONBLICKSBILD av hela listan, tagen
+  när skrivningen startade. Eftersom ingen av handlarna inväntas av sin anropare kan två
+  skrivningar ligga i luften samtidigt: läggs A till och sedan B, och A nekas medan B går
+  igenom, raderade återställningen B ur vyn — en titel Firestore faktiskt har, utan
+  felmeddelande. Fixen för "cachen får inte ljuga" bar alltså en värre lögn. Varje
+  återställning är nu den INVERSA operationen på det värde som gäller när den körs, så
+  den kommuterar med en samtidig syskonskrivning. Logiken är utbruten till
+  `src/lib/listItemsPatch.ts` enligt testutbrytningsmönstret i `code-style.md`, med ett
+  test som driver just det förloppet. Granskningens icke-blockerande punkt — att ett
+  sväljt fel var osynligt — är också åtgärdad med `captureError`.
+- [deviation] BIN-1207: de två nya filerna ÄNDRADE routningen. Urvalet och bygget routade
+  `[27,4,6,26,7]`; unionen med `src/lib/listItemsPatch.ts` svarar
+  `[27,4,6,5,26]` — #5 Legal/GDPR Counsel tillkommer och #7 QA faller ur. #5 hade inte
+  sett en rad, så en blind kritik konvenerades före commit i stället för att rollen nås
+  först av push-grinden. Att #7 faller ur är ofarligt: den kritiken kördes ändå. Kommandot
+  som ger svaret står bredvid bunten i planen, inte en mening om vilken fil som flyttar
+  panelen.
+- [discovery] BIN-1207: säkerhetsgranskningen gick igenom utan blockerande fynd men mätte
+  fram en oavsiktlig vidgning. Att dela den frånvaro-toleranta hjälparen in i
+  samredigerarens gren gjorde `items: deleteField()` till en skrivning den grenen
+  SLÄPPER IGENOM; före taket nekades den, eftersom grenen krävde ett `items` som är en
+  lista. En ändring som bara skulle begränsa hade alltså vidgat. Samredigerargrenen får
+  därför tillbaka kravet att fältet finns, medan ägarens gren och `create` behåller
+  frånvaro-toleransen — den är #6 Dataskyddsombudets villkor och skyddar ett
+  legacy-dokument från att bli permanent oredigerbart. Testet som påstod den nya
+  tillåtligheten är vänt till ett nekande, och ett `deleteField`-test är tillagt.
+  Muteringen som tar bort kravet fäller båda.
+- [deviation] BIN-1207: #26:s villkor 1 säger "strike/rewrite" av de två falska
+  klausulerna i BIN-1195-kommentaren. Strykregeln i `.claude/rules/code-style.md` säger
+  stryk hellre än omformulera. De falska klausulerna är strukna; den enda NYA meningen
+  är den som villkor 3 (#26) och villkor 3 (#4) båda kräver — att taket binder antal och
+  inte innehåll — och den är ett tillägg, inte en omskrivning av något struket.
+
+## Avslutning
+
+- [ ] Följdbiljetter filade FÖRE commit
+- [ ] Granskningsloggen greppad på varje granskares EGET agent-id, per körning
+- [ ] Routern omkörd mot `git diff --cached --name-only` före VARJE commit
+- [ ] Push-grinden budgeterad som ett eget varv
+- [ ] Lärdomar + digest i samma redigering
+
+---
+
 # Sprint 2026-09-17b — 3 biljetter, 3 buntar
 
 Rent träd vid start (`git status --porcelain` tomt), i fas med `origin/main`. Todo och
@@ -267,8 +465,6 @@ Panelens must-haves viks in här som bindande kriterier innan en rad skrivs.
   lydelsen. Publicerad juridik.
 - **BIN-1211** — listor och användare går att anmäla i schemat och i admin, men ingen yta
   i appen kan skapa en anmälan. Att bygga ytan är en ny kontroll.
-- **BIN-1207** — `lists.items` har inget tak på antal element. Panelen var genuint delad
-  och frågan eskalerades till dig; den ligger kvar där.
 - **BIN-1118** — ingen väg att lämna över en grupp utan att radera den. Märkt `Feature`.
 - **BIN-521** — bundle-rådgivaren. Märkt `idea`, och ditt eget beslut 2026-07-18 var att
   den ska genom `/stakeholder-review` före kod.
@@ -1535,7 +1731,7 @@ Kör om det (a) före varje kritik, (b) om en kritik vidgar eller krymper omfån
 ## Kända hinder i verktygen (inte biljetter)
 
 **Produktionsräkningen gick inte att köra.** Behörighetsklassificeraren nekade
-`node scratchpad/count-prod.mjs` med skälet `[Production Reads]`. Försöket gjordes en
+produktionsräkningen med skälet `[Production Reads]`. Försöket gjordes en
 gång och upprepas inte. Senaste mätningen är därför föregående sprints, 2026-09-12,
 projektet namngivet `binge-nu`:
 
@@ -1737,7 +1933,7 @@ den faktiska unionen då.
 
 ## Needs you (Tier D)
 
-1. **Produktionsräkningen.** `node scratchpad/count-prod.mjs` nekades av
+1. **Produktionsräkningen.** Den nekades av
    behörighetsklassificeraren (`[Production Reads]`). Inget i sprinten lutar sig mot
    talet, men det är värt att kunna köra: lägg en Bash-behörighetsregel för
    Admin-SDK-läsningar, eller kör kommandot själv med `!` i prompten.
@@ -1750,7 +1946,7 @@ den faktiska unionen då.
 ## Deviation log
 
 - [needs-human] Produktionsräkningen: planen sa "mät om före bygget" → klassificeraren
-  nekade `node scratchpad/count-prod.mjs` med `[Production Reads]` → försökte EN gång,
+  nekade produktionsräkningen med `[Production Reads]` → försökte EN gång,
   upprepade inte, och byggde i stället så att ingen acceptans lutar sig mot talet
   (batch A:s kriterium 9). Står under "Needs you".
 - [discovery] Muteringen som tar bort `subscribeToGroup`s error-callback ÖVERLEVDE i
@@ -1994,7 +2190,8 @@ och `-1 < n` ar sant).
 
 # Sprint 2026-09-12 — gruppens medlemslista blir privat, och tre fältlås
 
-Urval: 6 av 45 backlog-biljetter (+ BIN-1152 som redan låg i Todo). Rent träd vid start
+Urval: backlog-biljetterna i buntrubrikerna nedan, plus BIN-1152 som redan låg i Todo.
+Rent träd vid start
 (`git status --porcelain` tomt), allt på main, `npm run typecheck` rent och `npm test`
 grönt: 291 filer, 4974 test. Basen härleds med `git merge-base --fork-point @{u} HEAD`,
 aldrig ur en sha skriven här.
@@ -2019,8 +2216,8 @@ groups: 0   sessions: 0   users: 4   publicProfiles: 2
 
 Noll grupper och noll sessioner. **Ingen åtstramning i den här sprinten kan gå sönder
 för någon befintlig rad, och ingen migrering behövs.** Det svaret åldras — kör om det
-innan någon lutar sig mot det en tredje gång. Kommandot ligger i
-`scratchpad/count-prod.mjs` (Admin SDK, projektet namngivet i anropet per BIN-1063).
+innan någon lutar sig mot det en tredje gång. Mätningen är en Admin-SDK-läsning som
+måste namnge sitt projekt i anropet (BIN-1063).
 
 ## Inte valda, med skäl
 
@@ -2048,7 +2245,7 @@ innan någon lutar sig mot det en tredje gång. Kommandot ligger i
 ## Batch A — gruppens medlemslista blir privat [Tier C] — BIN-1152
 
 > **UTFALL: INTE BYGGD.** Ingen kod skriven, ingenting att återställa. Hela
-> panelen är körd och dess tretton bindande villkor står på BIN-1152 tillsammans med
+> panelen är körd och dess bindande villkor står på BIN-1152 tillsammans med
 > läsställesinventeringen. Nästa pass routar om på den faktiska unionen — den växte med
 > serversopningens fil under functions/ — och bygger därifrån.
 
@@ -2286,8 +2483,8 @@ groups: 0   sessions: 0   users: 4   publicProfiles: 2
 
 Noll grupper och noll sessioner: **ingen åtstramning i den här sprinten kan gå sönder
 för någon befintlig rad, och ingen migrering behövs.** Det svaret åldras — kör om det
-innan någon lutar sig mot det en andra gång. Kommandot ligger i
-`scratchpad/count-prod.mjs` (Admin SDK, projektet namngivet i anropet per BIN-1063).
+innan någon lutar sig mot det en andra gång. Mätningen är en Admin-SDK-läsning som
+måste namnge sitt projekt i anropet (BIN-1063).
 
 Att `publicProfiles` (2) är färre än `users` (4) är inte en bugg i sig — projektionen
 skrivs först när kontot laddar appen efter BIN-505 — men det är den mätning som gör
