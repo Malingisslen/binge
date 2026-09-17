@@ -1,3 +1,166 @@
+# Sprint 2026-09-17b — 3 biljetter, 3 buntar
+
+Rent träd vid start (`git status --porcelain` tomt), i fas med `origin/main`. Todo och
+In Progress tomma. Föregående sprintplan är arkiverad under separatorn nedan; dess
+obockade avslutningsrader hörde till en bunt som ligger på main (`03100d1`, `4875306`).
+
+Routningen nedan är körd vid URVALET på varje bunts faktiska filuppsättning. Den körs om
+före varje kritik och mot `git diff --cached --name-only` före VARJE commit — aldrig ärvd
+härifrån.
+
+## Varför bara tre biljetter
+
+Push-grinden kräver EN granskningskörning som läst varje granskningsbar fil i hela
+`@{u}..HEAD`, och per-bunts-granskningar summerar inte till den. Tre buntar, varav en med
+full panel, fyller anslaget.
+
+## Mätt vid urvalet (grep-of-main, före klassning)
+
+- **BIN-1193 håller, och är större än biljetten säger.** Sex kopior, alla mätta i dag:
+  `functions/src/retentionCleanup/logic.ts:133`, `logic.test.ts:131` ("the only sweep"),
+  `runCleanup.ts:31` + `src/test/rules/retention-cleanup-orchestrator.test.ts:59`
+  ("the three newest sweeps"), `runCleanup.ts:943` ("cannot starve the rest"), och
+  `functions/src/index.ts:33` ("vi gör bara FCM-skick + Firestore-läs"), som motsägs av
+  `runTransaction` på rad 74 i samma fil. Härled dem med
+  `grep -rn "only sweep\|three newest\|starve\|FCM-skick" functions/src src/test`.
+- **BIN-1207 håller.** `firestore.rules`' `lists`-block har tre skrivvägar (create, ägarens
+  update, samredigerarens update) och ingen av dem binder `items.size()`. `isValidList`
+  binder `editors` till 20; `isValidTagDoc` binder `tags` till 15.
+- **BIN-1103 håller, med ett annat tal än biljetten.** Mätningen om körd mot HEAD ger
+  **21 omnämnanden över 9 flöden**, inte åtta flöden. Skriptet står i bunt C.
+- **BIN-959 punkt 5 är OBSOLET.** Ordet "alone" finns inte i den meningen längre:
+  `src/contexts/WatchlistContext.test.tsx:1422` säger `current || listenerFailed`, vilket
+  är vad `src/lib/watchlistWrites.ts:420` gör. Punkt 1–3 ligger i `C:/claude-plugins` och
+  får inte röras från en session som spawnar granskare. Kommenteras, byggs inte.
+- **BIN-1211 är Malins val.** Biljetten säger själv "Byggs inte innan hon valt".
+  `git grep -n "UgcActionsMenu" -- src` ger två monteringar, båda i `ReviewList.tsx`.
+  Needs-approval.
+- **BIN-1210 rör delad automation.** `claim-lint.mjs` ligger i `C:/claude-plugins` och delas
+  med Synat. Samma spärr som BIN-959. Needs-you: egen session.
+
+## Bunt A — BIN-1193: sex meningar om svep som inte stämmer [Tier C] · build
+
+Router (`functions/src/retentionCleanup/logic.ts`, `logic.test.ts`, `runCleanup.ts`,
+`functions/src/index.ts`, `src/test/rules/retention-cleanup-orchestrator.test.ts`):
+körs om före kritiken. Vid urvalet på de tre `retentionCleanup`-filerna:
+**medium** · panel `#27 Database Administrator` → EN blind kritik före bygget.
+
+Vad som byggs: meningarna STRYKS. Ingen omformuleras. För punkt 3 ("cannot starve") är den
+konservativa åtgärden strykning; frågan om ett tidsgränsat `getUsers`-anrop behövs filas
+som egen biljett i stället för att avgöras inne i en strykningsbunt.
+
+Acceptanskriterier:
+
+1. Alla sex kopiorna är borta, och ett kommando i bunten härleder att de är det. *(diff)*
+2. Ingen av dem har ersatts av en ny mening som bär ett tal eller ett "det enda". *(diff)*
+3. `npm test` och `npm run typecheck` gröna; ingen körande kod ändrad. *(diff)*
+4. Frågan om tidsgräns på `getUsers` är filad som egen biljett, inte besvarad här. *(diff)*
+
+## Bunt B — BIN-1207: tak på antal element i `lists.items` [Tier C] · build
+
+Router (`firestore.rules`, `src/test/rules/firestore-rules.test.ts`): **top** ·
+panel `[27, 4, 6, 7, 13]` → FULL PANEL, blint, före bygget.
+
+Malins beslut 2026-09-16: bygg taket för BÅDA grenarna samtidigt, ett ställe, samma tal.
+
+Underlaget för N, härlett och inte gissat — ett `UserListItem` är
+`{tmdbId, mediaType, title, posterPath, addedAt}` (`src/types/domain.ts:241`). Mot
+Firestores 1 MiB-gräns ryms ~5 000–7 000 element beroende på titellängd. Ett tak på
+**1 000** lägger dokumentet på ~150–210 kB, alltså en femtedel av taket, och ligger långt
+över vad en kurerad lista rimligen innehåller. Kommandot som producerar talet skrivs in i
+bunten. Fördelningen i skarp data går inte att mäta härifrån — den halvan är `run`.
+
+Låsningsfällan: ett rent `size() <= N` på efterdokumentet låser ute en samredigerare
+permanent om ägaren växt listan förbi taket, även från att TA BORT element. Regeln måste
+därför alltid tillåta att listan KRYMPER.
+
+Acceptanskriterier (biljettens egna):
+
+1. Taket gäller alla tre skrivvägarna, definierat på ett ställe. *(diff)*
+2. Ett test som visar att en samredigerare kan KRYMPA en lista som redan ligger över
+   taket. *(diff)*
+3. Talet N är motiverat mot ett mätt underlag. *(diff — härledningen mot dokumentgränsen)*
+   3b. Fördelningen av verkliga listlängder i produktion. *(run — Needs-you)*
+4. Ingen mening som påstår att innehållet i `items` är validerat. *(diff)*
+
+Bindande tillägg från urvalet:
+
+5. Muteringar, en i taget, mutanten hävdad närvarande FÖRE och EFTER svitkörningen i ETT
+   kommando: (a) ta bort taket från samredigerarens gren, (b) ta bort krymp-undantaget.
+   Vardera ska fälla minst ett test. *(diff)*
+6. `npm run test:rules` körd, och utdatan läst — inte bara exitkoden. *(diff)*
+
+## Bunt C — BIN-1103: flöden som namnger filer ingen nod bär [Tier A] · build
+
+Router (`docs/workflow-map.html`, `scripts/check-workflow-map.mjs`,
+`scripts/check-workflow-map.test.mjs`): **medium** · panel
+`#25 Engineering Manager / Release Manager` → EN blind kritik före bygget.
+
+Vad som byggs: biljettens alternativ 1 + 2. Härledningen blir ett kommando i lintern
+(`scripts/check-workflow-map.mjs`) som VARNAR när en flödesbeskrivning namnger en spårad
+sökväg som ingen nods `path` bär, och de flöden mätningen hittar får sina noder.
+
+Mätt utfall i dag: 21 omnämnanden över 9 flöden. Några av dem är avsiktliga — `error.tsx`
+täcks av universumets `boundaries`-lista (kontroll 6), inte av en nods `path`, och
+`docs/RUNBOOK.md` är inte källkod. Den avgränsningen är kritikens huvudfråga.
+
+Acceptanskriterier:
+
+1. Lintern namnger varje flöde som beskriver en spårad KÄLLFIL ingen nods `path` bär, och
+   avgränsningen mot crash-boundaries och dokument är motiverad i skriptets huvud. *(diff)*
+2. Varningen är en varning, inte ett fel — deployen blir inte röd av den. *(diff)*
+3. Ett test driver båda riktningarna: ett flöde med en otäckt källfil varnar, ett utan
+   varnar inte. *(diff)*
+4. Innehållsbaslinjen (`docs/workflow-map-content-baseline.json`) regenereras i samma
+   commit om kartans prosa ändras. *(diff)*
+
+## Behöver dig (Tier D / needs-approval)
+
+- **BIN-1211** — ska en publik lista och en profil gå att anmäla? Två frågor, båda dina.
+- **BIN-1210** — `claim-lint.mjs` ligger i det delade pluginrepot; kräver en egen session.
+- **BIN-959 punkt 1–3** — samma delade pluginrepo. Punkt 5 är obsolet och stängs.
+- **BIN-1207 kriterium 3b** — fördelningen av verkliga listlängder kräver skarp data.
+
+## Deviation log
+
+- [deviation] BIN-1193: planen räknade sex kopior. #27:s blinda kritik mätte fram två till,
+  båda med lydelsen "the one sweep" i stället för "the only sweep" — `orphans.ts:167` och
+  `retention-cleanup-orchestrator.test.ts:875`. Åtta strukna. Härled med
+  `grep -rniE "(the )?(only|one) sweep" functions/src src/test --include=*.ts`.
+- [deviation] BIN-1193: strykningen på `runCleanup.ts:943` tog HELA bisatsen, inte frasen
+  — att bara stryka "cannot starve the rest" hade lämnat "so a single failure — an Auth
+  outage, a missing index —" utan objekt. #27:s villkor 3.
+- [discovery] BIN-1193: ett nionde exklusivitetspåstående står kvar på `runCleanup.ts:1145`
+  ("the one sweep that recursively deletes a library"). `grep -rn "recursiveDelete"
+  functions/src/retentionCleanup` ger två anropsställen, ett på en session och ett på
+  `users/{uid}`. Sannolikt sant, oräknat, utanför biljettens uppräkning. Lämnat orört.
+- [needs-human] Verktyget för att SKAPA Linear-biljetter är inte tillgängligt i den här
+  sessionen. Följdfynden är därför skrivna som fullständiga kommentarer på närmaste öppna
+  biljett i stället, och taket rapporteras till Malin. "Kunde inte filas" och "hittade
+  inget" får inte bli samma sträng.
+- [deviation] BIN-1103 UTDRAGEN före bygget. #25:s kritik underkände planens kriterium att
+  kontrollen ska VARNA (en varning ingen läser reproducerar exakt det sjuveckorsfel
+  biljetten öppnar med) och lade fyra villkor till. Bunten blev ungefär dubbelt så stor.
+  Villkoren skrivna på biljetten, som är tillbaka i Backlog. Ingen kod skriven.
+- [deviation] BIN-1207 PARKERAD före bygget, trots Malins beslut att bygga. Panelen hittade
+  två fel som hade shippat: ett tak som läser `resource` inuti `isValidList` nekar VARJE
+  nyskapad lista, och ett krymp-undantag skrivet `efter < före` låser ut ÄGAREN från
+  `addEditor`/`removeEditor` på en lista över taket. #13:s bindande villkor vidgar dessutom
+  unionen till `ListPageClient.tsx`, vilket routar om panelen och kräver en ny kritik.
+  Hela panelen skriven på biljetten. Ingen kod skriven.
+- [deviation] Port 8080 hålls av ett annat repos emulator (java.exe). En regelsvitkörning
+  här kräver `npm run test:rules -- --port 8123`. Ingen annans emulator har dödats.
+
+## Avslutning
+
+- [ ] Följdbiljetter filade FÖRE commit
+- [ ] Granskningsloggen greppad på varje granskares EGET agent-id, per körning
+- [ ] Routern omkörd mot `git diff --cached --name-only` före VARJE commit
+- [ ] Push-grinden budgeterad som ett eget varv
+- [ ] Lärdomar + digest i samma redigering
+
+---
+
 # Sprint 2026-09-17 — 3 biljetter, 2 buntar
 
 Rent träd vid start (`git status --porcelain` tomt), i fas med origin, Todo och In Progress

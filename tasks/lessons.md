@@ -2028,3 +2028,23 @@ falt skrivaren skriver - den andrades aldrig. Commitens faktiska union byter dar
 **Regel:** urvalets grep-of-main-kontroll gäller lika mycket för en biljett som FLAGGAS som för en som byggs. En fråga är ett beslut hon får ansvara för, så premissen måste vara mätt vid HEAD — och det billigaste sättet att mäta den är att köra de kommandon biljetten själv publicerar. En biljett skriven för veckor sedan beskriver ett träd som inte finns längre, och ett alternativ hon väljer kan redan vara byggt. Läs också ett daterat beslutsprotokoll innan du frågar: svaret kan stå där.
 
 **Exempel:** BIN-1139, 2026-09-17. Jag lade tre alternativ om ett löfte i villkoren framför Malin; hon valde "skriv om meningen". Den ändringen låg redan på main sedan `1515279` (2026-09-14, hennes eget val), och biljettens andra halva var avgjord i en daterad notering i `docs/org/adr/0002`. Biljettens eget första kommando, `git grep -n "meddelar" -- src/app`, ger noll träffar och hade avslöjat det på en sekund. Andra gången samma fel efter BIN-1080; det som saknades var inte regeln utan att kontrollen bara kördes för de biljetter som byggdes.
+
+---
+
+### [Workflow] COMMIT-MEDDELANDET är den enda artefakt ingen per-commit-grind läser — och det går inte att rätta
+
+**Trigger:** du skriver ett commit-meddelande som räknar upp vad commiten gör.
+
+**Regel:** varje granskare i den här kedjan läser den stageade DIFFEN. Ingen av dem läser meddelandet. Först push-grindens helhetsvarv gör det, och då är commiten redan skriven — och `--amend` är förbjudet av arbetsöverenskommelsen, så meningen kan inte strykas där den står. Skriv därför aldrig ett räkneord, ett "det enda" eller en superlativ i ett commit-meddelande: en uppräkning utan inledande tal säger samma sak och kan inte bli falsk när listan ändras. Upptäcks det ändå är den enda hållbara åtgärden en daterad `correction`-rad i `docs/org/metrics/events.jsonl` som namnger shan och stryker påståendet — inte en omformulering, och inte en ny commit som påstår något annat om den gamla.
+
+**Exempel:** BIN-1193, sprinten 2026-09-17b. Meddelandet till `61a5d9d` inledde sin lista med ett räkneord och listade fler punkter än ordet sa. Commiten hade passerat säkerhets-, test- och helhetsgranskaren, alla tre med `pass` och full lästäckning — ingen av dem kunde se det, eftersom de tre läste diffen. Push-grinden fällde det. Ett omätt tal inne i den commit vars hela syfte var att ta bort omätta tal.
+
+---
+
+### [Workflow] En kritik kan göra bunten för stor, och då är rätt svar att dra ut den FÖRE bygget
+
+**Trigger:** en blind rollkritik lämnar tillbaka villkor som gör en vald bunt väsentligt större än urvalet antog.
+
+**Regel:** kritikens kostnad är betald oavsett vad du gör härnäst — det som återstår att välja är om du spenderar en byggplats också. Att bygga halvt och parkera är det sämsta utfallet: koden kan inte committas, platsen är spenderad, och nästa sprint ärver ett halvbyggt träd. Dra ut biljetten, skriv HELA panelen på den, och lämna den i Backlog. Nästa körning startar då från en färdigkritiserad design i stället för från en gissning, vilket är mer värt än en halv leverans. Skriv uttryckligen att ingen kod skrevs, så "utdragen" och "misslyckad" inte blir samma sträng.
+
+**Exempel:** sprinten 2026-09-17b valde tre biljetter och byggde en. BIN-1103:s kritik underkände planens grundform (en varning ingen läser reproducerar exakt det fel biljetten öppnar med) och lade fyra villkor till. BIN-1207:s fullständiga panel hittade två fel som hade shippat — ett tak som läser `resource` inuti en hjälpare som också anropas från `create` nekar VARJE nyskapad lista, och ett krymp-undantag skrivet `efter < före` låser ute ägaren från att hantera medredigerare — och ett bindande villkor vidgade unionen till en klientfil, vilket routar om panelen och kräver en ny kritik. Båda parkerades före första raden kod.
