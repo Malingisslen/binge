@@ -2048,3 +2048,53 @@ falt skrivaren skriver - den andrades aldrig. Commitens faktiska union byter dar
 **Regel:** kritikens kostnad är betald oavsett vad du gör härnäst — det som återstår att välja är om du spenderar en byggplats också. Att bygga halvt och parkera är det sämsta utfallet: koden kan inte committas, platsen är spenderad, och nästa sprint ärver ett halvbyggt träd. Dra ut biljetten, skriv HELA panelen på den, och lämna den i Backlog. Nästa körning startar då från en färdigkritiserad design i stället för från en gissning, vilket är mer värt än en halv leverans. Skriv uttryckligen att ingen kod skrevs, så "utdragen" och "misslyckad" inte blir samma sträng.
 
 **Exempel:** sprinten 2026-09-17b valde tre biljetter och byggde en. BIN-1103:s kritik underkände planens grundform (en varning ingen läser reproducerar exakt det fel biljetten öppnar med) och lade fyra villkor till. BIN-1207:s fullständiga panel hittade två fel som hade shippat — ett tak som läser `resource` inuti en hjälpare som också anropas från `create` nekar VARJE nyskapad lista, och ett krymp-undantag skrivet `efter < före` låser ute ägaren från att hantera medredigerare — och ett bindande villkor vidgade unionen till en klientfil, vilket routar om panelen och kräver en ny kritik. Båda parkerades före första raden kod.
+
+---
+
+### [Design] En delad hjälpare bär sina TOLERANSER in i varje gren den kopplas in i
+
+**Trigger:** du bryter ut en klausul ur en gren till en hjälpare som andra grenar också anropar.
+
+**Regel:** fråga vad DEN grenen krävde före. En hjälpare skriven tolerant för en anropare ger den toleransen till varenda annan anropare, så en ändring som bara skulle begränsa kan VIDGA en gren i samma redigering. Lägg klausulen på den vidgade grenen; gör inte hjälparen stramare, för då faller det behov som motiverade toleransen.
+
+**Exempel:** BIN-1207, 2026-09-17. Takhjälparen släpper igenom ett frånvarande `items`, vilket ägarens gren och `create` behöver — ett legacy-dokument utan fältet hade annars blivit permanent oredigerbart för sin ägare, vilket var dataskyddsrollens bindande villkor. Samredigerargrenen hade krävt `items is list` ovillkorligt och nekade därför `items: deleteField()`. Att dela in hjälparen gjorde den skrivningen tillåten där. Säkerhetsgranskningen passerade med noll blockerande fynd och tog det som en icke-blockerande iakttagelse; det var ändå en ny förmåga inuti en biljett vars hela syfte var att begränsa.
+
+---
+
+### [Testing] Ett test för beteende du inte avsåg bokför olyckan som ett krav
+
+**Trigger:** du skriver, under bygget, ett test för ett fall biljetten aldrig bad om.
+
+**Regel:** när ett nytt test påstår att något är TILLÅTET, pröva om det var tillåtet före ändringen. Var det inte det, bokför testet en vidgning som om den vore ett krav, och det försvarar den vidgningen mot varje senare granskare som läser sviten ensam.
+
+**Exempel:** BIN-1207. Jag skrev ett test som påstod att en samredigerare får skriva på ett dokument utan `items`. Det nekades före bunten. Testet fick vidgningen i posten ovan att se avsiktlig ut. Det är nu vänt till ett nekande, med ett `deleteField`-fall bredvid, och muteringen som tar bort den återställda klausulen fäller båda.
+
+---
+
+### [Workflow] En granskares domrad skrivs inte tillförlitligt — läs granskningsloggen efter VARJE körning
+
+**Trigger:** vilken som helst commit-grindsgranskning vars dom loggen måste bära.
+
+**Regel:** läs granskningsloggen på granskarens EGET agent-id efter varje körning och bekräfta att en domrad finns bredvid dess läsrader. Granskarens egen rapport svarar på ingendera frågan. En körning med full lästäckning och ingen domrad lämnar agentens FÖRRA dom stående — som kan vara ett `fail` — och commiten nekas medan rapporten framför dig säger pass. Budgetera ett omkörningsvarv. Loggen läses med Read eller Grep; ett skalkommando som ens NÄMNER dess sökväg nekas av dess egen vakt, och vakten läser hela kommandosträngen, så resten av anropet kör inte heller.
+
+**Regel, fortsättning:** skriv inte ned någon ORSAK till att domraden ibland uteblir. Mätt 2026-09-17, samma session, samma repo: en säkerhetsgranskning med domkontraktet i sista stycket bokförde läsningar men ingen dom; samma granskning med kontraktet som första stycke bokförde domen; en kodgranskning med kontraktet som första stycke bokförde återigen ingen dom. Positionen är alltså inte förklaringen — utkastet till den här lärdomen påstod att den var det efter att ha sett de två första fallen, och motsades av det tredje. Det som håller är kontrollen, inte teorin.
+
+---
+
+### [Workflow] En rättelse som förklarar VARFÖR är nästa defekt — publicera kommandot, skriv ingen mekanism
+
+**Trigger:** du skriver en `correction`-rad, eller vilken text som helst som rättar ett falskt påstående.
+
+**Regel:** en rättelse får citera den strukna strängen, sätta domen och publicera ett kommando som FAKTISKT körts. I samma stund den också förklarar MEKANISMEN — varför det felaktiga var felaktigt — har den påstått något nytt som ingen mätt, och det påståendet blir nästa varvs blockerande fynd. Stryk, publicera, sluta. Ett kommando bredvid en mening måste dessutom kunna FALSIFIERA den: läs dess UTDATA före publicering, det räcker inte att det kör. Skriv kommandon utan pipes och utan escape-tecken.
+
+**Exempel:** BIN-1207, 2026-09-17, samma rad tre varv. En review-rad publicerade ett härledningskommando med `| tr NEWLINE SPACE`; `tr` tar teckenmängder, inte ord, så det skrev om bokstäver inuti sökvägarna och de manglade namnen routade till en ANNAN panel än raden påstod. Rättelsen som strök det förklarade mekanismen: att de manglade namnen "route as unmapped". Mätt gör de inte det — `unmapped`, `unmappedCode` och `unownedCode` kommer alla tillbaka tomma — och samma mening räknade dessutom upp de omskrivna sökvägarna och missade en, just den som bar rollen vars närvaro var hela poängen. Först den tredje raden höll, för den strök båda fragmenten och skrev ingenting i deras ställe. Formen `$(git diff --cached --name-only)` utan pipe var rätt hela tiden.
+
+---
+
+### [Workflow] En kritik som ändrar VAD du bygger ändrar VEM som äger det
+
+**Trigger:** en blind kritik vars rekommendation flyttar leveransen till en annan fil än den biljetten handlar om.
+
+**Regel:** routa om efter att ett villkor vikts in, inte bara när filer läggs till eller faller bort. De kända orsakerna till att panelen flyttar sig var en vidgad union, en krympt union och ett byte av säte. Det här är en fjärde: biljettens ämne och fixens plats gled isär, så den ägande rollen bytte utan att någon fil lades till eller togs bort. Billigaste stunden att märka det är när du väljer var fixen ska skrivas — fråga då om den filen har en annan ägare än den filen biljetten namngav.
+
+**Exempel:** BIN-1205, 2026-09-17. Biljetten handlar om en pekare i `docs/RUNBOOK.md` och routade till #8 DevOps/SRE, som kritiserade den. #8:s mätta råd var att inte ändra något dokument alls, så leveransen blev i stället en daterad post i `.claude/rules/accepted-deviations.md`, en fil #25 Engineering Manager äger. Grinden `check_staged_routing` nekade commiten med #25 som NOT REVIEWED. Ingenting var fel med #8:s kritik och ingenting var fel med posten; det som flyttade sig var var svaret skrevs.
