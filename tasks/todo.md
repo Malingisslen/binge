@@ -1,3 +1,176 @@
+# Sprint 2026-09-18 — 5 biljetter, 4 buntar + kartcommit
+
+Rent träd vid start (`git status --porcelain` tomt), i fas med `origin/main`. Todo och
+In Progress var tomma. Föregående sprintplan är arkiverad under separatorn nedan.
+
+Routningen nedan är körd vid URVALET. Den körs om före varje kritik och mot
+`git diff --cached --name-only` före VARJE commit — aldrig ärvd härifrån.
+
+## Mätt vid urvalet (grep-of-main, före klassning)
+
+- **BIN-1233 håller.** `git grep -n "buildTargetLink" -- src/app/admin/reports/page.tsx`
+  visar `/user/${report.targetOwnerUid}`; profilsidan slår upp `usernames/{username}`.
+  `users/{uid}` är ägarläsbart och `publicProfiles/{uid}` läsbart bara för publik/vän —
+  admin har ingen klientväg till användarnamnet för en privat profil. Härled:
+  `grep -n "match /publicProfiles" -A6 firestore.rules`.
+- **BIN-1235 håller.** `git grep -n "ReportTargetType =" -- src functions`.
+- **BIN-1236 håller.** `git grep -n "addItemToList\|removeItemFromList" -- src/components`.
+- **BIN-1237 håller** i alla fyra punkter: `git grep -n "posten daterad"`,
+  `grep -c "isValidList does not name items" docs/workflow-map.html`,
+  `grep -n "arrayUnion" src/hooks/useLists.ts`, `grep -n "targetType" docs/moderation.md`.
+- **BIN-1103** bär en färdigkritiserad design (#25, kommentaren 2026-09-17 11:01) med fem
+  bindande villkor; de gäller oförändrade.
+
+## Inte valda, med skäl
+
+- **BIN-1179** — halva 2 redan gjord (`87c2b18`, BIN-1182); halva 1 kräver en
+  produktionsräkning. Needs you.
+- **BIN-559** — eget pass med full panel (AuthContext), enligt kommentaren 2026-09-06.
+- **BIN-1234, BIN-1120, BIN-1167** — regeländringar med egen panel och/eller produktval.
+- **BIN-1210, BIN-959** — egen session utan granskaragenter (ditt villkor).
+- **BIN-1212, BIN-1144, BIN-1121, BIN-454/402** — Tier D (konsol/produktion).
+- **BIN-1118, BIN-521** — etikett `Feature`/`idea`.
+
+## Bunt A — BIN-1233 + BIN-1235 (+ BIN-1237 p4) · Tier A · panel `single`
+
+```
+node docs/org/route.mjs src/app/admin/reports/page.tsx docs/moderation.md \
+  src/lib/firebase/reports.ts src/lib/moderation/reportTargetCoverage.test.ts
+→ medium · owned · panel [27] · unownedCode [reportTargetCoverage.test.ts]
+```
+
+### Acceptanskriterier
+1. (1233) En användaranmälan i admin-vyn leder till den användarens profilsida när
+   användarnamnet går att nå; annars ingen länk som påstår att användaren saknas. *(diff)*
+2. (1233) Ett test driver länkbygget för en användaranmälan och pinnar målet. *(diff)*
+3. (1233) `docs/moderation.md`s `ownerResolved`-rad beskriver det koden nycklar på, eller
+   stryks. *(diff)*
+4. (1235) En måltyp som läggs till i serverns `REPORT_TARGET_TYPES` fäller ett test om
+   klientens typ saknar den. *(diff)*
+5. (1237 p4) `targetType`-raden pekar på `REPORT_TARGET_TYPES` i stället för att räkna
+   upp. Ingen ny uppräkning, inget nytt tal. *(diff)*
+
+### Villkor från #27 (blind kritik, bindande)
+- Endast klientdesign (i): ingen regel- eller funktionsändring. Användarnamnet läses ur den
+  befintliga projektionen via `useSenderProfile`, ingen ny spegel.
+- `ownerResolved`-raden rättas i samma commit.
+- Klientunionens påstående förankras i deklarationen och bevisas med en smalnande mutation.
+- Dokumentpekaren namnger serverns `REPORT_TARGET_TYPES` som auktoritativ.
+
+## Bunt B — BIN-1236 (+ BIN-1237 p3) · Tier A · panel `single`
+
+```
+node docs/org/route.mjs src/hooks/useLists.ts src/components/pages/ListPageClient.tsx \
+  src/components/title/AddToListButton.tsx
+→ medium · owned · panel [26] · unownedCode [AddToListButton.tsx]
+```
+
+### Acceptanskriterier
+1. En ny anropare av listmutationerna kan inte tyst sakna fångst och besked. *(diff)*
+2. Listsidans optimistiska återställning finns kvar och pinnas av ett test. *(diff)*
+3. Befintliga Sentry-`kind`-värden per anropsställe ändras inte. *(diff)*
+4. (1237 p3) "muteras via arrayUnion" är struken. *(diff)*
+
+### Villkor från #26 (blind kritik, bindande)
+- Hooken själv fångar, rapporterar och säger till; en anropare som struntar i utfallet får
+  ändå beskedet.
+- Listsidans återställning nycklas på `ok === false` och ett test driver ett nekande hela
+  vägen till en återställd cache.
+- Sentry-`kind` byte-identiska; kollisionsvakten i `AddToListButton.test.tsx` omkörd.
+- `AddToListButton.tsx`:s mekanismkommentar rättas i samma commit.
+- `AddToListButton.tsx` får inget säte i ägarkartan av den här bunten.
+
+## Bunt C — BIN-1103 · Tier A · panel `single` (designen redan kritiserad av #25)
+
+```
+node docs/org/route.mjs scripts/check-workflow-map.mjs scripts/check-workflow-map.test.mjs
+→ medium · owned · panel [25]
+```
+
+Kartans noder läggs till i en EGEN commit före linterns commit.
+
+### Acceptanskriterier
+1. Lintern FÄLLER (en `problems`-post) när en flödesbeskrivning namnger en spårad
+   källfil som ingen nod i flödet bär. *(diff)*
+2. Crash-boundaries undantas via flödets egen `covers[]`; dokument som `docs/**/*.md`,
+   aldrig prefixet `docs/`. *(diff)*
+3. Ett verkligt undantag nycklas på (flöde, sökväg) och bär ett skäl. *(diff)*
+4. Ett test pinnar att kontrollen är inkopplad i `main()` med arity-känslig regex. *(diff)*
+5. Tokeniseraren har gränsfallstest: parentes, komma/punkt efter, katalog utan
+   filändelse fälls inte; backtick-spann skördas inte som mekanism. *(diff)*
+6. Fynden lagas genom att lägga till noden, aldrig genom att ta bort omnämnandet. *(diff)*
+
+## Bunt D — BIN-1237 p1 · Tier C · panel `top`
+
+```
+node docs/org/route.mjs firestore.rules src/test/rules/firestore-rules.test.ts
+→ top · high-stakes · panel [27,4,6,7,13]
+```
+
+### Acceptanskriterier
+1. Pekaren "posten daterad 2026-09-17" i regler, regeltest och karta namnger `## BIN-1207`
+   i stället. *(diff)*
+2. Ingen regellogik ändras (bara kommentarer). *(diff)*
+3. (p2, i kartcommiten) "isValidList does not name items at all" är struken. *(diff)*
+4. Regeldeployen görs efter push. *(run)*
+
+### Panelens villkor (#27, #4, #6, #7, #13 — alla godkände)
+- Meningen bredvid pekaren står kvar ordagrant; båda pekarna namnger `## BIN-1207`.
+- Regel- och testkommentaren i samma commit; diffen rör bara kommentarsrader.
+
+## Needs you
+- **BIN-1179 halva 1** — räkna grupper utan `publicGroups`-projektion i produktion.
+- **BIN-1212** — återställning av säkerhetskopia mot en engångsdatabas.
+- **BIN-1144** — App Check för Firestore, konsolfråga.
+- **BIN-454** — `mutateEnabled`, din konsolåtgärd (~nov).
+
+## Avvikelselogg
+
+- [deviation] BIN-1103: commit `0cf01f5a`:s meddelande säger "Sex kallfiler"; kartdiffen
+  lägger till sju sökvägar på fem noder. Meddelandet kan inte rättas; en `correction`-rad i
+  `docs/org/metrics/events.jsonl` stryker påståendet.
+- [discovery] BIN-1103: av tolv fynd lades sju till som nodsökvägar och fem testfiler fick
+  parundantag (`FLOW_PATH_EXEMPTIONS`, skäl: citerade som belägg). `accountDeletion.ts` i
+  flow4 fick först ett undantag som kontrastomnämnande, men lades i stället på noden
+  `watchlist-context` — ett undantag hade lämnat flow4:s mening utan arbetsorder.
+- [deviation] BIN-1235: `src/lib/firebase/reports.ts` ändras inte — testet läser unionen som
+  text. Unionen krymper därmed och routningen körs om före commit.
+- [discovery] BIN-1233: för en användaranmälan sätter servern alltid `targetOwnerUid`
+  (`functions/src/submitReport/index.ts`), så den gamla kommentaren om null för ett
+  raderat konto gällde inte den grenen; den följde inte med till den nya koden.
+
+## Utfall
+
+Commitar, i ordning — härled dem med `git log --oneline bd179690..HEAD`:
+
+- `0cf01f5a` kartans nodvägar + BIN-1237 kartmeningar; `8ab56c33` kontroll 8 (BIN-1103).
+- `9eb9b47a` listmutationerna (BIN-1236 + BIN-1237 p3).
+- `6ce7a649` admin-länken och klientens måltyper (BIN-1233, BIN-1235, BIN-1237 p4).
+- `d513b067` säte i ägarkartan för listbuntens nya testfiler.
+- `80aeae57` regel- och testkommentaren (BIN-1237 p1).
+- `7680fe5f` kartans list- och anmälningsflöden omritade.
+
+Följdbiljetter: BIN-1239 (två otestade utfallsgrenar), BIN-1240 (avvikelseposten om admin-ytan),
+BIN-1241 (belägg-testfilernas källfiler bärs inte av noder).
+
+- [discovery] `9eb9b47a` gjorde `docs/org/gen-ownership-map.test.mjs` röd: två nya testfiler
+  i kataloger som ägarkartan listar fil för fil. Lagat i `d513b067` med säte under roll 26,
+  ingen `--update-gaps`. Den första helsviten kördes medan filerna var ospårade och var grön.
+- [deviation] Unionen för bunt A krympte när `src/lib/firebase/reports.ts` föll bort; panelen
+  flyttade från [27] till [12] och en ny blind kritik kördes före commit.
+- [deviation] Två bokföringsomgångar för BIN-1237 flaggades av auto-läget; deras domar
+  lutades inte på, två fullständiga granskningar kördes i stället (lärdom i `tasks/lessons.md`).
+
+## Efter sprinten
+- [x] Full `npm run typecheck`, full `npm test`.
+- [x] Följdbiljetter filade — efter commitarna, före push.
+- [x] Granskare per `reviewGates`; loggen greppad per granskares EGET agent-id.
+- [x] Routa om mot `git diff --cached --name-only` före VARJE commit.
+- [ ] Push (= hosting). Regeldeploy manuell.
+- [x] Linear-övergångar parvis med varje commit.
+
+---
+
 # Sprint 2026-09-17d — 4 biljetter, 3 buntar
 
 Rent träd vid start (`git status --porcelain` tomt), i fas med `origin/main`. Todo och

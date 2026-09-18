@@ -2118,3 +2118,11 @@ falt skrivaren skriver - den andrades aldrig. Commitens faktiska union byter dar
 **Regel:** en post får bara committas med det träd som gör den sann. Det krävs ingen interaktiv staging för att dela filen: ta bort den senare buntens block, committa den tidiga bunten, och lägg tillbaka blocket i den senare buntens commit. Spara blocket som en egen fil emellan, annars finns det bara i sessionen.
 
 **Exempel:** BIN-1227 och BIN-1211, 2026-09-17d. Min plan skrev att `.claude/rules/accepted-deviations.md` "inte går att dela" och skulle committas en gång i bunt A med båda posterna. Helhetsgranskaren fällde det: `## BIN-1211` påstod en anmälningsväg på profilen och pekade på en testfil som inte fanns i bunt A:s träd. Blocket flyttades, bunt A committades med bara `## BIN-1227`, och `## BIN-1211` kom in i `d1986e3e` tillsammans med testet som läser rubriken.
+### [Workflow] En bokföringsomgång som ombeds att INTE granska flaggas som grindkringgång — kör en fullständig granskning i stället
+
+**Trigger:** en granskares dom bokfördes inte, och du tänker köra om den bara för bokföringens skull.
+
+**Regel:** be aldrig en granskare att "inte göra om analysen" eller "bara skriva ut domraden". Auto-läget läser det som att runda commit-grinden och flaggar rapporten; en dom från en sådan körning är inte ett bevis. Kör i stället en fullständig, oberoende granskning av samma bytes med kravet att sista raden ska vara vanlig text med domen. Läs sedan loggen på granskarens eget id.
+
+**Exempel:** sprinten 2026-09-18, BIN-1237 punkt 1. Två bokföringsomgångar (säkerhet och test) flaggades som "[CI Bypass]" respektive "[Auto-Mode Bypass]". Båda hade läst filerna och deras domar hamnade i loggen, men de lutades inte på: två fullständiga granskningar kördes, båda bokfördes, och först då committades `80aeae57`. Tidigare samma dag hade bokföringsomgångar med samma form gått igenom utan flagga, så att det fungerat förut är inget skäl.
+
