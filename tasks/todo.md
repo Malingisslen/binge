@@ -1,3 +1,161 @@
+# Sprint 2026-09-17d — 4 biljetter, 3 buntar
+
+Rent träd vid start (`git status --porcelain` tomt), i fas med `origin/main`. Todo och
+In Progress var tomma. Föregående sprintplan är arkiverad under separatorn nedan.
+
+Routningen nedan är körd vid URVALET på varje bunts faktiska filuppsättning. Den körs om
+före varje kritik och mot `git diff --cached --name-only` före VARJE commit — aldrig ärvd
+härifrån.
+
+## Mätt vid urvalet (grep-of-main, före klassning)
+
+- **BIN-1228 håller.** `firestore.rules` läser före-antalet på ägargrenen och på
+  samredigerargrenen med `resource.data.get('items', []).size()`, medan typkontrollen
+  (`d.items is list`) ligger i `itemsWithinCap` och prövar EFTER-värdet. Härled:
+  `grep -n "resource.data.get('items'\|itemsWithinCap" firestore.rules`.
+- **BIN-1227 håller.** `maxListItems()` står ensam i `firestore.rules` utan pekare till
+  sitt underlag; underlaget bor i den arkiverade sprintplanen för 2026-09-17c. Härled:
+  `grep -n "maxListItems" firestore.rules`.
+- **BIN-1226 håller.** `AddToListButton.tsx` raderna 47–48 anropar `removeItemFromList`
+  respektive `addItemToList` utan `await`, utan `catch` och utan rapportering.
+  `ListPageClient.tsx` gör allt tre. Härled:
+  `grep -n "addItemToList\|removeItemFromList" src/components/title/AddToListButton.tsx`.
+- **BIN-1211 är BESLUTAD, inte längre en öppen produktfråga.** Malins kommentar
+  2026-09-17 17:18 säger "profilen först — godkänt att bygga", och den ligger EFTER den
+  tidigare "låt vänta"-kommentaren 10:23. Listor är uttryckligen INTE beslutat och byggs
+  inte. `UgcActionsMenu` monteras bara i `ReviewList.tsx`. Härled:
+  `git grep -n "UgcActionsMenu" -- src`.
+- **BIN-1210 får inte byggas i den här sessionen.** Malins villkor 2026-09-17: egen
+  session utan granskaragenter. Den här sprinten startar granskare i varje bunt.
+- **BIN-1097 är avgjord åt andra hållet** (kommentaren 2026-09-17 13:41): lämnas öppen,
+  byggs inte, mäts om när grupper används på riktigt.
+
+## Bunt A — BIN-1228 + BIN-1227 · Tier C · panel `top`
+
+Routning vid urvalet, på buntens faktiska filuppsättning:
+
+```
+node docs/org/route.mjs --md firestore.rules src/test/rules/firestore-rules.test.ts \
+  scripts/run-rules-tests.mjs .claude/rules/accepted-deviations.md
+→ Tier top · #27 DBA, #4 Säkerhetsarkitekt, #6 DPO, #7 QA, #25 Engineering Manager
+```
+
+Disposition: **build** båda. Ingen produktfråga — det är en spärr som läcker och ett
+saknat spår till ett redan taget beslut.
+
+### Acceptanskriterier
+
+1. Före-antalet härleds inte ur ett lagrat värde vars typ inte prövats; klausulen ligger
+   på ett ställe, inte i kopia per gren. *(kind: diff)*
+2. Ett emulatortest seedar ett lagrat `items` som sträng och visar att ägaren inte kan
+   skriva förbi taket på det dokumentet. *(kind: diff)*
+3. `MIN_TESTS` i `scripts/run-rules-tests.mjs` höjs i samma commit till vad
+   `numTotalTests` faktiskt rapporterar med de nya testen på plats — mätt, inte räknat
+   för hand. *(kind: diff)*
+4. Den som läser definitionen av taket hittar underlaget utan att öppna en arkiverad
+   sprintplan. *(kind: diff)*
+5. Ingen ny siffra skrivs som inte går att härleda med ett publicerat kommando, och
+   ingen mening påstår att INNEHÅLLET i `items` är validerat. *(kind: diff)*
+
+## Bunt B — BIN-1226 · Tier B · panel `single`
+
+```
+node docs/org/route.mjs --md src/components/title/AddToListButton.tsx
+→ Tier medium · #14 Software Architect (sökvägen saknar ägare i ownership-map.json)
+```
+
+Disposition: **build**. Ett nekande som blir osynligt är en defekt, inte ett produktval.
+Besked-texten följer mönstret som redan ligger live i `ListPageClient.tsx`.
+
+### Acceptanskriterier
+
+1. Båda anropen inväntas och fångas. *(kind: diff)*
+2. Ett nekande rapporteras i Sentry-scopet `lists` med ett eget `kind` per anropsställe.
+   *(kind: diff)*
+3. Användaren får ett besked som inte namnger en orsak. *(kind: diff)*
+4. Ingen ny mening som påstår att listsidan var den enda oskyddade vägen — härled
+   anroparna i stället. *(kind: diff)*
+
+## Bunt C — BIN-1211 · Tier B · panel `single`
+
+```
+node docs/org/route.mjs --md src/components/pages/UserProfilePageClient.tsx \
+  src/components/moderation/UgcActionsMenu.tsx docs/moderation.md
+→ Tier medium · #26 Information Architect
+```
+
+Disposition: **build**, avgränsat till PROFILEN. `list` som anmälningsbar yta är
+uttryckligen inte beslutat och levereras som en daterad rad, inte som en knapp.
+
+### Acceptanskriterier
+
+1. En inloggad besökare kan anmäla en annan användares profil; ingen kan anmäla sin
+   egen. *(kind: diff)*
+2. För varje `targetType` servern accepterar finns antingen en yta som kan skapa
+   anmälan, eller ett daterat beslut om att den medvetet saknas. *(kind: diff)*
+3. En kontroll gör att en NY `targetType` på serversidan inte kan läggas till utan att
+   frågan ställs. *(kind: diff)*
+4. `docs/moderation.md` beskriver vad som faktiskt går att anmäla. *(kind: diff)*
+
+## Needs you (Tier D / beslut)
+
+- **BIN-1210 + BIN-959 p1–3** — egen session utan granskaragenter, per ditt villkor.
+- **BIN-1144** — App Check för Firestore: konsolfråga, går inte att läsa ur repot.
+- **BIN-454** — tmdbTosSweep `mutateEnabled`: din Firebase Console-åtgärd, aldrig en sprint.
+- **BIN-1121** — produktionsmätning av grupper utan medlemsdokument; mätt 2026-09-06 till
+  noll grupper, mäts om när grupper används.
+
+## Avvikelselogg
+
+- [needs-human] Linear: `create_issue` svarar "You've exceeded the free issue limit for
+  this workspace" på varje nytt ärende. De tre följdfynden skrevs som fullständiga
+  kommentarer på BIN-1228, BIN-1211 och BIN-1226 i stället, var och en märkt med varför
+  den inte blev en egen biljett. Taket är Malins att åtgärda.
+- [deviation] #27 DBA och #25 Engineering Manager var oeniga om VAR BIN-1227:s underlag
+  ska bo: #27 ville ha en egen daterad rubrik efter BIN-1207-posten, #25 ville lägga till
+  ett stycke i den befintliga posten. Ingen av dem är en high-stakes-fråga. Löst med #27:s
+  form och #25:s innehållsvillkor — en egen `## BIN-1227`-rubrik, med mätmetoden och
+  datumet inskrivna och åldrandeförbehållet fört vidare.
+- [deviation] Helhetsgranskningen av bunt A underkände att `## BIN-1211`-posten låg i den
+  commiten: den beskriver en yta som inte finns i det trädet. Posten är utflyttad, och
+  bunt A:s commit-meddelande namnger bara BIN-1227-posten. Uppfyllt i `d1986e3e`: bunt
+  C:s commit bär `## BIN-1211` i `.claude/rules/accepted-deviations.md` tillsammans
+  med `src/lib/moderation/reportTargetCoverage.test.ts`, som läser rubriken.
+- [discovery] `src/components/pages/UserProfilePageClient.test.tsx` föll på import efter
+  att profilen monterade `UgcActionsMenu` — modulgrafen når firebase-konfigen, vars
+  `getAuth()` kastar på testnyckeln. Löst med samma `vi.mock`-rad som grannfilerna bär.
+- [discovery] Routern ger samma panel med och utan `tasks/todo.md` i unionen för bunt A.
+  Kommandona och utfallen står i respektive bunts avsnitt ovan; de kördes om mot den
+  faktiska stageade uppsättningen före varje commit.
+
+- [needs-human] 2026-09-18: **sprinten STANNADE före första commit.** Den fjärde
+  helhetsgranskningen av bunt A läste varje stageade fil men dödades av Anthropics
+  veckotak ("You've hit your weekly limit · resets Sep 22, 7pm (Europe/Stockholm)") innan
+  den skrev sin dom. Ledgern har läsrader för den körningen men INGEN domrad, så
+  commit-grinden släpper inte bunt A. Samma tak stoppar varje ny granskarkörning. Ingen
+  granskare har körts på lägre modell för att ta sig runt taket: commit-grindens granskare
+  stannar på opus enligt den globala instruktionen, och att sänka dem för att en gräns
+  slog till är att runda grinden.
+
+## Återupptagen 2026-09-18
+
+Commitar, i ordning: bunt A `342dfda5` (BIN-1228, BIN-1227), bunt B `ae17f33b`
+(BIN-1226), bunt C `d1986e3e` (BIN-1211), flödeskartan `c03b4dad`. Härled dem med
+`git log --oneline 342dfda5^..c03b4dad`.
+
+## Efter sprinten
+
+- [ ] Full `npm run typecheck`.
+- [ ] Full `npm test`.
+- [ ] Följdbiljetter filade FÖRE commit.
+- [ ] Granskare per `reviewGates`; ledgern är beviset, greppad per granskares EGET agent-id.
+- [ ] Routa om mot `git diff --cached --name-only` före VARJE commit.
+- [ ] Push (= deploy av hosting). Regeldeploy är manuell.
+- [ ] Linear-övergångar parvis med varje commit.
+- [ ] Lärdomar + digest i samma redigering.
+
+---
+
 # Sprint 2026-09-17c — 3 biljetter, 3 buntar
 
 Rent träd vid start (`git status --porcelain` tomt), i fas med `origin/main`. Todo och

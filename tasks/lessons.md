@@ -2098,3 +2098,23 @@ falt skrivaren skriver - den andrades aldrig. Commitens faktiska union byter dar
 **Regel:** routa om efter att ett villkor vikts in, inte bara när filer läggs till eller faller bort. De kända orsakerna till att panelen flyttar sig var en vidgad union, en krympt union och ett byte av säte. Det här är en fjärde: biljettens ämne och fixens plats gled isär, så den ägande rollen bytte utan att någon fil lades till eller togs bort. Billigaste stunden att märka det är när du väljer var fixen ska skrivas — fråga då om den filen har en annan ägare än den filen biljetten namngav.
 
 **Exempel:** BIN-1205, 2026-09-17. Biljetten handlar om en pekare i `docs/RUNBOOK.md` och routade till #8 DevOps/SRE, som kritiserade den. #8:s mätta råd var att inte ändra något dokument alls, så leveransen blev i stället en daterad post i `.claude/rules/accepted-deviations.md`, en fil #25 Engineering Manager äger. Grinden `check_staged_routing` nekade commiten med #25 som NOT REVIEWED. Ingenting var fel med #8:s kritik och ingenting var fel med posten; det som flyttade sig var var svaret skrevs.
+
+---
+
+### [Workflow] En granskare som dödas av en användningsgräns bokför läsningar men ingen dom — säkra buntarna FÖRE sista granskningsvarvet
+
+**Trigger:** en sprint som närmar sig kontots användningstak medan en granskningskedja pågår.
+
+**Regel:** en granskare som avbryts innan sitt sista meddelande lämnar läsrader i ledgern men ingen domrad, och commit-grinden läser det som "aldrig granskad". Samma tak stoppar varje ny granskare, så buntarna står färdigbyggda utan väg in. Spara därför varje bunt som en patchfil med datum i namnet innan det sista varvet, verifiera med `git apply -R --check`, jämför hasharna mot varandra, lägg commit-meddelandet bredvid, och skriv "byggd, INTE committad, återställbar från <fil>" på varje biljett. Kör ALDRIG grindens granskare på en billigare modell för att komma förbi taket — det är att runda grinden.
+
+**Exempel:** sprinten 2026-09-17d, 2026-09-18. Den fjärde helhetsgranskningen av bunt A läste alla fem stageade filer och dödades av veckotaket innan domen skrevs. Tre buntar låg klara och noll var committade. Patcharna i `.claude/state/sprint-patches/2026-09-18-*` höll arbetet intakt. När taket släppte gav `git diff --cached | git hash-object --stdin` exakt den sparade patchens hash, och sprinten kunde fortsätta där den stannat utan att något byggdes om.
+
+---
+
+### [Workflow] En post i avvikelseloggen som beskriver en SENARE bunts yta är falsk vid sin egen commit
+
+**Trigger:** två buntar i samma sprint skriver var sin post i samma loggfil.
+
+**Regel:** en post får bara committas med det träd som gör den sann. Det krävs ingen interaktiv staging för att dela filen: ta bort den senare buntens block, committa den tidiga bunten, och lägg tillbaka blocket i den senare buntens commit. Spara blocket som en egen fil emellan, annars finns det bara i sessionen.
+
+**Exempel:** BIN-1227 och BIN-1211, 2026-09-17d. Min plan skrev att `.claude/rules/accepted-deviations.md` "inte går att dela" och skulle committas en gång i bunt A med båda posterna. Helhetsgranskaren fällde det: `## BIN-1211` påstod en anmälningsväg på profilen och pekade på en testfil som inte fanns i bunt A:s träd. Blocket flyttades, bunt A committades med bara `## BIN-1227`, och `## BIN-1211` kom in i `d1986e3e` tillsammans med testet som läser rubriken.
