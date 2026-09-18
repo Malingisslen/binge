@@ -5,6 +5,8 @@ import { List, Check } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useMyLists } from '@/hooks/useLists';
 import { useClickOutside } from '@/hooks/useClickOutside';
+import { useToast } from '@/contexts/ToastContext';
+import { captureError } from '@/lib/sentry';
 import type { MediaType } from '@/types';
 
 interface AddToListButtonProps {
@@ -17,12 +19,41 @@ interface AddToListButtonProps {
 export default function AddToListButton({ tmdbId, mediaType, title, posterPath }: AddToListButtonProps) {
   const { uid } = useAuth();
   const { lists, addItemToList, removeItemFromList } = useMyLists();
+  const { show } = useToast();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
   useClickOutside(ref, close);
 
   if (!uid) return null;
+
+  // BIN-1207 gav `lists.items` ett tak i firestore.rules. Utan await/catch blir ett
+  // nekande en ohanterad rejection utan `scope`-tagg, och raden i popovern ser ut att inte
+  // göra något.
+  //
+  // Ingen optimistisk återställning här: bocken härleds ur `useMyLists` levande
+  // onSnapshot-ögonblicksbild. `ListPageClient` läser sin lista med en engångs-getDoc och
+  // behöver därför sin patchCache-rollback — härled anroparna av mutationerna med
+  //   git grep -n "addItemToList\|removeItemFromList" -- src
+  // hellre än att lita på en mening om vilka de är.
+  //
+  // `kind` bär anropsstället, så den här ytan går att skilja från listsidans i Sentry.
+  // Texten namnger ingen orsak: klienten kan inte skilja ett takavslag från något annat
+  // nekande, och en gissad orsak är ett nytt omätt påstående.
+  const toggle = async (listId: string, isInList: boolean) => {
+    try {
+      if (isInList) await removeItemFromList(listId, tmdbId);
+      else await addItemToList(listId, { tmdbId, mediaType, title, posterPath });
+    } catch (err) {
+      captureError(err, {
+        scope: 'lists',
+        kind: isInList ? 'removeItemFromList-quickAdd' : 'addItemToList-quickAdd',
+      });
+      show(isInList
+        ? 'Kunde inte ta bort titeln från listan.'
+        : 'Kunde inte lägga till titeln i listan.');
+    }
+  };
 
   return (
     <div className="relative inline-block" ref={ref}>
@@ -43,10 +74,7 @@ export default function AddToListButton({ tmdbId, mediaType, title, posterPath }
               return (
                 <button
                   key={list.id}
-                  onClick={() => {
-                    if (isInList) removeItemFromList(list.id, tmdbId);
-                    else addItemToList(list.id, { tmdbId, mediaType, title, posterPath });
-                  }}
+                  onClick={() => { void toggle(list.id, isInList); }}
                   className="w-full text-left px-2 py-[5px] text-xs border-none bg-transparent font-[inherit] cursor-pointer hover:bg-bg-2 flex items-center gap-2"
                 >
                   <span className={`w-[14px] inline-flex items-center justify-center ${isInList ? 'text-acc-deep' : 'text-ink-3'}`}>
