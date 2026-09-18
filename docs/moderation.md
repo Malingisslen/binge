@@ -24,10 +24,10 @@ tillkommer.
 | Fält | Typ | Värde |
 |------|-----|-------|
 | `reporterUid` | string | Uid för användaren som rapporterade |
-| `targetType` | string | `review` / `comment` / `user` / `list` |
+| `targetType` | string | Ett av värdena i `REPORT_TARGET_TYPES` (`functions/src/submitReport/logic.ts`) |
 | `targetId` | string | Formen per måltyp står i `resolveTargetRef` (`functions/src/submitReport/logic.ts`) |
 | `targetOwnerUid` | string \| null | Ägarens uid — **härleds server-side** från måldokumentet (aldrig klient-skickat, BIN-292). `null` när målet redan raderats/inte kan slås upp |
-| `ownerResolved` | boolean | `true` om ägaren kunde verifieras mot måldokumentet; `false` = ägare okänd (innehållet borttaget) → dashboarden visar "ägare okänd" istället för en `/user`-länk |
+| `ownerResolved` | boolean | `true` om ägaren kunde verifieras mot måldokumentet; `false` = ägare okänd (innehållet borttaget) |
 | `reason` | string | `spam` / `hate` / `harassment` / `illegal` / `pii` / `other` |
 | `note` | string \| undefined | Valfri kontext från rapportören (max 500 tecken) |
 | `status` | string | `open` (default), `reviewed`, `actioned`, `dismissed` |

@@ -13,6 +13,8 @@ import {
   type Report,
   type ReportStatus,
 } from '@/lib/firebase/reports';
+import { buildTargetLink } from '@/lib/moderation/reportTargetLink';
+import { useSenderProfile } from '@/hooks/useSenderProfile';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { LoadingView } from '@/components/ui/LoadingView';
 
@@ -140,7 +142,10 @@ function ReportRow({
   report: Report;
   onAction: (id: string, status: ReportStatus) => void;
 }) {
-  const targetLink = buildTargetLink(report);
+  const reportedUid = report.targetType === 'user' ? report.targetOwnerUid : null;
+  const profile = useSenderProfile(reportedUid);
+  const targetLink = buildTargetLink(report, profile.data?.username ?? null);
+  const profileUnreadable = !!reportedUid && !profile.isLoading && !targetLink;
 
   return (
     <li className="bg-surface border border-rule rounded-sm p-3">
@@ -175,6 +180,11 @@ function ReportRow({
             >
               Öppna target →
             </Link>
+          )}
+          {profileUnreadable && (
+            <span className="px-3 py-[3px] text-xxs text-ink-3 text-right">
+              Profilen går inte att läsa härifrån
+            </span>
           )}
           {report.status === 'open' && (
             <>
@@ -217,25 +227,3 @@ function ReportRow({
   );
 }
 
-/**
- * Bygger en länk till det rapporterade innehållet där det är rimligt att
- * öppna direkt. Kommentarer rapporteras via `reviews/{id}/comments/{id}`-
- * path — vi länkar till parent-recensionens titel-sida.
- */
-function buildTargetLink(report: Report): string | null {
-  switch (report.targetType) {
-    case 'user':
-      // BIN-292: targetOwnerUid can be null (reported account since deleted).
-      return report.targetOwnerUid ? `/user/${report.targetOwnerUid}` : null;
-    case 'list':
-      return `/list/${report.targetId}`;
-    case 'review':
-      // Vi har inte titel-id i rapporten — admin kan söka i Firestore-console
-      // på reviewId. Ingen direktlänk.
-      return null;
-    case 'comment':
-      return null;
-    default:
-      return null;
-  }
-}

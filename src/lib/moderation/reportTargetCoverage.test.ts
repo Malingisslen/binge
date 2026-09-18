@@ -12,6 +12,9 @@
 // Källorna läses som text med flit. Att importera unionen från `src/lib/firebase/reports.ts`
 // hade prövat en HANDSKRIVEN kopia av serverns lista mot sig själv; det är serverns lista
 // som avgör vad som kan skapas.
+//
+// BIN-1235. Klientens union är fortfarande en handskriven kopia. Den läses därför också som
+// text, förankrad på sin deklaration, och ska innehålla exakt serverns värden.
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -19,6 +22,7 @@ import { join } from 'node:path';
 const REPO = process.cwd();
 const SERVER_LOGIC = 'functions/src/submitReport/logic.ts';
 const DEVIATIONS = '.claude/rules/accepted-deviations.md';
+const CLIENT_TYPES = 'src/lib/firebase/reports.ts';
 
 /** Måltyper som medvetet saknar yta. Varje post pekar på sitt daterade beslut. */
 const DEFERRED: Record<string, string> = {
@@ -30,6 +34,14 @@ const DEFERRED: Record<string, string> = {
 function serverTargetTypes(): string[] {
   const src = readFileSync(join(REPO, SERVER_LOGIC), 'utf8');
   const m = /REPORT_TARGET_TYPES\s*=\s*\[([^\]]*)\]/.exec(src);
+  if (!m) return [];
+  return [...m[1].matchAll(/'([^']+)'/g)].map(x => x[1]);
+}
+
+/** Medlemmarna i klientens `export type ReportTargetType = ...;`, läst ur deklarationen. */
+function clientTargetTypes(): string[] {
+  const src = readFileSync(join(REPO, CLIENT_TYPES), 'utf8');
+  const m = /export type ReportTargetType\s*=([^;]*);/.exec(src);
   if (!m) return [];
   return [...m[1].matchAll(/'([^']+)'/g)].map(x => x[1]);
 }
@@ -76,6 +88,14 @@ describe('anmälningskedjans måltyper har antingen en yta eller ett beslut (BIN
       expect(types, `${type} står som parkerad men servern tar inte emot den`).toContain(type);
       expect(doc).toContain(`## ${ticket}:`);
     }
+  });
+
+  it('klientens ReportTargetType har exakt serverns måltyper (BIN-1235)', () => {
+    const client = clientTargetTypes();
+    // En deklaration som slutat matcha ger en tom lista, och då faller jämförelsen nedan
+    // av fel skäl. Golvet säger vilket av de två felen det är.
+    expect(client.length).toBeGreaterThanOrEqual(4);
+    expect([...client].sort()).toEqual([...types].sort());
   });
 
   it('en parkerad måltyp som fått en yta står inte kvar som parkerad', () => {
