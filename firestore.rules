@@ -97,6 +97,9 @@ service cloud.firestore {
 
     // BIN-1207: taket på antalet element i `lists.items`. Ett ställe, samma tal för
     // create, ägarens update-gren och samredigerarens update-gren.
+    //
+    // BIN-1227: underlaget talet valdes mot står i posten `## BIN-1227` i
+    // `.claude/rules/accepted-deviations.md`, daterad och med mätmetoden utskriven.
     function maxListItems() { return 1000; }
 
     // BIN-1207. Vad klausulen binder: ANTALET element. Den binder inte byte och inte
@@ -120,6 +123,17 @@ service cloud.firestore {
     // ovan: ett dokument som saknar fältet skrivs inte om av den här regeln, och en
     // ovillkorlig klausul hade nekat varje framtida ägarskrivning på ett sådant
     // dokument — inklusive att göra listan privat.
+    // BIN-1228: före-antalet får bara härledas ur ett lagrat värde vars typ är prövad.
+    // `.size()` är definierad på sträng och map också, så ett dokument som skrevs innan
+    // BIN-1207 band `items` på ägarens och creates grenar kunde ge en TECKENLÄNGD som
+    // före-antal — och krympundantaget nedan släppte då igenom en riktig lista större än
+    // taket. Ett lagrat värde som inte är en lista ger 0, alltså inget slack alls; taket
+    // gäller då rakt av och ägaren kan fortfarande laga dokumentet med en lista inom det.
+    // Ternärens falska gren tas för varje värde som inte är en lista.
+    function beforeItemCount(stored) {
+      return stored.get('items', []) is list ? stored.get('items', []).size() : 0;
+    }
+
     function itemsWithinCap(d, beforeCount) {
       return !('items' in d)
         || (d.items is list
@@ -127,14 +141,14 @@ service cloud.firestore {
     }
 
     // List content bounds.
-    function isValidList(d, beforeItemCount) {
+    function isValidList(d, beforeCount) {
       return d.uid is string
         && d.title is string && d.title.size() >= 1 && d.title.size() <= 100
         && (!('description' in d) || d.description is string && d.description.size() <= 500)
         && d.isPublic is bool
         // BIN-100: optional editors[] (co-editor uids). Owner-managed; bounded.
         && (!('editors' in d) || (d.editors is list && d.editors.size() <= 20))
-        && itemsWithinCap(d, beforeItemCount);
+        && itemsWithinCap(d, beforeCount);
     }
 
     // Watchlist-item fältkontrakt (A2.1). Merge-writes betyder att
@@ -1157,13 +1171,12 @@ service cloud.firestore {
         && request.resource.data.uid == request.auth.uid
         && isValidList(request.resource.data, 0);
       // Owner: full control (metadata, editors[], items).
-      // BIN-1207: före-antalet läses med `.get('items', [])` — samma idiom som
-      // `resource.data.get('editors', [])` ovan — så ett dokument utan `items` ger 0 i
-      // stället för att kasta.
+      // BIN-1228: före-antalet kommer från `beforeItemCount` — se hjälparen för vad den
+      // prövar och varför.
       allow update: if isSignedIn()
         && resource.data.uid == request.auth.uid
         && request.resource.data.uid == resource.data.uid
-        && isValidList(request.resource.data, resource.data.get('items', []).size());
+        && isValidList(request.resource.data, beforeItemCount(resource.data));
       // BIN-100: co-editor may change ONLY the items array (+ updatedAt). The
       // hasOnly-clause is the safety core — an editor cannot touch isPublic,
       // editors[], uid, title or description, so they can't escalate or hijack.
@@ -1188,7 +1201,7 @@ service cloud.firestore {
         // en oavsiktlig vidgning av vad en samredigerare får, i en ändring som bara skulle
         // begränsa.
         && 'items' in request.resource.data
-        && itemsWithinCap(request.resource.data, resource.data.get('items', []).size());
+        && itemsWithinCap(request.resource.data, beforeItemCount(resource.data));
       // BIN-149: a co-editor may remove ONLY THEMSELVES from editors[] — the
       // account-deletion cascade strips a leaving user from others' lists so a
       // deleted account doesn't linger as a write-authorized ghost editor.

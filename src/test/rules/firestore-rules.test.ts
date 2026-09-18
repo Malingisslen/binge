@@ -4112,7 +4112,7 @@ function listCreatePayload(extra: Record<string, unknown>) {
 
 async function seedCollabList(
   listId: string,
-  opts: { isPublic: boolean; editors: string[]; itemCount?: number; omitItems?: boolean },
+  opts: { isPublic: boolean; editors: string[]; itemCount?: number; omitItems?: boolean; rawItems?: unknown },
 ) {
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     const base: Record<string, unknown> = {
@@ -4121,7 +4121,11 @@ async function seedCollabList(
     };
     // `omitItems` seedar den legacy-form som saknar fältet helt. Utan den kan inget test
     // visa att en ovillkorlig items-klausul hade låst ägaren ute för alltid.
-    if (!opts.omitItems) base.items = listItems(opts.itemCount ?? 0);
+    // `rawItems` seedar ett FELTYPAT lagrat värde — den form ett dokument kunde få innan
+    // BIN-1207 band `items` på ägarens och creates grenar. Seedningen går genom
+    // rules-bypassen, så värdet avvisas inte vid seedningen utan når regeln.
+    if (opts.rawItems !== undefined) base.items = opts.rawItems;
+    else if (!opts.omitItems) base.items = listItems(opts.itemCount ?? 0);
     await setDoc(doc(ctx.firestore(), 'lists', listId), base);
   });
 }
@@ -4381,6 +4385,61 @@ describe('lists items cap (BIN-1207)', () => {
     await seedCollabList('cap-t3', { isPublic: true, editors: ['other_uid'], itemCount: MAX_LIST_ITEMS + 5 });
     await assertFails(updateDoc(doc(otherDb(), 'lists', 'cap-t3'),
       { items: { tmdbId: 1 }, updatedAt: serverTimestamp() }));
+  });
+});
+
+// BIN-1228 — före-antalet härleds bara ur ett lagrat värde vars typ prövats.
+//
+// Skilj det här från `cap-t1`–`cap-t3` ovan: de prövar EFTER-värdets typ. De här prövar
+// att FÖRE-antalet inte går att blåsa upp. `.size()` är definierad på sträng och map, så
+// ett dokument som skrevs innan BIN-1207 band `items` kunde ge en teckenlängd som
+// före-antal, och krympundantaget `after <= before` släppte då igenom en riktig lista
+// större än taket.
+//
+// Räkningen i `cap-b1`, `cap-b2` och `cap-b3`: det lagrade värdets `.size()` är
+// MAX_LIST_ITEMS + 500, och skrivningen bär MAX_LIST_ITEMS + 1 RIKTIGA element — en
+// välformad lista, inte ett typfel. Före fixen gäller MAX+1 <= MAX+500 och skrivningen
+// går igenom; efter fixen är före-antalet 0, MAX+1 > MAX, och den nekas. Ett litet
+// feltypat värde hade nekats av taket ensamt och bevisat ingenting.
+describe('lists items cap — feltypat lagrat items (BIN-1228)', () => {
+  const OVERSIZED_STRING = 'x'.repeat(MAX_LIST_ITEMS + 500);
+  const OVERSIZED_MAP = Object.fromEntries(
+    Array.from({ length: MAX_LIST_ITEMS + 500 }, (_, i) => [`k${i}`, i]),
+  );
+
+  // Golvet körs före gränstesten: utan det kan ett seedvärde som krympt göra varje
+  // nekande nedan sant av fel skäl, eftersom taket ensamt då räcker.
+  it('golv: båda de seedade lagrade värdena har fler element än taket', () => {
+    expect(OVERSIZED_STRING.length).toBeGreaterThan(MAX_LIST_ITEMS);
+    expect(Object.keys(OVERSIZED_MAP).length).toBeGreaterThan(MAX_LIST_ITEMS);
+  });
+
+  it('ägaren nekas förbi taket när lagrade items är en sträng', async () => {
+    await seedCollabList('cap-b1', { isPublic: true, editors: [], rawItems: OVERSIZED_STRING });
+    await assertFails(updateDoc(doc(ownerDb(), 'lists', 'cap-b1'),
+      { items: listItems(MAX_LIST_ITEMS + 1), updatedAt: serverTimestamp() }));
+  });
+
+  // Egen gren, eget före-antalsuttryck före den här bunten. Att ägarens gren är rätt
+  // kopplad säger ingenting om den här.
+  it('samredigeraren nekas förbi taket när lagrade items är en sträng', async () => {
+    await seedCollabList('cap-b2', { isPublic: true, editors: ['other_uid'], rawItems: OVERSIZED_STRING });
+    await assertFails(updateDoc(doc(otherDb(), 'lists', 'cap-b2'),
+      { items: listItems(MAX_LIST_ITEMS + 1), updatedAt: serverTimestamp() }));
+  });
+
+  it('ägaren nekas förbi taket när lagrade items är en map', async () => {
+    await seedCollabList('cap-b3', { isPublic: true, editors: [], rawItems: OVERSIZED_MAP });
+    await assertFails(updateDoc(doc(ownerDb(), 'lists', 'cap-b3'),
+      { items: listItems(MAX_LIST_ITEMS + 1), updatedAt: serverTimestamp() }));
+  });
+
+  // Fixen får inte låsa ägaren ute ur sitt eget dokument: ett feltypat `items` ska gå att
+  // laga genom att skriva en riktig lista inom taket.
+  it('ägaren kan laga ett feltypat dokument med en lista inom taket', async () => {
+    await seedCollabList('cap-b4', { isPublic: true, editors: [], rawItems: OVERSIZED_STRING });
+    await assertSucceeds(updateDoc(doc(ownerDb(), 'lists', 'cap-b4'),
+      { items: listItems(3), updatedAt: serverTimestamp() }));
   });
 });
 

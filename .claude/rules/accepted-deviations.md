@@ -1521,6 +1521,29 @@ utlösaren är en produktändring, inte ett driftläge.
 
 ---
 
+## BIN-1227: underlaget för `maxListItems()` — 2026-09-17
+
+Ett spår, inte en öppen brist. Fila inte "taket är godtyckligt valt".
+
+**Vad talet valdes mot.** Mätt 2026-09-17 med `firestore_list_documents` mot produktionens
+`lists`-samling: hela den lagrade populationen var ett dokument,
+`lists/jbdJCyVZ7l1XctISXsnG`, vars `items` bar ett element. Taket sattes som en
+övre gräns mot den ögonblicksbilden, inte härlett ur en formel.
+
+**Mätningen åldras.** Den beskriver läget vid den tidpunkten och ingenting annat. Läs om
+den mot produktionen innan den citeras som fortfarande generös.
+
+**Vad posten INTE säger.** Ingenting om innehållet i `items`. Taket binder antal; vad det
+inte binder står i posten `## BIN-1207` ovan.
+
+**Why:** #27 DBA:s och #25 Engineering Managers blinda kritiker 2026-09-17 krävde att
+underlaget bor i ett beslutsprotokoll med mätmetoden inskriven, inte i en sprintplan —
+`code-style.md` klassar `tasks/` som engångsmaterial som raderas när planen är byggd.
+
+**Re-open when:** taket ändras, eller en ny mätning motsäger ögonblicksbilden ovan.
+
+---
+
 ## BIN-1205: driftbokens pekare till "Blaze vs Spark" får stå kvar — 2026-09-17
 
 Ett beslut, inte en öppen brist. Fila inte "pekaren går i ring" eller "jourhavande skickas

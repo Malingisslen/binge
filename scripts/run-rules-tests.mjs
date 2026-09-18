@@ -80,7 +80,11 @@ const REPO = resolve(HERE, '..');
 // seed, and the co-editor's `deleteField()` on `items`, which the branch refused before
 // the cap and must keep refusing. Measured with `npm run test:rules -- --port 8123`
 // (port 8080 is held by another project on this machine), not counted by hand.
-export const MIN_TESTS = 664;
+// BIN-1228, 2026-09-17: raised to what `numTotalTests` reported with the before-count
+// tests in place. The fixtures are named in the `feltypat lagrat items` describe block:
+// `cap-b1`, `cap-b2`, `cap-b3`, `cap-b4` and the floor beside them. Measured the same way
+// as the entry above, not counted by hand.
+export const MIN_TESTS = 669;
 
 const VITEST_ARGS = ['run', '--config', 'vitest.rules.config.ts'];
 
