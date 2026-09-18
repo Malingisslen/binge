@@ -830,13 +830,18 @@ lever, och varje skrivning är idempotent — så omkörningen konvergerar.
 **Berör inte** det separat dokumenterade läget "delvis kaskaderad, Auth
 fortfarande vid liv" (ADR 0022) — andra förutsättningar, annat svep.
 
-### Framtida (ej byggt)
+### Tillsammans-sessioner och notifikationer — schemalagt svep
 
-- **Gamla Tillsammans-sessioner** — bör delete:as efter 30 dagar via
-  cron (kräver Cloud Functions, sprint 6 + 10)
-- **Gamla notifikationer** — bör delete:as efter 90 dagar (samma)
+`retentionCleanup` raderar dagligen:
 
-Dessa är dokumenterade i FUTURE_ROADMAP.md sprint 6 (B34).
+- **`sessions/{id}`** när sessionens egen `expiresAt` har passerat, eller — för
+  äldre sessioner utan `expiresAt` — när `createdAt` är äldre än `SESSION_MAX_AGE_MS`
+  (30 dagar).
+- **`users/{uid}/notifications/{id}`** när `createdAt` är äldre än
+  `NOTIFICATION_MAX_AGE_MS` (90 dagar).
+
+Ett dokument utan tidsstämpel raderas inte. Regeln står i `isExpiredSession` och
+`isStaleNotification` i `functions/src/retentionCleanup/logic.ts`.
 
 ## Re-visit triggers
 

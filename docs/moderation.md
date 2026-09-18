@@ -116,7 +116,6 @@ Admin-triage sker via Firebase Console med din ägar-inloggning.
 ## 4. Actioner — hur utför man dem?
 
 Alla dessa kräver direct Firestore-edit via Firebase Console (v1).
-Admin-UI är på backlog i FUTURE_ROADMAP.md (Sprint 6 B4 area).
 
 ### Ta bort en review
 
@@ -218,20 +217,7 @@ beslut med offentlig policy.
 
 ---
 
-## 9. Framtida automatisering
-
-Sprint 6 (FUTURE_ROADMAP.md) inkluderar ett admin-UI för rapports-
-modereringen. När det finns:
-
-- Lista rapporter med filtrera/sortera
-- Action-knappar som kör delete-cascade automatiskt
-- Audit log med `actionedBy` (om flera admins)
-
-Tills dess: Firebase Console + denna runbook + manuella actions.
-
----
-
-## 10. Escalation
+## 9. Escalation
 
 Saker som går utanför din kompetens som privatperson-drivare:
 
