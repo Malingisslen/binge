@@ -55,13 +55,15 @@
 //      legitimately made more concise, or genuinely removed), regenerate the
 //      baseline with `node scripts/check-workflow-map.mjs --update-baseline` and
 //      commit it — the ratchet forces that to be a conscious, reviewable step.
+//   8. PROSE PATHS (BIN-1103): a file a flow's prose names must be carried by a node the
+//      flow uses — see checkFlowPathNodes.
 // Semantic drift (behavior changed inside a still-existing file) is handled by
 // .claude/hooks/freshness.mjs (stampMap) + .claude/state/workflow-map-stale.json.
 //
 // Usage: node scripts/check-workflow-map.mjs                    (lint; exit 1 on a problem list)
 //        node scripts/check-workflow-map.mjs --update-baseline  (regenerate the content baseline)
 
-import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -565,6 +567,108 @@ export function checkRouteEnumeration(universe, problems, opts = {}) {
   return checkEnumeratedList(ROUTE_LIST, universe, problems, { ...opts, found: opts.routes });
 }
 
+// Check 8 — a flow's prose names a tracked source file that no node IN THAT FLOW carries
+// (BIN-1103). The freshness stamper (.claude/hooks/freshness.mjs) only fires for files a
+// node's `path` names, and the refresh procedure re-traces only the flows whose nodes match
+// the trigger. So a file a flow merely MENTIONS can change forever without a work order.
+// The fix for a finding is to add the file to a node the flow uses, never to delete the
+// mention from the prose: deleting it passes this check and is exactly the silent thinning
+// check 5 exists to catch.
+//
+// What it reads is prose, not the structured `path` field, so it has its own tokenizer.
+// It matches a repo-rooted path anywhere in the text and trims the punctuation prose puts
+// after one; a token without a file extension is a directory mention and is left alone.
+// It does NOT see a flow that names a SYMBOL instead of a file (BIN-1099's own case named
+// `writeMemberDoc`) — that is a known floor, not a sum.
+const PROSE_PATH = /(?<![\w./@-])((?:src|functions|extension|public|docs|shared|scripts)\/[\w@.\-/[\]]+|firestore\.rules|firebase\.json)/g;
+const HAS_EXTENSION = /\.[a-z0-9]+$/i;
+// Documentation is prose ABOUT the system, not a node in it. Scoped to docs/**/*.md on
+// purpose, never the `docs/` prefix: docs/org/route.mjs and docs/org/gen-ownership-map.mjs
+// are code (BIN-805), and a prefix would exempt them silently and for good.
+const DOC_FILE = /^docs\/.*\.md$/;
+
+export function proseFileTokens(text) {
+  const out = new Set();
+  for (const m of String(text ?? '').matchAll(PROSE_PATH)) {
+    const tok = m[1].replace(/:\d+(-\d+)?$/, '').replace(/[.,;:)\]]+$/, '');
+    if (tok.includes('*') || !HAS_EXTENSION.test(tok) || DOC_FILE.test(tok)) continue;
+    out.add(tok);
+  }
+  return [...out];
+}
+
+// Same three ways a node token can claim a file as the stamper's `matchesToken` — exact,
+// glob, or a directory token the file lives under. The test file pins the two against each
+// other.
+export function tokenClaims(tok, file) {
+  if (tok === file) return true;
+  if (tok.includes('*')) {
+    const re = new RegExp('^' + tok.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*') + '$');
+    if (re.test(file)) return true;
+  }
+  return !/\.[a-z]+$/i.test(tok) && file.startsWith(tok.replace(/\/$/, '') + '/');
+}
+
+// A real exception is keyed on the (flow, path) PAIR: a path can be a legitimate contrast
+// mention in one flow and a genuine gap in another. The reason is enforced here, the same
+// way checks 6 and 7 enforce theirs, and a stale pair is reported too.
+//
+// Putting a test file on a node would stamp the map stale on routine test maintenance.
+const CITED_AS_EVIDENCE =
+  'test file cited as evidence for the flow';
+export const FLOW_PATH_EXEMPTIONS = {
+  'flow-tillsammans :: src/lib/clampText.test.ts': CITED_AS_EVIDENCE,
+  'flow-available :: src/test/rules/available-notify-orchestrator.test.ts': CITED_AS_EVIDENCE,
+  'flow-rating-community :: src/test/rules/community-ratings-orchestrator.test.ts': CITED_AS_EVIDENCE,
+  'flow-moderation :: src/lib/moderation/reportTargetCoverage.test.ts': CITED_AS_EVIDENCE,
+  'flow-hygiene :: src/test/rules/retention-cleanup-orchestrator.test.ts': CITED_AS_EVIDENCE,
+};
+const pairKey = (flowId, file) => `${flowId} :: ${file}`;
+
+// The roots the stamper (.claude/hooks/freshness.mjs, MAP_ROOTS / MAP_ROOT_FILES) keeps a
+// node path under. A node token outside them never stamps a work order, so it does not
+// count as carrying a file here either. The test file pins these to the stamper's lists.
+export const STAMPED_ROOTS = ['src/', 'functions/', 'extension/', 'public/', 'shared/'];
+export const STAMPED_ROOT_FILES = ['firestore.rules', 'firebase.json'];
+const isStamped = (p) => STAMPED_ROOTS.some((r) => p.startsWith(r)) || STAMPED_ROOT_FILES.includes(p);
+
+export function checkFlowPathNodes(nodes, actions, problems, opts = {}) {
+  const isFile = opts.isFile ?? ((p) => existsSync(join(ROOT, p)) && statSync(join(ROOT, p)).isFile());
+  const exemptions = opts.exemptions ?? FLOW_PATH_EXEMPTIONS;
+  const byId = new Map((nodes || []).map((n) => [n.id, n]));
+  const seenPairs = new Set();
+  for (const action of actions || []) {
+    const id = action?.id || '(unnamed flow)';
+    const steps = Array.isArray(action?.steps) ? action.steps : [];
+    const tokens = [];
+    for (const s of steps) {
+      for (const end of [s?.from, s?.to]) tokens.push(...checkableTokens(byId.get(end)?.path || '').filter(isStamped));
+    }
+    // A crash boundary is tracked through the flow's own covers[] (check 3 / 6), so a flow
+    // that names one it covers is already wired — no third copy of the boundary pattern.
+    const covers = new Set(Array.isArray(action?.covers) ? action.covers : []);
+    const prose = [action?.description, ...steps.map((s) => s?.payload)].join('\n');
+    for (const file of proseFileTokens(prose)) {
+      if (covers.has(file) || !isFile(file)) continue;
+      if (tokens.some((tok) => tokenClaims(tok, file))) continue;
+      const key = pairKey(id, file);
+      seenPairs.add(key);
+      if (Object.prototype.hasOwnProperty.call(exemptions, key)) continue;
+      problems.push(
+        isStamped(file)
+          ? `flow '${id}' names ${file}, but no node in the flow carries that path — add it to a node's path the flow uses (never delete the mention), or add '${key}' to FLOW_PATH_EXEMPTIONS with a reason.`
+          : `flow '${id}' names ${file}, which is outside the roots the freshness stamper watches, so no node can carry it — widen the stamper's roots, or add '${key}' to FLOW_PATH_EXEMPTIONS with a reason (never delete the mention).`,
+      );
+    }
+  }
+  for (const [key, reason] of Object.entries(exemptions)) {
+    if (!seenPairs.has(key)) problems.push(`FLOW_PATH_EXEMPTIONS names '${key}', which is no longer a gap — delete the exemption.`);
+    if (typeof reason !== 'string' || reason.trim().length < MIN_EXEMPTION_REASON) {
+      problems.push(`FLOW_PATH_EXEMPTIONS['${key}'] has no usable reason — an exclusion without an argument is a silence.`);
+    }
+  }
+}
+
 // Build the content-baseline object from the current flows. Deterministic
 // (flows keyed by id, no timestamp) so the committed file only churns when the
 // prose actually changes.
@@ -623,6 +727,7 @@ export function main() {
   }
 
   checkFlowContent(data.actions || [], problems);
+  checkFlowPathNodes(data.nodes || [], data.actions || [], problems);
 
   // Check 5 — content ratchet against the committed per-flow baseline (BIN-470).
   const baselinePath = join(ROOT, BASELINE_FILE);

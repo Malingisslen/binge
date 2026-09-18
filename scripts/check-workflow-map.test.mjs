@@ -45,7 +45,14 @@ import {
   ROUTE_EXEMPTIONS,
   MIN_FUNCTION_EXPORTS,
   MIN_ROUTES,
+  proseFileTokens,
+  tokenClaims,
+  checkFlowPathNodes,
+  FLOW_PATH_EXEMPTIONS,
+  STAMPED_ROOTS,
+  STAMPED_ROOT_FILES,
 } from './check-workflow-map.mjs';
+import { matchesToken, MAP_ROOTS, MAP_ROOT_FILES } from '../.claude/hooks/freshness.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -898,4 +905,160 @@ test('coverage — no single covers[] token stands in for more than one boundary
   for (const b of universe.boundaries) {
     assert.ok([...claims].some((c) => coversEntry(c, b)), `boundary '${b}' is claimed by no flow`);
   }
+});
+
+// ── Check 8: a file a flow's prose names must be carried by a node the flow uses (BIN-1103)
+
+test('proseFileTokens — trims prose punctuation, keeps files, drops directories/docs/globs', () => {
+  const got = proseFileTokens(
+    'See (src/lib/a.ts), then src/lib/b.tsx. Also src/lib/c.ts: and src/lib/d.ts; '
+    + 'the directory src/lib/firebase/ and src/lib/firebase are not files; '
+    + 'docs/moderation.md is documentation, docs/org/route.mjs is code; '
+    + 'src/hooks/*.ts is a glob; src/e.ts:12-30 has a line range; `src/f.ts` is quoted; '
+    + 'firestore.rules is a root file; notsrc/lib/x.ts is not repo-rooted.',
+  );
+  assert.deepEqual(got.sort(), [
+    'docs/org/route.mjs',
+    'firestore.rules',
+    'src/e.ts',
+    'src/f.ts',
+    'src/lib/a.ts',
+    'src/lib/b.tsx',
+    'src/lib/c.ts',
+    'src/lib/d.ts',
+  ]);
+});
+
+test('tokenClaims — agrees with the stamper matchesToken on every claim shape', () => {
+  // The check is only worth its green if "claimed here" means "an edit stamps a work order"
+  // there. freshness.mjs is the stamper; this pins the two against each other.
+  const cases = [
+    ['src/lib/a.ts', 'src/lib/a.ts'],
+    ['src/lib/*.ts', 'src/lib/a.ts'],
+    ['src/lib/*.ts', 'src/lib/sub/a.ts'],
+    ['src/lib', 'src/lib/sub/a.ts'],
+    ['src/lib/', 'src/lib/a.ts'],
+    ['src/lib/a.ts', 'src/lib/a.tsx'],
+    ['src/li', 'src/lib/a.ts'],
+    ['functions/src/streamingOffers/*', 'functions/src/streamingOffers/x.ts'],
+  ];
+  for (const [tok, file] of cases) {
+    assert.equal(tokenClaims(tok, file), matchesToken(file, tok), `${tok} vs ${file}`);
+  }
+  assert.equal(tokenClaims('src/lib/*.ts', 'src/lib/a.ts'), true);
+  assert.equal(tokenClaims('src/lib/a.ts', 'src/lib/a.tsx'), false);
+});
+
+test('check 8 counts node paths under exactly the roots the stamper watches', () => {
+  // A node path outside the stamper's roots never stamps a work order, so letting it count
+  // as carrying a file would make check 8 green for a gap the stamper still has.
+  assert.deepEqual(STAMPED_ROOTS, MAP_ROOTS);
+  assert.deepEqual(STAMPED_ROOT_FILES, MAP_ROOT_FILES);
+});
+
+function proseFlow(id, text, covers = []) {
+  return { id, description: text, covers, steps: [{ from: 'n-a', to: 'n-b', payload: 'carries x' }] };
+}
+const everyFileExists = () => true;
+const emptyNodes = [{ id: 'n-a', path: '' }, { id: 'n-b', path: '' }];
+
+test('checkFlowPathNodes — fails a named file no node IN THE FLOW carries', () => {
+  const nodes = [
+    { id: 'n-a', path: 'src/a.ts' },
+    { id: 'n-b', path: 'src/b.ts' },
+    { id: 'n-elsewhere', path: 'src/c.ts' },
+  ];
+  const problems = [];
+  checkFlowPathNodes(nodes, [proseFlow('flow-x', 'uses src/a.ts and src/c.ts')], problems, {
+    isFile: everyFileExists,
+    exemptions: {},
+  });
+  // src/c.ts IS on a node, just not on one this flow uses, so re-tracing never reaches it.
+  assert.equal(problems.length, 1, problems.join('\n'));
+  assert.ok(problems[0].includes("flow 'flow-x'") && problems[0].includes('src/c.ts'), problems[0]);
+  assert.ok(problems[0].includes('never delete the mention'), problems[0]);
+});
+
+test('checkFlowPathNodes — passes when a flow node carries the file exactly, by glob, or by directory', () => {
+  const nodes = [
+    { id: 'n-a', path: 'src/a.ts, src/hooks/*.ts' },
+    { id: 'n-b', path: 'src/lib/deep' },
+  ];
+  const problems = [];
+  checkFlowPathNodes(
+    nodes,
+    [proseFlow('flow-x', 'src/a.ts, src/hooks/useX.ts and src/lib/deep/y/z.ts')],
+    problems,
+    { isFile: everyFileExists, exemptions: {} },
+  );
+  assert.deepEqual(problems, []);
+});
+
+test('checkFlowPathNodes — a node path outside the stamped roots does not carry the file', () => {
+  const nodes = [{ id: 'n-a', path: 'scripts/x.mjs' }, { id: 'n-b', path: 'docs/org' }];
+  const problems = [];
+  checkFlowPathNodes(nodes, [proseFlow('flow-x', 'runs scripts/x.mjs and docs/org/route.mjs')], problems, {
+    isFile: everyFileExists,
+    exemptions: {},
+  });
+  assert.equal(problems.length, 2, problems.join(String.fromCharCode(10)));
+  for (const p of problems) assert.ok(p.includes('outside the roots the freshness stamper watches'), p);
+});
+
+test('checkFlowPathNodes — a crash boundary in the flow covers[] is not demanded as a node', () => {
+  const problems = [];
+  const flow = proseFlow('flow-x', 'src/app/error.tsx catches it', ['src/app/error.tsx']);
+  checkFlowPathNodes(emptyNodes, [flow], problems, { isFile: everyFileExists, exemptions: {} });
+  assert.deepEqual(problems, []);
+});
+
+test('checkFlowPathNodes — a path that is not a file in the tree is not reported', () => {
+  const problems = [];
+  checkFlowPathNodes(emptyNodes, [proseFlow('flow-x', 'src/gone.ts')], problems, {
+    isFile: () => false,
+    exemptions: {},
+  });
+  assert.deepEqual(problems, []);
+});
+
+test('checkFlowPathNodes — an exemption is keyed on the (flow, path) PAIR, and needs a live gap and a reason', () => {
+  const flows = [proseFlow('flow-x', 'src/t.test.ts'), proseFlow('flow-y', 'src/t.test.ts')];
+  const problems = [];
+  checkFlowPathNodes(emptyNodes, flows, problems, {
+    isFile: everyFileExists,
+    exemptions: {
+      'flow-x :: src/t.test.ts': 'cited as evidence for the flow',
+      'flow-z :: src/t.test.ts': 'a pair that no longer is a gap',
+      'flow-y :: src/other.ts': '',
+    },
+  });
+  // flow-y's copy of the same path is still a gap: the exemption does not travel.
+  assert.ok(problems.some((p) => p.includes("flow 'flow-y' names src/t.test.ts")), problems.join('\n'));
+  assert.ok(!problems.some((p) => p.includes("flow 'flow-x' names")), problems.join('\n'));
+  assert.ok(problems.some((p) => p.includes("'flow-z :: src/t.test.ts', which is no longer a gap")), problems.join('\n'));
+  assert.ok(problems.some((p) => p.includes("FLOW_PATH_EXEMPTIONS['flow-y :: src/other.ts'] has no usable reason")), problems.join('\n'));
+  assert.ok(problems.some((p) => p.includes("'flow-y :: src/other.ts', which is no longer a gap")), problems.join('\n'));
+  assert.equal(problems.length, 4, problems.join('\n'));
+});
+
+test('checkFlowPathNodes — the real map passes, and the real exemption map is not empty', () => {
+  const data = extractDataJson(readFileSync(join(ROOT, 'docs/workflow-map.html'), 'utf8'));
+  const problems = [];
+  checkFlowPathNodes(data.nodes, data.actions, problems);
+  assert.deepEqual(problems, []);
+  // A stale exemption fails the call above, so every real entry names a live gap; this line
+  // is what tells an emptied map apart from a map with nothing to exempt.
+  assert.ok(Object.keys(FLOW_PATH_EXEMPTIONS).length > 0);
+});
+
+test('checkFlowPathNodes — check 8 is actually WIRED INTO main(), with nodes, actions AND problems', () => {
+  // Every other check-8 test calls the function directly, so deleting its call site in main()
+  // would leave them all green while the linter silently stops checking. Every argument is
+  // anchored; `[^,)]*` cannot swallow a comma, so dropping the middle argument fails too.
+  const src = readFileSync(join(ROOT, 'scripts/check-workflow-map.mjs'), 'utf8');
+  const body = src.slice(src.indexOf('export function main('));
+  assert.ok(
+    /checkFlowPathNodes\(\s*data\.nodes[^,)]*,\s*data\.actions[^,)]*,\s*problems\s*\)/.test(body),
+    'the call checkFlowPathNodes(data.nodes || [], data.actions || [], problems) is gone from main()',
+  );
 });

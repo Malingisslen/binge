@@ -7,7 +7,7 @@
 // WHY THIS FILE EXISTS. `prune-map-flag.mjs` DELETES work orders. Both directions cost, and
 // they cost differently:
 //   • dropping a live trigger sends the map's prose permanently out of date with nobody
-//     asked to fix it, and the map linter cannot notice because it does not read prose;
+//     asked to fix it, and the map linter cannot notice;
 //   • keeping a ghost costs one session a grep.
 // So the tests below drive both branches, and the never-blocks contract is asserted rather
 // than asserted-about: a cleanup that can fail a commit is a different kind of change from

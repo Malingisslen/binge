@@ -38,8 +38,10 @@ import { fileURLToPath } from 'node:url';
 const OWNERSHIP_REL = 'docs/org/ownership-map.json';
 const MAP_REL = 'docs/workflow-map.html';
 const FLAG_REL = '.claude/state/workflow-map-stale.json';
-const MAP_ROOTS = ['src/', 'functions/', 'extension/', 'public/', 'shared/'];
-const MAP_ROOT_FILES = ['firestore.rules', 'firebase.json'];
+// Exported so scripts/check-workflow-map.test.mjs can pin the map linter's check 8 to the
+// same roots: a node path outside them never stamps a work order (BIN-1103).
+export const MAP_ROOTS = ['src/', 'functions/', 'extension/', 'public/', 'shared/'];
+export const MAP_ROOT_FILES = ['firestore.rules', 'firebase.json'];
 
 // ── shared resolution ────────────────────────────────────────────────────────────
 
@@ -204,6 +206,9 @@ function stampDossier(payload, repoRoot, rel) {
 // the only thing that tells a LATER session to re-trace. Accepting the gap means a
 // git-apply landing leaves no such note for anyone, and the map linter cannot supply one
 // because it does not read prose.
+//   (Dated note 2026-09-18, BIN-1103: the linter's check 8 now reads flow prose, but only
+//   for file paths. It still cannot tell stale wording from current or leave a re-trace
+//   note, so the residue above is unchanged; only its "because" no longer holds.)
 
 function mapTokens(repoRoot) {
   const mapPath = join(repoRoot, MAP_REL);
