@@ -4227,8 +4227,8 @@ describe('lists collaborative editing (BIN-100)', () => {
 
 // BIN-1207 — taket på ANTALET element i lists.items, på alla tre skrivvägarna.
 //
-// Taket binder antal. Det binder inte byte och inte elementens form; se posten daterad
-// 2026-09-17 i .claude/rules/accepted-deviations.md.
+// Taket binder antal. Det binder inte byte och inte elementens form; se posten
+// `## BIN-1207` i .claude/rules/accepted-deviations.md.
 //
 // Spärrhaken är `after <= tak || after <= before`. Den andra halvan är det som gör att en
 // lista som hunnit växa förbi taket fortfarande går att krympa OCH att få sina övriga

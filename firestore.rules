@@ -107,7 +107,7 @@ service cloud.firestore {
     // samredigerare som skriver direkt mot SDK:t, förbi appens TMDB-härledda form, kan
     // alltså fylla varje element med långa strängar, och dokumentets tak är då
     // Firestores eget, precis som före det här taket. Skriv aldrig att taket gör
-    // INNEHÅLLET i `items` validerat. Posten daterad 2026-09-17 i
+    // INNEHÅLLET i `items` validerat. Posten `## BIN-1207` i
     // `.claude/rules/accepted-deviations.md` bär beslutet.
     //
     // `beforeCount` är en PARAMETER, aldrig en `resource`-läsning inuti hjälparen:
