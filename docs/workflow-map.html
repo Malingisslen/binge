@@ -183,13 +183,13 @@
       "id": "auth-context",
       "label": "AuthContext",
       "context": "client-state",
-      "path": "src/contexts/AuthContext.tsx,src/lib/firebase/groups.ts"
+      "path": "src/contexts/AuthContext.tsx,src/lib/firebase/groups.ts, src/lib/profileIdentityChannel.ts"
     },
     {
       "id": "watchlist-context",
       "label": "WatchlistContext",
       "context": "client-state",
-      "path": "src/contexts/WatchlistContext.tsx,src/lib/firebase/groups.ts"
+      "path": "src/contexts/WatchlistContext.tsx,src/lib/firebase/groups.ts, src/lib/watchlist/libraryHoldCopy.ts, src/lib/firebase/accountDeletion.ts"
     },
     {
       "id": "local-parser",
@@ -591,7 +591,7 @@
       "id": "movie-tv-page",
       "label": "MoviePageClient / TVShowPageClient",
       "context": "web-app",
-      "path": "src/components/pages/MoviePageClient.tsx"
+      "path": "src/components/pages/MoviePageClient.tsx, src/lib/franchise/companions.ts, src/lib/tv/relatedSeries.ts"
     },
     {
       "id": "cheapest-path-verdict",
@@ -687,7 +687,7 @@
       "id": "account-deletion-lib",
       "label": "accountDeletion.ts (collectDeletionRefs/applyDeletionPlan)",
       "context": "web-app",
-      "path": "src/lib/firebase/accountDeletion.ts"
+      "path": "src/lib/firebase/accountDeletion.ts, src/lib/firebase/userDocWrite.ts"
     },
     {
       "id": "group-handover-lib",
@@ -771,7 +771,7 @@
       "id": "premiere-hooks",
       "label": "usePremiereEvents / useDiscoveryPremieres",
       "context": "client-state",
-      "path": "src/hooks/usePremiereEvents.ts, src/hooks/useDiscoveryPremieres.ts"
+      "path": "src/hooks/usePremiereEvents.ts, src/hooks/useDiscoveryPremieres.ts, src/lib/calendar/premieres.ts"
     },
     {
       "id": "guider-page",
@@ -1302,7 +1302,7 @@
         {
           "from": "list-page-client",
           "to": "uselists-hook",
-          "payload": "owner/co-editor adds/removes a title from the list page itself → addItemToList/removeItemFromList, optimistic queryClient cache patch first. BIN-1195 (2026-09-16): the co-editor's update branch in firestore.rules now also requires request.resource.data.items is list. Before it that branch gated only on WHICH KEYS change — affectedKeys().hasOnly(['items','updatedAt']) — never on content, and isValidList does not name items at all, so a co-editor could store the field as a string, a number or a map; docToList maps straight over it. It binds the TYPE: element shape is not inspectable in the rules language. BIN-1207 (2026-09-17) added the missing ceiling on the element COUNT, and it is bound on create, on the owner's update branch and on this one, through a single shared helper that takes the BEFORE count as a parameter — a helper that read resource itself would throw on create, which Firestore evaluates as deny, so every new list would have been refused. The exemption is written after &lt;= before, so a list already past the ceiling can still shrink and its owner can still change editors; a strict &lt; would lock the owner out of an operation that does not touch list content at all. This branch additionally requires items to be PRESENT, as it did before the cap, so deleting the field outright is refused here. The self-removal branch (editors + updatedAt) is deliberately ungated on count — that is the write the account-deletion cascade produces, from the departing editor's own credentials. What the ceiling binds is COUNT: never bytes, never the shape of an element, and the dated entry in .claude/rules/accepted-deviations.md carries that scope. Because a refusal became reachable for an ordinary user, ListPageClient rolls its optimistic cache patch back and says so, rather than leaving the title on screen as though it had been saved. The two write shapes this flow actually sends are an arrayUnion transform and a filtered literal array, and both have a rules test proving they still pass. Derive the branches rather than trusting this line: git grep 'affectedKeys().hasOnly' firestore.rules",
+          "payload": "owner/co-editor adds/removes a title from the list page itself → addItemToList/removeItemFromList, optimistic queryClient cache patch first. BIN-1195 (2026-09-16): the co-editor's update branch in firestore.rules now also requires request.resource.data.items is list. Before it that branch gated only on WHICH KEYS change — affectedKeys().hasOnly(['items','updatedAt']) — never on content, so a co-editor could store the field as a string, a number or a map; docToList maps straight over it. It binds the TYPE: element shape is not inspectable in the rules language. BIN-1207 (2026-09-17) added the missing ceiling on the element COUNT, and it is bound on create, on the owner's update branch and on this one, through a single shared helper that takes the BEFORE count as a parameter — a helper that read resource itself would throw on create, which Firestore evaluates as deny, so every new list would have been refused. The exemption is written after &lt;= before, so a list already past the ceiling can still shrink and its owner can still change editors; a strict &lt; would lock the owner out of an operation that does not touch list content at all. This branch additionally requires items to be PRESENT, as it did before the cap, so deleting the field outright is refused here. The self-removal branch (editors + updatedAt) is deliberately ungated on count — that is the write the account-deletion cascade produces, from the departing editor's own credentials. What the ceiling binds is COUNT: never bytes, never the shape of an element, and the ## BIN-1207 entry in .claude/rules/accepted-deviations.md carries that scope. Because a refusal became reachable for an ordinary user, ListPageClient rolls its optimistic cache patch back and says so, rather than leaving the title on screen as though it had been saved. The two write shapes this flow actually sends are an arrayUnion transform and a filtered literal array, and both have a rules test proving they still pass. Derive the branches rather than trusting this line: git grep 'affectedKeys().hasOnly' firestore.rules",
           "transport": "method call",
           "verified": true
         },
