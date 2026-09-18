@@ -1521,6 +1521,36 @@ utlösaren är en produktändring, inte ett driftläge.
 
 ---
 
+## BIN-1211: `list` som anmälningsbar yta är PARKERAD, inte avgjord — 2026-09-17
+
+Läs det här som ett uppskjutet val, inte som ett beslut emot. Fila gärna om
+förutsättningarna ändras; fila inte "listor borde gå att anmäla" som ett fynd.
+
+**Läget.** Servern tar emot fler måltyper än appen kan skapa. Härled båda sidorna i
+stället för att lita på en uppräkning här:
+
+```
+git grep -n "REPORT_TARGET_TYPES" -- functions/src/submitReport/logic.ts
+git grep -n "targetType=" -- src
+```
+
+**Vad som byggdes 2026-09-17.** Profilen fick en anmälningsväg, på Malins beslut samma
+dag ("profilen först"). Skälet hon valde på: en anmälan mot en person har tydligast
+innebörd för den som gör den, och en delad lista har redan en ägare som kan ta bort
+innehållet själv.
+
+**Vad som INTE är avgjort.** Om en publik lista ska gå att anmäla. Frågan ligger öppen på
+biljetten; ingen sprint får läsa den här posten som klartecken åt något håll.
+
+**Why:** utan en post här skulle nästa granskare läsa den saknade ytan som en ny brist och
+fila den igen, och `src/lib/moderation/reportTargetCoverage.test.ts` skulle inte ha något
+att peka på när den släpper igenom måltypen.
+
+**Re-open when:** Malin svarar på listfrågan, eller en användare faktiskt ber om att få
+anmäla en lista.
+
+---
+
 ## BIN-1227: underlaget för `maxListItems()` — 2026-09-17
 
 Ett spår, inte en öppen brist. Fila inte "taket är godtyckligt valt".

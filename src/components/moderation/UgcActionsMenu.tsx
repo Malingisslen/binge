@@ -177,7 +177,11 @@ function ReportDialog({
         aria-labelledby="report-dialog-title"
       >
         <div className="px-3 py-2 border-b border-rule-2">
-          <h2 id="report-dialog-title" className="text-sm font-bold">Rapportera innehåll</h2>
+          {/* BIN-1211: rubriken följer måltypen. "Rapportera innehåll" är fel ord när målet
+              är en person, och profilen är den första ytan som skickar `user`. */}
+          <h2 id="report-dialog-title" className="text-sm font-bold">
+            {targetType === 'user' ? 'Rapportera användare' : 'Rapportera innehåll'}
+          </h2>
         </div>
         <div className="px-3 py-3 space-y-3">
           <div>

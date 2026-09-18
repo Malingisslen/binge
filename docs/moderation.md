@@ -8,9 +8,16 @@ _Version: 1.0 (2026-04-24)_
 
 ## 1. Hur rapporter kommer in
 
-Användare triggar rapporter via UgcActionsMenu (trepunktsmenyn på recensioner
-och kommentarer). Dessa skrivs till `reports/{reportId}` top-level
-Firestore-collection.
+Användare triggar rapporter via UgcActionsMenu (trepunktsmenyn). Dessa skrivs
+till `reports/{reportId}` top-level Firestore-collection.
+
+Vilka måltyper servern tar emot står i `REPORT_TARGET_TYPES`
+(`functions/src/submitReport/logic.ts`). Vilka av dem som har en yta i appen —
+och vilka som medvetet saknar en — härleds av
+`src/lib/moderation/reportTargetCoverage.test.ts`, som fäller bygget när en ny
+måltyp läggs till utan att frågan ställts. Läs de två i stället för en
+uppräkning här: en uppräkning i prosa blir falsk i samma commit som en yta
+tillkommer.
 
 **Fältformat:**
 
@@ -18,7 +25,7 @@ Firestore-collection.
 |------|-----|-------|
 | `reporterUid` | string | Uid för användaren som rapporterade |
 | `targetType` | string | `review` / `comment` / `user` / `list` |
-| `targetId` | string | Review-id eller `reviews/{reviewId}/comments/{commentId}` för kommentarer |
+| `targetId` | string | Formen per måltyp står i `resolveTargetRef` (`functions/src/submitReport/logic.ts`) |
 | `targetOwnerUid` | string \| null | Ägarens uid — **härleds server-side** från måldokumentet (aldrig klient-skickat, BIN-292). `null` när målet redan raderats/inte kan slås upp |
 | `ownerResolved` | boolean | `true` om ägaren kunde verifieras mot måldokumentet; `false` = ägare okänd (innehållet borttaget) → dashboarden visar "ägare okänd" istället för en `/user`-länk |
 | `reason` | string | `spam` / `hate` / `harassment` / `illegal` / `pii` / `other` |

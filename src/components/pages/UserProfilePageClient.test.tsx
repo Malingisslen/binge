@@ -9,6 +9,15 @@ import { render, screen } from '@testing-library/react';
 // What this file adds over `stats/page.test.tsx` is that a wrong count here is public. The
 // tile sits on a profile other people read.
 
+// BIN-1211: profilen monterar UgcActionsMenu, vars modulgraf når firebase-konfigen, vars
+// top-level getAuth() kastar på testnyckeln.
+vi.mock('@/lib/firebase/config', () => ({ auth: {}, default: {} }));
+// Menyn anropar useBlockedUsers, som prenumererar på Firestore. Mot den stubbade appen
+// ovan kastar den initieringen.
+vi.mock('@/hooks/useBlockedUsers', () => ({
+  useBlockedUsers: () => ({ isBlocked: () => false, blockUser: vi.fn(), unblockUser: vi.fn() }),
+}));
+
 const watchlist: unknown[] = [];
 
 vi.mock('@/hooks/usePublicProfile', () => ({

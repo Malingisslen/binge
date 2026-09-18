@@ -8,6 +8,7 @@ import { useTasteMatch } from '@/hooks/useTasteVector';
 import FollowButton from '@/components/social/FollowButton';
 import FriendButton from '@/components/social/FriendButton';
 import ProfileStatsPanel from '@/components/social/ProfileStatsPanel';
+import { UgcActionsMenu } from '@/components/moderation/UgcActionsMenu';
 import StatCard from '@/components/ui/StatCard';
 import { posterUrl } from '@/lib/tmdb/client';
 import { toneForId } from '@/lib/duotone';
@@ -95,6 +96,16 @@ export default function UserProfilePageClient({ username }: { username: string }
           <>
             {!isOwnProfile && <FollowButton targetUid={uid} />}
             {!isOwnProfile && <FriendButton targetUid={uid} />}
+            {/* BIN-1211: profilen är den första ytan i appen som kan skapa en anmälan mot
+                en person. Servern tog emot `user` långt innan den här knappen fanns.
+                Menyn gömmer sig själv för den egna profilen och för utloggade, och den
+                privata profilen returnerar innan PageHeader monteras. */}
+            <UgcActionsMenu
+              targetType="user"
+              targetId={uid}
+              targetOwnerUid={uid}
+              targetOwnerName={card.displayName}
+            />
             {isOwnProfile && (
               <Link href="/settings" className="text-xs text-acc-deep no-underline">Redigera profil</Link>
             )}
