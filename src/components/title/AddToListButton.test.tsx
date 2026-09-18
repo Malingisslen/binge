@@ -1,9 +1,9 @@
 // src/components/title/AddToListButton.test.tsx
 //
-// BIN-1226. Vad som pinnas här: ett NEKAT listanrop från titelsidans popover säger till
-// och lämnar ett spår. Före den här bunten anropades mutationerna utan await och utan
-// catch, så ett nekande blev en ohanterad rejection — och `firestore.rules` kan sedan
-// BIN-1207 neka en liständring på taket.
+// BIN-1226, BIN-1236. Vad som pinnas här: titelsidans popover anropar listmutationerna
+// med sitt EGET anropsställe. Fångsten, rapporten och beskedet bor sedan BIN-1236 i
+// `useListMutations` och pinnas i `src/hooks/useListMutations.test.tsx`; knappen
+// mockar hooken, så ett test här av Sentry eller toast hade prövat mocken, inte koden.
 //
 // Testet driver hela knappens klickväg, inte en utbruten hjälpare: grenen ÄR anropet, och
 // en utbrytning hade flyttat det som ska bevisas ifrån det som körs.
@@ -18,16 +18,12 @@ vi.mock('@/lib/firebase/config', () => ({ auth: {}, default: {} }));
 
 const addItemToList = vi.hoisted(() => vi.fn());
 const removeItemFromList = vi.hoisted(() => vi.fn());
-const captureError = vi.hoisted(() => vi.fn());
-const show = vi.hoisted(() => vi.fn());
 const lists = vi.hoisted(() => ({ value: [] as Array<{ id: string; title: string; items: Array<{ tmdbId: number }> }> }));
 
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ uid: 'me' }) }));
 vi.mock('@/hooks/useLists', () => ({
   useMyLists: () => ({ lists: lists.value, addItemToList, removeItemFromList }),
 }));
-vi.mock('@/contexts/ToastContext', () => ({ useToast: () => ({ show }) }));
-vi.mock('@/lib/sentry', () => ({ captureError }));
 
 const PROPS = { tmdbId: 42, mediaType: 'movie' as const, title: 'Titeln', posterPath: null };
 
@@ -39,71 +35,53 @@ async function clickRow(rowLabel: string) {
   });
 }
 
-describe('AddToListButton — ett nekat anrop säger till och lämnar spår (BIN-1226)', () => {
+describe('AddToListButton — anropar mutationerna med sitt eget anropsställe (BIN-1226, BIN-1236)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    addItemToList.mockResolvedValue({ ok: true });
+    removeItemFromList.mockResolvedValue({ ok: true });
     lists.value = [{ id: 'l1', title: 'Romcoms', items: [] }];
   });
 
-  it('ett nekat tillägg rapporteras i scopet lists med anropsställets eget kind', async () => {
-    addItemToList.mockRejectedValueOnce(new Error('permission-denied'));
+  it('ett tillägg bär kind addItemToList-quickAdd', async () => {
     render(<AddToListButton {...PROPS} />);
 
     await clickRow('Romcoms');
 
     expect(addItemToList).toHaveBeenCalledTimes(1);
-    expect(captureError).toHaveBeenCalledTimes(1);
-    expect(captureError.mock.calls[0][1]).toEqual({
-      scope: 'lists',
-      kind: 'addItemToList-quickAdd',
-    });
+    expect(addItemToList.mock.calls[0][0]).toBe('l1');
+    expect(addItemToList.mock.calls[0][1]).toEqual({ tmdbId: 42, mediaType: 'movie', title: 'Titeln', posterPath: null });
+    expect(addItemToList.mock.calls[0][2]).toEqual({ kind: 'addItemToList-quickAdd' });
+    expect(removeItemFromList).not.toHaveBeenCalled();
   });
 
-  it('ett nekat tillägg ger ett besked som inte namnger en orsak', async () => {
-    addItemToList.mockRejectedValueOnce(new Error('permission-denied'));
-    render(<AddToListButton {...PROPS} />);
-
-    await clickRow('Romcoms');
-
-    expect(show).toHaveBeenCalledTimes(1);
-    const message = String(show.mock.calls[0][0]);
-    expect(message.length).toBeGreaterThan(0);
-    // Orsaksord klienten inte kan veta något om. Att bara pinna den exakta strängen hade
-    // varit uppfyllt av vilken framtida orsaksgissning som helst.
-    for (const forbidden of ['tak', 'full', 'behörighet', 'nekad', 'gräns', 'för många']) {
-      expect(message.toLowerCase()).not.toContain(forbidden);
-    }
-  });
-
-  it('en nekad borttagning bär sitt eget kind, inte tilläggets', async () => {
+  it('en borttagning bär sitt eget kind, inte tilläggets', async () => {
     lists.value = [{ id: 'l1', title: 'Romcoms', items: [{ tmdbId: 42 }] }];
-    removeItemFromList.mockRejectedValueOnce(new Error('permission-denied'));
     render(<AddToListButton {...PROPS} />);
 
     await clickRow('Romcoms');
 
     expect(removeItemFromList).toHaveBeenCalledTimes(1);
+    expect(removeItemFromList.mock.calls[0]).toEqual(['l1', 42, { kind: 'removeItemFromList-quickAdd' }]);
     expect(addItemToList).not.toHaveBeenCalled();
-    expect(captureError.mock.calls[0][1]).toEqual({
-      scope: 'lists',
-      kind: 'removeItemFromList-quickAdd',
-    });
   });
 
-  it('en lyckad skrivning varken rapporterar eller säger till', async () => {
-    addItemToList.mockResolvedValueOnce(undefined);
+  it('ett nekat utfall kastar inte ut ur klickhanteraren', async () => {
+    // Mutationen kastar aldrig; ett nekande kommer tillbaka som { ok: false }. Knappen har
+    // inget att ångra, så det enda som kan gå fel här är att den gör något med utfallet.
+    addItemToList.mockResolvedValueOnce({ ok: false });
     render(<AddToListButton {...PROPS} />);
 
     await clickRow('Romcoms');
 
-    expect(captureError).not.toHaveBeenCalled();
-    expect(show).not.toHaveBeenCalled();
+    expect(addItemToList).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('Romcoms')).toBeTruthy();
   });
 
-  // #14 Software Architects bindande villkor: de här kind-värdena får inte kollidera med
-  // listsidans, annars blir två olika ytor samma rad i Sentry. Källorna läses som text —
-  // en jämförelse mellan två importerade konstanter hade inte kunnat se en kollision som
-  // uppstår i en strängliteral.
+  // #14 Software Architects bindande villkor (BIN-1226): de här kind-värdena får inte
+  // kollidera med listsidans, annars blir två olika ytor samma rad i Sentry. Källorna läses
+  // som text — en jämförelse mellan två importerade konstanter hade inte kunnat se en
+  // kollision som uppstår i en strängliteral.
   it('kind-värdena här krockar inte med ListPageClients', () => {
     const kindsIn = (path: string) =>
       [...readFileSync(path, 'utf8').matchAll(/kind:\s*(?:isInList\s*\?\s*)?'([^']+)'(?:\s*:\s*'([^']+)')?/g)]

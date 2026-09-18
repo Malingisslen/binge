@@ -5,6 +5,8 @@ import { useQuery } from '@tanstack/react-query';
 import { fsdb, lazySubscribe } from '@/lib/firebase/db';
 import { toDate } from '@/lib/firebase/utils';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/contexts/ToastContext';
+import { captureError } from '@/lib/sentry';
 import { lookupUserByHandle } from '@/lib/firebase/username';
 import type { UserList, UserListItem } from '@/types';
 
@@ -26,7 +28,7 @@ function docToList(id: string, data: Record<string, unknown>): UserList {
 }
 
 // Varför ingen useInfiniteQuery här (A4.2): en lista lagrar sina titlar som
-// ett *array-fält* (`items`, muteras via arrayUnion), inte som en
+// ett *array-fält* (`items`), inte som en
 // subcollection — så det finns ingen obegränsad *collection*-query att
 // paginera. `useMyLists` är ett realtids-`onSnapshot`-abonnemang med
 // `limit(100)` (read-bomb-skydd), och `usePublicList` är en enda `getDoc`.
@@ -73,27 +75,68 @@ export function useMyLists() {
   return { lists, createList, deleteList, addItemToList, removeItemFromList };
 }
 
+/** Anropsställets etikett i Sentry-scopet `lists`, så två ytor aldrig blir samma rad. */
+export interface ListMutationSite {
+  kind: string;
+}
+
+export type ListMutationOutcome = { ok: true } | { ok: false };
+
+// Beskeden namnger ingen orsak: klienten kan inte skilja ett takavslag (BIN-1207) från
+// något annat nekande, och en gissad orsak är ett nytt omätt påstående.
+const ADD_FAILED = 'Kunde inte lägga till titeln i listan.';
+const REMOVE_FAILED = 'Kunde inte ta bort titeln från listan.';
+
 /**
  * Lättviktiga mutationer för enstaka listor — utan `onSnapshot`-abonnemang.
  * Använd detta på listsidan där vi bara vill mutera den aktuella listan och
  * inte ladda hela `users/{uid}`-listsamlingen.
+ *
+ * BIN-1236: mutationerna fångar, rapporterar och säger till SJÄLVA och kastar aldrig.
+ * En anropare som bara gör `await` och struntar i utfallet får ändå beskedet — därför
+ * bor fångsten här och inte hos anroparna. `site` är obligatorisk, så en ny anropare
+ * måste välja sitt eget `kind`. Utfallet finns för den som har något att ångra.
  */
 export function useListMutations() {
-  const addItemToList = useCallback(async (listId: string, item: Omit<UserListItem, 'addedAt'>) => {
-    const { db, doc, updateDoc, arrayUnion, serverTimestamp } = await fsdb();
-    await updateDoc(doc(db, 'lists', listId), {
-      items: arrayUnion({ ...item, addedAt: new Date() }),
-      updatedAt: serverTimestamp(),
-    });
-  }, []);
+  const { show } = useToast();
 
-  const removeItemFromList = useCallback(async (listId: string, tmdbId: number) => {
-    const { db, doc, getDoc, updateDoc, serverTimestamp } = await fsdb();
-    const snap = await getDoc(doc(db, 'lists', listId));
-    if (!snap.exists()) return;
-    const items = (snap.data().items as UserListItem[]).filter(i => i.tmdbId !== tmdbId);
-    await updateDoc(doc(db, 'lists', listId), { items, updatedAt: serverTimestamp() });
-  }, []);
+  const addItemToList = useCallback(async (
+    listId: string,
+    item: Omit<UserListItem, 'addedAt'>,
+    site: ListMutationSite,
+  ): Promise<ListMutationOutcome> => {
+    try {
+      const { db, doc, updateDoc, arrayUnion, serverTimestamp } = await fsdb();
+      await updateDoc(doc(db, 'lists', listId), {
+        items: arrayUnion({ ...item, addedAt: new Date() }),
+        updatedAt: serverTimestamp(),
+      });
+      return { ok: true };
+    } catch (err) {
+      captureError(err, { scope: 'lists', kind: site.kind });
+      show(ADD_FAILED);
+      return { ok: false };
+    }
+  }, [show]);
+
+  const removeItemFromList = useCallback(async (
+    listId: string,
+    tmdbId: number,
+    site: ListMutationSite,
+  ): Promise<ListMutationOutcome> => {
+    try {
+      const { db, doc, getDoc, updateDoc, serverTimestamp } = await fsdb();
+      const snap = await getDoc(doc(db, 'lists', listId));
+      if (!snap.exists()) return { ok: true };
+      const items = (snap.data().items as UserListItem[]).filter(i => i.tmdbId !== tmdbId);
+      await updateDoc(doc(db, 'lists', listId), { items, updatedAt: serverTimestamp() });
+      return { ok: true };
+    } catch (err) {
+      captureError(err, { scope: 'lists', kind: site.kind });
+      show(REMOVE_FAILED);
+      return { ok: false };
+    }
+  }, [show]);
 
   return { addItemToList, removeItemFromList };
 }

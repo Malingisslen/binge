@@ -5,8 +5,6 @@ import { List, Check } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useMyLists } from '@/hooks/useLists';
 import { useClickOutside } from '@/hooks/useClickOutside';
-import { useToast } from '@/contexts/ToastContext';
-import { captureError } from '@/lib/sentry';
 import type { MediaType } from '@/types';
 
 interface AddToListButtonProps {
@@ -19,7 +17,6 @@ interface AddToListButtonProps {
 export default function AddToListButton({ tmdbId, mediaType, title, posterPath }: AddToListButtonProps) {
   const { uid } = useAuth();
   const { lists, addItemToList, removeItemFromList } = useMyLists();
-  const { show } = useToast();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
@@ -27,33 +24,14 @@ export default function AddToListButton({ tmdbId, mediaType, title, posterPath }
 
   if (!uid) return null;
 
-  // BIN-1207 gav `lists.items` ett tak i firestore.rules. Utan await/catch blir ett
-  // nekande en ohanterad rejection utan `scope`-tagg, och raden i popovern ser ut att inte
-  // göra något.
-  //
-  // Ingen optimistisk återställning här: bocken härleds ur `useMyLists` levande
-  // onSnapshot-ögonblicksbild. `ListPageClient` läser sin lista med en engångs-getDoc och
-  // behöver därför sin patchCache-rollback — härled anroparna av mutationerna med
-  //   git grep -n "addItemToList\|removeItemFromList" -- src
-  // hellre än att lita på en mening om vilka de är.
+  // Mutationerna fångar, rapporterar och säger till själva (BIN-1236, `useListMutations`).
+  // Utfallet används inte här: bocken härleds ur `useMyLists` levande
+  // onSnapshot-ögonblicksbild, så det finns ingen optimistisk ändring att ångra.
   //
   // `kind` bär anropsstället, så den här ytan går att skilja från listsidans i Sentry.
-  // Texten namnger ingen orsak: klienten kan inte skilja ett takavslag från något annat
-  // nekande, och en gissad orsak är ett nytt omätt påstående.
-  const toggle = async (listId: string, isInList: boolean) => {
-    try {
-      if (isInList) await removeItemFromList(listId, tmdbId);
-      else await addItemToList(listId, { tmdbId, mediaType, title, posterPath });
-    } catch (err) {
-      captureError(err, {
-        scope: 'lists',
-        kind: isInList ? 'removeItemFromList-quickAdd' : 'addItemToList-quickAdd',
-      });
-      show(isInList
-        ? 'Kunde inte ta bort titeln från listan.'
-        : 'Kunde inte lägga till titeln i listan.');
-    }
-  };
+  const toggle = (listId: string, isInList: boolean) => isInList
+    ? removeItemFromList(listId, tmdbId, { kind: 'removeItemFromList-quickAdd' })
+    : addItemToList(listId, { tmdbId, mediaType, title, posterPath }, { kind: 'addItemToList-quickAdd' });
 
   return (
     <div className="relative inline-block" ref={ref}>

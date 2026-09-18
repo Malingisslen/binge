@@ -6,8 +6,6 @@ import { Plus, Search, X } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { getPublicProfileCard } from '@/lib/firebase/publicProfile';
 import { useAuth } from '@/hooks/useAuth';
-import { useToast } from '@/contexts/ToastContext';
-import { captureError } from '@/lib/sentry';
 import { withItemAdded, withItemRemoved, withItemReinserted } from '@/lib/listItemsPatch';
 import { usePublicList, useListMutations, useListEditors, useListFollows } from '@/hooks/useLists';
 import { usePageMeta } from '@/hooks/usePageMeta';
@@ -30,7 +28,6 @@ export default function ListPageClient({ listId }: { listId: string }) {
   const { addEditor, removeEditor } = useListEditors();
   const { isFollowing, followList, unfollowList } = useListFollows();
   const queryClient = useQueryClient();
-  const { show } = useToast();
   const [showPicker, setShowPicker] = useState(false);
 
   const isOwner = !!(uid && list && list.uid === uid);
@@ -81,12 +78,9 @@ export default function ListPageClient({ listId }: { listId: string }) {
     );
   };
 
-  // Ett kast här hade blivit en ohanterad rejection som ingen ser, eftersom anroparen
-  // inte inväntar löftet. Felet fångas därför i handlaren och rapporteras — en tyst
-  // svälj gör ett systematiskt nekande osynligt.
-  //
-  // Toast-texten namnger inte orsaken: klienten kan inte skilja ett takavslag från något
-  // annat nekande, och en gissad orsak är ett nytt omätt påstående.
+  // Mutationerna fångar, rapporterar och säger till själva (BIN-1236, `useListMutations`)
+  // och kastar aldrig. Det som bara den här sidan har är patchen, så återställningen
+  // nycklas på utfallet.
   const handleAdd = async (r: TMDBSearchResult & { media_type: 'movie' | 'tv' }) => {
     const item: UserListItem = {
       tmdbId: r.id,
@@ -96,26 +90,16 @@ export default function ListPageClient({ listId }: { listId: string }) {
       addedAt: new Date(),
     };
     patchCache(items => withItemAdded(items, item));
-    try {
-      await addItemToList(listId, item);
-    } catch (err) {
-      patchCache(items => withItemRemoved(items, item.tmdbId));
-      captureError(err, { scope: 'lists', kind: 'addItemToList' });
-      show('Kunde inte lägga till titeln i listan.');
-    }
+    const res = await addItemToList(listId, item, { kind: 'addItemToList' });
+    if (!res.ok) patchCache(items => withItemRemoved(items, item.tmdbId));
   };
 
   const handleRemove = async (tmdbId: number) => {
     const index = list.items.findIndex(i => i.tmdbId === tmdbId);
     const removed = index >= 0 ? list.items[index] : null;
     patchCache(items => withItemRemoved(items, tmdbId));
-    try {
-      await removeItemFromList(listId, tmdbId);
-    } catch (err) {
-      if (removed) patchCache(items => withItemReinserted(items, removed, index));
-      captureError(err, { scope: 'lists', kind: 'removeItemFromList' });
-      show('Kunde inte ta bort titeln från listan.');
-    }
+    const res = await removeItemFromList(listId, tmdbId, { kind: 'removeItemFromList' });
+    if (!res.ok && removed) patchCache(items => withItemReinserted(items, removed, index));
   };
 
   return (
