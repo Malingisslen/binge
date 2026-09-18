@@ -1242,7 +1242,7 @@
     {
       "id": "flow-lists",
       "label": "Custom lists",
-      "description": "Lists are top-level Firestore docs (uid + items array, not a subcollection — items are mutated via arrayUnion/arrayRemove), so there's no per-title write history. Creating a list happens on /my/lists; adding titles happens either inline from a title's AddToListButton or from the list's own page, which is served through the [...path] catch-all router (DynamicRouter → ListPageClient), not a dedicated Next.js route folder. BIN-416: a signed-in viewer of a curated list (≥2 titles) also gets a \"billigaste sättet att se listan\" panel, computed client-side from a lite TMDB fan-out.",
+      "description": "Lists are top-level Firestore docs (uid + items array, not a subcollection — items are added via arrayUnion), so there's no per-title write history. Creating a list happens on /my/lists; adding titles happens either inline from a title's AddToListButton or from the list's own page, which is served through the [...path] catch-all router (DynamicRouter → ListPageClient), not a dedicated Next.js route folder. BIN-416: a signed-in viewer of a curated list (≥2 titles) also gets a \"billigaste sättet att se listan\" panel, computed client-side from a lite TMDB fan-out.",
       "covers": [
         "/my/lists",
         "list/[id]",
@@ -2373,7 +2373,7 @@
     {
       "id": "flow-moderation",
       "label": "Content reporting & moderation",
-      "description": "A user reports a review/comment/user/list via the UgcActionsMenu \"…\" menu. The client-side reports.ts helper lazy-loads Firebase Functions and calls the submitReport callable (never writes reports/ directly — the create rule is locked to `if false`). The callable validates the payload server-side, enforces a per-uid 10s cooldown inside a Firestore transaction on users/{uid}/reportMeta/throttle (closing the old batch-throttle bypass, BIN-49), and derives the real targetOwnerUid from the target doc itself rather than trusting the client (BIN-292, anti-framing). It then writes the report doc to top-level reports/. Admins review it on /admin/reports (gated by users/{uid}.isAdmin, both client-side and via firestore.rules), which reads via listReports and can transition status via updateReportStatus (writes actionedByUid + updatedAt for an audit trail).",
+      "description": "A user reports via the UgcActionsMenu \"…\" menu. Which target types have a surface in the app is pinned by src/lib/moderation/reportTargetCoverage.test.ts rather than listed here. The client-side reports.ts helper lazy-loads Firebase Functions and calls the submitReport callable (never writes reports/ directly — the create rule is locked to `if false`). The callable validates the payload server-side, enforces a per-uid 10s cooldown inside a Firestore transaction on users/{uid}/reportMeta/throttle (closing the old batch-throttle bypass, BIN-49), and derives the real targetOwnerUid from the target doc itself rather than trusting the client (BIN-292, anti-framing). It then writes the report doc to top-level reports/. Admins review it on /admin/reports (gated by users/{uid}.isAdmin, both client-side and via firestore.rules), which reads via listReports and can transition status via updateReportStatus (writes actionedByUid + updatedAt for an audit trail).",
       "covers": [
         "submitReport",
         "/admin/reports",
