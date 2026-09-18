@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 609,
+  "patternCount": 611,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -616,6 +616,7 @@
         "src/components/pages/GroupPageClient.tsx",
         "src/components/pages/HomePageClient.test.tsx",
         "src/components/pages/HomePageClient.tsx",
+        "src/components/pages/ListPageClient.test.tsx",
         "src/components/pages/ListPageClient.tsx",
         "src/components/pages/MediaTypePage.tsx",
         "src/components/pages/MoviePageClient.test.tsx",
@@ -638,6 +639,7 @@
         "src/hooks/useEpisodeProgressWithSync.helpers.ts",
         "src/hooks/useEpisodeProgressWithSync.test.tsx",
         "src/hooks/useEpisodeProgressWithSync.ts",
+        "src/hooks/useListMutations.test.tsx",
         "src/hooks/useLists.ts",
         "src/hooks/useMarkSeen.helpers.test.ts",
         "src/hooks/useMarkSeen.helpers.ts",
