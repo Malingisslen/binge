@@ -633,7 +633,13 @@
       "id": "admin-reports-page",
       "label": "/admin/reports dashboard",
       "context": "web-app",
-      "path": "src/app/admin/reports/page.tsx, src/lib/moderation/reportTargetLink.ts"
+      "path": "src/app/admin/reports/page.tsx, src/lib/moderation/reportTargetLink.ts, src/lib/firebase/moderationProfile.ts"
+    },
+    {
+      "id": "cf-getProfileForModeration",
+      "label": "getProfileForModeration callable",
+      "context": "backend-api",
+      "path": "functions/src/moderationProfile/index.ts, functions/src/moderationProfile/logic.ts"
     },
     {
       "id": "cf-rollupInsights",
@@ -2373,9 +2379,10 @@
     {
       "id": "flow-moderation",
       "label": "Content reporting & moderation",
-      "description": "A user reports via the UgcActionsMenu \"…\" menu. Which target types have a surface in the app is pinned by src/lib/moderation/reportTargetCoverage.test.ts rather than listed here. The client-side reports.ts helper lazy-loads Firebase Functions and calls the submitReport callable (never writes reports/ directly — the create rule is locked to `if false`). The callable validates the payload server-side, enforces a per-uid 10s cooldown inside a Firestore transaction on users/{uid}/reportMeta/throttle (closing the old batch-throttle bypass, BIN-49), and derives the real targetOwnerUid from the target doc itself rather than trusting the client (BIN-292, anti-framing). It then writes the report doc to top-level reports/. Admins review it on /admin/reports (gated by users/{uid}.isAdmin, both client-side and via firestore.rules), which reads via listReports. BIN-1233: a user report links to /user/ plus the username read from the public projection, because profile pages resolve by username; when the projection is not readable for the admin the row says so instead of linking. The page can transition status via updateReportStatus (writes actionedByUid + updatedAt for an audit trail).",
+      "description": "A user reports via the UgcActionsMenu \"…\" menu. Which target types have a surface in the app is pinned by src/lib/moderation/reportTargetCoverage.test.ts rather than listed here. The client-side reports.ts helper lazy-loads Firebase Functions and calls the submitReport callable (never writes reports/ directly — the create rule is locked to `if false`). The callable validates the payload server-side, enforces a per-uid 10s cooldown inside a Firestore transaction on users/{uid}/reportMeta/throttle (closing the old batch-throttle bypass, BIN-49), and derives the real targetOwnerUid from the target doc itself rather than trusting the client (BIN-292, anti-framing). It then writes the report doc to top-level reports/. Admins review it on /admin/reports (gated by users/{uid}.isAdmin, both client-side and via firestore.rules), which reads via listReports. BIN-1244: for a user report the row calls the admin-only getProfileForModeration callable, which checks users/{caller}.isAdmin server-side, spends a per-admin hourly budget in moderationBudget/{caller} (no rule matches it, so only the function can touch it), reads publicProfiles/{uid} with the Admin SDK and returns only the display fields, and logs actor, target and whether a profile was found. The row shows those fields inline, marks a profile that is not public, and links to /user/ plus the username only for a public profile. firestore.rules is not changed by this, so no other screen can see a private profile through it. The page can transition status via updateReportStatus (writes actionedByUid + updatedAt for an audit trail).",
       "covers": [
         "submitReport",
+        "getProfileForModeration",
         "/admin/reports",
         "UgcActionsMenu"
       ],
@@ -2427,6 +2434,20 @@
           "to": "firestore",
           "payload": "updateReportStatus(reportId, status, actionedByUid) → updateDoc reports/{id}",
           "transport": "firestore-write",
+          "verified": true
+        },
+        {
+          "from": "admin-reports-page",
+          "to": "cf-getProfileForModeration",
+          "payload": "httpsCallable getProfileForModeration({uid}) for a user report → {profile: {displayName, username, photoURL, bio, isPublic} | null}",
+          "transport": "https-callable",
+          "verified": true
+        },
+        {
+          "from": "cf-getProfileForModeration",
+          "to": "firestore",
+          "payload": "get users/{caller} (isAdmin must be true) → tx on moderationBudget/{caller} (hourly budget) → query reports where targetType=='user' and targetId==uid (a user report must exist) → get publicProfiles/{uid}; logger.info actorUid, targetUid, found",
+          "transport": "Firestore read",
           "verified": true
         }
       ],

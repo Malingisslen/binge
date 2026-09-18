@@ -10,8 +10,8 @@ export default function IntegritetPage() {
   return (
     <LegalPageShell
       title="Integritetspolicy"
-      lastUpdated="2026-09-14"
-      version="1.4"
+      lastUpdated="2026-09-18"
+      version="1.5"
     >
       <section>
         <h2>1. Vem är ansvarig?</h2>
@@ -54,6 +54,12 @@ export default function IntegritetPage() {
           <li><strong>Berättigat intresse (art. 6.1.f)</strong> — för driftlogg, felsökning, felövervakning, bot- och missbruksskydd, samt cookiefri och anonymiserad besöksstatistik (se §4).</li>
           <li><strong>Samtycke (art. 6.1.a)</strong> — för Hushåll, den frivilliga delningen av prenumerationskostnader i grupper (se §10), samt eventuella framtida inslag som kräver samtycke, t.ex. marknadsföring eller cookie-baserad spårning. Inga marknadsföringsinslag används idag.</li>
         </ul>
+        <p>
+          Administratörer kan se namn, användarnamn, profilbild och presentation
+          även på en privat profil vid en anmälan mot kontot, för att kunna hantera
+          anmälningar och missbruk.
+          Åtkomsten loggas.
+        </p>
       </section>
 
       <section>

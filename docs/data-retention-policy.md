@@ -830,6 +830,32 @@ lever, och varje skrivning är idempotent — så omkörningen konvergerar.
 **Berör inte** det separat dokumenterade läget "delvis kaskaderad, Auth
 fortfarande vid liv" (ADR 0022) — andra förutsättningar, annat svep.
 
+### Admins uppslag av en anmäld profil → loggrad i Cloud Logging (BIN-1244, 2026-09-18)
+
+Admin-vyn `/admin/reports` hämtar en anmäld användares visningsfält genom den
+anropbara funktionen `getProfileForModeration` (`functions/src/moderationProfile/`),
+också när profilen är privat. Varje uppslag som läser en profil loggas med
+`logger.info`: vem som slog upp (admins uid), vems profil (mål-uid) och om en profil
+hittades. Profilens innehåll loggas aldrig.
+
+- **Rättslig grund:** berättigat intresse, art. 6.1.f — hantering av anmälningar och
+  missbruk. Integritetspolicyn §3 säger att administratörer kan se fälten och att
+  åtkomsten loggas.
+- **Lagringstid:** loggraderna ligger i Cloud Loggings `_Default`-bucket, vars
+  lagringstid mättes till 30 dagar 2026-09-18 med
+  `gcloud logging buckets describe _Default --location=global --project=binge-nu --format="value(retentionDays)"`.
+  Det värdet är bucketens inställning, inte ett beslut i koden; kör kommandot igen
+  innan siffran citeras.
+- **Vem kan läsa loggen:** den som har läsrätt till loggar i Google Cloud-projektet
+  `binge-nu` (IAM), inte Firestore-reglerna.
+- **Export och radering:** loggraderna ingår inte i en användares export (art. 20)
+  och raderas inte av kontoraderingen — de är driftmetadata om en moderatorsåtgärd
+  och försvinner med lagringstiden ovan.
+- **Uppslagsbudgeten** (hur många uppslag en admin får göra per timme) lagras i
+  `moderationBudget/{adminUid}`: fönstrets starttid och ett antal, inget annat. Ingen
+  regel i `firestore.rules` matchar samlingen, så klienten kan varken läsa, ändra eller
+  radera den. Kontoraderingen tar inte bort dokumentet; det gäller bara admin-konton.
+
 ### Tillsammans-sessioner och notifikationer — schemalagt svep
 
 `retentionCleanup` raderar dagligen:

@@ -8,8 +8,8 @@ import type { ItemVisibility } from '@/types';
 import { MAX_BIO } from '@/lib/clampText';
 
 const VISIBILITY_OPTIONS: { value: ItemVisibility; label: string; description: string }[] = [
-  { value: 'private', label: 'Privat', description: 'Bara jag ser mina titlar och min profil.' },
-  { value: 'friends', label: 'Endast vänner', description: 'Bekräftade vänner ser min profil och mitt bibliotek. Andra ser inget.' },
+  { value: 'private', label: 'Privat', description: 'Bara jag ser mina titlar.' },
+  { value: 'friends', label: 'Endast vänner', description: 'Bekräftade vänner ser min profil och mitt bibliotek.' },
   { value: 'public', label: 'Publik', description: 'Alla med länken till min profil kan se biblioteket och betyg.' },
 ];
 
@@ -122,6 +122,11 @@ export function UsernameSection() {
               </label>
             ))}
           </div>
+          {/* BIN-1244: juridik- och dataskyddsrollernas villkor — valet ska själv säga vem
+              mer som kan se profilen. Malin valde lydelsen 2026-09-18. */}
+          <p className="text-xxs text-ink-3 mt-[6px]">
+            Administratörer kan se namn, användarnamn, bild och presentation vid en anmälan.
+          </p>
           {visibilitySyncPending && (
             <div className="mt-[6px] border border-danger bg-danger-soft rounded-sm px-2 py-[6px]">
               <p className="text-xxs text-danger-ink leading-snug">

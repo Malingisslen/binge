@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 611,
+  "patternCount": 613,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -206,9 +206,11 @@
       "slug": "trust-safety-content-moderation",
       "patterns": [
         "docs/moderation.md",
+        "functions/src/moderationProfile/",
         "functions/src/submitReport/",
         "src/app/admin/reports/",
-        "src/hooks/useBlockedUsers.ts"
+        "src/hooks/useBlockedUsers.ts",
+        "src/lib/firebase/moderationProfile.ts"
       ]
     },
     "13": {

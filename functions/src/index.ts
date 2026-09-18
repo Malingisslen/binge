@@ -234,6 +234,12 @@ export { retentionCleanup } from './retentionCleanup';
 // reports-create-regeln är låst till `if false` så bara denna funktion får skapa.
 export { submitReport } from './submitReport';
 
+// ── Moderering: admin ser en anmäld profil (BIN-1244) ─────────────────────────
+// getProfileForModeration: admin-only callable som ger /admin/reports en anmäld
+// användares visningsfält, även för en privat profil. Ingen regeländring: resten
+// av appen ser profiler precis som förut.
+export { getProfileForModeration } from './moderationProfile';
+
 // ── Gruppöverlämning (BIN-1063 steg 3) ──────────────────────────────────────
 // handOverOwnedGroups: callable som lämnar över den raderande användarens ägda
 // grupper till den medlem som varit med längst, i stället för att radera dem.

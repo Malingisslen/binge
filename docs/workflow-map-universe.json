@@ -12,6 +12,7 @@
     "reclaimOrphanFollows",
     "retentionCleanup",
     "submitReport",
+    "getProfileForModeration",
     "handOverOwnedGroups",
     "recordAskBinge",
     "askBingeParse",

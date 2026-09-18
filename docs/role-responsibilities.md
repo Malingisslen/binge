@@ -364,7 +364,7 @@ Owns **everything Swedish**.
   decision tree by reason; hard content removal; account-termination cascade;
   self-service blocking; community guidelines; law-enforcement escalation
   (NCMEC/IMY).
-  → `functions/src/submitReport/`, `src/app/admin/reports/`, `docs/moderation.md`, `src/hooks/useBlockedUsers.ts`
+  → `functions/src/submitReport/`, `src/app/admin/reports/`, `docs/moderation.md`, `src/hooks/useBlockedUsers.ts`, `functions/src/moderationProfile/`, `src/lib/firebase/moderationProfile.ts`
 
 ## 13. Data / Integrations Engineer
 

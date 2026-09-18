@@ -47,6 +47,23 @@ Läsning är admin-only (`allow read: if isAdmin()`) — vanliga användare kan
 aldrig läsa sina egna eller andras rapporter (sekretess mot den rapporterade).
 Admin-triage sker via Firebase Console med din ägar-inloggning.
 
+**Anmälda profiler (BIN-1244).** I `/admin/reports` visar en anmälan mot en
+användare den användarens namn, användarnamn, profilbild och presentation direkt
+i raden — också när profilen inte är publik, då med raden "Inte publik profil".
+Fälten hämtas av den anropbara funktionen
+`getProfileForModeration` (`functions/src/moderationProfile/`), som kräver att du
+är admin, bara svarar för ett konto som har en anmälan mot sig, och loggar varje
+uppslag som läser en profil. Rättslig grund: berättigat intresse (art.
+6.1.f), hantering av anmälningar och missbruk. Länken till profilsidan visas bara
+för en publik profil; en privat profil visar profilsidan som privat även för
+admin, och sökning, inbjudningar och listor är oförändrade. Profilfälten ersätter
+inte att öppna det anmälda innehållet: för en anmäld recension, kommentar eller
+lista finns innehållet inte i profilen. Bara anmälningar mot en användare visar
+profilfälten. Varje admin har ett begränsat antal uppslag per timme
+(`MODERATION_LOOKUPS_PER_WINDOW` i `functions/src/moderationProfile/logic.ts`);
+når du gränsen står det i raden att profilen inte kunde hämtas just nu, och det
+går att försöka igen när timmen gått.
+
 ---
 
 ## 2. Dagligt triage

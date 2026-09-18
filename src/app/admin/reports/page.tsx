@@ -13,8 +13,9 @@ import {
   type Report,
   type ReportStatus,
 } from '@/lib/firebase/reports';
-import { buildTargetLink } from '@/lib/moderation/reportTargetLink';
-import { useSenderProfile } from '@/hooks/useSenderProfile';
+import { buildTargetLink, linkableUsername } from '@/lib/moderation/reportTargetLink';
+import { useQuery } from '@tanstack/react-query';
+import { getProfileForModeration } from '@/lib/firebase/moderationProfile';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { LoadingView } from '@/components/ui/LoadingView';
 
@@ -143,9 +144,22 @@ function ReportRow({
   onAction: (id: string, status: ReportStatus) => void;
 }) {
   const reportedUid = report.targetType === 'user' ? report.targetOwnerUid : null;
-  const profile = useSenderProfile(reportedUid);
-  const targetLink = buildTargetLink(report, profile.data?.username ?? null);
-  const profileUnreadable = !!reportedUid && !profile.isLoading && !targetLink;
+  // BIN-1244: the reported profile comes from an admin-only server lookup, so a
+  // private profile is visible here too. The link to /user/ is offered only for a
+  // public profile: the profile page itself still shows a private one as private.
+  const profile = useQuery({
+    queryKey: ['moderation-profile', reportedUid],
+    queryFn: () => getProfileForModeration(reportedUid!),
+    enabled: !!reportedUid,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  const reported = profile.data ?? null;
+  const targetLink = buildTargetLink(report, linkableUsername(reported));
+  // Two different states, kept apart on purpose (role 12): a failed lookup — the
+  // hourly budget, the network — is worth retrying; a missing profile document is not.
+  const lookupFailed = !!reportedUid && profile.isError;
+  const profileMissing = !!reportedUid && profile.isSuccess && !reported;
 
   return (
     <li className="bg-surface border border-rule rounded-sm p-3">
@@ -165,6 +179,31 @@ function ReportRow({
               &ldquo;{report.note}&rdquo;
             </div>
           )}
+          {reported && (
+            <div className="flex items-start gap-2 mt-2 px-2 py-1 bg-bg rounded-sm">
+              {reported.photoURL && (
+                <img
+                  src={reported.photoURL}
+                  alt=""
+                  width={32}
+                  height={32}
+                  loading="lazy"
+                  decoding="async"
+                  className="rounded-sm shrink-0"
+                />
+              )}
+              <div className="min-w-0">
+                <div className="text-xs font-semibold text-ink">
+                  {reported.displayName || 'Namn saknas'}
+                  {reported.username && <span className="text-ink-3 font-normal ml-1">@{reported.username}</span>}
+                </div>
+                {reported.bio && <div className="text-xs text-ink-2">{reported.bio}</div>}
+                {!reported.isPublic && (
+                  <div className="text-xxs text-ink-3">Inte publik profil</div>
+                )}
+              </div>
+            </div>
+          )}
           <div className="text-xxs text-ink-3 mt-1">
             Rapporterad av {report.reporterUid.slice(0, 8)} •
             Target ägare: {report.targetOwnerUid ? report.targetOwnerUid.slice(0, 8) : 'okänd (innehållet borttaget)'}
@@ -181,9 +220,14 @@ function ReportRow({
               Öppna target →
             </Link>
           )}
-          {profileUnreadable && (
+          {lookupFailed && (
             <span className="px-3 py-[3px] text-xxs text-ink-3 text-right">
-              Profilen går inte att läsa härifrån
+              Profilen kunde inte hämtas just nu — försök igen om en stund
+            </span>
+          )}
+          {profileMissing && (
+            <span className="px-3 py-[3px] text-xxs text-ink-3 text-right">
+              Ingen profil finns för kontot
             </span>
           )}
           {report.status === 'open' && (
