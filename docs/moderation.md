@@ -45,7 +45,9 @@ batch-baserade rate-limiten i BIN-25). Servern stämplar `createdAt`/
 
 Läsning är admin-only (`allow read: if isAdmin()`) — vanliga användare kan
 aldrig läsa sina egna eller andras rapporter (sekretess mot den rapporterade).
-Admin-triage sker via Firebase Console med din ägar-inloggning.
+Admin-triage sker i `/admin/reports`, som visar anmälningarna per status och låter
+dig sätta en anmälan som granskad, åtgärdad, avfärdad eller öppen igen. Att radera
+innehåll eller konton görs fortfarande i Firebase Console (se nedan).
 
 **Anmälda profiler (BIN-1244).** I `/admin/reports` visar en anmälan mot en
 användare den användarens namn, användarnamn, profilbild och presentation direkt
@@ -131,8 +133,6 @@ går att försöka igen när timmen gått.
 ---
 
 ## 4. Actioner — hur utför man dem?
-
-Alla dessa kräver direct Firestore-edit via Firebase Console (v1).
 
 ### Ta bort en review
 

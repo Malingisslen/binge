@@ -45,9 +45,7 @@ export const submitReport = onCall({ region: 'europe-west1' }, async (request) =
     // ownership-lookup oracle. All reads precede the writes below.
     //
     // A deleted / missing / malformed target does NOT reject (it would lose a
-    // legit report about since-deleted content — e.g. posted-then-deleted abuse):
-    // we persist with targetOwnerUid=null + ownerResolved=false so the admin sees
-    // "ägare okänd (innehållet borttaget)" rather than a forged/mis-attributed uid.
+    // legit report about since-deleted content — e.g. posted-then-deleted abuse).
     const ref = resolveTargetRef(report.targetType, report.targetId);
     let targetOwnerUid: string | null = null;
     let ownerResolved = false;
@@ -70,7 +68,7 @@ export const submitReport = onCall({ region: 'europe-west1' }, async (request) =
       reporterUid: uid,
       targetType: report.targetType,
       targetId: report.targetId,
-      targetOwnerUid, // server-derived (null when the target is gone/unresolvable)
+      targetOwnerUid, // server-derived
       ownerResolved,
       reason: report.reason,
       ...(report.note ? { note: report.note } : {}),

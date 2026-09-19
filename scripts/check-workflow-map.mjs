@@ -614,6 +614,11 @@ export function tokenClaims(tok, file) {
 // way checks 6 and 7 enforce theirs, and a stale pair is reported too.
 //
 // Putting a test file on a node would stamp the map stale on routine test maintenance.
+//
+// BIN-1241, 2026-09-19: of what these tests import or read, these stay off every node on
+// purpose: .claude/rules/accepted-deviations.md, which is outside the stamped roots, and
+// src/test/rules/memberTraceRoster.ts, a test helper. The import and file-read lines:
+//   git grep -n -e "from '" -e "readFileSync(join" -- src/test/rules/available-notify-orchestrator.test.ts src/test/rules/community-ratings-orchestrator.test.ts src/test/rules/retention-cleanup-orchestrator.test.ts src/lib/clampText.test.ts src/lib/moderation/reportTargetCoverage.test.ts
 const CITED_AS_EVIDENCE =
   'test file cited as evidence for the flow';
 export const FLOW_PATH_EXEMPTIONS = {

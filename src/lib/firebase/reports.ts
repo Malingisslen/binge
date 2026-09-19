@@ -40,8 +40,7 @@ export interface Report {
   reporterUid: string;
   targetType: ReportTargetType;
   targetId: string;
-  // BIN-292: server-derived from the real target doc; null when the target was
-  // deleted/unresolvable (ownerResolved=false) rather than a forged client value.
+  // BIN-292: server-derived rather than a forged client value.
   targetOwnerUid: string | null;
   ownerResolved?: boolean;
   reason: ReportReason;

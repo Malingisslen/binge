@@ -83,6 +83,21 @@ describe('useListMutations — ett nekande säger till och lämnar spår, utan a
     expect(show).toHaveBeenCalledTimes(1);
   });
 
+  // BIN-1239: `if (!snap.exists()) return { ok: true };` i removeItemFromList. En lista
+  // som redan är borta innehåller inte titeln — det är ett lyckat utfall, inte ett fel.
+  it('en borttagning ur en lista som inte finns svarar ok:true utan att skriva eller säga till', async () => {
+    getDoc.mockResolvedValueOnce({ exists: () => false, data: () => undefined });
+    const result = hook();
+
+    let outcome;
+    await act(async () => { outcome = await result.current.removeItemFromList('l1', 42, { kind: 'site-b' }); });
+
+    expect(outcome).toEqual({ ok: true });
+    expect(updateDoc).not.toHaveBeenCalled();
+    expect(captureError).not.toHaveBeenCalled();
+    expect(show).not.toHaveBeenCalled();
+  });
+
   it('beskeden namnger ingen orsak klienten inte kan veta', async () => {
     updateDoc.mockRejectedValue(denied());
     const result = hook();

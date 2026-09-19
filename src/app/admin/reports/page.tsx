@@ -13,7 +13,7 @@ import {
   type Report,
   type ReportStatus,
 } from '@/lib/firebase/reports';
-import { buildTargetLink, linkableUsername } from '@/lib/moderation/reportTargetLink';
+import { buildTargetLink, linkableUsername, reportedProfileNotice } from '@/lib/moderation/reportTargetLink';
 import { useQuery } from '@tanstack/react-query';
 import { getProfileForModeration } from '@/lib/firebase/moderationProfile';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -156,10 +156,7 @@ function ReportRow({
   });
   const reported = profile.data ?? null;
   const targetLink = buildTargetLink(report, linkableUsername(reported));
-  // Two different states, kept apart on purpose (role 12): a failed lookup — the
-  // hourly budget, the network — is worth retrying; a missing profile document is not.
-  const lookupFailed = !!reportedUid && profile.isError;
-  const profileMissing = !!reportedUid && profile.isSuccess && !reported;
+  const notice = reportedProfileNotice(reportedUid, profile);
 
   return (
     <li className="bg-surface border border-rule rounded-sm p-3">
@@ -220,12 +217,12 @@ function ReportRow({
               Öppna target →
             </Link>
           )}
-          {lookupFailed && (
+          {notice === 'lookup-failed' && (
             <span className="px-3 py-[3px] text-xxs text-ink-3 text-right">
               Profilen kunde inte hämtas just nu — försök igen om en stund
             </span>
           )}
-          {profileMissing && (
+          {notice === 'missing' && (
             <span className="px-3 py-[3px] text-xxs text-ink-3 text-right">
               Ingen profil finns för kontot
             </span>

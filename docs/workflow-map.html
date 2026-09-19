@@ -459,7 +459,7 @@
       "id": "tillsammans-session-page",
       "label": "TillsammansSessionPageClient (tillsammans/[id])",
       "context": "web-app",
-      "path": "src/components/pages/TillsammansSessionPageClient.tsx,src/lib/firebase/groups.ts"
+      "path": "src/components/pages/TillsammansSessionPageClient.tsx,src/lib/firebase/groups.ts, src/lib/clampText.ts"
     },
     {
       "id": "cf-episode-notify",
@@ -477,7 +477,7 @@
       "id": "cf-available-notify",
       "label": "availableNotify",
       "context": "backend-api",
-      "path": "functions/src/availableNotify/index.ts"
+      "path": "functions/src/availableNotify/index.ts, functions/src/availableNotify/runNotify.ts, functions/src/releaseNotify/logic.ts"
     },
     {
       "id": "cf-weekly-digest",
@@ -573,7 +573,7 @@
       "id": "cf-communityRatingMaintain",
       "label": "communityRatingMaintain (trigger)",
       "context": "backend-api",
-      "path": "functions/src/communityRatings/index.ts"
+      "path": "functions/src/communityRatings/index.ts, functions/src/communityRatings/runAggregate.ts"
     },
     {
       "id": "community-rating-hook",
@@ -627,7 +627,7 @@
       "id": "cf-submitReport",
       "label": "submitReport callable",
       "context": "backend-api",
-      "path": "functions/src/submitReport/index.ts"
+      "path": "functions/src/submitReport/index.ts, functions/src/submitReport/logic.ts"
     },
     {
       "id": "admin-reports-page",
@@ -669,7 +669,7 @@
       "id": "cf-retentionCleanup",
       "label": "retentionCleanup scheduled sweep",
       "context": "backend-api",
-      "path": "functions/src/retentionCleanup/index.ts"
+      "path": "functions/src/retentionCleanup/index.ts, functions/src/retentionCleanup/runCleanup.ts, functions/src/retentionCleanup/logic.ts, functions/src/retentionCleanup/orphans.ts, functions/src/retentionCleanup/fieldOwned.ts, functions/src/groupHandover/runHandover.ts, functions/src/groupHandover/logic.ts, functions/src/friendRequestPush/logic.ts"
     },
     {
       "id": "data-export-section",

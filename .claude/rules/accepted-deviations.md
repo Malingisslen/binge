@@ -1619,3 +1619,19 @@ förutsättningar.
 
 **Re-open when:** någon av de tre ovan inträffar. Det finns ingen loggrad att bevaka;
 utlösaren är en dokumentändring.
+
+---
+
+## BIN-1240: anmälningar har en admin-yta i appen — 2026-09-19
+
+Efterföljare till `[Moderation] Reports are client-create-only with no in-app admin surface`
+(Sprint 5), som står kvar ordagrant. `/admin/reports` finns. Härled sidan:
+
+```
+git ls-files src/app/admin
+```
+
+Där listar admin anmälningarna per status, ändrar en anmälans status, och ser för en
+användaranmälan den anmälda profilen via den anropbara funktionen `getProfileForModeration`
+(BIN-1244). Att radera innehåll eller konton sker fortfarande i Firebase Console enligt
+`docs/moderation.md`.

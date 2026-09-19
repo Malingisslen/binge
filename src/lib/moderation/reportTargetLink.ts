@@ -33,3 +33,20 @@ export function buildTargetLink(
 export function linkableUsername(profile: { username: string | null; isPublic: boolean } | null): string | null {
   return profile?.isPublic ? profile.username : null;
 }
+
+export type ReportedProfileNotice = 'lookup-failed' | 'missing' | null;
+
+/**
+ * BIN-1239: which note the admin row shows under a reported profile. A failed lookup (the
+ * hourly budget, the network) is worth retrying; a missing profile document is not, so the
+ * two stay apart. Only a user report looks a profile up at all.
+ */
+export function reportedProfileNotice(
+  reportedUid: string | null,
+  lookup: { isError: boolean; isSuccess: boolean; data: unknown },
+): ReportedProfileNotice {
+  if (!reportedUid) return null;
+  if (lookup.isError) return 'lookup-failed';
+  if (lookup.isSuccess && !lookup.data) return 'missing';
+  return null;
+}

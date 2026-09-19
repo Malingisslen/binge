@@ -1,3 +1,78 @@
+# Sprint 2026-09-19 — 4 biljetter, 4 buntar
+
+Rent träd vid start, i fas med `origin/main`. Todo och In Progress tomma. En annan session
+(binge-e0) arbetar i samma träd; filerna nedan är anmälda till den, den rör inga av dem.
+
+Routningen körs om mot `git diff --cached --name-only` före VARJE incheckning.
+
+## Mätt vid urvalet (grep-of-main)
+
+- **BIN-1242 p1 håller:** `git grep -n "null when\|targetOwnerUid=null" -- src/lib/firebase/reports.ts functions/src/submitReport/index.ts`.
+  **p2 premiss borta:** admin-sidan läser inte längre `useSenderProfile` (BIN-1244, `074cd002`);
+  `grep -rln useSenderProfile src` nämner inte `src/app/admin`.
+- **BIN-1240 p1+p2 håller:** `grep -n "no in-app admin surface" .claude/rules/accepted-deviations.md`,
+  `grep -n "Admin-triage sker via Firebase Console" docs/moderation.md`. **p3 premiss borta** (samma skäl som 1242 p2).
+- **BIN-1239 p1 håller:** `git grep -n "snap.exists()" -- src/hooks/useLists.ts`. **p2 omskopad:**
+  etiketten "går inte att läsa härifrån" finns inte längre (`074cd002`); raden räknar i stället ut
+  `lookupFailed`/`profileMissing` med samma `!!reportedUid`-vakt, otestad.
+- **BIN-1241 håller:** `git grep -n "CITED_AS_EVIDENCE" -- scripts/check-workflow-map.mjs`.
+
+## Inte valda, med skäl
+
+- **BIN-1133** — produktval (vad visar en förfrågan från privat avsändare) → needs-approval.
+- **BIN-1174** — `AuthContext` → full panel, eget pass.
+- **BIN-1097, BIN-1170, BIN-624, BIN-1234, BIN-1120, BIN-1167** — regeländringar, eget pass.
+- **BIN-559** — eget pass med full panel. **BIN-959** — egen session (ditt villkor).
+- **BIN-1212, BIN-1144, BIN-1121, BIN-454/402, BIN-1114, BIN-1164, BIN-1179** — Tier D / kräver produktionsmätning.
+- **BIN-1118, BIN-521** — `Feature`/`idea`. **BIN-658, BIN-824** — blockerad uppströms / medvetet ej nu.
+- **BIN-1159** — stor granskning, eget pass.
+
+## Bunt A — BIN-1242 p1 · Tier A · panel full (high-stakes: functions/src/submitReport/index.ts)
+
+`node docs/org/route.mjs functions/src/submitReport/index.ts src/lib/firebase/reports.ts` → top · [5,6,27,4,12]
+
+- [x] Stryk satserna som säger att `targetOwnerUid` blir null — för en användaranmälan stämmer det inte.
+  Kriterier: 1) ingen kommentar i de två filerna påstår null för en användaranmälan *(diff)*;
+  2) ingen kod ändras, bara kommentarer *(diff)*; 3) strykning, ingen ny påståendemening *(diff)*.
+
+## Bunt B — BIN-1239 · Tier A · panel single [26]
+
+- [x] Test: `removeItemFromList` när listan saknas → `{ ok: true }`, ingen `updateDoc`, ingen `captureError`/`show`.
+- [x] Admin-radens två lägen (`lookupFailed`/`profileMissing`) blir en ren funktion i
+  `src/lib/moderation/reportTargetLink.ts` med test; sidan använder den.
+  Kriterier: 1) båda grenarna har test som faller om grenen muteras *(diff)*; 2) en
+  recensions-/kommentarsanmälan visar aldrig profilens fel-/saknas-rad *(diff)*; 3) sidans synliga
+  beteende oförändrat *(diff)*.
+
+## Bunt C — BIN-1240 p1+p2 · Tier A · panel single [25]
+
+- [x] Daterad efterföljare till posten "[Moderation] Reports are client-create-only with no in-app admin surface".
+- [x] `docs/moderation.md`: meningen om att triage sker i konsolen rättas mot `/admin/reports`.
+  Kriterier: 1) efterföljaren säger att `/admin/reports` finns och vad den gör *(diff)*; 2) originalposten
+  står kvar (beslutsprotokoll) *(diff)*; 3) moderation.md säger inte att triage bara sker i konsolen *(diff)*;
+  4) ingen ny uppräkning av `useSenderProfile`s användare *(diff)*.
+
+## Bunt D — BIN-1241 · Tier A · panel single [25]
+
+- [x] För varje `CITED_AS_EVIDENCE`-undantag: källfilerna testet pinnar läggs på en nod i flödet, eller en
+  daterad post säger varför inte.
+  Kriterier: 1) som biljettens krit. 1 *(diff)*; 2) ingen mening påstår nodtäckning utan kommando *(diff)*;
+  3) `node scripts/check-workflow-map.mjs` grön *(diff)*.
+
+## Deviation log
+
+- [discovery] BIN-1242/1240: p2 resp. p3 premiss borta — admin-sidan läser profilen via getProfileForModeration (074cd002), inte useSenderProfile → inte byggda.
+- [deviation] BIN-1239 p2: etiketten "går inte att läsa härifrån" fanns inte längre → testade i stället raden lookupFailed/profileMissing via ren funktion reportedProfileNotice.
+- [discovery] #26-villkor 1 (optimistisk cache) gäller inte: removeItemFromList har ingen optimistisk cache, bara getDoc+updateDoc (git grep -n "removeItemFromList = useCallback" -A14 -- src/hooks/useLists.ts). Villkor 2 uppfyllt med kommentar vid testet.
+- [deviation] BIN-1241: lade även releaseNotify/logic, groupHandover/{runHandover,logic}, friendRequestPush/logic på noder — testerna läser dem och funktionen i flödet importerar dem. Katalogtoken valdes bort (färre stämplar).
+- [discovery] Kartflaggan re-traced för flow-moderation: inga steg ändrade (kommentarer + ren hjälpare på befintlig nod); flaggan raderad.
+
+## Post-sprint
+
+- [ ] Lint + typecheck, följdbiljetter, en incheckning per bunt, push, vänta deploy, purge, stäng biljetter.
+
+---
+
 # Sprint 2026-09-18 — 5 biljetter, 4 buntar + kartcommit
 
 Rent träd vid start (`git status --porcelain` tomt), i fas med `origin/main`. Todo och
