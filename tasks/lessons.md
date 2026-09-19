@@ -2091,3 +2091,10 @@ falt skrivaren skriver - den andrades aldrig. Commitens faktiska union byter dar
 
 **Exempel:** sprinten 2026-09-18, BIN-1237 punkt 1. Två bokföringsomgångar (säkerhet och test) flaggades som "[CI Bypass]" respektive "[Auto-Mode Bypass]". Båda hade läst filerna och deras domar hamnade i loggen, men de lutades inte på: två fullständiga granskningar kördes, båda bokfördes, och först då committades `80aeae57`. Tidigare samma dag hade bokföringsomgångar med samma form gått igenom utan flagga, så att det fungerat förut är inget skäl.
 
+### [Workflow] Ett `--help` mot en append-only logg SKRIVER en rad
+
+**Trigger:** du vet inte hur ett loggskript anropas och tänker fråga det.
+
+**Regel:** läs skriptets första rader i stället. `docs/org/metrics/log_event.mjs` fail:ar öppet och tolkar varje argument som nyttolast, så `log_event.mjs review --help` lägger en rad `{"type":"review","raw":"--help"}` i `events.jsonl`. Filen är append-only även för en rad som aldrig pushats, så raden stryks inte — den får en daterad `correction`-rad. Ett skript som fail:ar öppet har inget läge som bara frågar.
+
+**Exempel:** sprinten 2026-09-19b, BIN-1247. Raden ligger kvar i `events.jsonl` med sin correction-rad bredvid; `check_events.mjs` och `check_review_coverage.mjs` går igenom, eftersom raden saknar `outcome` och biljettid.
