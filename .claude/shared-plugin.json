@@ -30,6 +30,7 @@
       "**/accepted-deviations.archive.md",
       "tasks/lessons.md",
       ".claude/rules/lessons-digest*.md",
+      "tasks/archive/lessons-digest-long-form.md",
       "docs/org/adr/**"
     ]
   },
@@ -143,7 +144,12 @@
     "sizeLimit": 800,
     "windowDays": 30,
     "lessonsFile": "tasks/lessons.md",
-    "digestFile": ".claude/rules/lessons-digest.md",
+    "digestFiles": [
+      ".claude/rules/lessons-digest.md",
+      ".claude/rules/lessons-digest-delivery.md",
+      ".claude/rules/lessons-digest-testing.md"
+    ],
+    "digestCoreMaxChars": 18000,
     "tiers": {
       "coreMaxChars": 15000,
       "chapterMaxChars": 20000,

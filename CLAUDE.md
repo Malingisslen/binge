@@ -20,8 +20,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   plans, reviews, audits, research — is written as one self-contained HTML page instead
   of printed. Locally: write it under `C:/Users/malla/claude-reports/binge/` and open it.
   In a cloud or phone session: publish it as an Artifact and give her the link.
-- **Minimize running costs.** Firebase is Blaze with a 25 SEK/mån cap. Prefer the
-  lite TMDB queries on fan-out surfaces, respect the cache tiers, and flag anything
+- **Minimize running costs.** Firebase is Blaze with a 25 SEK/mån cap. Flag anything
   that would add a paid service.
 - **Testing honesty.** Tests prove intended behavior. Never weaken, skip, or rewrite
   an assertion just to go green — if a test fails, the production code is the suspect.
@@ -43,10 +42,10 @@ single-file fixes ship without ceremony.
    reason, unmappedCode, unownedCode }`, `tier` ∈ `skip` / `medium` / `top`.
    Deterministic, no agents. Don't hand-roll a second risk judgment — this is the same
    router `/linear` and `/stakeholder-review` use.
-   **Branch on `reasonCode`, not on the prose in `reason`** (BIN-804). `skip` is always
+   **Branch on `reasonCode`, not on the prose in `reason`**. `skip` is always
    harmless (`doc-only` / `no-code-paths`). Code nobody owns routes **`medium`** with
    `reasonCode: 'unmapped-code'`, seated on the #14 fallback and listed in `unownedCode` —
-   that is BIN-788's fix, so do not write a consumer that tests for `skip` + `unmapped-code`
+   do not write a consumer that tests for `skip` + `unmapped-code`
    (no such state exists, and the branch would read as satisfied forever). And
    `unownedCode` can be non-empty even when `reasonCode` is `'owned'`, when only SOME of
    the paths have an owner: read the array, not only the code.
@@ -73,11 +72,9 @@ some other way, point it there too.
 ## Standing "do not do this" calls
 
 - **Never flip tmdbTosSweep's `mutateEnabled`.** It writes to EVERY user's watchlist. The
-  flip is Malin's Firebase Console action, gated on BIN-454/468 (real traffic + recorded
-  prod dry-run cost + a missed-run alert) and pegged to ~Nov. Test coverage is NOT the open
-  gate — BIN-566 closed that. A sprint may never do this.
+  flip is Malin's Firebase Console action. A sprint may never do this.
 - **Tillsammans carries two accepted security/cost risks** (anon-vs-anon vote forgery; no
-  session-expiry gate on writes), both decided by Malin against a full panel. See ADR 0015
+  session-expiry gate on writes). See ADR 0015
   before touching `firestore.rules`' session block, and never "fix" the first with a token
   stored on a public-read doc.
 
@@ -144,6 +141,8 @@ a missing entry under-informs, a stale path list actively misdirects.
 - `code-style.md`, `lessons-digest.md` — **always-on**, and that is a property of the files
   themselves (they carry no `paths:` block at all), not something to infer from an empty
   one: doc-taxonomy + test-extraction convention, and the running lessons digest.
+- `lessons-digest-delivery.md`, `lessons-digest-testing.md` — the lessons that only bind
+  during sprint/review-gate work or while writing tests.
 
 Non-rules docs (read on demand, not trigger-loaded): `docs/data-export-format.md` (GDPR
 export JSON schema), `docs/data-retention-policy.md` (deletion/anonymization),
