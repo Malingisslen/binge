@@ -137,15 +137,14 @@ Plötslig spike i rapport-volymen.
 1. Gå till användarens profil. Verifiera: riktig användare eller bot-konto?
 2. Om bot: delete:a deras konto via Authentication + manuell
    users/{uid}-cascade (använd `collectUserDataSnapshots`-flödet)
-3. Lägg till i `reports/` en dismiss-batch för alla deras rapporter
-4. **Om återkommande:** implementera hard-rate-limit i `firestore.rules`
-   (max 10 rapporter/timme per reporterUid — TODO i Sprint 6)
+3. Avfärda deras rapporter i `/admin/reports`
+4. **Om återkommande:** se §5 i `docs/moderation.md`
 
 ### 4c. Koordinerad mass-reporting på 1 target
 
 1. Läs innehållet — är det faktiskt problematiskt?
 2. Om ja: hantera enligt `docs/moderation.md`
-3. Om nej: dismiss alla rapporter, notera orsak i dismissReason
+3. Om nej: avfärda rapporterna i `/admin/reports`
 
 ---
 

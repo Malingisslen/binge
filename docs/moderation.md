@@ -154,7 +154,8 @@ går att försöka igen när timmen gått.
 2. Disable eller delete user
 3. Kör `deleteAccount`-cascaden via att inloggning-impersonera är INTE
    möjligt — antingen be användaren göra det själv, eller gör det manuellt
-   via Admin SDK (kräver skript, ej byggt än)
+   via Admin SDK (kräver skript, ej byggt än — se "Console-bypass" i
+   `docs/data-retention-policy.md`)
 4. Vid critical (barnporr etc.) — kontakta Firebase Support för emergency
    account termination
 
