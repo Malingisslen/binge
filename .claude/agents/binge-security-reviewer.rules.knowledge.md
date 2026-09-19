@@ -47,6 +47,12 @@ Read only when the staged diff touches this chapter's paths (see .claude/shared-
   `request.resource.data.k is T` asserts PRESENCE, so `is <type>` silently makes a field MANDATORY on that
   path — harden with `.get(k,D) is T` on the left and enumerate every partial-update writer against the
   smallest real write. `updateDoc`'s `request.resource.data` is the MERGED doc, so an omitted pin inherits.
+- **A method on a STORED value runs on whatever type is stored — and some never type-error.** `.size()` is
+  defined on string, list, map and bytes, so `resource.data.get('items', []).size()` on a legacy doc whose
+  `items` is a string yields its character count; a cap or ratchet built on it silently compares the wrong
+  quantity instead of denying. Flag any `resource.data…` value that feeds `.size()` without an
+  `is <T>` guard first (`x is list ? x.size() : 0`), and ask for a fixture that STORES a string/map under the
+  field. BIN-1228, found by the integration review of BIN-1207; the shipped form is `beforeItemCount`.
 - **A range bound is not a ratchet.** `is int && >=0 && <=1` stops "set it absurd", not "reset after spending
   down". Use `v <= (resource == null || !(resource.data.get('v',1) is int) ? 1 : resource.data.get('v',1))`.
   **Tell:** an ADR saying "budget"/"cap"/"once per X" with one field ratcheted, its neighbour not.

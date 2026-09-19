@@ -11494,3 +11494,14 @@ Struck from the "Review scope, premises and attestations" bullet, verbatim:
   re-reads.`
 - `It is outside every `reviewGates` pattern and in `claimLint.exemptPaths`, so nothing
   will catch it:`
+
+
+### 2026-09-19 — `.size()` on a stored value that is not the type the rule assumes
+
+Added to the rules chapter on Malin's call after the knowledge-split benchmark. The case: BIN-1207's
+`lists.items` cap read `resource.data.get('items', []).size()` as the before-count. For a legacy doc whose
+`items` was a string, that is the string's length, and the shrink exemption `after <= before` then admitted a
+real list larger than the cap. The integration reviewer caught it on BIN-1207 (non-blocking), filed as
+BIN-1228, fixed in 342dfda5 with `beforeItemCount` (`is list ? size() : 0`) and emulator tests.
+In the benchmark this reviewer surfaced it 1 of 3 runs with the pre-split knowledge and 0 of 3 after:
+the nearest existing bullet covers the equality type-error brick, not `.size()` succeeding on the wrong type.
