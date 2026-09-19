@@ -1000,14 +1000,6 @@ service cloud.firestore {
     }
 
     // ---- reports (UGC-moderation) ----
-    // Inloggade användare kan skapa rapporter. Läsning sker off-line via
-    // Firebase Console av admins — inga klienter har read-access. Ingen
-    // klient kan heller uppdatera eller radera en rapport (admin sätter
-    // status via console).
-    //
-    // Rate-limit: vi litar på klient-cooldown (1 s) + vi begränsar
-    // note-size via valideringsregel. En hårdare rate-limit (per user per
-    // timme) lägger vi in när vi ser abuse-mönster.
     match /reports/{reportId} {
       // Läsning: vanliga användare får aldrig läsa sina egna eller andras
       // rapporter (sekretess mot reporterad target). Admins får läsa alla.
@@ -1022,7 +1014,8 @@ service cloud.firestore {
       // i en transaktion. Klienter får aldrig skriva direkt.
       allow create: if false;
 
-      // Admin får uppdatera status + lägga till actionedAt/dismissedAt m.m.
+      // Admin får uppdatera en rapport (updateReportStatus i
+      // src/lib/firebase/reports.ts skriver status, actionedByUid och updatedAt)
       // men får INTE ändra core-fält som skulle manipulera historik.
       allow update: if isAdmin()
         && request.resource.data.status in ['open', 'reviewed', 'actioned', 'dismissed']
