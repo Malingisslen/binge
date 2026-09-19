@@ -28,11 +28,9 @@ Dated record → `…archive.md` (append-only).
   is a hint, never the boundary. **Sha equality proves the BYTES held, not that their CLAIMS do** — a
   byte-identical module's doc comment is falsifiable by a change elsewhere in the diff. An unchanged file the
   diff depends on is exempt from re-reading, never from re-derivation.
-  **THIS FILE is the worst place to write a finding in the present tense, and the only place no gate
-  re-reads.** A finding describes bytes that exist because they are WRONG; the fix deletes them, and the
+  **THIS FILE is the worst place to write a finding in the present tense.** A finding describes bytes that exist because they are WRONG; the fix deletes them, and the
   sentence becomes a standing instruction that is false — handed to the next review of the same surface as
-  if it were the code. It is outside every `reviewGates` pattern and in `claimLint.exemptPaths`, so nothing
-  will catch it: BIN-1063 steg 3 bunt 2 shipped with two such bullets, one of them quoting an attestation
+  if it were the code. BIN-1063 steg 3 bunt 2 shipped with two such bullets, one of them quoting an attestation
   the same round had struck, both found by the INTEGRATION reviewer rather than by me. So: write the
   TRANSFERABLE SHAPE plus the durable fix, attribute the instance to the review round in the PAST tense
   ("found in review, fixed before it shipped"), and point at the dated archive entry for the verbatim

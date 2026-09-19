@@ -11482,3 +11482,15 @@ Check three things —
 - [S62 sentence, STRIKE-MECHANIZED: carried by docs/org/rules-id-client-symmetry.test.mjs]
 (c) no client id builder can emit the dropped shape — trace where the number comes from (TMDB ids
   start at 1; a swipe deck is discover, never the library)
+
+
+### 2026-09-19 — two clauses superseded in the core card (BIN-959 del 3 made them false)
+
+Since _note27 in `.claude/shared-plugin.json`, the integration reviewer's gate matches this file, so both
+clauses below stopped being true on the day it landed. Found by the integration review of e4ed72bd.
+Struck from the "Review scope, premises and attestations" bullet, verbatim:
+
+- `, and the only place no gate
+  re-reads.`
+- `It is outside every `reviewGates` pattern and in `claimLint.exemptPaths`, so nothing
+  will catch it:`

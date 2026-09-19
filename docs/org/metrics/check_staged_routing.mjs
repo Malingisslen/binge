@@ -48,12 +48,6 @@ import { route, ROLE_TITLES } from '../route.mjs';
  *
  * BIN-1059 asked for this to be DECIDED rather than left to chance, on the premise that the
  * router answers differently depending on whether reviewers' own knowledge files are counted.
- * Measured before building, that premise does not hold: a `*.knowledge.md` is not a code path,
- * so it lands in the router's `unmapped` array rather than seating a role. Derive it —
- *
- *     node docs/org/route.mjs .claude/agents/binge-test-reviewer.knowledge.md
- *     node docs/org/route.mjs lefthook.yml .claude/agents/binge-test-reviewer.knowledge.md
- *     node docs/org/route.mjs lefthook.yml
  *
  * The exclusion stands on a reason that does not depend on today's ownership map:
  * a reviewer writes to its own knowledge file AS PART OF reviewing, so the union would then
