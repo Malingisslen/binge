@@ -645,11 +645,13 @@ Owns the process.
 - **The reviewers' own instruction files and the hooks that stamp their state**
   (BIN-869). Editing what a reviewer is told to look for disarms a gate exactly as
   effectively as deleting its pattern, and until now both routed `skip` and matched
-  no gate. The four `*-reviewer.md` files are in; their `*.knowledge*.md` siblings
-  are deliberately NOT — the reviewers append to those on every ledger run, and
-  gating them would put routine bookkeeping behind a review (the same call Malin
-  made for `lessons-digest.md` in BIN-851).
+  no gate. The four `*-reviewer.md` files are in.
   → `.claude/agents/binge-code-reviewer.md`, `.claude/agents/binge-security-reviewer.md`, `.claude/agents/binge-integration-reviewer.md`, `.claude/agents/binge-test-reviewer.md`, `.claude/hooks/freshness.mjs`, `.claude/hooks/freshness.test.mjs`, `.claude/hooks/preview-gate.mjs`, `.claude/hooks/preview-gate.test.mjs`
+- **Granskarnas kunskapskärnor och kapitel** (BIN-959 del 3, Malins beslut 2026-09-19).
+  Sedan uppdelningen i tre nivåer är kärnan och kapitlen det varje granskning läser
+  först, så en ändring i dem ändrar vad grindarna letar efter. Arkivfilerna ingår inte:
+  de läses aldrig vid granskning.
+  → `.claude/agents/binge-code-reviewer.knowledge.md`, `.claude/agents/binge-code-reviewer.data.knowledge.md`, `.claude/agents/binge-code-reviewer.functions.knowledge.md`, `.claude/agents/binge-code-reviewer.client.knowledge.md`, `.claude/agents/binge-code-reviewer.build.knowledge.md`, `.claude/agents/binge-code-reviewer.tests.knowledge.md`, `.claude/agents/binge-security-reviewer.knowledge.md`, `.claude/agents/binge-security-reviewer.rules.knowledge.md`, `.claude/agents/binge-security-reviewer.server.knowledge.md`, `.claude/agents/binge-security-reviewer.client.knowledge.md`, `.claude/agents/binge-security-reviewer.gdpr.knowledge.md`, `.claude/agents/binge-test-reviewer.knowledge.md`, `.claude/agents/binge-test-reviewer.rules.knowledge.md`, `.claude/agents/binge-test-reviewer.ui.knowledge.md`, `.claude/agents/binge-test-reviewer.data.knowledge.md`, `.claude/agents/binge-test-reviewer.tooling.knowledge.md`
 - **Vad funktionsbygget kompilerar, och vad som typkontrollerar resten** (BIN-1110,
   utvidgad med rotens konfiguration i BIN-1130). Byggets konfiguration avgjorde tidigare
   bada sakerna pa en gang, sa den enda platsen ett typfel i en testfil syntes var i

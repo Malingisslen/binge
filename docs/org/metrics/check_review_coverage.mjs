@@ -291,6 +291,36 @@ export function owesReviewRow(subject) {
   return OWES_REVIEW.test(subject.trim());
 }
 
+/**
+ * BIN-959 del 3 (Malin's call, 2026-09-19): a commit that changes what a gate reviewer is
+ * TOLD to look for owes a review row whatever its conventional type. Before this, a
+ * `docs:`/`chore:` commit could rewrite every reviewer's instructions without owing one —
+ * BIN-958 did exactly that in three commits and nothing counted the missing critique.
+ *
+ * The instruction files only, never `*.knowledge*.md`: reviewers fold lessons into those on
+ * every run, and the integration reviewer's gate reads them instead (shared-plugin.json).
+ */
+export const REVIEWER_INSTRUCTIONS = /^\.claude\/agents\/binge-[a-z]+-reviewer\.md$/;
+
+/**
+ * The path rule judges history only from here on. Earlier `docs:` commits that touched these
+ * files were legal under the rule of their day, and grading them now would turn the deploy
+ * permanently red for commits nobody can re-review (BIN-938's non-retroactive epoch).
+ */
+export const INSTRUCTIONS_EFFECTIVE_FROM = '2026-09-19T00:00:00.000Z';
+
+/** True when any of these repo-relative paths is a reviewer instruction file. */
+export function changesReviewerInstructions(files) {
+  return files.some((f) => REVIEWER_INSTRUCTIONS.test(f));
+}
+
+/** The files one existing commit touched. Only called for commits the type rule did not catch. */
+export function filesOfCommit(sha) {
+  return execFileSync('git', ['diff-tree', '--no-commit-id', '--name-only', '-r', sha], {
+    cwd: dirname(EVENTS_PATH), encoding: 'utf8', maxBuffer: 8 * 1024 * 1024,
+  }).split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+}
+
 /** The BIN-ids a commit subject names, deduplicated and in order. */
 export function ticketsInSubject(subject) {
   return [...new Set(subject.match(TICKET_IN_SUBJECT) ?? [])];
@@ -381,6 +411,10 @@ export function findCoverageGaps(commits, reviewed, {
   // grades exactly as this file did before the exemption existed.
   botShas = new Set(),
   dependabotPrefixes = [],
+  // BIN-959 del 3. Defaults to "touched nothing", so a caller that does not pass it grades
+  // exactly as this file did before the path rule existed.
+  filesOf = () => [],
+  instructionsFrom = INSTRUCTIONS_EFFECTIVE_FROM,
 } = {}) {
   // A depth-1 checkout can see exactly one commit, so it does not get to answer a question
   // about history at all. Reported, never assumed either way.
@@ -394,8 +428,11 @@ export function findCoverageGaps(commits, reviewed, {
   let eligible = 0;
   let covered = 0;
 
+  const instructionsEpoch = Date.parse(instructionsFrom);
+
   for (const commit of commits) {
-    if (!owesReviewRow(commit.subject)) continue;
+    if (!owesReviewRow(commit.subject)
+      && (Date.parse(commit.date) < instructionsEpoch || !changesReviewerInstructions(filesOf(commit.sha)))) continue;
     // BIN-1040, and it sits HERE rather than inside `owesReviewRow` on purpose: the
     // exemption needs the commit's AUTHOR, and the predicate only ever sees a subject. That
     // is also why `gradeSubject` — which grades an unwritten commit — cannot reach it.
@@ -408,7 +445,7 @@ export function findCoverageGaps(commits, reviewed, {
     if (tickets.length === 0) {
       violations.push({
         sha: commit.sha.slice(0, 7),
-        reason: 'is a feat/fix commit whose subject names no BIN-id, so no review row can '
+        reason: 'owes a review row (its type changes code, or it changes the instructions of a gate reviewer) but its subject names no BIN-id, so no review row can '
           + 'ever be keyed to it — an untraceable change is the silence this check exists to remove',
       });
       continue;
@@ -469,6 +506,9 @@ export function exemptionInputs(historyAvailable) {
     // is the safe direction.
     botShas: historyAvailable ? readBotBumpShas() : new Set(),
     dependabotPrefixes: readDependabotPrefixes(),
+    // BIN-959 del 3: the path rule needs each commit's files, and it goes through here for
+    // the same reason the exemption does — both callers must grade identically.
+    filesOf: historyAvailable ? filesOfCommit : () => [],
   };
 }
 
@@ -524,14 +564,14 @@ export function main() {
  *
  * @returns {{ok: true, tickets: string[]} | {ok: false, reason: string}}
  */
-export function gradeSubject(subject, reviewed) {
-  if (!owesReviewRow(subject)) return { ok: true, tickets: [] };
+export function gradeSubject(subject, reviewed, stagedFiles = []) {
+  if (!owesReviewRow(subject) && !changesReviewerInstructions(stagedFiles)) return { ok: true, tickets: [] };
 
   const tickets = ticketsInSubject(subject);
   if (tickets.length === 0) {
     return {
       ok: false,
-      reason: 'this is a code-changing commit whose subject names no BIN-id, so no review row '
+      reason: 'this commit owes a review row (its type changes code, or it changes the instructions of a gate reviewer) but its subject names no BIN-id, so no review row '
         + 'can ever be keyed to it',
     };
   }
@@ -636,12 +676,23 @@ export function stagedEventsLog(repoDir = REPO_ROOT, relPath = DEFAULT_EVENTS_RE
   }
 }
 
+/**
+ * The paths staged for the commit being written. Parameterised on the repo root only so a
+ * test can drive it against a scratch repo. A failed read THROWS: the hook then refuses the
+ * commit, which is the safe direction for a gate that cannot see what it is judging.
+ */
+export function stagedFiles(repoDir = REPO_ROOT) {
+  return execFileSync('git', ['diff', '--cached', '--name-only'], {
+    cwd: repoDir, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'],
+  }).split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+}
+
 /** The `--message <file>` entry point. Reads the pending subject and refuses the commit. */
-export function mainMessage(messagePath) {
+export function mainMessage(messagePath, staged = stagedFiles()) {
   const subject = (readFileSync(messagePath, 'utf8').split(/\r?\n/)[0] ?? '').trim();
   const log = stagedEventsLog();
   const reviewed = ticketsWithAReviewRow(parseEvents(log.text));
-  const verdict = gradeSubject(subject, reviewed);
+  const verdict = gradeSubject(subject, reviewed, staged);
 
   if (verdict.ok) {
     if (verdict.tickets.length > 0) {

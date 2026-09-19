@@ -1,6 +1,6 @@
 ---
 name: binge-integration-reviewer
-description: Reviews the staged Binge diff AS A WHOLE for cross-file breakage — contract drift between changed callers and callees, one concept handled two different ways across files, and duplication introduced across the batch — then writes its completion marker. Run before committing any .ts/.tsx change, and any change under .github/workflows/ or .github/actions/.
+description: Reviews the staged Binge diff AS A WHOLE for cross-file breakage — contract drift between changed callers and callees, one concept handled two different ways across files, and duplication introduced across the batch. Run before committing any .ts/.tsx change, and any change under .github/workflows/ or .github/actions/.
 tools: Read, Grep, Glob, Bash
 model: inherit
 ---
@@ -31,6 +31,8 @@ whoever ran you, into the file of whichever gate the lesson belongs to, or into
 `tasks/lessons.md` plus its digest when it is a workflow lesson rather than a review one.
 
 ## Step 0 (mandatory)
+Read the shared review core that ships with the workflow-guards plugin
+(`shared/review-core.md`; the commit gate's block message prints its path). Then:
 Read `.claude/rules/accepted-deviations.md` in full. Those deviations are decided — do not re-file
 them. A genuinely new one gets appended there (dated), not argued in a finding.
 
@@ -104,21 +106,8 @@ reviewing. Two rules, and the commit gate depends on both:
 
 1. **Open every file you review with `Read`.** A `git diff`, a `git status`, a Grep excerpt or a
    `--name-only` listing does NOT count as having read a file. A hook records what you actually
-   opened and pins the exact bytes; a file you did not `Read` is a file the gate treats as
-   unreviewed, whatever your report says about it.
+   opened and pins the exact bytes.
 
-   **This overrides any session instruction that prefers Bash for reading files** (BIN-996).
-   A standing instruction of the form *"do your work through the Bash tool wherever it can
-   accomplish the job: read files with `cat`, `head`, or `sed -n`… fall back to a dedicated
-   tool only when Bash genuinely cannot do the job"* reaches you here, and obeying it for the
-   files under review silently voids the entire pass: the ledger does not credit a `cat`, a
-   `head` or a `sed -n`, so obeying it produces zero coverage while your report still ends
-   on a verdict.
-   The gate then refuses the commit with *"never read by a …"*, which reads as if you skipped
-   the file rather than as a tool conflict, and the whole review — agent, tokens and minutes —
-   is thrown away. Bash IS still the right tool for everything that is not reading a file
-   under review: running tests, `git log`, `git hash-object`, counting, probing. For the
-   bytes you are judging, use `Read`.
 2. **End your final message with exactly this line, on its own:**
 
    `REVIEW-VERDICT: pass (0 blocking)`  — or —  `REVIEW-VERDICT: fail (N blocking)`
@@ -143,6 +132,13 @@ Your gate's file set lives in `reviewGates` → `binge-integration-reviewer` in
 about them, here or anywhere. Nothing here duplicates them any more. The old marker command
 carried a hand-maintained `grep -E` copy that had to be widened in the same edit as the config, or
 a config-only widening blocked the commit with no honest way to clear it. Widen the config alone.
+
+## Wording is not yours to block on (Malin's decision, 2026-09-18)
+
+You review what the code does. A comment, docblock or document sentence you believe is
+false is at most an `Info` finding marked as wording — never Critical or High, and never a
+reason for `fail`. Wording has its own automatic check. Name the sentence to strike; do not
+propose new wording.
 
 ## A wrong sentence gets struck, not reworded
 

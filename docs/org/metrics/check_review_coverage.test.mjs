@@ -42,6 +42,11 @@ import {
   readDependabotPrefixes,
   readBotBumpShas,
   exemptionInputs,
+  REVIEWER_INSTRUCTIONS,
+  INSTRUCTIONS_EFFECTIVE_FROM,
+  changesReviewerInstructions,
+  filesOfCommit,
+  stagedFiles,
 } from './check_review_coverage.mjs';
 import { EVENTS_PATH, parseEvents, historyIsAvailable } from './check_events.mjs';
 
@@ -401,21 +406,21 @@ describe('mainMessage — the exit code the commit-msg hook acts on', () => {
     // BIN-917 itself: this very batch logged its row, so the live log answers for it.
     const p = tmp('ok', 'fix(org): a thing (BIN-917)\n\nbody\n');
     try {
-      expect(mainMessage(p)).toBe(0);
+      expect(mainMessage(p, [])).toBe(0);
     } finally { rmSync(p, { force: true }); }
   });
 
   it('exits 1 for a subject naming a ticket with no row', () => {
     const p = tmp('bad', 'fix(org): a thing (BIN-9999999)\n');
     try {
-      expect(mainMessage(p)).toBe(1);
+      expect(mainMessage(p, [])).toBe(1);
     } finally { rmSync(p, { force: true }); }
   });
 
   it('exits 1 for a code-changing subject naming no ticket', () => {
     const p = tmp('noid', 'feat(x): untraceable\n');
     try {
-      expect(mainMessage(p)).toBe(1);
+      expect(mainMessage(p, [])).toBe(1);
     } finally { rmSync(p, { force: true }); }
   });
 
@@ -425,7 +430,7 @@ describe('mainMessage — the exit code the commit-msg hook acts on', () => {
     // below names an unreviewed ticket and the commit is still allowed.
     const p = tmp('docs', 'docs(map): re-trace\n\nRefs BIN-9999999 in the body only.\n');
     try {
-      expect(mainMessage(p)).toBe(0);
+      expect(mainMessage(p, [])).toBe(0);
     } finally { rmSync(p, { force: true }); }
   });
 });
@@ -692,5 +697,128 @@ describe('the dependabot exemption (BIN-1040)', () => {
       'git attributes no commit to dependabot[bot] — either the author spelling changed or '
       + 'the exemption is now guarding nothing and should be re-anchored, not deleted quietly',
     ).toBeGreaterThan(0);
+  });
+});
+
+describe('reviewer instructions owe a review row whatever the type (BIN-959 del 3)', () => {
+  const reviewed = new Set(['BIN-100']);
+  const INSTR = '.claude/agents/binge-code-reviewer.md';
+  const AFTER_INSTR = '2026-09-20T12:00:00.000Z';
+  const BEFORE_INSTR = '2026-09-18T12:00:00.000Z';
+
+  it('matches the four instruction files and never a knowledge file', () => {
+    for (const f of [
+      '.claude/agents/binge-code-reviewer.md',
+      '.claude/agents/binge-security-reviewer.md',
+      '.claude/agents/binge-test-reviewer.md',
+      '.claude/agents/binge-integration-reviewer.md',
+    ]) expect(REVIEWER_INSTRUCTIONS.test(f), f).toBe(true);
+    for (const f of [
+      '.claude/agents/binge-code-reviewer.knowledge.md',
+      '.claude/agents/binge-code-reviewer.data.knowledge.md',
+      '.claude/agents/binge-code-reviewer.knowledge.archive.md',
+      'docs/.claude/agents/binge-code-reviewer.md',
+    ]) expect(REVIEWER_INSTRUCTIONS.test(f), f).toBe(false);
+  });
+
+  it('the instruction files it names exist, so the pattern is not guarding nothing', () => {
+    const tracked = execFileSync('git', ['ls-files', '.claude/agents'], { cwd: REPO_ROOT, encoding: 'utf8' })
+      .split(/\r?\n/).filter(Boolean);
+    expect(tracked.filter((f) => REVIEWER_INSTRUCTIONS.test(f)).length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('refuses a docs commit that changes an instruction file and names a ticket with no row', () => {
+    const v = gradeSubject('docs(agents): reword a step (BIN-999)', reviewed, [INSTR]);
+    expect(v.ok).toBe(false);
+    expect(v.reason).toContain('BIN-999');
+  });
+
+  it('refuses a docs commit that changes an instruction file and names no ticket', () => {
+    const v = gradeSubject('docs(agents): reword a step', reviewed, [INSTR]);
+    expect(v.ok).toBe(false);
+    expect(v.reason).toContain('no BIN-id');
+  });
+
+  it('passes the same docs commit when its ticket has a row', () => {
+    expect(gradeSubject('docs(agents): reword a step (BIN-100)', reviewed, [INSTR]).ok).toBe(true);
+  });
+
+  it('still lets a docs commit through when it touches only knowledge files', () => {
+    expect(gradeSubject('docs(agents): fold a lesson', reviewed,
+      ['.claude/agents/binge-code-reviewer.knowledge.md']).ok).toBe(true);
+  });
+
+  it('history: judges a docs commit by its files only from the instructions epoch on', () => {
+    const filesOf = (sha) => (sha.startsWith('i') ? [INSTR] : ['docs/x.md']);
+    const commits = [
+      commit('i1', 'docs(agents): reword (BIN-999)', AFTER_INSTR),
+      commit('i2', 'docs(agents): reword', AFTER_INSTR),
+      commit('i3', 'docs(agents): reword (BIN-999)', BEFORE_INSTR),
+      commit('d1', 'docs(map): unrelated (BIN-999)', AFTER_INSTR),
+    ];
+    const r = findCoverageGaps(commits, reviewed, { filesOf, instructionsFrom: INSTRUCTIONS_EFFECTIVE_FROM });
+    expect(r.violations.map((v) => v.sha)).toEqual(['i1', 'i2']);
+    expect(r.eligible).toBe(2);
+  });
+
+  it('history: a commit landing EXACTLY on the instructions epoch is judged, one ms earlier is not', () => {
+    // The sibling epoch carries the same pair for the same reason: a `<` turned `<=`
+    // survives every case that sits comfortably on either side of the line.
+    const filesOf = () => [INSTR];
+    const onIt = commit('e1', 'docs(agents): reword (BIN-999)', INSTRUCTIONS_EFFECTIVE_FROM);
+    const justBefore = commit('e2', 'docs(agents): reword (BIN-999)',
+      new Date(Date.parse(INSTRUCTIONS_EFFECTIVE_FROM) - 1).toISOString());
+    expect(findCoverageGaps([onIt], reviewed, { filesOf }).violations.map((v) => v.sha)).toEqual(['e1']);
+    expect(findCoverageGaps([justBefore], reviewed, { filesOf }).violations).toEqual([]);
+  });
+
+  it('history: a caller that passes no filesOf grades exactly as before', () => {
+    const r = findCoverageGaps([commit('i1', 'docs(agents): reword (BIN-999)', AFTER_INSTR)], reviewed);
+    expect(r.violations).toEqual([]);
+    expect(r.eligible).toBe(0);
+  });
+
+  it('the instructions epoch is not before the day the rule was decided', () => {
+    // Non-retroactive, like BIN-938's epoch: an earlier date would grade docs commits that
+    // were legal under the rule of their day.
+    expect(Date.parse(INSTRUCTIONS_EFFECTIVE_FROM)).toBeGreaterThanOrEqual(Date.parse('2026-09-19T00:00:00.000Z'));
+    expect(Date.parse(INSTRUCTIONS_EFFECTIVE_FROM)).toBeLessThanOrEqual(Date.now());
+  });
+
+  it('filesOfCommit reads a real commit, and the history builder hands it to both callers', () => {
+    if (!historyIsAvailable()) return;
+    const sha = execFileSync('git', ['log', '-1', '--format=%H', '--', INSTR], { cwd: REPO_ROOT, encoding: 'utf8' }).trim();
+    expect(filesOfCommit(sha)).toContain(INSTR);
+    expect(exemptionInputs(true).filesOf(sha)).toContain(INSTR);
+  });
+
+  it('mainMessage refuses by the STAGED files, not only the subject', () => {
+    const p = join(tmpdir(), `binge-bin959-${process.pid}.txt`);
+    writeFileSync(p, 'docs(agents): reword a step (BIN-9999999)\n', 'utf8');
+    try {
+      expect(mainMessage(p, [INSTR])).toBe(1);
+      expect(mainMessage(p, ['docs/x.md'])).toBe(0);
+    } finally { rmSync(p, { force: true }); }
+  });
+
+  it('stagedFiles reads the index of the repo it is pointed at', () => {
+    const repo = mkdtempSync(join(tmpdir(), 'binge-bin959-staged-'));
+    const run = (...args) => execFileSync('git', args, { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    try {
+      run('init', '-q');
+      mkdirSync(join(repo, '.claude', 'agents'), { recursive: true });
+      writeFileSync(join(repo, INSTR), 'x\n', 'utf8');
+      writeFileSync(join(repo, 'unstaged.md'), 'y\n', 'utf8');
+      run('add', INSTR);
+      expect(stagedFiles(repo)).toEqual([INSTR]);
+    } finally { rmSync(repo, { recursive: true, force: true }); }
+  });
+
+  it('mainMessage reads the staged files by default', () => {
+    // BIN-852's shape: a check that is only ever handed its input by a test can be unwired
+    // from the entry point with the whole suite green. Pin the default parameter itself.
+    const src = readFileSync(join(METRICS_DIR, 'check_review_coverage.mjs'), 'utf8');
+    expect(src).toMatch(/export function mainMessage\(messagePath, staged = stagedFiles\(\)\)/);
+    expect(src).toMatch(/gradeSubject\(subject, reviewed, staged\)/);
   });
 });

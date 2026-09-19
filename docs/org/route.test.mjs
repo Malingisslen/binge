@@ -564,15 +564,14 @@ describe("the reviewers' own instructions and the hooks reach a gate (BIN-869)",
     expect(r.panel).toEqual([25]);
   });
 
-  it('EXCLUDES the knowledge files the reviewers write to themselves', () => {
-    // The deliberate carve-out, exact mirror of the lessons-digest.md negative above:
-    // these are appended on every ledger run, so gating them would put routine
-    // bookkeeping behind a review (Malin's narrow-over-broad call). The mechanism is the
-    // `\.md` SUFFIX in the pattern, not the `$` anchor — verified by mutation: dropping
-    // the `$` still excludes them (their names continue past `-reviewer`), while
-    // dropping `\.md` lets them straight in.
-    expect(integrationGateMatches('.claude/agents/binge-test-reviewer.knowledge.md')).toBe(false);
+  it('gates the knowledge cores and chapters, never the archives (BIN-959 del 3)', () => {
+    // Malin's 2026-09-19 call, superseding the 2026-08-13 carve-out (_note27 in
+    // shared-plugin.json): since the three-tier split the core card and the chapters are
+    // what every review reads first. The archive is never read at review time and stays out.
+    expect(integrationGateMatches('.claude/agents/binge-test-reviewer.knowledge.md')).toBe(true);
+    expect(integrationGateMatches('.claude/agents/binge-code-reviewer.data.knowledge.md')).toBe(true);
     expect(integrationGateMatches('.claude/agents/binge-code-reviewer.knowledge.archive.md')).toBe(false);
+    expect(integrationGateMatches('.claude/agents/binge-security-reviewer.knowledge.archive.md')).toBe(false);
   });
 
   it('the derived list has not silently shrunk to nothing', () => {

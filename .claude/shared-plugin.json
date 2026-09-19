@@ -83,6 +83,7 @@
       "_note": "The whole-diff, cross-file pass. Was `codeReviewGate` until 2026-07-31, i.e. gated on the /code-review BUILTIN â€” a command only a human can start, so every unattended run (sprint-parallel, /commit, any resume) dead-ended asking Malin to type it. Same filePattern and same marker as before; the only change is that a spawnable agent now owns it. /code-review stays available and is still the deeper pass â€” it is simply no longer the ONLY way to earn this marker.",
       "agent": "binge-integration-reviewer",
       "marker": "simplify-done.marker",
+      "_note27": "BIN-959 del 3, 2026-09-19: supersedes the knowledge-file half of _note6, which stands verbatim. _note6 excluded the *.knowledge.md siblings because reviewers write to them on every run. Since the three-tier split (knowledge.tiers), the core card and the chapters are what every review reads first, so a commit that rewrites them changes what the gates look for: the hole _note4 and _note6 closed for the instruction files. Malin chose to gate them anyway, knowing it reverses her 2026-08-13 call (asked again 2026-09-19 after role #25 raised it). The archive stays ungated; it is never read at review time. Cost: this reviewer also reads a touched core or chapter. It does not loop: the per-file reviewer that folds a lesson is not gated on its own knowledge file, and this reviewer runs last.",
       "_note17": "BIN-990, 2026-09-03, Malin's decision — against my own recommendation to leave it. `keyed` watches ONE key rather than the whole path, a matcher type built for this case in the same pass. `.claude/settings.json` registers the PostToolUse freshness stamper and the PreToolUse preview gate, so emptying its `hooks` block disarms both while every gated file stays byte-identical and no gate sees it: _note4's 'a gate that can be disarmed unwitnessed', one file further out. Gating the whole path was the obvious fix and the wrong one — the file's other top-level key is `permissions`, and gating the whole path would bill a reviewer run on edits that never touch `hooks`, against Malin's standing narrow-before-broad call. The advising half is a bullet under #25 in docs/role-responsibilities.md, added in the same commit per BIN-830. A gate with no `keyed` entry is unaffected: the matcher returns null and falls through to `patterns`/`exact` exactly as before.",
       "keyed": [{ "path": ".claude/settings.json", "key": "hooks" }],
       "_note2": "2026-08-08: added `^\\.github/(workflows|actions)/`. Before this, NO gate in this repo covered the release path at all — a change to `deploy.yml` (which builds and deploys production), `preview.yml`, `ci.yml` or `secret-scan.yml` reached zero reviewers. Meanwhile `.claude/rules/deployment.md` already lists `.github/workflows/**` in its auto-load `paths:`, so the repo's own prose treated it as load-bearing while the automated half — the one that actually runs — did not. Two sources, opposite answers, and the automated one wins by default. Found by sweeping all three repos on 2026-08-08 after the same gap was fixed in Synat (BIN-820), where the identical widening (BIN-667) had already been made and this repo never got it. These are REGEXES, not globs: a literal `.github/workflows/**` throws `Nothing to repeat` at `new RegExp()`. `actions` is in the alternation even though this repo has no `.github/actions/` yet — Synat learned that gating only `workflows/` exempts logic the moment anything is extracted into a composite action (BIN-666/667), and the cheap time to cover it is before that move, not after.",
@@ -110,6 +111,7 @@
         "^\\.claude/rules/accepted-deviations\\.md$",
         "^\\.claude/rules/code-style\\.md$",
         "^\\.claude/agents/binge-(code|security|integration|test)-reviewer\\.md$",
+        "^\\.claude/agents/binge-(code|security|test)-reviewer(\\.[a-z]+)?\\.knowledge\\.md$",
         "^\\.claude/hooks/(freshness|preview-gate)(\\.test)?\\.mjs$",
         "^CLAUDE\\.md$",
         "^firebase\\.json$",
@@ -136,12 +138,155 @@
   },
   "knowledge": {
     "agentsDir": ".claude/agents",
-    "_sizeLimitCharsNote": "BIN-997: the knowledge-freshness Stop hook and scripts/check-knowledge-caps.mjs read the same *.knowledge.md glob and each carry their own limit. Setting this explicitly pins the value against a future change to the hook's default, rather than relying on two defaults that happen to agree. It does NOT give the number one home: it is also CAP_CHARS in check-knowledge-caps.mjs and the cap sentence at the top of each knowledge file, and nothing enforces that they agree — all of them are changed by hand, together.",
+    "_sizeLimitCharsNote": "BIN-997: the knowledge-freshness Stop hook and scripts/check-knowledge-caps.mjs read the same *.knowledge.md glob and each carry their own limit. Setting this explicitly pins the value against a future change to the hook's default, rather than relying on two defaults that happen to agree. It does NOT give the number one home: it is also CAP_CHARS in check-knowledge-caps.mjs, and nothing enforces that they agree — all of them are changed by hand, together.",
     "sizeLimitChars": 80000,
     "sizeLimit": 800,
     "windowDays": 30,
     "lessonsFile": "tasks/lessons.md",
-    "digestFile": ".claude/rules/lessons-digest.md"
+    "digestFile": ".claude/rules/lessons-digest.md",
+    "tiers": {
+      "coreMaxChars": 15000,
+      "chapterMaxChars": 20000,
+      "agents": {
+        "binge-code-reviewer": {
+          "core": ".claude/agents/binge-code-reviewer.knowledge.md",
+          "chapters": [
+            {
+              "file": ".claude/agents/binge-code-reviewer.data.knowledge.md",
+              "paths": [
+                "^firestore\\.(rules|indexes\\.json)$",
+                "^src/lib/firebase/",
+                "^src/lib/watchlist/",
+                "^src/contexts/",
+                "^src/lib/(watchStatus|watchedAt|mediaTypeDocId)",
+                "^src/test/rules/"
+              ]
+            },
+            {
+              "file": ".claude/agents/binge-code-reviewer.functions.knowledge.md",
+              "paths": [
+                "^functions/src/",
+                "^src/lib/firebase/accountDeletion\\.ts$",
+                "^src/lib/deletion",
+                "^src/components/(layout/(AppShell|DeletionLimbo)|settings/DeleteAccountSection)\\.tsx$",
+                "^src/contexts/AuthContext\\.tsx$"
+              ]
+            },
+            {
+              "file": ".claude/agents/binge-code-reviewer.client.knowledge.md",
+              "paths": [
+                "^src/(components|hooks|contexts)/",
+                "^src/app/.*\\.tsx$",
+                "^src/lib/recaps/",
+                "^src/lib/(advisor/|tmdb/providers)",
+                "^tailwind\\.config\\.ts$",
+                "\\.css$"
+              ]
+            },
+            {
+              "file": ".claude/agents/binge-code-reviewer.build.knowledge.md",
+              "paths": [
+                "^src/lib/(tmdb/(build|selection|semaphore)|seo/)",
+                "^src/app/[^/]+\\.ts$",
+                "^src/app/(movie|tv|person)/",
+                "^\\.github/(workflows|actions)/",
+                "^next\\.config\\.mjs$",
+                "^firebase\\.json$"
+              ]
+            },
+            {
+              "file": ".claude/agents/binge-code-reviewer.tests.knowledge.md",
+              "paths": [
+                "\\.test\\.(ts|tsx|mjs)$",
+                "^src/test/"
+              ]
+            }
+          ],
+          "archive": ".claude/agents/binge-code-reviewer.knowledge.archive.md"
+        },
+        "binge-security-reviewer": {
+          "core": ".claude/agents/binge-security-reviewer.knowledge.md",
+          "chapters": [
+            {
+              "file": ".claude/agents/binge-security-reviewer.rules.knowledge.md",
+              "paths": [
+                "^firestore\\.rules$",
+                "^firestore\\.indexes\\.json$"
+              ]
+            },
+            {
+              "file": ".claude/agents/binge-security-reviewer.server.knowledge.md",
+              "paths": [
+                "^functions/"
+              ]
+            },
+            {
+              "file": ".claude/agents/binge-security-reviewer.client.knowledge.md",
+              "paths": [
+                "^src/lib/firebase/",
+                "^src/contexts/(AuthContext|WatchlistContext)\\.tsx$",
+                "^src/lib/passwordStrength\\.ts$",
+                "^src/app/settings/import/"
+              ]
+            },
+            {
+              "file": ".claude/agents/binge-security-reviewer.gdpr.knowledge.md",
+              "paths": [
+                "^src/lib/firebase/",
+                "^functions/",
+                "^firestore\\.rules$",
+                "^src/contexts/AuthContext\\.tsx$"
+              ]
+            }
+          ],
+          "archive": ".claude/agents/binge-security-reviewer.knowledge.archive.md"
+        },
+        "binge-test-reviewer": {
+          "core": ".claude/agents/binge-test-reviewer.knowledge.md",
+          "chapters": [
+            {
+              "file": ".claude/agents/binge-test-reviewer.rules.knowledge.md",
+              "paths": [
+                "^firestore\\.rules$",
+                "^src/test/rules/",
+                "^vitest\\.rules\\.config\\.ts$",
+                "^scripts/run-rules-tests\\.mjs$"
+              ]
+            },
+            {
+              "file": ".claude/agents/binge-test-reviewer.ui.knowledge.md",
+              "paths": [
+                "^src/components/",
+                "^src/hooks/",
+                "^src/contexts/",
+                "^src/app/"
+              ]
+            },
+            {
+              "file": ".claude/agents/binge-test-reviewer.data.knowledge.md",
+              "paths": [
+                "^functions/",
+                "^src/lib/firebase/",
+                "^src/lib/watchlist/",
+                "^src/lib/streaming/",
+                "^src/contexts/WatchlistContext\\.tsx$"
+              ]
+            },
+            {
+              "file": ".claude/agents/binge-test-reviewer.tooling.knowledge.md",
+              "paths": [
+                "^scripts/",
+                "^docs/org/",
+                "^\\.claude/",
+                "^\\.github/",
+                "^lefthook\\.yml$"
+              ]
+            }
+          ],
+          "archive": ".claude/agents/binge-test-reviewer.knowledge.archive.md"
+        }
+      }
+    }
   },
   "docsSweep": {
     "exemptGlobs": [

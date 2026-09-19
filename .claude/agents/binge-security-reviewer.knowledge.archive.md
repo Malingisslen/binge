@@ -11189,3 +11189,296 @@ operator-tool-only (which Firestore project a locally-run Admin-SDK script opens
 **Verdict: pass (0 blocking).**
 
 **Verdict: pass (0 blocking).**
+
+### 2026-09-19 — moved out of the reviewed knowledge (three-tier split, approved by Malin)
+
+- [S01, STRIKE-DUPLICATE: already in the reviewer's own instructions (Scope + step 2) and in accepted-deviations]
+- **Public-read:** `reviews/**`,`lists`(isPublic),`usernames`,`sessions/**`,`reports`(create-only, never
+  client-read). A NEW public-read collection must be intentional+minimal.
+
+- [S06, ARCHIVE: source-scanning guard tests sit outside this reviewer's gate; the form is in lessons-digest 2026-08-29/2026-09-02]
+- **A source-scanning guard test is itself an attestation — read its regex against the chokepoint's OWN
+  idiom.** BIN-816's guard first detected WRITES: `doc\(\s*\w+\s*,` misses `kit.doc(kit.db,'users',uid)`,
+  the style the sanctioned module itself uses, and requiring BOTH a 'ref' and a 'write' regex let a hoisted
+  `const ref = doc(...)` through. What works: a **whitelist over the REFERENCE** (naming the doc at all
+  fails; each exemption must also assert the guard call), each ALTERNATION pinned by its own unit case, and a
+  fileset floor just under the real count (BIN-838). Residual: misses a template-literal path.
+
+- [S12, STRIKE-DUPLICATE: carried by lessons-digest [Security] 2026-09-12 (BIN-1155)]
+- **A "field is optional, null bypasses the check" comparator built for CREATE forges an ERASURE when reused
+  as an UPDATE identity-binding pin.** `isOwnIdentity(v, ...)` returns true unconditionally when `v == null` —
+  correct for create, where "absent" only ever means "the writer never set this optional field". Reused inside
+  an update-time `keepsOrOwnsIdentity()` as `new.get('displayName',null)==old.get(...) || isOwnIdentity(new.get(...),null)`,
+  the same null trivially satisfies the SECOND disjunct too: a writer under `selfOrOwner()` can `updateDoc(ref,
+  {displayName: deleteField()})` (or an explicit `{displayName: null}`) on ANY row it may write — including,
+  via the owner branch, a DIFFERENT member's row — turning a previously-set field absent with NO identity check
+  at all, live-PoC'd both ways (BIN-1155). The module comment's own claim ("changing the field to something
+  that isn't yours still requires your own live profile") is false for this one value. Fix: require the
+  ownership disjunct to also assert the NEW value is non-null — `(new==old) || (new!=null && isOwnIdentity(new,null))`
+  — so "unset" only ever passes via the unchanged branch (old was already null/absent), never as a fresh erasure.
+  Tell: any update rule building on a create-time "optional field" comparator to express "unchanged OR mine".
+
+- [S18, ARCHIVE: a description of how two rules look today — read firestore.rules instead]
+- Admin report-update rules pin `reporterUid`/`target*`/`reason`/`createdAt` by equality to `resource.data.*`.
+  `usernames/{username}` has `allow create`, no `allow update`, so writing an existing doc default-denies —
+  so a reservation's `uid` changes only via delete-then-create BY ITS OWNER, and a `where('uid','==',me)`
+  result stays delete-permitted (BIN-875).
+
+- [S51, STRIKE-DUPLICATE: carried by lessons-digest 2026-09-07]
+- **A plan/commit split for a BINARY outcome (delete vs. hand-over) needs the re-verify guard in BOTH
+  transition directions, not just the one whose failure mode is "destroys a live third party's data".**
+  FOUND IN REVIEW, BIN-1063 steg 3 bunt 3 (r1, fixed before it shipped — full finding in the archive, dated
+  2026-09-07): `eraseFieldOwned` guarded the GAINED-a-survivor direction twice (`commitGroupHandover`'s fresh
+  recompute, `recheckPlannedGroup` right before delete — named `isStillEmptyGroup` until BIN-1180) and left the LOST-its-last-survivor direction
+  unguarded — a group empty only by commit-time resolves inside `runGroupHandover` to a `'delete'` outcome
+  that performs no actual delete, and the caller only ever deleted paths from the stale plan-time list, so the
+  group would have stood forever, owned by a uid the same run erases from Auth. The shipped fix diffs
+  `commitGroupHandover`'s returned `toDeleteIds` against the plan-time set and THROWS on any id the plan
+  didn't carry, rather than silently leaving it standing — the watch record survives and the next run re-plans
+  the group as empty from the start. General lesson: when a plan/commit split recomputes a decision at
+  write-time, audit EVERY outcome branch the recomputation can newly reach, not only the one the existing
+  guard targets — a binary decision has two failure directions and a guard built for one says nothing about
+  the other.
+
+- [S61, STRIKE-DUPLICATE: carried by lessons-digest 2026-07-28; the volume half by ADR 0015]
+- A doc-id namespacing migration on a doc holding a MULTI-WRITER map needs a VALUE-level merge, never a
+  document-level `??` fallback — the first post-cutover write creates a one-entry namespaced doc HIDING every
+  pre-cutover entry (BIN-608 `swipes.votes`; pin a legacy-key test). A doc id is a trust boundary only if it
+  appears in the allow-expression, and a FORM guard is not a VOLUME guard: BIN-624's `canonicalSwipeDocId`
+  still permits `movie_1`…`movie_999999` (junk-doc cost, ADR 0015).
+
+- [S64, STRIKE-DUPLICATE: carried by deploy.yml's own guard and .claude/rules/deployment.md]
+- **`deploy.yml`'s rules/functions drift guard runs FIRST with no `continue-on-error`** — a commit touching
+  `functions/**` fails the job before the hosting step, so prod runs the PARENT commit for BOTH surfaces.
+
+- [S65, ARCHIVE: wording is no longer blocking (review-core.md)]
+- **An attestation is a load-bearing claim — verify it like code**, in a comment, a JSDoc, a `tasks/todo.md`
+  note, a policy doc or your own last marker. A false safety comment is WORSE than none: it says the audit
+  happened (BIN-523's "the scan filters mediaType"). **A REDESIGN orphans comments** — grep the REMOVED
+  mechanism's name across the diff's files. **A "line-endings only" claim needs BYTE ACCOUNTING:**
+  `--ignore-cr-at-eol` ignores a TRAILING CR but not a LONE one (content). **A struck false claim can survive
+  in a SIBLING file the same commit never touched for it** — BIN-1088 r2 corrected "Dependabot cannot touch
+  workflow files" in `tasks/todo.md` (the plan) but left the identical sentence live in
+  `scripts/check-dependency-diff.mjs`'s own header comment, the shipped file the claim is actually about. A
+  single-line `grep` missed it because the sentence wraps across lines differently in the two files — grep
+  the claim's distinctive words MULTILINE across the whole repo, not just the file the ticket names as fixed.
+  **And this repo documents in TWO LANGUAGES, so a hunt scoped to the wording you struck is scoped to one
+  of them.** BIN-1063 steg 3 r7: I swept `every access clause`, declared "no live copy survives", and the
+  integration reviewer then found the identical claim alive in Swedish in `tasks/todo.md` — "varje
+  atkomstvillkor pa gruppen nycklar pa `memberUids`" — same batch, same false direction. Never conclude a
+  strike closed from an English-only sweep. Grep a LANGUAGE-INDEPENDENT token instead: the identifier the
+  claim is about (`memberUids`), the path, the symbol — prose translates, code identifiers do not, and
+  that sweep also surfaces the paraphrase that shares no words with the original. Plans and tickets are
+  the Swedish half; a claim's code home can be clean while its plan home still asserts it.
+  **The same class arrives from the PURELY ADDITIVE direction, and that disguise is why it survives a
+  round:** a diff that only ADDS a guard branch falsifies the QUANTIFIER in the doc comment naming the
+  guarded set — BIN-1063 r3 added a third `refusalFor` branch, making "The two refusals live here"
+  (`helpers.mjs`) and "Both refusals live in the helpers" (`backfill-mirror-uid.mjs`) false, the second in
+  a file whose blob the commit never changed. An additive diff reads as safe and a byte-identical sibling
+  is invisible to every per-file check, so ask at every guard addition which sentence COUNTS the set, and
+  grep the word (`refusals`) rather than the quantifier — the quantifier can wrap onto the line above.
+  **A SUPERLATIVE about a branch is the same defect in one word, and its refutation is usually the
+  branch's own doc comment one file away:** BIN-1063 steg 3 r7 — the test's "which is the one case the
+  guard exists for" beside a `noop` whose type doc in `logic.ts` enumerates TWO causes (an earlier run
+  already handed over, or the leaver was only a member), both of which destroy a live group when read as
+  `delete`. When a comment says "the one case"/"the only time", open the DEFINITION of the thing it
+  describes and count the arms; struck, the sentence keeps its whole force, because one sufficient
+  example never needed to be the only one.
+  Strike the quantifier, never renumber it: "The refusals live here" needs no counting and cannot go stale
+  on the fourth branch. Hits in your own two knowledge files are the audit trail, not surviving copies.
+  **Three shapes of this claim hide behind being EXPLANATORY rather than factual, and all three survived
+  the round that struck their sibling (BIN-1063 steg 3 r3, one file, one commit):**
+  (i) a CAUSAL story for a defensive edge state — "null is a real state because the self-healing paths omit
+  `joinedAt` when repairing" — where the named mechanism cannot PRODUCE the state: a `merge` that omits a
+  field preserves it, every path that CREATES the doc writes it, and the rule pins it on create, so the
+  null comes only from legacy or hand-written Console rows. Ask which write actually yields the state, not
+  whether the sentence sounds right. **Two residues of shape (i) survive the round that strikes it, and
+  both are invisible to a grep for the struck mechanism (BIN-1063 steg 3 r5, after r4 had struck three
+  homes):** (a) the REACHABILITY assertion with the mechanism deleted — "Null is a real state, not a
+  defensive placeholder" — now supported by nothing, and standing beside a published derive command whose
+  output argues the OTHER way for every app path, while the ticket's own production measurement found the
+  population empty; (b) a SECOND causal clause of the identical shape elsewhere in the same file, never
+  touched because the first one absorbed the round — "ties are reachable rather than theoretical because
+  server timestamps within one batch share a commit time", where no write path puts two member docs in one
+  batch at all (each join is its own single `setDoc`; the batch was reverted by BIN-532), so the tie is
+  reachable for a different reason than the one given. Both strike cleanly: the null branch and the
+  tie-break are correct determinism guarantees that need no reachability story. So after striking a causal
+  claim, re-read the WHOLE file for (a) the bare "X is real/reachable" left behind and (b) any other
+  "because <mechanism>" — and test each by asking which write produces it.
+  **The replacement that CONVERGED (r6: one round, zero findings) re-grounds an edge state in the READER
+  rather than deleting the sentence.** "Nothing enforces the field at READ time, so the null branch is real
+  whatever the write paths do" needs no counting — rules validate `request.resource` only, so no read rule
+  can enforce a field — while any wording about which WRITE yields the state needs a measurement the
+  published derive command then contradicts. Prove such a claim by finding the EXISTING reader of the same
+  field: `groups.ts`' `memberDocToObject` runs `toDate(data.joinedAt)` and `toDate` returns `new Date()`
+  for a missing value, so the live reader INVENTS a timestamp instead of enforcing one — which both
+  establishes the claim and names the trap the `number | null` contract keeps out of the election (an
+  unstamped row entering the STAMPED pool). Carry that to whichever batch writes the admin-side mapper.
+  For the ordering half the convergent form drops reachability entirely and states the PROPERTY bought
+  ("ties break on the lowest uid, so the successor never depends on read order"), which is provable by
+  reading the comparator as a total order over `(joinedAt, uid)` — and note the pool is never MIXED, since
+  the unstamped fallback is taken only when no candidate is finite;
+  (ii) a PRECEDENT — "that is what already happens to reviews and comments" — cited to justify a
+  data-minimization choice, where the cascade in fact DELETES those docs outright and strips a uid only from
+  `editors[]`. A precedent is a measurement of another file; run it;
+  (iii) FUTURE WIRING in the present tense — "both doors go through a callable running on the Admin SDK" in
+  a module with zero importers and no callable in the tree. This is the sibling of the claim the same round
+  already struck from the same header ("Both callers import these functions"), so a header that just lost one
+  present-tense falsehood is where you look for the next.
+  All three strike cleanly: the decision, the type and the ordering rules stand on their own and need no
+  measurement. Strike the neighbour left subject-less in the SAME edit.
+  **Striking a claim from its home closes NONE of its other homes — r4 found THREE, and the round that
+  struck the original had touched none of them. Budget the round after a strike for exactly this hunt.**
+  Home one, same file, six lines below the strike: an ENUMERATED rationale where the claim is a
+  subordinate clause JUSTIFYING a rule rather than a statement ("a missing value must never sort as
+  earliest — that would hand the group to whoever was repaired by a self-healing write"), so it reads as
+  reasoning and no grep for the struck wording finds it. Home two: the paired TEST file, blob untouched
+  by the fix, carrying a STRONGER and flatly false form ("a member document written by a self-healing
+  path carries no joinedAt at all") as the justification for the very test the strike was about — an
+  unchanged sha is not an unchanged CLAIM. Home three: a DIFFERENT precedent in the same header ("all of
+  it goes on this door too, exactly as the plain member-leave path already does it" — `removeMember`
+  deletes `members/{uid}` + `household/{uid}` but NOT the per-title
+  `groups/{gid}/watchlist/{id}/progress/{uid}` rows, only `collectDeletionRefs`' non-owner branch does),
+  under-erasing in the GDPR direction. So: grep the MECHANISM's name (`self-heal`, `repaired`) across
+  every file in the duty list, never the struck wording, and read each precedent as "WHICH function, and
+  does it do ALL of what the list beside it names". **And never `head -N` that grep** — the truncation
+  silently hid home one from me while the tail I did read looked like a complete answer; a capped result
+  is not a measurement, exactly like a timed-out one. The replacement that HELD is a published COMMAND
+  where the sentence was: accept one only after RUNNING it and reading its output, since a command that
+  runs and says nothing passes an "extract and run it" check.
+
+- [S66, ARCHIVE: wording is no longer blocking (review-core.md)]
+- **A mutation-justification comment ("without this line the FILE/BLOCK/SUITE pins no X") has TWO measurable
+  halves — the ABSENCE premise and the consequent's SCOPE — and correcting one mints the next falsehood; STRIKE
+  it.** BIN-797 r1: "the file carries no one-digit id" was falsified by the twin block's `tv_1`, same commit.
+  r2 said "the block" and broke both halves: that commit's `movie_0`/`tv_0` DENIAL rows are
+  one-digit ids too, and "still pass 100% of this SUITE" is false for the ONE-line removal it describes — the
+  twin block's own positive still reddens. Measure both: scan the block for the shape it calls absent, AND
+  probe the mutant regex over every fixture id for which verdicts move (only the two new single-digit ids did).
+  Two copies of a guard need two boundary cases and two verified comments. **r3/r4 closed it by STRIKING, and
+  that is the shape of the right fix: when a parenthetical ENUMERATES a subset of what a guard excludes
+  ("KANONISKA siffror (ingen inledande nolla)" after `_0` was also dropped), delete the parenthetical — the
+  surviving superset term is then true with nothing new to measure.** Re-listing the widened subset is what
+  restarts the chain. **On a rules-TIGHTENING commit the commonest instance is a NEGATIVE claim
+  about the very constraint being added, or a field list of the doc being changed — "none of these
+  collections has ever had a `hasOnly` allowlist", "`friends/{targetUid}`: `{ since }`" — sitting in
+  a helper, its test and the module header while that same commit adds the allowlist and the field.
+  Grep the constraint keyword AND the new field name across every file the commit touches, including
+  the ones that only DESCRIBE the data (BIN-1063 r2: three copies, three files).** Verify a strike two ways: the main clause still holds WITHOUT the qualifier, and the
+  struck fact is not the repo's only copy (grep it — BIN-797's struck `Art. 15` left 8 consistent `Art. 20`
+  framings incl. both policy docs, so nothing legal was lost). **On the NEXT round that grep hits your own
+  two knowledge files, because the finding QUOTED the false sentence — those two hits are the audit trail
+  working, never a surviving copy; count only tracked non-knowledge files (BIN-1063 r3).** The pair also
+  shows which half converges in one round: a claim needing measurement gets STRUCK, a field list a rule
+  now pins is read straight off the writer and corrected IN PLACE — both landed clean, no new claim minted.
+  Leave a NEIGHBOURING stale enumeration the commit did not falsify alone: re-listing it is how one finding
+  becomes a chain. Superseded 2026-09-08 (BIN-1106): the example this carried was `friendRequests`' header
+  line, justified by that create rule carrying no `hasOnly` — it carries one now, so the same header would
+  hand a maintainer an allowlist that denies every real friend request. When a rule starts PINNING a set,
+  every enumeration of that set stops being neighbouring and becomes part of the change.
+
+- [S67, ARCHIVE: wording is no longer blocking]
+- **A cross-reference is only as durable as the LIFECYCLE of what it points at.** `code-style.md` makes
+  `tasks/` disposable ("delete plans once implemented"), so a JSDoc in permanent code pointing at
+  `tasks/todo.md` for a binding condition is not wrong today and wrong later — it is wrong when written,
+  because the deletion is already policy, and it dangles exactly when a later batch comes to consume it
+  (BIN-1063 steg 3 r9). Anchor on something durable: the ticket id, the ADR number, the role. Mirror
+  image of the strike class — those sentences go false when the CODE changes, this one goes false when a
+  doc is correctly cleaned up on schedule. Check the target's class before accepting any pointer.
+
+- [S70, STRIKE-MECHANIZED: review-ledger.mjs (readTarget/stagedBlobSha) pins the staged bytes; the md5 alignment is replaced]
+- **Shared-checkout hazard: a sibling's mutation loop can land INSIDE your window** — 4× now — so a clean
+  `git status` is NOT proof; re-`Read`/re-run twice, identical required. **Review target is the STAGED blob**
+  — `Read` serves the worktree; align `git show :<path> | md5sum` with `md5sum <path>` first (BIN-856 r2).
+  **A brief that says "the tree is FROZEN" is a claim about someone else's behaviour, so re-pin at the END
+  too:** BIN-1063 r3's two files were fixed and re-staged WHILE I wrote the report, so the `fail` I had just
+  rendered described blobs that would never be committed — r2 was blocked for exactly that. Re-run
+  `git hash-object` vs `git rev-parse :<file>` after the write-up, not only before reading. **r4: the
+  re-stage landed AFTER that closing re-pin, i.e. after the verdict line, so even a correct end-of-round
+  pin expires — treat any later evidence as a reason to re-pin again rather than to trust the pin.** The
+  tell was mechanical and worth watching for: a line number from `git grep`/`grep -n` disagreeing with the
+  line number `Read` showed for the same symbol. Same shas at both my pins, different bytes by the time I
+  looked again; only a comment-only diff, which is exactly the change that moves every line number while
+  leaving the derived mutation counts and the executable review intact — so re-verify by
+  `git diff <oldsha> <newsha>` and keep the parts of the round the diff cannot touch. What surfaced it
+  was a KILLED background grep returning empty, which reads as a refutation of your own finding: an empty
+  result from a command that timed out is not a measurement, so re-run it scoped, and when the re-run also
+  disagrees suspect the TREE MOVED before you suspect your reading.
+  **The same hazard self-inflicted: a restore-from-snapshot taken BEFORE a later edit landed silently reverts
+  that edit when `cp`'d back mid-round, no error** — BIN-1088 lost a struck false claim this way between r3 and
+  r4. Snapshot the WORKTREE bytes immediately before mutating, never reuse an earlier copy, and after any
+  restore diff against what the file should currently say, not only against the pre-mutation hash.
+
+- [P2, STRIKE-DUPLICATE: already in the reviewer's instructions, step 0 item 2 (was the `## Archive` section)]
+Write it every review, dated. Grep it for a familiar finding, a past PoC, or a compressed principle.
+
+- [P1 sentence, STRIKE-FALSE: the 80k cap is false once the tiers are on (core 15 000, chapters 20 000)]
+Cap: 80k chars — pay for an addition with a cut, and move what you cut verbatim to the archive file beside this one.
+
+- [S04 sentence, STRIKE-FALSE: `grep -c OPEN_RULES src/test/rules/*` hits 5 files, not 4 of 6]
+(4 of
+  binge's 6 `src/test/rules/*` files boot an INLINE `OPEN_RULES` instead and are immune to any rules mutant)
+
+- [S04 sentence, STRIKE: markers are gone]
+(a re-review whose marker is the gate)
+
+- [S25 sentence, STRIKE-MECHANIZED: incident part; the roster test exists (src/test/rules/memberTraceRoster.ts)]
+FOUND IN REVIEW, BIN-1063 steg 3 bunt 2 (r1, fixed before it shipped — full finding in
+  the archive, dated 2026-09-07): the batch as first written cleared `sessionHistory.pickedByUid` and left
+  `sessionHistory.participantUids` (a `<=50` uid list, `firestore.rules`, written by `recordGroupSessionPick`,
+  rendered as initials) on the very same row, under a module comment attesting that the subtree's uid-bearing
+  fields had been enumerated.
+
+- [S25 sentence, STRIKE-MECHANIZED: the roster test exists (src/test/rules/memberTraceRoster.ts); its trailing caveat deleted as a dangling fragment]
+The durable answer that shipped is a ROSTER TEST: brace-match the
+  subtree, harvest every `/uid/i` name from its `hasOnly` contracts, assert set equality both ways against a
+  declared per-field erasure EXPRESSION (never the field NAME — it still occurs in the row type it is read
+  from), floor the scan's size OUTSIDE the loop. It reaches only collections that HAVE a contract.
+
+- [S39 sentence, STRIKE-DUPLICATE: ghost-member decision is carried by accepted-deviations.md (2026-09-07, bunt 2)]
+**That second direction is a PRODUCT decision with a data-loss residual on both answers — it is not
+  yours to settle, and it re-opens at the CALLER.** The array is the access list, so an array entry with no
+  roll row (a
+  "ghost": `memberUids` written, the member doc never written — the three-write non-batch join can die
+  between writes, scope measured in BIN-1097) is a full member by every rules clause. Yielding null for
+  a group whose surviving members are ALL ghosts routes it to the delete branch, destroying shared data
+  for people the rules treat as members — the very trade the same file calls "the worse of the two
+  failures" when it refuses to delete over a missing `joinedAt`. Live impact was nil only because the
+  population was measured empty. The decision belongs to whichever call site maps `delete` onto a real
+  `recursiveDelete`, so a batch wiring this decider to a door must answer it, never inherit it. **It was
+  answered for `groups` by Malin in BIN-1063 steg 3 bunt 2: a ghost IS a candidate, ranked below everyone
+  with a `joinedAt`, because deleting shared data out from under someone the rules count as a member is the
+  worse of the two failures. It is a dated entry in `accepted-deviations.md` — do not re-file it, and read
+  that file before filing against this shape anywhere else.**
+
+- [S56 sentence, STRIKE-DUPLICATE: project flag / mode flags / callable refusal carried by lessons-digest 2026-09-06]
+**`initializeApp({credential: applicationDefault()})` with NO `projectId` opens whatever quota project
+  the machine was last set up for:** BIN-1063's first dry run read a DIFFERENT project, succeeded, and
+  printed `0 scanned` — a log line nobody can tell apart from a healthy no-op. Require a MANDATORY
+  `--project <id>` threaded into `initializeApp` and echoed before the first query; the explicit option
+  DOES beat `GOOGLE_CLOUD_PROJECT`/`GCLOUD_PROJECT` (probe it — `db._settings.projectId` and
+  `formattedName` = `projects/<named>/databases/(default)`), and the flag parser must reject a value
+  starting with `--` or `--project --apply` aims the run at a project literally named `--apply`; drive
+  THAT argv against the live CLI, not only the missing-flag one. **The refusal itself must be proven BY
+  CALL, not by a source scan of the entrypoint** — an admin-SDK runner cannot be imported under the root
+  test runner, so lift the whole argv validation into the admin-free helper as one
+  `refusalFor(argv) -> null | string` and call it; keep only ONE regex spanning the condition through
+  `return 1;` for the residual wiring, since an anchor on the condition alone stays green while the body
+  is deleted and an anchor on `run({ a, b })` is satisfied by run's own DECLARATION. Check the MODE flags
+  are mutually exclusive too: `--dry-run --apply` where apply simply wins is a command that reads dry and
+  writes. Pin the branch that closes it in BOTH directions — one `it` on the both-flags argv, and the
+  existing null-return `it` on a lone mode flag; an `&&`→`||` slip refuses every run and only the second
+  one moves. Drive every ORDERING of the pair, and never put a live `--apply --project` argv in the same
+  loop as the refusing shapes — the classifier refuses the whole command, correctly.
+
+- [S56 sentence, STRIKE-DUPLICATE: proportional-latch floor carried by lessons-digest 2026-08-13]
+A purely PROPORTIONAL bound (`> 0.25*checked`) LATCHES — candidates shrink only by deletion (under
+  50 users ONE orphan of three trips it); require `> max(FLOOR, fraction*checked)` and pin the decisive SMALL
+  case.
+
+- [S62 sentence, STRIKE: count left dangling by the (c) strike below, deleted as a fragment]
+Check three things — 
+
+- [S62 sentence, STRIKE-MECHANIZED: carried by docs/org/rules-id-client-symmetry.test.mjs]
+(c) no client id builder can emit the dropped shape — trace where the number comes from (TMDB ids
+  start at 1; a swipe deck is discover, never the library)
