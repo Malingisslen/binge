@@ -505,7 +505,7 @@
       ".claude/rules/lessons-digest.md"
     ],
     "memoryIndex": "C:/Users/malla/.claude/projects/C--binge/memory/MEMORY.md",
-    "budgetChars": 13000,
+    "budgetChars": 35000,
     "neverMove": [
       "GDPR",
       "consent",
