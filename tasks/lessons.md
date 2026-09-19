@@ -26,18 +26,6 @@ Categories: `[Workflow]` `[Design]` `[Data]` `[Security]` `[Testing]` `[Linear]`
 - **Rule:** Keep `docs/workflow-map.html` edits in their own dedicated commit, separate from feature code that might later be reverted. A feature-revert must never be able to take unrelated flow docs down with it. (Structural CI guard tracked in BIN-459.)
 - **Example:** BAD — one commit carries `functions/src/tmdbSweep.ts` + a `flow-titlepage` description edit; reverting the function drops the flow prose too. GOOD — feature code in commit A, the map re-trace in commit B; reverting A leaves the map intact.
 
-### [Workflow] A review-gate ticket isn't done until its marker names the surface it was filed to protect
-- **Date:** 2026-07-11
-- **Trigger:** BIN-472 existed purely as a pre-deploy gate: run a fresh `binge-security-reviewer` pass over the `retentionCleanup` GDPR-erasure sweep before the manual `firebase deploy --only functions` (which ships both `availableNotify` AND `retentionCleanup`). The review ran, but its `security-done.marker` was **scope-limited** — it said `retentionCleanup NOT covered`. Marking the ticket Done on the marker's mere existence would have shipped the exact gap the ticket was filed to close, with a live GDPR-erasure sweep unreviewed.
-- **Rule:** When a ticket's *deliverable is a review of surface X* (security/test/design), don't accept the review marker at face value — read it and confirm it explicitly names surface X. A scope-limited marker that reviewed a neighbouring file is an UNMET acceptance criterion, not a pass. File a blocking follow-up and gate the deploy.
-- **Example:** BAD — `security-done.marker` exists → grade acceptance "review retentionCleanup" as met. GOOD — marker says "scope-limited … retentionCleanup NOT covered" → acceptance failed → file blocking BIN-476, hold the functions deploy.
-
-### [Workflow] In a parallel sprint, a review marker can cover ONE batch and silently leave the sibling batch un-reviewed
-- **Date:** 2026-07-14
-- **Trigger:** A 2-batch parallel sprint (BIN-496 SEO + BIN-495 watchlist Firestore-write). The `code-review-done.marker` and `test-done.marker` both passed the mtime gate but their CONTENT named only the SEO area — the BIN-495 hook diff (a user-data Firestore write) would have committed through the reviewer gate un-reviewed by `binge-code-reviewer`, and its one risky acceptance criterion had no test-reviewer verdict. Separately the `simplify-done.marker` mtime was fresh (2026-07-14) but its CONTENT was stale BIN-185 text (HEAD 0a3e021, a different sprint). The gate keys on mtime, so all three would have passed silently.
-- **Rule:** In post-sprint, read EVERY review marker's content and confirm it names EACH batch's surface, not just one. When a parallel sprint fans work across worktrees, the per-batch review evidence must be reconciled at merge — a marker that names only the loudest batch is an unmet gate for the quiet one. Re-review the un-named surface (opus, the correctness model, for small diffs) and re-stamp the marker to name it before commit; never trust marker mtime over marker content.
-- **Example:** BAD — `code-review-done.marker` says "SEO area reviewed", mtime fresh → commit both batches. GOOD — notice it never names `useEpisodeProgress*.ts`, re-review that diff, re-stamp the marker naming the watchlist batch, file BIN-499 for the missing test-reviewer verdict, then commit.
-
 ### [Testing] Mutation-verification restore via `git checkout --` can wipe the real unstaged edit
 - **Date:** 2026-07-16
 - **Trigger:** During BIN-522, a mutation-verification pass (deliberately breaking a line to prove a test catches it) restored `WatchlistContext.tsx` with `git checkout -- <file>` — which restored to HEAD, wiping the sprint's real no-op-gate edit along with the deliberate mutations, since the real edit was unstaged working-tree state, not committed. The loss was only caught because the implementer re-diffed afterwards; the identical edit had to be re-applied and the full suite + typecheck re-run.
@@ -508,8 +496,8 @@ släpp, observera. Ett test som kör operationerna i följd är grönt mot båda
 **Utlösare:** en granskare slutar på `REVIEW-VERDICT: fail` och du lagar fyndet.
 
 **Regel:** kör om SAMMA granskare tills den slutar på en godkännande domrad. Den måste öppna
-varje fil med `Read` igen — ledgern bokför bara Read-verktyget — och grinden kräver EN körning
-som täcker allt. Säg i uppdraget vilka blobbar som är byte-identiska med förra varvet och vad
+varje fil med `Read` igen.
+Säg i uppdraget vilka blobbar som är byte-identiska med förra varvet och vad
 som ändrats, så blir omkörningen billig.
 
 **Exempel (BIN-954):** integrationsgranskaren fällde varv 4 på ett tal i `tasks/todo.md` — en
@@ -1695,9 +1683,8 @@ losare.
 **Trigger:** en helhetsgranskning som avslutar pa `pass (0 blocking)` och redovisar en
 fillista.
 
-**Regel:** rakna inte varvet som klart forran `git push` slapper igenom. Grinden bokfor bara
-`Read`-verktyget; en granskare som last en fil med `Grep` eller `git show` har inte last den
-enligt ledgern. Be om ett kontrollerbart bevis - citera forsta raden i varje fil - i stallet
+**Regel:** rakna inte varvet som klart forran `git push` slapper igenom.
+Be om ett kontrollerbart bevis - citera forsta raden i varje fil - i stallet
 for en sammanfattning, och rakna med ett extra varv i budgeten.
 
 **Exempel:** nionde varvet gav `pass`, med en tabell over 15 lasta filer. Pushen nekades
@@ -1841,16 +1828,6 @@ falt skrivaren skriver - den andrades aldrig. Commitens faktiska union byter dar
 
 ---
 
-### [Workflow] En granskare som kontrollerar bytes med SKALKOMMANDON lämnar inget spår — ledgern bokför bara `Read`
-
-**Trigger:** en granskare rapporterar pass och säger att den verifierade de oförändrade filerna med `git diff --cached --stat`, `git show` eller en innehållsjämförelse i skalet i stället för att öppna dem igen.
-
-**Regel:** det är god sparsamhet för en människa och NOLL bevis för commit-grinden. `reviewProof: "ledger"` bokför `Read`-verktyget och ingenting annat, så en fil som verifierats genom Bash registreras som oläst — och grinden namnger den. Instruera varje granskare att öppna VARJE skyldig fil med `Read`, också de den är säker på inte har flyttat sig, och budgetera det: en granskare som läser om nio filer kostar ett varv, en commit som nekas kostar tre.
-
-**Exempel:** sprinten 2026-09-13. Fyra granskare rapporterade pass; grinden nekade commiten och namngav tre filer som "reviewed the PRE-CHANGE version" eller "reviewed, then changed". Granskarna hade kontrollerat dem noggrant — en av dem påpekade till och med att `--stat`s stapelkolumn skalar med terminalbredden och är oduglig som likhetstest — men genom skalet. Och det var inte formalia: `src/app/integritet/page.tsx` HADE ändrats sedan kodgranskaren läste den, och granskaren behandlade den som orörd i två varv. Samma runda fälldes en granskare för `src/lib/firebase/groups.ts` med skälet att versionen den läst låg före ändringen helt.
-
----
-
 ### [Workflow] `git add -A && git commit` stagear ingenting när en PreToolUse-grind nekar
 
 **Trigger:** du kedjar staging och commit i ett Bash-anrop, och commiten nekas av en grind.
@@ -1893,8 +1870,6 @@ falt skrivaren skriver - den andrades aldrig. Commitens faktiska union byter dar
 
 ### [Workflow] En granskares domrad spelas in bara om den är sista PLAINTEXT-raden
 
-**Trigger:** en granskare rapporterar `pass`, läsningarna finns i loggen, och commit-grinden nekar ändå med "read, but no `<agent>` run ended on REVIEW-VERDICT".
-
 **Regel:** domens halva av grinden är en `SubagentStop`-hook som läser subagentens `last_assistant_message` och matchar `REVIEW-VERDICT:`. Når slutsatsen föräldern bara inne i en hand-back eller ett sammanfattningsanrop står ingen `t:"verdict"`-rad i loggen, medan `t:"read"`-raderna landar som vanligt — så det SER ut som att granskningen var ofullständig fast den var komplett. Lägg instruktionen ÖVERST i varje granskardispatch: sista turen ska vara vanlig assistenttext vars sista rad är domraden, och den raden får inte finnas bara inuti ett verktygsanrop. Verifiera i loggen på granskarens EGET id i stället för att tro på dess rapport — fältet heter `"t":"verdict"`, inte en `verdict`-nyckel, så en grep på `"verdict":` ger noll träffar och ser ut som att hooken är död när den inte är det.
 
 **Exempel:** sprinten 2026-09-16, BIN-1117. Säkerhets- och testgranskaren gick båda igenom på sak — mutationstestade den nya koden, noll blockerande fynd — och båda lämnade full läsningstäckning med shan som matchade det stageade. Ingen av dem spelade in en dom. Omkörning med instruktionen ovan spelade in den på första försöket, på annars identiska bytes. Kostnaden var två extra granskarvarv. Åtgärda ALDRIG genom att redigera pluginet eller skriva loggen för hand: loggen har en egen vakt som nekar varje verktygsskrivning, och delad plugin-infra är utanför räckhåll från en session som startar subagenter.
@@ -1905,7 +1880,7 @@ falt skrivaren skriver - den andrades aldrig. Commitens faktiska union byter dar
 
 **Trigger:** en granskare rapporterar pass och du går vidare till nästa grind.
 
-**Regel:** grinden kräver att SAMMA körning både läste varje skyldig fil vid den stageade shan OCH avslutade på en dom. Täckning utan dom läses som "aldrig granskad", och en dom utan täckning duger inte heller. Granskarens egen rapport svarar på ingendera frågan — den har varit fel åt båda hållen. Greppa loggen på granskarens EGET agent-id direkt när den rapporterar, jämför läsraddernas sha mot `git rev-parse :<fil>`, och kör om innan du går vidare. Instruktionen om domraden hjälper men garanterar inte: håll granskarens sista tur kort, och behandla varje körning som obokförd tills du sett raden.
+**Regel:** grinden kräver att SAMMA körning både läste varje skyldig fil vid den stageade shan OCH avslutade på en dom. Granskarens egen rapport svarar på ingendera frågan — den har varit fel åt båda hållen. Greppa loggen på granskarens EGET agent-id direkt när den rapporterar, jämför läsraddernas sha mot `git rev-parse :<fil>`, och kör om innan du går vidare. Instruktionen om domraden hjälper men garanterar inte: håll granskarens sista tur kort, och behandla varje körning som obokförd tills du sett raden.
 
 **Exempel:** sprinten 2026-09-16, bunt C. En körning rapporterade att den läst båda de stageade testfilerna "in full"; loggen hade ingen läsrad alls för den ena, och commit-grinden namngav just den filen. Senare körningar avslutade på rätt domrad utan att någon dom bokfördes, medan de korta, verktygssnåla körningarna bokfördes. Bunten kostade långt fler granskarvarv än sin storlek — varje varv korrekt utfört, flera osynliga för grinden. Att kontrollera loggen kostar ett grep; att upptäcka det vid commiten kostar ett helt varv.
 
@@ -1938,16 +1913,6 @@ falt skrivaren skriver - den andrades aldrig. Commitens faktiska union byter dar
 **Regel:** `scripts/check-workflow-map.mjs` jämför varje flödes prosalängd mot `docs/workflow-map-content-baseline.json` och fäller en nettominskning. En strykning ÄR en nettominskning, så spärren fyrar på rätt sak av fel skäl. Lintern anvisar själv en baslinjeregenerering för den avsiktliga minskningen, och baslinjen ska committas i samma commit som strykningen. Förväxla den inte med ägarkartans motsvarande flagga, som lärdomarna förbjuder: den här spärren finns för att fånga tyst förlorad dokumentation, den andra skulle göra ett ägarlöst hål permanent.
 
 **Exempel:** BIN-1202, sprinten 2026-09-16b. Strykningen av 92 tecken falsk prosa ur flödet "Sign in & hydrate" gav "prose shrank (13713 < baseline 13805)". Kartfilerna routar `skip`/`doc-only` och matchar ingen post i `reviewGates`, så commiten gick utan granskare — och låg för sig själv, eftersom en revert av funktionskod annars tyst tar med sig orelaterad flödesdokumentation.
-
----
-
-### [Workflow] Ett `-n` inne i ett commit-meddelande fäller no-verify-vakten och blockerar HELA anropet
-
-**Trigger:** du skriver ett commit-meddelande som citerar ett kommando med `-n`, till exempel `grep -n`.
-
-**Regel:** vakten som förbjuder `git commit --no-verify`/`-n` läser hela Bash-anropet som en sträng, inklusive heredoc-kroppen. En träff blockerar anropet innan något körs — `log_event`, `git add` och commiten, alla tre. Symptomet är förvillande: indexet står kvar oförändrat och nästa försök ger ett identiskt fel. Skriv meddelandet till en fil i scratchpad och committa med `-F <sökväg>`, eller citera kommandot utan flaggan. Kontrollera efteråt med `git status --porcelain` att ingenting halvkördes.
-
-**Exempel:** sprinten 2026-09-16b, kartans commit. Meddelandet publicerade två härledningskommandon med `grep -n`; vakten fällde hela anropet, och metrikraden som skulle ha skrivits först skrevs aldrig. Samma familj som lärdomen om att en grind nekar hela Bash-anropet så att `git add` aldrig kör.
 
 ---
 
@@ -2005,7 +1970,7 @@ falt skrivaren skriver - den andrades aldrig. Commitens faktiska union byter dar
 
 **Trigger:** en granskare rapporterar `pass (0 blocking)` och du tänker gå vidare till commiten.
 
-**Regel:** greppa loggen på granskarens EGET agent-id direkt när den rapporterar, inte när commiten nekas. Fältet är `"t":"verdict"`, så en grep på `"verdict":` ger noll och ser ut som en död hook. Att lägga kravet först i utskicket räcker inte — det måste också sägas att sista raden ska vara vanlig assistenttext och att svaret inte får levereras enbart via en hand-back. Följdfälla: `grep`/`wc` mot loggens sökväg NEKAS av dess egen vakt, som inte skiljer läsning från skrivning, så läs den med Read- eller Grep-verktyget.
+**Regel:** greppa loggen på granskarens EGET agent-id direkt när den rapporterar, inte när commiten nekas. Fältet är `"t":"verdict"`, så en grep på `"verdict":` ger noll och ser ut som en död hook. Att lägga kravet först i utskicket räcker inte — det måste också sägas att sista raden ska vara vanlig assistenttext och att svaret inte får levereras enbart via en hand-back.
 
 **Exempel:** sprinten 2026-09-16c, bunt D. `binge-security-reviewer` och `binge-test-reviewer` gav fullständig lästäckning och `pass` i vardera två körningar utan en enda `t:"verdict"`-rad, medan `binge-integration-reviewer` bokförde sin dom i båda sina körningar, inklusive den som slutade `fail`. Två bokföringskörningar till löste det.
 
@@ -2075,7 +2040,7 @@ falt skrivaren skriver - den andrades aldrig. Commitens faktiska union byter dar
 
 **Trigger:** vilken som helst commit-grindsgranskning vars dom loggen måste bära.
 
-**Regel:** läs granskningsloggen på granskarens EGET agent-id efter varje körning och bekräfta att en domrad finns bredvid dess läsrader. Granskarens egen rapport svarar på ingendera frågan. En körning med full lästäckning och ingen domrad lämnar agentens FÖRRA dom stående — som kan vara ett `fail` — och commiten nekas medan rapporten framför dig säger pass. Budgetera ett omkörningsvarv. Loggen läses med Read eller Grep; ett skalkommando som ens NÄMNER dess sökväg nekas av dess egen vakt, och vakten läser hela kommandosträngen, så resten av anropet kör inte heller.
+**Regel:** läs granskningsloggen på granskarens EGET agent-id efter varje körning och bekräfta att en domrad finns bredvid dess läsrader. Granskarens egen rapport svarar på ingendera frågan. En körning med full lästäckning och ingen domrad lämnar agentens FÖRRA dom stående — som kan vara ett `fail` — och commiten nekas medan rapporten framför dig säger pass.
 
 **Regel, fortsättning:** skriv inte ned någon ORSAK till att domraden ibland uteblir. Mätt 2026-09-17, samma session, samma repo: en säkerhetsgranskning med domkontraktet i sista stycket bokförde läsningar men ingen dom; samma granskning med kontraktet som första stycke bokförde domen; en kodgranskning med kontraktet som första stycke bokförde återigen ingen dom. Positionen är alltså inte förklaringen — utkastet till den här lärdomen påstod att den var det efter att ha sett de två första fallen, och motsades av det tredje. Det som håller är kontrollen, inte teorin.
 
