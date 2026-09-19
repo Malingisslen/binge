@@ -321,7 +321,7 @@
     "memoryCuration": {
       "memoryDir": "C:/Users/malla/.claude/projects/C--binge/memory",
       "projectDir": "C:/Users/malla/.claude/projects/C--binge",
-      "excludeFiles": [],
+      "excludeFiles": ["current-state.md"],
       "corpusCapMB": 4
     }
   },
