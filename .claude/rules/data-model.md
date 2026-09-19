@@ -51,7 +51,7 @@ groups/{id}/members/{uid}
 groups/{id}/watchlist/{mediaType_tmdbId}
 
 usernames/{username}                     — global username-reservation, värdet är { uid }
-reports/{reportId}                       — UGC-moderation, create-only från klient, admin-läses via Console
+reports/{reportId}                       — UGC-moderation, skapas via submitReport-callablen, admin läser i /admin/reports
 ```
 
 ## Delad Firestore-helper: `collectUserDataSnapshots`

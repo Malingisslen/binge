@@ -74,10 +74,8 @@ går att försöka igen när timmen gått.
 
 **Steg:**
 
-1. Öppna https://console.firebase.google.com/project/binge-nu/firestore/databases/-default-/data/~2Freports
-2. Sortera efter `createdAt desc` (nyast först)
-3. Filter: `status == 'open'`
-4. Per rapport: klassificera per nedan
+1. Öppna `/admin/reports` (`src/app/admin/reports/page.tsx`) och välj fliken för status
+2. Per rapport: klassificera per nedan
 
 ---
 
@@ -141,8 +139,8 @@ går att försöka igen när timmen gått.
 3. Glöm inte subcollections — `reviews/{id}/likes/*` + `comments/*` ska
    också bort. Firebase Console raderar automatiskt subcollections om
    användaren bekräftar.
-4. Uppdatera rapporten: `status: 'actioned'`, lägg till `actionedAt: <now>`,
-   `actionedBy: 'malin@binge.nu'` (eller vem som tog actionen)
+4. Sätt rapporten som åtgärdad i `/admin/reports` — fälten statusbytet skriver
+   står i `updateReportStatus` (`src/lib/firebase/reports.ts`)
 
 ### Ta bort en kommentar
 
@@ -163,16 +161,17 @@ går att försöka igen när timmen gått.
 ### Dismiss en rapport
 
 Oftast om det är falsk flagga eller borderline-innehåll som inte bryter
-riktlinjerna:
-- `status: 'dismissed'`, lägg till `dismissedAt` + `dismissedReason`
+riktlinjerna: sätt rapporten som avfärdad i `/admin/reports`.
 
 ---
 
 ## 5. Rate-limiting / spam-protection
 
 **Nuvarande:**
-- Client-side 1-sekunds cooldown mellan rapporter (hindrar knapp-spam)
-- Firestore-regel begränsar note-length (500 tecken)
+- Cooldown per uid, hållen av servern: `REPORT_COOLDOWN_MS`
+  (`functions/src/submitReport/logic.ts`); klienten speglar den i
+  `src/lib/firebase/reports.ts`
+- Notens längd begränsas av servern: `REPORT_NOTE_MAX` (`functions/src/submitReport/logic.ts`)
 - **Ingen** hård rate-limit per timme/dag — lita på att reporterUid kan
   spåras
 

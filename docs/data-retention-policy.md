@@ -108,7 +108,8 @@ anmälan till god tro, eller försvara ett moderationsbeslut i efterhand.
 **Retention-fönster:** ingen auto-utgång idag (v1) — rapporter behålls så
 länge moderationsbehovet finns; omvärderas vid skala (se Re-visit triggers).
 Detta är en smal, dokumenterad PII-retention och rapportinnehållet är aldrig
-publikt (klienten kan bara `create`, aldrig `read` — admin läser via Console).
+publikt (skapandet går via den anropbara `submitReport`, och admin läser i
+`/admin/reports`; se `match /reports` i `firestore.rules`).
 
 **Transparens:** integritetspolicyn bör nämna att en anmälares uid kan behållas
 i moderationssyfte efter kontoradering (Art. 13/14). Spåras som copy-följdpunkt

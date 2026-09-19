@@ -20,8 +20,7 @@ import {
  * Klient-side filter: useBlockedUsers används av review/feed-listor för att
  * gömma blockerad användares innehåll (hygienfilter, ej säkerhetsgräns).
  *
- * Rapporter skrivs till top-level reports/ collection; admin-flödet körs
- * manuellt via Firebase Console tills vi bygger ett admin-UI.
+ * Rapporter skrivs till top-level reports/ collection.
  */
 export function UgcActionsMenu({
   targetType,
