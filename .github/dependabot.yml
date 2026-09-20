@@ -88,7 +88,11 @@ updates:
       # Utan den här posten öppnar roboten om samma omergebara PR varje vecka och en check
       # står permanent röd, vilket gör rött till normaltillstånd — då slutar man titta.
       # Sårbarheterna bakom höjningen är dev-only och når ingen besökare — härled dem:
-      #   npm audit --omit=dev --audit-level=high    (0 fynd = inget når produktion)
+      #   npm audit --omit=dev --audit-level=high
+      # Parentesen som stod efter kommandot sa "0 fynd = inget når produktion". Den är
+      # struken 2026-09-20: kommandot rapporterade då en high i produktionsträdet
+      # (`sharp`, via `next`), och efter BIN-1252 en moderate. Läs utdatan; eslint-kedjan
+      # ovan är dev-only oavsett vad den raden visar.
       # BIN-658 bär avvägningen.
       # TA BORT HELA DEN HÄR POSTEN — kommentaren OCH båda raderna under. Att bara ta bort
       # `update-types` lämnar `- dependency-name: "eslint"` kvar, vilket för dependabot

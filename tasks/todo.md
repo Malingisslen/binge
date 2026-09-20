@@ -121,11 +121,12 @@ Den här bunten rör ingen produktionskod utanför `clampText.ts`.
 - [x] Blir fixen att ta bort den tidiga returen: ett test där strängen är exakt taket i kodenheter
       och slutar i en ensam HÖG surrogat, och ska klampas en kodenhet kortare. *(diff)*
 
-## Bunt D — BIN-1252 · Tier C · panel `medium` (#25), routad med
+## Bunt D — BIN-1252 · Tier C
 
-```
-node docs/org/route.mjs --md package.json package-lock.json
-```
+Rubriken bar tidigare panelen `medium` (#25) och ett routningskommando som namngav
+`package.json`. Bada ar strukna: commiten innehaller inte den filen, och den union som
+faktiskt committades routar till #14. Vem som granskade vad star i `events.jsonl`s tva
+rader for biljetten — #25 blockerade `overrides`-instrumentet, #14 godkande hojningen.
 
 Nytt fynd ur BIN-658:s ommätning. **#25 BLOCKERADE mitt första instrument** — en `overrides`-post
 som pinnar `sharp` — och namngav ett bättre: `next@16.3.5` deklarerar själv `sharp: ^0.35.4` och
