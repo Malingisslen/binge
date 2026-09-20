@@ -2098,3 +2098,31 @@ falt skrivaren skriver - den andrades aldrig. Commitens faktiska union byter dar
 **Regel:** läs skriptets första rader i stället. `docs/org/metrics/log_event.mjs` fail:ar öppet och tolkar varje argument som nyttolast, så `log_event.mjs review --help` lägger en rad `{"type":"review","raw":"--help"}` i `events.jsonl`. Filen är append-only även för en rad som aldrig pushats, så raden stryks inte — den får en daterad `correction`-rad. Ett skript som fail:ar öppet har inget läge som bara frågar.
 
 **Exempel:** sprinten 2026-09-19b, BIN-1247. Raden ligger kvar i `events.jsonl` med sin correction-rad bredvid; `check_events.mjs` och `check_review_coverage.mjs` går igenom, eftersom raden saknar `outcome` och biljettid.
+
+### [Workflow] Att smalna ett svalj till den MATTA koden tystar det den gamla koden aldrig fangade
+
+**Trigger:** du rattar ett predikat som grindar ett svalj, och den gamla koden var fel.
+
+**Regel:** frag vad den gamla koden MATCHADE innan du byter den. Matchade den ingenting var svaljet en no-op, och varje avvisande gick till Sentry — sa en korrekt smalning ar samtidigt en TYSTNING av allt som hade rapporterats. Behall rapporten under ett eget `kind`: tyst mot anvandaren, aldrig tyst mot oss. Systerfilen visar formen; sok upp den och gor likadant hellre an att uppfinna ett svar.
+
+**Exempel:** BIN-1251, 2026-09-20. `isBenignWriteFailure` svalde `not-found`, en kod den matta skrivvagen aldrig ger, sa varje `permission-denied` rapporterades. Min forsta version bytte till `isPermissionDenied` och returnerade tyst — helhetsgranskningen fallde den: en regelregression eller en utloggad session hade gjort varje "markera som last" verkningslos med noll spar. `guardedItemWrite` i `WatchlistContext` svaljer samma kod och `captureError`:ar anda, och BIN-957 la just den kanalen pa fyra vagar av samma skal.
+
+---
+
+### [Workflow] Att SAMMANKALLA en kritik och att BOKFORA den ar tva handlingar, och grinden laser bara den andra
+
+**Trigger:** routningen pekar pa en roll du kritiserade nagon gang under sprinten.
+
+**Regel:** `check_staged_routing.mjs` jamfor den stageade unionens panel mot `panel`-faltet i `events.jsonl` — inte mot vad som faktiskt hande. En kritik som kordes och godkande blockerar alltsa commiten tills en rad namner dess roll. Logga raden nar kritiken svarar, inte nar commiten nekas. Grindens egen text ger tva utvagar och bada ar giltiga: logga rollen som verkligen kritiserade, ELLER committa splittat sa varje commits filuppsattning routar till den kritik som kordes. Vidga aldrig en loggad panel for att matcha.
+
+**Exempel:** sprinten 2026-09-20. #18 Community Manager kritiserade den stageade unionen fore bygget och godkande utan villkor. Jag loggade aldrig raden, sa commiten nekades med `logged panel: [25, 27]` mot `routed panel: [18]`. Samma runda kravde ocksa tre commits: kartan ensam routar `skip`, koden routar `[18]`, lasfilen ensam routar `[14]` — och `[14]` var en roll ingen hade kritiserat forran den sammankallades for just den commiten.
+
+---
+
+### [Workflow] En biljett ar en gammal ogonblicksbild aven for den halva den sager ar OBYGGD
+
+**Trigger:** en biljett delar upp sig i halvor och sager att ingen av dem ar rord.
+
+**Regel:** grep-of-main galler varje halva for sig, inte biljetten som helhet. Och flodeskartan ar en andra, oberoende beskrivning av samma kod — motsager den en biljett ar det ett matbart pastaende, inte en smaksak. Mat, och stryk den halva som ar shippad.
+
+**Exempel:** BIN-624, 2026-09-20. Kroppen sa "Still open — two halves, both intentionally NOT touched". `docs/workflow-map.html`s Tillsammans-flode sa att regeln bar doc-id-sparren. Kartan hade ratt: `canonicalSwipeDocId` kraver `^(movie|tv)_[1-9][0-9]*$` pa `allow create` under `match /swipes/{tmdbId}`, shippad i `6373f6a4` och smalnad av BIN-797. Halvan stroks ur biljetten. Fyndet kom ur en kartsparning som flaggan for fardighet tvingade fram, inte ur biljettlasningen.

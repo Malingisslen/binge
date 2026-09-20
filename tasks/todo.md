@@ -133,7 +133,7 @@ ryms i det redan deklarerade `^16.3.3`-intervallet. Blocket är antaget, planen 
 
 - [x] `grep -n overrides package.json` ger ingen träff. *(diff)*
 - [x] `npm ls sharp` löser till 0.35.4 eller senare. *(diff)*
-- [x] `npm audit --omit=dev --audit-level=high` ger 0 fynd. *(diff)*
+- [x] `npm audit --omit=dev --audit-level=high` avslutar med 0 och rapporterar inget high. *(diff)*
 - [x] `package-lock.json`s diff rör bara det subträd ett vanligt `npm install` flyttar — ingen
       handredigerad låsfil. *(diff)*
 - [x] BIN-658:s "0 fynd"-mening är struken i biljetten. Grannmeningen om att inget når en besökare
@@ -198,8 +198,8 @@ mot skarp databas.
 - [deviation] BIN-1252 kriterium 3: `npm audit --omit=dev --audit-level=high` ger exit 0 och
   `high: 0, critical: 0` — men skriver ut EN moderate, `baseline-browser-mapping`. Kriteriet
   sa "0 fynd"; det matta ar "0 high". Den moderate ligger under repots egen flaggningsniva
-  (hygiene: High/Critical) och #25 namngav den uttryckligen som utanfor omfanget. Ingen biljett
-  filad, matningen star i biljettens kommentar.
+  (hygiene: High/Critical) och #25 namngav den uttryckligen som utanfor omfanget. Filad som BIN-1255 pa #14:s rad,
+  avsiktligt som en egen commit — det ar en annan beroendekedja.
 - [discovery] BIN-1167 del 2: premiss borta (`role` togs bort 2026-09-12, `2235172c`). Halvan
   struken ur biljetten; del 1 kvar hos Malin.
 - [discovery] BIN-1174: fan-out kraver att `allow update: if false` oppnas pa tva samlingar i
