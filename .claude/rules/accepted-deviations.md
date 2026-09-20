@@ -1705,3 +1705,105 @@ grep -c "!('" firestore.rules
 **Re-open when:** nagon av de tre ovan intraffar, ELLER nar en lasning mot skarp databas
 visar att sadana dokument finns. Da byggs reparationsgrenen, `cap-b5` vands, och den har
 posten far en daterad eftertradare — den redigeras inte.
+
+---
+
+## BIN-1193: en hangd skanning halls tillbaka av FUNKTIONENS timeout, inte av en egen klocka — 2026-09-20
+
+Malins beslut 2026-09-20, efter #25 Engineering Manager / Release Managers blinda kritik.
+Fila inte "en hangning i en skanning svalter syskonen" eller "parallellblocket saknar en
+tidsgrans".
+
+**Vad som redan ar atgardat, och inte hor till accepten.** Biljettens tre falska meningar ar
+strukna ur koden. Harled att de ar borta:
+
+```
+grep -rn "only sweep" functions/src/retentionCleanup
+grep -rn "three newest" functions/src
+grep -rn "cannot starve" functions/src/retentionCleanup
+grep -rn "timeout default" functions/src
+```
+
+Tom utdata pa alla fyra ar det friska laget. Den fjarde stod i `functions/src/index.ts` och
+var den av dem som handlade om just den har funktionens tidsbudget; den namns inte i
+biljetten men stroks i samma commit, sa den hor till samma kontroll. Det som stod kvar var
+ett VAL, och det ar det har posten avgor.
+
+**Mekanismen.** Varje skanning i `runRetentionCleanup` bar sin egen `.catch` som loggar och
+returnerar en tom lista. En `.catch` hanterar ett AVSLAG. Den hanterar inte ett anrop som
+aldrig svarar, och ingen gren har en egen klocka. Harled bada halvorna:
+
+```
+grep -c "\.catch((err) =>" functions/src/retentionCleanup/runCleanup.ts
+grep -rn "AbortController\|Promise.race\|setTimeout\|withTimeout" functions/src/retentionCleanup/
+```
+
+Den forsta raknar grenarna som bar formen — bade de som kor i `Promise.all` och de
+Auth-berorande som kor efter det. Den andra soker efter en klocka i sopningens egen kod:
+tom utdata ar laget posten beskriver, och en trafflista betyder att nagon lagt in en och att
+posten inte langre beskriver koden. Vad som da ater ar kvar:
+
+```
+grep -n "timeoutSeconds" functions/src/retentionCleanup/index.ts
+```
+
+**Vad som accepteras.** Att en hangd skanning haller tillbaka syskonens raderingar fram till
+den gransen, i stallet for att falla for sig sjalv. Accepten galler varje gren som bar
+formen ovan, inte bara de parallella.
+
+Den galler SKANNINGSfasen. Skrivfasens awaits — `deleteSessions`, `deleteInBatches`,
+`deleteAuthAccounts`, `eraseOrphanedUserData`, `stampOrphanWatch` — bar inte den formen och
+ligger utanfor. De har samma avsaknad av klocka; att de ar utanfor ar en avgransning, inte
+ett forbiseende.
+
+**Why:** sopningen ar idempotent och schemalagd, sa nasta korning tar det som blev kvar.
+Ingen anvandare ser en fordrojd stadning. Alternativet ar en egen klocka per gren i en
+funktion som `recursiveDelete`:ar hela anvandartrad — harled den blast-radiusen med
+`grep -n "recursiveDelete" functions/src/retentionCleanup/index.ts` — alltsa mer kod i
+den kansligaste vagen, for ett lage ingen har observerat. Avvagningen ar kostnad mot en
+ohandd risk, och den vagen valdes bort.
+
+**VAD ACCEPTEN VILAR PA, OCH SOM INTE ar pa plats i dag.** En korning som dor mitt i en
+sopning larmar INGEN. `docs/RUNBOOK.md` §5d sager det sjalvt, med BIN-468 namngiven som
+den oppna biljetten. Signaturerna finns i Cloud Logging men ingenting lyfter dem, sa
+utlosaren nedan ar MANUELL tills BIN-468 shippar. Att stanga BIN-1193 stanger inte den
+luckan.
+
+**TVA signaturer, inte en — och det ar den halvan jag forst missade.** Bada loggraderna
+ligger EFTER sitt eget avsnitt, vilket gor frånvaro till signalen. Harled ordningen:
+
+```
+grep -n "await Promise.all\|scheduled sweeps done\|retentionCleanup done" functions/src/retentionCleanup/runCleanup.ts
+```
+
+Utdatan visar `await Promise.all` forst och `scheduled sweeps done` efter den. Hanger en av
+de PARALLELLA skanningarna skrivs alltsa ingen av raderna — inte heller den som en utlosare
+byggd pa "den forsta finns, den andra saknas" kraver. §5d beskriver bara den senare halvan,
+sa den manuella kontrollen svarar "inget att se" for precis det fall den har posten handlar
+mest om.
+
+**INTE accepterat, alltsa fortfarande fileable:**
+1. Att en skanning slutar bara sin egen `.catch`. Accepten galler en HANGNING, inte ett
+   avslag som far falla igenom och ta hela korningen med sig.
+2. Att den schemalagda funktionens timeout tas bort eller hojs utan eget beslut. Den ar
+   taket accepten vilar pa.
+3. Att sopningen slutar vara idempotent. Da konvergerar inte omkorningen, och hela skalet
+   faller.
+4. Overvakningsluckan sjalv. Den ar BIN-468 och stangs inte av den har posten.
+5. Att §5d bara beskriver den ena signaturen. Den halvan ar inte lagad har, och en
+   driftbokstext som svarar "inget att se" for en hangning i parallellblocket hor till
+   BIN-468:s omfang.
+6. Meningen om ett svep som rekursivt raderar ett bibliotek, i `CleanupSummary`s
+   `orphanDataUids`-kommentar i `functions/src/retentionCleanup/runCleanup.ts`.
+   Commit `61a5d9dc` lamnade den medvetet orord och bokforde den pa BIN-1193; den stryks
+   alltsa inte av den commit som stanger biljetten, och far en egen atgard.
+
+**Re-open when:** nagon av TVA signaturer, och bada maste kontrolleras for hand:
+
+1. En schemalagd korning som loggar `scheduled sweeps done` men aldrig `retentionCleanup
+   done` — en hangning i den Auth-berorande svansen. Det ar fallet §5d beskriver.
+2. En schemalagd korning som loggar INGEN av raderna — en hangning i parallellblocket.
+   Utan den har punkten kan utlosaren inte fyra for den halvan av accepten.
+
+Nar BIN-468 shippar blir bada larmade i stallet for manuella, och den har posten bor da fa
+en daterad eftertradare som sager det.
