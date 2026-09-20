@@ -4958,3 +4958,186 @@ describe('group name floor — empty and whitespace-only names are refused (BIN-
     await assertSucceeds(writeInvite({ groupName: 'a' }));
   });
 });
+
+// BIN-1170: faltkontrakt pa de fyra agar-egna subkollektionerna som tidigare bara
+// band VEM som fick skriva. Skrivarna som varje nyckellista harleds ur:
+//   git grep -n "pauseHistory" -- src functions   (samma form for blocked, fcmTokens, notifications)
+function validPauseHistory() {
+  return {
+    providerId: 8, providerShortName: 'Netflix', pausedAt: '2026-01-01', resumedAt: '2026-02-01',
+    monthlyCost: 139, durationDays: 31, savedAmount: 139, createdAt: serverTimestamp(),
+  };
+}
+
+describe('users/{uid}/pauseHistory/{historyId} (BIN-1170)', () => {
+  it('owner can write a row with exactly the fields resumeProvider writes', async () => {
+    await assertSucceeds(setDoc(doc(ownerDb(), 'users', OWNER, 'pauseHistory', 'h1'), validPauseHistory()));
+  });
+  it('rejects an extra field', async () => {
+    await assertFails(setDoc(doc(ownerDb(), 'users', OWNER, 'pauseHistory', 'h2'), { ...validPauseHistory(), spam: 1 }));
+  });
+  it('rejects a wrong type on savedAmount', async () => {
+    await assertFails(setDoc(doc(ownerDb(), 'users', OWNER, 'pauseHistory', 'h3'), { ...validPauseHistory(), savedAmount: '139' }));
+  });
+  it('rejects a row that omits a required field', async () => {
+    const { createdAt: _omitted, ...withoutCreatedAt } = validPauseHistory();
+    await assertFails(setDoc(doc(ownerDb(), 'users', OWNER, 'pauseHistory', 'h6'), withoutCreatedAt));
+  });
+  it.each([
+    'providerId', 'providerShortName', 'pausedAt', 'resumedAt',
+    'monthlyCost', 'durationDays', 'savedAmount',
+  ])('rejects a row that omits %s', async (field) => {
+    const row: Record<string, unknown> = validPauseHistory();
+    delete row[field];
+    await assertFails(setDoc(doc(ownerDb(), 'users', OWNER, 'pauseHistory', `h_miss_${field}`), row));
+  });
+  // One case per bound field: without these, a type clause can be deleted from the
+  // rule and the whole suite stays green (measured by mutation, BIN-1170 review).
+  it.each([
+    ['providerId', '8'],
+    ['providerShortName', 8],
+    ['pausedAt', 20260101],
+    ['resumedAt', 20260201],
+    ['monthlyCost', '139'],
+    ['durationDays', '31'],
+    ['createdAt', '2026-01-01'],
+  ])('rejects a wrong type on %s', async (field, wrongValue) => {
+    await assertFails(setDoc(doc(ownerDb(), 'users', OWNER, 'pauseHistory', `h_${field}`), {
+      ...validPauseHistory(), [field]: wrongValue,
+    }));
+  });
+  it('an UPDATE must satisfy the same contract', async () => {
+    await setDoc(doc(ownerDb(), 'users', OWNER, 'pauseHistory', 'h4'), validPauseHistory());
+    await assertSucceeds(updateDoc(doc(ownerDb(), 'users', OWNER, 'pauseHistory', 'h4'), { savedAmount: 200 }));
+    await assertFails(updateDoc(doc(ownerDb(), 'users', OWNER, 'pauseHistory', 'h4'), { savedAmount: '200' }));
+    await assertFails(updateDoc(doc(ownerDb(), 'users', OWNER, 'pauseHistory', 'h4'), { spam: 1 }));
+  });
+  it('another user cannot write to the owner tree', async () => {
+    await assertFails(setDoc(doc(otherDb(), 'users', OWNER, 'pauseHistory', 'h5'), validPauseHistory()));
+  });
+  it('owner can delete a row', async () => {
+    await setDoc(doc(ownerDb(), 'users', OWNER, 'pauseHistory', 'h7'), validPauseHistory());
+    await assertSucceeds(deleteDoc(doc(ownerDb(), 'users', OWNER, 'pauseHistory', 'h7')));
+  });
+});
+
+describe('users/{uid}/blocked/{targetUid} (BIN-1170)', () => {
+  it('owner can block with only blockedAt', async () => {
+    await assertSucceeds(setDoc(doc(ownerDb(), 'users', OWNER, 'blocked', 'other_uid'), { blockedAt: serverTimestamp() }));
+  });
+  it('rejects an extra field', async () => {
+    await assertFails(setDoc(doc(ownerDb(), 'users', OWNER, 'blocked', 'other_uid'), { blockedAt: serverTimestamp(), note: 'x' }));
+  });
+  it('rejects a non-timestamp blockedAt', async () => {
+    await assertFails(setDoc(doc(ownerDb(), 'users', OWNER, 'blocked', 'other_uid'), { blockedAt: 1 }));
+  });
+  it('rejects an empty document (blockedAt missing)', async () => {
+    await assertFails(setDoc(doc(ownerDb(), 'users', OWNER, 'blocked', 'other_uid'), {}));
+  });
+  it('another user cannot write to the owner blocked list', async () => {
+    await assertFails(setDoc(doc(otherDb(), 'users', OWNER, 'blocked', 'third_uid'), { blockedAt: serverTimestamp() }));
+  });
+  it('an UPDATE must satisfy the same contract', async () => {
+    await setDoc(doc(ownerDb(), 'users', OWNER, 'blocked', 'other_uid'), { blockedAt: serverTimestamp() });
+    await assertFails(updateDoc(doc(ownerDb(), 'users', OWNER, 'blocked', 'other_uid'), { note: 'x' }));
+  });
+  it('owner can unblock (delete)', async () => {
+    await setDoc(doc(ownerDb(), 'users', OWNER, 'blocked', 'other_uid'), { blockedAt: serverTimestamp() });
+    await assertSucceeds(deleteDoc(doc(ownerDb(), 'users', OWNER, 'blocked', 'other_uid')));
+  });
+});
+
+function validFcmToken() {
+  return { token: 'tok-abc', createdAt: serverTimestamp(), lastUsedAt: serverTimestamp(), userAgent: 'Mozilla/5.0' };
+}
+
+describe('users/{uid}/fcmTokens/{tokenId} (BIN-1170)', () => {
+  it('owner can register a token with exactly the fields enablePushForUser writes', async () => {
+    await assertSucceeds(setDoc(doc(ownerDb(), 'users', OWNER, 'fcmTokens', 't1'), validFcmToken()));
+  });
+  it('rejects an extra field', async () => {
+    await assertFails(setDoc(doc(ownerDb(), 'users', OWNER, 'fcmTokens', 't2'), { ...validFcmToken(), spam: 1 }));
+  });
+  it('rejects a userAgent over the cap', async () => {
+    await assertFails(setDoc(doc(ownerDb(), 'users', OWNER, 'fcmTokens', 't3'), { ...validFcmToken(), userAgent: 'u'.repeat(513) }));
+  });
+  it('rejects a token over the cap', async () => {
+    await assertFails(setDoc(doc(ownerDb(), 'users', OWNER, 'fcmTokens', 't4'), { ...validFcmToken(), token: 'x'.repeat(4097) }));
+  });
+  it('rejects a token document that omits a required field', async () => {
+    const { userAgent: _omitted, ...withoutUserAgent } = validFcmToken();
+    await assertFails(setDoc(doc(ownerDb(), 'users', OWNER, 'fcmTokens', 't7'), withoutUserAgent));
+  });
+  it.each(['token', 'createdAt', 'lastUsedAt'])('rejects a token document that omits %s', async (field) => {
+    const row: Record<string, unknown> = validFcmToken();
+    delete row[field];
+    await assertFails(setDoc(doc(ownerDb(), 'users', OWNER, 'fcmTokens', `t_miss_${field}`), row));
+  });
+  // token and userAgent are guarded `X is string && X.size() <= N`. A SCALAR here
+  // would be denied by .size()'s own evaluation error even with `is string`
+  // removed, so the non-string fixture is a short LIST: .size() succeeds on it and
+  // only the type clause can deny (BIN-1134/1140 masking pattern).
+  it.each([
+    ['token', ['x']],
+    ['userAgent', ['x']],
+    ['createdAt', '2026-01-01'],
+    ['lastUsedAt', '2026-01-01'],
+  ])('rejects a wrong type on %s', async (field, wrongValue) => {
+    await assertFails(setDoc(doc(ownerDb(), 'users', OWNER, 'fcmTokens', `t_${field}`), {
+      ...validFcmToken(), [field]: wrongValue,
+    }));
+  });
+  it('an UPDATE must satisfy the same contract', async () => {
+    await setDoc(doc(ownerDb(), 'users', OWNER, 'fcmTokens', 't5'), validFcmToken());
+    await assertSucceeds(updateDoc(doc(ownerDb(), 'users', OWNER, 'fcmTokens', 't5'), { lastUsedAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(ownerDb(), 'users', OWNER, 'fcmTokens', 't5'), { lastUsedAt: 1 }));
+  });
+  it('another user cannot register a token in the owner tree', async () => {
+    await assertFails(setDoc(doc(otherDb(), 'users', OWNER, 'fcmTokens', 't6'), validFcmToken()));
+  });
+  it('owner can delete a token', async () => {
+    await setDoc(doc(ownerDb(), 'users', OWNER, 'fcmTokens', 't8'), validFcmToken());
+    await assertSucceeds(deleteDoc(doc(ownerDb(), 'users', OWNER, 'fcmTokens', 't8')));
+  });
+});
+
+describe('users/{uid}/notifications/{notifId} (BIN-1170)', () => {
+  async function seedNotification(notifId: string) {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', OWNER, 'notifications', notifId), {
+        kind: 'provider_available', tmdbId: 27205, mediaType: 'movie', title: 'Inception',
+        providerId: 8, providerName: 'Netflix', read: false, createdAt: serverTimestamp(),
+      });
+    });
+  }
+  it('the client cannot CREATE a notification', async () => {
+    await assertFails(setDoc(doc(ownerDb(), 'users', OWNER, 'notifications', 'n_new'), { kind: 'system', read: false }));
+  });
+  it('a merge write against a deleted notification is a create and is denied', async () => {
+    await assertFails(setDoc(doc(ownerDb(), 'users', OWNER, 'notifications', 'n_gone'), { read: true }, { merge: true }));
+  });
+  it('owner can mark an existing notification read', async () => {
+    await seedNotification('n2');
+    await assertSucceeds(updateDoc(doc(ownerDb(), 'users', OWNER, 'notifications', 'n2'), { read: true }));
+  });
+  it('rejects a write that changes read together with another field', async () => {
+    await seedNotification('n3');
+    await assertFails(updateDoc(doc(ownerDb(), 'users', OWNER, 'notifications', 'n3'), { read: true, kind: 'system' }));
+  });
+  it('rejects rewriting the content alone', async () => {
+    await seedNotification('n4');
+    await assertFails(updateDoc(doc(ownerDb(), 'users', OWNER, 'notifications', 'n4'), { title: 'Forged' }));
+  });
+  it('rejects a non-boolean read', async () => {
+    await seedNotification('n5');
+    await assertFails(updateDoc(doc(ownerDb(), 'users', OWNER, 'notifications', 'n5'), { read: 'yes' }));
+  });
+  it('owner can delete a notification', async () => {
+    await seedNotification('n6');
+    await assertSucceeds(deleteDoc(doc(ownerDb(), 'users', OWNER, 'notifications', 'n6')));
+  });
+  it('another user cannot mark the owner notification read', async () => {
+    await seedNotification('n7');
+    await assertFails(updateDoc(doc(otherDb(), 'users', OWNER, 'notifications', 'n7'), { read: true }));
+  });
+});

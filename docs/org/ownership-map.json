@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 629,
+  "patternCount": 632,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -415,6 +415,9 @@
         "src/hooks/useGroupMemberProgress.ts",
         "src/hooks/useGroups.ts",
         "src/hooks/useMySessions.ts",
+        "src/hooks/useNotifications.helpers.test.ts",
+        "src/hooks/useNotifications.helpers.ts",
+        "src/hooks/useNotifications.test.tsx",
         "src/hooks/useNotifications.ts",
         "src/hooks/useReviewSocial.ts",
         "src/hooks/useReviews.ts",

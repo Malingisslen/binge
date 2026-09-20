@@ -29099,3 +29099,204 @@ Alias-table per-member fixture discipline: [arkiv 92].
 
 - [T77, STRIKE-FALSE: Säger åt granskaren att läsa arkivet – i den nya ordningen läses arkivet aldrig vid granskning. Bevis: C:/claude-plugins/lib/common.mjs knowledgeFilesFor(): returnerar bara `core` och `chapters`; fcd2458: "Arkiv: läses aldrig vid granskning".] (from "## When to consult the archive")
 Grep `binge-test-reviewer.knowledge.archive.md` when: a gap resembles a past one; a bullet is too compressed to act on (which mutation/fixture, what the emulator printed); you're on a re-attempt/revert/Phase-N; or a test looks weakened-but-plausible on rules/PII/deletion/money.
+
+## 2026-09-20 — BIN-1170 field contracts (pauseHistory/blocked/fcmTokens/notifications)
+
+**Diff reviewed:** staged `firestore.rules` (hasOnly + type/length-cap contracts on
+`users/{uid}/{pauseHistory,blocked,fcmTokens}` create+update; `notifications` client-create
+denied, update narrowed to `diff(resource.data).affectedKeys().hasOnly(['read'])`), staged
+`src/test/rules/firestore-rules.test.ts` (+30 tests across four new `describe` blocks), and
+the co-staged `src/hooks/useNotifications.ts` (markRead: `setDoc+merge` → `updateDoc` inside
+try/catch swallowing `not-found`; markAllRead: atomic `writeBatch` → `Promise.allSettled` of
+per-item `updateDoc`s, each failure reported via a new `reportWriteFailure`/`captureError`).
+
+**Control run:** `npm run test:rules -- --port 8123` → 699 passed (matches ticket evidence,
+669 before). `scripts/run-rules-tests.mjs`'s `MIN_TESTS` floor was NOT bumped from 669 in this
+diff (not staged) — noted as a Medium finding, not blocking on its own, but it means a future
+revert of exactly these 30 tests would still clear the floor.
+
+**Mutation runs (scratchpad copy, never the tracked file — own `firebase.json`, project
+`binge-rules-scratch-1170`, port 8291, throwaway untracked test file inside `src/test/rules/`
+repointed at the scratch rules copy via `SCRATCH_RULES_PATH`, deleted after each run; verified
+`git status --porcelain -- firestore.rules src/test/rules/` clean before and after):**
+1. Removed `request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])` from
+   the notifications update branch → exactly the 2 diff-dependent tests ("rejects a write that
+   changes read together with another field", "rejects rewriting the content alone") went red,
+   8/10 stayed green. Non-vacuous, precisely attributed.
+2. Removed the `keys().hasOnly([...])` term from pauseHistory's combined create/update guard →
+   exactly "rejects an extra field" went red, 9/10 green. Non-vacuous.
+3. Removed `token.size() <= 4096` from fcmTokens → exactly "rejects a token over the cap" went
+   red, 9/10 green. Non-vacuous.
+4. Removed `providerShortName is string` from pauseHistory (a term with NO dedicated negative
+   fixture — only `savedAmount` gets a wrong-type case) → ALL 5 replayed pauseHistory tests
+   stayed green. Confirmed gap: 7 of 8 ANDed type-guard terms (`providerId`, `providerShortName`,
+   `pausedAt`, `resumedAt`, `monthlyCost`, `durationDays`, `createdAt`) have zero mutation
+   coverage; only `savedAmount`'s type is pinned.
+5. Removed `createdAt is timestamp` from fcmTokens → ALL 6 replayed fcmTokens tests stayed
+   green. Confirmed gap: `token is string` and `createdAt is timestamp` are also untested
+   (only `lastUsedAt`'s type is pinned, via the update-branch test).
+
+**`useNotifications.ts`:** `ls src/hooks/*.test.ts` shows no `useNotifications.test.ts`, and
+`grep -rn "useNotifications" src` shows the only consumer test
+(`src/components/layout/TopbarActions.test.tsx`) does `vi.mock('@/hooks/useNotifications', ...)`
+— full replacement, zero coverage of the real file anywhere. The repo has an established
+pattern for exactly this shape (`useStreamingOffers.test.ts` etc. mock `@/lib/firebase/db`'s
+`fsdb()` and drive the hook with `renderHook`), not used here. Read `docs/org/metrics/events.jsonl`'s
+two `review` rows for BIN-1170 (panel [4,6,27] then [7,18]): the second panel's `must_haves`
+explicitly names "markRead and markAllRead must not leave an unhandled rejection" and
+"markAllRead must not lose every row when one notification is gone" — both self-imposed
+acceptance criteria, both unmet by any test in the diff (exception 1 under "When NO new test
+is owed" in the core card applies: an unmet self-imposed bar is a gap even in an otherwise
+exempt shape).
+
+**Verdict:** fail (2 blocking) — (1) `firestore.rules` pauseHistory/fcmTokens: 7+2 ANDed
+type-guard terms with zero mutation-discriminating test, live-verified; (2)
+`src/hooks/useNotifications.ts`: no test anywhere, including two of the ticket's own recorded
+must_haves. Plus one Medium (MIN_TESTS floor not bumped, separate unstaged file).
+
+## 2026-09-20 — BIN-1170, third round: round-1 gaps closed, MIN_TESTS bumped, two NEW findings
+
+**Diff reviewed:** the same staged set as the round-1 entry above, now with the fcmTokens
+`it.each` list fixtures, the pauseHistory 7-field `it.each`, `src/hooks/useNotifications.test.tsx`
+(new), and `scripts/run-rules-tests.mjs`'s `MIN_TESTS` bumped 669→710 all present.
+
+**Control runs (tracked files, untouched):** `npm run test:rules -- --port 8123` → 710/710
+passed (matches the bumped floor). `npx vitest run docs/org/metrics/check_events.test.mjs
+docs/org/metrics/check_review_coverage.test.mjs` → 101/101 passed. Full `npm test -- --run`
+→ **3 FAILED, 5171 passed, 4 skipped (5178), 1 failed file of 307** — contradicts the "5174
+passed" evidence handed to this round; that evidence was measured before or without the
+tree in its current staged state.
+
+**Round-1 gaps, both independently re-verified as CLOSED (own mutations, not inherited):**
+1. Removed `request.resource.data.providerShortName is string` from the scratch copy of
+   `firestore.rules` (pauseHistory) → exactly 1 test red (`rejects a wrong type on
+   providerShortName`), 40/41 green in the throwaway `scratch-1170-mutation.test.ts` harness
+   (own `firebase.json`, project `binge-rules-scratch-1170`, port 8291, deleted after use;
+   `md5sum firestore.rules` on the TRACKED file identical before/after: `e600a24...`).
+2. Removed `request.resource.data.token is string` from the same scratch copy (fcmTokens) →
+   exactly 1 test red (`rejects a wrong type on token`), 40/41 green. Confirms the list
+   fixture `['token', ['x']]` now discriminates where a scalar (BIN-1134/1140 masking
+   pattern) would not have.
+3. `useNotifications.test.tsx`'s `markRead` claim independently re-mutated on the TRACKED
+   file (not inherited from the prior round's report): reverted `writeRead` to
+   `setDoc(..., { merge: true })` → exactly 1 red (`updateDoc` called 0 times), restored,
+   `git hash-object` back to `dc0c3b85f6...` before and after.
+
+**Two NEW findings, both live-verified, neither present in the round-1 archive entry:**
+
+1. **BLOCKING — `docs/org/ownership-map.json` is stale against the co-staged
+   `docs/role-responsibilities.md`.** The prose file already lists all four new
+   `useNotifications*` files including `src/hooks/useNotifications.test.tsx`; the generated
+   JSON only got `useNotifications.helpers.ts` and `.helpers.test.ts` added —
+   `useNotifications.test.tsx` was left out. Verified three independent ways on the current
+   staged tree: `node docs/org/gen-ownership-map.mjs --check` exits 1 ("1 NEW unowned
+   sibling(s): src/hooks/useNotifications.test.tsx"); `npx vitest run
+   docs/org/gen-ownership-map.test.mjs` → 3/11 red; full `npm test -- --run` → 3 failed as
+   above. This is the same recurring class named in `lessons-digest-delivery.md`'s
+   2026-08-26 BIN-1013 entry (a new file under a directory the map lists file-by-file is an
+   ownership-map event) — not a new pattern, a fresh instance of a known one, so no new
+   digest line was added for it. Fix: `node docs/org/gen-ownership-map.mjs` and re-stage
+   `docs/org/ownership-map.json`.
+2. **BLOCKING — `markAllRead`'s wiring to `markManyRead` has zero call-site coverage.**
+   `useNotifications.test.tsx` only drives `markRead`; nothing renders the hook and calls
+   `markAllRead`. Live-verified: reverted `markAllRead` in the TRACKED file to the old atomic
+   `writeBatch` (the exact regression BIN-1170 fixes, and the literal wording of the second
+   review row's must_have "markAllRead must not lose every row when one notification is
+   gone") → ran `useNotifications.test.tsx` + `useNotifications.helpers.test.ts` +
+   `TopbarActions.test.tsx` together → **18/18 stayed green**. Restored, hash confirmed
+   `dc0c3b85f6...` before and after. The helper-level test proves `markManyRead`'s per-item
+   logic in isolation but never proves the hook calls it instead of `writeBatch` for
+   `markAllRead` specifically — one call site of a two-call-site shared helper tested is not
+   both tested. Also: the test file's own comment ("`markAllRead` drivs via en egen, seedad
+   lista nedan") promises a test that is not in the file — Info/wording, named alongside the
+   gap it describes, not filed separately.
+
+**Verdict:** fail (2 blocking) — (1) `docs/org/ownership-map.json` stale, live-verified via
+three independent runs; (2) `markAllRead` wiring untested, live-verified by mutation on the
+tracked file. Both round-1 findings independently confirmed closed. No Medium carried
+forward — the MIN_TESTS floor is bumped and staged in this round's diff.
+
+## 2026-09-20 — BIN-1170 round 4: both round-3 blockings verified closed
+
+Round 3 filed two blocking findings against this ticket: a stale `docs/org/ownership-map.json`
+(the new `src/hooks/useNotifications.test.tsx` had no owner) and an untested `markAllRead`
+wiring. Both are closed in the commit that ships with this entry, verified independently:
+
+- `node docs/org/gen-ownership-map.mjs --check` exits 0; `npx vitest run docs/org/gen-ownership-map.test.mjs`
+  → 11/11. Full suite `npm test -- --run` → 307 files, 5176 passed, 4 skipped.
+- `useNotifications.test.tsx` drives `markAllRead` twice (one write per unread row, no `writeBatch`;
+  the remaining rows still written when one rejects). Reverting `markAllRead` to the atomic
+  `writeBatch` reddens exactly those two tests; the tracked file was restored and hash-verified.
+- Rules suite `node scripts/run-rules-tests.mjs --port 8291` → 710/710, matching `MIN_TESTS = 710`.
+
+The round-3 entries above are left verbatim; this entry is their dated successor.
+
+## 2026-09-20 — BIN-1170 round 5: independent re-review, one NEW field-omission gap
+
+**Diff reviewed:** the same staged set as rounds 1/3/4 above, at the tree's current state
+(rounds 3 and 4's fixes present: fcmTokens/pauseHistory `it.each` wrong-type rows,
+`useNotifications.test.tsx`, `docs/org/ownership-map.json` updated, `MIN_TESTS` 669→710).
+Opened whole: `firestore.rules`, `src/test/rules/firestore-rules.test.ts` (BIN-1170 blocks),
+`src/hooks/useNotifications.ts`, `.helpers.ts`, `.helpers.test.ts`, `.test.tsx`,
+`scripts/run-rules-tests.mjs`, `.claude/rules/accepted-deviations.md` (paged, grepped for
+BIN-1170 — nothing on point).
+
+**Control runs, tracked tree untouched:** `node scripts/run-rules-tests.mjs --port 8123` →
+710/710, `PERMISSION_DENIED` visible in emulator logs for the notifications deny cases
+(non-vacuous). `npx vitest run src/hooks/useNotifications.helpers.test.ts
+src/hooks/useNotifications.test.tsx` → 11/11. `node docs/org/gen-ownership-map.mjs --check` →
+0 gaps (round-4's fix holds). Hand-counted the four new `describe` blocks in the test file:
+14 (pauseHistory) + 7 (blocked) + 12 (fcmTokens) + 8 (notifications) = 41 new tests, exactly
+matching the staged `MIN_TESTS` delta (669→710).
+
+**Re-verified round-3/4 fixes independently (own mutations):**
+1. Reverted `markAllRead` (tracked `src/hooks/useNotifications.ts`) to the old atomic
+   `writeBatch` mechanism → exactly the 2 `markAllRead` tests in `useNotifications.test.tsx`
+   went red (9/11 green), confirming round 4's wiring claim. Restored via scratchpad copy,
+   `git hash-object` matched `ea3c61d9…` before and after, `git diff --cached` unchanged.
+2. Scratchpad-copy mutation (own `firebase.mutant.json`, project
+   `demo-binge-mutant-scratch`, port 8145, throwaway untracked test file inside
+   `src/test/rules/`, deleted after use): confirmed `firestore.rules`'s tracked-file hash
+   (`git hash-object`) identical before and after every run.
+
+**One NEW finding, live-verified, not present in any prior round's archive entry:**
+
+`firestore.rules`'s `pauseHistory` and `fcmTokens` blocks bind every field via UNCONDITIONAL
+dot-access (`d.field is T`, no `!('field' in d) ||` guard) — so accessing a field that is
+absent from the payload throws, and the throw denies the whole write. That is what makes
+"required" true for every one of those fields today, and it is a DIFFERENT property from
+"has the right type when present," which the round-3 `it.each` rows pin per field. The two
+mutations are independent: wrapping a bound field's clause in an optional guard
+(`!('f' in d) || d.f is T`) leaves every wrong-type-when-present fixture green (the field is
+still typed when it's there) and is caught ONLY by a fixture that omits exactly that field.
+
+`pauseHistory` pins omission for `createdAt` only (`it('rejects a row that omits a required
+field', …)`); the other 7 bound fields (`providerId`, `providerShortName`, `pausedAt`,
+`resumedAt`, `monthlyCost`, `durationDays`, `savedAmount`) have no omission fixture.
+`fcmTokens` pins omission for `userAgent` only; `token`, `createdAt`, `lastUsedAt` have none.
+(`blocked` has exactly one bound field, `blockedAt`, and its existing "rejects an empty
+document" test already covers it — no gap there. `notifications`' update branch has no
+comparable required-field shape: `create` is `if false` outright, and `update` is scoped by
+`affectedKeys().hasOnly(['read'])`, so there's nothing to omit into.)
+
+**Live mutation (scratchpad copy, not the tracked file):** copied `firestore.rules` to
+`C:/…/scratchpad/firestore.mutant.rules`, changed `pauseHistory`'s
+`&& request.resource.data.providerId is number` to
+`&& (!('providerId' in request.resource.data) || request.resource.data.providerId is number)`,
+wrote a throwaway `src/test/rules/zz-scratch-bin1170-mutant.test.ts` (own `firebase.json`
+pointing at the mutant copy, project `demo-binge-mutant-scratch`, port 8145) replaying all 14
+shipped `pauseHistory` tests plus one PROBE that omits `providerId` entirely. Result: **15/15
+passed**, including the PROBE — every shipped test, including `providerId`'s own wrong-type
+row (`['providerId', '8']`), stayed green under the mutation. Confirms the gap live for the
+representative field; the remaining 6 pauseHistory fields and 3 fcmTokens fields share the
+exact same rule idiom (verified by reading `firestore.rules` directly) and were reasoned,
+not separately live-run, for budget reasons — flagged here rather than silently assumed.
+Deleted the scratch test file after the run; `git status --porcelain` and
+`git hash-object firestore.rules` (`2291a973…`) confirmed clean/unchanged before and after.
+
+**Verdict:** fail (1 blocking) — the field-omission gap above, live-verified for one field
+per collection, reasoned for the rest by identical rule idiom. All four rounds' prior fixes
+(round-1 wrong-type gap, round-3 ownership-map/wiring gaps, round-4's closure of both)
+independently re-confirmed as holding. Lesson folded into
+`binge-test-reviewer.rules.knowledge.md`'s "Field OMISSION is distinct from wrong-TYPE"
+bullet: omission and wrong-type are ALSO distinct per field, not just per collection.

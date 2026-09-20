@@ -7,6 +7,8 @@ import { toDate } from '@/lib/firebase/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFriendRequests } from '@/hooks/useFriends';
 import { getRecentSessionPicksAcrossGroups } from '@/lib/firebase/groups';
+import { captureError } from '@/lib/sentry';
+import { markOneRead, markManyRead } from './useNotifications.helpers';
 
 export interface AppNotification {
   id: string;
@@ -152,21 +154,30 @@ export function useNotifications() {
   // `provider_available` notif shape + `${tmdbId}-${canonicalId}` doc id, so
   // the inbox below renders it unchanged.
 
+  const reportWriteFailure = useCallback((error: unknown, kind: string) => {
+    captureError(error, { scope: 'notifications', kind });
+  }, []);
+
+  // BIN-1170: updateDoc, inte setDoc+merge — en merge mot ett dokument som hunnit
+  // raderas utvarderas som CREATE av reglerna, och notis-grenen nekar create
+  // (notiser skrivs bara av Cloud Functions). Vad som rapporteras och varfor
+  // skrivningarna gar en och en star i useNotifications.helpers.ts.
+  const writeRead = useCallback(async (notifId: string) => {
+    const { db, doc, updateDoc } = await fsdb();
+    return updateDoc(doc(db, 'users', uid!, 'notifications', notifId), { read: true });
+  }, [uid]);
+
   const markRead = useCallback(async (notifId: string) => {
     if (!uid) return;
-    const { db, doc, setDoc } = await fsdb();
-    await setDoc(doc(db, 'users', uid, 'notifications', notifId), { read: true }, { merge: true });
-  }, [uid]);
+    await markOneRead(writeRead, notifId, reportWriteFailure);
+  }, [uid, writeRead, reportWriteFailure]);
 
   const markAllRead = useCallback(async () => {
     if (!uid) return;
     const unread = notifications.filter(n => !n.read);
     if (unread.length === 0) return;
-    const { db, doc, writeBatch } = await fsdb();
-    const batch = writeBatch(db);
-    unread.forEach(n => batch.update(doc(db, 'users', uid, 'notifications', n.id), { read: true }));
-    await batch.commit();
-  }, [uid, notifications]);
+    await markManyRead(writeRead, unread.map(n => n.id), reportWriteFailure);
+  }, [uid, notifications, writeRead, reportWriteFailure]);
 
   // Sammansatt unread-räkning för bell-badge:n. Friend requests är action-
   // required (måste accepteras/avböjas) → räknas alltid. Recent picks +

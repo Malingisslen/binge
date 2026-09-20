@@ -84,7 +84,11 @@ const REPO = resolve(HERE, '..');
 // tests in place. The fixtures are named in the `feltypat lagrat items` describe block:
 // `cap-b1`, `cap-b2`, `cap-b3`, `cap-b4` and the floor beside them. Measured the same way
 // as the entry above, not counted by hand.
-export const MIN_TESTS = 669;
+// BIN-1170, 2026-09-20: raised to what `numTotalTests` reported once the four
+// owner-only subcollections got field contracts and a test per branch. The new
+// describe blocks name themselves `(BIN-1170)`. Measured with
+// `npm run test:rules -- --port 8123`, not counted by hand.
+export const MIN_TESTS = 720;
 
 const VITEST_ARGS = ['run', '--config', 'vitest.rules.config.ts'];
 

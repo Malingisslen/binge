@@ -1,3 +1,67 @@
+# Sprint 2026-09-19b — 1 biljett
+
+Rent träd vid start, i fas med `origin/main`. Todo och In Progress tomma. binge-e0 fick filerna nedan anmälda.
+
+## Mätt vid urvalet (grep-of-main)
+
+- **BIN-1179 del 2 premiss borta:** `git grep -n "getGroupOnce" -- src functions` ger noll träffar. Del 1 kräver produktionsmätning → kommenterad, kvar i Backlog.
+- **BIN-1247 håller:** `git grep -n -i "admin-läses via Console\|admin läser via Console\|tills vi bygger ett admin-UI\|Dagligt triage" -- docs .claude/rules src`.
+
+## Inte valda, med skäl
+
+Samma som sprinten 2026-09-19 nedan (regeländringar, produktionsmätningar, Feature/idea, BIN-959 egen session).
+
+## Bunt A — BIN-1247 · Tier A · panel medium (#6), routad med
+`node docs/org/route.mjs --md docs/moderation.md src/components/moderation/UgcActionsMenu.tsx .claude/rules/data-model.md docs/data-retention-policy.md`
+
+- [ ] Varje mening i driftbokens §2, §4–5 stämmer mot koden eller är struken. *(diff)*
+- [ ] Kopiorna i `UgcActionsMenu.tsx`, `data-model.md`, `data-retention-policy.md` strukna/rättade i samma bunt. *(diff)*
+- [ ] Ingen ny mening utan ett kommando eller en namngiven symbol som kan fälla den. *(diff)*
+
+## Bunt B — BIN-1249 · Tier A · panel medium (#12), routad med
+`node docs/org/route.mjs --md docs/RUNBOOK.md docs/moderation.md`
+
+- [x] `git grep -n "dismissReason" -- docs` ger ingen instruktion att skriva ett fält som ingen kod skriver. *(diff)*
+- [x] "ej byggt än" mätt (inget admin-raderingsskript i `scripts/` eller `functions/src`) och står kvar med pekare till "Console-bypass". *(diff)*
+- #12:s villkor: saknat skäl-fält filat som BIN-1250 (Feature, ditt val).
+
+## Bunt C — BIN-1248 · Tier C · panel top (#4, #6, #27), routad med `node docs/org/route.mjs firestore.rules`
+
+- [x] Blocket ovanför `match /reports` säger inget som motsägs av regeln eller `submitReport` — struket. *(diff)*
+- [x] `npm run test:rules -- --port 8123`: 669 test kördes, alla gröna (port 8080 upptagen av annat repo). *(diff)*
+- #27:s villkor: uppdateringskommentaren namnger fälten `updateReportStatus` skriver.
+
+## Bunt D — BIN-1170 · Tier C · panel `top` (#4, #6, #27, sedan #7 och #18 nar den stageade
+unionen routades om), routad med
+`node docs/org/route.mjs --md $(git diff --cached --name-only | tr "\n" " ")`
+
+Fyra agar-egna subkollektioner band VEM som fick skriva, inte VAD. Faltkontrakten harleds ur
+de skrivvagar som faktiskt skriver dokumenten (`resumeProvider` i AuthContext, `blockUser` i
+useBlockedUsers, `enablePushForUser` i messaging.ts, notisernas Cloud Functions).
+
+- [x] pauseHistory, blocked och fcmTokens: `keys().hasOnly(...)` + typ per falt; fcmTokens
+      far dessutom langdtak pa `token` och `userAgent`. *(diff)*
+- [x] notifications: klienten far inte skapa en notis, och en uppdatering far bara rora
+      `read`. *(diff)*
+- [x] `markRead` slutar anvanda `setDoc`+merge (en merge mot ett raderat dokument ar en
+      CREATE och nekas av den nya regeln), och "markera alla lasta" tappar inte alla rader
+      nar en notis hunnit raderas. *(diff)*
+- [x] Ett negativt typfall per bundet falt, och ett fall dar ett obligatoriskt falt saknas. *(diff)*
+- [x] `npm run test:rules` rapporterar fler test an golvet i `scripts/run-rules-tests.mjs`,
+      och golvet foljer med i samma commit. *(diff)*
+
+Oppna fragor: inga arkitekturandrande okanda. Antaganden: langdtaken pa `token` och
+`userAgent` ar tak mot dokumentuppblasning, inte matta minsta varden — #6 ville ha dem matta
+och #27 ville ha dem explicita nu; konflikten gar till Malin med biljetten i In Review.
+
+## Deviation log
+
+- [discovery] BIN-1247: kritiken (#6) pekade på samma påståenden i kommentaren ovanför `match /reports` i `firestore.rules` → en regelfil hade routat till full panel → filad som BIN-1248, inte breddad.
+- [discovery] BIN-1247: `log_event.mjs review --help` skrev en skräprad i `events.jsonl` → filen är append-only → daterad `correction`-rad.
+- [discovery] BIN-1247: driftbokens "Stäng ett konto" säger att ett Admin-SDK-radera-skript "ej byggt än", och `docs/RUNBOOK.md` §4a skickar till konsolen för gruppering per anmälare → utanför biljettens meningar → lämnat.
+
+---
+
 # Sprint 2026-09-19 — 4 biljetter, 4 buntar
 
 Rent träd vid start, i fas med `origin/main`. Todo och In Progress tomma. En annan session

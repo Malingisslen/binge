@@ -505,14 +505,33 @@ service cloud.firestore {
     // Sparbeslut-historik för Streamingrådgivaren. Skrivs av resumeProvider
     // när användaren tar av en paus, så "Sparat hittills" + "Senaste
     // sparbesluten" har data att visa. Owner-only — inga andra läser.
+    // BIN-1170: faltkontraktet harleds ur skrivarna, som listas av
+    //   git grep -n "pauseHistory" -- src functions
+    // Regeln tillater update med samma kontrakt (som BIN-1141/1153); att
+    // historiska rader inte skrivs om ar klientdisciplin, inte nagot regeln haller.
     match /users/{uid}/pauseHistory/{historyId} {
-      allow read, write: if isOwner(uid);
+      allow read, delete: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(['providerId', 'providerShortName',
+             'pausedAt', 'resumedAt', 'monthlyCost', 'durationDays', 'savedAmount', 'createdAt'])
+        && request.resource.data.providerId is number
+        && request.resource.data.providerShortName is string
+        && request.resource.data.pausedAt is string
+        && request.resource.data.resumedAt is string
+        && request.resource.data.monthlyCost is number
+        && request.resource.data.durationDays is number
+        && request.resource.data.savedAmount is number
+        && request.resource.data.createdAt is timestamp;
     }
 
     // Blockerade användare — endast ägaren läser/skriver. Klient-filter i UI
     // gömmer blockerad användares innehåll (hygien-nivå, inte säkerhetsgräns).
+    // BIN-1170: blockUser i src/hooks/useBlockedUsers.ts skriver bara blockedAt.
     match /users/{uid}/blocked/{targetUid} {
-      allow read, write: if isOwner(uid);
+      allow read, delete: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(['blockedAt'])
+        && request.resource.data.blockedAt is timestamp;
     }
 
     // Följda listor (BIN-96) — ägar-ägt: doc-id = {listId} man följer. Endast
@@ -525,9 +544,17 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/lists/$(listId));
     }
 
-    // Notifications — owner only
+    // Notifications — owner only. BIN-1170: notiser skrivs av Cloud Functions via
+    // Admin SDK, som gar forbi reglerna, i flera former per `kind`. Regeln binder
+    // darfor las-status i stallet for en nyckellista som inte kan vara sann for
+    // alla former. Skrivarna listas av:
+    //   git grep -n "'notifications'" -- src functions
     match /users/{uid}/notifications/{notifId} {
-      allow read, write: if isOwner(uid);
+      allow read, delete: if isOwner(uid);
+      allow create: if false;
+      allow update: if isOwner(uid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
+        && request.resource.data.read is bool;
     }
 
     // FCM web-push tokens. Doc-id = autoId, fältet 'token' lagrar registrering-
@@ -535,8 +562,20 @@ service cloud.firestore {
     // skicka push vid friend-request och sessionHistory-create. När send returnerar
     // 'messaging/registration-token-not-registered' raderar functions doc:et —
     // men det är admin-SDK-skrivning, inte klient-skrivning.
+    // BIN-1170: faltkontrakt harlett ur enablePushForUser i
+    // src/lib/firebase/messaging.ts. Admin SDK (functions/src/push.ts) uppdaterar
+    // lastUsedAt och raderar doda tokens forbi reglerna. Langdtaken ar tak mot
+    // dokumentuppblasning, inte matta minsta varden.
     match /users/{uid}/fcmTokens/{tokenId} {
-      allow read, write: if isOwner(uid);
+      allow read, delete: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(['token', 'createdAt', 'lastUsedAt', 'userAgent'])
+        && request.resource.data.token is string
+        && request.resource.data.token.size() <= 4096
+        && request.resource.data.userAgent is string
+        && request.resource.data.userAgent.size() <= 512
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.lastUsedAt is timestamp;
     }
 
     // Report-throttle (BIN-25): per-user tidsstämpel som ger server-side
