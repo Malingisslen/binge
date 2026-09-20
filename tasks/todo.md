@@ -121,6 +121,31 @@ Den här bunten rör ingen produktionskod utanför `clampText.ts`.
 - [x] Blir fixen att ta bort den tidiga returen: ett test där strängen är exakt taket i kodenheter
       och slutar i en ensam HÖG surrogat, och ska klampas en kodenhet kortare. *(diff)*
 
+## Bunt D — BIN-1252 · Tier C · panel `medium` (#25), routad med
+
+```
+node docs/org/route.mjs --md package.json package-lock.json
+```
+
+Nytt fynd ur BIN-658:s ommätning. **#25 BLOCKERADE mitt första instrument** — en `overrides`-post
+som pinnar `sharp` — och namngav ett bättre: `next@16.3.5` deklarerar själv `sharp: ^0.35.4` och
+ryms i det redan deklarerade `^16.3.3`-intervallet. Blocket är antaget, planen ändrad.
+
+- [x] `grep -n overrides package.json` ger ingen träff. *(diff)*
+- [x] `npm ls sharp` löser till 0.35.4 eller senare. *(diff)*
+- [x] `npm audit --omit=dev --audit-level=high` ger 0 fynd. *(diff)*
+- [x] `package-lock.json`s diff rör bara det subträd ett vanligt `npm install` flyttar — ingen
+      handredigerad låsfil. *(diff)*
+- [x] BIN-658:s "0 fynd"-mening är struken i biljetten. Grannmeningen om att inget når en besökare
+      rörs INTE — den gäller eslint-kedjan och är fortfarande sann. *(diff)*
+- [x] Ingen daterad post läggs någonstans: en patchhöjning inom ett deklarerat intervall är ingen
+      avvikelse. Ingen ny biljett om `package-lock.json`s ägarskap — det är redan avgjort
+      (dossier §25, BIN-934). *(diff)*
+- [x] `npm run build`, `npm run typecheck`, `npm test` och `npm run lint` gröna efter höjningen. *(diff)*
+
+Routningen körs om mot den stageade unionen omedelbart före VARJE incheckning — unionen krymper
+och växer mellan kritiken och skrivningen.
+
 ## Needs you (Tier D / ditt val)
 
 Inget av det nedan kan en obemannad session göra. De fyra första behöver samma sak: EN läsning
@@ -167,6 +192,14 @@ mot skarp databas.
 - [needs-human] BIN-1164: #27:s kritik vidgade omfanget till `src/contexts/AuthContext.tsx`
   (`updateBio` klampar inte alls), och den vidgade unionen routade om till `top`. Halvan bruten
   ut som BIN-1253 i stallet for att byggas utan full panel.
+- [deviation] BIN-1252: #25 BLOCKERADE `overrides`-instrumentet och namngav `next` 16.3.5 i
+  stallet. Blocket antaget. `npm update next` lamnar `package.json` orord och flyttar bara
+  `next`/`@next/*`/`sharp`/`@img/sharp-*` i lasfilen.
+- [deviation] BIN-1252 kriterium 3: `npm audit --omit=dev --audit-level=high` ger exit 0 och
+  `high: 0, critical: 0` — men skriver ut EN moderate, `baseline-browser-mapping`. Kriteriet
+  sa "0 fynd"; det matta ar "0 high". Den moderate ligger under repots egen flaggningsniva
+  (hygiene: High/Critical) och #25 namngav den uttryckligen som utanfor omfanget. Ingen biljett
+  filad, matningen star i biljettens kommentar.
 - [discovery] BIN-1167 del 2: premiss borta (`role` togs bort 2026-09-12, `2235172c`). Halvan
   struken ur biljetten; del 1 kvar hos Malin.
 - [discovery] BIN-1174: fan-out kraver att `allow update: if false` oppnas pa tva samlingar i
