@@ -1635,3 +1635,73 @@ Där listar admin anmälningarna per status, ändrar en anmälans status, och se
 användaranmälan den anmälda profilen via den anropbara funktionen `getProfileForModeration`
 (BIN-1244). Att radera innehåll eller konton sker fortfarande i Firebase Console enligt
 `docs/moderation.md`.
+
+---
+
+## BIN-1234: ett feltypat lagrat `items` lagas eller raderas — 2026-09-20
+
+`itemsWithinCap` provar `d.items is list` pa `request.resource.data`, alltsa hela
+efterdokumentet och inte bara det falt som andras. Harled grenarna:
+
+```
+grep -n "itemsWithinCap" firestore.rules
+```
+
+For ett dokument vars LAGRADE `items` ar feltypat nekas darfor agaren varje skrivning som
+inte samtidigt skickar ett giltigt `items` — en titelandring, att gora listan privat, att
+lagga till eller ta bort en samredigerare.
+
+**Vad som accepteras.** Att agaren maste LAGA eller RADERA ett sadant dokument, i stallet
+for att kunna andra ett orelaterat falt forst.
+
+Lagningsvagen ar provad: `cap-b4` i `src/test/rules/firestore-rules.test.ts` driver en
+skrivning med en riktig lista inom taket och visar att den gar igenom. `cap-b5` i samma fil
+driver det som NEKAS — en ren titelandring pa ett feltypat dokument — och ar alltsa
+avvikelsen sjalv, inte en av vagarna ut.
+
+Raderingsvagen ar inte provad av nagot test. Den ar i stallet direkt lasbar ur regeln:
+
+```
+awk '/match .lists.{listId} {/,/^    }/' firestore.rules | grep -n "allow delete"
+```
+
+Klausulen som kommer ut namnger bara agaren, ingen `isValidList`.
+
+**Var rackvidden gar.** Ingen klientskrivvag kan producera ett feltypat lagrat `items`.
+Harled producenterna:
+
+```
+grep -n "items" src/hooks/useLists.ts
+```
+
+De tre skrivningarna ar `items: []` vid skapandet, en `arrayUnion` vid tillagg och en
+filtrerad array vid borttagning. Alla tre ar listor, och BIN-1207:s egna create- och
+update-grenar kraver dessutom `d.items is list` nar faltet finns. Att na det tillstand den
+har posten accepterar kraver alltsa en Admin-SDK- eller konsolskrivning, eller ett dokument
+aldre an BIN-1207.
+
+**Varfor den inte lagas nu.** En reparationsgren som later agaren andra ett orelaterat falt
+utan att skicka ett giltigt `items` ar en regelandring pa agarmodellen, och den routar till
+`top` med full panel. Biljetten sager sjalv att produktionen ska matas forst: finns inget
+sadant dokument ar grenen betald for ingenting. Matningen kraver en lasning mot skarp
+databas, som en obemannad session inte gor, sa laget skrivs ned i vantan pa den.
+
+**Omfang.** Accepten galler `itemsWithinCap` och `lists.items`, och ingenting annat. Den
+sager INGENTING om hur manga andra hjalpare i filen som delar formen "validera hela
+efterdokumentet" — `isValidWatchlistItem` och `isValidPublicProfile` gor det ocksa, pa sina
+egna falt, och varje sadant fall bedoms pa sina egna forutsattningar. Harled formen:
+
+```
+grep -c "!('" firestore.rules
+```
+
+**INTE accepterat, alltsa fortfarande fileable:**
+1. Att `allow delete` pa `lists/{listId}` borjar anropa `isValidList` — da forsvinner
+   raderingsvagen och hela accepten vilar pa den.
+2. Att `cap-b4` slutar ga igenom — da forsvinner lagningsvagen.
+3. Att en klientskrivvag borjar kunna producera ett feltypat `items`. Da ar tillstandet
+   inte langre bara nabart via Admin-SDK, och avvagningen om produktionen ar en annan.
+
+**Re-open when:** nagon av de tre ovan intraffar, ELLER nar en lasning mot skarp databas
+visar att sadana dokument finns. Da byggs reparationsgrenen, `cap-b5` vands, och den har
+posten far en daterad eftertradare — den redigeras inte.

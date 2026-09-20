@@ -1,6 +1,7 @@
 'use client';
 
 import { fsdb } from './db';
+import { clampToCodeUnits, MAX_FCM_USER_AGENT } from '@/lib/clampText';
 
 // Lazy-importerar firebase/messaging eftersom den drar in en relativt stor
 // chunk + bryter SSR (window-references). Importeras bara när användaren
@@ -81,11 +82,17 @@ export async function enablePushForUser(uid: string, userAgent?: string): Promis
   const { db, doc, collection, setDoc, serverTimestamp } = await fsdb();
   const tokensCol = collection(db, 'users', uid, 'fcmTokens');
   const tokenDoc = doc(tokensCol);
+  // BIN-1251: `userAgent` klipps HAR, hos skrivaren, som `updateDisplayName` gor.
+  // Regeln bar ett tak pa faltet och en strang over det far HELA skrivningen nekad
+  // — och med den push-aktiveringen, eftersom `setDoc` ar det sista steget. Ett bart
+  // `.slice()` racker inte: snittet kan landa mitt i ett surrogatpar och da lagras en
+  // ensam halva som laser tillbaka som U+FFFD. `clampToCodeUnits` slapper tecknet i
+  // stallet. Talet star i `MAX_FCM_USER_AGENT`, som ett test jamfor med regelklausulen.
   await setDoc(tokenDoc, {
     token,
     createdAt: serverTimestamp(),
     lastUsedAt: serverTimestamp(),
-    userAgent: userAgent ?? navigator.userAgent ?? '',
+    userAgent: clampToCodeUnits(userAgent ?? navigator.userAgent ?? '', MAX_FCM_USER_AGENT),
   });
 
   // Spara doc-id i localStorage så vi vet vilken doc att radera vid disable

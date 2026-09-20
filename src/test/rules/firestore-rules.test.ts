@@ -731,6 +731,25 @@ describe('users/{uid} create value bounds (BIN-1134/BIN-1142)', () => {
   it('a displayName one over the limit is denied', async () => {
     await assertFails(signup({ displayName: 'x'.repeat(NAME_MAX + 1) }));
   });
+  // BIN-1164: WHICH UNIT `size()` counts, measured rather than assumed.
+  // `src/lib/clampText.ts` clamps in UTF-16 code units and its header says the two
+  // quantities are the same one — but every cap test above uses `'x'.repeat(N)`, where
+  // bytes and code units are equal, so none of them could ever tell the difference.
+  // This app's UI is Swedish, so the case that matters is a name of å/ä/ö: one UTF-16
+  // code unit each, two UTF-8 bytes each. At exactly the cap that is 80 code units and
+  // 160 bytes. If `size()` counted bytes this write would be denied and
+  // `clampToCodeUnits` would be clamping in the wrong unit for every Swedish name.
+  it('size() counts UTF-16 code units, not UTF-8 bytes — a 80-char å/ä/ö name passes', async () => {
+    const swedish = 'åäö'.repeat(26) + 'åä'; // 80 code units, 160 UTF-8 bytes
+    expect(swedish.length).toBe(NAME_MAX);
+    expect(Buffer.byteLength(swedish, 'utf8')).toBe(NAME_MAX * 2);
+    await assertSucceeds(signup({ displayName: swedish }));
+  });
+  it('and one code unit over is still denied when the characters are two bytes each', async () => {
+    const swedish = 'åäö'.repeat(27); // 81 code units
+    expect(swedish.length).toBe(NAME_MAX + 1);
+    await assertFails(signup({ displayName: swedish }));
+  });
   // A LIST, not a number. `42` proves nothing here: the clause is
   // `is string && .size() <= N`, and `.size()` on a number raises its own
   // evaluation error that denies the write whether or not `is string` is present —
@@ -4441,6 +4460,29 @@ describe('lists items cap — feltypat lagrat items (BIN-1228)', () => {
     await assertSucceeds(updateDoc(doc(ownerDb(), 'lists', 'cap-b4'),
       { items: listItems(3), updatedAt: serverTimestamp() }));
   });
+
+  // BIN-1234, 2026-09-20. PINNAR DAGENS VAL, INTE EN SPECIFIKATION.
+  //
+  // `itemsWithinCap` prövar `d.items is list` på HELA efterdokumentet, så ägaren nekas
+  // varje skrivning som inte samtidigt lagar ett feltypat lagrat `items` — här en ren
+  // titeländring. Två vägar stod öppna: en reparationsgren i regeln, eller en daterad
+  // post som säger att laga-eller-radera är vägen. Posten valdes, och den står som
+  // `## BIN-1234` i `.claude/rules/accepted-deviations.md`.
+  //
+  // Bygger någon senare reparationsgrenen ska DET HÄR TESTET GÅ RÖTT. Det är det
+  // väntade utfallet av den ändringen, inte ett fel att laga genom att svänga
+  // assertionen: den vägen kräver en daterad EFTERTRÄDARE till posten, i samma commit
+  // som testet vänds. Testet får aldrig svagas för att gå grönt.
+  //
+  // Avgränsat mot grannarna med flit: `cap-o7` driver ett dokument som SAKNAR `items`
+  // (då lyckas titeländringen, `!('items' in d)` undantar det) och `cap-b4` driver en
+  // skrivning som LAGAR `items`. Det här är det tredje fallet — feltypat och närvarande,
+  // och skrivningen rör bara ett orelaterat fält.
+  it('ägaren nekas en ren titeländring när lagrade items är feltypat (BIN-1234, dagens val)', async () => {
+    await seedCollabList('cap-b5', { isPublic: true, editors: [], rawItems: OVERSIZED_STRING });
+    await assertFails(updateDoc(doc(ownerDb(), 'lists', 'cap-b5'),
+      { title: 'Nytt namn', updatedAt: serverTimestamp() }));
+  });
 });
 
 // BIN-96: list following — users/{uid}/listFollows/{listId}.
@@ -5115,6 +5157,22 @@ describe('users/{uid}/notifications/{notifId} (BIN-1170)', () => {
   });
   it('a merge write against a deleted notification is a create and is denied', async () => {
     await assertFails(setDoc(doc(ownerDb(), 'users', OWNER, 'notifications', 'n_gone'), { read: true }, { merge: true }));
+  });
+  // BIN-1251: the CODE, not just the rejection. `useNotifications.helpers.ts` used to
+  // swallow `not-found` here, on the assumption that a `read` update losing a race with
+  // a delete reports that. It does not: the update branch dereferences `resource.data`
+  // through `diff(...)`, so the rule evaluation itself fails on a null value and the
+  // server answers `permission-denied`. Every other test in this file uses
+  // `assertFails`, which cannot tell the two apart — so this asserts `err.code`
+  // directly, and the client's predicate is wired to the code this test measures.
+  it('an updateDoc against a DELETED notification reports permission-denied, not not-found', async () => {
+    let code: unknown = '(no rejection)';
+    try {
+      await updateDoc(doc(ownerDb(), 'users', OWNER, 'notifications', 'n_deleted'), { read: true });
+    } catch (err) {
+      code = (err as { code?: string }).code;
+    }
+    expect(code).toBe('permission-denied');
   });
   it('owner can mark an existing notification read', async () => {
     await seedNotification('n2');

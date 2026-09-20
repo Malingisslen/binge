@@ -10,10 +10,16 @@
  * told the user to go ask the owner for a new token. See the long comment above
  * `joinGroupViaToken` in `groups.ts` for that history.
  *
- * BIN-942 gave it a second caller: the watchlist edit paths that may now be refused by the
- * create-floor when they race a delete. They swallow `permission-denied` and rethrow
- * everything else, so a broad catch there would silently eat every network failure on six
- * of the app's most common writes. One definition, so the two cannot drift.
+ * BIN-942 added the watchlist edit paths, which may be refused by the create-floor when
+ * they race a delete. They swallow `permission-denied` and rethrow everything else, so a
+ * broad catch there would silently eat every network failure on the app's most common
+ * writes. BIN-1251 added the notification read-flip, where the rule's update branch
+ * dereferences `resource.data` and a deleted document therefore answers
+ * `permission-denied` rather than `not-found` (measured; see
+ * `useNotifications.helpers.ts`). One definition, so the callers cannot drift.
+ *
+ * Derive who they are rather than trusting a number here:
+ *   grep -rn "isPermissionDenied" src functions
  */
 export function isPermissionDenied(err: unknown): boolean {
   return (err as { code?: string } | null)?.code === 'permission-denied';

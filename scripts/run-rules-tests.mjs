@@ -88,7 +88,13 @@ const REPO = resolve(HERE, '..');
 // owner-only subcollections got field contracts and a test per branch. The new
 // describe blocks name themselves `(BIN-1170)`. Measured with
 // `npm run test:rules -- --port 8123`, not counted by hand.
-export const MIN_TESTS = 720;
+// BIN-1251/BIN-1234/BIN-1164, 2026-09-20: raised to what `numTotalTests` reported once
+// three things landed — the notification delete-race got a test that asserts `err.code`
+// rather than only that the write fails, the mistyped-`items` title change got `cap-b5`,
+// and `size()`'s unit got a pair of tests driven by a Swedish name where UTF-8 bytes and
+// UTF-16 code units differ. Measured with `npm run test:rules -- --port 8123`, not
+// counted by hand.
+export const MIN_TESTS = 724;
 
 const VITEST_ARGS = ['run', '--config', 'vitest.rules.config.ts'];
 

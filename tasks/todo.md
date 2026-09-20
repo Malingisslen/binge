@@ -1,3 +1,179 @@
+# Sprint 2026-09-20 — 4 biljetter, 4 buntar
+
+Rent träd vid start, i fas med `origin/main`. Todo och In Progress tomma vid urvalet.
+
+Backlogen är 23 öppna ärenden och den är till stor del OBYGGBAR för en obemannad
+session: produktionsmätningar, konsolsteg och avgöranden som är Malins. Fyra buntar är
+det ärliga utfallet, inte ett urval bland många.
+
+## Mätt vid urvalet (grep-of-main, Step 0)
+
+Premissen prövad mot HEAD för varje kandidat, inte mot biljettens text.
+
+- **BIN-1251 håller.** `grep -n "export function" src/lib/firebase/errorCodes.ts src/hooks/useNotifications.helpers.ts`
+  → `errorCodes.ts` bär bara `isPermissionDenied`; `isBenignWriteFailure` ligger kvar i helparfilen.
+  `grep -n "userAgent" src/lib/firebase/messaging.ts` → `navigator.userAgent` skickas oklippt.
+- **BIN-1234 håller.** `grep -n "itemsWithinCap" firestore.rules` → hjälparen prövar
+  `d.items is list` på `request.resource.data`.
+- **BIN-1164 håller.** `grep -n "value.length <= max" src/lib/clampText.ts` → den tidiga returen står kvar.
+- **BIN-1167 del 2: PREMISS BORTA.** `grep -n "isValidGroupMember" firestore.rules` leder till
+  medlemsradens tillåtna nycklar, och `role` står inte bland dem; `grep -rn "GroupRole" src functions`
+  ger två träffar, båda i `src/types/social.ts` (typen och kommentaren ovanför den), noll läsare.
+  Fältet togs bort 2026-09-12, BIN-1155, `2235172c`. Halvan struken ur biljetten, inte byggd.
+  Del 1 kvar hos Malin.
+- **BIN-1174: ny mätning gjord, inte byggd.** `grep -n "allow update: if false" firestore.rules` →
+  både `friendRequests` och `groupInvites` är oföränderliga efter skapandet (BIN-1063 steg 2).
+  Fan-out-vägen kräver alltså en regeländring på två samlingar i ANDRAS träd. Kommenterad.
+- **BIN-658: ommätt, "vänta" gäller vidare — men en mening föll.** De två kommandona biljetten
+  namnger gav samma svar som 2026-09-06: `eslint-plugin-react@latest` deklarerar fortfarande ett
+  eslint-intervall som slutar på 9, och `eslint-config-next@latest` levererar fortfarande pluginen.
+  Eslint-halvan står kvar orörd under Malins beslut 2026-08-06. MEN
+  `npm audit --omit=dev --audit-level=high` ger inte längre 0 — det blev BIN-1252, som är vald
+  till den här sprinten.
+
+## Inte valda, med skäl
+
+- **Produktionsmätning krävs** (kan inte köras härifrån): BIN-1121, BIN-1114, BIN-1179 del 1, BIN-1097.
+- **Konsol- eller gcloud-steg** (Tier D): BIN-1144, BIN-1212, BIN-454 (och dess `mutateEnabled`-flipp
+  som en sprint ALDRIG får göra), BIN-402.
+- **Produktval som är Malins** (`Feature`/`idea`-etikett eller ett val i kroppen): BIN-1250, BIN-1118,
+  BIN-521, BIN-1120, BIN-559 (kräver egen designrunda plus ny funktionskostnad), BIN-624 (biljetten
+  säger själv "does not belong in an autonomous batch"), BIN-1174, BIN-1167 del 1, BIN-1253.
+- **Uttryckligen parkerad:** BIN-824 ("byggs inte nu"), BIN-959 (egen session), BIN-1159 (egen
+  mening-för-mening-runda, per Malins metodbeslut).
+
+## Bunt A — BIN-1251 · Tier A · panel `medium` (#27), routad med
+
+```
+node docs/org/route.mjs --md src/lib/firebase/errorCodes.ts src/hooks/useNotifications.helpers.ts src/lib/firebase/messaging.ts src/test/rules/firestore-rules.test.ts src/lib/clampText.ts src/lib/clampText.test.ts src/hooks/useNotifications.ts
+```
+
+Omroutad efter att #27:s villkor 6 drog in `clampText.ts` — fortfarande `medium`, samma roll.
+
+- [x] Emulatortestet MÄTER vilken felkod en `updateDoc` mot en RADERAD notis ger: fånga
+      avvisandet och assert:a på `err.code`, inte bara `assertFails`. *(diff)*
+- [x] Predikatet kopplas till det MÄTTA utfallet, inte till `not-found` som förval. Blir det
+      `permission-denied` återanvänds `isPermissionDenied` — inget nytt predikat — och helparens
+      mening om `not-found` STRYKS. *(diff)*
+- [x] Svalget hålls kvar i samma smala omfång: bara notisskrivningens `read`-uppdatering. Ingen
+      generell "svälj varje permission-denied"-hjälpare. *(diff)*
+- [x] `errorCodes.ts` huvudkommentar får inget räkneord om antalet predikat — den pekar på ett
+      `grep`, som filens egen konvention redan gör. *(diff)*
+- [x] Del 2 (titellängd) är BESVARAD, inte öppen: `lists.title` är redan bunden i `isValidList`.
+      Härled med `grep -n "d.title.size" firestore.rules`. Ingen ny biljett. *(diff)*
+- [x] `userAgent` klipps i `enablePushForUser` genom `clampToCodeUnits` med en namngiven konstant
+      i samma familj som `MAX_DISPLAY_NAME` — inte ett bart `.slice()`, som kan klyva ett
+      surrogatpar. Talet härleds ur regelns egen `userAgent.size`-klausul. *(diff)*
+- [x] Gränstest för den nya klampningen mot regeln, samma form som `clampText.test.ts` redan använder. *(diff)*
+- [x] Var och en av de tre nyckelmängdstesterna bär ett NEGATIVT fall — en extra nyckel, ett
+      omdöpt fält, ett saknat obligatoriskt fält. Ett test med bara `assertSucceeds` pinnar
+      ingenting och är samma tysta spärrhake som en tömd `describe.each`. *(diff)*
+- [x] Nyckelmängderna härleds ur PRODUCENTENS objektlitteral (`messaging.ts`, `useBlockedUsers.ts`,
+      `resumeProvider`), inte ur regelns lista — annars pinnar testet inget om de två redan glidit isär. *(diff)*
+
+## Bunt B — BIN-1234 · Tier A, `build-review` · panel `medium` (#27), routad med
+
+```
+node docs/org/route.mjs --md .claude/rules/accepted-deviations.md src/test/rules/firestore-rules.test.ts
+```
+
+Biljetten bär två uteslutande vägar och säger "mät produktionen först". Produktionsläsningen går
+inte att göra härifrån, så den KONSERVATIVA vägen tas: skriv ned läget, pinna det, och låt Malin
+säga till om hon vill ha reparationsgrenen i stället. **Ingen ändring i `firestore.rules`.**
+
+- [x] Posten APPENDAS efter den sista posten med egen `## BIN-1234 … — 2026-09-20`-rubrik.
+      `## BIN-1207` och `## BIN-1227` redigeras INTE — beslutsprotokoll får daterade efterträdare. *(diff)*
+- [x] Posten avgränsar sig till `itemsWithinCap` och `lists.items`, och namnger
+      `isValidWatchlistItem` och `isValidPublicProfile` som bärare av samma form utan att
+      utvidga accepten dit. Härled formen med `grep -c "!('" firestore.rules`. *(diff)*
+- [x] Posten säger var räckvidden GÅR: ingen nuvarande klientskrivväg kan producera ett feltypat
+      lagrat `items`. Att nå läget kräver en Admin-SDK-skrivning eller ett äldre dokument. *(diff)*
+- [x] Testets rubrik säger uttryckligen att det pinnar DAGENS val, inte en specifikation: en framtida
+      reparationsgren ska FÄLLA just det här testet, och kräver då en daterad efterträdare till posten. *(diff)*
+- [x] Testet såddar ett feltypat NÄRVARANDE `items` och ändrar bara ett orelaterat fält — så det inte
+      sammanfaller med `cap-o7` (items saknas) eller `cap-b4` (skrivningen lagar items). *(diff)*
+- [x] `git diff --stat` visar bara de två filerna — ingen hunk i `firestore.rules`. Det är vad som
+      gör bunten routningsbar på `medium`. *(diff)*
+- [x] `npm run test:rules` UTDATA läst, inte bara exitkoden, och det nya testnamnet syns köra. *(diff)*
+
+## Bunt C — BIN-1164 (mäthalvan) · Tier A · panel `medium` (#27), routad med
+
+```
+node docs/org/route.mjs --md src/lib/clampText.ts src/lib/clampText.test.ts src/test/rules/firestore-rules.test.ts
+```
+
+**#27:s kritik VIDGADE omfånget** och den vidgade unionen routade om till `top` med full panel,
+eftersom `src/contexts/AuthContext.tsx` är en high-stakes-sökväg. Halvan som rör den filen —
+`updateBio` klampar inte alls — bröts därför ut som **BIN-1253** i stället för att byggas här.
+Den här bunten rör ingen produktionskod utanför `clampText.ts`.
+
+- [x] Mätningen använder en RIKTIG inklistringsgest, inte en skriptad tilldelning av `value` — en
+      sådan går förbi `maxlength` helt, och ett "klyvs inte" därifrån är ett verktygsartefakt.
+      Vilken mekanism som användes skrivs ned. *(run)*
+- [x] Både `input` och `textarea` med `maxlength` mäts — appen skickar båda, och ett fynd
+      på den ena generaliseras inte till den andra. *(run)*
+- [x] `size`-enheten avgörs med en emulatorkörning och ett svenskt namn med å/ä/ö, på en längd
+      där kodenheter och byte skiljer sig. `clampText.ts` huvudkommentar PÅSTÅR kodenheter och att
+      det är uppmätt; inget committat test kör `size` med ett icke-ASCII-tecken. Faller påståendet
+      stryks det. *(run)*
+- [x] Utfallet skrivs ned avgränsat till motor plus version plus datum plus inklistringsmekanism.
+      Ingen mening om "webbläsare" i allmänhet. *(diff)*
+- [x] Blir fixen att ta bort den tidiga returen: ett test där strängen är exakt taket i kodenheter
+      och slutar i en ensam HÖG surrogat, och ska klampas en kodenhet kortare. *(diff)*
+
+## Needs you (Tier D / ditt val)
+
+Inget av det nedan kan en obemannad session göra. De fyra första behöver samma sak: EN läsning
+mot skarp databas.
+
+- **BIN-1121** — finns det grupper där ägaren inte står i medlemslistan?
+- **BIN-1179 del 1** — finns grupper utan namnprojektion? (Noll grupper i produktion 2026-09-12; svaret åldras.)
+- **BIN-1097** — finns spöke-medlemmar? Min rekommendation står i biljetten: väg 3, låt det vara.
+- **BIN-1234** — finns listor med ett feltypat `items`? Bunt B skriver ned läget i väntan på svaret.
+- **BIN-1144** — är App Check faktiskt påslaget för Firestore? Konsolfråga.
+- **BIN-1212** — ta fram och PRÖVA ett återställningskommando mot en engångsdatabas. gcloud-steg.
+- **BIN-454** — `mutateEnabled`-flippen. Din konsolåtgärd, aldrig en sprints.
+- **BIN-1167 del 1** — ska gruppägarens skrivrätt på medlemsfält skiljas från raderingsrätten?
+- **BIN-1174** — ska en namnändring nå redan skickade inbjudningar? Min rekommendation: nej, skriv ned den.
+- **BIN-1253** — `updateBio` klampar inte. Behöver full panel; inte byggd här.
+
+## Deviation log
+
+- [discovery] BIN-1251 del 3: felkoden MATT till `permission-denied`, inte `not-found`. Regelns
+  update-gren avrefererar `resource.data` genom `diff(...)`, sa ett raderat dokument ger ett
+  nollvarde och utvarderingen faller. Emulatorn skrev ut `Null value error. for 'update'`.
+  Foljd: `isBenignWriteFailure` RADERAD, `isPermissionDenied` ateranvand, och meningen om
+  `not-found` struken i helparfilen. Svalget svalde alltsa ingenting fore i dag.
+- [discovery] BIN-1251 del 5: PREMISS BORTA. Biljetten sager att ingen av de tre nyttolasterna
+  har sin nyckelmangd pinnad. BIN-1170 shippade redan de testerna, med negativa fall per falt
+  (extra nyckel, saknat obligatoriskt falt, fel typ) for pauseHistory, blocked och fcmTokens.
+  Harled: `grep -n "BIN-1170" src/test/rules/firestore-rules.test.ts`. Ingen kod skriven.
+- [discovery] BIN-1251 del 2: BESVARAD utan ny biljett. `lists.title` ar redan bunden till
+  1..100 i `isValidList`. Harled: `grep -n "d.title.size" firestore.rules`.
+- [deviation] BIN-1234: biljetten sager "mat produktionen forst" och lasningen gar inte att
+  gora harifran. Den konservativa vagen togs — daterad post plus ett test som pinnar dagens
+  utfall — och biljetten parkeras In Review sa Malin kan valja reparationsgrenen i stallet.
+- [discovery] BIN-1234: formen "validera hela efterdokumentet" delas av `isValidWatchlistItem`
+  och `isValidPublicProfile`. Posten namnger darfor bara `itemsWithinCap`/`lists.items`.
+  Inte breddad — de faller far egna bedomningar.
+- [discovery] BIN-1164: PARET KLYVS INTE. Chrome 153 pa Windows 11, riktigt Ctrl+V:
+  `input maxlength=80` gav 79 kodenheter, `textarea maxlength=160` gav 159, ingen ensam
+  surrogat och inget U+FFFD i nagot av fallen. Chrome slapper hela tecknet. Den tidiga returen
+  i `clampToCodeUnits` behalls; utfallet nedskrivet dar fragan stalls.
+- [discovery] BIN-1164: `size()` raknar UTF-16-kodenheter, mott mot emulatorn med ett svenskt
+  namn (a/a/o: en kodenhet, tva UTF-8-byte). Filens huvudkommentar pastod det utan att nagot
+  test kunde falla det — varje takprov anvande `'x'.repeat(N)`, dar byte och kodenheter ar
+  lika. Nu finns tva test som skiljer dem.
+- [needs-human] BIN-1164: #27:s kritik vidgade omfanget till `src/contexts/AuthContext.tsx`
+  (`updateBio` klampar inte alls), och den vidgade unionen routade om till `top`. Halvan bruten
+  ut som BIN-1253 i stallet for att byggas utan full panel.
+- [discovery] BIN-1167 del 2: premiss borta (`role` togs bort 2026-09-12, `2235172c`). Halvan
+  struken ur biljetten; del 1 kvar hos Malin.
+- [discovery] BIN-1174: fan-out kraver att `allow update: if false` oppnas pa tva samlingar i
+  ANDRAS trad. Inte byggd, rekommendation skriven i biljetten.
+
+---
+
 # Sprint 2026-09-19b — 1 biljett
 
 Rent träd vid start, i fas med `origin/main`. Todo och In Progress tomma. binge-e0 fick filerna nedan anmälda.

@@ -12,7 +12,9 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
-import { clampToCodeUnits, MAX_DISPLAY_NAME, MAX_BIO, MAX_SESSION_DISPLAY_NAME } from './clampText';
+import {
+  clampToCodeUnits, MAX_DISPLAY_NAME, MAX_BIO, MAX_SESSION_DISPLAY_NAME, MAX_FCM_USER_AGENT,
+} from './clampText';
 
 describe('clampToCodeUnits', () => {
   it('lamnar en strang under taket orord', () => {
@@ -163,5 +165,51 @@ describe('sessionsetikettens tak i firestore.rules', () => {
     // Kontrollprovet: planteringen traffade faktiskt nagot utanfor sessionsblocket.
     expect(planted).not.toBe(RULES);
     expect(sessionLabelCaps(planted)).toEqual(found);
+  });
+});
+
+// BIN-1251. `enablePushForUser` klampar nu `userAgent` innan den skriver, och talet
+// den klampar till maste vara talet regeln bokstavligen bar. Samma extraktion som
+// sessionsblocket ovan, ankrad pa fcmTokens-blockets EGNA kropp.
+const FCM_TOKENS_MATCH = 'match /users/{uid}/fcmTokens/{tokenId} {';
+
+function fcmUserAgentCaps(text: string): number[] {
+  return caps(ownBody(text, FCM_TOKENS_MATCH), 'userAgent');
+}
+
+describe('fcmTokens userAgent-tak i firestore.rules', () => {
+  const found = fcmUserAgentCaps(RULES);
+
+  // Utanfor varje loop: en extraktion som hittar noll klausuler far inte bli gron.
+  it('hittar userAgent-klausulen i fcmTokens-blockets egen kropp', () => {
+    expect(found, 'userAgent.size() i fcmTokens-blocket').toHaveLength(1);
+  });
+
+  it('klausulen ar MAX_FCM_USER_AGENT', () => {
+    expect(found[0]).toBe(MAX_FCM_USER_AGENT);
+  });
+
+  it('en userAgent over taket klampas till taket', () => {
+    const long = 'Mozilla/5.0 '.repeat(200);
+    expect(long.length).toBeGreaterThan(MAX_FCM_USER_AGENT);
+    expect(clampToCodeUnits(long, MAX_FCM_USER_AGENT).length).toBe(MAX_FCM_USER_AGENT);
+  });
+
+  it('en userAgent EXAKT pa taket lamnas orord', () => {
+    const atLimit = 'u'.repeat(MAX_FCM_USER_AGENT);
+    expect(clampToCodeUnits(atLimit, MAX_FCM_USER_AGENT)).toBe(atLimit);
+  });
+
+  // Det bara `.slice()` gor fel, pa just den langd regeln bar.
+  it('klyver inte ett surrogatpar vid taket', () => {
+    const input = 'u'.repeat(MAX_FCM_USER_AGENT - 1) + '\u{1F600}';
+    const naive = input.slice(0, MAX_FCM_USER_AGENT);
+    const lastNaive = naive.charCodeAt(naive.length - 1);
+    expect(lastNaive).toBeGreaterThanOrEqual(0xd800);
+    expect(lastNaive).toBeLessThanOrEqual(0xdbff);
+
+    const clamped = clampToCodeUnits(input, MAX_FCM_USER_AGENT);
+    expect(clamped.length).toBe(MAX_FCM_USER_AGENT - 1);
+    expect([...clamped].every(ch => ch.codePointAt(0) !== 0xfffd)).toBe(true);
   });
 });
