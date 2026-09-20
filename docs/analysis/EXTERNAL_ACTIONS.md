@@ -183,9 +183,27 @@ Firestore Console — rules forbid client writes to the field.
 
 ## Known exceptions (load-bearing)
 
-- **npm audit:** `npm audit --audit-level=high` = **0 HIGH**. Two **moderate** postcss
-  advisories remain; the fix requires a `next` major downgrade, so they are a **consciously
-  accepted exception**. The CI gate uses `--audit-level=high`, so moderate does not fail it.
+- **npm audit:** the deploy's audit step is **advisory at every severity** — it cannot fail a
+  build. Read the mechanism rather than the flag: the step ends in an unconditional `exit 0`
+  on every branch, and the comment above it names BIN-1028 as the change that removed the
+  last blocking audit gate.
+
+  ```
+  grep -n -A28 "Audit (high" .github/workflows/deploy.yml
+  ```
+
+  Three claims that used to sit here are **struck 2026-09-20**, each measured false that day:
+  that the command returned no HIGH findings; which moderate advisories made up the remainder;
+  and that `--audit-level=high` is what keeps a moderate from failing the build. The flag only
+  sets an exit code the step then discards. Do not read a count here — run it:
+
+  ```
+  npm audit
+  npm audit --omit=dev --audit-level=high
+  ```
+
+  The second is the one that answers whether anything reaches a visitor. `.github/dependabot.yml`
+  carries the dated reasoning for the eslint chain, and BIN-658 the trade-off.
 - **C More provider-id 1759:** TMDB fully retired C More (folded into TV4 Play) and no longer
   lists it, so the id could not be live-confirmed. `1759` is the historical id and **no active
   provider uses it**, so the alias `1759 → 489` (`canonicalProviderId`) is zero-collision — it
