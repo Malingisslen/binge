@@ -201,7 +201,7 @@
       "id": "messaging-lib",
       "label": "FCM client wrapper",
       "context": "client-state",
-      "path": "src/lib/firebase/messaging.ts"
+      "path": "src/lib/firebase/messaging.ts,src/lib/clampText.ts"
     },
     {
       "id": "fcm-sw",
@@ -942,7 +942,7 @@
         {
           "from": "messaging-lib",
           "to": "firestore",
-          "payload": "save FCM token to users/{uid}",
+          "payload": "save FCM token to users/{uid}/fcmTokens; userAgent clamped to the rule's cap first",
           "transport": "Firestore write",
           "verified": true
         },
