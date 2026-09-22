@@ -541,6 +541,12 @@ describe('stagedEventsLog — the gate reads the INDEX, not the working tree', (
   });
 });
 
+// BIN-1263: the real-history walk shells out to git and reads the whole events log.
+// Alone it finishes well inside the 5 000 ms default; in a full-suite run on a loaded
+// machine it has been measured past it, which turned a full-suite run red for a busy
+// CPU. Its own clock, not a global one.
+const LIVE_WALK_TIMEOUT_MS = 30_000;
+
 describe('the live repo', () => {
   it('every feat/fix commit since the epoch carries a review row', () => {
     // The real log and the real history, the way the sibling's live case works.
@@ -571,7 +577,7 @@ describe('the live repo', () => {
       result.violations.map(v => `${v.sha ?? '(whole walk)'} — ${v.reason}`),
       'a commit reached main with no stakeholder-review row; log one rather than weakening this',
     ).toEqual([]);
-  });
+  }, LIVE_WALK_TIMEOUT_MS);
 
   it('the walk is not silently empty, and the epoch is not in the future', () => {
     // Anti-vacuity, the shape BIN-838/823/850 taught. Floors, not equalities: history grows.

@@ -25,6 +25,13 @@ function tsxFilesRecursive(dir: string): string[] {
   });
 }
 
+// BIN-1263: the sweeps that read every .tsx under src/components and src/app get
+// their own clock. Alone they finish in tens of milliseconds; in a full-suite run on
+// a loaded machine they have been measured past the 5 000 ms default, so a red
+// line there said "busy CPU", not "design rule broken". Per test, not per file or
+// global, so the fast cases in this file keep failing loudly.
+const TREE_SWEEP_TIMEOUT_MS = 30_000;
+
 // X2: bare "Laddar…" JSX-textnoder är förbjudna — använd <LoadingView>.
 // Regexen matchar bara literala textnoder (>Laddar…<), inte knapp-copy i
 // expressions ({isLoading ? 'Laddar…' : 'Visa fler'}) eller LoadingViews
@@ -41,7 +48,7 @@ describe('design consistency — loading states', () => {
       .flatMap(tsxFilesRecursive)
       .filter(f => BARE_LOADING_TEXT.test(readFileSync(f, 'utf8')));
     expect(offenders.map(f => f.replace(process.cwd(), ''))).toEqual([]);
-  });
+  }, TREE_SWEEP_TIMEOUT_MS);
 });
 
 describe('design consistency — dynamic route headers', () => {
@@ -98,14 +105,14 @@ describe('design consistency — token vocabulary (app-wide, BIN-356)', () => {
       .flatMap(tsxFilesRecursive)
       .filter(f => RAW_RED.test(readFileSync(f, 'utf8')));
     expect(offenders.map(f => f.replace(process.cwd(), ''))).toEqual([]);
-  });
+  }, TREE_SWEEP_TIMEOUT_MS);
 
   it('no component or page uses legacy token aliases (use Direction-H tokens)', () => {
     const offenders = roots
       .flatMap(tsxFilesRecursive)
       .filter(f => LEGACY_TOKENS.test(readFileSync(f, 'utf8')));
     expect(offenders.map(f => f.replace(process.cwd(), ''))).toEqual([]);
-  });
+  }, TREE_SWEEP_TIMEOUT_MS);
 
   it('scans a non-empty set of files (guard is not vacuous)', () => {
     // An empty-path misconfig would make the sweeps above pass trivially.
