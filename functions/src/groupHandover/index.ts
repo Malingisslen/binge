@@ -42,9 +42,9 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions/v2';
 
-import { refusalForHandover } from './logic';
-import { eraseSentInvites, runGroupHandover } from './runHandover';
-import { adminHandoverIo } from './adminIo';
+import { HandoverRefusal, refusalForHandover } from './logic';
+import { eraseSentInvites, runGroupHandover, runOwnerPickedHandover } from './runHandover';
+import { adminHandoverIo, adminHandoverNotifyIo } from './adminIo';
 
 
 
@@ -82,5 +82,68 @@ export const handOverOwnedGroups = onCall(
       throw new HttpsError('internal', refusal);
     }
     return summary;
+  },
+);
+
+/**
+ * BIN-1118: hand ONE group to a successor the owner named, and leave it.
+ *
+ * A second entry point beside `handOverOwnedGroups`, not a parameter on it. The
+ * two answer different questions: that one is "this account is going away, place
+ * every group it owns", driven by the deletion cascade and the retention sweep,
+ * with no human present to choose. This one is "I picked Jonas", driven by a
+ * button, about a single group, and it must REFUSE rather than quietly do nothing
+ * when the pick is wrong — the person is looking at the result.
+ *
+ * It is a callable for the same reason the other one is: `ownerUid` is pinned
+ * unchanged on every client-writable `groups/{groupId}` update branch, and it
+ * stays pinned. Derive that rather than trusting this sentence:
+ *   grep -n "resource.data.ownerUid" firestore.rules
+ *
+ * A rules branch could have expressed the membership check on its own — the
+ * successor must be in `memberUids`, which needs no `get()` and no iteration, so
+ * this is NOT the case the 2026-09-07 deviation entry turned down. Two other
+ * things decided it. The remaining members are notified, and that writes into
+ * OTHER people's `users/{uid}/notifications` trees, which no rules branch can
+ * permit. And the departing owner's own traces must be erased by the same
+ * machinery the deletion door uses, which lives here.
+ *
+ * `leavingUid` is the authenticated caller and is never read from the payload:
+ * you can only hand over a group you own.
+ */
+export const handOverGroup = onCall(
+  { region: 'europe-west1', timeoutSeconds: 300 },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Du måste vara inloggad.');
+
+    const data = request.data as { groupId?: unknown; successorUid?: unknown } | null;
+    const groupId = typeof data?.groupId === 'string' ? data.groupId : '';
+    const successorUid = typeof data?.successorUid === 'string' ? data.successorUid : '';
+    if (!groupId || !successorUid) {
+      throw new HttpsError('invalid-argument', 'Grupp och efterträdare måste anges.');
+    }
+
+    const db = getFirestore();
+    const io = { ...adminHandoverIo(db, logger), ...adminHandoverNotifyIo(db) };
+
+    try {
+      await runOwnerPickedHandover(io, groupId, uid, successorUid);
+    } catch (err) {
+      // Only a refusal carries wording written for the owner to read, and only a
+      // refusal gets the code the client passes through verbatim. Everything else
+      // — a failed batch write, an unreachable document — is `internal`, whose
+      // message the client replaces with a Swedish sentence.
+      //
+      // Marking the difference at the THROW site rather than here is what keeps
+      // it true: an earlier version assigned `failed-precondition` to everything
+      // in this try, so a raw gRPC string reached the dialog.
+      if (err instanceof HandoverRefusal) {
+        throw new HttpsError('failed-precondition', err.message);
+      }
+      logger.error('handOverGroup: failed', { groupId, err });
+      throw new HttpsError('internal', err instanceof Error ? err.message : String(err));
+    }
+    return { ok: true };
   },
 );

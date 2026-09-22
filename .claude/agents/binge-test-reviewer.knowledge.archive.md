@@ -29300,3 +29300,165 @@ per collection, reasoned for the rest by identical rule idiom. All four rounds' 
 independently re-confirmed as holding. Lesson folded into
 `binge-test-reviewer.rules.knowledge.md`'s "Field OMISSION is distinct from wrong-TYPE"
 bullet: omission and wrong-type are ALSO distinct per field, not just per collection.
+
+## 2026-09-22 — BIN-1118/1120/1259, re-review: the Escape defect's sibling is a SHADOWED guard pair
+
+Diff reviewed: staged `git diff --cached` for BIN-1118/1120/1259 — the twelve gated test
+files (`functions/src/{groupHandover,reportDecided,submitReport}/logic.test.ts`,
+`src/components/groups/{GroupSettingsModal,HandOverGroupDialog}.test.tsx`,
+`src/components/layout/TopbarActions.test.tsx`,
+`src/components/moderation/UgcActionsMenu.test.tsx`,
+`src/components/pages/GroupPageClient.{groupActions,joinResubscribe}.test.tsx`,
+`src/lib/firebase/groups.test.ts`, `src/lib/moderation/reportTargetLink.test.ts`,
+`src/test/rules/group-handover-orchestrator.test.ts`) plus their production neighbours.
+
+Brief: the coordinator had fixed a real defect (HandOverGroupDialog's Escape handler sat on
+the overlay, so no real keypress reached it; now a `document` listener) and asked whether any
+OTHER fixture-driven assertion in the batch is green for the wrong reason — an event driven
+from a place a real user's event could never originate. Named candidates: the backdrop-click
+cases and the settings-modal Escape cases.
+
+Mutations run (snapshots in the session scratchpad; every restore verified by
+`git hash-object` — `GroupSettingsModal.tsx` back to `0dda1cc9a99ae4e05b43981e9d1cb14549fb2fd9`,
+`HandOverGroupDialog.tsx` back to `a07f6bdf9943928e00ed14f02bf7ca8b541b5a95`, and
+`git status --porcelain` showing no worktree-dirty entries afterwards):
+
+1. `GroupSettingsModal.tsx` document handler, `&& !handingOver` removed →
+   `npx vitest run src/components/groups/GroupSettingsModal.test.tsx` = **10 passed (10)**.
+   SURVIVED. The test named `stänger INTE modalen medan överlämningen är öppen —
+   dokumentvägen` cannot fail on the term it is named for.
+2. `HandOverGroupDialog.tsx`, `e.stopImmediatePropagation()` removed → both component files
+   = **34 passed (34)**. SURVIVED.
+3. Both mutants together → **2 failed | 8 passed (10)**; the two reddened are the
+   document-path and the backdrop-path negative cases. So the PAIR is jointly load-bearing
+   and neither half is pinned alone.
+4. `GroupSettingsModal.tsx` backdrop `onKeyDown`, `&& !handingOver` removed →
+   **1 failed | 9 passed**, exactly `bakgrundsvägen`. PINNED alone. The test file's own
+   comment about firing the key on the trigger BUTTON (a sibling of the child overlay, so
+   the event really does bubble to the host backdrop) is correct and load-bearing.
+5. `HandOverGroupDialog.tsx` Escape working-gate `if (!workingRef.current)` → unconditional
+   `onCancelRef.current()` → **1 failed | 23 passed**. PINNED alone.
+6. `HandOverGroupDialog.tsx` backdrop `if (!working) onCancel()` → unconditional →
+   **1 failed | 23 passed**. PINNED alone.
+
+Mechanism behind (1)+(2): React flushes the CHILD's passive effect before the parent's
+re-registered one (the parent's deps include `handingOver`), so `HandOverGroupDialog`'s
+document listener is installed first and its unconditional `stopImmediatePropagation()` runs
+ahead of `GroupSettingsModal`'s. Behaviour today is correct in both directions; what is
+missing is that either guard can be deleted with the suite green. A two-step removal is still
+caught at step 2 (mutation 3), so this is not a shipped defect and not blocking.
+
+Also checked and cleared: every backdrop-click case drives the event from the element a real
+click would target (`role="presentation"` overlay, or `confirm-backdrop` with
+`target === currentTarget`); `ConfirmDialog`'s Escape is fired on `document` and its handler
+is a capture-phase `document` listener; `UgcActionsMenu` adds no Escape/backdrop test.
+`ConfirmDialog`'s ungated cancel paths while `busy` are the accepted deviation dated
+2026-09-21 (BIN-1261) and were not filed.
+
+Verdict: pass (0 blocking). One Medium, non-blocking finding — the shadowed guard pair above.
+Agreed with the coordinator's decision to LEAVE `\b(note|reason|adminNote)\b` case-sensitive
+in `functions/src/reportDecided/logic.test.ts`: widening it would assert something unmeasured
+about future field names, and the structural protection is that the trigger reads only
+`status` and `reporterUid`. No assertion in the batch was weakened — every removed line
+(`logic.test.ts`'s single-`exec` timeout pairing, `submitReport`'s `resolveTargetRef` shapes)
+was replaced by a strictly stronger one.
+
+Lesson folded into `binge-test-reviewer.ui.knowledge.md`'s defense-in-depth
+double-validation bullet.
+
+## 2026-09-22 — BIN-1259: the reports roster's brace-walk, and what its bound does NOT survive
+
+**Diff reviewed.** Narrow re-check of the staged BIN-1118/1120/1259 bundle. Only
+`functions/src/reportDecided/logic.test.ts` (`209c79b1f11654729c92a8fba5aaefd29db78e33`)
+had moved since the prior pass. `firestore.rules` at `cb246e1157b6ee84394d57cc16976e8a4e26ad84`;
+`git diff --name-only` empty (worktree == index) and no live mutant in the tree — the only
+`MUTANT` hit in the repo is the word inside a comment in the untouched `src/lib/clampText.test.ts`.
+
+**What the file now does.** `REPORT_STATUSES` is derived from `firestore.rules` by
+brace-matching the `match /reports/{reportId}` block, opening the walk AFTER the header
+string (the path's own `{reportId}` is a brace pair that closed the block on its first
+character in the first draft; two tests caught it), and pulling the quoted tokens out of
+`request.resource.data.status in [...]`. Backed by a floor (`>= 4`), a quote-count
+completeness check, and an exact partition against `DECIDED_STATUSES + ['open','reviewed']`.
+
+**Mutations run — read-only probes over in-memory copies of `firestore.rules`, the tree
+never touched.** Script kept at the session scratchpad; the walk was reimplemented verbatim
+from the test file and fed mutated copies.
+
+    BASE                                   {"n":4,"lit":"'open', 'reviewed', 'actioned', 'dismissed'","blkLines":33}
+    header renamed away                    {"n":0,"lit":"","blkLines":0}        -> floor RED
+    extra } in a comment, before clause     {"n":0,"lit":"","blkLines":2}        -> floor RED
+    extra } in a comment, after clause      {"n":4,"lit":"'open', ...","blkLines":32}  benign
+    extra { in a comment inside the block   {"n":4,"lit":"'open', ...","blkLines":497} benign (clause still first)
+    block-closing } removed                 {"n":4,"lit":"'open', ...","blkLines":495} benign (parent brace closes it)
+    clause DELETED + foreign clause planted
+      in a later match /sessions block      {"n":0,"lit":"","blkLines":32}       -> floor + partition RED
+    ...the same, PLUS a stray { inside the
+      reports block                         {"n":4,"lit":"'alpha', 'beta', 'gamma', 'delta'","blkLines":497}
+
+The founder's own measured run of the second-to-last row: `2 failed | 21 passed` (the floor
+and the partition), clean tree `27 passed`.
+
+**Verdict: pass, 0 blocking.** Two Info, neither a reason to fail.
+
+1. The bound holds for the case the earlier Info named, and the two brace directions fail
+   DIFFERENTLY: a stray `}` truncates and the floor reddens; a stray `{` over-extends and
+   restores the exact borrowing the bound was added to stop, with the floor AND the
+   quote-count completeness check both still green. The only assertion that survives it is
+   the exact PARTITION — which did redden on the compound row above. This is not
+   hypothetical here: `firestore.rules` carries an unbalanced-brace comment today at
+   line 1307 (`// sed -n '/addDoc(collection(db, .sessions.)/,/});/p' ...`), outside the
+   reports block, and BIN-1155 shipped one inside the groups block that shrank that roster
+   to three. Same class, caught there by the floor because the direction was `}`.
+
+2. The double-quote residual the security reviewer raised is real and is NOT backstopped by
+   the partition: a status written `"needs_info"` is dropped from the roster, contributes
+   zero to the `match(/'/g).length / 2` divisor, and leaves the four single-quoted names
+   partitioning exactly — silent in all three assertions. Filing it rather than fixing it
+   is a defensible call (every literal in the file is single-quoted today), and the fix is
+   one alternation wider on both the roster regex and the divisor. Non-blocking either way.
+
+**Lesson folded** into `binge-test-reviewer.rules.knowledge.md`'s brace-walk bullet, in
+place: open the walk after the header string; the bound dies to one unbalanced brace and
+the two directions differ; require the exact partition, never the floor alone; a roster
+regex matching one quote style is silent on the other.
+
+## 2026-09-22 — BIN-1118 re-check: the refs are gone, the Escape listener re-registers on `working`
+
+**Diff reviewed.** One production file changed since the pass: `src/components/groups/HandOverGroupDialog.tsx`
+at `e603665a1ca613af8e65bacd2f6b5ff414c13985` (staged blob == worktree). The gate's eslint
+run rejected `react-hooks/refs` on a render-phase `workingRef.current = working` assignment; both
+refs were removed and the `document` keydown listener now carries `[working, onCancel]` and
+re-registers. Question put to this gate: can `Escape avbryter INTE medan anropet ligger ute` be
+green because the listener is momentarily ABSENT rather than because the guard bit, and do the
+`document`-fired and overlay-fired cases still test different things?
+
+**Mutations run** (own snapshot at the sha above; restored and hash-verified after each; tree back
+to 51 staged entries):
+
+| mutant | edit | result |
+| --- | --- | --- |
+| M1 | `if (!working) onCancel();` → `onCancel();` | 1 failed / 23 passed — exactly `Escape avbryter INTE medan anropet ligger ute` |
+| M3 | dep array `[working, onCancel]` → `[]` (stale closure, `working` frozen false) | 1 failed / 23 passed — same test |
+| M2 | cleanup `return () => document.removeEventListener(...)` disabled | 3 failed / 35 passed across `HandOverGroupDialog.test.tsx` + `GroupSettingsModal.test.tsx` |
+| M4 | `if (e.target === document) return;` — handler reachable only from inside the dialog, i.e. the pre-fix overlay placement | 1 failed / 23 passed — ONLY `Escape avbryter aven nar fokus star utanfor dialogen` |
+
+Clean control after restore: 24/24 on the dialog file, 38/38 across the three group dialog suites.
+
+**Answers.** M1 settles the absent-listener worry directly: with the guard deleted the SAME test
+reddens, which is only possible if the listener is attached at that moment — the test is green
+because the guard bit. M3 shows the `working` dep term is pinned, not decorative. M2 shows the
+cleanup is load-bearing (a leaked listener from an unmounted dialog reddens three cases). M4 shows
+the two Escape reach-paths are not one test twice: the `document`-fired case fails ALONE under the
+regression it was written for, while the overlay-fired case stays green.
+
+**Ordering, and what it changes.** The ui chapter's nested-dialog bullet said React flushes the
+child's effect first, so the child's `stopImmediatePropagation()` runs before the host's handler.
+That is now only true at MOUNT: when `working` flips, only the child re-registers, so the child's
+listener lands AFTER `GroupSettingsModal`'s. During an in-flight call the host's handler therefore
+runs FIRST and is stopped by its own `!handingOver` clause — which is pinned alone in
+`GroupSettingsModal.escape.test.tsx` (the child stubbed). No gap; the bullet's operative
+instruction (mutate each guard alone, stub the child) is unchanged and is what these runs
+re-verified. Folded in place into that bullet.
+
+**Verdict: pass, 0 blocking.**

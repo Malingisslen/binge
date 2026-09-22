@@ -12,6 +12,43 @@ and the third-party accounts each Cloud Function needs. `deploy.yml` (push → m
 `deploy.yml` never touches functions, `firestore.rules`, or `firestore.indexes.json`. After
 changing any of them, deploy manually.
 
+**ORDNINGEN: funktionerna FÖRE pushen, när ändringen lägger till en ny ingång.** `deploy.yml`
+fyrar på push till `main` och skickar hosting. Går hostingen ut först står den nya knappen
+framför användaren och pekar på en anropbar funktion som ännu inte finns, och en ny
+utlösare fyrar inte på de händelser som passerar under tiden. Inget går sönder permanent
+och allt läker när funktionerna är ute — men fönstret är onödigt, och det är osynligt för
+varje grind, eftersom ingen av dem läser driftsättningsordningen. Härled vilka ingångar en
+bunt lägger till innan du pushar:
+
+```bash
+git diff origin/main..HEAD -- functions/src/index.ts
+```
+
+BIN-1118/1120/1259 (2026-09-20) är fallet posten skrevs för, och det visade tre olika sätt
+att missa en funktion. Driftlistan är inte "de nya ingångarna" — den är UNIONEN av tre
+mängder, och den första är den som är lätt att tro räcker:
+
+1. Nya export i `functions/src/index.ts`.
+2. Funktioner vars EGEN modul ändrades, nya eller inte. Den här bunten vidgade
+   `submitReport` med en ny måltyp utan att lägga till någon export — pushas hosting före
+   den driftsättningen avvisar den redan driftsatta funktionen varje gruppanmälan med
+   "Ogiltig måltyp", permanent, medan knappen står live.
+3. Funktioner som kompilerar in en DELAD modul du ändrade. De går sönder inte, men de kör
+   annan kod än sina syskon — vilket är den drift den delade modulen finns för att hindra.
+
+Härled alla tre ur diffen i stället för att lita på en lista här:
+
+```bash
+git diff origin/main..HEAD --name-only -- functions/src
+```
+
+En katalog i utdatan kan bära mer än en export — `groupHandover/` bär två — så läs namnen
+ur `functions/src/index.ts`, inte ur katalognamnet. För en DELAD katalog, ta reda på vem
+som importerar den med `git grep -ln "<katalog>/" -- functions/src`.
+
+Och driftsätt dem **vid namn**. Den stående regeln mot en svepande `--only functions` står
+kvar ovan och gäller även här.
+
 **Deploy the function(s) you changed by exact name** (targeted deploys are the standing rule
 — never a blanket `--only functions`). But do **not** rely on a hand-maintained named-subset
 list for a full rollout: that list drifted from the code before and silently dropped

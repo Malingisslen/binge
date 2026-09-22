@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import {
   pickGroupSuccessor,
   buildHandoverUpdate,
+  buildOwnerPickedHandover,
   clearsAddedBy,
   isEmptyExcept,
   refusalForHandover,
@@ -228,6 +229,55 @@ describe('buildHandoverUpdate — the write, and when there must not be one', ()
   });
 });
 
+describe('buildOwnerPickedHandover — the owner names the successor (BIN-1118)', () => {
+  const group = { ownerUid: 'owner', memberUids: ['owner', 'jonas', 'sara'] };
+
+  it('hands the group to the named member and drops the leaver from memberUids', () => {
+    expect(buildOwnerPickedHandover(group, 'owner', 'jonas')).toEqual({
+      kind: 'handover',
+      ownerUid: 'jonas',
+      memberUids: ['jonas', 'sara'],
+    });
+  });
+
+  // The decisive difference from `buildHandoverUpdate`, which returns `noop` here.
+  // A person is looking at this one, so silence would read as success and leave
+  // them the owner.
+  it('REFUSES rather than no-ops when the caller is not the owner', () => {
+    expect(buildOwnerPickedHandover(group, 'jonas', 'sara'))
+      .toEqual({ kind: 'refused', reason: 'not-owner' });
+  });
+
+  it('refuses a successor who is not in memberUids', () => {
+    expect(buildOwnerPickedHandover(group, 'owner', 'stranger'))
+      .toEqual({ kind: 'refused', reason: 'not-a-member' });
+  });
+
+  // The order of the two checks is load-bearing and this is what pins it. The
+  // leaver IS in memberUids, so a membership test alone would accept them — and
+  // the write that followed would strip the owner out of memberUids while naming
+  // them owner, leaving a group owned by a non-member.
+  it('refuses a self-handover, and does not fall through the membership test', () => {
+    const outcome = buildOwnerPickedHandover(group, 'owner', 'owner');
+    expect(outcome).toEqual({ kind: 'refused', reason: 'self' });
+    expect(outcome).not.toMatchObject({ kind: 'handover' });
+  });
+
+  it('never grows memberUids', () => {
+    const outcome = buildOwnerPickedHandover(group, 'owner', 'sara');
+    if (outcome.kind !== 'handover') throw new Error('expected a handover');
+    expect(outcome.memberUids.length).toBeLessThan(group.memberUids.length);
+    expect(outcome.memberUids).not.toContain('owner');
+  });
+
+  // A two-person group still has somebody to pick, so it must work; a one-person
+  // group never reaches here because the UI has nobody to offer.
+  it('works when exactly one other member remains', () => {
+    expect(buildOwnerPickedHandover({ ownerUid: 'owner', memberUids: ['owner', 'jonas'] }, 'owner', 'jonas'))
+      .toEqual({ kind: 'handover', ownerUid: 'jonas', memberUids: ['jonas'] });
+  });
+});
+
 describe('isEmptyExcept — the one spelling of "nobody but them is left"', () => {
   // The sweep asks this twice: once when it PLANS which groups it may delete,
   // once immediately before deleting each one. Two spellings is how one drifts,
@@ -312,11 +362,41 @@ describe('refusalForHandover — the caller must not fall through', () => {
       join(REPO, 'src', 'lib', 'firebase', 'groupHandover.ts'),
       'utf8',
     ).replace(/^\s*\/\/.*$/gm, '');
-    const clientMs = Number(/timeout:\s*([\d_]+)/.exec(client)?.[1].replace(/_/g, ''));
-    const serverS = Number(/timeoutSeconds:\s*(\d+)/.exec(ENTRY)?.[1]);
-    expect(clientMs, 'the client sets no explicit timeout').toBeGreaterThan(0);
-    expect(serverS, 'the function sets no explicit timeoutSeconds').toBeGreaterThan(0);
-    expect(clientMs).toBeGreaterThanOrEqual(serverS * 1000);
+    // Every declaration, and paired BY NAME rather than by position.
+    //
+    // A single `exec` covered the first callable only, so the second one's value
+    // was unpinned when this file gained it. Pairing by array index would have
+    // fixed that and left a subtler hole: the two files list their callables in
+    // the same order today, so a third one inserted at different positions would
+    // compare one callable's client timeout against another's server value and
+    // pass by coincidence. The name is what actually joins the two sides.
+    //
+    //   git grep -n "export const .* = onCall(" -- functions/src/groupHandover/index.ts
+    //   git grep -n "httpsCallable" -- src/lib/firebase/groupHandover.ts
+    const serverByName = new Map(
+      [...ENTRY.matchAll(/export const (\w+) = onCall\(([\s\S]*?)\n\)/g)]
+        .map(([, name, body]) => [name, Number(/timeoutSeconds:\s*(\d+)/.exec(body)?.[1])]),
+    );
+    const clientByName = new Map(
+      [...client.matchAll(/httpsCallable<[\s\S]*?>\(\s*functions,\s*'(\w+)'[\s\S]*?timeout:\s*([\d_]+)/g)]
+        .map(([, name, ms]) => [name, Number(ms.replace(/_/g, ''))]),
+    );
+
+    // Against the DECLARATION count, not a bare floor. The server pattern ends on
+    // a closing paren at the start of a line, so a callable written in another
+    // shape would be absent from the map and a `> 0` floor would still pass on its
+    // sibling. Derive the count:
+    //   git grep -c "onCall(" -- functions/src/groupHandover/index.ts
+    const declarations = [...ENTRY.matchAll(/onCall\(/g)].length;
+    expect(declarations, 'the file declares no callable').toBeGreaterThan(0);
+    expect(serverByName.size, 'a callable declares no timeoutSeconds').toBe(declarations);
+    for (const [name, seconds] of serverByName) {
+      expect(seconds, `${name}: the function sets no explicit timeoutSeconds`).toBeGreaterThan(0);
+      const clientMs = clientByName.get(name);
+      expect(clientMs, `${name}: no client wrapper sets an explicit timeout`).toBeGreaterThan(0);
+      expect(clientMs, `${name}: the client must outwait the function`)
+        .toBeGreaterThanOrEqual(seconds * 1000);
+    }
   });
 
   it('marks the refusal partial when a write was already attempted', () => {
@@ -338,6 +418,45 @@ describe('refusalForHandover — the caller must not fall through', () => {
 
   // The uid comes from the authenticated context, never the payload: a caller
   // can only ever hand over their OWN groups.
+  // A `toContain` is satisfied by a single occurrence, so it stops covering the
+  // file as soon as the file declares more than one callable. Count instead: one
+  // auth derivation and one refusal per declaration. Derive the declarations:
+  //   git grep -c "onCall(" -- functions/src/groupHandover/index.ts
+  //
+  // The floor matters: with zero `onCall` the two counts would agree at zero and
+  // the assertion would pass over a file that declares nothing.
+  it('every callable in the file derives its uid from request.auth', () => {
+    const declarations = [...ENTRY.matchAll(/onCall\(/g)].length;
+    expect(declarations).toBeGreaterThan(0);
+    expect([...ENTRY.matchAll(/const uid = request\.auth\?\.uid;/g)].length).toBe(declarations);
+    expect([...ENTRY.matchAll(/if \(!uid\) throw new HttpsError\('unauthenticated'/g)].length)
+      .toBe(declarations);
+    // The payload is never the source of the acting uid. `handOverGroup` does read
+    // `request.data`, but only for the group and the successor.
+    expect(ENTRY).not.toMatch(/uid\s*=\s*[^;]*request\.data/);
+  });
+
+  // The joint the two halves hang on: the emulator suite pins WHAT is thrown, the
+  // dialog test pins what the client renders per code, and this pins the line that
+  // maps one onto the other. It cannot be imported under the root runner, so it is
+  // scanned the same way this file already scans the auth derivation and the
+  // refusal wiring next to it.
+  //
+  // Anchored as ONE pattern on purpose. The dangerous edit is the widening one —
+  // re-pointing the generic branch at `failed-precondition`, which is the exact
+  // regression that shipped once — and two separate assertions would each stay
+  // green while the other half moved.
+  it('only a refusal is marked as reader-facing, everything else is internal', () => {
+    expect(ENTRY).toMatch(
+      /if \(err instanceof HandoverRefusal\) \{\s*throw new HttpsError\('failed-precondition', err\.message\);\s*\}[\s\S]{0,200}?throw new HttpsError\('internal'/,
+    );
+    // And exactly one THROW carries that code. Anchored on the call rather than
+    // the bare string: `ENTRY` strips only whole-line `//` comments, so a block
+    // comment or a trailing note naming the code would otherwise turn this red
+    // for a reason that is not the one it guards against.
+    expect([...ENTRY.matchAll(/HttpsError\('failed-precondition'/g)].length).toBe(1);
+  });
+
   it('takes the uid from request.auth and refuses without it', () => {
     expect(ENTRY).toContain('const uid = request.auth?.uid;');
     expect(ENTRY).toMatch(/if \(!uid\) throw new HttpsError\('unauthenticated'/);
@@ -472,10 +591,36 @@ describe('the erasure covers every uid-bearing field the group contracts pin', (
     }
   });
 
-  it('each declared handler is actually in the loop', () => {
+  // BIN-1118 moved the construction out of the loop and into `buildTraceErasure`,
+  // so this scan reads the pure function rather than the runner.
+  it('each declared handler is actually in the erasure builder', () => {
     for (const [field, expression] of Object.entries(ERASURE_EXPRESSION)) {
-      expect(LOOP, `${field} is no longer erased`).toContain(expression);
+      expect(LOGIC, `${field} is no longer erased`).toContain(expression);
     }
+  });
+
+  // The reason the scan above can be trusted at all. It reads ONE function, so it
+  // only proves anything while every door's payload comes from that function.
+  //
+  // BIN-1118 briefly re-wrote the enumeration by hand inside the owner-picked
+  // handover, and the scan stayed green on the first copy while the second was
+  // free to drop a category — the same shape the block's own header describes,
+  // one door later. A missed category leaves a departing member's rows in a group
+  // they are no longer in, and after the swap no door's query finds that group
+  // again, so nothing retries it.
+  it('every erasure call site builds its payload with buildTraceErasure', () => {
+    // Anchored on the CALL (`io.`), not on the name: the port's own interface
+    // declaration spells the method too, and counting that would compare a real
+    // call site against a type signature.
+    const callSites = [...LOOP.matchAll(/io\.eraseMemberTraces\(/g)];
+    // Not an absolute: if a door is ever removed this floor drops with it. It is
+    // here so an empty scan cannot be mistaken for a clean one.
+    expect(callSites.length).toBeGreaterThan(0);
+    const viaBuilder = [...LOOP.matchAll(/io\.eraseMemberTraces\([^;]*?buildTraceErasure\(/gs)];
+    expect(
+      viaBuilder.length,
+      'an eraseMemberTraces call builds its payload by hand — hoist it into buildTraceErasure',
+    ).toBe(callSites.length);
   });
 });
 

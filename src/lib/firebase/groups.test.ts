@@ -111,6 +111,7 @@ import {
   updateMemberIdentity,
   GROUP_WRITE_REFUSED,
   MY_GROUPS_LIMIT,
+  memberDocToObject,
 } from './groups';
 
 function groupsQueryConstraints() {
@@ -1421,5 +1422,57 @@ describe('subscribeToGroup lamnar over nekandet, inte bara dokumentet (BIN-1152)
     // "Finns inte" kommer fortfarande genom dokumentvagen, inte genom nekandet —
     // det ar de tva skarmarnas ena halva.
     expect(seen).toEqual([null]);
+  });
+});
+
+// BIN-1118. `toDate` svarar NU för ett `joinedAt` den inte kan tolka, och en
+// medlemsrad utan användbar tidsstämpel läses då som den NYASTE medlemmen —
+// motsatsen till hur `pickGroupSuccessor` rankar samma rad när servern väljer
+// efterträdare själv. Överlämningsdialogen visar medlemstid till en människa som
+// ska välja, så den måste kunna säga att den inte vet.
+//
+// Fältet härleds ur det RÅA värdet. Prövas det bara genom handbyggda fixturer i
+// dialogens eget test går en mutant som alltid svarar true — eller alltid false —
+// rakt igenom hela sviten.
+describe('memberDocToObject — joinedAtKnown följer det RÅA fältet (BIN-1118)', () => {
+  const stamp = (d: Date) => ({ toDate: () => d });
+
+  it('en Firestore-tidsstämpel räknas som känd', () => {
+    const m = memberDocToObject('u1', { joinedAt: stamp(new Date('2024-03-04')) });
+    expect(m.joinedAtKnown).toBe(true);
+    expect(m.joinedAt).toEqual(new Date('2024-03-04'));
+  });
+
+  it('ett Date-värde räknas som känt', () => {
+    expect(memberDocToObject('u1', { joinedAt: new Date('2024-03-04') }).joinedAtKnown).toBe(true);
+  });
+
+  // De tre formerna som gör `toDate` till en lögnare. Var och en för sig, så en
+  // gren som bara fångar en av dem faller.
+  it('ett saknat fält är okänt', () => {
+    expect(memberDocToObject('u1', {}).joinedAtKnown).toBe(false);
+  });
+
+  it('null är okänt', () => {
+    expect(memberDocToObject('u1', { joinedAt: null }).joinedAtKnown).toBe(false);
+  });
+
+  it('ett värde av fel typ är okänt', () => {
+    expect(memberDocToObject('u1', { joinedAt: 1709510400000 }).joinedAtKnown).toBe(false);
+    expect(memberDocToObject('u1', { joinedAt: '2024-03-04' }).joinedAtKnown).toBe(false);
+    expect(memberDocToObject('u1', { joinedAt: { toDate: 'inte en funktion' } }).joinedAtKnown).toBe(false);
+  });
+
+  // Det avgörande paret. `joinedAt` är IDENTISKT användbart i båda fallen —
+  // `toDate` har redan svarat med ett datum för den okända raden — så bara
+  // `joinedAtKnown` skiljer dem åt. Utan det skulle ytan visa samma sak för en
+  // medlem som gick med i dag och en vars tidpunkt aldrig skrevs.
+  it('en okänd rad går inte att skilja från en färsk på joinedAt allena', () => {
+    const unknown = memberDocToObject('u1', {});
+    const fresh = memberDocToObject('u2', { joinedAt: stamp(new Date()) });
+    expect(Number.isFinite(unknown.joinedAt.getTime())).toBe(true);
+    expect(Number.isFinite(fresh.joinedAt.getTime())).toBe(true);
+    expect(unknown.joinedAtKnown).toBe(false);
+    expect(fresh.joinedAtKnown).toBe(true);
   });
 });

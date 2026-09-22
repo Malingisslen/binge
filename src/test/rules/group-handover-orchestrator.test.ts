@@ -9,8 +9,11 @@ import {
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
-import { eraseSentInvites, runGroupHandover, type HandoverIo } from '../../../functions/src/groupHandover/runHandover';
-import { SENT_INVITE_BATCH_LIMIT } from '../../../functions/src/groupHandover/logic';
+import {
+  eraseSentInvites, runGroupHandover, runOwnerPickedHandover,
+  type HandoverIo, type HandoverNotifyIo,
+} from '../../../functions/src/groupHandover/runHandover';
+import { HandoverRefusal, SENT_INVITE_BATCH_LIMIT } from '../../../functions/src/groupHandover/logic';
 import { rosterMismatches } from './memberTraceRoster';
 
 /**
@@ -218,6 +221,253 @@ async function seedGroup(opts: {
 }
 
 const exists = async (path: string[]) => (await getDoc(doc(db(), ...(path as [string, string])))).exists();
+
+/**
+ * BIN-1118's extra port, implemented against the emulator like the one above.
+ * `sent` records what was written so a test can assert WHO was told, which is
+ * the half a pure unit test cannot reach.
+ */
+function notifyIo(): HandoverNotifyIo & {
+  sent: { uids: readonly string[]; body: string }[];
+  failNotify: { on: boolean };
+} {
+  const d = db();
+  const sent: { uids: readonly string[]; body: string }[] = [];
+  const failNotify = { on: false };
+  return {
+    sent,
+    failNotify,
+    readGroupName: async (groupId) => {
+      const snap = await getDoc(doc(d, 'groups', groupId));
+      const name = snap.exists() ? snap.data().name : undefined;
+      return typeof name === 'string' && name.length > 0 ? name : null;
+    },
+    readMemberName: async (groupId, uid) => {
+      const snap = await getDoc(doc(d, 'groups', groupId, 'members', uid));
+      const name = snap.exists() ? snap.data().displayName : undefined;
+      return typeof name === 'string' && name.length > 0 ? name : null;
+    },
+    notifyMembers: async (uids, card) => {
+      if (failNotify.on) throw new Error('notify nere');
+      sent.push({ uids, body: card.body });
+    },
+  };
+}
+
+describe('runOwnerPickedHandover — the owner names the successor (BIN-1118)', () => {
+  it('hands the group to the PICKED member, not to the longest-standing one', async () => {
+    // The whole point of the new door. `sara` joined before `jonas`, so the
+    // automatic election would name her; the owner picks `jonas` instead.
+    await seedGroup({
+      id: 'g1',
+      ownerUid: 'owner',
+      members: [
+        { uid: 'owner', joinedAtMs: 1 },
+        { uid: 'sara', joinedAtMs: 2 },
+        { uid: 'jonas', joinedAtMs: 9 },
+      ],
+    });
+    await runOwnerPickedHandover({ ...clientIo(), ...notifyIo() }, 'g1', 'owner', 'jonas');
+
+    const after = await getDoc(doc(db(), 'groups', 'g1'));
+    expect(after.data()?.ownerUid).toBe('jonas');
+    expect(after.data()?.memberUids).toEqual(['sara', 'jonas']);
+  });
+
+  it('erases the departing owner traces and nobody else', async () => {
+    await seedGroup({
+      id: 'g1',
+      ownerUid: 'owner',
+      members: [
+        { uid: 'owner', joinedAtMs: 1, household: true },
+        { uid: 'jonas', joinedAtMs: 2, household: true },
+      ],
+      items: { movie_1: 'owner', movie_2: 'jonas' },
+      progressFor: ['owner', 'jonas'],
+      joinAttemptsFor: ['owner'],
+    });
+    await runOwnerPickedHandover({ ...clientIo(), ...notifyIo() }, 'g1', 'owner', 'jonas');
+
+    const d = db();
+    expect((await getDoc(doc(d, 'groups', 'g1', 'members', 'owner'))).exists()).toBe(false);
+    expect((await getDoc(doc(d, 'groups', 'g1', 'household', 'owner'))).exists()).toBe(false);
+    expect((await getDoc(doc(d, 'groups', 'g1', 'joinAttempts', 'owner'))).exists()).toBe(false);
+    expect((await getDoc(doc(d, 'groups', 'g1', 'members', 'jonas'))).exists()).toBe(true);
+    expect((await getDoc(doc(d, 'groups', 'g1', 'household', 'jonas'))).exists()).toBe(true);
+
+    // The title stays; the note saying who added it goes — and only on the row
+    // the departing owner added.
+    expect((await getDoc(doc(d, 'groups', 'g1', 'watchlist', 'movie_1'))).data()).toEqual({ title: 'movie_1' });
+    expect((await getDoc(doc(d, 'groups', 'g1', 'watchlist', 'movie_2'))).data()?.addedBy).toBe('jonas');
+  });
+
+  // The order is load-bearing in the FAILING direction, exactly as it is for the
+  // automatic door: a throw must leave the caller still the owner, so a retry
+  // still finds the group. Had the swap run first, those rows would be stranded.
+  it('leaves the group findable when the erasure fails, so a retry can finish it', async () => {
+    await seedGroup({
+      id: 'g1',
+      ownerUid: 'owner',
+      members: [{ uid: 'owner', joinedAtMs: 1 }, { uid: 'jonas', joinedAtMs: 2 }],
+    });
+    const io = { ...clientIo(), ...notifyIo() };
+    io.eraseMemberTraces = async () => { throw new Error('erasure nere'); };
+
+    await expect(runOwnerPickedHandover(io, 'g1', 'owner', 'jonas')).rejects.toThrow('erasure nere');
+    expect((await getDoc(doc(db(), 'groups', 'g1'))).data()?.ownerUid).toBe('owner');
+  });
+
+  it('tells exactly the remaining members, and never the one who left', async () => {
+    await seedGroup({
+      id: 'g1',
+      ownerUid: 'owner',
+      members: [
+        { uid: 'owner', joinedAtMs: 1 },
+        { uid: 'jonas', joinedAtMs: 2 },
+        { uid: 'sara', joinedAtMs: 3 },
+      ],
+    });
+    const io = { ...clientIo(), ...notifyIo() };
+    await runOwnerPickedHandover(io, 'g1', 'owner', 'jonas');
+
+    expect(io.sent).toHaveLength(1);
+    expect([...io.sent[0].uids].sort()).toEqual(['jonas', 'sara']);
+    expect(io.sent[0].uids).not.toContain('owner');
+    // The successor name is read BEFORE the erasure removes the leaver row, so
+    // the card can still name them.
+    expect(io.sent[0].body).toContain('namn-jonas');
+  });
+
+  // The notification is the last step and nothing depends on it. A failure there
+  // must not turn a completed handover into a reported failure — the inverse of
+  // the erasure case above.
+  it('keeps the handover when the notification fails', async () => {
+    await seedGroup({
+      id: 'g1',
+      ownerUid: 'owner',
+      members: [{ uid: 'owner', joinedAtMs: 1 }, { uid: 'jonas', joinedAtMs: 2 }],
+    });
+    const io = { ...clientIo(), ...notifyIo() };
+    io.failNotify.on = true;
+
+    await expect(runOwnerPickedHandover(io, 'g1', 'owner', 'jonas')).resolves.toBeUndefined();
+    expect((await getDoc(doc(db(), 'groups', 'g1'))).data()?.ownerUid).toBe('jonas');
+    expect(io.errors.length).toBeGreaterThan(0);
+  });
+
+  it('refuses rather than writing when the caller is not the owner', async () => {
+    await seedGroup({
+      id: 'g1',
+      ownerUid: 'owner',
+      members: [{ uid: 'owner', joinedAtMs: 1 }, { uid: 'jonas', joinedAtMs: 2 }],
+    });
+    const io = { ...clientIo(), ...notifyIo() };
+    await expect(runOwnerPickedHandover(io, 'g1', 'jonas', 'owner')).rejects.toThrow();
+
+    expect((await getDoc(doc(db(), 'groups', 'g1'))).data()?.ownerUid).toBe('owner');
+    expect((await getDoc(doc(db(), 'groups', 'g1', 'members', 'jonas'))).exists()).toBe(true);
+    expect(io.sent).toHaveLength(0);
+  });
+
+  it('refuses a successor who is not a member, and erases nothing', async () => {
+    await seedGroup({
+      id: 'g1',
+      ownerUid: 'owner',
+      members: [{ uid: 'owner', joinedAtMs: 1, household: true }, { uid: 'jonas', joinedAtMs: 2 }],
+    });
+    const io = { ...clientIo(), ...notifyIo() };
+    await expect(runOwnerPickedHandover(io, 'g1', 'owner', 'stranger')).rejects.toThrow();
+
+    expect((await getDoc(doc(db(), 'groups', 'g1'))).data()?.ownerUid).toBe('owner');
+    expect((await getDoc(doc(db(), 'groups', 'g1', 'household', 'owner'))).exists()).toBe(true);
+  });
+
+  // The optimistic guard the automatic door also uses. Reproduced by moving
+  // ownership between this run's read and its write.
+  it('refuses when ownership moved under it, rather than writing over it', async () => {
+    await seedGroup({
+      id: 'g1',
+      ownerUid: 'owner',
+      members: [{ uid: 'owner', joinedAtMs: 1 }, { uid: 'jonas', joinedAtMs: 2 }],
+    });
+    const io = { ...clientIo(), ...notifyIo() };
+    io.eraseMemberTraces = async () => {
+      await updateDoc(doc(db(), 'groups', 'g1'), { ownerUid: 'someone-else' });
+    };
+
+    await expect(runOwnerPickedHandover(io, 'g1', 'owner', 'jonas')).rejects.toThrow();
+    expect((await getDoc(doc(db(), 'groups', 'g1'))).data()?.ownerUid).toBe('someone-else');
+    expect(io.sent).toHaveLength(0);
+  });
+
+  it('refuses when the group is gone', async () => {
+    const io = { ...clientIo(), ...notifyIo() };
+    await expect(runOwnerPickedHandover(io, 'nope', 'owner', 'jonas')).rejects.toThrow();
+    expect(io.sent).toHaveLength(0);
+  });
+
+  // The distinction the callable reads to decide which messages an owner may be
+  // shown. Refusals are written for a reader; anything else carries whatever the
+  // failing library said, which for a batch write is a raw gRPC string.
+  //
+  // Marked at the THROW site on purpose: an earlier version marked it in the
+  // callable's catch, which wrapped both kinds and so marked them the same.
+  describe('what kind of error each failure throws', () => {
+    const seedTwo = () => seedGroup({
+      id: 'g1',
+      ownerUid: 'owner',
+      members: [{ uid: 'owner', joinedAtMs: 1 }, { uid: 'jonas', joinedAtMs: 2 }],
+    });
+
+    it.each([
+      ['not the owner', 'jonas', 'owner'],
+      ['successor is not a member', 'owner', 'stranger'],
+      ['handing over to yourself', 'owner', 'owner'],
+    ])('a refusal — %s — throws HandoverRefusal', async (_label, caller, successor) => {
+      await seedTwo();
+      const io = { ...clientIo(), ...notifyIo() };
+      await expect(runOwnerPickedHandover(io, 'g1', caller, successor))
+        .rejects.toBeInstanceOf(HandoverRefusal);
+    });
+
+    it('a missing group is a refusal', async () => {
+      const io = { ...clientIo(), ...notifyIo() };
+      await expect(runOwnerPickedHandover(io, 'nope', 'owner', 'jonas'))
+        .rejects.toBeInstanceOf(HandoverRefusal);
+    });
+
+    it('a lost race is a refusal', async () => {
+      await seedTwo();
+      const io = { ...clientIo(), ...notifyIo() };
+      io.eraseMemberTraces = async () => {
+        await updateDoc(doc(db(), 'groups', 'g1'), { ownerUid: 'someone-else' });
+      };
+      await expect(runOwnerPickedHandover(io, 'g1', 'owner', 'jonas'))
+        .rejects.toBeInstanceOf(HandoverRefusal);
+    });
+
+    // The decisive case. `eraseMemberTraces` throws for real when a watchlist row
+    // is deleted between the read and the write — `adminIo.ts` says so at the
+    // method. Its message is the library's, and the owner must never see it.
+    it('a failed erasure is NOT a refusal', async () => {
+      await seedTwo();
+      const io = { ...clientIo(), ...notifyIo() };
+      io.eraseMemberTraces = async () => {
+        throw new Error('5 NOT_FOUND: no entity to update');
+      };
+      await expect(runOwnerPickedHandover(io, 'g1', 'owner', 'jonas'))
+        .rejects.not.toBeInstanceOf(HandoverRefusal);
+    });
+
+    it('a failed read is NOT a refusal', async () => {
+      await seedTwo();
+      const io = { ...clientIo(), ...notifyIo() };
+      io.readWatchlist = async () => { throw new Error('14 UNAVAILABLE'); };
+      await expect(runOwnerPickedHandover(io, 'g1', 'owner', 'jonas'))
+        .rejects.not.toBeInstanceOf(HandoverRefusal);
+    });
+  });
+});
 
 describe('runGroupHandover — the loop', () => {
   it('hands the group to the longest-standing REMAINING member', async () => {

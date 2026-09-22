@@ -182,20 +182,34 @@ export default function TopbarActions() {
                         </Link>
                       );
                     }
-                    // BINGE-9: system-notiser (admin-varningar från backend, t.ex.
-                    // Cineasterna-synk) är inte tmdbId-formade — länka till deras
-                    // actionUrl och visa body, aldrig en /tv/undefined-titel+länk.
                     if (n.kind === 'system') {
-                      return (
-                        <Link
-                          key={n.id}
-                          href={n.actionUrl || '/insikter'}
-                          onClick={() => { markRead(n.id); setBellOpen(false); }}
-                          className={`popover-row${n.read ? '' : ' is-unread'}`}
-                        >
+                      // BIN-1259: ett kort UTAN actionUrl renderas som en knapp,
+                      // inte som en länk. Reservvägen `|| '/insikter'` skickade
+                      // varje sådant kort till adminsidan — harmlöst så länge
+                      // bara adminvarningar bar den här formen, men anmälarens
+                      // besked gör det inte, och det har medvetet ingen sida att
+                      // öppna: rapporten är läsbar bara för admin.
+                      const body = (
+                        <>
                           <div className="popover-row-title">{n.title}</div>
                           {n.body && <div className="popover-row-meta">{n.body}</div>}
+                        </>
+                      );
+                      const onSelect = () => { markRead(n.id); setBellOpen(false); };
+                      const rowClass = `popover-row${n.read ? '' : ' is-unread'}`;
+                      return n.actionUrl ? (
+                        <Link key={n.id} href={n.actionUrl} onClick={onSelect} className={rowClass}>
+                          {body}
                         </Link>
+                      ) : (
+                        <button
+                          key={n.id}
+                          type="button"
+                          onClick={onSelect}
+                          className={`${rowClass} popover-row-btn`}
+                        >
+                          {body}
+                        </button>
                       );
                     }
                     const provider = n.providerId != null ? getProvider(n.providerId) : undefined;

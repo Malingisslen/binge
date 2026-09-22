@@ -15,7 +15,7 @@
 
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import { validateReportInput, isWithinCooldown, resolveTargetRef } from './logic';
+import { validateReportInput, isWithinCooldown, resolveTargetRef, resolveDocOwner } from './logic';
 
 export const submitReport = onCall({ region: 'europe-west1' }, async (request) => {
   const uid = request.auth?.uid;
@@ -56,11 +56,11 @@ export const submitReport = onCall({ region: 'europe-west1' }, async (request) =
       ownerResolved = (await tx.get(db.doc(`users/${ref.uid}`))).exists;
     } else if (ref.kind === 'doc') {
       const targetSnap = await tx.get(db.doc(ref.path.join('/')));
-      const owner = targetSnap.exists ? targetSnap.get('uid') : undefined;
-      if (typeof owner === 'string' && owner.length > 0) {
-        targetOwnerUid = owner;
-        ownerResolved = true;
-      }
+      // BIN-1120: which field holds the owner is per target type, not hardcoded.
+      ({ targetOwnerUid, ownerResolved } = resolveDocOwner(ref, {
+        exists: targetSnap.exists,
+        get: (field) => targetSnap.get(field),
+      }));
     }
 
     tx.set(throttleRef, { lastReportAt: FieldValue.serverTimestamp() });

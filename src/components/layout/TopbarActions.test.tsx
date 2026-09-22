@@ -215,3 +215,75 @@ describe('TopbarActions — a refused friend-request write says so, on its own r
     expect(within(rowFor(view, 'Bertil')).queryByRole('alert')).toBeNull();
   });
 });
+
+// BIN-1259. Ett system-kort UTAN `actionUrl` är den normala formen sedan
+// anmälarens besked finns — rapporten är läsbar bara för admin, så kortet har
+// medvetet ingen sida att öppna. Reservvägen `|| '/insikter'` skickade varje
+// sådant kort till adminsidan, och den grenen var opinnad: en återgång till den
+// ovillkorliga länken hade shippat tyst.
+describe('TopbarActions — systemnotiser med och utan länk (BIN-1259)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    notif.friendRequests = [];
+    notif.friendRequestsCount = 0;
+  });
+
+  const systemCard = (over: Record<string, unknown> = {}) => ({
+    id: 'n1',
+    tmdbId: 0,
+    mediaType: 'movie',
+    kind: 'system',
+    title: 'Din anmälan',
+    body: 'Vi har granskat din anmälan.',
+    providerId: null,
+    providerName: null,
+    episodeCode: null,
+    read: false,
+    createdAt: new Date('2026-09-20'),
+    ...over,
+  });
+
+  async function openBellWith(cards: unknown[]) {
+    auth.user = { displayName: 'Malin' };
+    auth.uid = 'me';
+    notif.notifications = cards;
+    notif.unreadCount = cards.length;
+    let view!: ReturnType<typeof render>;
+    await act(async () => { view = render(<TopbarActions />); });
+    await act(async () => {
+      fireEvent.click(view.getByRole('button', { name: /Notiser/ }));
+    });
+    return view;
+  }
+
+  it('ett kort utan actionUrl renderas som en rad, inte som en länk', async () => {
+    const view = await openBellWith([systemCard()]);
+    const row = view.getByText('Din anmälan').closest('a, button');
+    expect(row).toBeTruthy();
+    expect(row!.tagName).toBe('BUTTON');
+    expect(row!.getAttribute('href')).toBeNull();
+  });
+
+  // Kontrollen åt andra hållet. Utan den hade en trasig gren som ALDRIG länkar
+  // uppfyllt testet ovan lika bra.
+  it('ett kort med actionUrl är fortfarande en länk dit', async () => {
+    const view = await openBellWith([systemCard({ actionUrl: '/insikter' })]);
+    const row = view.getByText('Din anmälan').closest('a, button');
+    expect(row!.tagName).toBe('A');
+    expect(row!.getAttribute('href')).toBe('/insikter');
+  });
+
+  it('ingen av formerna skickar läsaren till /insikter utan att kortet bett om det', async () => {
+    const view = await openBellWith([systemCard()]);
+    const row = view.getByText('Din anmälan').closest('a, button');
+    expect(row!.outerHTML).not.toContain('/insikter');
+  });
+
+  it('en klickad rad markeras som läst oavsett form', async () => {
+    const view = await openBellWith([systemCard()]);
+    await act(async () => {
+      fireEvent.click(view.getByText('Din anmälan'));
+    });
+    expect(notif.markRead).toHaveBeenCalledWith('n1');
+  });
+});

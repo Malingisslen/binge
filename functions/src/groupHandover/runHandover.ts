@@ -11,7 +11,10 @@
  * `adminIo.ts`. Neither re-derives who inherits.
  */
 
-import { buildHandoverUpdate, clearsAddedBy, refusalForSentInvites, type MemberRow } from './logic';
+import {
+  buildHandoverUpdate, buildOwnerPickedHandover, buildTraceErasure,
+  HandoverRefusal, refusalForSentInvites, type MemberRow,
+} from './logic';
 
 /** One `groups/{gid}/watchlist/{id}` row, narrowed to what the handover reads. */
 export interface WatchlistRow {
@@ -227,18 +230,7 @@ export async function runGroupHandover(
       // Before the first write, not after the last: a chunked erasure can commit
       // some rows and then throw, and the caller must not report that as untouched.
       summary.attempted += 1;
-      await io.eraseMemberTraces(groupId, leavingUid, {
-        itemIds: watchlist.map((row) => row.id),
-        clearAddedByIds: watchlist
-          .filter((row) => clearsAddedBy(row.addedBy, leavingUid))
-          .map((row) => row.id),
-        clearPickedByIds: history
-          .filter((row) => clearsAddedBy(row.pickedByUid, leavingUid))
-          .map((row) => row.id),
-        dropParticipantIds: history
-          .filter((row) => row.participantUids.includes(leavingUid))
-          .map((row) => row.id),
-      });
+      await io.eraseMemberTraces(groupId, leavingUid, buildTraceErasure(watchlist, history, leavingUid));
 
       const claimed = await io.claimOwnership(groupId, group.ownerUid, {
         ownerUid: outcome.ownerUid,
@@ -254,6 +246,105 @@ export async function runGroupHandover(
 
   io.log.info('groupHandover done', { leavingUid, ...summary });
   return summary;
+}
+
+
+/**
+ * BIN-1118: the extra port the owner-picked handover needs, kept OFF `HandoverIo`.
+ *
+ * The sweep and the account-delete door build a `HandoverIo` each. Adding a
+ * required method there would have forced both to grow a notification they never
+ * send — the automatic handover happens because an account is going away, and
+ * telling the remaining members would be announcing a deletion they were not told
+ * about. This path is the one a human chose, so it is the one that announces.
+ */
+export interface HandoverNotifyIo {
+  /** `groups/{gid}.name`, or null when the document has none. */
+  readGroupName(groupId: string): Promise<string | null>;
+  /** The successor's display name, or null when unreadable. */
+  readMemberName(groupId: string, uid: string): Promise<string | null>;
+  /**
+   * Write one inbox card into each recipient's `users/{uid}/notifications`.
+   *
+   * Admin SDK only: the collection is `allow create: if false` for clients, so
+   * no browser session can write into another member's tree. Derive it rather
+   * than trusting this comment:
+   *   grep -n -A 6 "match /users/{uid}/notifications" firestore.rules
+   */
+  notifyMembers(
+    recipientUids: readonly string[],
+    card: { title: string; body: string; actionUrl: string },
+  ): Promise<void>;
+}
+
+/** Why an owner-picked handover did not happen. Surfaced to the caller verbatim. */
+export const OWNER_PICK_REFUSALS: Record<'not-owner' | 'not-a-member' | 'self', string> = {
+  'not-owner': 'Du äger inte den här gruppen.',
+  'not-a-member': 'Personen du valde är inte medlem i gruppen.',
+  self: 'Du kan inte lämna över gruppen till dig själv.',
+};
+
+/**
+ * Hand ONE group to a successor the owner named, then leave it.
+ *
+ * Mirrors `runGroupHandover`'s order exactly — erase the departing owner's traces
+ * FIRST, swap second — and for the same reason: a throw after a committed swap
+ * would strand those rows outside every retry, because both doors find a group by
+ * `ownerUid` or `memberUids`, and the swap moves both at once.
+ *
+ * Unlike that function this one THROWS on refusal. It handles a single group that
+ * a person is looking at, so a silent no-op would show them a success and leave
+ * them the owner.
+ *
+ * Refusals throw `HandoverRefusal`; everything else throws whatever failed. The
+ * callable reads that distinction to decide which messages may be shown to the
+ * owner, so a new refusal added here must use the class too. Derive the throw
+ * sites: `git grep -n "HandoverRefusal(" -- functions/src`
+ *
+ * The notification is sent AFTER the swap and is best-effort: it is the last step
+ * and nothing depends on it, so a failure there must not turn a completed
+ * handover into a reported failure. It is logged instead.
+ */
+export async function runOwnerPickedHandover(
+  io: HandoverIo & HandoverNotifyIo,
+  groupId: string,
+  leavingUid: string,
+  successorUid: string,
+): Promise<void> {
+  const group = await io.readGroup(groupId);
+  if (!group) throw new HandoverRefusal('Gruppen finns inte längre.');
+
+  const outcome = buildOwnerPickedHandover(group, leavingUid, successorUid);
+  if (outcome.kind === 'refused') throw new HandoverRefusal(OWNER_PICK_REFUSALS[outcome.reason]);
+
+  const watchlist = await io.readWatchlist(groupId);
+  const history = await io.readSessionHistory(groupId);
+  await io.eraseMemberTraces(groupId, leavingUid, buildTraceErasure(watchlist, history, leavingUid));
+
+  // Reads the successor's name BEFORE the swap: the departing owner's own member
+  // row is erased above, but the successor's is not, and reading it here keeps
+  // the notification off the critical path afterwards.
+  const successorName = await io.readMemberName(groupId, successorUid);
+  const groupName = await io.readGroupName(groupId);
+
+  const claimed = await io.claimOwnership(groupId, group.ownerUid, {
+    ownerUid: outcome.ownerUid,
+    memberUids: outcome.memberUids,
+  });
+  // The same optimistic guard the automatic door uses. It fires when the account
+  // -deletion handover moved ownership between this function's read and its
+  // write — rare, and the honest answer is that the group already changed hands.
+  if (!claimed) throw new HandoverRefusal('Gruppen bytte ägare medan du höll på. Ladda om sidan.');
+
+  try {
+    await io.notifyMembers(outcome.memberUids, {
+      title: 'Gruppen har ny ägare',
+      body: `${successorName ?? 'En medlem'} tog över ${groupName ?? 'gruppen'}.`,
+      actionUrl: `/grupper/${groupId}/`,
+    });
+  } catch (err) {
+    io.log.error('groupHandover: owner-picked notification failed, handover stands', { groupId, err });
+  }
 }
 
 

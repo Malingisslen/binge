@@ -159,6 +159,29 @@ går att försöka igen när timmen gått.
 4. Vid critical (barnporr etc.) — kontakta Firebase Support för emergency
    account termination
 
+### En anmäld grupp — bara triage, ingen knapp
+
+Malins beslut 2026-09-20: gruppanmälan shippar som en **triageväg**, inte som en
+åtgärd. Det finns ingen adminväg som tar bort en grupp, och en ska inte byggas
+förrän frågan nedan är besvarad.
+
+1. Console → Firestore → `groups/{targetId}`. Anmälan bär gruppens id i
+   `targetId` och ägaren i `targetOwnerUid`, härledd av servern.
+2. Läs `name`, `memberUids` och gruppens innehåll. Är problemet en enskild
+   medlem eller ägaren, gäller `Stäng ett konto` ovan.
+3. Sätt rapporten som åtgärdad eller avfärdad i `/admin/reports`. **Det steget
+   skickar ett kort till anmälaren** — `notifyReportDecided` fyrar på övergången
+   in i ett avgjort läge. Kortet säger bara att anmälan granskats; det namnger
+   varken gruppen, utfallet eller något du skrivit. Härled:
+   `grep -n "REPORT_DECIDED_CARD" functions/src/reportDecided/logic.ts`
+
+**Vad som INTE finns, och varför det står här.** Att radera en grupp träffar
+tredje part: de andra medlemmarnas rader, hushållsdata och framsteg ligger under
+gruppen. Kontoraderingens väg städar de spåren, men den vägen går bara att nå
+genom att gruppens ägare lämnar eller raderar sitt konto. Vad en rå radering ur
+Console lämnar efter sig är **inte mätt**. Radera därför ingen grupp ur Console
+förrän någon mätt det — hantera i stället ägaren eller medlemmen.
+
 ### Dismiss en rapport
 
 Oftast om det är falsk flagga eller borderline-innehåll som inte bryter

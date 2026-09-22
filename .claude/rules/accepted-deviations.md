@@ -1807,3 +1807,52 @@ mest om.
 
 Nar BIN-468 shippar blir bada larmade i stallet for manuella, och den har posten bor da fa
 en daterad eftertradare som sager det.
+
+---
+
+## BIN-1120: utträdets FELHANTERING är omskriven, inte bara flyttad — 2026-09-21
+
+Läs det här som ett avgjort val, inte som en öppen avvikelse. Fila inte "lämnarlogiken
+skrevs om trots villkoret".
+
+**Villkoret.** Panelen inför BIN-1118/1120/1259 band, genom #4 Security Architect och #12
+Trust & Safety, att `LeavePanel` får flyttas in i gruppsidans åtgärdsmeny **utan att
+lämnarlogiken skrivs om**. Skälet var #12:s: utträdet ska förbli en klientåtgärd som inte
+går via gruppens medlemslista, så att en medlem kan lämna en grupp vars ägare beter sig
+illa utan att passera något den ägaren kontrollerar.
+
+**Vad som håller, och hur du kontrollerar det.** Skrivvägen är oförändrad — samma
+`leaveGroup(groupId, uid)`, samma `removeMember`-batch på klienten, ingen serverväg,
+ingenting routat via medlemslistan. Härled i stället för att lita på den här meningen:
+
+```
+git grep -n "leaveGroup(" -- src
+git grep -n -A 12 "export async function removeMember" src/lib/firebase/groups.ts
+```
+
+**Vad som DÄREMOT skrevs om.** Bekräftelserutans felhantering. Den gamla panelen stängde
+i ett `finally`, alltså även när skrivningen föll. Det var uthärdligt när en alltid synlig
+knapp satt kvar bakom den; efter flytten ligger omförsöket två klick in i menyn, och en
+tyst stängning lämnar inget spår av att något misslyckades. Rutan står nu kvar och byter
+text vid fel.
+
+Samtidigt flyttades `onLeft()` och `onCancel()` ut ur skrivningens `try`, med en egen
+fångst runt navigeringen. Utan det rapporterades ett kast från `router.push` som att
+utträdet misslyckades — över ett `leaveGroup` som redan gått igenom.
+
+**Malins beslut 2026-09-21:** felhanteringen stannar som den är. Villkorets substans är
+uppfylld; det var ordalydelsen "utan att lämnarlogiken skrivs om" som inte förutsåg att
+just felhanteringen behövde ändras när knappen flyttade.
+
+**INTE accepterat, alltså fortfarande fileable — två saker:**
+
+1. Att SKRIVVÄGEN ändras. Går utträdet någon gång via en serverfunktion eller via
+   gruppens medlemslista är #12:s villkor brutet, och den här posten säger ingenting till
+   dess försvar.
+2. Att `ConfirmDialog`s egna avbrottsvägar är ogrindade. Escape och bakgrundsklicket där
+   anropar `onCancel` ovillkorligt medan `busy` bara grindar knapparna. Det är
+   förbefintligt och gäller varje användare av komponenten, inte något den här bunten
+   införde — men det är samma klass som BIN-1261 och hör dit, inte hit.
+
+**Re-open when:** utträdets skrivväg ändras, eller `ConfirmDialog` får grindade
+avbrottsvägar och den här postens punkt 2 därmed faller bort.

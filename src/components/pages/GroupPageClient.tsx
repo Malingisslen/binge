@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Users, ChevronLeft, Play, Settings } from 'lucide-react';
+import { Users, ChevronLeft, Play, Settings, LogOut, Copy } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import { useAuth } from '@/hooks/useAuth';
 import { useGroup } from '@/hooks/useGroups';
@@ -24,9 +24,10 @@ import { GroupWatchlistTable } from '@/components/groups/GroupWatchlistTable';
 import ListCheapestPlanPanel from '@/components/lists/ListCheapestPlanPanel';
 import type { ListPlanItem } from '@/hooks/useListCheapestPlan';
 import { GroupSessionHistoryPanel } from '@/components/groups/GroupSessionHistoryPanel';
+import { UgcActionsMenu } from '@/components/moderation/UgcActionsMenu';
 import {
   InvitePanel,
-  LeavePanel,
+  LeaveGroupDialog,
   ProviderOverlapPanel,
 } from '@/components/groups/GroupSidePanels';
 import HouseholdPanel from '@/components/groups/HouseholdPanel';
@@ -228,8 +229,31 @@ function GroupView({
   const router = useRouter();
   const { items: myLibrary } = useWatchlist();
   const [showSettings, setShowSettings] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [startingSession, setStartingSession] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // origin + pathname, ALDRIG `href`. En medlem som kom hit via en
+  // inbjudningslänk har `?invite=<token i klartext>` kvar i adressen — sidan
+  // läser parametern men tar aldrig bort den. Att kopiera hela adressen hade
+  // delat ut ett levande join-token till vem som helst, och därmed gett varje
+  // medlem den inbjudningsrätt som `InvitePanel` medvetet håller hos ägaren.
+  //
+  // Formen — await, catch, en kort bekräftelse — är `InvitePanel`s. Ett
+  // `void`-anrop gav ingen bekräftelse alls och gjorde ett nekat urklipp till en
+  // ohanterad rejection med ingenting på skärmen.
+  const copyGroupLink = async () => {
+    try {
+      await navigator.clipboard.writeText(
+        `${window.location.origin}${window.location.pathname}`,
+      );
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* urklippet kan nekas; knappen säger då bara ingenting */
+    }
+  };
 
   const intersectProviders = useMemo(
     () => computeSessionProviders(members, 'intersect'),
@@ -318,6 +342,39 @@ function GroupView({
                 Inställningar
               </button>
             )}
+            {/* BIN-1120: kopiera-länken står UTANFÖR menyn. Menyn nedan döljer
+                sig själv för den som äger det anmälda — det är rätt för en
+                moderingsåtgärd, men det hade tagit bort ägarens enda väg att
+                kopiera en länk till sin egen grupp. */}
+            <button
+              type="button"
+              onClick={copyGroupLink}
+              className="btn btn-ghost btn-sm"
+            >
+              <Copy size={11} />
+              {copied ? 'Kopierad.' : 'Kopiera länk'}
+            </button>
+            {/* BIN-1120: gruppens sällan-åtgärder ligger i samma meny som
+                recensioner och profiler redan använder — utträdet flyttades hit
+                ur vänsterkolumnen. Menyn döljer sig själv för ägaren, som i
+                stället når överlämningen via Inställningar; ägaren har alltså
+                ingen väg att anmäla sin egen grupp, vilket är avsikten. */}
+            <UgcActionsMenu
+              targetType="group"
+              targetId={groupId}
+              targetOwnerUid={group.ownerUid}
+              triggerLabel="Mer"
+              showBlock={false}
+              extraItems={[
+                {
+                  key: 'leave',
+                  label: 'Lämna gruppen',
+                  icon: <LogOut size={11} />,
+                  danger: true,
+                  onSelect: () => setLeaving(true),
+                },
+              ]}
+            />
           </>
         }
       />
@@ -342,7 +399,6 @@ function GroupView({
           {/* BIN-184: opt-in hushållsvy — aggregatet av delade kostnadsdata. */}
           <HouseholdPanel groupId={groupId} />
           {isOwner && <InvitePanel groupId={groupId} group={group} isOwner={isOwner} />}
-          {!isOwner && <LeavePanel groupId={groupId} myUid={myUid} onLeft={() => router.push('/grupper')} />}
         </div>
 
         <div className="space-y-3">
@@ -358,12 +414,24 @@ function GroupView({
         </div>
       </div>
 
+      {leaving && (
+        <LeaveGroupDialog
+          groupId={groupId}
+          myUid={myUid}
+          onLeft={() => router.push('/grupper')}
+          onCancel={() => setLeaving(false)}
+        />
+      )}
+
       {showSettings && (
         <GroupSettingsModal
           groupId={groupId}
           name={group.name}
           defaults={group.defaults}
+          members={members}
+          myUid={myUid}
           onClose={() => setShowSettings(false)}
+          onHandedOver={() => router.push('/grupper')}
           onDelete={() => {
             void deleteGroup(groupId, myUid).then(() => router.push('/grupper'));
           }}

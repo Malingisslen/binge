@@ -246,7 +246,20 @@ export { getProfileForModeration } from './moderationProfile';
 // Server-auktoritativ av två skäl: `ownerUid` är pinnad oförändrad på varje
 // groups-update-gren, och reglerna kan inte iterera medlems-undersamlingen för
 // att kontrollera VEM som varit med längst. Kontot tas ur `request.auth`.
-export { handOverOwnedGroups } from './groupHandover';
+// handOverGroup (BIN-1118): callable som lämnar över EN grupp till en efterträdare
+// som ägaren själv pekat ut, och tar ägaren ur gruppen. Samma serverkrav som ovan,
+// plus ett till: de kvarvarande medlemmarna får en notis, och det skriver i ANDRAS
+// `users/{uid}/notifications`, vilket ingen regelgren kan tillåta.
+export { handOverOwnedGroups, handOverGroup } from './groupHandover';
+
+// ── Besked till anmälaren (BIN-1259) ────────────────────────────────────────
+// notifyReportDecided: Firestore-utlösare som lägger ETT kort i anmälarens inbox
+// när en anmälan går in i ett avgjort läge. Utlösare och inte en skrivning från
+// adminvyn, eftersom `users/{uid}/notifications` är låst för klienter — en
+// isAdmin()-gren där hade gett varje adminsession rätt att skriva vad som helst
+// i vems inbox som helst. Kortet läser bara `status` och `reporterUid`, aldrig
+// admins egen motivering (BIN-1250, som är intern).
+export { notifyReportDecided } from './reportDecided';
 
 // ── Fråga Binge usage/error recorder (BIN-176 learning loop) ─────────────────
 // recordAskBinge: callable som inkrementerar dagliga räknare i askBingeStats/{date}

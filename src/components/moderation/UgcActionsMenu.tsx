@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, type ReactNode } from 'react';
 import { MoreHorizontal, Flag, UserX, UserCheck } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useBlockedUsers } from '@/hooks/useBlockedUsers';
@@ -22,18 +22,65 @@ import {
  *
  * Rapporter skrivs till top-level reports/ collection.
  */
+/**
+ * BIN-1120: menyraden och dialogrubriken namnger MÅLET, eftersom en grupp inte
+ * är "innehåll" på det sätt en recension är. Ordet "Anmäl" är det Malin valde i
+ * riktningsgenomgången 2026-09-20; recensioner och profiler behåller "Rapportera",
+ * som de haft sedan BIN-49.
+ */
+function reportItemLabel(targetType: ReportTargetType): string {
+  return targetType === 'group' ? 'Anmäl gruppen' : 'Rapportera';
+}
+
+function reportDialogTitle(targetType: ReportTargetType): string {
+  if (targetType === 'group') return 'Anmäl gruppen';
+  return targetType === 'user' ? 'Rapportera användare' : 'Rapportera innehåll';
+}
+
+/**
+ * BIN-1120: en post som anroparen lägger till i menyn ovanför "Rapportera".
+ * Finns för att gruppsidan ska kunna samla sina egna sällan-åtgärder i SAMMA
+ * meny i stället för att få en andra. Att menyn och rapportdialogen inte forkas
+ * var panelens villkor; derivera implementationerna:
+ *   git grep -ln "ReportDialog" -- src
+ */
+export interface UgcMenuItem {
+  key: string;
+  label: string;
+  icon: ReactNode;
+  onSelect: () => void;
+  danger?: boolean;
+}
+
 export function UgcActionsMenu({
   targetType,
   targetId,
   targetOwnerUid,
   targetOwnerName,
   className = '',
+  triggerLabel,
+  showBlock = true,
+  extraItems = [],
 }: {
   targetType: ReportTargetType;
   targetId: string;
   targetOwnerUid: string;
   targetOwnerName?: string;
   className?: string;
+  /**
+   * Text bredvid "…"-ikonen. BIN-1120: på gruppsidan går utträdet genom menyn,
+   * och en naken ikon läses som dekoration snarare än som en meny — #18 Community
+   * Manager band den där. Utelämnad förblir knappen den diskreta ikon som review-
+   * och kommentarskorten redan bär.
+   */
+  triggerLabel?: string;
+  /**
+   * BIN-1120: "Blockera användare" hör inte hemma i en gruppmeny — målet är
+   * gruppen, och blockeringen hade träffat dess ägare, vilket varken döljer
+   * gruppen eller löser det anmälaren är ute efter.
+   */
+  showBlock?: boolean;
+  extraItems?: UgcMenuItem[];
 }) {
   const { uid } = useAuth();
   const { isBlocked, blockUser, unblockUser } = useBlockedUsers();
@@ -82,27 +129,43 @@ export function UgcActionsMenu({
     <div ref={menuRef} className={`relative inline-block ${className}`}>
       <button
         onClick={() => setOpen(v => !v)}
-        className="text-ink-3 hover:text-ink-2 p-1 cursor-pointer"
+        className="inline-flex items-center gap-1 text-ink-3 hover:text-ink-2 p-1 cursor-pointer"
         aria-label="Åtgärder"
         title="Åtgärder"
       >
         <MoreHorizontal size={14} />
+        {triggerLabel && <span className="text-xs">{triggerLabel}</span>}
       </button>
       {open && (
         <div className="absolute right-0 top-full mt-[2px] bg-surface border border-rule rounded-sm min-w-[160px] z-20">
+          {extraItems.map((item, i) => (
+            <button
+              key={item.key}
+              onClick={() => { setOpen(false); item.onSelect(); }}
+              className={`w-full flex items-center gap-2 px-3 py-[6px] text-xs cursor-pointer hover:bg-bg-2 ${
+                item.danger ? 'text-danger-ink' : 'text-ink-2'
+              } ${i > 0 ? 'border-t border-rule-2' : ''}`}
+            >
+              {item.icon} {item.label}
+            </button>
+          ))}
           <button
             onClick={() => { setOpen(false); setReporting(true); }}
-            className="w-full flex items-center gap-2 px-3 py-[6px] text-xs text-ink-2 hover:bg-bg-2 cursor-pointer"
+            className={`w-full flex items-center gap-2 px-3 py-[6px] text-xs text-ink-2 hover:bg-bg-2 cursor-pointer ${
+              extraItems.length > 0 ? 'border-t border-rule-2' : ''
+            }`}
           >
-            <Flag size={11} /> Rapportera
+            <Flag size={11} /> {reportItemLabel(targetType)}
           </button>
-          <button
-            onClick={handleBlock}
-            className="w-full flex items-center gap-2 px-3 py-[6px] text-xs text-ink-2 hover:bg-bg-2 cursor-pointer border-t border-rule-2"
-          >
-            {blocked ? <UserCheck size={11} /> : <UserX size={11} />}
-            {blocked ? 'Avblockera' : 'Blockera användare'}
-          </button>
+          {showBlock && (
+            <button
+              onClick={handleBlock}
+              className="w-full flex items-center gap-2 px-3 py-[6px] text-xs text-ink-2 hover:bg-bg-2 cursor-pointer border-t border-rule-2"
+            >
+              {blocked ? <UserCheck size={11} /> : <UserX size={11} />}
+              {blocked ? 'Avblockera' : 'Blockera användare'}
+            </button>
+          )}
         </div>
       )}
       {reporting && (
@@ -179,7 +242,7 @@ function ReportDialog({
           {/* BIN-1211: rubriken följer måltypen. "Rapportera innehåll" är fel ord när målet
               är en person, och profilen är den första ytan som skickar `user`. */}
           <h2 id="report-dialog-title" className="text-sm font-bold">
-            {targetType === 'user' ? 'Rapportera användare' : 'Rapportera innehåll'}
+            {reportDialogTitle(targetType)}
           </h2>
         </div>
         <div className="px-3 py-3 space-y-3">

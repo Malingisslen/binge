@@ -803,7 +803,7 @@ Detta raderas INTE, och det är beslut:
   någon annans radering.
 * **En ägd grupp med kvarvarande medlemmar lämnas över** till den som varit
   medlem längst (Malins beslut 2026-09-06), genom exakt samma `runGroupHandover`
-  som raderaknappen driver — aldrig ett andra val. Finns ingen annan medlem kvar
+  som raderaknappen driver. Finns ingen annan medlem kvar
   raderas gruppen.
 * **En grupp kontot bara var MEDLEM i rörs inte alls.** Svepet frågar på
   `ownerUid`, inte på `memberUids`, så uid:t står kvar i medlemslistan och

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Copy, LogOut, RefreshCw } from 'lucide-react';
+import { Copy, RefreshCw } from 'lucide-react';
 import { getProvider } from '@/lib/tmdb/providers';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -30,7 +30,7 @@ import {
  *
  * ProviderOverlapPanel — visar intersect (alla har) + union (någon har)
  * InvitePanel — inbjudningslänk med kopiera/generera/inaktivera
- * LeavePanel — en röd "Lämna gruppen"-knapp
+ * LeaveGroupDialog — bekräftelsen för "Lämna gruppen"
  * ProviderPills — återanvändbar provider-pill-display
  */
 
@@ -268,45 +268,66 @@ export function InvitePanel({
   );
 }
 
-export function LeavePanel({
-  groupId, myUid, onLeft,
+/**
+ * BIN-1120: utträdet satt tidigare i en egen panel i vänsterkolumnen. Panelen är
+ * borta och posten ligger nu i gruppsidans åtgärdsmeny — men SKRIVVÄGEN är
+ * flyttad, inte omskriven: samma `leaveGroup`-anrop, alltså fortfarande en ren
+ * klientåtgärd som inte går via gruppens medlemslista. Det var det #12 Trust &
+ * Safety band vid. Felhanteringen däremot ÄR omskriven; skälet står vid `catch`.
+ *
+ * Renderas bara när anroparen redan öppnat den; den bär ingen egen knapp.
+ */
+export function LeaveGroupDialog({
+  groupId, myUid, onLeft, onCancel,
 }: {
   groupId: string;
   myUid: string;
   onLeft: () => void;
+  onCancel: () => void;
 }) {
   const [working, setWorking] = useState(false);
-  const [confirming, setConfirming] = useState(false);
+  const [failed, setFailed] = useState(false);
   return (
-    <div className="bg-surface border border-rule rounded-sm">
-      <div className="px-3 py-2">
-        <button
-          onClick={() => setConfirming(true)}
-          disabled={working}
-          className="inline-flex items-center gap-1 text-xs text-danger-ink hover:underline cursor-pointer disabled:opacity-50"
-        >
-          <LogOut size={11} /> Lämna gruppen
-        </button>
-      </div>
-      {confirming && (
-        <ConfirmDialog
-          title="Lämna gruppen?"
-          body="Du tas bort från medlemslistan och kan bara komma tillbaka via en ny inbjudan."
-          confirmLabel="Lämna gruppen"
-          busy={working}
-          onConfirm={async () => {
-            setWorking(true);
-            try {
-              await leaveGroup(groupId, myUid);
-              onLeft();
-            } finally {
-              setWorking(false);
-              setConfirming(false);
-            }
-          }}
-          onCancel={() => setConfirming(false)}
-        />
-      )}
-    </div>
+    <ConfirmDialog
+      title="Lämna gruppen?"
+      body={
+        failed
+          ? 'Det gick inte att lämna gruppen. Försök igen.'
+          : 'Du tas bort från medlemslistan och kan bara komma tillbaka via en ny inbjudan.'
+      }
+      confirmLabel="Lämna gruppen"
+      busy={working}
+      onConfirm={async () => {
+        setWorking(true);
+        setFailed(false);
+        try {
+          await leaveGroup(groupId, myUid);
+        } catch {
+          // Stänger INTE. Den gamla panelen stängde i ett `finally`, alltså även
+          // när skrivningen föll. Det var uthärdligt när en alltid synlig knapp
+          // satt kvar bakom den; sedan BIN-1120 ligger omförsöket två klick in i
+          // åtgärdsmenyn, och en tyst stängning lämnar inget spår av att något
+          // misslyckades.
+          setFailed(true);
+          return;
+        } finally {
+          setWorking(false);
+        }
+        // EFTER den bärande skrivningen, och utanför dess `catch`. Låg de kvar
+        // inuti blev ett kast från `router.push` rapporterat som att utträdet
+        // misslyckades — över ett `leaveGroup` som redan gått igenom.
+        //
+        // Egen fångst, inte ingen fångst: allt efter den bärande skrivningen är
+        // bäst-möjliga. Utan den blev ett kast här en ohanterad rejection i
+        // stället för ett rapporterat fel, vilket är samma tystnad en nivå ned.
+        try {
+          onLeft();
+        } catch (err) {
+          console.error('leaveGroup: utträdet gick igenom, navigeringen inte', err);
+        }
+        onCancel();
+      }}
+      onCancel={onCancel}
+    />
   );
 }

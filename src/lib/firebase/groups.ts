@@ -1181,6 +1181,11 @@ export function memberDocToObject(id: string, data: Record<string, unknown>): Gr
     photoURL: (data.photoURL as string | null) ?? null,
     providers: (data.providers as number[]) ?? [],
     joinedAt: toDate(data.joinedAt),
+    // Read the RAW field, not the converted one: `toDate` answers `new Date()`
+    // for anything it cannot parse, so the converted value cannot tell a real
+    // stamp from a missing one.
+    joinedAtKnown: typeof (data.joinedAt as { toDate?: unknown } | undefined)?.toDate === 'function'
+      || data.joinedAt instanceof Date,
   };
 }
 

@@ -144,6 +144,106 @@ export function buildHandoverUpdate(
 }
 
 /**
+ * A refusal the owner is meant to READ, as opposed to anything that merely went
+ * wrong.
+ *
+ * BIN-1118 first marked the difference with an `HttpsError` code, and the
+ * callable assigned that code to everything thrown inside its try — so a raw
+ * gRPC message from a failed batch write reached the dialog and was rendered
+ * verbatim, in a Swedish UI, at the moment the owner was giving the group away.
+ * `eraseMemberTraces` throws exactly that way when a watchlist row is deleted
+ * between the read and the write; its own comment in `adminIo.ts` says so.
+ *
+ * A class rather than a string sentinel because the callable only has to ask
+ * `instanceof`, and nothing has to stay in sync with a list of wordings.
+ */
+export class HandoverRefusal extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'HandoverRefusal';
+  }
+}
+
+/**
+ * BIN-1118. The owner names their own successor, instead of the server electing
+ * the longest-standing member.
+ *
+ * Separate from `buildHandoverUpdate` on purpose: that one answers "the owner is
+ * gone, who gets this?" for the deletion and sweep doors, where no human is
+ * present to choose and a tie must break deterministically. This one answers
+ * "the owner picked X" — so it validates the pick rather than holding an
+ * election, and it REFUSES where the other returns `noop`. A caller that pointed
+ * at the wrong group, or at someone who is not a member, must hear about it;
+ * silently doing nothing would show the owner a success and leave them owner.
+ *
+ * `delete` is deliberately not an outcome. An owner with nobody else in the group
+ * has nobody to pick, so the UI never offers the choice, and the existing "Radera
+ * grupp" is the honest action there.
+ */
+export type OwnerPickedOutcome =
+  | { readonly kind: 'handover'; readonly ownerUid: string; readonly memberUids: readonly string[] }
+  | { readonly kind: 'refused'; readonly reason: 'not-owner' | 'not-a-member' | 'self' };
+
+export function buildOwnerPickedHandover(
+  group: { readonly ownerUid: string; readonly memberUids: readonly string[] },
+  leavingUid: string,
+  successorUid: string,
+): OwnerPickedOutcome {
+  if (group.ownerUid !== leavingUid) return { kind: 'refused', reason: 'not-owner' };
+  // Checked before membership: the leaver IS in `memberUids`, so without this the
+  // next test would pass and the owner would hand the group to themselves — a
+  // write that looks like a handover, changes nothing, and still removes them
+  // from `memberUids`, leaving a group owned by a non-member.
+  if (successorUid === leavingUid) return { kind: 'refused', reason: 'self' };
+  if (!group.memberUids.includes(successorUid)) return { kind: 'refused', reason: 'not-a-member' };
+  return {
+    kind: 'handover',
+    ownerUid: successorUid,
+    memberUids: group.memberUids.filter((uid) => uid !== leavingUid),
+  };
+}
+
+/**
+ * Build the departing member's trace-erasure payload. ONE construction site.
+ *
+ * BIN-1118 first wrote this enumeration a second time, inside the owner-picked
+ * handover, and that is precisely the defect the roster block in `logic.test.ts`
+ * exists to stop: its handler assertions search the runner's source text, and one
+ * occurrence satisfies them, so dropping a category from the SECOND copy stayed
+ * green. The direction of that silence is the bad one — a missed category leaves
+ * a departing member's rows in a group they are no longer in, and after the swap
+ * neither door's query finds that group again, so no retry reaches them.
+ *
+ * The guard that keeps that true reads `runHandover.ts` and requires every
+ * `io.eraseMemberTraces(` call site there to build its payload with this function.
+ * A door added in ANOTHER file is outside that scan, which is why the sibling
+ * roster guard in `src/test/rules/group-handover-orchestrator.test.ts` derives the
+ * file list instead of naming one.
+ */
+export function buildTraceErasure(
+  watchlist: readonly { readonly id: string; readonly addedBy?: unknown }[],
+  history: readonly {
+    readonly id: string;
+    readonly pickedByUid?: unknown;
+    readonly participantUids: readonly string[];
+  }[],
+  leavingUid: string,
+): TraceErasure {
+  return {
+    itemIds: watchlist.map((row) => row.id),
+    clearAddedByIds: watchlist
+      .filter((row) => clearsAddedBy(row.addedBy, leavingUid))
+      .map((row) => row.id),
+    clearPickedByIds: history
+      .filter((row) => clearsAddedBy(row.pickedByUid, leavingUid))
+      .map((row) => row.id),
+    dropParticipantIds: history
+      .filter((row) => row.participantUids.includes(leavingUid))
+      .map((row) => row.id),
+  };
+}
+
+/**
  * Whether a `groups/{gid}/watchlist/{id}` row must lose its `addedBy`.
  *
  * Malin's decision of 2026-09-06: the title stays — it is the shared list the

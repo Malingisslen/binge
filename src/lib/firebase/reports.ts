@@ -15,7 +15,7 @@ export type ReportReason =
   | 'pii'
   | 'other';
 
-export type ReportTargetType = 'review' | 'comment' | 'user' | 'list';
+export type ReportTargetType = 'review' | 'comment' | 'user' | 'list' | 'group';
 
 export type ReportStatus = 'open' | 'reviewed' | 'actioned' | 'dismissed';
 

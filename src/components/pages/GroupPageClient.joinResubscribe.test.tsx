@@ -57,9 +57,10 @@ vi.mock('@/components/lists/ListCheapestPlanPanel', () => ({ default: () => null
 vi.mock('@/components/groups/GroupSessionHistoryPanel', () => ({ GroupSessionHistoryPanel: () => null }));
 vi.mock('@/components/groups/GroupSidePanels', () => ({
   InvitePanel: () => null,
-  LeavePanel: () => null,
+  LeaveGroupDialog: () => null,
   ProviderOverlapPanel: () => null,
 }));
+vi.mock('@/components/moderation/UgcActionsMenu', () => ({ UgcActionsMenu: () => null }));
 vi.mock('@/components/groups/HouseholdPanel', () => ({ default: () => null }));
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({

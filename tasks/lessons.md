@@ -2126,3 +2126,43 @@ falt skrivaren skriver - den andrades aldrig. Commitens faktiska union byter dar
 **Regel:** grep-of-main galler varje halva for sig, inte biljetten som helhet. Och flodeskartan ar en andra, oberoende beskrivning av samma kod — motsager den en biljett ar det ett matbart pastaende, inte en smaksak. Mat, och stryk den halva som ar shippad.
 
 **Exempel:** BIN-624, 2026-09-20. Kroppen sa "Still open — two halves, both intentionally NOT touched". `docs/workflow-map.html`s Tillsammans-flode sa att regeln bar doc-id-sparren. Kartan hade ratt: `canonicalSwipeDocId` kraver `^(movie|tv)_[1-9][0-9]*$` pa `allow create` under `match /swipes/{tmdbId}`, shippad i `6373f6a4` och smalnad av BIN-797. Halvan stroks ur biljetten. Fyndet kom ur en kartsparning som flaggan for fardighet tvingade fram, inte ur biljettlasningen.
+
+---
+
+### [Design] Ett villkor som gäller en KLASS av vägar införs på de vägar du råkade tänka på
+
+**Trigger:** du lägger en spärr på en avbrytande, stängande eller nekande väg.
+
+**Regel:** räkna vägarna ur filen innan du spärrar någon av dem, och ge varje väg både ett fall som visar att den fungerar och ett som visar att spärren biter. Ett villkor kopierat till syskon behöver en prövning per syskon — en mutation av det ena fäller inte det andra. Härled vägarna i stället för att lita på minnet: `git grep -n "onCancel\b" -- <fil>`.
+
+**Exempel:** BIN-1118, 2026-09-20/21. Spärren `!working` lades först på bakgrundsklicket, sedan efter en granskningsrunda på Escape, sedan på krysset, och Avbryt fick sin upptaget-prövning i varvet efter det. Samma runda fällde också modalens Escape-vägar, den anropbara filens `onCall`-deklarationer, och till sist samma form en gång till: `onDone()` låg kvar inuti skrivningens `try` i överlämningsdialogen efter att tvillingen i utträdesdialogen redan flyttats ut. Härled vägarna: `git grep -n "onCancel" -- <fil>`.
+
+---
+
+### [Workflow] En härledning som ger rätt svar för fallen du tänkte på är ingen härledning
+
+**Trigger:** du publicerar ett kommando som ska ersätta en lista.
+
+**Regel:** pröva det mot buntens faktiska diff och jämför med vad du tror. Ger det ett svar du inte hade skrivit själv är det en härledning; ger det exakt din lista är det en lista med extra steg. Fråga särskilt vilket fall som INTE liknar de andra.
+
+**Exempel:** driftlistan i BIN-1118/1120/1259, 2026-09-21. Jag skrev att funktionerna att driftsätta är de nya exporterna plus de som kompilerar in en ändrad delad modul. Båda stämmer. `submitReport` är ingendera — den fick en ny måltyp utan ny export och importerar inte den delade modulen — så den föll ur. Hade hostingen pushats först hade varje gruppanmälan avvisats med "Ogiltig måltyp" medan knappen stod live. Posten räknar nu tre mängder och härleder dem ur `git diff origin/main..HEAD --name-only -- functions/src`.
+
+---
+
+### [Workflow] En fix som läser ett MÄRKE måste kontrollera vem som sätter märket
+
+**Trigger:** du villkorar en visning, en tystnad eller ett genomsläpp på en felkod, ett fältvärde eller en klass.
+
+**Regel:** följ märket till sitt ursprung. Sätts det på ett ställe som inte skiljer fallen åt är fixen kringgången en nivå upp, och den ser korrekt ut i sin egen fil.
+
+**Exempel:** BIN-1118, 2026-09-20. Dialogen släppte igenom serverns text bara för `failed-precondition`, vilket är rätt. Serverns `catch` satte den koden på allt som kastades i dess `try` — både de läsbara vägransmeddelandena och varje infrastrukturfel från läsningarna och spårraderingen. En fallen batch-skrivning hade landat som rå gRPC-text i felrutan. Skillnaden markeras nu vid kastet med en egen klass, och den anropbara mappar bara den klassen.
+
+---
+
+### [Workflow] En gitignorerad flagga kan komma tillbaka efter att du rensat den
+
+**Trigger:** du rensar en tillståndsflagga och fortsätter redigera.
+
+**Regel:** kontrollera flaggan igen omedelbart före commit. Den stämplas av en hook på VARJE redigering av en bevakad sökväg, så varje rättelse efter rensningen sätter tillbaka den — och eftersom filen är gitignorerad ser ingen diffbaserad grind den.
+
+**Exempel:** BIN-1120, 2026-09-21. `.claude/state/workflow-map-stale.json` rensades, varpå två granskningsfynd rättades i bevakade filer och flaggan stod där igen. Omspårningen den tvingade fram hittade en riktig lucka: kartan beskrev överlämningen men hade inget steg för utträdet, trots att bunten var det som flyttade utträdet in i menyn.

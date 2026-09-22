@@ -58,3 +58,41 @@ export async function handOverOwnedGroups(): Promise<void> {
   });
   await call();
 }
+
+/**
+ * BIN-1118 — hand ONE group to a successor the owner picked, and leave it.
+ *
+ * Separate from `handOverOwnedGroups` above, which the account-deletion cascade
+ * drives over every group the account owns with no choice involved. This one is
+ * a button: one group, a named successor, and a refusal the person reads.
+ *
+ * Throws. A refusal written for a reader is thrown as `HandoverRefusal`, which is
+ * also what the callable keys on when it decides which code to send. What a caller
+ * then does with the thrown error is the caller's own decision, and
+ * `HandOverGroupDialog.readableRefusal` is where that decision is made.
+ *
+ * The caller's uid is never sent: the server takes it from the authenticated
+ * context, so you can only ever hand over a group you own.
+ */
+export async function handOverGroup(groupId: string, successorUid: string): Promise<void> {
+  const { getFunctions, httpsCallable, connectFunctionsEmulator } = await import('firebase/functions');
+  const app = (await import('./config')).default;
+  const functions = getFunctions(app, 'europe-west1');
+  if (
+    typeof window !== 'undefined' &&
+    process.env.NEXT_PUBLIC_FIREBASE_USE_EMULATOR === 'true'
+  ) {
+    try { connectFunctionsEmulator(functions, '127.0.0.1', 5001); } catch { /* idempotent på samma instans */ }
+  }
+
+  // Held at the function's own `timeoutSeconds`, for the same reason the sibling
+  // above is: `httpsCallable`'s 70s default only loses its own race without
+  // aborting the request, so a client that gave up first would report a failure
+  // over a handover that went on to succeed.
+  const call = httpsCallable<{ groupId: string; successorUid: string }, void>(
+    functions,
+    'handOverGroup',
+    { timeout: 300_000 },
+  );
+  await call({ groupId, successorUid });
+}

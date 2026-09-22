@@ -118,6 +118,15 @@ export interface GroupMember {
   photoURL: string | null;
   providers: number[];
   joinedAt: Date;
+  /**
+   * BIN-1118: false when the stored `joinedAt` was missing or unusable.
+   *
+   * `toDate` answers NOW for such a row, which reads as the newest member — the
+   * exact reverse of how `pickGroupSuccessor` ranks it, where an absent value
+   * must never read as "joined before everyone". A surface that shows membership
+   * time to a human must be able to say it does not know.
+   */
+  joinedAtKnown: boolean;
 }
 
 export interface GroupWatchlistItem {

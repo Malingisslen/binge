@@ -1668,9 +1668,10 @@ service cloud.firestore {
           //
           // Att ISTALLET lata grenen bara over agarskapet var vad #27 och #4 avvisade
           // i BIN-1063: regler kan inte iterera medlems-undersamlingen for att avgora
-          // vem som varit med langst, sa garantin hade legat i klientkoden. Den
-          // frivilliga vagen ut ar `handOverOwnedGroups`, som redan finns och kor pa
-          // Admin SDK - alltsa forbi de har reglerna.
+          // vem som varit med langst, sa garantin hade legat i klientkoden. De
+          // frivilliga vagarna ut ar anropbara funktioner som kor pa Admin SDK,
+          // alltsa forbi de har reglerna. Harled vilka de ar:
+          //   git grep -n "export const" -- functions/src/groupHandover/index.ts
           && request.auth.uid in request.resource.data.memberUids
           // BIN-276: the owner branch is the ONLY legit rename path (updateGroup
           // patches name/defaults), so name/defaults stay mutable here — but pin

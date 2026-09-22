@@ -697,7 +697,7 @@
     },
     {
       "id": "group-handover-lib",
-      "label": "groupHandover.ts (handOverOwnedGroups)",
+      "label": "groupHandover.ts (handOverOwnedGroups, handOverGroup)",
       "context": "web-app",
       "path": "src/lib/firebase/groupHandover.ts"
     },
@@ -784,6 +784,24 @@
       "label": "Guider (hub-of-hubs)",
       "context": "web-app",
       "path": "src/app/guider/page.tsx, src/lib/seo/hubLinks.ts"
+    },
+    {
+      "id": "handover-group-dialog",
+      "label": "HandOverGroupDialog (steg 2 av 2)",
+      "context": "web-app",
+      "path": "src/components/groups/HandOverGroupDialog.tsx"
+    },
+    {
+      "id": "cf-handOverGroup",
+      "label": "handOverGroup callable",
+      "context": "backend-api",
+      "path": "functions/src/groupHandover/index.ts, functions/src/groupHandover/runHandover.ts, functions/src/groupHandover/adminIo.ts"
+    },
+    {
+      "id": "cf-notifyReportDecided",
+      "label": "notifyReportDecided trigger",
+      "context": "backend-api",
+      "path": "functions/src/reportDecided/index.ts, functions/src/reportDecided/logic.ts"
     }
   ],
   "actions": [
@@ -1511,13 +1529,16 @@
     {
       "id": "flow-groups",
       "label": "Groups: create, invite, manage",
-      "description": "Owner creates a group (self as first member) and gets a plaintext invite token whose hash alone is persisted; joining is a two-step rule-verified token check, or a consent-based invite-by-handle that mirrors the friend-request pattern. Owner-only settings cover rename/defaults, member removal, and a client-side cascading delete across subcollections. BIN-184 added an opt-in household facet: a member who explicitly shares (writes groups/{gid}/household/{uid}) unlocks a share-to-see aggregate view of the group's cost data (HouseholdPanel/useGroupHousehold) — reads require the reader to already share too, revoke is immediate, and the doc is cascade-deleted on opt-out/leave/removal/group-deletion and on account deletion/export (flow-gdpr).",
+      "description": "Owner creates a group (self as first member) and gets a plaintext invite token whose hash alone is persisted; joining is a two-step rule-verified token check, or a consent-based invite-by-handle that mirrors the friend-request pattern. Owner-only settings cover rename/defaults, member removal, and a client-side cascading delete across subcollections. BIN-184 added an opt-in household facet: a member who explicitly shares (writes groups/{gid}/household/{uid}) unlocks a share-to-see aggregate view of the group's cost data (HouseholdPanel/useGroupHousehold) — reads require the reader to already share too, revoke is immediate, and the doc is cascade-deleted on opt-out/leave/removal/group-deletion and on account deletion/export (flow-gdpr). BIN-1118: en ägare som vill sluta sköta gruppen öppnar Gruppinställningar och väljer \"Lämna över\", som är steg 1 av 2; steg 2 är HandOverGroupDialog, där ägaren pekar ut en medlem. Klienten kan inte skriva ownerUid — den är pinnad oförändrad på varje klientskrivbar groups-update-gren — så valet går genom handOverGroup-callablen, som validerar att anroparen äger gruppen och att efterträdaren står i memberUids, raderar den avgående ägarens egna spår med samma maskineri som kontoraderingens dörr, och först därefter byter ägare under adminIo:s optimistiska spärr. Efteråt skriver den ett system-kort i varje kvarvarande medlems users/{uid}/notifications. BIN-1120: gruppsidans ⋯-meny är samma UgcActionsMenu som recensioner använder, med utträdet flyttat in i den och targetType=group.",
       "covers": [
         "/grupper",
         "/grupper/ny",
         "grupper/[id]",
         "GroupSettingsModal",
-        "HouseholdPanel"
+        "HouseholdPanel",
+        "handOverGroup",
+        "HandOverGroupDialog",
+        "UgcActionsMenu"
       ],
       "steps": [
         {
@@ -1609,6 +1630,62 @@
           "to": "firestore",
           "payload": "BIN-1162: a rename fans out to each group's own copy of the name. publishIdentityChange runs AFTER the users/{uid} write resolves, then queries groups where memberUids array-contains uid — bounded by MY_GROUPS_LIMIT, the constant imported from groups.ts rather than re-declared — and calls updateMemberIdentity(groupId, uid, {displayName, username}) per group. That write is a two-key updateDoc, never memberFields() and never a merge set: memberFields() builds the WHOLE document, so rebuilding through it would stamp photoURL and providers with values this caller does not own, and omitting joinedAt is what satisfies the rule's immutability check, while updateDoc's not-found failure is what stops the fan-out recreating a row the deletion cascade already took. Each group is caught on its own (captureError kind identityFanOut-group; a failed import or query is identityFanOut-query), so a group whose write fails keeps the OLD name until the next rename or rejoin — there is no reconciliation pass, and that residual is a dated entry in accepted-deviations.md. Tillsammans participants are deliberately untouched: a session seat can be anonymous, so there is no account to resolve a current name from.",
           "transport": "Firestore write (fan-out)",
+          "verified": true
+        },
+        {
+          "from": "group-settings-modal",
+          "to": "handover-group-dialog",
+          "payload": "ägaren öppnar steg 2 — kandidatlistan är medlemmarna utom ägaren själv",
+          "transport": "React render",
+          "verified": true
+        },
+        {
+          "from": "handover-group-dialog",
+          "to": "group-handover-lib",
+          "payload": "handOverGroup(groupId, successorUid)",
+          "transport": "function call",
+          "verified": true
+        },
+        {
+          "from": "group-handover-lib",
+          "to": "cf-handOverGroup",
+          "payload": "httpsCallable handOverGroup({groupId, successorUid}) — uid tas ur request.auth, aldrig ur nyttolasten",
+          "transport": "https-callable",
+          "verified": true
+        },
+        {
+          "from": "cf-handOverGroup",
+          "to": "firestore",
+          "payload": "läser groups/{id} + watchlist + sessionHistory, raderar den avgående ägarens spår (members/{uid}, household/{uid}, progress/{uid}, joinAttempts/{uid}) och rensar addedBy/pickedByUid/participantUids",
+          "transport": "Firestore batch write",
+          "verified": true
+        },
+        {
+          "from": "cf-handOverGroup",
+          "to": "firestore",
+          "payload": "claimOwnership i transaktion — skriver ownerUid + memberUids bara om ownerUid ännu är den avgående ägaren",
+          "transport": "firestore-transaction-write",
+          "verified": true
+        },
+        {
+          "from": "cf-handOverGroup",
+          "to": "firestore",
+          "payload": "ett system-kort per kvarvarande medlem i users/{uid}/notifications — bäst-möjliga, en miss fäller inte överlämningen",
+          "transport": "Firestore batch write",
+          "verified": true
+        },
+        {
+          "from": "group-page-client",
+          "to": "ugc-actions-menu",
+          "payload": "⋯ Mer — Lämna gruppen, Anmäl gruppen; menyn döljer sig för ägaren, som når överlämningen via Inställningar",
+          "transport": "React render",
+          "verified": true
+        },
+        {
+          "from": "ugc-actions-menu",
+          "to": "firestore",
+          "payload": "Lämna gruppen → LeaveGroupDialog → leaveGroup(groupId, uid) → removeMember: EN klientbatch (arrayRemove ur memberUids, members/{uid}, household/{uid}). Ingen serverväg och inget som går via gruppens medlemslista — det var #12 Trust & Safetys villkor för att flytta utträdet in i menyn. Faller skrivningen stängs rutan INTE; den byter text, eftersom omförsöket efter flytten ligger två klick in i menyn. Navigeringen efteråt är bäst-möjliga och rapporteras för sig.",
+          "transport": "Firestore batch write",
           "verified": true
         }
       ],
@@ -2379,12 +2456,14 @@
     {
       "id": "flow-moderation",
       "label": "Content reporting & moderation",
-      "description": "A user reports via the UgcActionsMenu \"…\" menu. Which target types have a surface in the app is pinned by src/lib/moderation/reportTargetCoverage.test.ts rather than listed here. The client-side reports.ts helper lazy-loads Firebase Functions and calls the submitReport callable (never writes reports/ directly — the create rule is locked to `if false`). The callable validates the payload server-side, enforces a per-uid 10s cooldown inside a Firestore transaction on users/{uid}/reportMeta/throttle (closing the old batch-throttle bypass, BIN-49), and derives the real targetOwnerUid from the target doc itself rather than trusting the client (BIN-292, anti-framing). It then writes the report doc to top-level reports/. Admins review it on /admin/reports (gated by users/{uid}.isAdmin, both client-side and via firestore.rules), which reads via listReports. BIN-1244: for a user report the row calls the admin-only getProfileForModeration callable, which checks users/{caller}.isAdmin server-side, spends a per-admin hourly budget in moderationBudget/{caller} (no rule matches it, so only the function can touch it), reads publicProfiles/{uid} with the Admin SDK and returns only the display fields, and logs actor, target and whether a profile was found. The row shows those fields inline, marks a profile that is not public, and links to /user/ plus the username only for a public profile. firestore.rules is not changed by this, so no other screen can see a private profile through it. The page can transition status via updateReportStatus (writes actionedByUid + updatedAt for an audit trail).",
+      "description": "A user reports via the UgcActionsMenu \"…\" menu. Which target types have a surface in the app is pinned by src/lib/moderation/reportTargetCoverage.test.ts rather than listed here. The client-side reports.ts helper lazy-loads Firebase Functions and calls the submitReport callable (never writes reports/ directly — the create rule is locked to `if false`). The callable validates the payload server-side, enforces a per-uid 10s cooldown inside a Firestore transaction on users/{uid}/reportMeta/throttle (closing the old batch-throttle bypass, BIN-49), and derives the real targetOwnerUid from the target doc itself rather than trusting the client (BIN-292, anti-framing). It then writes the report doc to top-level reports/. Admins review it on /admin/reports (gated by users/{uid}.isAdmin, both client-side and via firestore.rules), which reads via listReports. BIN-1244: for a user report the row calls the admin-only getProfileForModeration callable, which checks users/{caller}.isAdmin server-side, spends a per-admin hourly budget in moderationBudget/{caller} (no rule matches it, so only the function can touch it), reads publicProfiles/{uid} with the Admin SDK and returns only the display fields, and logs actor, target and whether a profile was found. The row shows those fields inline, marks a profile that is not public, and links to /user/ plus the username only for a public profile. firestore.rules is not changed by this, so no other screen can see a private profile through it. The page can transition status via updateReportStatus (writes actionedByUid + updatedAt for an audit trail). BIN-1120: en grupp är också ett mål. Uppräkningen av måltyper ligger i functions/src/submitReport/logic.ts, inte i firestore.rules, och resolveTargetRef bär numera fältnamnet för ägaren per måltyp — ett gruppdokument nycklar ägaren ownerUid och har inget uid, så en läsning som antog uid hade skrivit rapporten med targetOwnerUid null utan att något fällde. BIN-1259: när en anmälan går IN i actioned eller dismissed skriver notifyReportDecided ett kort i anmälarens egen inbox. Kortet har en enda lydelse för båda utfallen och namnger varken målet eller åtgärden; utlösaren läser bara status och reporterUid, aldrig admins interna motivering (BIN-1250). Dokument-id:t härleds ur rapporten, så Firestores at-least-once-leverans lägger inte ett andra kort.",
       "covers": [
         "submitReport",
         "getProfileForModeration",
         "/admin/reports",
-        "UgcActionsMenu"
+        "UgcActionsMenu",
+        "notifyReportDecided",
+        "grupper/[id]"
       ],
       "steps": [
         {
@@ -2448,6 +2527,34 @@
           "to": "firestore",
           "payload": "get users/{caller} (isAdmin must be true) → tx on moderationBudget/{caller} (hourly budget) → query reports where targetType=='user' and targetId==uid (a user report must exist) → get publicProfiles/{uid}; logger.info actorUid, targetUid, found",
           "transport": "Firestore read",
+          "verified": true
+        },
+        {
+          "from": "group-page-client",
+          "to": "ugc-actions-menu",
+          "payload": "medlem öppnar ⋯ Mer → Anmäl gruppen (targetType=group, targetId=groupId)",
+          "transport": "React render",
+          "verified": true
+        },
+        {
+          "from": "admin-reports-page",
+          "to": "firestore",
+          "payload": "updateReportStatus — status till actioned eller dismissed",
+          "transport": "Firestore write",
+          "verified": true
+        },
+        {
+          "from": "firestore",
+          "to": "cf-notifyReportDecided",
+          "payload": "onDocumentUpdated reports/{reportId} — fyrar bara på en övergång IN i ett avgjort läge",
+          "transport": "firestore-trigger",
+          "verified": true
+        },
+        {
+          "from": "cf-notifyReportDecided",
+          "to": "firestore",
+          "payload": "create users/{reporterUid}/notifications/report_{reportId} {kind:system, title, body, read:false} — ingen actionUrl, anmälaren kan inte läsa reports/",
+          "transport": "Firestore write",
           "verified": true
         }
       ],

@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 632,
+  "patternCount": 640,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -207,10 +207,13 @@
       "patterns": [
         "docs/moderation.md",
         "functions/src/moderationProfile/",
+        "functions/src/reportDecided/",
         "functions/src/submitReport/",
         "src/app/admin/reports/",
+        "src/components/moderation/",
         "src/hooks/useBlockedUsers.ts",
-        "src/lib/firebase/moderationProfile.ts"
+        "src/lib/firebase/moderationProfile.ts",
+        "src/lib/moderation/"
       ]
     },
     "13": {
@@ -392,9 +395,13 @@
         "src/components/groups/GroupMembersPanel.test.tsx",
         "src/components/groups/GroupMembersPanel.tsx",
         "src/components/groups/GroupSessionHistoryPanel.tsx",
+        "src/components/groups/GroupSettingsModal.escape.test.tsx",
+        "src/components/groups/GroupSettingsModal.test.tsx",
         "src/components/groups/GroupSettingsModal.tsx",
         "src/components/groups/GroupSidePanels.tsx",
         "src/components/groups/GroupWatchlistTable.tsx",
+        "src/components/groups/HandOverGroupDialog.test.tsx",
+        "src/components/groups/HandOverGroupDialog.tsx",
         "src/components/groups/HouseholdPanel.tsx",
         "src/components/social/FollowButton.tsx",
         "src/components/social/FriendButton.test.tsx",
@@ -633,6 +640,7 @@
         "src/components/pages/ForsvinnerListClient.tsx",
         "src/components/pages/FriendsPageClient.test.tsx",
         "src/components/pages/FriendsPageClient.tsx",
+        "src/components/pages/GroupPageClient.groupActions.test.tsx",
         "src/components/pages/GroupPageClient.joinResubscribe.test.tsx",
         "src/components/pages/GroupPageClient.tsx",
         "src/components/pages/HomePageClient.test.tsx",

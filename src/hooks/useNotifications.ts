@@ -21,9 +21,9 @@ export interface AppNotification {
   // (BIN-360) är film-analogen — en "släpps idag"-push på svenskt digitalt
   // släppdatum; tmdbId-formad (movie), inga provider-/episod-fält. Veckodigest
   // (BIN-163) sätter 'weekly_digest' + summary/digestItems och är INTE
-  // tmdbId-formad (tmdbId=0) — en rollup över flera titlar. 'system' är en
-  // admin-varning från backend-funktioner (t.ex. Cineasterna-synk) — INTE
-  // tmdbId-formad; bär `body` + `actionUrl` och länkar dit, inte till en titel.
+  // tmdbId-formad (tmdbId=0) — en rollup över flera titlar. 'system' är en notis
+  // som inte handlar om en titel — INTE tmdbId-formad; bär `body`, och
+  // `actionUrl` när det finns något att öppna.
   kind: 'provider_available' | 'episode_release' | 'digital_release' | 'weekly_digest' | 'system';
   providerId: number | null;
   providerName: string | null;
@@ -96,10 +96,10 @@ export function useNotifications() {
           } as AppNotification;
         }
         if (data.kind === 'system') {
-          // Admin-varning från en backend-funktion (Cineasterna-synk m.fl.).
-          // Inte tmdbId-formad — länkar till `actionUrl` (t.ex. /insikter), inte
-          // en titelsida. Utan denna gren coerce:ades den till 'provider_available'
-          // och byggde en trasig /tv/undefined-länk (Sentry BINGE-9).
+          // En notis som inte handlar om en titel. Inte tmdbId-formad. Utan denna gren coerce:ades den till 'provider_available'
+          // och byggde en trasig /tv/undefined-länk (Sentry BINGE-9). `actionUrl`
+          // är valfri — ett kort utan den har ingen sida läsaren får öppna, och
+          // `TopbarActions` renderar det som en rad i stället för en länk.
           return {
             id: d.id,
             tmdbId: 0,

@@ -1,10 +1,11 @@
 /**
  * The Admin-SDK implementation of `HandoverIo` (BIN-1063 steg 3).
  *
- * Its own module because BOTH doors use it: the `handOverOwnedGroups` callable
- * and `retentionCleanup`'s field-owned sweep. Two implementations that merely
+ * Its own module because every door uses it. Two implementations that merely
  * looked equivalent would be the drift this whole ticket exists to prevent —
- * one door handing a group to a different member than the other.
+ * one door handing a group to a different member than the other. Derive the
+ * doors rather than trusting a list here:
+ *   git grep -n "adminHandoverIo(" -- functions src
  *
  * `db` and `log` are injected rather than reached for, so a caller that already
  * holds them does not open a second handle.
@@ -12,11 +13,55 @@
 
 import { FieldValue, Timestamp, type Firestore } from 'firebase-admin/firestore';
 
-import { type HandoverIo } from './runHandover';
+import { type HandoverIo, type HandoverNotifyIo } from './runHandover';
 import { chunkWrites, memberTraceWrites } from './logic';
 
 /** Writes per batch, under Firestore's own 500 ceiling. */
 const BATCH_LIMIT = 450;
+
+/**
+ * BIN-1118: the notification half of the owner-picked handover, as its own port
+ * so the two doors that never notify do not have to implement it.
+ *
+ * `kind: 'system'` is an existing inbox card that the client already renders with
+ * a title, a body and a link — reusing it means no client change and no second
+ * card shape to keep in sync. Derive the reader rather than trusting this:
+ *   grep -n "data.kind === 'system'" src/hooks/useNotifications.ts
+ */
+export function adminHandoverNotifyIo(db: Firestore): HandoverNotifyIo {
+  return {
+    readGroupName: async (groupId) => {
+      const snap = await db.doc(`groups/${groupId}`).get();
+      const name = snap.exists ? snap.get('name') : undefined;
+      return typeof name === 'string' && name.length > 0 ? name : null;
+    },
+
+    readMemberName: async (groupId, uid) => {
+      const snap = await db.doc(`groups/${groupId}/members/${uid}`).get();
+      const name = snap.exists ? snap.get('displayName') : undefined;
+      return typeof name === 'string' && name.length > 0 ? name : null;
+    },
+
+    notifyMembers: async (recipientUids, card) => {
+      // One batch. The recipients are a group's members, a set the create rules
+      // already bound well under the batch ceiling — unlike a watchlist, it
+      // cannot grow unbounded.
+      if (recipientUids.length === 0) return;
+      const batch = db.batch();
+      for (const uid of recipientUids) {
+        batch.set(db.collection('users').doc(uid).collection('notifications').doc(), {
+          kind: 'system',
+          title: card.title,
+          body: card.body,
+          actionUrl: card.actionUrl,
+          read: false,
+          createdAt: FieldValue.serverTimestamp(),
+        });
+      }
+      await batch.commit();
+    },
+  };
+}
 
 /** One Admin-SDK operation per method, no decisions. */
 export function adminHandoverIo(db: Firestore, log: HandoverIo['log']): HandoverIo {
