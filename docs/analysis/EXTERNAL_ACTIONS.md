@@ -241,6 +241,13 @@ Firestore Console — rules forbid client writes to the field.
 
   The second is the one that answers whether anything reaches a visitor. `.github/dependabot.yml`
   carries the dated reasoning for the eslint chain, and BIN-658 the trade-off.
+  When the first lists findings the second does not, this traces one to the dependency that
+  pulls it in — put each package name `npm audit` printed in place of `<package>`. A path that
+  runs only through a devDependency never ships:
+
+  ```
+  npm ls <package> --all
+  ```
 - **C More provider-id 1759:** TMDB fully retired C More (folded into TV4 Play) and no longer
   lists it, so the id could not be live-confirmed. `1759` is the historical id and **no active
   provider uses it**, so the alias `1759 → 489` (`canonicalProviderId`) is zero-collision — it
