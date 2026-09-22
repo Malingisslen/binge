@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 
 /**
  * BIN-1120/1118 — gruppsidans två nya åtgärder, prövade där de KOPPLAS IHOP.
@@ -24,6 +24,17 @@ const hoisted = vi.hoisted(() => ({
   leaveGroup: vi.fn(async () => {}),
   push: vi.fn(),
   writeText: vi.fn(),
+  captureError: vi.fn(),
+  readInviteToken: vi.fn(() => null as string | null),
+}));
+
+vi.mock('@/lib/sentry', () => ({ captureError: hoisted.captureError }));
+// `InvitePanel` läser inbjudningslänkens klartext ur en lokal cache. Styrd här så
+// ägarläget har en länk att kopiera; ingen annan del av sidan läser cachen.
+vi.mock('@/lib/groupInviteCache', () => ({
+  readInviteToken: hoisted.readInviteToken,
+  cacheInviteToken: vi.fn(),
+  clearInviteToken: vi.fn(),
 }));
 
 vi.mock('@/hooks/useGroups', () => ({
@@ -100,8 +111,13 @@ function memberState() {
   };
 }
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 beforeEach(() => {
   vi.clearAllMocks();
+  hoisted.readInviteToken.mockImplementation(() => null);
   hoisted.useGroup.mockImplementation(() => memberState());
   Object.defineProperty(window, 'location', {
     configurable: true,
@@ -220,6 +236,26 @@ describe('GroupPageClient — utträdet når hela vägen från menyn (BIN-1120)'
     // får inte försökas en andra gång.
     expect(screen.queryByText(/gick inte att lämna gruppen/)).toBeNull();
     expect(hoisted.leaveGroup).toHaveBeenCalledTimes(1);
+    // BIN-1264: kastet rapporteras till Sentry under ett EGET kind — inte som ett
+    // misslyckat utträde — och dialogen stänger ändå.
+    expect(hoisted.captureError).toHaveBeenCalledWith(expect.any(Error), {
+      scope: 'groups',
+      kind: 'leaveGroup-navigation',
+    });
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('ett lyckat utträde rapporterar ingenting', async () => {
+    render(<GroupPageClient id="g-1" />);
+    await screen.findByTestId('group-view');
+
+    fireEvent.click(screen.getByLabelText('Åtgärder'));
+    fireEvent.click(screen.getByText('Lämna gruppen'));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Lämna gruppen' }));
+
+    await waitFor(() => expect(hoisted.push).toHaveBeenCalledWith('/grupper'));
+    expect(hoisted.captureError).not.toHaveBeenCalled();
   });
 
   it('ägaren erbjuds ingen meny, och därmed ingen väg att lämna utan överlämning', async () => {
@@ -232,5 +268,102 @@ describe('GroupPageClient — utträdet når hela vägen från menyn (BIN-1120)'
 
     expect(screen.queryByLabelText('Åtgärder')).toBeNull();
     expect(hoisted.leaveGroup).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * BIN-1262 — "Kopierad."-bekräftelsen, på båda ställena den finns. Den är ett
+ * kortlivat mellanläge, så den drivs hold → observera → släpp: urklippet hålls på
+ * en styrbar promise, bekräftelsen läses medan den står, och klockan flyttas förbi
+ * 1,5 s för att se den gå tillbaka.
+ */
+function heldClipboard() {
+  let release: () => void = () => {};
+  hoisted.writeText.mockImplementation(
+    () => new Promise<void>(resolve => { release = resolve; }),
+  );
+  return () => release();
+}
+
+function ownerState(rotatedAt: Date) {
+  const state = memberState();
+  return {
+    ...state,
+    group: { ...state.group, ownerUid: 'me', inviteTokenHash: 'hash', inviteTokenRotatedAt: rotatedAt },
+  };
+}
+
+describe('GroupPageClient — "Kopiera länk" bekräftar och går tillbaka (BIN-1262)', () => {
+  it('visar "Kopierad." först när urklippet svarat, och går tillbaka efter 1,5 s', async () => {
+    render(<GroupPageClient id="g-1" />);
+    await screen.findByTestId('group-view');
+    vi.useFakeTimers();
+    const release = heldClipboard();
+
+    fireEvent.click(screen.getByText('Kopiera länk'));
+    // Hold: urklippet har inte svarat, så ingenting är bekräftat än.
+    expect(screen.queryByText('Kopierad.')).toBeNull();
+
+    await act(async () => { release(); });
+    expect(screen.getByText('Kopierad.')).toBeTruthy();
+
+    act(() => { vi.advanceTimersByTime(1499); });
+    expect(screen.getByText('Kopierad.')).toBeTruthy();
+
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(screen.queryByText('Kopierad.')).toBeNull();
+    expect(screen.getByText('Kopiera länk')).toBeTruthy();
+  });
+
+  it('ett nekat urklipp kastar inte vidare och lämnar knappen oförändrad', async () => {
+    render(<GroupPageClient id="g-1" />);
+    await screen.findByTestId('group-view');
+    hoisted.writeText.mockRejectedValueOnce(new Error('NotAllowedError'));
+
+    await act(async () => { fireEvent.click(screen.getByText('Kopiera länk')); });
+
+    expect(hoisted.writeText).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Kopierad.')).toBeNull();
+    expect(screen.getByText('Kopiera länk')).toBeTruthy();
+  });
+});
+
+describe('InvitePanel — inbjudningslänkens kopieringsknapp bekräftar och går tillbaka (BIN-1262)', () => {
+  // Nyss roterad, så panelens automatiska rotation inte löser ut — den skulle
+  // anropa en skrivväg den här filen inte mockar.
+  beforeEach(() => {
+    hoisted.useGroup.mockImplementation(() => ownerState(new Date()));
+    hoisted.readInviteToken.mockImplementation(() => 'plain123');
+  });
+
+  it('visar "Kopierad." först när urklippet svarat, och tar bort den efter 1,5 s', async () => {
+    render(<GroupPageClient id="g-1" />);
+    const copyButton = await screen.findByTitle('Kopiera');
+    vi.useFakeTimers();
+    const release = heldClipboard();
+
+    fireEvent.click(copyButton);
+    expect(hoisted.writeText).toHaveBeenCalledWith('https://binge.nu/grupper/g-1?invite=plain123');
+    expect(screen.queryByText('Kopierad.')).toBeNull();
+
+    await act(async () => { release(); });
+    expect(screen.getByText('Kopierad.')).toBeTruthy();
+
+    act(() => { vi.advanceTimersByTime(1499); });
+    expect(screen.getByText('Kopierad.')).toBeTruthy();
+
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(screen.queryByText('Kopierad.')).toBeNull();
+  });
+
+  it('ett nekat urklipp kastar inte vidare och visar ingen bekräftelse', async () => {
+    render(<GroupPageClient id="g-1" />);
+    const copyButton = await screen.findByTitle('Kopiera');
+    hoisted.writeText.mockRejectedValueOnce(new Error('NotAllowedError'));
+
+    await act(async () => { fireEvent.click(copyButton); });
+
+    expect(hoisted.writeText).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Kopierad.')).toBeNull();
   });
 });

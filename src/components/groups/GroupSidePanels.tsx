@@ -16,6 +16,7 @@ import {
   readInviteToken,
 } from '@/lib/groupInviteCache';
 import { useMountTime } from '@/hooks/useMountTime';
+import { captureError } from '@/lib/sentry';
 import {
   inviteTokenAgeDays,
   inviteTokenAgeLabel,
@@ -324,6 +325,7 @@ export function LeaveGroupDialog({
           onLeft();
         } catch (err) {
           console.error('leaveGroup: utträdet gick igenom, navigeringen inte', err);
+          captureError(err, { scope: 'groups', kind: 'leaveGroup-navigation' });
         }
         onCancel();
       }}

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { UserCheck, X } from 'lucide-react';
 import { handOverGroup } from '@/lib/firebase/groupHandover';
+import { captureError } from '@/lib/sentry';
 import type { GroupMember } from '@/types';
 
 /**
@@ -67,6 +68,7 @@ export function HandOverGroupDialog({
       onDone();
     } catch (err) {
       console.error('handOverGroup: överlämningen gick igenom, navigeringen inte', err);
+      captureError(err, { scope: 'groups', kind: 'handOverGroup-navigation' });
     }
   };
 

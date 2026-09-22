@@ -9,6 +9,8 @@ import type { GroupMember } from '@/types';
 
 const handOverGroup = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/firebase/groupHandover', () => ({ handOverGroup }));
+const captureError = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/sentry', () => ({ captureError }));
 
 const member = (uid: string, name: string, joinedAt: Date, joinedAtKnown = true): GroupMember => ({
   uid,
@@ -56,6 +58,8 @@ describe('HandOverGroupDialog', () => {
     handOverGroup.mockResolvedValueOnce(undefined);
     fireEvent.click(screen.getByText('Lämna över till Jonas'));
     await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
+    // En lyckad navigering rapporterar ingenting (BIN-1264).
+    expect(captureError).not.toHaveBeenCalled();
   });
 
   /** Ett avvisande av den sort servern formulerar for en lasare. */
@@ -255,6 +259,12 @@ describe('HandOverGroupDialog', () => {
 
     expect(screen.queryByText(/gick inte igenom/)).toBeNull();
     expect(handOverGroup).toHaveBeenCalledTimes(1);
+    // BIN-1264: kastet når Sentry under ett EGET kind, skilt från en misslyckad
+    // överlämning.
+    expect(captureError).toHaveBeenCalledWith(expect.any(Error), {
+      scope: 'groups',
+      kind: 'handOverGroup-navigation',
+    });
 
     // Och dialogen får inte stå kvar låst. Varje väg ut är spärrad på `working`,
     // så ett `working` som aldrig går tillbaka gör skyddet till en fälla: ingen
