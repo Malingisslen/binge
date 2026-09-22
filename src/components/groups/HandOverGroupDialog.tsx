@@ -42,6 +42,11 @@ export function HandOverGroupDialog({
     try {
       await handOverGroup(groupId, picked);
     } catch (err) {
+      // Serverns läsbara vägran är ett väntat svar till ägaren och rapporteras
+      // inte. Allt annat är ett fel som annars bara felrutan hade vetat om.
+      if (!isReadableRefusal(err)) {
+        captureError(err, { scope: 'groups', kind: 'handOverGroup-write' });
+      }
       setError(readableRefusal(err));
       return;
     } finally {
@@ -195,11 +200,13 @@ export function HandOverGroupDialog({
  * som står och väntar.
  */
 function readableRefusal(err: unknown): string {
-  const code = (err as { code?: unknown } | null)?.code;
-  if (code === 'functions/failed-precondition' && err instanceof Error && err.message) {
-    return err.message;
-  }
+  if (isReadableRefusal(err)) return err.message;
   return 'Överlämningen gick inte igenom. Försök igen.';
+}
+
+function isReadableRefusal(err: unknown): err is Error {
+  const code = (err as { code?: unknown } | null)?.code;
+  return code === 'functions/failed-precondition' && err instanceof Error && !!err.message;
 }
 
 /**

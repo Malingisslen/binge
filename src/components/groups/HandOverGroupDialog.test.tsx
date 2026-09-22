@@ -77,6 +77,8 @@ describe('HandOverGroupDialog', () => {
     fireEvent.click(screen.getByText('Lämna över till Jonas'));
     await screen.findByText('Gruppen bytte ägare medan du höll på.');
     expect(onDone).not.toHaveBeenCalled();
+    // En väntad vägran rapporteras inte (BIN-1272).
+    expect(captureError).not.toHaveBeenCalled();
   });
 
   // Motsatsen, och skälet till att genomsläppet är villkorat. Ett nätfel, ett
@@ -106,6 +108,11 @@ describe('HandOverGroupDialog', () => {
     fireEvent.click(screen.getByText('Lämna över till Jonas'));
     await screen.findByText(/Överlämningen gick inte igenom/);
     expect(screen.queryByText(/NOT_FOUND/)).toBeNull();
+    // Ett fel som inte är en vägran når Sentry (BIN-1272).
+    expect(captureError).toHaveBeenCalledWith(internal, {
+      scope: 'groups',
+      kind: 'handOverGroup-write',
+    });
   });
 
   it('ett fel utan kod visas inte heller ordagrant', async () => {

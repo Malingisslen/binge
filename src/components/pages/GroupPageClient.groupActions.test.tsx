@@ -117,6 +117,9 @@ afterEach(() => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // `clearAllMocks` rensar anrop, inte implementationer — utan återställningen
+  // hade `heldClipboard()`s aldrig lösta promise följt med till nästa test (BIN-1273).
+  hoisted.writeText.mockReset();
   hoisted.readInviteToken.mockImplementation(() => null);
   hoisted.useGroup.mockImplementation(() => memberState());
   Object.defineProperty(window, 'location', {
@@ -213,6 +216,11 @@ describe('GroupPageClient — utträdet når hela vägen från menyn (BIN-1120)'
     await screen.findByText(/gick inte att lämna gruppen/);
     expect(hoisted.push).not.toHaveBeenCalledWith('/grupper');
     expect(screen.getByRole('dialog')).toBeTruthy();
+    // BIN-1272: skrivfelet når Sentry under ett eget kind, skilt från navigeringens.
+    expect(hoisted.captureError).toHaveBeenCalledWith(expect.any(Error), {
+      scope: 'groups',
+      kind: 'leaveGroup-write',
+    });
   });
 
   // Skälet till att `onLeft()` och `onCancel()` flyttades UT ur sitt `try`.

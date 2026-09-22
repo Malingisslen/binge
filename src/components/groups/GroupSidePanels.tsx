@@ -303,7 +303,8 @@ export function LeaveGroupDialog({
         setFailed(false);
         try {
           await leaveGroup(groupId, myUid);
-        } catch {
+        } catch (err) {
+          captureError(err, { scope: 'groups', kind: 'leaveGroup-write' });
           // Stänger INTE. Den gamla panelen stängde i ett `finally`, alltså även
           // när skrivningen föll. Det var uthärdligt när en alltid synlig knapp
           // satt kvar bakom den; sedan BIN-1120 ligger omförsöket två klick in i
