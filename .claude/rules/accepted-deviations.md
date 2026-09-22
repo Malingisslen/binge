@@ -1797,12 +1797,13 @@ mest om.
    `orphanDataUids`-kommentar i `functions/src/retentionCleanup/runCleanup.ts`.
    Commit `61a5d9dc` lamnade den medvetet orord och bokforde den pa BIN-1193; den stryks
    alltsa inte av den commit som stanger biljetten, och far en egen atgard.
+   Struken 2026-09-22 under BIN-1256.
 
 **Re-open when:** nagon av TVA signaturer, och bada maste kontrolleras for hand:
 
 1. En schemalagd korning som loggar `scheduled sweeps done` men aldrig `retentionCleanup
    done` — en hangning i den Auth-berorande svansen. Det ar fallet §5d beskriver.
-2. En schemalagd korning som loggar INGEN av raderna — en hangning i parallellblocket.
+2. En schemalagd korning som loggar INGEN av raderna.
    Utan den har punkten kan utlosaren inte fyra for den halvan av accepten.
 
 Nar BIN-468 shippar blir bada larmade i stallet for manuella, och den har posten bor da fa
@@ -1856,3 +1857,39 @@ just felhanteringen behövde ändras när knappen flyttade.
 
 **Re-open when:** utträdets skrivväg ändras, eller `ConfirmDialog` får grindade
 avbrottsvägar och den här postens punkt 2 därmed faller bort.
+
+---
+
+## BIN-1254: notisernas `-refused` skiljer inte raderingskapplöpningen från en utloggad session — 2026-09-22
+
+Malins beslut 2026-09-20: en daterad post, ingen uppdelning. Fila inte "`markRead-refused`
+blandar ihop två orsaker" eller "en avstängd session syns inte för sig i Sentry".
+
+**Läget.** `markOneRead`/`markManyRead` i `src/hooks/useNotifications.helpers.ts`
+rapporterar varje `permission-denied` under `markRead-refused` respektive
+`markAllRead-refused`. Samma kod kommer ut när notisen hunnit raderas och när regelns
+ägarkontroll faller — en utloggad session, en återkallad token, ett avstängt konto.
+Hjälparen ser bara felkoden. Härled grenen och rapporten:
+
+```
+grep -n "refused" src/hooks/useNotifications.helpers.ts
+grep -n -A6 "match /users/{uid}/notifications" firestore.rules
+```
+
+**Vad som accepteras.** Att de orsakerna hamnar under samma `kind`. Testet
+"en utloggad session och en raderad notis ger samma kind" i
+`src/hooks/useNotifications.helpers.test.ts` pinnar det.
+
+**Why:** ingen användarsynlig skillnad — knapparna är fire-and-forget och klockans antal
+räknas ur lyssnaren, inte ur skrivningen. Rapporten finns redan; det som saknas är
+uppdelningen, och en uppdelning kräver att hjälparen läser auth-tillstånd den i dag inte
+känner till, för en fråga ingen har ställt i driften.
+
+**INTE accepterat, alltså fortfarande fileable:**
+1. Att rapporten tas bort eller att `-refused` slutar skilja sig från felvägens `kind`.
+2. Att `-refused` börjar komma i mängd. En enstaka träff är väntad; återkommande träffar
+   är signalen den här posten inte tystar.
+
+**Re-open when:** `kind: 'markRead-refused'` eller `kind: 'markAllRead-refused'` återkommer
+i Sentry, eller när avstängnings- eller utloggningsflöden behöver skiljas ut där av något
+annat skäl.

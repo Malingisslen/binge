@@ -1141,8 +1141,7 @@ export async function runRetentionCleanup(io: CleanupIo): Promise<CleanupSummary
     checkedReservations: orphanUsernames.checkedReservations,
     orphanUsernameSkippedProfileBatches: orphanUsernames.skippedProfileBatches,
     orphanUsernameSkippedAuthBatches: orphanUsernames.skippedAuthBatches,
-    // BIN-1023: same reading rule again, and here it matters most — this is the
-    // one sweep that recursively deletes a library. `orphanDataUids: 0` means
+    // BIN-1023: same reading rule again. `orphanDataUids: 0` means
     // "nobody's account is missing" only when checkedUserRoots > 0 AND
     // orphanDataSkippedAuthBatches is 0; otherwise it means "we do not know".
     orphanDataUids: orphanData.erase.length,
