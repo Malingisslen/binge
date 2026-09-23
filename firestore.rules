@@ -1634,12 +1634,19 @@ service cloud.firestore {
           && request.resource.data.name.size() <= 48;
       }
 
+      // BIN-1291: ett grupp-id får aldrig vara ett befintligt kontos id. Schemalagda
+      // funktioner som läser `collectionGroup('watchlist')` tog förr mottagaren ur
+      // `ref.parent.parent.id`, som för en gruppsökväg är grupp-id:t — en grupp med
+      // ett offers uid som id styrde då titeltext till offrets notiser. Funktionerna
+      // filtrerar nu på sökvägen (functions/src/shared/watchlistPath.ts); det här är
+      // det andra lagret.
       allow create: if isSignedIn()
         && isValidGroupDoc()
         && hasVisibleName(request.resource.data.name)
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.memberUids.hasOnly([request.auth.uid])
-        && request.auth.uid in request.resource.data.memberUids;
+        && request.auth.uid in request.resource.data.memberUids
+        && !exists(/databases/$(database)/documents/users/$(groupId));
 
       // Tillåt: ägaren (write UTAN att lägga till andra uids), medlem som
       // lämnar (självborttag), gäst som joinar via länk (joinAttempts), eller

@@ -4128,6 +4128,34 @@ describe('groups — en spöke-medlem kan lämna och gå med igen (BIN-1274)', (
 });
 
 
+// BIN-1291. Kedjan: en grupp med samma id som ett befintligt konto, och en titelrad
+// med `status` under den. Schemalagda funktioner tar mottagaren ur
+// `ref.parent.parent.id`, som för en gruppsökväg är grupp-id:t — alltså offrets uid.
+describe('groups — ett grupp-id får inte vara ett befintligt kontos id (BIN-1291)', () => {
+  const VICTIM = 'victim_uid';
+
+  // Före fixen gick båda skrivningarna igenom — mätt 2026-09-23 med samma fixtur och
+  // assertSucceeds. Nu nekas gruppen, så titelraden under den kan aldrig skapas.
+  const group = () => ({
+    ownerUid: OWNER, memberUids: [OWNER], name: 'Grupp', defaults: { region: 'SE' },
+    inviteTokenHash: null, inviteTokenRotatedAt: null,
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+  });
+
+  it('en grupp med samma id som ett befintligt konto nekas', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', VICTIM), { displayName: 'Offret' });
+    });
+    await assertFails(setDoc(doc(ownerDb(), 'groups', VICTIM), group()));
+  });
+
+  // Kontrollen: samma fixtur med ett id som inget konto har går igenom, så nekandet
+  // ovan kommer från id-spärren och inte från något annat villkor.
+  it('samma grupp med ett id som inget konto har går igenom', async () => {
+    await assertSucceeds(setDoc(doc(ownerDb(), 'groups', 'fresh_group_id'), group()));
+  });
+});
+
 describe('groups sessionHistory pickedByUid anti-forge', () => {
   const validPick = {
     sessionId: 's1', pickedByUid: 'other_uid', pickedTmdbId: 603, mediaType: 'movie',

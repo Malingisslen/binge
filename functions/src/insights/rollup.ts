@@ -15,6 +15,7 @@
 
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { resolveTmdbId } from '../shared/mediaTypeDocId';
+import { onlyUserWatchlistDocs } from '../shared/watchlistPath';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { logger } from 'firebase-functions/v2';
 import {
@@ -43,9 +44,11 @@ const PAGE_SIZE = 2000;
 const RETENTION_DAYS = 90;
 
 /** Read every watchlist doc (narrowed fields) across all users, paginated. */
-async function readWatchlist(): Promise<WatchlistLite[]> {
+async function readWatchlist(): Promise<{ rows: WatchlistLite[]; docsRead: number }> {
   const db = getFirestore();
   const out: WatchlistLite[] = [];
+  // Billed reads, counted before the BIN-1291 filter drops group rows.
+  let docsRead = 0;
   let cursor: FirebaseFirestore.QueryDocumentSnapshot | undefined;
   for (;;) {
     let q = db
@@ -55,7 +58,9 @@ async function readWatchlist(): Promise<WatchlistLite[]> {
       .limit(PAGE_SIZE);
     if (cursor) q = q.startAfter(cursor);
     const snap = await q.get();
-    for (const d of snap.docs) {
+    docsRead += snap.size;
+    // BIN-1291: group rows are not a user's library and must not skew the counts.
+    for (const d of onlyUserWatchlistDocs(snap.docs)) {
       const x = d.data();
       out.push({
         status: String(x.status ?? ''),
@@ -77,7 +82,7 @@ async function readWatchlist(): Promise<WatchlistLite[]> {
     if (snap.size < PAGE_SIZE) break;
     cursor = snap.docs[snap.docs.length - 1];
   }
-  return out;
+  return { rows: out, docsRead };
 }
 
 /** Count a collection cheaply with the aggregation API (1 read). */
@@ -102,8 +107,9 @@ export async function computeRollup(): Promise<RollupData> {
   let partial = false;
 
   let watchlist: WatchlistLite[] = [];
+  let watchlistReads = 0;
   try {
-    watchlist = await readWatchlist();
+    ({ rows: watchlist, docsRead: watchlistReads } = await readWatchlist());
   } catch (err) {
     logger.error('rollup: watchlist scan failed', err);
     partial = true;
@@ -152,8 +158,8 @@ export async function computeRollup(): Promise<RollupData> {
     topTitles: topTitles(watchlist, 10),
     topProviders: tallyTop(providers, 10).map((t) => ({ providerId: t.value, count: t.count })),
     topGenres: tallyTop(genres, 10).map((t) => ({ genreId: t.value, count: t.count })),
-    // 4 aggregation reads + one read per watchlist doc.
-    readsUsed: watchlist.length + 4,
+    // 4 aggregation reads + one read per scanned watchlist doc, group rows included.
+    readsUsed: watchlistReads + 4,
     partial,
   };
 }

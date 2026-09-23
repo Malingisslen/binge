@@ -103,7 +103,10 @@ const REPO = resolve(HERE, '..');
 // BIN-1260/1278/1279, 2026-09-23: raised to what `numTotalTests` reported with the
 // leaver-erasure, member-group and reminder-marker cases in place. Measured with
 // `npm run test:rules -- --port 8123`, not counted by hand.
-export const MIN_TESTS = 761;
+// BIN-1291, 2026-09-23: raised to what `numTotalTests` reported with the group-id
+// denial, its control, and the availableNotify group-row case in place. Measured with
+// `npm run test:rules -- --port 8123`, not counted by hand.
+export const MIN_TESTS = 764;
 
 const VITEST_ARGS = ['run', '--config', 'vitest.rules.config.ts'];
 

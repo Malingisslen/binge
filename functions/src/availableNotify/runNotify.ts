@@ -63,6 +63,7 @@ import {
   type TmdbReleaseDatesCountry,
 } from '../releaseNotify/logic';
 import { resolveTmdbId } from '../shared/mediaTypeDocId';
+import { isUserWatchlistDocPath } from '../shared/watchlistPath';
 
 /** One scanned watchlist document, flattened to path + fields. */
 export interface ScanDoc {
@@ -207,6 +208,9 @@ async function readWatchlistTitles(io: NotifyIo): Promise<WatchlistTitleLite[]> 
     const page = await io.scanWatchlistPage(cursor, io.pageSize);
     if (page.length === 0) break;
     for (const d of page) {
+      // BIN-1291: a group row would map to uid '' and still cost TMDB calls and
+      // state writes. The cursor below still comes from the unfiltered page.
+      if (!isUserWatchlistDocPath(d.path)) continue;
       const x = d.data;
       out.push({
         uid: uidFromWatchlistPath(d.path),

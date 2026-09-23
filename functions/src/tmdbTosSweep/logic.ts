@@ -214,10 +214,9 @@ export function buildClearedPayload(groups: readonly FieldGroup[], deleteSentine
  * Anything else (grandparent `groups`, or any future `watchlist` nesting) is
  * skipped and NEVER cleared.
  */
-export function isUserWatchlistDocPath(path: string): boolean {
-  const segments = path.split('/');
-  return segments.length === 4 && segments[0] === 'users' && segments[2] === 'watchlist';
-}
+// Moved to shared/watchlistPath.ts (BIN-1291) so every collection-group reader
+// uses the same guard; re-exported so this module's callers are unchanged.
+export { isUserWatchlistDocPath } from '../shared/watchlistPath';
 
 /* ------------------------------------------------------------------------- *
  * Orchestration decisions (BIN-452).
