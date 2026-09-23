@@ -8,7 +8,7 @@ import {
 } from 'firebase/firestore';
 
 import { runGroupHandover, type HandoverIo } from '../../../functions/src/groupHandover/runHandover';
-import { isEmptyExcept } from '../../../functions/src/groupHandover/logic';
+import { isEmptyExcept, planClaim } from '../../../functions/src/groupHandover/logic';
 import { rosterMismatches } from './memberTraceRoster';
 import { FRIEND_REQUEST_PUSH_MARKER_MAX_AGE_MS } from '../../../functions/src/friendRequestPush/logic';
 import {
@@ -444,13 +444,18 @@ function handoverIo(db: Firestore): HandoverIo {
     claimOwnership: async (groupId, expectedOwnerUid, write) => {
       const ref = doc(db, 'groups', groupId);
       const fresh = await getDoc(ref);
-      if (!fresh.exists() || fresh.data().ownerUid !== expectedOwnerUid) return false;
-      await updateDoc(ref, {
-        ownerUid: write.ownerUid,
-        memberUids: write.memberUids,
-        updatedAt: serverTimestamp(),
-      });
-      return true;
+      const claim = planClaim(fresh.exists() ? {
+        ownerUid: fresh.data().ownerUid,
+        memberUids: fresh.data().memberUids ?? [],
+      } : null, expectedOwnerUid, write);
+      if (claim.kind === 'claimed') {
+        await updateDoc(ref, {
+          ownerUid: claim.ownerUid,
+          memberUids: claim.memberUids,
+          updatedAt: serverTimestamp(),
+        });
+      }
+      return claim;
     },
     eraseMemberTraces: async (groupId, leavingUid, erasure) => {
       const batch = writeBatch(db);

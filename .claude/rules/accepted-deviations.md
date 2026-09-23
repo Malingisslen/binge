@@ -1984,3 +1984,46 @@ Det är BIN-1291, och det är inte accepterat.
 3. Att parity-testet mjukas upp eller skrivs om utan ett nytt beslut.
 
 **Re-open when:** någon av punkterna ovan inträffar.
+
+---
+
+## BIN-1267: en förlorad överlämning kan vägra efter att ägarens egna spår raderats — 2026-09-23
+
+Gäller ägarens egen överlämning (`runOwnerPickedHandover`), och bara den. Fila inte "vägran
+kommer efter raderingen" för den här vägen; läs först vad som INTE är accepterat nedan.
+
+**Ordningen.** Spåren raderas FÖRE ägarbytet, med flit: raderas de efter och raderingen
+fallerar, hittar ingen omkörning gruppen igen. Härled ordningen i funktionen:
+
+```
+git grep -n "eraseMemberTraces(\|claimOwnership(" -- functions/src/groupHandover/runHandover.ts
+```
+
+**Vad som kan hända.** Gruppen läses direkt före raderingen och valet prövas där. Mellan
+raderingen och ägarbytet kan två saker ändå hinna ske, och ägarbytet (`planClaim`) vägrar då
+utan att skriva något:
+
+1. **Någon annan hann bli ägare.** Den som bad om överlämningen är inte längre ägare oavsett
+   vad som händer här. Spåren som raderades är hens egna.
+2. **Den valda efterträdaren lämnade gruppen.** Den som bad om överlämningen ÄR fortfarande
+   ägare och kvar i gruppen, men hens egen medlemsrad, hushållsrad, förbrukade inbjudningskod
+   och egen upphovsmärkning i gruppen är redan borta. Dialogen visar "Personen du valde har
+   lämnat gruppen. Välj någon annan." Ett nytt försök med en annan medlem slutför överlämningen
+   och raderar samma sak en gång till, utan effekt. Testet "a retry with a successor who is
+   still a member converges" i `src/test/rules/group-handover-orchestrator.test.ts` driver det.
+
+**Accepterat:** att fall 2 lämnar en ägare utan sina egna rader tills hen försöker igen eller
+lämnar gruppen. Ingen annans data rörs i något av fallen.
+
+**Why:** alternativet är att radera efter ägarbytet, och då strandar en misslyckad radering
+spåren permanent. Fönstret är den tid raderingen tar, och fall 2 kräver att den valda personen
+lämnar just då.
+
+**INTE accepterat, alltså fortfarande fileable:**
+1. Att någon ANNANS data raderas före en vägran.
+2. Att vägran i fall 2 visar något annat än att personen lämnat, så att ägaren inte vet att
+   hen kan försöka igen.
+3. Samma ordning i en väg som inte är ägarens egen knapp.
+
+**Re-open when:** någon av punkterna ovan inträffar, eller en rapport om en ägare som saknar
+sin egen medlemsrad.

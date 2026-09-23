@@ -204,6 +204,37 @@ export function buildOwnerPickedHandover(
 }
 
 /**
+ * BIN-1266 — what `claimOwnership` writes, decided from the group AS ITS OWN
+ * TRANSACTION READ IT. ONE decision site; every port runs it inside its
+ * read-then-write.
+ *
+ * `memberUids` is derived here, from `fresh`, and never carried in from the
+ * caller's earlier read: the erasure runs between that read and the claim, and a
+ * member who left in that window used to be written back into the group.
+ *
+ * `successor-left` writes nothing. Writing would leave a group owned by someone
+ * who is not in `memberUids` — the state BIN-1108 closed in the rules.
+ */
+export type ClaimResult =
+  | { readonly kind: 'claimed'; readonly ownerUid: string; readonly memberUids: readonly string[] }
+  | { readonly kind: 'owner-changed' }
+  | { readonly kind: 'successor-left' };
+
+export function planClaim(
+  fresh: { readonly ownerUid: string; readonly memberUids: readonly string[] } | null,
+  expectedOwnerUid: string,
+  write: { readonly ownerUid: string; readonly leavingUid: string },
+): ClaimResult {
+  if (!fresh || fresh.ownerUid !== expectedOwnerUid) return { kind: 'owner-changed' };
+  if (!fresh.memberUids.includes(write.ownerUid)) return { kind: 'successor-left' };
+  return {
+    kind: 'claimed',
+    ownerUid: write.ownerUid,
+    memberUids: fresh.memberUids.filter((uid) => uid !== write.leavingUid),
+  };
+}
+
+/**
  * Build the departing member's trace-erasure payload. ONE construction site.
  *
  * BIN-1118 first wrote this enumeration a second time, inside the owner-picked

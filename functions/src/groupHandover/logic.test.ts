@@ -15,6 +15,7 @@ import {
   SENT_INVITE_BATCH_LIMIT,
   HANDOVER_PARTIAL,
   memberTraceWrites,
+  planClaim,
   chunkWrites,
   type MemberRow,
   type TraceWrite,
@@ -847,5 +848,31 @@ describe('the callable erases sent invites BEFORE it hands over (BIN-1147)', () 
     expect(ENTRY).toMatch(
       /try \{\s*await eraseSentInvites\(io, uid\);\s*\} catch \(err\) \{\s*throw new HttpsError\('internal',/,
     );
+  });
+});
+
+// BIN-1266. The claim derives memberUids from the group as ITS OWN read sees it,
+// never from the caller's earlier read.
+describe('planClaim — the claim decides on its own read (BIN-1266)', () => {
+  const write = { ownerUid: 'heir', leavingUid: 'owner' };
+
+  it('writes the fresh member list minus the leaver, not a list carried in from before', () => {
+    // 'gone' left between the caller's read and the claim, so it is not in fresh.
+    const claim = planClaim({ ownerUid: 'owner', memberUids: ['owner', 'heir', 'kvar'] }, 'owner', write);
+    expect(claim).toEqual({ kind: 'claimed', ownerUid: 'heir', memberUids: ['heir', 'kvar'] });
+  });
+
+  it('writes nothing when ownership already moved', () => {
+    expect(planClaim({ ownerUid: 'someone', memberUids: ['someone', 'heir'] }, 'owner', write))
+      .toEqual({ kind: 'owner-changed' });
+  });
+
+  it('writes nothing when the group is gone', () => {
+    expect(planClaim(null, 'owner', write)).toEqual({ kind: 'owner-changed' });
+  });
+
+  it('writes nothing when the successor has left — never an owner outside memberUids', () => {
+    expect(planClaim({ ownerUid: 'owner', memberUids: ['owner', 'kvar'] }, 'owner', write))
+      .toEqual({ kind: 'successor-left' });
   });
 });

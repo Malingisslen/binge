@@ -14,6 +14,7 @@ vi.mock('../../lib/firebase/db', () => ({ fsdb: vi.fn() }));
 import { collectUserDataSnapshots, KNOWN_USER_SUBCOLLECTIONS } from '../../lib/firebase/userData';
 import { collectDeletionRefs, applyDeletionPlan } from '../../lib/firebase/accountDeletion';
 import { runGroupHandover, type HandoverIo } from '../../../functions/src/groupHandover/runHandover';
+import { planClaim } from '../../../functions/src/groupHandover/logic';
 import { rosterMismatches } from './memberTraceRoster';
 
 /**
@@ -128,9 +129,14 @@ function handoverIo(): HandoverIo {
     claimOwnership: (groupId, expectedOwnerUid, write) => withDb(async d => {
       const ref = fsMod.doc(d, 'groups', groupId);
       const fresh = await fsMod.getDoc(ref);
-      if (!fresh.exists() || fresh.data().ownerUid !== expectedOwnerUid) return false;
-      await fsMod.updateDoc(ref, { ownerUid: write.ownerUid, memberUids: write.memberUids });
-      return true;
+      const claim = planClaim(fresh.exists() ? {
+        ownerUid: fresh.data().ownerUid,
+        memberUids: fresh.data().memberUids ?? [],
+      } : null, expectedOwnerUid, write);
+      if (claim.kind === 'claimed') {
+        await fsMod.updateDoc(ref, { ownerUid: claim.ownerUid, memberUids: claim.memberUids });
+      }
+      return claim;
     }),
     eraseMemberTraces: (groupId, leavingUid, erasure) => withDb(async d => {
       const batch = fsMod.writeBatch(d);

@@ -13,7 +13,7 @@
 
 import {
   buildHandoverUpdate, buildOwnerPickedHandover, buildTraceErasure,
-  HandoverRefusal, refusalForSentInvites, type MemberRow,
+  HandoverRefusal, refusalForSentInvites, type ClaimResult, type MemberRow,
 } from './logic';
 
 /** One `groups/{gid}/watchlist/{id}` row, narrowed to what the handover reads. */
@@ -35,10 +35,14 @@ export interface GroupRow {
   readonly memberUids: readonly string[];
 }
 
-/** The `groups/{gid}` ownership swap. Bounded: one document. */
+/**
+ * The `groups/{gid}` ownership swap. Bounded: one document. Carries WHO leaves,
+ * not the resulting member list — the port derives that from its own
+ * transactional read through `planClaim` (BIN-1266).
+ */
 export interface HandoverWrite {
   readonly ownerUid: string;
-  readonly memberUids: readonly string[];
+  readonly leavingUid: string;
 }
 
 /**
@@ -86,8 +90,9 @@ export interface HandoverIo {
   /** Every `groups/{gid}/sessionHistory/{id}` row. */
   readSessionHistory(groupId: string): Promise<readonly SessionHistoryRow[]>;
   /**
-   * Swap the owner, but ONLY if `ownerUid` is still `expectedOwnerUid`; return
-   * false when it had already moved.
+   * Swap the owner, but ONLY if `ownerUid` is still `expectedOwnerUid` and the
+   * successor is still a member. What to write, or why not, is `planClaim`'s
+   * decision on the port's own read.
    *
    * The check and the write MUST be one atomic unit. That is what makes a retry a
    * no-op rather than a second election — two runs must never be able to name two
@@ -103,7 +108,7 @@ export interface HandoverIo {
     groupId: string,
     expectedOwnerUid: string,
     write: HandoverWrite,
-  ): Promise<boolean>;
+  ): Promise<ClaimResult>;
 
   /**
    * Erase the departing member's traces from a group that survives.
@@ -232,11 +237,20 @@ export async function runGroupHandover(
       summary.attempted += 1;
       await io.eraseMemberTraces(groupId, leavingUid, buildTraceErasure(watchlist, history, leavingUid));
 
-      const claimed = await io.claimOwnership(groupId, group.ownerUid, {
+      // A lost claim writes nothing. `owner-changed`: the group is someone else's
+      // now. `successor-left`: the group is STILL the leaver's, with other members in
+      // it, so it counts as failed — both doors must stop there rather than go on to
+      // delete or orphan a group other people are still in.
+      const claim = await io.claimOwnership(groupId, group.ownerUid, {
         ownerUid: outcome.ownerUid,
-        memberUids: outcome.memberUids,
+        leavingUid,
       });
-      if (!claimed) { summary.raced += 1; continue; }
+      if (claim.kind === 'owner-changed') { summary.raced += 1; continue; }
+      if (claim.kind === 'successor-left') {
+        io.log.error('groupHandover: successor left before the claim, group still owned', { groupId });
+        summary.failed += 1;
+        continue;
+      }
       summary.handedOver += 1;
     } catch (err) {
       io.log.error('groupHandover: group failed, others continue', { groupId, err });
@@ -278,10 +292,12 @@ export interface HandoverNotifyIo {
 }
 
 /** Why an owner-picked handover did not happen. Surfaced to the caller verbatim. */
-export const OWNER_PICK_REFUSALS: Record<'not-owner' | 'not-a-member' | 'self', string> = {
+export const OWNER_PICK_REFUSALS: Record<'not-owner' | 'not-a-member' | 'self' | 'owner-changed' | 'successor-left', string> = {
   'not-owner': 'Du äger inte den här gruppen.',
   'not-a-member': 'Personen du valde är inte medlem i gruppen.',
   self: 'Du kan inte lämna över gruppen till dig själv.',
+  'owner-changed': 'Gruppen bytte ägare medan du höll på. Ladda om sidan.',
+  'successor-left': 'Personen du valde har lämnat gruppen. Välj någon annan.',
 };
 
 /**
@@ -311,14 +327,18 @@ export async function runOwnerPickedHandover(
   leavingUid: string,
   successorUid: string,
 ): Promise<void> {
+  // The group is read AFTER the rows the erasure needs, so the membership check
+  // below is the last read before the first write. A successor who leaves in the
+  // window that remains is caught by `planClaim` and refused, but the erasure has
+  // run by then — see `## BIN-1267` in .claude/rules/accepted-deviations.md.
+  const watchlist = await io.readWatchlist(groupId);
+  const history = await io.readSessionHistory(groupId);
   const group = await io.readGroup(groupId);
   if (!group) throw new HandoverRefusal('Gruppen finns inte längre.');
 
   const outcome = buildOwnerPickedHandover(group, leavingUid, successorUid);
   if (outcome.kind === 'refused') throw new HandoverRefusal(OWNER_PICK_REFUSALS[outcome.reason]);
 
-  const watchlist = await io.readWatchlist(groupId);
-  const history = await io.readSessionHistory(groupId);
   await io.eraseMemberTraces(groupId, leavingUid, buildTraceErasure(watchlist, history, leavingUid));
 
   // Reads the successor's name BEFORE the swap: the departing owner's own member
@@ -327,17 +347,29 @@ export async function runOwnerPickedHandover(
   const successorName = await io.readMemberName(groupId, successorUid);
   const groupName = await io.readGroupName(groupId);
 
-  const claimed = await io.claimOwnership(groupId, group.ownerUid, {
+  const claim = await io.claimOwnership(groupId, group.ownerUid, {
     ownerUid: outcome.ownerUid,
-    memberUids: outcome.memberUids,
+    leavingUid,
   });
-  // The same optimistic guard the automatic door uses. It fires when the account
-  // -deletion handover moved ownership between this function's read and its
-  // write — rare, and the honest answer is that the group already changed hands.
-  if (!claimed) throw new HandoverRefusal('Gruppen bytte ägare medan du höll på. Ladda om sidan.');
+  // The same optimistic guard the automatic door uses, now with two ways to lose.
+  switch (claim.kind) {
+    case 'owner-changed': throw new HandoverRefusal(OWNER_PICK_REFUSALS['owner-changed']);
+    case 'successor-left': throw new HandoverRefusal(OWNER_PICK_REFUSALS['successor-left']);
+    case 'claimed': break;
+  }
+
+  // BIN-1271, Malins beslut 2026-09-23: the invitations the departing owner sent
+  // for THIS group go with them. After the swap and best-effort, like the
+  // notification below: a failure must not turn a completed handover into a
+  // reported failure.
+  try {
+    await eraseSentInvites(io, leavingUid, groupId);
+  } catch (err) {
+    io.log.error('groupHandover: sent-invite erasure after owner-picked handover failed, handover stands', { groupId, err });
+  }
 
   try {
-    await io.notifyMembers(outcome.memberUids, {
+    await io.notifyMembers(claim.memberUids, {
       title: 'Gruppen har ny ägare',
       body: `${successorName ?? 'En medlem'} tog över ${groupName ?? 'gruppen'}.`,
       actionUrl: `/grupper/${groupId}/`,
@@ -372,8 +404,11 @@ export async function runOwnerPickedHandover(
 export async function eraseSentInvites(
   io: Pick<HandoverIo, 'sentInvitePaths' | 'deleteSentInvites' | 'log'>,
   uid: string,
+  /** BIN-1271: only the invitations for this group. The document id IS the group id. */
+  groupId?: string,
 ): Promise<{ found: number }> {
-  const paths = await io.sentInvitePaths(uid);
+  const all = await io.sentInvitePaths(uid);
+  const paths = groupId === undefined ? all : all.filter((p) => p.endsWith(`/groupInvites/${groupId}`));
   const refusal = refusalForSentInvites(paths.length);
   if (refusal) {
     io.log.error('groupHandover: sent-invite erasure refused', { uid, found: paths.length });

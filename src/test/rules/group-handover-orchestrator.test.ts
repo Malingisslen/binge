@@ -13,7 +13,9 @@ import {
   eraseSentInvites, runGroupHandover, runOwnerPickedHandover,
   type HandoverIo, type HandoverNotifyIo,
 } from '../../../functions/src/groupHandover/runHandover';
-import { HandoverRefusal, SENT_INVITE_BATCH_LIMIT } from '../../../functions/src/groupHandover/logic';
+import {
+  HandoverRefusal, SENT_INVITE_BATCH_LIMIT, planClaim, refusalForHandover, HANDOVER_PARTIAL,
+} from '../../../functions/src/groupHandover/logic';
 import { rosterMismatches } from './memberTraceRoster';
 
 /**
@@ -128,13 +130,18 @@ function clientIo(): HandoverIo & { errors: unknown[] } {
     claimOwnership: async (groupId, expectedOwnerUid, write) => {
       const ref = doc(d, 'groups', groupId);
       const fresh = await getDoc(ref);
-      if (!fresh.exists() || fresh.data().ownerUid !== expectedOwnerUid) return false;
-      await updateDoc(ref, {
-        ownerUid: write.ownerUid,
-        memberUids: write.memberUids,
-        updatedAt: serverTimestamp(),
-      });
-      return true;
+      const claim = planClaim(fresh.exists() ? {
+        ownerUid: fresh.data().ownerUid,
+        memberUids: fresh.data().memberUids ?? [],
+      } : null, expectedOwnerUid, write);
+      if (claim.kind === 'claimed') {
+        await updateDoc(ref, {
+          ownerUid: claim.ownerUid,
+          memberUids: claim.memberUids,
+          updatedAt: serverTimestamp(),
+        });
+      }
+      return claim;
     },
 
     eraseMemberTraces: async (groupId, leavingUid, erasure) => {
@@ -466,6 +473,157 @@ describe('runOwnerPickedHandover — the owner names the successor (BIN-1118)', 
       await expect(runOwnerPickedHandover(io, 'g1', 'owner', 'jonas'))
         .rejects.not.toBeInstanceOf(HandoverRefusal);
     });
+  });
+});
+
+// BIN-1266 / BIN-1267 / BIN-1271. The windows between this function's reads and
+// its claim, driven by writing to the group from inside the erasure step — the
+// write lands after the reads and before the claim, exactly where a real leave
+// or a real invite would.
+describe('runOwnerPickedHandover — what changes while it runs (BIN-1266, BIN-1267, BIN-1271)', () => {
+  const seedThree = () => seedGroup({
+    id: 'g1',
+    ownerUid: 'owner',
+    members: [
+      { uid: 'owner', joinedAtMs: 1 },
+      { uid: 'jonas', joinedAtMs: 2 },
+      { uid: 'sara', joinedAtMs: 3 },
+    ],
+  });
+
+  it('a member who leaves mid-handover is NOT written back, and is not told', async () => {
+    await seedThree();
+    const io = { ...clientIo(), ...notifyIo() };
+    const realErase = io.eraseMemberTraces.bind(io);
+    io.eraseMemberTraces = async (groupId, leavingUid, erasure) => {
+      await realErase(groupId, leavingUid, erasure);
+      await updateDoc(doc(db(), 'groups', 'g1'), { memberUids: arrayRemove('sara') });
+    };
+
+    await runOwnerPickedHandover(io, 'g1', 'owner', 'jonas');
+
+    const after = (await getDoc(doc(db(), 'groups', 'g1'))).data();
+    expect(after?.ownerUid).toBe('jonas');
+    expect(after?.memberUids).toEqual(['jonas']);
+    expect(io.sent[0].uids).toEqual(['jonas']);
+  });
+
+  it('a successor who leaves mid-handover is refused, and nothing is claimed', async () => {
+    await seedThree();
+    const io = { ...clientIo(), ...notifyIo() };
+    const realErase = io.eraseMemberTraces.bind(io);
+    io.eraseMemberTraces = async (groupId, leavingUid, erasure) => {
+      await realErase(groupId, leavingUid, erasure);
+      await updateDoc(doc(db(), 'groups', 'g1'), { memberUids: arrayRemove('jonas') });
+    };
+
+    const err = await runOwnerPickedHandover(io, 'g1', 'owner', 'jonas').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(HandoverRefusal);
+    expect((err as Error).message).toBe('Personen du valde har lämnat gruppen. Välj någon annan.');
+
+    const after = (await getDoc(doc(db(), 'groups', 'g1'))).data();
+    expect(after?.ownerUid).toBe('owner');
+    expect(after?.memberUids).toEqual(['owner', 'sara']);
+    expect(io.sent).toHaveLength(0);
+    // BIN-1267: the erasure has run — the owner's own row is gone. What a retry
+    // with a successor who is still there does about it is the next test.
+    expect(await exists(['groups', 'g1', 'members', 'owner'])).toBe(false);
+  });
+
+  it('a retry with a successor who is still a member converges', async () => {
+    await seedThree();
+    const first = { ...clientIo(), ...notifyIo() };
+    const realErase = first.eraseMemberTraces.bind(first);
+    first.eraseMemberTraces = async (groupId, leavingUid, erasure) => {
+      await realErase(groupId, leavingUid, erasure);
+      await updateDoc(doc(db(), 'groups', 'g1'), { memberUids: arrayRemove('jonas') });
+    };
+    await expect(runOwnerPickedHandover(first, 'g1', 'owner', 'jonas')).rejects.toBeInstanceOf(HandoverRefusal);
+
+    await runOwnerPickedHandover({ ...clientIo(), ...notifyIo() }, 'g1', 'owner', 'sara');
+
+    const after = (await getDoc(doc(db(), 'groups', 'g1'))).data();
+    expect(after?.ownerUid).toBe('sara');
+    expect(after?.memberUids).toEqual(['sara']);
+  });
+
+  const seedInvite = (target: string, gid: string, fromUid: string) =>
+    setDoc(doc(db(), 'users', target, 'groupInvites', gid), {
+      groupId: gid, groupName: 'Gruppen', fromUid, fromDisplayName: 'namn', invitedAt: serverTimestamp(),
+    });
+
+  it('erases the invitations the departing owner sent for THIS group, and only those', async () => {
+    await seedThree();
+    await seedInvite('invitee', 'g1', 'owner');
+    await seedInvite('invitee', 'annan-grupp', 'owner');
+    await seedInvite('invitee2', 'g1', 'jonas');
+
+    await runOwnerPickedHandover({ ...clientIo(), ...notifyIo() }, 'g1', 'owner', 'jonas');
+
+    expect(await exists(['users', 'invitee', 'groupInvites', 'g1'])).toBe(false);
+    expect(await exists(['users', 'invitee', 'groupInvites', 'annan-grupp'])).toBe(true);
+    expect(await exists(['users', 'invitee2', 'groupInvites', 'g1'])).toBe(true);
+  });
+
+  it('keeps the handover when the invitation erasure fails', async () => {
+    await seedThree();
+    const io = { ...clientIo(), ...notifyIo() };
+    io.sentInvitePaths = async () => { throw new Error('14 UNAVAILABLE'); };
+
+    await runOwnerPickedHandover(io, 'g1', 'owner', 'jonas');
+
+    expect((await getDoc(doc(db(), 'groups', 'g1'))).data()?.ownerUid).toBe('jonas');
+    expect(io.errors).toHaveLength(1);
+    expect(io.sent).toHaveLength(1);
+  });
+});
+
+describe('runGroupHandover — a member who leaves mid-handover (BIN-1266)', () => {
+  it('is not written back into memberUids', async () => {
+    await seedGroup({
+      id: 'g',
+      ownerUid: 'owner',
+      members: [
+        { uid: 'owner', joinedAtMs: 1 },
+        { uid: 'heir', joinedAtMs: 2 },
+        { uid: 'sara', joinedAtMs: 3 },
+      ],
+    });
+    const io = clientIo();
+    const realErase = io.eraseMemberTraces.bind(io);
+    io.eraseMemberTraces = async (groupId, leavingUid, erasure) => {
+      await realErase(groupId, leavingUid, erasure);
+      await updateDoc(doc(db(), 'groups', 'g'), { memberUids: arrayRemove('sara') });
+    };
+
+    const summary = await runGroupHandover(io, 'owner');
+
+    expect(summary).toMatchObject({ handedOver: 1, raced: 0 });
+    expect((await getDoc(doc(db(), 'groups', 'g'))).data()?.memberUids).toEqual(['heir']);
+  });
+
+  it('counts a successor who left as a FAILURE, so both doors stop, and writes nothing', async () => {
+    await seedGroup({
+      id: 'g',
+      ownerUid: 'owner',
+      members: [{ uid: 'owner', joinedAtMs: 1 }, { uid: 'heir', joinedAtMs: 2 }, { uid: 'sara', joinedAtMs: 3 }],
+    });
+    const io = clientIo();
+    const realErase = io.eraseMemberTraces.bind(io);
+    io.eraseMemberTraces = async (groupId, leavingUid, erasure) => {
+      await realErase(groupId, leavingUid, erasure);
+      await updateDoc(doc(db(), 'groups', 'g'), { memberUids: arrayRemove('heir') });
+    };
+
+    const summary = await runGroupHandover(io, 'owner');
+
+    expect(summary).toMatchObject({ handedOver: 0, raced: 0, failed: 1, attempted: 1 });
+    // The account-delete door refuses on this, with the partial marker, instead of
+    // going on to delete a group other people are still in.
+    expect(refusalForHandover(summary)).toContain(HANDOVER_PARTIAL);
+    const after = (await getDoc(doc(db(), 'groups', 'g'))).data();
+    expect(after?.ownerUid).toBe('owner');
+    expect(after?.memberUids).toEqual(['owner', 'sara']);
   });
 });
 

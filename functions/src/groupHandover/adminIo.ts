@@ -14,7 +14,7 @@
 import { FieldValue, Timestamp, type Firestore } from 'firebase-admin/firestore';
 
 import { type HandoverIo, type HandoverNotifyIo } from './runHandover';
-import { chunkWrites, memberTraceWrites } from './logic';
+import { chunkWrites, memberTraceWrites, planClaim } from './logic';
 
 /** Writes per batch, under Firestore's own 500 ceiling. */
 const BATCH_LIMIT = 450;
@@ -124,13 +124,18 @@ export function adminHandoverIo(db: Firestore, log: HandoverIo['log']): Handover
         // transaction: a retry must find its own earlier handover already done
         // rather than hold a second election naming a different member.
         const fresh = await tx.get(groupRef);
-        if (!fresh.exists || fresh.get('ownerUid') !== expectedOwnerUid) return false;
-        tx.update(groupRef, {
-          ownerUid: write.ownerUid,
-          memberUids: write.memberUids,
-          updatedAt: FieldValue.serverTimestamp(),
-        });
-        return true;
+        const claim = planClaim(fresh.exists ? {
+          ownerUid: (fresh.get('ownerUid') as string | undefined) ?? '',
+          memberUids: (fresh.get('memberUids') as string[] | undefined) ?? [],
+        } : null, expectedOwnerUid, write);
+        if (claim.kind === 'claimed') {
+          tx.update(groupRef, {
+            ownerUid: claim.ownerUid,
+            memberUids: claim.memberUids,
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+        }
+        return claim;
       });
     },
 
