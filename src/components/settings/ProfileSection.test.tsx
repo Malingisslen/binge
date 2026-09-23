@@ -10,7 +10,7 @@ import { render, screen, act, fireEvent } from '@testing-library/react';
 const auth = vi.hoisted(() => ({
   user: { displayName: 'Malin', email: 'malin@example.com' } as Record<string, unknown> | null,
   signOut: vi.fn(async () => {}),
-  updateDisplayName: vi.fn(async () => {}),
+  updateDisplayName: vi.fn(async (name: string) => name),
 }));
 const toastShow = vi.hoisted(() => vi.fn());
 
@@ -24,7 +24,7 @@ const field = () => screen.getByLabelText('Namn') as HTMLInputElement;
 beforeEach(() => {
   vi.clearAllMocks();
   auth.user = { displayName: 'Malin', email: 'malin@example.com' };
-  auth.updateDisplayName.mockResolvedValue(undefined);
+  auth.updateDisplayName.mockImplementation(async (name: string) => name);
 });
 
 describe('ProfileSection — visningsnamnet går att ändra (BIN-1154)', () => {
@@ -74,6 +74,33 @@ describe('ProfileSection — visningsnamnet går att ändra (BIN-1154)', () => {
     expect(toastShow).not.toHaveBeenCalledWith('Namnet sparat');
     expect(toastShow).toHaveBeenCalledWith('Kunde inte spara. Försök igen om en stund.');
     expect(field().value).toBe('Malin');
+  });
+
+  // BIN-1275: sparningen kan lagra något kortare än det som står i fältet (taket
+  // mäts i UTF-16-enheter, och ett emoji-par som straddlar det kapas helt). Fältet
+  // ska visa det som LAGRADES, annars står "Namnet sparat" över ett annat namn.
+  it('fältet visar det lagrade namnet efter sparningen', async () => {
+    auth.updateDisplayName.mockImplementationOnce(async () => 'Kapat');
+    await act(async () => { render(<ProfileSection />); });
+
+    fireEvent.change(field(), { target: { value: 'Kapat och lite till' } });
+    await act(async () => { fireEvent.blur(field()); });
+
+    expect(field().value).toBe('Kapat');
+    expect(toastShow).toHaveBeenCalledWith('Namnet sparat');
+  });
+
+  it('skriver inte över det användaren hunnit skriva under sparningen', async () => {
+    let release!: (v: string) => void;
+    auth.updateDisplayName.mockImplementationOnce(() => new Promise<string>((r) => { release = r; }));
+    await act(async () => { render(<ProfileSection />); });
+
+    fireEvent.change(field(), { target: { value: 'Första' } });
+    await act(async () => { fireEvent.blur(field()); });
+    fireEvent.change(field(), { target: { value: 'Andra' } });
+    await act(async () => { release('Första'); });
+
+    expect(field().value).toBe('Andra');
   });
 
   it('fältet bär taket och är kopplat till sin hjälptext', async () => {

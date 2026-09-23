@@ -2542,10 +2542,13 @@ describe('AuthContext - visningsnamnet gar att andra, och skrivningarna har en o
     await login({ displayName: 'Malin', email: 'malin@example.com' });
     setDoc.mockClear();
 
-    await act(async () => { await ctx!.updateDisplayName('y'.repeat(200)); });
+    let stored: string | undefined;
+    await act(async () => { stored = await ctx!.updateDisplayName('y'.repeat(200)); });
 
     const [, payload] = userDocWrites()[0] as [unknown, Record<string, unknown>, unknown];
     expect(payload.displayName).toBe('y'.repeat(80));
+    // BIN-1275: det namnfaltet far tillbaka ar samma strang som skrevs.
+    expect(stored).toBe(payload.displayName);
   });
 
   it('Auth-posten far samma BEARBETADE varde, sa de tva lagringarna inte glider isar', async () => {
@@ -2608,7 +2611,8 @@ describe('AuthContext - visningsnamnet gar att andra, och skrivningarna har en o
     setDoc.mockClear();
 
     await act(async () => {
-      await expect(ctx!.updateDisplayName('Nytt namn')).resolves.toBeUndefined();
+      // BIN-1275: resolvar med det lagrade vardet, inte bara utan att kasta.
+      await expect(ctx!.updateDisplayName('Nytt namn')).resolves.toBe('Nytt namn');
     });
 
     const [, payload] = userDocWrites()[0] as [unknown, Record<string, unknown>, unknown];

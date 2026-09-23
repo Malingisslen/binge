@@ -30,8 +30,12 @@ export function ProfileSection() {
       toast('Namnet kan inte vara tomt.');
       return;
     }
+    // BIN-1275: faltet visar det som LAGRADES, som kan vara kortare an det som
+    // skrevs. Bara om ingen skrivit i faltet under sparningen (samma spärr som bion).
+    const sent = nameInput;
     try {
-      await updateDisplayName(next);
+      const stored = await updateDisplayName(next);
+      setNameInput(prev => (prev === sent ? stored : prev));
       toast('Namnet sparat');
     } catch {
       setNameInput(user!.displayName);

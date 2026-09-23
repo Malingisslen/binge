@@ -96,7 +96,7 @@ interface AuthState {
    * slapper igenom, se accepted-deviations. Anroparen gatar sin bekraftelse pa
    * att await:en inte kastade.
    */
-  updateDisplayName: (name: string) => Promise<void>;
+  updateDisplayName: (name: string) => Promise<string>;
   /** Resolvar med det LAGRADE vardet, som kan vara klampat (BIN-1253). */
   updateBio: (bio: string) => Promise<string>;
   updateDefaultVisibility: (visibility: ItemVisibility) => Promise<void>;
@@ -153,7 +153,7 @@ const AuthContext = createContext<AuthState>({
   pauseProvider: async () => {},
   resumeProvider: async () => {},
   updateUsername: async () => {},
-  updateDisplayName: async () => {},
+  updateDisplayName: async (name: string) => name,
   updateBio: async (bio: string) => bio,
   updateDefaultVisibility: async () => {},
   visibilitySyncPending: false,
@@ -1333,6 +1333,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Vardet ar det KLAMPADE, samma strang som gick till dokumentet - aldrig ett
     // omharlett eller omlast (#27 DBA).
     await publishIdentityChange({ displayName: clamped, username: user?.username ?? null });
+    // BIN-1275: det lagrade vardet, sa namnfaltet kan visa det som faktiskt sparades.
+    return clamped;
   }, [updateUserField, publishIdentityChange, user?.username]);
 
   // BIN-1253: samma klampning som den publika projektionen redan gor, sa den privata
