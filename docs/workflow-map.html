@@ -1663,8 +1663,15 @@
         {
           "from": "cf-handOverGroup",
           "to": "firestore",
-          "payload": "claimOwnership i transaktion — skriver ownerUid + memberUids bara om ownerUid ännu är den avgående ägaren",
+          "payload": "claimOwnership i transaktion — skriver ownerUid + memberUids",
           "transport": "firestore-transaction-write",
+          "verified": true
+        },
+        {
+          "from": "cf-handOverGroup",
+          "to": "firestore",
+          "payload": "BIN-1271: raderar inbjudningarna den avgående ägaren skickat till just den här gruppen (users/*/groupInvites/{groupId} med fromUid = ägaren) — efter ägarbytet och bäst-möjliga, en miss fäller inte överlämningen",
+          "transport": "Firestore batch write",
           "verified": true
         },
         {
@@ -2775,7 +2782,7 @@
         {
           "from": "cf-handOverOwnedGroups",
           "to": "firestore",
-          "payload": "claimOwnership — runTransaction re-reads ownerUid and writes ownerUid + memberUids only if it has not moved. The re-read is the idempotency guard: a retry must find its own earlier handover done rather than hold a second election naming a different member. The erasure is deliberately outside it, because a group's watchlist is unbounded and a transaction that grew with it would fail the one write that must not",
+          "payload": "claimOwnership — runTransaction re-reads ownerUid and writes ownerUid + memberUids. The re-read is the idempotency guard: a retry must find its own earlier handover done rather than hold a second election naming a different member. The erasure is deliberately outside it, because a group's watchlist is unbounded and a transaction that grew with it would fail the one write that must not",
           "transport": "firestore-transaction-write",
           "verified": true
         },
