@@ -3008,7 +3008,7 @@
         {
           "from": "sentry-lib",
           "to": "sentry-ingest",
-          "payload": "captureException(error, {tags: {scope: 'app:global', kind: 'error-boundary'}, extra: {digest}}) — beforeSend first deletes user.email/username/ip_address and strips the query string from request.url; ignoreErrors drops ResizeObserver/abort/network noise",
+          "payload": "captureException(error, {tags: {scope: 'app:global', kind: 'error-boundary'}, extra: {digest}}) — beforeSend first deletes user.id/email/username/ip_address, strips the query string, and replaces the id segment after user, tillsammans, grupper and list with a placeholder in request.url, the Referer header, the transaction and frame filenames; Firestore document paths in exception text are reduced to collection names (BIN-1283). beforeBreadcrumb applies the same to navigation and fetch crumbs, drops console crumbs and deletes ui crumb text; ignoreErrors drops ResizeObserver/abort/network noise",
           "transport": "https (Sentry SDK)",
           "verified": true
         },
