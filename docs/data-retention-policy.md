@@ -208,11 +208,6 @@ När användaren raderas:
   EFTER överlämningen. Mitt uid tas sedan ur `memberUids` av klientkaskaden, som
   förut.
 
-  Gäller raderaknappen. Ett konto som raderats i Firebase Console når inte det här
-  steget: sopningen frågar på `ownerUid`, inte på `memberUids`, och den avgränsningen
-  står i posten daterad 2026-09-07 i `.claude/rules/accepted-deviations.md`. Öppet
-  arbete: BIN-1294.
-
 ### Att lämna en grupp → samma spår raderas (BIN-1260, Malins beslut 2026-09-23)
 
 Själva utträdet är en klientskrivning och oförändrat: mitt uid ur `memberUids`,
@@ -829,12 +824,6 @@ Detta raderas INTE, och det är beslut:
   medlem längst (Malins beslut 2026-09-06), genom exakt samma `runGroupHandover`
   som raderaknappen driver. Finns ingen annan medlem kvar
   raderas gruppen.
-* **En grupp kontot bara var MEDLEM i rörs inte alls.** Svepet frågar på
-  `ownerUid`, inte på `memberUids`, så uid:t står kvar i medlemslistan och
-  `groups/{g}/members/{uid}` behåller sitt denormaliserade `displayName` och
-  `photoURL` för gruppens övriga medlemmar — permanent, eftersom uid:t inte
-  återkommer i `listUserUids()` efter att samma körning raderat `users/{uid}`.
-  Klientkaskaden når dem; svepet gör det inte.
 
 **Dokumentbudget.** Kontotaket ovan räknar PERSONER. Den här halvan behöver ett
 tak till, för utflakningen av ett KORREKT val är obegränsad i dokument: ett konto
@@ -913,6 +902,11 @@ Policy ska omvärderas om:
 - **Moderation-runbook** (`docs/moderation.md`).
 
 ## Ändringslogg
+
+- **2026-09-23 (BIN-1294)** — Malins beslut (runda 2, A): sopningen raderar nu ett
+  konsolraderat kontos spår i grupper det bara var MEDLEM i, samma spår som
+  raderaknappen raderar, och tar bort uid:t ur gruppens `memberUids`. Steget räknas
+  in i dokumentbudgeten och körs efter gruppernas överlämning.
 
 - **2026-09-23 (BIN-1296)** — Malins beslut (runda 2, A): när en ägare tar bort en
   medlem raderas samma spår som när medlemmen själv lämnar (se "Att lämna en

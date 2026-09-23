@@ -12,7 +12,7 @@
  */
 
 import {
-  buildHandoverUpdate, buildOwnerPickedHandover, buildTraceErasure,
+  buildHandoverUpdate, buildOwnerPickedHandover, buildTraceErasure, memberTraceWrites,
   HandoverRefusal, LEAVER_ERASURE_REFUSALS, OWNER_REMOVAL_REFUSALS, planLeaverErasure,
   planOwnerRemovalErasure, refusalForSentInvites,
   type ClaimResult, type MemberRow,
@@ -530,5 +530,61 @@ export async function runMemberGroupErasure(
     await io.eraseMemberTraces(id, uid, buildTraceErasure(watchlist, history, uid));
   }
   io.log.info('groupHandover: member-group traces erased', { uid, groups: groups.length });
+  return { groups: groups.length };
+}
+
+/** BIN-1294: the sweep has no client cascade to take the uid out of `memberUids`. */
+export interface MemberStripIo {
+  /** Remove `uid` from `groups/{groupId}.memberUids`. */
+  stripMemberUid(groupId: string, uid: string): Promise<void>;
+}
+
+type SweptMemberGroupIo = MemberGroupsIo
+  & Pick<HandoverIo, 'readWatchlist' | 'readSessionHistory' | 'eraseMemberTraces' | 'log'>;
+
+/**
+ * BIN-1294: READ-ONLY — how many writes the sweep's member-group step would make
+ * for `uid`, so the all-or-nothing document budget can see it before anything is
+ * written. Per group: the trace writes `memberTraceWrites` produces, plus the
+ * `memberUids` strip.
+ */
+export async function planSweptMemberGroupErasure(io: SweptMemberGroupIo, uid: string): Promise<number> {
+  const groups = (await io.memberGroups(uid)).filter((g) => g.ownerUid !== uid);
+  let writes = 0;
+  for (const { id } of groups) {
+    const watchlist = await io.readWatchlist(id);
+    const history = await io.readSessionHistory(id);
+    writes += memberTraceWrites(uid, buildTraceErasure(watchlist, history, uid)).length + 1;
+  }
+  return writes;
+}
+
+/**
+ * BIN-1294: the retention sweep's version of `runMemberGroupErasure`, for an
+ * account deleted in Firebase Console.
+ *
+ * The button's door leaves `memberUids` to the client cascade; the sweep has none,
+ * so it strips the uid itself — LAST per group, after that group's traces. A
+ * failure before the strip leaves the uid in `memberUids`, so the next run finds
+ * the group again and converges.
+ *
+ * `progress.written` is credited per group BEFORE the next write can throw
+ * (#27's condition).
+ */
+export async function runSweptMemberGroupErasure(
+  io: SweptMemberGroupIo & MemberStripIo,
+  uid: string,
+  progress: { written: number },
+): Promise<{ groups: number }> {
+  const groups = (await io.memberGroups(uid)).filter((g) => g.ownerUid !== uid);
+  for (const { id } of groups) {
+    const watchlist = await io.readWatchlist(id);
+    const history = await io.readSessionHistory(id);
+    await io.eraseMemberTraces(id, uid, buildTraceErasure(watchlist, history, uid));
+    progress.written += memberTraceWrites(uid, buildTraceErasure(watchlist, history, uid)).length;
+    await io.stripMemberUid(id, uid);
+    progress.written += 1;
+  }
+  io.log.info('groupHandover: swept member-group traces erased', { uid, groups: groups.length });
   return { groups: groups.length };
 }

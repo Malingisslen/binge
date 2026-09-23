@@ -2215,3 +2215,32 @@ borttagna är med igen, gruppen är borta, eller anroparen inte längre är äga
 
 **Re-open when:** någon av punkterna ovan inträffar, eller `kind: 'removeMember-traceErasure'`
 återkommer i Sentry-scopet `groups`.
+
+---
+
+## BIN-1294: svepet raderar spåren i grupper ett konsolraderat konto bara var medlem i — 2026-09-23
+
+Efterföljare till tre poster som står kvar ordagrant: "2026-09-07 — BIN-1063 steg 3, bunt 3"
+(punkten "En grupp kontot bara var MEDLEM i rör svepet inte alls"), `## BIN-1260` (punkt 2
+under "Vad som INTE täcks") och `## BIN-1296` (raden "BIN-1294 (konton raderade i Firebase
+Console) är oförändrad"). Alla tre punkterna är stängda.
+
+**Vad som byggdes.** `retentionCleanup` kör numera, efter gruppernas överlämning, samma
+spårradering som raderaknappen i grupper uid:t bara var medlem i, och tar sedan bort uid:t ur
+gruppens `memberUids` — sist per grupp, så en omkörning hittar gruppen igen om något föll.
+Steget räknas in i samma allt-eller-inget-budget som resten. Härled de delade funktionerna:
+
+```
+git grep -n "runSweptMemberGroupErasure\|planSweptMemberGroupErasure" -- functions/src
+```
+
+**Vad som fortfarande INTE täcks, oförändrat:** `followers` (se BIN-1113-posten), och det som
+ligger bortom observationsgolvet — spåren står kvar tills golvet passerats.
+
+**INTE accepterat, alltså fortfarande fileable:**
+1. Att steget körs utanför det `try` som behåller bevakningsposten vid ett fel.
+2. Att `memberUids` strippas före gruppens spår.
+3. Att steget rör en grupp uid:t ÄGER — den är överlämningens.
+
+**Re-open when:** någon av punkterna ovan inträffar, eller en rapport visar ett konsolraderat
+uid kvar i en grupps `memberUids` efter en körning som passerat observationsgolvet.

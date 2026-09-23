@@ -37,7 +37,7 @@
  *     rather than an unfinished Art. 17 request — Malin's decision 2026-08-11,
  *     conditional on this running. See docs/data-retention-policy.md.
  *   - users/{uid} — the WHOLE tree, plus publicProfiles/{uid}, plus everything
- *     owned through a FIELD (the roster is FIELD_OWNED_CATEGORIES) — for uids Auth
+ *     owned through a FIELD — for uids Auth
  *     does not know at all, observed absent since an earlier run (BIN-1023):
  *     an account deleted from the Firebase Console runs no client cascade, so
  *     every document survives an erasure its owner can no longer retry (they
@@ -88,8 +88,8 @@ import { getAuth } from 'firebase-admin/auth';
 import { runRetentionCleanup, type CleanupIo, type ScanKind } from './runCleanup';
 import { handoverEstimate, type CategoryFindings } from './fieldOwned';
 import { isEmptyExcept } from '../groupHandover/logic';
-import { runGroupHandover } from '../groupHandover/runHandover';
-import { adminHandoverIo } from '../groupHandover/adminIo';
+import { planSweptMemberGroupErasure, runGroupHandover, runSweptMemberGroupErasure } from '../groupHandover/runHandover';
+import { adminHandoverIo, adminLeaverIo } from '../groupHandover/adminIo';
 
 /** Firestore's per-commit write ceiling is 500; leave headroom like the client. */
 const BATCH_SIZE = 450;
@@ -393,6 +393,18 @@ const adminIo: CleanupIo = {
     if (!snap.exists) return 'gone';
     const memberUids = (snap.get('memberUids') as string[] | undefined) ?? [];
     return isEmptyExcept(memberUids, uid) ? 'still-empty' : 'gained-member';
+  },
+
+  // BIN-1294 — the groups the uid was only a MEMBER of, through the same shared
+  // functions and Admin port the account-delete button's door uses.
+  planMemberGroupErasure: async (uid) => {
+    const db = getFirestore();
+    return planSweptMemberGroupErasure({ ...adminHandoverIo(db, logger), ...adminLeaverIo(db, logger) }, uid);
+  },
+
+  commitMemberGroupErasure: async (uid, progress) => {
+    const db = getFirestore();
+    await runSweptMemberGroupErasure({ ...adminHandoverIo(db, logger), ...adminLeaverIo(db, logger) }, uid, progress);
   },
 };
 

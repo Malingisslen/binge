@@ -448,6 +448,19 @@ ingen rad där (`grep -n -A6 "export function subscribeToGroupMembers" src/lib/f
 Går steg 1 inte att genomföra: ta bort medlemmens uid ur `memberUids` i `groups/{groupId}` i
 Firebase Console, och fortsätt med steg 2.
 
+### 5i. En raderingsbegäran kommer via mejl (BIN-1294)
+
+1. Be personen radera kontot själv: Inställningar → "Radera konto". Den vägen raderar
+   allt direkt, också spåren i grupper hen bara var medlem i, och visar vad som hände.
+2. Kan personen inte logga in: bekräfta först att begäran kommer från kontoinnehavaren,
+   på samma sätt som en Art. 17-begäran. Radera sedan kontot i Firebase Console →
+   Authentication.
+   `retentionCleanup` raderar sedan resten, men först efter observationsgolvet. Härled
+   golvet i stället för att lita på en siffra här:
+   `git grep -n "ORPHAN_DATA_MIN_OBSERVED_MS =" -- functions/src`
+3. Svara personen att raderingen är påbörjad och när den är klar enligt golvet i steg 2.
+4. Skriv en rad i §12 Loggbok: datum, vem som körde.
+
 ## 6. "Bygget failar i CI"
 
 ### 6a. Lint/typecheck fel

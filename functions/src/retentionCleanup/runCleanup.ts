@@ -245,6 +245,20 @@ export interface CleanupIo {
    * otherwise stay readable with nothing left to delete it.
    */
   recheckPlannedGroup(groupId: string, uid: string): Promise<PlannedGroupState>;
+
+  /**
+   * BIN-1294, READ-ONLY: how many writes the member-group step would make for
+   * `uid` — its traces in groups it was only a MEMBER of, plus its `memberUids`
+   * entry there. Counted into the same all-or-nothing budget as the rest.
+   */
+  planMemberGroupErasure(uid: string): Promise<number>;
+
+  /**
+   * BIN-1294, WRITE: erase those traces and strip the uid from `memberUids`,
+   * through the shared `runSweptMemberGroupErasure`. Credits `progress.written`
+   * as it goes, so a throw mid-way still reports what landed.
+   */
+  commitMemberGroupErasure(uid: string, progress: { written: number }): Promise<void>;
 }
 
 /** Uids per `deleteUsers` call — the Admin API's own ceiling. */
@@ -729,7 +743,13 @@ async function eraseFieldOwned(
     deletePaths: Array.from({ length: plan.handoverDocs }, (_, i) => `handover-write/${i}`),
     arrayStrips: [],
   };
-  const { allowed, documents } = withinDocumentBudget([...findings, handoverCost]);
+  // BIN-1294: the groups this uid was only a member of, counted the same way.
+  const memberGroupWrites = await io.planMemberGroupErasure(uid);
+  const memberGroupCost: CategoryFindings = {
+    deletePaths: Array.from({ length: memberGroupWrites }, (_, i) => `member-group-write/${i}`),
+    arrayStrips: [],
+  };
+  const { allowed, documents } = withinDocumentBudget([...findings, handoverCost, memberGroupCost]);
   if (!allowed) {
     io.log.error('retentionCleanup: field-owned erasure exceeded its document budget — erasing NOTHING for this uid', {
       uid,
@@ -803,6 +823,11 @@ async function eraseFieldOwned(
       progress.written += 1;
     }
   }
+
+  // BIN-1294: AFTER the handover, as the account-delete button does — a group just
+  // handed over no longer has the uid in `memberUids`, so this step cannot touch it.
+  // Inside the caller's try, so a failure keeps the watch record (#27's condition).
+  await io.commitMemberGroupErasure(uid, progress);
   return progress.written;
 }
 

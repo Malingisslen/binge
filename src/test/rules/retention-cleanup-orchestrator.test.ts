@@ -7,7 +7,10 @@ import {
   type Firestore, type Query,
 } from 'firebase/firestore';
 
-import { runGroupHandover, type HandoverIo } from '../../../functions/src/groupHandover/runHandover';
+import {
+  planSweptMemberGroupErasure, runGroupHandover, runSweptMemberGroupErasure,
+  type HandoverIo, type MemberGroupsIo, type MemberStripIo,
+} from '../../../functions/src/groupHandover/runHandover';
 import { isEmptyExcept, planClaim } from '../../../functions/src/groupHandover/logic';
 import { rosterMismatches } from './memberTraceRoster';
 import { FRIEND_REQUEST_PUSH_MARKER_MAX_AGE_MS } from '../../../functions/src/friendRequestPush/logic';
@@ -396,7 +399,26 @@ function makeIo(db: Firestore, auth: FakeAuth, overrides: Partial<CleanupIo> = {
       return isEmptyExcept(memberUids, uid) ? 'still-empty' : 'gained-member';
     },
 
+    // BIN-1294 — drives the SAME shared functions production drives.
+    planMemberGroupErasure: async (uid) => planSweptMemberGroupErasure(memberGroupIo(db), uid),
+    commitMemberGroupErasure: async (uid, progress) => {
+      await runSweptMemberGroupErasure(memberGroupIo(db), uid, progress);
+    },
+
     ...overrides,
+  };
+}
+
+/** BIN-1294: the member-group step's port — the handover reads plus the two new operations. */
+function memberGroupIo(db: Firestore): HandoverIo & MemberGroupsIo & MemberStripIo {
+  return {
+    ...handoverIo(db),
+    memberGroups: async (uid) =>
+      (await getDocs(query(collection(db, 'groups'), where('memberUids', 'array-contains', uid))))
+        .docs.map((x) => ({ id: x.id, ownerUid: (x.data().ownerUid as string) ?? '' })),
+    stripMemberUid: async (groupId, uid) => {
+      await updateDoc(doc(db, 'groups', groupId), { memberUids: arrayRemove(uid) });
+    },
   };
 }
 
@@ -1088,6 +1110,58 @@ describe('retentionCleanup orchestrator — the FIELD-owned half (BIN-1063 steg 
       'reviews', 'foreignReviewUgc', 'reactions', 'lists', 'sessions',
       'friendMirrors', 'groupInvitesSent', 'rotationReminders', 'groups',
     ]);
+  });
+
+  // BIN-1294: a group the departed account was only a MEMBER of. Its traces and its
+  // `memberUids` entry go; the owner's rows in the SAME collections stay.
+  it('erases a member-only group’s traces and memberUids entry, and leaves the live owner’s', async () => {
+    const db = adminLikeDb();
+    await setDoc(doc(db, 'groups', 'joined'), { ownerUid: 'keeper', memberUids: ['keeper', 'consoled'] });
+    await setDoc(doc(db, 'groups', 'joined', 'members', 'keeper'), { uid: 'keeper', joinedAt: ts(NOW - 2000) });
+    await setDoc(doc(db, 'groups', 'joined', 'members', 'consoled'), { uid: 'consoled', joinedAt: ts(NOW - 1000) });
+    await setDoc(doc(db, 'groups', 'joined', 'household', 'consoled'), { uid: 'consoled' });
+    await setDoc(doc(db, 'groups', 'joined', 'household', 'keeper'), { uid: 'keeper' });
+    await setDoc(doc(db, 'groups', 'joined', 'watchlist', 'movie_1'), { addedBy: 'consoled', title: 'x' });
+    await setDoc(doc(db, 'groups', 'joined', 'watchlist', 'movie_2'), { addedBy: 'keeper', title: 'y' });
+    await setDoc(doc(db, 'groups', 'joined', 'watchlist', 'movie_1', 'progress', 'consoled'), { s: 1 });
+    await setDoc(doc(db, 'groups', 'joined', 'watchlist', 'movie_1', 'progress', 'keeper'), { s: 1 });
+    await setDoc(doc(db, 'groups', 'joined', 'sessionHistory', 'h1'), {
+      pickedByUid: 'consoled', participantUids: ['keeper', 'consoled'],
+    });
+    await sweepPastTheFloor(db);
+
+    expect((await getDoc(doc(db, 'groups', 'joined'))).data()?.memberUids).toEqual(['keeper']);
+    expect(await exists(db, 'groups/joined/members/consoled')).toBe(false);
+    expect(await exists(db, 'groups/joined/household/consoled')).toBe(false);
+    expect(await exists(db, 'groups/joined/watchlist/movie_1/progress/consoled')).toBe(false);
+    expect('addedBy' in ((await getDoc(doc(db, 'groups', 'joined', 'watchlist', 'movie_1'))).data() ?? {})).toBe(false);
+    const h1 = (await getDoc(doc(db, 'groups', 'joined', 'sessionHistory', 'h1'))).data() ?? {};
+    expect('pickedByUid' in h1).toBe(false);
+    expect(h1.participantUids).toEqual(['keeper']);
+
+    expect(await exists(db, 'groups/joined/members/keeper')).toBe(true);
+    expect(await exists(db, 'groups/joined/household/keeper')).toBe(true);
+    expect(await exists(db, 'groups/joined/watchlist/movie_1/progress/keeper')).toBe(true);
+    expect((await getDoc(doc(db, 'groups', 'joined', 'watchlist', 'movie_2'))).data()?.addedBy).toBe('keeper');
+    expect((await getDoc(doc(db, 'groups', 'joined', 'watchlist', 'movie_1'))).data()?.title).toBe('x');
+  });
+
+  // #27's condition: a failure in the member-group step keeps the watch record, so
+  // the next run retries, and `users/{uid}` is untouched.
+  it('a failed member-group step keeps the watch record and the user tree', async () => {
+    const db = adminLikeDb();
+    const auth = makeAuth(ORPHAN_DATA_ACCOUNTS);
+    await seedOrphanData(db);
+    await seedFieldOwned(db);
+    await runRetentionCleanup(makeIo(db, auth));
+    const later = NOW + ORPHAN_DATA_MIN_OBSERVED_MS + ONE_DAY;
+    await runRetentionCleanup(makeIo(db, auth, {
+      now: () => later,
+      commitMemberGroupErasure: async () => { throw new Error('nere'); },
+    }));
+
+    expect(await exists(db, 'orphanWatch/consoled')).toBe(true);
+    expect(await exists(db, 'users/consoled/watchlist/movie_42')).toBe(true);
   });
 
   // BIN-1113. Two rows the new category must NOT reach: a follower row about the

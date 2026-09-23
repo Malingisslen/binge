@@ -27,7 +27,8 @@ import {
   type TraceWrite,
 } from './logic';
 import {
-  eraseSentInvites, runLeaverErasure, runMemberGroupErasure, runOwnerRemovalErasure, type LeaverIo, type TraceErasure,
+  eraseSentInvites, runLeaverErasure, runMemberGroupErasure, runOwnerRemovalErasure,
+  planSweptMemberGroupErasure, runSweptMemberGroupErasure, type LeaverIo, type TraceErasure,
 } from './runHandover';
 import { eraseReminderMarkers } from '../rotationReminder/markers';
 
@@ -1046,6 +1047,47 @@ describe('runOwnerRemovalErasure — group first, one answer for strangers (BIN-
     const { port, calls } = io({ ownerUid: 'o', memberUids: ['o', 'm'] });
     await expect(runOwnerRemovalErasure(port, 'g', 'o', 'm')).rejects.toThrow(OWNER_REMOVAL_REFUSALS['still-member']);
     expect(calls).toEqual(['readGroup']);
+  });
+});
+
+describe('the sweep’s member-group step (BIN-1294)', () => {
+  function io(opts: { failStrip?: boolean } = {}) {
+    const calls: string[] = [];
+    const port = {
+      log: fakeLog(),
+      memberGroups: async () => [{ id: 'mine', ownerUid: 'me' }, { id: 'theirs', ownerUid: 'o' }],
+      readWatchlist: async () => [{ id: 'movie_1', addedBy: 'me' }],
+      readSessionHistory: async () => [],
+      eraseMemberTraces: async (groupId: string) => { calls.push(`erase:${groupId}`); },
+      stripMemberUid: async (groupId: string) => {
+        if (opts.failStrip) throw new Error('nere');
+        calls.push(`strip:${groupId}`);
+      },
+    };
+    return { port, calls };
+  }
+  const writesFor = (uid: string) =>
+    memberTraceWrites(uid, { itemIds: ['movie_1'], clearAddedByIds: ['movie_1'], clearPickedByIds: [], dropParticipantIds: [] }).length;
+
+  it('plans the trace writes plus the memberUids strip, for groups it does not own', async () => {
+    const { port, calls } = io();
+    await expect(planSweptMemberGroupErasure(port, 'me')).resolves.toBe(writesFor('me') + 1);
+    expect(calls).toEqual([]);
+  });
+
+  it('strips memberUids after the traces, and credits what landed', async () => {
+    const { port, calls } = io();
+    const progress = { written: 0 };
+    await expect(runSweptMemberGroupErasure(port, 'me', progress)).resolves.toEqual({ groups: 1 });
+    expect(calls).toEqual(['erase:theirs', 'strip:theirs']);
+    expect(progress.written).toBe(writesFor('me') + 1);
+  });
+
+  it('a failed strip still reports the traces that landed', async () => {
+    const { port } = io({ failStrip: true });
+    const progress = { written: 0 };
+    await expect(runSweptMemberGroupErasure(port, 'me', progress)).rejects.toThrow('nere');
+    expect(progress.written).toBe(writesFor('me'));
   });
 });
 

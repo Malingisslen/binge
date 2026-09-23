@@ -13,7 +13,7 @@
 
 import { FieldValue, Timestamp, type Firestore } from 'firebase-admin/firestore';
 
-import { type HandoverIo, type HandoverNotifyIo, type LeaverIo, type MemberGroupsIo } from './runHandover';
+import { type HandoverIo, type HandoverNotifyIo, type LeaverIo, type MemberGroupsIo, type MemberStripIo } from './runHandover';
 import { chunkWrites, leaverChunkMayCommit, memberTraceWrites, planClaim } from './logic';
 
 /** Writes per batch, under Firestore's own 500 ceiling. */
@@ -172,7 +172,7 @@ export function adminHandoverIo(db: Firestore, log: HandoverIo['log']): Handover
  * BIN-1260 + BIN-1278: the two ports the leaver's erasure and the account-delete
  * door's member-group step need, built on the same reads as `adminHandoverIo`.
  */
-export function adminLeaverIo(db: Firestore, log: HandoverIo['log']): LeaverIo & MemberGroupsIo {
+export function adminLeaverIo(db: Firestore, log: HandoverIo['log']): LeaverIo & MemberGroupsIo & MemberStripIo {
   const base = adminHandoverIo(db, log);
   return {
     log,
@@ -183,6 +183,12 @@ export function adminLeaverIo(db: Firestore, log: HandoverIo['log']): LeaverIo &
     memberGroups: async (uid) => {
       const snap = await db.collection('groups').where('memberUids', 'array-contains', uid).select('ownerUid').get();
       return snap.docs.map((d) => ({ id: d.id, ownerUid: (d.get('ownerUid') as string | undefined) ?? '' }));
+    },
+
+    // BIN-1294: `update`, not a merge — it throws on a group that is gone rather than
+    // resurrecting one holding nothing but a member list.
+    stripMemberUid: async (groupId, uid) => {
+      await db.doc('groups/' + groupId).update({ memberUids: FieldValue.arrayRemove(uid) });
     },
 
     eraseLeaverTraces: async (groupId, uid, erasure, requiredOwner) => {
