@@ -36,7 +36,7 @@ export interface MemberRow {
  * the group" destroys a live group on a retried sweep that already succeeded.
  */
 export type HandoverOutcome =
-  | { readonly kind: 'handover'; readonly ownerUid: string; readonly memberUids: readonly string[] }
+  | { readonly kind: 'handover'; readonly ownerUid: string }
   /** Nobody eligible remains. A successor cannot be invented, so the group goes. */
   | { readonly kind: 'delete' }
   /**
@@ -125,7 +125,6 @@ export function isEmptyExcept(memberUids: readonly string[], leavingUid: string)
  *
  * `noop` comes first and is the idempotency guard: a retried run must hold no
  * second election, which could name a different member than the first one did.
- * `memberUids` shrinks by exactly the departing uid and never grows.
  */
 export function buildHandoverUpdate(
   currentOwnerUid: string,
@@ -140,7 +139,7 @@ export function buildHandoverUpdate(
   const survivors = memberUids.filter((uid) => uid !== leavingUid);
   const successorUid = pickGroupSuccessor(members, leavingUid, survivors);
   if (successorUid === null) return { kind: 'delete' };
-  return { kind: 'handover', ownerUid: successorUid, memberUids: survivors };
+  return { kind: 'handover', ownerUid: successorUid };
 }
 
 /**
@@ -181,7 +180,7 @@ export class HandoverRefusal extends Error {
  * grupp" is the honest action there.
  */
 export type OwnerPickedOutcome =
-  | { readonly kind: 'handover'; readonly ownerUid: string; readonly memberUids: readonly string[] }
+  | { readonly kind: 'handover'; readonly ownerUid: string }
   | { readonly kind: 'refused'; readonly reason: 'not-owner' | 'not-a-member' | 'self' };
 
 export function buildOwnerPickedHandover(
@@ -196,11 +195,7 @@ export function buildOwnerPickedHandover(
   // from `memberUids`, leaving a group owned by a non-member.
   if (successorUid === leavingUid) return { kind: 'refused', reason: 'self' };
   if (!group.memberUids.includes(successorUid)) return { kind: 'refused', reason: 'not-a-member' };
-  return {
-    kind: 'handover',
-    ownerUid: successorUid,
-    memberUids: group.memberUids.filter((uid) => uid !== leavingUid),
-  };
+  return { kind: 'handover', ownerUid: successorUid };
 }
 
 /**

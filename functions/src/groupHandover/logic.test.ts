@@ -201,9 +201,9 @@ describe('pickGroupSuccessor — who inherits the group', () => {
 describe('buildHandoverUpdate — the write, and when there must not be one', () => {
   const members = [member('owner', 100), member('heir', 200), member('other', 300)];
 
-  it('names the successor as owner and shrinks memberUids by exactly the leaver', () => {
+  it('names the successor as owner', () => {
     const update = buildHandoverUpdate('owner', 'owner', members, ['owner', 'heir', 'other']);
-    expect(update).toEqual({ kind: 'handover', ownerUid: 'heir', memberUids: ['heir', 'other'] });
+    expect(update).toEqual({ kind: 'handover', ownerUid: 'heir' });
   });
 
   // The eligibility intersection has to happen INSIDE the builder, not be left to
@@ -212,7 +212,7 @@ describe('buildHandoverUpdate — the write, and when there must not be one', ()
   it('elects from the surviving memberUids, never from the member rows alone', () => {
     const stranded = [member('owner', 100), member('stranded', 150), member('real', 800)];
     const update = buildHandoverUpdate('owner', 'owner', stranded, ['owner', 'real']);
-    expect(update).toEqual({ kind: 'handover', ownerUid: 'real', memberUids: ['real'] });
+    expect(update).toEqual({ kind: 'handover', ownerUid: 'real' });
   });
 
   // The idempotency guard. A retried sweep must find its own earlier handover
@@ -233,19 +233,15 @@ describe('buildHandoverUpdate — the write, and when there must not be one', ()
 
   it('hands over to a ghost rather than deleting the group', () => {
     expect(buildHandoverUpdate('owner', 'owner', members, ['owner', 'ghost']))
-      .toEqual({ kind: 'handover', ownerUid: 'ghost', memberUids: ['ghost'] });
+      .toEqual({ kind: 'handover', ownerUid: 'ghost' });
   });
 });
 
 describe('buildOwnerPickedHandover — the owner names the successor (BIN-1118)', () => {
   const group = { ownerUid: 'owner', memberUids: ['owner', 'jonas', 'sara'] };
 
-  it('hands the group to the named member and drops the leaver from memberUids', () => {
-    expect(buildOwnerPickedHandover(group, 'owner', 'jonas')).toEqual({
-      kind: 'handover',
-      ownerUid: 'jonas',
-      memberUids: ['jonas', 'sara'],
-    });
+  it('hands the group to the named member', () => {
+    expect(buildOwnerPickedHandover(group, 'owner', 'jonas')).toEqual({ kind: 'handover', ownerUid: 'jonas' });
   });
 
   // The decisive difference from `buildHandoverUpdate`, which returns `noop` here.
@@ -271,18 +267,11 @@ describe('buildOwnerPickedHandover — the owner names the successor (BIN-1118)'
     expect(outcome).not.toMatchObject({ kind: 'handover' });
   });
 
-  it('never grows memberUids', () => {
-    const outcome = buildOwnerPickedHandover(group, 'owner', 'sara');
-    if (outcome.kind !== 'handover') throw new Error('expected a handover');
-    expect(outcome.memberUids.length).toBeLessThan(group.memberUids.length);
-    expect(outcome.memberUids).not.toContain('owner');
-  });
-
   // A two-person group still has somebody to pick, so it must work; a one-person
   // group never reaches here because the UI has nobody to offer.
   it('works when exactly one other member remains', () => {
     expect(buildOwnerPickedHandover({ ownerUid: 'owner', memberUids: ['owner', 'jonas'] }, 'owner', 'jonas'))
-      .toEqual({ kind: 'handover', ownerUid: 'jonas', memberUids: ['jonas'] });
+      .toEqual({ kind: 'handover', ownerUid: 'jonas' });
   });
 });
 
@@ -571,7 +560,9 @@ describe('the erasure covers every uid-bearing field the group contracts pin', (
   // document permanently unwatched.
   const HANDOVER_EXPRESSION: Record<string, string> = {
     ownerUid: 'ownerUid: successorUid',
-    memberUids: 'memberUids: survivors',
+    // BIN-1292: the member list is written by planClaim from its own read, not by
+    // the builders, so the expression pinned is planClaim's filter.
+    memberUids: 'fresh.memberUids.filter((uid) => uid !== write.leavingUid)',
   };
 
   // The third way, added by BIN-1155. `groups/{gid}/members/{uid}` gained its own
@@ -594,8 +585,7 @@ describe('the erasure covers every uid-bearing field the group contracts pin', (
   });
 
   it('the group document\'s own uid fields are handed over, not merely named', () => {
-    // Pinned on the expressions in buildHandoverUpdate, not on the field names: the
-    // names occur in the row types they are read from, so a `toContain(field)` would
+    // Pinned on the expressions, not on the field names: the names occur in the row types they are read from, so a `toContain(field)` would
     // stay green with the handover ripped out.
     for (const expr of Object.values(HANDOVER_EXPRESSION)) {
       expect(LOGIC, `the handover no longer writes \`${expr}\``).toContain(expr);
@@ -882,6 +872,18 @@ describe('planClaim — the claim decides on its own read (BIN-1266)', () => {
 
   it('writes nothing when the group is gone', () => {
     expect(planClaim(null, 'owner', write)).toEqual({ kind: 'owner-changed' });
+  });
+
+  // BIN-1292. The fixtures above always name the same uid as expected owner and as
+  // leaver, so a filter keyed on the wrong one passed them. Here they differ.
+  it('drops the leaver it was given, not the owner it expected', () => {
+    const claim = planClaim(
+      { ownerUid: 'owner', memberUids: ['owner', 'heir', 'gone'] },
+      'owner',
+      { ownerUid: 'heir', leavingUid: 'gone' },
+    );
+    if (claim.kind !== 'claimed') throw new Error('expected a claim');
+    expect(claim.memberUids).toEqual(['owner', 'heir']);
   });
 
   it('writes nothing when the successor has left — never an owner outside memberUids', () => {
