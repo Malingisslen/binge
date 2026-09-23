@@ -1534,6 +1534,13 @@
           "payload": "acceptFriendRequest/declineFriendRequest — accept: batch set users/{my}/friends/{from} + users/{from}/friends/{my} (mutual) and delete both request docs; decline: delete both request docs only",
           "transport": "Firestore batch write",
           "verified": true
+        },
+        {
+          "from": "auth-context",
+          "to": "firestore",
+          "payload": "BIN-1174: after a rename, publishIdentityChange also calls updateSentFriendRequestIdentity(uid, {displayName, username}). It reads my own users/{uid}/friendRequestsSent, bounded by SENT_REQUESTS_IDENTITY_LIMIT, and runs a two-key updateDoc on each users/{toUid}/friendRequests/{uid}. It never uses set or merge, so a request that was already answered is not recreated. The update rule lets only the sender change fromDisplayName and fromUsername, each unchanged or non-null and equal to the sender's live profile. Every failed write is reported (captureError kind identityFanOut-friendRequest) and never fails the rename. Group invites are not rewritten; that is a dated entry in accepted-deviations.md.",
+          "transport": "Firestore write (fan-out)",
+          "verified": true
         }
       ],
       "area": "social"
