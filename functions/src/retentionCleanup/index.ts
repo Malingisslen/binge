@@ -324,6 +324,14 @@ const adminIo: CleanupIo = {
           deletePaths: await paths(db.collectionGroup('groupInvites').where('fromUid', '==', uid)),
           arrayStrips: [],
         };
+      case 'rotationReminders':
+        // BIN-1279. A top-level collection, so the single-field `uid` equality
+        // needs no index override. Whether the writer has always set `uid`:
+        //   git log -p -S "markerRef.set" -- functions/src/rotationReminder/index.ts
+        return {
+          deletePaths: await paths(db.collection('rotationReminderState').where('uid', '==', uid)),
+          arrayStrips: [],
+        };
       case 'groups':
         // Handled by `commitGroupHandover`; the loop never asks for this.
         return { deletePaths: [], arrayStrips: [] } satisfies CategoryFindings;

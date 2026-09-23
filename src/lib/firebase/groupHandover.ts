@@ -96,3 +96,28 @@ export async function handOverGroup(groupId: string, successorUid: string): Prom
   );
   await call({ groupId, successorUid });
 }
+
+/**
+ * BIN-1260 — ask the server to erase this account's traces from a group it has
+ * ALREADY left: its progress rows, the plaintext invite token in `joinAttempts`,
+ * and its uid on titles it added and in the session history.
+ *
+ * Called by `leaveGroup` after the leave itself, which stays a client write. The
+ * uid is never sent; the server takes it from the authenticated context.
+ */
+export async function eraseMyGroupTraces(groupId: string): Promise<void> {
+  const { getFunctions, httpsCallable, connectFunctionsEmulator } = await import('firebase/functions');
+  const app = (await import('./config')).default;
+  const functions = getFunctions(app, 'europe-west1');
+  if (
+    typeof window !== 'undefined' &&
+    process.env.NEXT_PUBLIC_FIREBASE_USE_EMULATOR === 'true'
+  ) {
+    try { connectFunctionsEmulator(functions, '127.0.0.1', 5001); } catch { /* idempotent på samma instans */ }
+  }
+  // At the function's own `timeoutSeconds`, for the reason given above.
+  const call = httpsCallable<{ groupId: string }, void>(functions, 'eraseMyGroupTraces', {
+    timeout: 120_000,
+  });
+  await call({ groupId });
+}

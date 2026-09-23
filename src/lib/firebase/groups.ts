@@ -740,8 +740,18 @@ export async function removeMember(groupId: string, uid: string): Promise<void> 
   await batch.commit();
 }
 
+/**
+ * Utträdet är klientskrivningen i `removeMember`, oförändrad (#12:s villkor, se
+ * `## BIN-1120` i .claude/rules/accepted-deviations.md). BIN-1260: EFTER den ber
+ * klienten servern radera användarens egna spår i gruppen. Det steget är
+ * bäst-möjligt och inväntas inte — ett fel där rapporteras men gör aldrig ett
+ * lyckat utträde till ett misslyckat (BIN-1166).
+ */
 export async function leaveGroup(groupId: string, uid: string): Promise<void> {
-  return removeMember(groupId, uid);
+  await removeMember(groupId, uid);
+  void import('./groupHandover')
+    .then(({ eraseMyGroupTraces }) => eraseMyGroupTraces(groupId))
+    .catch((err) => reportGroupWriteError('leaveGroup-traceErasure', err));
 }
 
 export async function deleteGroup(groupId: string, currentUid: string): Promise<void> {

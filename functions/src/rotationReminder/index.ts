@@ -82,9 +82,6 @@ export const rotationReminderNotify = onSchedule(
             actionUrl: '/savings/',
             tag: `rotation-${ev.providerId}`,
           }, { pushEnabled });
-          // uid stored so a future delete-cascade can sweep these markers; until
-          // then they're sealed garbage (default-deny, UIDs never recycled), same
-          // accepted residual as titleRatingsRateLimit.
           await markerRef.set({ uid: doc.id, notifiedAt: FieldValue.serverTimestamp() }, { merge: true });
           totalNotified += 1;
         }

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, it, expect } from 'vitest';
 import { initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
 import {
   collection, collectionGroup, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where,
-  writeBatch, deleteField, arrayRemove, serverTimestamp, Timestamp,
+  writeBatch, deleteField, arrayRemove, serverTimestamp, Timestamp, runTransaction,
   type Firestore,
 } from 'firebase/firestore';
 
@@ -10,11 +10,12 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
 import {
-  eraseSentInvites, runGroupHandover, runOwnerPickedHandover,
-  type HandoverIo, type HandoverNotifyIo,
+  eraseSentInvites, runGroupHandover, runLeaverErasure, runMemberGroupErasure, runOwnerPickedHandover,
+  type HandoverIo, type HandoverNotifyIo, type LeaverIo, type MemberGroupsIo,
 } from '../../../functions/src/groupHandover/runHandover';
 import {
   HandoverRefusal, SENT_INVITE_BATCH_LIMIT, planClaim, refusalForHandover, HANDOVER_PARTIAL,
+  chunkWrites, leaverChunkMayCommit, memberTraceWrites,
 } from '../../../functions/src/groupHandover/logic';
 import { rosterMismatches } from './memberTraceRoster';
 
@@ -42,6 +43,10 @@ import { rosterMismatches } from './memberTraceRoster';
  * Admin port implements that with `runTransaction`; this harness implements the
  * same check non-atomically, so it pins the DECISION the check makes, not its
  * atomicity. The Admin implementation carries that warning at the transaction.
+ *
+ * Nor the Admin half of `eraseLeaverTraces` (BIN-1260): `leaverIo` below is this
+ * file's OWN client-SDK copy, with a real transaction. The Admin port's shape is
+ * pinned by a source scan in functions/src/groupHandover/logic.test.ts.
  */
 
 const PROJECT_ID = 'binge-group-handover-test';
@@ -978,5 +983,175 @@ describe('eraseMemberTraces — held to memberTraceWrites (BIN-1123)', () => {
     expect(files.length).toBeGreaterThan(0);
     const silent = files.filter((f) => !readFileSync(f, 'utf8').includes('rosterMismatches('));
     expect(silent, 'a port of eraseMemberTraces that the roster does not hold').toEqual([]);
+  });
+});
+
+/**
+ * BIN-1260 + BIN-1278 — the leaver's erasure and the delete door's member-group
+ * step, against the emulator.
+ *
+ * `eraseLeaverTraces` here applies `memberTraceWrites` directly, in chunks, each in
+ * a real client-SDK transaction that re-reads the group through
+ * `leaverChunkMayCommit` — the same shape as the Admin port. `chunk` is small so a
+ * test can land a rejoin between two chunks.
+ */
+function leaverIo(opts: { chunk?: number; afterChunk?: () => Promise<void> } = {}): LeaverIo & MemberGroupsIo {
+  const d = db();
+  const base = clientIo();
+  return {
+    log: base.log,
+    readGroup: base.readGroup,
+    readWatchlist: base.readWatchlist,
+    readSessionHistory: base.readSessionHistory,
+    memberGroups: async (uid) =>
+      (await getDocs(query(collection(d, 'groups'), where('memberUids', 'array-contains', uid))))
+        .docs.map((x) => ({ id: x.id, ownerUid: x.data().ownerUid as string })),
+    eraseLeaverTraces: async (groupId, uid, erasure) => {
+      const groupRef = doc(d, 'groups', groupId);
+      for (const chunk of chunkWrites(memberTraceWrites(uid, erasure), opts.chunk ?? 450)) {
+        const wrote = await runTransaction(d, async (tx) => {
+          const fresh = await tx.get(groupRef);
+          const group = fresh.exists() ? { memberUids: (fresh.data().memberUids as string[]) ?? [] } : null;
+          if (!leaverChunkMayCommit(group, uid)) return false;
+          for (const w of chunk) {
+            const ref = doc(d, `groups/${groupId}/${w.collection}/${w.doc}`);
+            if (w.op === 'delete') tx.delete(ref);
+            else if (w.op === 'clear') tx.update(ref, { [w.field as string]: deleteField() });
+            else tx.update(ref, { [w.field as string]: arrayRemove(uid) });
+          }
+          return true;
+        });
+        if (!wrote) return { kind: 'stopped' };
+        await opts.afterChunk?.();
+      }
+      return { kind: 'done' };
+    },
+  };
+}
+
+/** A group `leaver` has just left the way the client does: out of memberUids, member row and household gone. */
+async function seedLeftGroup() {
+  await seedGroup({
+    id: 'g',
+    ownerUid: 'owner',
+    members: [
+      { uid: 'owner', joinedAtMs: 1, household: true },
+      { uid: 'stayer', joinedAtMs: 2, household: true },
+      { uid: 'leaver', joinedAtMs: 3, household: true },
+    ],
+    items: { movie_1: 'leaver', movie_2: 'stayer' },
+    progressFor: ['leaver', 'stayer'],
+    history: { h1: 'leaver', h2: 'stayer' },
+    joinAttemptsFor: ['leaver', 'stayer'],
+  });
+  const d = db();
+  await updateDoc(doc(d, 'groups', 'g'), { memberUids: ['owner', 'stayer'] });
+  await deleteDoc(doc(d, 'groups', 'g', 'members', 'leaver'));
+  await deleteDoc(doc(d, 'groups', 'g', 'household', 'leaver'));
+}
+
+describe('runLeaverErasure — after a plain leave (BIN-1260)', () => {
+  it('erases the leaver traces and nobody else’s', async () => {
+    await seedLeftGroup();
+    await runLeaverErasure(leaverIo(), 'g', 'leaver');
+    const d = db();
+
+    expect(await exists(['groups', 'g', 'joinAttempts', 'leaver'])).toBe(false);
+    expect((await getDoc(doc(d, 'groups', 'g', 'watchlist', 'movie_1', 'progress', 'leaver'))).exists()).toBe(false);
+    const item1 = (await getDoc(doc(d, 'groups', 'g', 'watchlist', 'movie_1'))).data() ?? {};
+    expect('addedBy' in item1, 'the title stays, the note about who added it goes').toBe(false);
+    expect(item1.title).toBe('movie_1');
+    const h1 = (await getDoc(doc(d, 'groups', 'g', 'sessionHistory', 'h1'))).data() ?? {};
+    expect('pickedByUid' in h1).toBe(false);
+    expect(h1.participantUids).toEqual(['owner', 'stayer']);
+
+    // The stayer's, in the same collections: filtered by uid, not wiped.
+    expect(await exists(['groups', 'g', 'joinAttempts', 'stayer'])).toBe(true);
+    expect(await exists(['groups', 'g', 'members', 'stayer'])).toBe(true);
+    expect(await exists(['groups', 'g', 'household', 'stayer'])).toBe(true);
+    expect((await getDoc(doc(d, 'groups', 'g', 'watchlist', 'movie_1', 'progress', 'stayer'))).exists()).toBe(true);
+    expect((await getDoc(doc(d, 'groups', 'g', 'watchlist', 'movie_2'))).data()?.addedBy).toBe('stayer');
+    expect((await getDoc(doc(d, 'groups', 'g', 'sessionHistory', 'h2'))).data()?.pickedByUid).toBe('stayer');
+    // And the leave itself is not touched: memberUids is what the client wrote.
+    expect((await getDoc(doc(d, 'groups', 'g'))).data()?.memberUids).toEqual(['owner', 'stayer']);
+  });
+
+  it('refuses someone still in the group and writes nothing', async () => {
+    await seedLeftGroup();
+    await expect(runLeaverErasure(leaverIo(), 'g', 'stayer')).rejects.toBeInstanceOf(HandoverRefusal);
+    expect(await exists(['groups', 'g', 'members', 'stayer'])).toBe(true);
+    expect(await exists(['groups', 'g', 'joinAttempts', 'stayer'])).toBe(true);
+  });
+
+  it('refuses the owner and writes nothing', async () => {
+    await seedLeftGroup();
+    await expect(runLeaverErasure(leaverIo(), 'g', 'owner')).rejects.toBeInstanceOf(HandoverRefusal);
+    expect(await exists(['groups', 'g', 'members', 'owner'])).toBe(true);
+  });
+
+  it('resolves quietly for a group that does not exist', async () => {
+    await expect(runLeaverErasure(leaverIo(), 'nope', 'leaver')).resolves.toBeUndefined();
+  });
+
+  // #4's condition, driven for real: the leaver rejoins after the first chunk, and
+  // the chunks still queued must not touch the fresh membership.
+  it('stops at the next chunk when the leaver rejoins, and the new membership survives', async () => {
+    await seedLeftGroup();
+    const d = db();
+    let rejoined = false;
+    const io = leaverIo({
+      chunk: 2,
+      afterChunk: async () => {
+        if (rejoined) return;
+        rejoined = true;
+        await updateDoc(doc(d, 'groups', 'g'), { memberUids: ['owner', 'stayer', 'leaver'] });
+        await setDoc(doc(d, 'groups', 'g', 'members', 'leaver'), { uid: 'leaver', joinedAt: ts(9) });
+      },
+    });
+    await runLeaverErasure(io, 'g', 'leaver');
+
+    expect(rejoined, 'the rejoin must have landed between chunks').toBe(true);
+    // The member row is deleted in chunk 1, BEFORE the rejoin, so this holds with or
+    // without the guard. It shows the rejoin landed, nothing more.
+    expect(await exists(['groups', 'g', 'members', 'leaver']), 'the new member row').toBe(true);
+    // This is the assertion the guard is for: the progress row is in a later chunk.
+    expect((await getDoc(doc(d, 'groups', 'g', 'watchlist', 'movie_1', 'progress', 'leaver'))).exists()).toBe(true);
+  });
+});
+
+describe('runMemberGroupErasure — the delete door, groups the account only belongs to (BIN-1278)', () => {
+  it('erases the traces, leaves memberUids for the cascade, and skips owned groups', async () => {
+    await seedGroup({
+      id: 'g',
+      ownerUid: 'owner',
+      members: [{ uid: 'owner', joinedAtMs: 1 }, { uid: 'me', joinedAtMs: 2, household: true }],
+      items: { movie_1: 'me', movie_2: 'owner' },
+      progressFor: ['me', 'owner'],
+      history: { h1: 'me' },
+    });
+    await seedGroup({
+      id: 'mine',
+      ownerUid: 'me',
+      members: [{ uid: 'me', joinedAtMs: 1 }, { uid: 'other', joinedAtMs: 2 }],
+      items: { movie_9: 'me' },
+    });
+    const d = db();
+    const io = { ...clientIo(), ...leaverIo() };
+
+    await expect(runMemberGroupErasure(io, 'me', { attempted: false })).resolves.toEqual({ groups: 1 });
+
+    const item1 = (await getDoc(doc(d, 'groups', 'g', 'watchlist', 'movie_1'))).data() ?? {};
+    expect('addedBy' in item1).toBe(false);
+    const h1 = (await getDoc(doc(d, 'groups', 'g', 'sessionHistory', 'h1'))).data() ?? {};
+    expect('pickedByUid' in h1).toBe(false);
+    expect(h1.participantUids).toEqual(['owner']);
+    expect((await getDoc(doc(d, 'groups', 'g', 'watchlist', 'movie_1', 'progress', 'me'))).exists()).toBe(false);
+    expect(await exists(['groups', 'g', 'members', 'me'])).toBe(false);
+    expect((await getDoc(doc(d, 'groups', 'g', 'watchlist', 'movie_2'))).data()?.addedBy).toBe('owner');
+    expect((await getDoc(doc(d, 'groups', 'g', 'watchlist', 'movie_1', 'progress', 'owner'))).exists()).toBe(true);
+    // Not this step's job: the uid stays in memberUids until the client cascade removes it.
+    expect((await getDoc(doc(d, 'groups', 'g'))).data()?.memberUids).toEqual(['owner', 'me']);
+    // An owned group belongs to the handover, not to this step.
+    expect((await getDoc(doc(d, 'groups', 'mine', 'watchlist', 'movie_9'))).data()?.addedBy).toBe('me');
   });
 });

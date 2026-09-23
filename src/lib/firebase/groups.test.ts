@@ -66,6 +66,9 @@ vi.mock('./db', () => ({
 }));
 const captureErrorMock = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/sentry', () => ({ captureError: captureErrorMock, initSentry: () => {} }));
+// BIN-1260: the server step `leaveGroup` calls after the leave.
+const eraseMyGroupTracesMock = vi.hoisted(() => vi.fn((_groupId: string) => Promise.resolve()));
+vi.mock('./groupHandover', () => ({ eraseMyGroupTraces: eraseMyGroupTracesMock }));
 
 vi.mock('firebase/firestore', () => ({
   collection: vi.fn((_db: unknown, ...path: string[]) => ({ _path: path.join('/') })),
@@ -112,6 +115,7 @@ import {
   GROUP_WRITE_REFUSED,
   MY_GROUPS_LIMIT,
   memberDocToObject,
+  leaveGroup,
 } from './groups';
 
 function groupsQueryConstraints() {
@@ -1488,5 +1492,60 @@ describe('memberDocToObject — joinedAtKnown följer det RÅA fältet (BIN-1118
     expect(Number.isFinite(fresh.joinedAt.getTime())).toBe(true);
     expect(unknown.joinedAtKnown).toBe(false);
     expect(fresh.joinedAtKnown).toBe(true);
+  });
+});
+
+describe('leaveGroup — utträdet först, spårraderingen efteråt (BIN-1260)', () => {
+  // Låter den inväntade `import('./groupHandover')` och kedjan efter den köras klart.
+  const settle = () => new Promise((r) => setTimeout(r, 0));
+
+  beforeEach(() => {
+    eraseMyGroupTracesMock.mockReset();
+    eraseMyGroupTracesMock.mockImplementation(async () => {});
+    captureErrorMock.mockClear();
+  });
+
+  it('skriver utträdet som förut och ber sedan servern radera spåren', async () => {
+    await leaveGroup('g1', 'me');
+    await settle();
+
+    expect(commitMock).toHaveBeenCalledTimes(1);
+    expect(eraseMyGroupTracesMock).toHaveBeenCalledWith('g1');
+  });
+
+  it('ett fel i spårraderingen rapporteras men gör inte utträdet till ett misslyckande', async () => {
+    const boom = new Error('server nere');
+    eraseMyGroupTracesMock.mockImplementation(async () => { throw boom; });
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await expect(leaveGroup('g1', 'me')).resolves.toBeUndefined();
+    await settle();
+
+    expect(captureErrorMock).toHaveBeenCalledWith(boom, { scope: 'groups', kind: 'leaveGroup-traceErasure' });
+    spy.mockRestore();
+  });
+
+  // Utträdet väntar inte på servern: en callable som aldrig svarar får inte hålla
+  // knappen i "Lämnar…" (upp till funktionens timeout).
+  it('är klart utan att vänta på spårraderingen', async () => {
+    eraseMyGroupTracesMock.mockImplementation(() => new Promise<void>(() => {}));
+
+    const outcome = await Promise.race([
+      leaveGroup('g1', 'me').then(() => 'klar'),
+      new Promise((r) => setTimeout(() => r('hänger'), 50)),
+    ]);
+
+    expect(outcome).toBe('klar');
+    await settle();
+    expect(eraseMyGroupTracesMock).toHaveBeenCalledWith('g1');
+  });
+
+  it('ber inte om någon spårradering när själva utträdet faller', async () => {
+    commitMock.mockImplementationOnce(() => Promise.reject(new Error('nekad')));
+
+    await expect(leaveGroup('g1', 'me')).rejects.toThrow('nekad');
+    await settle();
+
+    expect(eraseMyGroupTracesMock).not.toHaveBeenCalled();
   });
 });

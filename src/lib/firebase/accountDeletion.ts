@@ -146,6 +146,11 @@ export async function collectDeletionRefs(
   // The ordering is the whole guarantee, and it is not visible from this file:
   // see `runDeletionCascade` in `src/contexts/AuthContext.tsx`, which calls the
   // handover first and does not swallow its failure.
+  //
+  // BIN-1278: the member branch is not the whole story either. The same callable
+  // erases this uid's `addedBy`, `pickedByUid` and `participantUids` in groups it
+  // is only a member of — see `runMemberGroupErasure` in
+  // functions/src/groupHandover/runHandover.ts.
   const memberLeaveUpdates: MemberLeaveUpdate[] = [];
   for (const groupDoc of snaps.groupsSnap.docs) {
     // BIN-329: erase any joinAttempts/{myUid} (holds a plaintext invite token).

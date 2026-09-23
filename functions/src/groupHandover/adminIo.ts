@@ -13,8 +13,8 @@
 
 import { FieldValue, Timestamp, type Firestore } from 'firebase-admin/firestore';
 
-import { type HandoverIo, type HandoverNotifyIo } from './runHandover';
-import { chunkWrites, memberTraceWrites, planClaim } from './logic';
+import { type HandoverIo, type HandoverNotifyIo, type LeaverIo, type MemberGroupsIo } from './runHandover';
+import { chunkWrites, leaverChunkMayCommit, memberTraceWrites, planClaim } from './logic';
 
 /** Writes per batch, under Firestore's own 500 ceiling. */
 const BATCH_LIMIT = 450;
@@ -164,6 +164,49 @@ export function adminHandoverIo(db: Firestore, log: HandoverIo['log']): Handover
         }
         await batch.commit();
       }
+    },
+  };
+}
+
+/**
+ * BIN-1260 + BIN-1278: the two ports the leaver's erasure and the account-delete
+ * door's member-group step need, built on the same reads as `adminHandoverIo`.
+ */
+export function adminLeaverIo(db: Firestore, log: HandoverIo['log']): LeaverIo & MemberGroupsIo {
+  const base = adminHandoverIo(db, log);
+  return {
+    log,
+    readGroup: base.readGroup,
+    readWatchlist: base.readWatchlist,
+    readSessionHistory: base.readSessionHistory,
+
+    memberGroups: async (uid) => {
+      const snap = await db.collection('groups').where('memberUids', 'array-contains', uid).select('ownerUid').get();
+      return snap.docs.map((d) => ({ id: d.id, ownerUid: (d.get('ownerUid') as string | undefined) ?? '' }));
+    },
+
+    eraseLeaverTraces: async (groupId, uid, erasure) => {
+      const groupRef = db.doc(`groups/${groupId}`);
+      for (const chunk of chunkWrites(memberTraceWrites(uid, erasure), BATCH_LIMIT)) {
+        // The group read and the chunk's writes are one transaction: see
+        // `leaverChunkMayCommit` for the rejoin it guards against.
+        const wrote = await db.runTransaction(async (tx) => {
+          const fresh = await tx.get(groupRef);
+          const group = fresh.exists
+            ? { memberUids: (fresh.get('memberUids') as string[] | undefined) ?? [] }
+            : null;
+          if (!leaverChunkMayCommit(group, uid)) return false;
+          for (const w of chunk) {
+            const ref = groupRef.collection(w.collection).doc(w.doc);
+            if (w.op === 'delete') tx.delete(ref);
+            else if (w.op === 'clear') tx.update(ref, { [w.field as string]: FieldValue.delete() });
+            else tx.update(ref, { [w.field as string]: FieldValue.arrayRemove(uid) });
+          }
+          return true;
+        });
+        if (!wrote) return { kind: 'stopped' };
+      }
+      return { kind: 'done' };
     },
   };
 }

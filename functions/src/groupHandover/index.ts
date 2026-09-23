@@ -42,9 +42,12 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions/v2';
 
-import { HandoverRefusal, refusalForHandover } from './logic';
-import { eraseSentInvites, runGroupHandover, runOwnerPickedHandover } from './runHandover';
-import { adminHandoverIo, adminHandoverNotifyIo } from './adminIo';
+import { HandoverRefusal, refusalAfterHandover, refusalForHandover } from './logic';
+import {
+  eraseSentInvites, runGroupHandover, runLeaverErasure, runMemberGroupErasure, runOwnerPickedHandover,
+} from './runHandover';
+import { adminHandoverIo, adminHandoverNotifyIo, adminLeaverIo } from './adminIo';
+import { adminReminderMarkerIo, eraseReminderMarkers } from '../rotationReminder/markers';
 
 
 
@@ -64,8 +67,9 @@ export const handOverOwnedGroups = onCall(
     // Before the handover, deliberately: see the header. `eraseSentInvites`
     // throws its own refusal, which carries no partial marker because nothing
     // has been written when it fires.
+    let invites: { found: number };
     try {
-      await eraseSentInvites(io, uid);
+      invites = await eraseSentInvites(io, uid);
     } catch (err) {
       throw new HttpsError('internal', err instanceof Error ? err.message : String(err));
     }
@@ -80,6 +84,20 @@ export const handOverOwnedGroups = onCall(
     const refusal = refusalForHandover(summary);
     if (refusal) {
       throw new HttpsError('internal', refusal);
+    }
+
+    // BIN-1278 and BIN-1279: what the client cascade cannot reach. AFTER the
+    // handover, so a group just handed over is no longer found by the member
+    // query — the uid left its `memberUids` in the swap. A failure here comes
+    // after writes may have landed, so whether it says "partial" is decided on
+    // what was attempted, invites and handover included.
+    const progress = { attempted: invites.found > 0 || summary.attempted > 0 };
+    try {
+      await runMemberGroupErasure({ ...io, ...adminLeaverIo(getFirestore(), logger) }, uid, progress);
+      await eraseReminderMarkers(adminReminderMarkerIo(getFirestore()), uid, progress);
+    } catch (err) {
+      logger.error('handOverOwnedGroups: erasure after the handover failed', { err });
+      throw new HttpsError('internal', refusalAfterHandover(progress.attempted));
     }
     return summary;
   },
@@ -143,6 +161,49 @@ export const handOverGroup = onCall(
       }
       logger.error('handOverGroup: failed', { groupId, err });
       throw new HttpsError('internal', err instanceof Error ? err.message : String(err));
+    }
+    return { ok: true };
+  },
+);
+
+/**
+ * BIN-1260: erase the caller's own traces from a group they have ALREADY left.
+ *
+ * Malin's decision of 2026-09-23: leaving a group should erase what the handover
+ * erases for a departing owner. The leave itself stays a client write, and this
+ * is a separate step the client calls after it (#12's condition, recorded under
+ * `## BIN-1120` in .claude/rules/accepted-deviations.md). A failure here never
+ * undoes or blocks the leave.
+ *
+ * Reachable by any signed-in caller for any group id. Every write names the
+ * caller's own uid (`memberTraceWrites`), so a caller who was never in the group
+ * changes nothing, and the answer is the same `{ ok: true }` whether the group
+ * exists or not. The refusals are about the caller's own membership only.
+ *
+ * `internal` errors carry a fixed sentence rather than the raw error, so nothing
+ * about the group reaches the caller (#4's condition).
+ */
+export const eraseMyGroupTraces = onCall(
+  { region: 'europe-west1', timeoutSeconds: 120 },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Du måste vara inloggad.');
+
+    const data = request.data as { groupId?: unknown } | null;
+    const groupId = typeof data?.groupId === 'string' ? data.groupId : '';
+    // A document id: no path separator, and Firestore's own length ceiling.
+    if (!groupId || groupId.includes('/') || groupId.length > 1500) {
+      throw new HttpsError('invalid-argument', 'Grupp måste anges.');
+    }
+
+    try {
+      await runLeaverErasure(adminLeaverIo(getFirestore(), logger), groupId, uid);
+    } catch (err) {
+      if (err instanceof HandoverRefusal) {
+        throw new HttpsError('failed-precondition', err.message);
+      }
+      logger.error('eraseMyGroupTraces: failed', { groupId, err });
+      throw new HttpsError('internal', 'Kunde inte radera dina spår i gruppen.');
     }
     return { ok: true };
   },

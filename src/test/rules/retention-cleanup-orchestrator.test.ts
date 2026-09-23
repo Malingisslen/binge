@@ -343,6 +343,12 @@ function makeIo(db: Firestore, auth: FakeAuth, overrides: Partial<CleanupIo> = {
             deletePaths: await pathsOf(query(collectionGroup(db, 'groupInvites'), where('fromUid', '==', uid))),
             arrayStrips: [],
           };
+        case 'rotationReminders':
+          // BIN-1279. Mirrors the Admin adapter's query on the top-level collection.
+          return {
+            deletePaths: await pathsOf(query(collection(db, 'rotationReminderState'), where('uid', '==', uid))),
+            arrayStrips: [],
+          };
         case 'groups':
           return { deletePaths: [], arrayStrips: [] };
       }
@@ -989,6 +995,8 @@ async function seedFieldOwned(db: Firestore): Promise<void> {
     await setDoc(doc(db, 'sessions', `sess-${uid}`), { hostUid: uid });
     await setDoc(doc(db, 'sessions', `sess-${uid}`, 'participants', uid), { uid });
     await setDoc(doc(db, 'sessions', `sess-${uid}`, 'swipes', 'movie_42'), { votes: {} });
+    // BIN-1279: a rotation-reminder dedup marker, named after the service.
+    await setDoc(doc(db, 'rotationReminderState', `${uid}_8_cancel_2026-09-01`), { uid, notifiedAt: ts(NOW - 3000) });
     // An invitation this uid SENT, living in a THIRD party's tree. Owned by the
     // field, unreachable by any path walk from the sender (BIN-1147).
     // `fromDisplayName` deliberately does NOT echo `fromUid`, and the two
@@ -1061,6 +1069,7 @@ describe('retentionCleanup orchestrator — the FIELD-owned half (BIN-1063 steg 
     ['a friend row in another tree', 'users/pal/friends/consoled', 'users/pal/friends/keeper'],
     ['a request another account sent them', 'users/pal/friendRequestsSent/consoled', 'users/pal/friendRequestsSent/keeper'],
     ['a friend request they sent', 'users/pal/friendRequests/consoled', 'users/pal/friendRequests/keeper'],
+    ['rotation-reminder markers', 'rotationReminderState/consoled_8_cancel_2026-09-01', 'rotationReminderState/keeper_8_cancel_2026-09-01'],
   ])('erases %s for the departed account and leaves the live one alone', async (_label, gone, kept) => {
     const db = adminLikeDb();
     await sweepPastTheFloor(db);
@@ -1077,7 +1086,7 @@ describe('retentionCleanup orchestrator — the FIELD-owned half (BIN-1063 steg 
   it('the table is checked against the list the run walks', () => {
     expect([...FIELD_OWNED_CATEGORIES]).toEqual([
       'reviews', 'foreignReviewUgc', 'reactions', 'lists', 'sessions',
-      'friendMirrors', 'groupInvitesSent', 'groups',
+      'friendMirrors', 'groupInvitesSent', 'rotationReminders', 'groups',
     ]);
   });
 
@@ -1225,7 +1234,9 @@ describe('retentionCleanup orchestrator — the FIELD-owned half (BIN-1063 steg 
     // BIN-1113 raised it again, to the 20 the run reported: `seedFieldOwned` now
     // seeds a `friends`, a `friendRequestsSent` and a `friendRequests` row about
     // `consoled` under `users/pal`.
-    expect(summary.fieldOwnedDocs).toBe(20);
+    // BIN-1279 raised it to the 21 the run reported: `seedFieldOwned` now seeds one
+    // `rotationReminderState` marker for `consoled`.
+    expect(summary.fieldOwnedDocs).toBe(21);
     expect(summary.fieldOwnedRefused).toBe(0);
   });
 

@@ -13,7 +13,8 @@
 
 import {
   buildHandoverUpdate, buildOwnerPickedHandover, buildTraceErasure,
-  HandoverRefusal, refusalForSentInvites, type ClaimResult, type MemberRow,
+  HandoverRefusal, LEAVER_ERASURE_REFUSALS, planLeaverErasure, refusalForSentInvites,
+  type ClaimResult, type MemberRow,
 } from './logic';
 
 /** One `groups/{gid}/watchlist/{id}` row, narrowed to what the handover reads. */
@@ -417,4 +418,88 @@ export async function eraseSentInvites(
   if (paths.length > 0) await io.deleteSentInvites(paths);
   io.log.info('groupHandover: sent invites erased', { uid, found: paths.length });
   return { found: paths.length };
+}
+
+/**
+ * BIN-1260: the port a LEAVER's erasure needs, kept off `HandoverIo` so the sweep's
+ * port and the test ports that never run it do not have to grow it.
+ */
+export interface LeaverIo {
+  readGroup: HandoverIo['readGroup'];
+  readWatchlist: HandoverIo['readWatchlist'];
+  readSessionHistory: HandoverIo['readSessionHistory'];
+  /**
+   * Apply `memberTraceWrites(uid, erasure)` in chunks, each in its own
+   * transaction that first re-reads the group and writes only when
+   * `leaverChunkMayCommit` says so. Returns `stopped` at the first chunk it
+   * declined, without writing that chunk or any after it.
+   */
+  eraseLeaverTraces(
+    groupId: string,
+    uid: string,
+    erasure: TraceErasure,
+  ): Promise<{ kind: 'done' } | { kind: 'stopped' }>;
+  log: HandoverIo['log'];
+}
+
+/**
+ * BIN-1260: erase what a person who has left a group still has in it.
+ *
+ * The group is read FIRST and the refusal decided on it, before the two
+ * unbounded reads (#4's condition): any signed-in caller can name any group id,
+ * and a caller who is still a member should cost one document read, not the
+ * group's whole watchlist and history.
+ *
+ * Refusals throw `HandoverRefusal`; everything else throws whatever failed.
+ */
+export async function runLeaverErasure(io: LeaverIo, groupId: string, uid: string): Promise<void> {
+  const group = await io.readGroup(groupId);
+  const plan = planLeaverErasure(group, uid);
+  if (plan.kind === 'refused') throw new HandoverRefusal(LEAVER_ERASURE_REFUSALS[plan.reason]);
+  if (plan.kind === 'nothing') return;
+
+  const watchlist = await io.readWatchlist(groupId);
+  const history = await io.readSessionHistory(groupId);
+  const result = await io.eraseLeaverTraces(groupId, uid, buildTraceErasure(watchlist, history, uid));
+  if (result.kind === 'stopped') {
+    io.log.info('groupHandover: leaver erasure stopped, caller is back in the group or it is gone', { groupId });
+  }
+}
+
+/** BIN-1278: the one extra read the account-delete door needs for groups it only belongs to. */
+export interface MemberGroupsIo {
+  /**
+   * Every group whose `memberUids` contains the uid, with its owner. ONE filter
+   * (`array-contains`): #27's condition, since a second one would need a
+   * composite index that is not deployed. The owner is filtered by the caller.
+   */
+  memberGroups(uid: string): Promise<readonly { id: string; ownerUid: string }[]>;
+}
+
+/**
+ * BIN-1278: erase the account's traces from every group it is only a MEMBER of.
+ *
+ * Runs in the account-delete door AFTER `runGroupHandover`. It leaves `memberUids`
+ * alone: the client cascade removes the uid from it next, as it always has, so
+ * between the two the account is briefly a member without a member row.
+ *
+ * `progress.attempted` is set before the first write of the first group and never
+ * cleared, so a caller that catches a throw can tell "wrote nothing" from "wrote
+ * something" (#4's condition). It is an argument rather than a return value
+ * because the answer is needed exactly when this throws.
+ */
+export async function runMemberGroupErasure(
+  io: MemberGroupsIo & Pick<HandoverIo, 'readWatchlist' | 'readSessionHistory' | 'eraseMemberTraces' | 'log'>,
+  uid: string,
+  progress: { attempted: boolean },
+): Promise<{ groups: number }> {
+  const groups = (await io.memberGroups(uid)).filter((g) => g.ownerUid !== uid);
+  for (const { id } of groups) {
+    const watchlist = await io.readWatchlist(id);
+    const history = await io.readSessionHistory(id);
+    progress.attempted = true;
+    await io.eraseMemberTraces(id, uid, buildTraceErasure(watchlist, history, uid));
+  }
+  io.log.info('groupHandover: member-group traces erased', { uid, groups: groups.length });
+  return { groups: groups.length };
 }

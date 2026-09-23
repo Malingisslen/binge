@@ -417,3 +417,72 @@ export function refusalForSentInvites(found: number): string | null {
   if (found <= SENT_INVITE_BATCH_LIMIT) return null;
   return `Fler an ${SENT_INVITE_BATCH_LIMIT} skickade gruppinbjudningar. Ingenting raderades.`;
 }
+
+/**
+ * BIN-1260: what a person who has LEFT a group may have erased from it.
+ *
+ * Leaving stays a client write (#12's condition, `## BIN-1120` in
+ * .claude/rules/accepted-deviations.md); this runs afterwards, as a separate
+ * server step the leaver calls for themselves. It must therefore refuse anyone
+ * still IN the group: erasing a live member's row would manufacture the ghost
+ * state BIN-1097 is about, out of a membership that is working.
+ *
+ * `nothing` covers a group that is gone. A caller who was never a member gets
+ * `erase` like anyone else, and every write that follows names only their own
+ * uid, so it finds nothing to change. Both answers return the same thing to the
+ * client, so the callable says nothing about whether a group exists.
+ */
+export type LeaverErasurePlan =
+  | { kind: 'erase' }
+  | { kind: 'nothing' }
+  | { kind: 'refused'; reason: 'still-member' | 'owner' };
+
+export function planLeaverErasure(
+  group: { readonly ownerUid: string; readonly memberUids: readonly string[] } | null,
+  uid: string,
+): LeaverErasurePlan {
+  if (!group) return { kind: 'nothing' };
+  // Before the membership check although an owner is normally a member: the
+  // owner leaves through the handover, and that answer should not depend on
+  // `memberUids` being intact.
+  if (group.ownerUid === uid) return { kind: 'refused', reason: 'owner' };
+  if (group.memberUids.includes(uid)) return { kind: 'refused', reason: 'still-member' };
+  return { kind: 'erase' };
+}
+
+export const LEAVER_ERASURE_REFUSALS: Record<'still-member' | 'owner', string> = {
+  'still-member': 'Du är fortfarande med i gruppen.',
+  owner: 'Du äger gruppen. Lämna över den först.',
+};
+
+/**
+ * Whether one chunk of a leaver's erasure may be written, decided on a read made
+ * INSIDE the same transaction as the chunk.
+ *
+ * #4 Security's binding condition on BIN-1260: a leaver who rejoins while the
+ * erasure is still running has a live membership again, and the chunks still
+ * queued would delete its fresh member row, household contribution and
+ * progress. A check made once at the start cannot see that, so every chunk
+ * re-reads the group and stops when the caller is back in, or the group is gone.
+ */
+export function leaverChunkMayCommit(
+  group: { readonly memberUids: readonly string[] } | null,
+  uid: string,
+): boolean {
+  return group !== null && !group.memberUids.includes(uid);
+}
+
+/**
+ * The error the account-delete door throws when a step AFTER the handover fails.
+ *
+ * `anyWriteAttempted` must be conservative in the same way `HandoverSummary.
+ * attempted` is: true as soon as a write was attempted, not once one landed.
+ * #4's condition: a failure before anything was written must not be reported as
+ * partial, and one after must not be reported as untouched.
+ */
+export function refusalAfterHandover(anyWriteAttempted: boolean): string {
+  if (anyWriteAttempted) {
+    return `${HANDOVER_PARTIAL}: Kunde inte radera allt, och en del ändringar hann göras. Försök igen.`;
+  }
+  return 'Kunde inte radera allt. Försök igen.';
+}

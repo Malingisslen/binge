@@ -2066,3 +2066,56 @@ avbruten radering. Den gäller ett annat läge och står kvar oförändrad.
 
 **Re-open when:** någon av punkterna ovan inträffar, eller en rapport om ett nytt konto som
 fastnat utan profil trots anslutning.
+
+---
+
+## BIN-1260: spårraderingen efter ett utträde är ett eget serversteg, utträdet är oförändrat — 2026-09-23
+
+Efterföljare till `## BIN-1120` ovan, som står kvar ordagrant. Den posten säger att #12:s villkor
+bryts om "utträdet någon gång går via en serverfunktion". Malins beslut 2026-09-23 (BIN-1260 A) var
+att utträdet städar på servern. Så här håller båda.
+
+**Utträdet är samma klientskrivning som förut.** `leaveGroup` kör `removeMember` först och väntar
+in den. Först EFTER den anropar klienten den anropbara `eraseMyGroupTraces` — utan att vänta på den,
+och ett fel där rapporteras men gör aldrig utträdet till ett misslyckande. Härled ordningen:
+
+```
+git grep -n -A 6 "export async function leaveGroup" -- src/lib/firebase/groups.ts
+```
+
+**Den anropbara är självanropad.** Uid:t tas ur `request.auth`, aldrig ur anropet. Den vägrar den
+som fortfarande står i `memberUids` och den som äger gruppen. Den kan alltså inte användas som en
+borttagning förbi ägaren eller medlemslistan, och den kan inte ta bort någon ur en grupp.
+
+**Vem som helst som är inloggad kan anropa den, för vilket grupp-id som helst** (#27:s och #4:s
+villkor, att det står utskrivet). Gruppdokumentet läses först och vägran avgörs på det, så den som
+fortfarande är medlem kostar en läsning. Den som aldrig varit medlem går igenom: då läses gruppens
+hela titellista och sessionshistorik, och en radering av `progress/{uid}` görs per titel — på
+dokument som inte finns. Ingen annans data ändras, men varje anrop kostar läsningar och
+skrivningar. Svaret är detsamma om gruppen finns eller inte, och ett fel ger en fast mening, så
+ingenting om gruppen når anroparen.
+
+**En återkomst mitt i raderingen.** Raderingen skrivs i chunkar, och varje chunk är en egen
+transaktion som först läser om gruppen och stannar om anroparen är med igen eller gruppen är borta
+(`leaverChunkMayCommit`). Utan det hade en chunk som skrivs efter återkomsten raderat den nya
+medlemsraden, hushållsbidraget och tittarprogressen — riktig data i medlemskapet som lever igen, inte spöktillståndet från
+BIN-1097. Emulatortestet
+"stops at the next chunk when the leaver rejoins" i `src/test/rules/group-handover-orchestrator.test.ts`
+driver beslutet mot en riktig transaktion, men i testfilens EGEN kopia av porten. Admin-portens
+form — omläsningen och skrivningarna i samma transaktion — hålls av källkodsskanningen "the Admin
+port re-reads the group inside each chunk transaction" i `functions/src/groupHandover/logic.test.ts`.
+Det som redan skrivits före återkomsten står fast; det var den gamla medlemstidens spår.
+
+**Vad som INTE täcks:**
+1. När ägaren tar bort en medlem körs steget inte. BIN-1296.
+2. BIN-1278 (spåren i grupper man bara var medlem i, vid kontoradering) gäller RADERAKNAPPEN. Ett
+   konto som raderats i Firebase Console lämnar dem kvar, enligt avgränsningen i posten daterad
+   2026-09-07 (bunt 3). BIN-1294.
+
+**INTE accepterat, alltså fortfarande fileable:**
+1. Att utträdet börjar vänta på, eller bero av, den anropbara.
+2. Att den anropbara slutar vägra en medlem eller ägaren.
+3. Att chunkens omläsning flyttas ut ur transaktionen.
+
+**Re-open when:** någon av punkterna ovan inträffar, eller `kind: 'leaveGroup-traceErasure'`
+återkommer i Sentry-scopet `groups`.

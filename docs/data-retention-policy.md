@@ -52,6 +52,14 @@ vid kontoradering. Export och radering läser samma helper
 (`src/lib/firebase/userData.ts`), så listorna hålls i synk: lägger man till en
 ny user-owned subcollection måste helpern uppdateras så båda flödena får med den.
 
+Utanför mitt träd, och därför inte i helpern:
+
+- `rotationReminderState/{uid}_{providerId}_{kind}_{datum}` — dedup-märket för
+  påminnelsen om att pausa eller återuppta en streamingtjänst (BIN-1279). Id:t
+  namnger tjänsten. Klienten kan varken läsa eller radera det, så servern raderar
+  det: den anropbara `handOverOwnedGroups` vid raderaknappen, och
+  `retentionCleanup`-sopningen för ett konto som raderats i Firebase Console.
+
 #### Per-titel-borttagning ("Ta bort" i biblioteket)
 
 "Ta bort" på en titel raderar watchlist-docen men lämnar medvetet kvar
@@ -194,6 +202,30 @@ När användaren raderas:
   kommentar och i posten daterad 2026-09-10 i `.claude/rules/accepted-deviations.md`;
   den upprepas inte här, eftersom två exemplar av ett beslut är två saker som kan
   glida isär.
+- **Mina spår i grupper jag bara är MEDLEM i raderas också** (BIN-1278, Malins
+  beslut 2026-09-23). Samma spår som i ägarfallet ovan: `watchlist.addedBy`,
+  `sessionHistory.pickedByUid` och mitt uid ur `sessionHistory.participantUids`,
+  utöver raderna under mitt eget uid. Görs av servern, i samma anropbara funktion,
+  EFTER överlämningen. Mitt uid tas sedan ur `memberUids` av klientkaskaden, som
+  förut.
+
+  Gäller raderaknappen. Ett konto som raderats i Firebase Console når inte det här
+  steget: sopningen frågar på `ownerUid`, inte på `memberUids`, och den avgränsningen
+  står i posten daterad 2026-09-07 i `.claude/rules/accepted-deviations.md`. Öppet
+  arbete: BIN-1294.
+
+### Att lämna en grupp → samma spår raderas (BIN-1260, Malins beslut 2026-09-23)
+
+Själva utträdet är en klientskrivning och oförändrat: mitt uid ur `memberUids`,
+`members/{uid}` och `household/{uid}` raderas. Efteråt anropar appen den anropbara
+`eraseMyGroupTraces`, som raderar resten: `joinAttempts/{uid}`, varje
+`watchlist/*/progress/{uid}`, och rensar `watchlist.addedBy`,
+`sessionHistory.pickedByUid` och `sessionHistory.participantUids` där de pekar på
+mig. Titlarna och historikraderna blir kvar i gruppen.
+
+Steget är bäst-möjligt: faller det står utträdet ändå, och felet rapporteras. När en
+ägare TAR BORT en medlem körs det inte, så den borttagnas spår blir kvar
+(BIN-1296).
 
 ### Hushålls-bidrag (delade prenumerationskostnader) → Samtyckesbaserad, självstyrd radering (BIN-184, 2026-07-05)
 
