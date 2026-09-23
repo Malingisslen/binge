@@ -1936,3 +1936,51 @@ hänger på; väg 2 lägger en ny schemalagd funktion mot kostnadstaket.
 INGEN automatisk signal: ingen logg eller metrik jämför `memberUids` med medlemsraderna, så
 ett spöke syns bara om någon rapporterar det. Utlösaren är alltså skönsmässig, på samma sätt
 som BIN-590-postens.
+
+---
+
+## BIN-624: serverns tolkning av dokument-id är mer tillåtande än klientens, med flit — 2026-09-23
+
+Malins beslut 2026-09-20, bekräftat 2026-09-23 (alternativ A). Fila inte "klient- och
+serverkopian av `mediaTypeDocId` har glidit isär", och synka inte om paret.
+
+**Läget.** `parseTmdbIdFromDocId` i `src/lib/mediaTypeDocId.ts` godtar bara kanoniska id;
+kopian i `functions/src/shared/mediaTypeDocId.ts` godtar också alias som `movie_042`.
+Delningen pinnas i båda riktningarna av `src/lib/mediaTypeDocId.parity.test.ts`. Härled
+serverns läsställen, båda formerna:
+
+```
+git grep -n "resolveTmdbId(\|parseTmdbIdFromDocId(" -- functions/src
+```
+
+**Vad som skyddar läsarna, mätt 2026-09-23.** Två olika saker, beroende på läsare:
+
+- Läsare som går via `resolveTmdbId` föredrar dokumentets eget `tmdbId`-fält och faller
+  bara tillbaka på id:t när fältet saknas eller är oanvändbart.
+- `aggregateDocId` i `functions/src/communityRatings/runAggregate.ts` läser id:t direkt, med
+  flit (BIN-560). Den triggas bara på `users/{uid}/watchlist/{tmdbId}`, och där nekar
+  `canonicalWatchlistDocId` i `firestore.rules` ett aliasformat id redan på create. Det som
+  kan finnas kvar är äldre dokument skrivna före spärren.
+
+Härled spärren och triggern:
+
+```
+grep -n "canonicalWatchlistDocId(" firestore.rules
+git grep -n "onDocumentWritten(" -- functions/src/communityRatings/index.ts
+```
+
+Beslutet 2026-09-20 vilade på att bara kontots ägare kan skapa ett felformat id. Det gäller
+inte `groups/{gid}/watchlist`, där varje gruppmedlem kan skapa ett dokument med vilket id och
+vilka fält som helst. Den samlingen läses av `collectionGroup`-skanningar, inte av
+betygstriggern.
+
+**Vad den här posten INTE säger.** Den säger ingenting om att gruppernas titellista saknar
+fältspärr, eller om vad schemalagda funktioner gör med ett gruppdokument som bär ett `status`.
+Det är BIN-1291, och det är inte accepterat.
+
+**INTE accepterat, alltså fortfarande fileable:**
+1. Att en serverläsare som tolkar id:t direkt börjar läsa en samling utan id-spärr på create.
+2. Att `canonicalWatchlistDocId` tas bort eller vidgas.
+3. Att parity-testet mjukas upp eller skrivs om utan ett nytt beslut.
+
+**Re-open when:** någon av punkterna ovan inträffar.

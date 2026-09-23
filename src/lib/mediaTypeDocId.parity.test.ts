@@ -13,8 +13,8 @@ import * as server from '../../functions/src/shared/mediaTypeDocId';
  *
  * The READ side diverges on purpose since BIN-618: the client rejects aliased doc
  * ids (`movie_042`, `zmovie_42`, …) that would re-key onto a genuine title's slot
- * and shadow its contents; the server copy stays permissive because its read sites
- * were not audited (BIN-624, still open).
+ * and shadow its contents; the server copy stays permissive, decided and recorded in
+ * `## BIN-624` in .claude/rules/accepted-deviations.md.
  *
  * Nothing else enforced that split, so a plausible "these two files should be
  * identical, resync them" cleanup could silently reopen the alias hole with the
@@ -22,10 +22,8 @@ import * as server from '../../functions/src/shared/mediaTypeDocId';
  * loosening the client fails the "client rejects" assertions, tightening the
  * server fails the "server still accepts" ones.
  *
- * WHEN THIS FILE GOES RED: that is the signal to decide, not to soften. If the
- * server was deliberately tightened, BIN-624 is what just shipped — audit the
- * server read sites listed on that ticket, then rewrite the divergence block below
- * as a plain agreement block. Never relax the client to make it pass.
+ * WHEN THIS FILE GOES RED: that is the signal to decide, not to soften. Never
+ * relax the client to make it pass.
  */
 
 /**
