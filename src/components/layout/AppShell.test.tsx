@@ -16,7 +16,10 @@ import AppShell from './AppShell';
 
 const useAuthMock = vi.fn();
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => useAuthMock() }));
-vi.mock('next/navigation', () => ({ usePathname: () => '/' }));
+// `useRouter` because the shell renders ProfileOfflineBanner, which takes the router
+// since BIN-1293. ONE object, not a fresh one per call: the banner's effect lists it.
+const routerMock = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock('next/navigation', () => ({ usePathname: () => '/', useRouter: () => routerMock }));
 vi.mock('@/hooks/useFcmToken', () => ({ useFcmForeground: () => {} }));
 vi.mock('@/hooks/useTitleLinkPrefetch', () => ({ useTitleLinkPrefetch: () => {} }));
 vi.mock('@/components/ui/DuotoneFilters', () => ({ default: () => null }));

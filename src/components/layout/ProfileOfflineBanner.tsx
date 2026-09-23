@@ -1,7 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { needsOnboarding } from '@/lib/onboarding';
+import { clearNextPath, isSignInPath, rememberNextPath } from '@/lib/nextPath';
 
 /**
  * BIN-559 — inloggad, men profilen gick inte att läsa för att enheten saknar
@@ -15,8 +18,32 @@ import { useAuth } from '@/hooks/useAuth';
  * flera laddningar samtidigt. Misslyckas försöket står remsan kvar.
  */
 export function ProfileOfflineBanner() {
-  const { uid, profileLoadError, retryProfileLoad } = useAuth();
+  const { uid, user, profileLoading, profileLoadError, retryProfileLoad } = useAuth();
+  const router = useRouter();
   const [retrying, setRetrying] = useState(false);
+  // BIN-1293: räknas upp när ett tryck på "Försök igen" har gått klart, så att
+  // effekten nedan körs då. Refen håller vilket tryck som redan är hanterat
+  // (StrictMode), samma skäl som inloggningssidans `redirectedRef`.
+  const [retriesDone, setRetriesDone] = useState(0);
+  const handledRef = useRef(0);
+
+  // BIN-1293: ett helt nytt konto som loggade in offline landade utanför
+  // onboardingen, eftersom inloggningssidan inte kunde läsa profilen. Skapar
+  // omförsöket profilen, ställs samma fråga som inloggningssidan ställer. Bara
+  // efter ett tryck här, aldrig vid en vanlig laddning.
+  useEffect(() => {
+    if (retriesDone === handledRef.current || profileLoading) return;
+    handledRef.current = retriesDone;
+    if (profileLoadError !== null || !needsOnboarding(user)) return;
+    const here = window.location.pathname + window.location.search;
+    if (isSignInPath(here)) return;
+    // Onboardingen är en omväg, inte ett avbrott (BIN-669): den tar sidan man
+    // stod på när flödet är klart. Rensa först, som AuthGuard gör: en äldre
+    // sparad sida ska inte överleva om den här skulle vägras.
+    clearNextPath();
+    rememberNextPath(here);
+    router.push('/onboarding/');
+  }, [retriesDone, user, profileLoading, profileLoadError, router]);
 
   if (!uid || profileLoadError !== 'offline') return null;
 
@@ -26,6 +53,7 @@ export function ProfileOfflineBanner() {
       await retryProfileLoad();
     } finally {
       setRetrying(false);
+      setRetriesDone((n) => n + 1);
     }
   };
 

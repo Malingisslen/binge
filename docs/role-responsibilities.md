@@ -510,7 +510,7 @@ Owns the human interface to the system.
   username conflict help; onboarding hand-holding.
   → `src/app/login/page.tsx`, `src/components/layout/EmailVerificationBanner.tsx`, `src/app/settings/import/page.tsx`, `src/components/settings/`, `src/components/layout/Footer.tsx`
 - **Filer som saknade en ägande roll** (BIN-871). Återvändningsvägen efter inloggning och testerna för inloggnings- och importsidorna.
-  → `src/app/login/page.test.tsx`, `src/app/settings/import/page.test.tsx`, `src/lib/nextPath.test.ts`, `src/lib/nextPath.ts`
+  → `src/app/login/page.test.tsx`, `src/app/settings/import/page.test.tsx`, `src/lib/nextPath.test.ts`, `src/lib/nextPath.ts`, `src/lib/onboarding.test.ts`, `src/lib/onboarding.ts`
 
 
 ## 20. Manual / Release QA Tester

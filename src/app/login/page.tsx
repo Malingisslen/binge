@@ -9,6 +9,7 @@ import { scorePassword } from '@/lib/passwordStrength';
 import { PasswordStrengthMeter } from '@/components/auth/PasswordStrengthMeter';
 import { CURRENT_TERMS_VERSION, MIN_AGE } from '@/lib/legal';
 import { takeNextPath } from '@/lib/nextPath';
+import { needsOnboarding } from '@/lib/onboarding';
 import { MAX_DISPLAY_NAME } from '@/lib/clampText';
 
 /**
@@ -65,11 +66,7 @@ export default function LoginPage() {
   useEffect(() => {
     if (!uid || profileLoading || redirectedRef.current) return;
     redirectedRef.current = true;
-    // Nya användare utan myProviders + utan onboardingCompletedAt ska igenom
-    // onboarding-flödet. Existerande användare (före featuren landade) har
-    // varken flagga men har providers — vi skickar bara in tomma profiler.
-    const needsOnboarding =
-      user != null && !user.onboardingCompletedAt && (user.myProviders?.length ?? 0) === 0;
+    const onboarding = needsOnboarding(user);
     // Come back to where the visitor started. Four surfaces remember a path, and
     // they all go through `useSignedOutRedirect` — read its caller list rather
     // than trusting a copy of it here; an earlier version of this comment named
@@ -85,8 +82,8 @@ export default function LoginPage() {
     // The path comes from sessionStorage, never a query param — see nextPath.ts
     // for why (a `?next=` would travel to Firebase's Google-hosted auth handler,
     // and would be attacker-supplied). `takeNextPath` validates on read anyway.
-    const next = needsOnboarding ? null : takeNextPath();
-    router.push(needsOnboarding ? '/onboarding/' : (next ?? '/'));
+    const next = onboarding ? null : takeNextPath();
+    router.push(onboarding ? '/onboarding/' : (next ?? '/'));
   }, [uid, user, profileLoading, router]);
 
   async function handleGoogle() {
