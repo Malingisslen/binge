@@ -1557,7 +1557,7 @@
         {
           "from": "grupper-new-page",
           "to": "firestore",
-          "payload": "createGroup — addDoc groups/{id} {name,ownerUid,memberUids:[ownerUid],defaults,inviteTokenHash:sha256(token)} + setDoc publicGroups/{id} {name} (BIN-1152 — the signed-in-readable name projection; its position between the two is load-bearing, because its write rule requires the group document to exist and it must precede the member doc so the createGroup-memberDoc rollback branch is what cleans it) + setDoc groups/{id}/members/{ownerUid} {uid,displayName,username,photoURL,providers,joinedAt} — the field set firestore.rules' isValidGroupMember pins; derive it with: grep -n -A 10 function.memberFields src/lib/firebase/groups.ts",
+          "payload": "createGroup — addDoc groups/{id} {name,ownerUid,memberUids:[ownerUid],defaults,inviteTokenHash:sha256(token)} (BIN-1291: the create rule refuses an id that is an existing users/{id} document, so a group can never share an id with an account) + setDoc publicGroups/{id} {name} (BIN-1152 — the signed-in-readable name projection; its position between the two is load-bearing, because its write rule requires the group document to exist and it must precede the member doc so the createGroup-memberDoc rollback branch is what cleans it) + setDoc groups/{id}/members/{ownerUid} {uid,displayName,username,photoURL,providers,joinedAt} — the field set firestore.rules' isValidGroupMember pins; derive it with: grep -n -A 10 function.memberFields src/lib/firebase/groups.ts",
           "transport": "Firestore write",
           "verified": true
         },
