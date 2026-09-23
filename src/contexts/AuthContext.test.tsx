@@ -278,6 +278,7 @@ import { REQUIRES_RECENT_LOGIN, STALE_SESSION_PREFLIGHT, classifyDeletionFailure
 import { HANDOVER_PARTIAL } from '@/lib/firebase/groupHandover';
 import { CURRENT_TERMS_VERSION } from '@/lib/legal';
 import { openProfileIdentityChannel, PROFILE_IDENTITY_CHANNEL } from '@/lib/profileIdentityChannel';
+import { MAX_BIO } from '@/lib/clampText';
 
 // BIN-1163: a real cross-tab bus, not a spy. The whole mechanism is "does the
 // OTHER tab end up holding the new name", and a mocked module could only prove
@@ -2614,5 +2615,29 @@ describe('AuthContext - visningsnamnet gar att andra, och skrivningarna har en o
       { scope: 'auth', kind: 'updateDisplayName-authSync' },
     );
     errSpy.mockRestore();
+  });
+});
+
+// BIN-1253. Bion klampas pa skrivvagen, samma form som visningsnamnet. Fixturen ar ett
+// emoji-par som STRADDLAR taket: kodenhet [MAX_BIO-1] ar den hoga halvan och [MAX_BIO]
+// den laga. En strang som ar exakt MAX_BIO lang slapps igenom oforandrad av
+// clampToCodeUnits tidiga retur (BIN-1164) och kan darfor inte bevisa klampningen.
+describe('AuthContext - bion klampas innan den skrivs (BIN-1253)', () => {
+  it('ett par som straddlar taket kapas helt, och det lagrade vardet ar valformat', async () => {
+    renderAuth();
+    await login({ displayName: 'Malin', email: 'malin@example.com' });
+    setDoc.mockClear();
+    const bio = 'a'.repeat(MAX_BIO - 1) + '😀';
+    expect(bio.length).toBe(MAX_BIO + 1);
+
+    let stored = '';
+    await act(async () => { stored = await ctx!.updateBio(bio); });
+
+    const [, payload] = userDocWrites()[0] as [unknown, Record<string, unknown>, unknown];
+    expect(payload.bio).toBe('a'.repeat(MAX_BIO - 1));
+    expect((payload.bio as string).isWellFormed()).toBe(true);
+    // Anroparen far samma strang tillbaka, sa inställningarnas textfalt kan visa det
+    // som faktiskt sparades.
+    expect(stored).toBe(payload.bio);
   });
 });

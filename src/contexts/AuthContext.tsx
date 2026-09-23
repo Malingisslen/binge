@@ -37,7 +37,7 @@ import { markDeletionStarted, clearDeletionStarted, isDeletionStarted, deletionM
 import { mergeUserDoc, assertProfileWritable } from '@/lib/firebase/userDocWrite';
 import { REQUIRES_RECENT_LOGIN, STALE_SESSION_PREFLIGHT, markHandedOff, markCascadePartial } from '@/lib/authErrors';
 import { useOptimisticMirrorField } from '@/hooks/useOptimisticMirrorField';
-import { clampToCodeUnits, MAX_DISPLAY_NAME } from '@/lib/clampText';
+import { clampToCodeUnits, MAX_BIO, MAX_DISPLAY_NAME } from '@/lib/clampText';
 import { openProfileIdentityChannel, type ProfileIdentityChannel } from '@/lib/profileIdentityChannel';
 import type { ItemVisibility, UserProfile } from '@/types';
 
@@ -91,7 +91,8 @@ interface AuthState {
    * att await:en inte kastade.
    */
   updateDisplayName: (name: string) => Promise<void>;
-  updateBio: (bio: string) => Promise<void>;
+  /** Resolvar med det LAGRADE vardet, som kan vara klampat (BIN-1253). */
+  updateBio: (bio: string) => Promise<string>;
   updateDefaultVisibility: (visibility: ItemVisibility) => Promise<void>;
   /**
    * BIN-587: true när profilens defaultVisibility ÄR sparad men stämplingen av
@@ -145,7 +146,7 @@ const AuthContext = createContext<AuthState>({
   resumeProvider: async () => {},
   updateUsername: async () => {},
   updateDisplayName: async () => {},
-  updateBio: async () => {},
+  updateBio: async (bio: string) => bio,
   updateDefaultVisibility: async () => {},
   visibilitySyncPending: false,
   deletionInProgress: false,
@@ -1311,7 +1312,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await publishIdentityChange({ displayName: clamped, username: user?.username ?? null });
   }, [updateUserField, publishIdentityChange, user?.username]);
 
-  const updateBio = useCallback((bio: string) => updateUserField('bio', bio), [updateUserField]);
+  // BIN-1253: samma klampning som den publika projektionen redan gor, sa den privata
+  // kopian och projektionen aldrig bar olika text.
+  const updateBio = useCallback(async (bio: string) => {
+    const clamped = clampToCodeUnits(bio, MAX_BIO);
+    await updateUserField('bio', clamped);
+    return clamped;
+  }, [updateUserField]);
 
   const updateDefaultVisibility = useCallback(async (visibility: ItemVisibility) => {
     if (!uid) return;

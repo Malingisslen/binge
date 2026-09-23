@@ -88,7 +88,14 @@ export function UsernameSection() {
             onChange={e => setBioInput(e.target.value)}
             onBlur={async () => {
               if (bioInput === user.bio) return;
-              try { await updateBio(bioInput); toast('Bio sparad'); }
+              // Skriv bara tillbaka om faltet fortfarande haller det som skickades -
+              // text som skrevs medan sparningen pagick far inte skrivas over.
+              const sent = bioInput;
+              try {
+                const stored = await updateBio(sent);
+                setBioInput(prev => (prev === sent ? stored : prev));
+                toast('Bio sparad');
+              }
               catch { toast('Kunde inte spara. Försök igen om en stund.'); }
             }}
             placeholder="Berätta lite om dig…"
