@@ -1618,6 +1618,13 @@
           "verified": true
         },
         {
+          "from": "group-members-panel",
+          "to": "cf-eraseMyGroupTraces",
+          "payload": "BIN-1296: after the owner removeMember batch has gone through, removeMemberAsOwner calls httpsCallable eraseMyGroupTraces({groupId, memberUid}) without waiting for it. The server reads the group first; a caller who does not own it, or a group that does not exist, gets the same silent ok and nothing is written. For the owner it erases the removed member traces the same way a leave does, and each chunk re-reads the group in its transaction and stops if the member is back, the group is gone or the caller is no longer the owner. A failure is reported as removeMember-traceErasure and never turns the removal into a failure.",
+          "transport": "Callable (httpsCallable)",
+          "verified": true
+        },
+        {
           "from": "group-page-client",
           "to": "household-panel",
           "payload": "renders <HouseholdPanel groupId> in the group side panel — aggregate-only UI (\"Disney+ betalas av 2 av er\"), never per-person; copy never implies account sharing (ADR 0010)",
