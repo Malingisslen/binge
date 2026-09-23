@@ -1893,3 +1893,44 @@ känner till, för en fråga ingen har ställt i driften.
 **Re-open when:** `kind: 'markRead-refused'` eller `kind: 'markAllRead-refused'` återkommer
 i Sentry, eller när avstängnings- eller utloggningsflöden behöver skiljas ut där av något
 annat skäl.
+
+---
+
+## BIN-1097: en spöke-medlem lagas genom att lämna och gå med igen — 2026-09-23
+
+Malins beslut 2026-09-20 (väg 3 av tre). Fila inte "en medlem kan inte skriva in sig i
+gruppen igen", och föreslå inte att grupp-update-regeln vidgas för en no-op-`arrayUnion` eller
+att ett serversidigt svep letar spöken — båda är prövade och avvisade.
+
+**Läget.** En spöke-medlem är ett uid i `groups/{gid}.memberUids` utan
+`groups/{gid}/members/{uid}`. Både token-join-grenen och invite-accept-grenen i gruppens
+update-regel kräver att uid:t INTE redan står i listan, så ett nytt inträde ovanpå spöket
+nekas. Härled:
+
+```
+grep -n "!(request.auth.uid in resource.data.memberUids)" firestore.rules
+```
+
+Emulatortestet "en icke-ägande medlem kan inte läggas till igen (BIN-1063 steg 1)" i
+`src/test/rules/firestore-rules.test.ts` pinnar det, med kontrollen åt andra hållet bredvid.
+
+**Reparationen** står i `docs/RUNBOOK.md` §5h. Medlemmen själv lämnar gruppen och går med
+igen; spöket står i `memberUids` och får därför gruppvyn med menyvalet "Lämna gruppen".
+Den vägen är läst ur regler och kod men inte körd mot emulatorn. Beslutet 2026-09-20 utgick
+från att ägaren tar bort och bjuder in igen; i appen kan ägaren inte det, eftersom
+medlemslistan byggs av medlemsraderna och spöket saknar en. Den skillnaden är lyft till Malin
+i sprintrapporten 2026-09-23.
+
+**Why:** tillståndet kräver att medlemsradens skrivning OCH den kompenserande
+återställningen faller i samma anrop. Väg 1 rör den regel gruppernas behörighetsmodell
+hänger på; väg 2 lägger en ny schemalagd funktion mot kostnadstaket.
+
+**INTE accepterat, alltså fortfarande fileable:**
+1. Att utträdet slutar fungera för ett spöke — att `leaveGroup` nekas för ett uid som står
+   i `memberUids` utan medlemsrad.
+2. Att emulatortestet ovan tas bort eller vänds utan ett nytt beslut.
+
+**Re-open when:** Malin bedömer att grupper används på riktigt och vill mäta. Det finns
+INGEN automatisk signal: ingen logg eller metrik jämför `memberUids` med medlemsraderna, så
+ett spöke syns bara om någon rapporterar det. Utlösaren är alltså skönsmässig, på samma sätt
+som BIN-590-postens.

@@ -433,6 +433,21 @@ BIN-1147-posten i `.claude/rules/accepted-deviations.md`.
 5. Be användaren trycka på radera igen i appen. Kör inte kaskaden själv.
 6. Skriv en rad i §12 Loggbok: datum, antal raderade, vem som körde.
 
+### 5h. "Jag ser mig som med i gruppen men syns inte i medlemslistan"
+
+Det är en spöke-medlem: kontots uid står i gruppens medlemslista men medlemsraden saknas.
+Beslutet att inte bygga en egen reparation står i posten `## BIN-1097` i
+`.claude/rules/accepted-deviations.md`.
+
+1. Medlemmen öppnar gruppen, väljer menyn och "Lämna gruppen".
+2. Medlemmen går med igen via inbjudningslänken eller en ny inbjudan från ägaren.
+   Medlemsraden skrivs då på nytt.
+
+Ägaren kan inte ta bort spöket i appen: medlemslistan byggs av medlemsraderna, så spöket har
+ingen rad där (`grep -n -A6 "export function subscribeToGroupMembers" src/lib/firebase/groups.ts`).
+Går steg 1 inte att genomföra: ta bort medlemmens uid ur `memberUids` i `groups/{groupId}` i
+Firebase Console, och fortsätt med steg 2.
+
 ## 6. "Bygget failar i CI"
 
 ### 6a. Lint/typecheck fel
