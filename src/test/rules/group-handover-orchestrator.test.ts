@@ -10,7 +10,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
 import {
-  eraseSentInvites, runGroupHandover, runLeaverErasure, runMemberGroupErasure, runOwnerPickedHandover,
+  eraseSentInvites, runGroupHandover, runLeaverErasure, runMemberGroupErasure, runOwnerPickedHandover, runOwnerRemovalErasure,
   type HandoverIo, type HandoverNotifyIo, type LeaverIo, type MemberGroupsIo,
 } from '../../../functions/src/groupHandover/runHandover';
 import {
@@ -1006,13 +1006,15 @@ function leaverIo(opts: { chunk?: number; afterChunk?: () => Promise<void> } = {
     memberGroups: async (uid) =>
       (await getDocs(query(collection(d, 'groups'), where('memberUids', 'array-contains', uid))))
         .docs.map((x) => ({ id: x.id, ownerUid: x.data().ownerUid as string })),
-    eraseLeaverTraces: async (groupId, uid, erasure) => {
+    eraseLeaverTraces: async (groupId, uid, erasure, requiredOwner) => {
       const groupRef = doc(d, 'groups', groupId);
       for (const chunk of chunkWrites(memberTraceWrites(uid, erasure), opts.chunk ?? 450)) {
         const wrote = await runTransaction(d, async (tx) => {
           const fresh = await tx.get(groupRef);
-          const group = fresh.exists() ? { memberUids: (fresh.data().memberUids as string[]) ?? [] } : null;
-          if (!leaverChunkMayCommit(group, uid)) return false;
+          const group = fresh.exists()
+            ? { memberUids: (fresh.data().memberUids as string[]) ?? [], ownerUid: (fresh.data().ownerUid as string) ?? '' }
+            : null;
+          if (!leaverChunkMayCommit(group, uid, requiredOwner)) return false;
           for (const w of chunk) {
             const ref = doc(d, `groups/${groupId}/${w.collection}/${w.doc}`);
             if (w.op === 'delete') tx.delete(ref);
@@ -1115,6 +1117,57 @@ describe('runLeaverErasure — after a plain leave (BIN-1260)', () => {
     // without the guard. It shows the rejoin landed, nothing more.
     expect(await exists(['groups', 'g', 'members', 'leaver']), 'the new member row').toBe(true);
     // This is the assertion the guard is for: the progress row is in a later chunk.
+    expect((await getDoc(doc(d, 'groups', 'g', 'watchlist', 'movie_1', 'progress', 'leaver'))).exists()).toBe(true);
+  });
+});
+
+describe('runOwnerRemovalErasure — the owner removed a member (BIN-1296)', () => {
+  it('erases the removed member traces and nobody else’s', async () => {
+    await seedLeftGroup();
+    await runOwnerRemovalErasure(leaverIo(), 'g', 'owner', 'leaver');
+    const d = db();
+
+    expect(await exists(['groups', 'g', 'joinAttempts', 'leaver'])).toBe(false);
+    expect((await getDoc(doc(d, 'groups', 'g', 'watchlist', 'movie_1', 'progress', 'leaver'))).exists()).toBe(false);
+    expect('addedBy' in ((await getDoc(doc(d, 'groups', 'g', 'watchlist', 'movie_1'))).data() ?? {})).toBe(false);
+    expect((await getDoc(doc(d, 'groups', 'g', 'sessionHistory', 'h1'))).data()?.participantUids).toEqual(['owner', 'stayer']);
+
+    expect(await exists(['groups', 'g', 'joinAttempts', 'stayer'])).toBe(true);
+    expect((await getDoc(doc(d, 'groups', 'g', 'watchlist', 'movie_2'))).data()?.addedBy).toBe('stayer');
+  });
+
+  it('a non-owner changes nothing, and gets the same answer as for a missing group', async () => {
+    await seedLeftGroup();
+    await expect(runOwnerRemovalErasure(leaverIo(), 'g', 'stayer', 'leaver')).resolves.toBeUndefined();
+    await expect(runOwnerRemovalErasure(leaverIo(), 'nope', 'stayer', 'leaver')).resolves.toBeUndefined();
+    expect(await exists(['groups', 'g', 'joinAttempts', 'leaver'])).toBe(true);
+    expect((await getDoc(doc(db(), 'groups', 'g', 'watchlist', 'movie_1', 'progress', 'leaver'))).exists()).toBe(true);
+  });
+
+  it('refuses while the named person is still a member, and writes nothing', async () => {
+    await seedLeftGroup();
+    await expect(runOwnerRemovalErasure(leaverIo(), 'g', 'owner', 'stayer')).rejects.toBeInstanceOf(HandoverRefusal);
+    expect(await exists(['groups', 'g', 'members', 'stayer'])).toBe(true);
+    expect(await exists(['groups', 'g', 'joinAttempts', 'stayer'])).toBe(true);
+  });
+
+  // #4/#6/#27's condition, driven for real: ownership moves after the first chunk,
+  // and the old owner's queued chunks must not be written.
+  it('stops at the next chunk once the caller no longer owns the group', async () => {
+    await seedLeftGroup();
+    const d = db();
+    let moved = false;
+    const io = leaverIo({
+      chunk: 2,
+      afterChunk: async () => {
+        if (moved) return;
+        moved = true;
+        await updateDoc(doc(d, 'groups', 'g'), { ownerUid: 'stayer' });
+      },
+    });
+    await runOwnerRemovalErasure(io, 'g', 'owner', 'leaver');
+
+    expect(moved, 'the handover must have landed between chunks').toBe(true);
     expect((await getDoc(doc(d, 'groups', 'g', 'watchlist', 'movie_1', 'progress', 'leaver'))).exists()).toBe(true);
   });
 });

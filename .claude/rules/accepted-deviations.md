@@ -2179,3 +2179,39 @@ som alltid svarar till slut.
 
 **Re-open when:** en bekräftelsedialog får en åtgärd vars väntan har en övre gräns och som
 inte får avbrytas halvvägs — då skickar den anroparen en egen spärr, inte alla.
+
+---
+
+## BIN-1296: ägarens borttagning raderar den borttagnas spår — 2026-09-23
+
+Efterföljare till `## BIN-1260` ovan, som står kvar ordagrant. Två saker i den gäller inte
+längre: punkt 1 under "Vad som INTE täcks" ("När ägaren tar bort en medlem körs steget inte")
+är stängd, och meningen "Den anropbara är självanropad" gäller bara när inget `memberUid`
+skickas.
+
+**Vad som byggdes.** `eraseMyGroupTraces` tar ett valfritt `memberUid`. Utan det, eller med
+anroparens eget uid, är vägen oförändrad. Med ett annat uid raderar gruppens ägare spåren
+efter en medlem hen tagit bort. Härled grenen:
+
+```
+git grep -n "runOwnerRemovalErasure" -- functions/src
+```
+
+**Vem som kan anropa, och vad de får veta.** Vem som helst som är inloggad, för vilket
+grupp-id och uid som helst. Är anroparen inte ägare, eller finns gruppen inte, blir svaret
+samma tysta `{ ok: true }` efter en läsning, och ingenting skrivs. Bara en ägare kan få
+vägran att personen fortfarande är medlem.
+
+**Mitt i raderingen.** Varje chunk läser om gruppen i sin transaktion och stannar om den
+borttagna är med igen, gruppen är borta, eller anroparen inte längre är ägare
+(`leaverChunkMayCommit` med `requiredOwner`).
+
+**Vad som INTE täcks:** BIN-1294 (konton raderade i Firebase Console) är oförändrad.
+
+**INTE accepterat, alltså fortfarande fileable:**
+1. Att en icke-ägare får något annat svar än en saknad grupp.
+2. Att ägarkontrollen i chunken flyttas ut ur transaktionen.
+3. Att borttagningen börjar vänta på, eller bero av, den anropbara.
+
+**Re-open when:** någon av punkterna ovan inträffar, eller `kind: 'removeMember-traceErasure'`
+återkommer i Sentry-scopet `groups`.

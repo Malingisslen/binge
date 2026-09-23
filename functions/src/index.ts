@@ -250,9 +250,8 @@ export { getProfileForModeration } from './moderationProfile';
 // som ägaren själv pekat ut, och tar ägaren ur gruppen. Samma serverkrav som ovan,
 // plus ett till: de kvarvarande medlemmarna får en notis, och det skriver i ANDRAS
 // `users/{uid}/notifications`, vilket ingen regelgren kan tillåta.
-// eraseMyGroupTraces (BIN-1260): callable som den som LÄMNAT en grupp anropar
-// efteråt, för att radera sina egna spår i den. Själva utträdet är fortfarande en
-// klientskrivning; se `## BIN-1120` i .claude/rules/accepted-deviations.md.
+// eraseMyGroupTraces (BIN-1260, BIN-1296): se funktionens egen rubrik i
+// groupHandover/index.ts.
 export { handOverOwnedGroups, handOverGroup, eraseMyGroupTraces } from './groupHandover';
 
 // ── Besked till anmälaren (BIN-1259) ────────────────────────────────────────

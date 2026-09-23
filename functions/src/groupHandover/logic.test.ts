@@ -19,13 +19,15 @@ import {
   chunkWrites,
   planLeaverErasure,
   leaverChunkMayCommit,
+  planOwnerRemovalErasure,
+  OWNER_REMOVAL_REFUSALS,
   refusalAfterHandover,
   HandoverRefusal,
   type MemberRow,
   type TraceWrite,
 } from './logic';
 import {
-  eraseSentInvites, runLeaverErasure, runMemberGroupErasure, type LeaverIo, type TraceErasure,
+  eraseSentInvites, runLeaverErasure, runMemberGroupErasure, runOwnerRemovalErasure, type LeaverIo, type TraceErasure,
 } from './runHandover';
 import { eraseReminderMarkers } from '../rotationReminder/markers';
 
@@ -925,6 +927,35 @@ describe('leaverChunkMayCommit — decided on the read inside each chunk (BIN-12
   it('stops when the group is gone', () => {
     expect(leaverChunkMayCommit(null, 'me')).toBe(false);
   });
+  // BIN-1296: an owner's removal also stops when ownership has moved.
+  it('lets an owner removal through while the caller still owns the group', () => {
+    expect(leaverChunkMayCommit({ memberUids: ['o'], ownerUid: 'o' }, 'gone', 'o')).toBe(true);
+  });
+  it('stops an owner removal once the caller no longer owns the group', () => {
+    expect(leaverChunkMayCommit({ memberUids: ['o', 'n'], ownerUid: 'n' }, 'gone', 'o')).toBe(false);
+  });
+  it('stops an owner removal when the removed member is back', () => {
+    expect(leaverChunkMayCommit({ memberUids: ['o', 'gone'], ownerUid: 'o' }, 'gone', 'o')).toBe(false);
+  });
+});
+
+describe('planOwnerRemovalErasure (BIN-1296)', () => {
+  it('erases for the owner once the member is out', () => {
+    expect(planOwnerRemovalErasure({ ownerUid: 'o', memberUids: ['o'] }, 'o', 'gone')).toEqual({ kind: 'erase' });
+  });
+  it('refuses the owner while the member is still in the group', () => {
+    expect(planOwnerRemovalErasure({ ownerUid: 'o', memberUids: ['o', 'm'] }, 'o', 'm'))
+      .toEqual({ kind: 'refused', reason: 'still-member' });
+  });
+  it('gives a non-owner and a missing group the same answer', () => {
+    const notOwner = planOwnerRemovalErasure({ ownerUid: 'o', memberUids: ['o'] }, 'x', 'gone');
+    const missing = planOwnerRemovalErasure(null, 'x', 'gone');
+    expect(notOwner).toEqual({ kind: 'nothing' });
+    expect(missing).toEqual(notOwner);
+  });
+  it('does not tell a non-owner whether the named person is still a member', () => {
+    expect(planOwnerRemovalErasure({ ownerUid: 'o', memberUids: ['o', 'm'] }, 'x', 'm')).toEqual({ kind: 'nothing' });
+  });
 });
 
 describe('refusalAfterHandover — partial only when something was attempted (BIN-1278)', () => {
@@ -975,6 +1006,46 @@ describe('runLeaverErasure — reads the group before anything unbounded (BIN-12
     const { port } = io({ ownerUid: 'o', memberUids: ['o'] });
     port.eraseLeaverTraces = async () => ({ kind: 'stopped' });
     await expect(runLeaverErasure(port, 'g', 'me')).resolves.toBeUndefined();
+  });
+});
+
+describe('runOwnerRemovalErasure — group first, one answer for strangers (BIN-1296)', () => {
+  function io(group: { ownerUid: string; memberUids: string[] } | null) {
+    const calls: string[] = [];
+    const erased: { uid: string; requiredOwner?: string }[] = [];
+    const port: LeaverIo = {
+      log: fakeLog(),
+      readGroup: async () => { calls.push('readGroup'); return group; },
+      readWatchlist: async () => { calls.push('readWatchlist'); return [{ id: 'movie_1', addedBy: 'gone' }]; },
+      readSessionHistory: async () => { calls.push('readSessionHistory'); return []; },
+      eraseLeaverTraces: async (_g, uid, _e, requiredOwner) => {
+        calls.push('erase');
+        erased.push({ uid, requiredOwner });
+        return { kind: 'done' };
+      },
+    };
+    return { port, calls, erased };
+  }
+
+  it('erases the removed member, bound to the calling owner', async () => {
+    const { port, calls, erased } = io({ ownerUid: 'o', memberUids: ['o'] });
+    await runOwnerRemovalErasure(port, 'g', 'o', 'gone');
+    expect(calls).toEqual(['readGroup', 'readWatchlist', 'readSessionHistory', 'erase']);
+    expect(erased).toEqual([{ uid: 'gone', requiredOwner: 'o' }]);
+  });
+
+  it('a non-owner and a missing group both resolve silently after one read', async () => {
+    for (const group of [{ ownerUid: 'o', memberUids: ['o'] }, null]) {
+      const { port, calls } = io(group);
+      await expect(runOwnerRemovalErasure(port, 'g', 'x', 'gone')).resolves.toBeUndefined();
+      expect(calls).toEqual(['readGroup']);
+    }
+  });
+
+  it('refuses the owner while the member is still in, before anything unbounded', async () => {
+    const { port, calls } = io({ ownerUid: 'o', memberUids: ['o', 'm'] });
+    await expect(runOwnerRemovalErasure(port, 'g', 'o', 'm')).rejects.toThrow(OWNER_REMOVAL_REFUSALS['still-member']);
+    expect(calls).toEqual(['readGroup']);
   });
 });
 
@@ -1068,12 +1139,23 @@ describe('the delete door runs the new steps after the handover (BIN-1278, BIN-1
   // suite green. ONE pattern, so no half can go while the other stays.
   it('the Admin port re-reads the group inside each chunk transaction and writes through it', () => {
     const adminIo = readFileSync(join(HERE, 'adminIo.ts'), 'utf8').replace(/^\s*\/\/.*$/gm, '');
-    const body = /eraseLeaverTraces: async \(groupId, uid, erasure\) => \{[\s\S]*?\n {4}\},\n/.exec(adminIo)?.[0] ?? '';
+    const body = /eraseLeaverTraces: async \(groupId, uid, erasure, requiredOwner\) => \{[\s\S]*?\n {4}\},\n/.exec(adminIo)?.[0] ?? '';
     expect(body, 'eraseLeaverTraces not found in adminIo.ts').not.toBe('');
     expect(body).toMatch(
-      /const wrote = await db\.runTransaction\(async \(tx\) => \{\s*const fresh = await tx\.get\(groupRef\);[\s\S]*?if \(!leaverChunkMayCommit\(group, uid\)\) return false;\s*for \(const w of chunk\) \{[\s\S]*?tx\.delete\(ref\);[\s\S]*?tx\.update\(ref,[\s\S]*?tx\.update\(ref,[\s\S]*?return true;\s*\}\);\s*if \(!wrote\) return \{ kind: 'stopped' \};/,
+      /const wrote = await db\.runTransaction\(async \(tx\) => \{\s*const fresh = await tx\.get\(groupRef\);[\s\S]*?if \(!leaverChunkMayCommit\(group, uid, requiredOwner\)\) return false;\s*for \(const w of chunk\) \{[\s\S]*?tx\.delete\(ref\);[\s\S]*?tx\.update\(ref,[\s\S]*?tx\.update\(ref,[\s\S]*?return true;\s*\}\);\s*if \(!wrote\) return \{ kind: 'stopped' \};/,
     );
     expect(body).not.toMatch(/batch/);
+    // BIN-1296: the owner check needs the owner from the SAME read.
+    expect(body).toMatch(/const fresh = await tx\.get\(groupRef\);[\s\S]*?ownerUid: \(fresh\.get\('ownerUid'\)/);
+  });
+
+  // BIN-1296 (#27's condition): a caller naming themselves takes the unchanged self
+  // path, so an owner naming themselves meets the leaver's 'owner' refusal.
+  it('eraseMyGroupTraces routes a missing or own memberUid to the leaver path', () => {
+    const block = /export const eraseMyGroupTraces = onCall\([\s\S]*?\n\);/.exec(ENTRY)?.[0] ?? '';
+    expect(block).toMatch(
+      /if \(memberUid === undefined \|\| memberUid === uid\) await runLeaverErasure\(io, groupId, uid\);\s*else await runOwnerRemovalErasure\(io, groupId, uid, memberUid\);/,
+    );
   });
 
   // #4's condition: nothing about a group reaches a caller who may not be in it.

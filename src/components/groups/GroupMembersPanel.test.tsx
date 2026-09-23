@@ -15,7 +15,7 @@ vi.mock('next/link', () => ({
 }));
 vi.mock('@/lib/firebase/groups', () => ({
   inviteMemberByUid: vi.fn(async () => {}),
-  removeMember: vi.fn(async () => {}),
+  removeMemberAsOwner: vi.fn(async () => {}),
 }));
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: null }) }));
 // Formen är React Querys, inte en egen — komponenten destrukturerar

@@ -116,6 +116,7 @@ import {
   MY_GROUPS_LIMIT,
   memberDocToObject,
   leaveGroup,
+  removeMemberAsOwner,
 } from './groups';
 
 function groupsQueryConstraints() {
@@ -1544,6 +1545,56 @@ describe('leaveGroup — utträdet först, spårraderingen efteråt (BIN-1260)',
     commitMock.mockImplementationOnce(() => Promise.reject(new Error('nekad')));
 
     await expect(leaveGroup('g1', 'me')).rejects.toThrow('nekad');
+    await settle();
+
+    expect(eraseMyGroupTracesMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('removeMemberAsOwner — borttagningen först, spårraderingen efteråt (BIN-1296)', () => {
+  const settle = () => new Promise((r) => setTimeout(r, 0));
+
+  beforeEach(() => {
+    eraseMyGroupTracesMock.mockReset();
+    eraseMyGroupTracesMock.mockImplementation(async () => {});
+    captureErrorMock.mockClear();
+  });
+
+  it('tar bort medlemmen och ber sedan servern radera just den medlemmens spår', async () => {
+    await removeMemberAsOwner('g1', 'jonas');
+    await settle();
+
+    expect(commitMock).toHaveBeenCalledTimes(1);
+    expect(eraseMyGroupTracesMock).toHaveBeenCalledWith('g1', 'jonas');
+  });
+
+  it('ett fel i spårraderingen rapporteras men gör inte borttagningen till ett misslyckande', async () => {
+    const boom = new Error('server nere');
+    eraseMyGroupTracesMock.mockImplementation(async () => { throw boom; });
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await expect(removeMemberAsOwner('g1', 'jonas')).resolves.toBeUndefined();
+    await settle();
+
+    expect(captureErrorMock).toHaveBeenCalledWith(boom, { scope: 'groups', kind: 'removeMember-traceErasure' });
+    spy.mockRestore();
+  });
+
+  it('är klar utan att vänta på spårraderingen', async () => {
+    eraseMyGroupTracesMock.mockImplementation(() => new Promise<void>(() => {}));
+
+    const outcome = await Promise.race([
+      removeMemberAsOwner('g1', 'jonas').then(() => 'klar'),
+      new Promise((r) => setTimeout(() => r('hänger'), 50)),
+    ]);
+
+    expect(outcome).toBe('klar');
+  });
+
+  it('en nekad borttagning når anroparen, och ingen spårradering begärs', async () => {
+    commitMock.mockImplementationOnce(() => Promise.reject(new Error('nekad')));
+
+    await expect(removeMemberAsOwner('g1', 'jonas')).rejects.toThrow('nekad');
     await settle();
 
     expect(eraseMyGroupTracesMock).not.toHaveBeenCalled();

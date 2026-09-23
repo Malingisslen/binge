@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { X } from 'lucide-react';
-import { inviteMemberByUid, removeMember } from '@/lib/firebase/groups';
+import { inviteMemberByUid, removeMemberAsOwner } from '@/lib/firebase/groups';
 import { useUserSearch } from '@/hooks/useUserSearch';
 import { useAuth } from '@/hooks/useAuth';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -91,7 +91,7 @@ export function GroupMembersPanel({
           body={`${memberToRemove.displayName} tas bort från gruppen och kan bara komma tillbaka via en ny inbjudan.`}
           confirmLabel="Ta bort"
           onConfirm={() => {
-            void removeMember(groupId, memberToRemove.uid);
+            void removeMemberAsOwner(groupId, memberToRemove.uid);
             setMemberToRemove(null);
           }}
           onCancel={() => setMemberToRemove(null)}

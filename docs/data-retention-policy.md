@@ -222,9 +222,7 @@ Själva utträdet är en klientskrivning och oförändrat: mitt uid ur `memberUi
 `sessionHistory.pickedByUid` och `sessionHistory.participantUids` där de pekar på
 mig. Titlarna och historikraderna blir kvar i gruppen.
 
-Steget är bäst-möjligt: faller det står utträdet ändå, och felet rapporteras. När en
-ägare TAR BORT en medlem körs det inte, så den borttagnas spår blir kvar
-(BIN-1296).
+Steget är bäst-möjligt: faller det står utträdet ändå, och felet rapporteras.
 
 ### Hushålls-bidrag (delade prenumerationskostnader) → Samtyckesbaserad, självstyrd radering (BIN-184, 2026-07-05)
 
@@ -915,6 +913,11 @@ Policy ska omvärderas om:
 - **Moderation-runbook** (`docs/moderation.md`).
 
 ## Ändringslogg
+
+- **2026-09-23 (BIN-1296)** — Malins beslut (runda 2, A): när en ägare tar bort en
+  medlem raderas samma spår som när medlemmen själv lämnar (se "Att lämna en
+  grupp" ovan). Appen anropar `eraseMyGroupTraces` med den borttagnas uid efter
+  borttagningen; bara gruppens ägare kan få något raderat den vägen.
 
 - **2026-09-23 (BIN-1281, BIN-1250)** — Malins beslut (runda 2, A): en anmälan
   som någon annan gjort mot en användare, med den anmäldas interna användar-id

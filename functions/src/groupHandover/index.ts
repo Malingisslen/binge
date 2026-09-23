@@ -44,7 +44,7 @@ import { logger } from 'firebase-functions/v2';
 
 import { HandoverRefusal, refusalAfterHandover, refusalForHandover } from './logic';
 import {
-  eraseSentInvites, runGroupHandover, runLeaverErasure, runMemberGroupErasure, runOwnerPickedHandover,
+  eraseSentInvites, runGroupHandover, runLeaverErasure, runMemberGroupErasure, runOwnerPickedHandover, runOwnerRemovalErasure,
 } from './runHandover';
 import { adminHandoverIo, adminHandoverNotifyIo, adminLeaverIo } from './adminIo';
 import { adminReminderMarkerIo, eraseReminderMarkers } from '../rotationReminder/markers';
@@ -175,10 +175,16 @@ export const handOverGroup = onCall(
  * `## BIN-1120` in .claude/rules/accepted-deviations.md). A failure here never
  * undoes or blocks the leave.
  *
- * Reachable by any signed-in caller for any group id. Every write names the
- * caller's own uid (`memberTraceWrites`), so a caller who was never in the group
- * changes nothing, and the answer is the same `{ ok: true }` whether the group
- * exists or not. The refusals are about the caller's own membership only.
+ * Without `memberUid` (or with the caller's own uid): reachable by any signed-in
+ * caller for any group id. Every write names the caller's own uid
+ * (`memberTraceWrites`), so a caller who was never in the group changes nothing,
+ * and the answer is the same `{ ok: true }` whether the group exists or not. The
+ * refusals are about the caller's own membership only.
+ *
+ * BIN-1296: with a `memberUid` that is not the caller, the owner erases a member
+ * they have removed. A caller who does not own the group gets the same silent
+ * `{ ok: true }` as a missing group, and nothing is written. The one refusal is
+ * that the named person is still a member, and only an owner can reach it.
  *
  * `internal` errors carry a fixed sentence rather than the raw error, so nothing
  * about the group reaches the caller (#4's condition).
@@ -189,15 +195,24 @@ export const eraseMyGroupTraces = onCall(
     const uid = request.auth?.uid;
     if (!uid) throw new HttpsError('unauthenticated', 'Du måste vara inloggad.');
 
-    const data = request.data as { groupId?: unknown } | null;
+    const data = request.data as { groupId?: unknown; memberUid?: unknown } | null;
     const groupId = typeof data?.groupId === 'string' ? data.groupId : '';
     // A document id: no path separator, and Firestore's own length ceiling.
     if (!groupId || groupId.includes('/') || groupId.length > 1500) {
       throw new HttpsError('invalid-argument', 'Grupp måste anges.');
     }
+    const memberUid = data?.memberUid;
+    if (
+      memberUid !== undefined
+      && (typeof memberUid !== 'string' || !memberUid || memberUid.includes('/') || memberUid.length > 128)
+    ) {
+      throw new HttpsError('invalid-argument', 'Ogiltig medlem.');
+    }
 
     try {
-      await runLeaverErasure(adminLeaverIo(getFirestore(), logger), groupId, uid);
+      const io = adminLeaverIo(getFirestore(), logger);
+      if (memberUid === undefined || memberUid === uid) await runLeaverErasure(io, groupId, uid);
+      else await runOwnerRemovalErasure(io, groupId, uid, memberUid);
     } catch (err) {
       if (err instanceof HandoverRefusal) {
         throw new HttpsError('failed-precondition', err.message);

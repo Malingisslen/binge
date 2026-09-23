@@ -13,7 +13,8 @@
 
 import {
   buildHandoverUpdate, buildOwnerPickedHandover, buildTraceErasure,
-  HandoverRefusal, LEAVER_ERASURE_REFUSALS, planLeaverErasure, refusalForSentInvites,
+  HandoverRefusal, LEAVER_ERASURE_REFUSALS, OWNER_REMOVAL_REFUSALS, planLeaverErasure,
+  planOwnerRemovalErasure, refusalForSentInvites,
   type ClaimResult, type MemberRow,
 } from './logic';
 
@@ -431,13 +432,15 @@ export interface LeaverIo {
   /**
    * Apply `memberTraceWrites(uid, erasure)` in chunks, each in its own
    * transaction that first re-reads the group and writes only when
-   * `leaverChunkMayCommit` says so. Returns `stopped` at the first chunk it
-   * declined, without writing that chunk or any after it.
+   * `leaverChunkMayCommit(group, uid, requiredOwner)` says so. Returns `stopped`
+   * at the first chunk it declined, without writing that chunk or any after it.
+   * `requiredOwner` is set on an owner's removal (BIN-1296), never on a leave.
    */
   eraseLeaverTraces(
     groupId: string,
     uid: string,
     erasure: TraceErasure,
+    requiredOwner?: string,
   ): Promise<{ kind: 'done' } | { kind: 'stopped' }>;
   log: HandoverIo['log'];
 }
@@ -463,6 +466,32 @@ export async function runLeaverErasure(io: LeaverIo, groupId: string, uid: strin
   const result = await io.eraseLeaverTraces(groupId, uid, buildTraceErasure(watchlist, history, uid));
   if (result.kind === 'stopped') {
     io.log.info('groupHandover: leaver erasure stopped, caller is back in the group or it is gone', { groupId });
+  }
+}
+
+/**
+ * BIN-1296: erase what a member the OWNER removed still has in the group.
+ *
+ * Same order as `runLeaverErasure`: the group is read and the plan decided on it
+ * before the two unbounded reads, so a non-owner naming any group id costs one
+ * read. A non-owner and a missing group get the same silent return.
+ */
+export async function runOwnerRemovalErasure(
+  io: LeaverIo,
+  groupId: string,
+  callerUid: string,
+  memberUid: string,
+): Promise<void> {
+  const group = await io.readGroup(groupId);
+  const plan = planOwnerRemovalErasure(group, callerUid, memberUid);
+  if (plan.kind === 'refused') throw new HandoverRefusal(OWNER_REMOVAL_REFUSALS[plan.reason]);
+  if (plan.kind === 'nothing') return;
+
+  const watchlist = await io.readWatchlist(groupId);
+  const history = await io.readSessionHistory(groupId);
+  const result = await io.eraseLeaverTraces(groupId, memberUid, buildTraceErasure(watchlist, history, memberUid), callerUid);
+  if (result.kind === 'stopped') {
+    io.log.info('groupHandover: owner removal erasure stopped, member is back, group is gone or ownership moved', { groupId });
   }
 }
 

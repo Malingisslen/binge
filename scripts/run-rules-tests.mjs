@@ -106,7 +106,7 @@ const REPO = resolve(HERE, '..');
 // BIN-1291, 2026-09-23: raised to what `numTotalTests` reported with the group-id
 // denial, its control, and the availableNotify group-row case in place. Measured with
 // `npm run test:rules -- --port 8123`, not counted by hand.
-export const MIN_TESTS = 778;
+export const MIN_TESTS = 782;
 
 const VITEST_ARGS = ['run', '--config', 'vitest.rules.config.ts'];
 

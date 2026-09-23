@@ -754,6 +754,20 @@ export async function leaveGroup(groupId: string, uid: string): Promise<void> {
     .catch((err) => reportGroupWriteError('leaveGroup-traceErasure', err));
 }
 
+/**
+ * BIN-1296: the owner removes a member. Same shape as `leaveGroup`: the client
+ * write in `removeMember` first, awaited, so a failure there still reaches the
+ * caller; THEN the server erases the removed member's traces, not awaited, and a
+ * failure there is reported but never turns a removal that went through into one
+ * that failed (BIN-1166).
+ */
+export async function removeMemberAsOwner(groupId: string, memberUid: string): Promise<void> {
+  await removeMember(groupId, memberUid);
+  void import('./groupHandover')
+    .then(({ eraseMyGroupTraces }) => eraseMyGroupTraces(groupId, memberUid))
+    .catch((err) => reportGroupWriteError('removeMember-traceErasure', err));
+}
+
 export async function deleteGroup(groupId: string, currentUid: string): Promise<void> {
   // Best-effort cleanup. Members + watchlist (inkl. per-item progress) +
   // sessionHistory-subcollections måste raderas innan parent-doc:et för att

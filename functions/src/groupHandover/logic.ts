@@ -461,11 +461,43 @@ export const LEAVER_ERASURE_REFUSALS: Record<'still-member' | 'owner', string> =
  * re-reads the group and stops when the caller is back in, or the group is gone.
  */
 export function leaverChunkMayCommit(
-  group: { readonly memberUids: readonly string[] } | null,
+  group: { readonly memberUids: readonly string[]; readonly ownerUid?: string } | null,
   uid: string,
+  requiredOwner?: string,
 ): boolean {
-  return group !== null && !group.memberUids.includes(uid);
+  if (group === null || group.memberUids.includes(uid)) return false;
+  // BIN-1296: an owner's removal also stops when the caller is no longer the
+  // owner — a handover mid-run must not let the old owner keep erasing.
+  return requiredOwner === undefined || group.ownerUid === requiredOwner;
 }
+
+/**
+ * BIN-1296: what an OWNER who has removed a member may have erased from the group.
+ *
+ * `nothing` when the group is gone OR the caller does not own it — one answer for
+ * both, so the callable says nothing to a non-owner about whether a group exists
+ * (#4, #5, #6, #27). Otherwise the removed member is judged exactly as a leaver
+ * is: still in `memberUids` refuses, since erasing a live member's row would
+ * manufacture the ghost state BIN-1097 is about.
+ */
+export type OwnerRemovalPlan =
+  | { kind: 'erase' }
+  | { kind: 'nothing' }
+  | { kind: 'refused'; reason: 'still-member' };
+
+export function planOwnerRemovalErasure(
+  group: { readonly ownerUid: string; readonly memberUids: readonly string[] } | null,
+  callerUid: string,
+  memberUid: string,
+): OwnerRemovalPlan {
+  if (!group || group.ownerUid !== callerUid) return { kind: 'nothing' };
+  if (group.memberUids.includes(memberUid)) return { kind: 'refused', reason: 'still-member' };
+  return { kind: 'erase' };
+}
+
+export const OWNER_REMOVAL_REFUSALS: Record<'still-member', string> = {
+  'still-member': 'Personen är fortfarande med i gruppen.',
+};
 
 /**
  * The error the account-delete door throws when a step AFTER the handover fails.

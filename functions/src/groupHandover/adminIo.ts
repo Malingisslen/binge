@@ -185,17 +185,21 @@ export function adminLeaverIo(db: Firestore, log: HandoverIo['log']): LeaverIo &
       return snap.docs.map((d) => ({ id: d.id, ownerUid: (d.get('ownerUid') as string | undefined) ?? '' }));
     },
 
-    eraseLeaverTraces: async (groupId, uid, erasure) => {
+    eraseLeaverTraces: async (groupId, uid, erasure, requiredOwner) => {
       const groupRef = db.doc(`groups/${groupId}`);
       for (const chunk of chunkWrites(memberTraceWrites(uid, erasure), BATCH_LIMIT)) {
         // The group read and the chunk's writes are one transaction: see
-        // `leaverChunkMayCommit` for the rejoin it guards against.
+        // `leaverChunkMayCommit` for the rejoin (and, BIN-1296, the ownership
+        // change) it guards against.
         const wrote = await db.runTransaction(async (tx) => {
           const fresh = await tx.get(groupRef);
           const group = fresh.exists
-            ? { memberUids: (fresh.get('memberUids') as string[] | undefined) ?? [] }
+            ? {
+                memberUids: (fresh.get('memberUids') as string[] | undefined) ?? [],
+                ownerUid: (fresh.get('ownerUid') as string | undefined) ?? '',
+              }
             : null;
-          if (!leaverChunkMayCommit(group, uid)) return false;
+          if (!leaverChunkMayCommit(group, uid, requiredOwner)) return false;
           for (const w of chunk) {
             const ref = groupRef.collection(w.collection).doc(w.doc);
             if (w.op === 'delete') tx.delete(ref);
