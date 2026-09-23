@@ -994,9 +994,8 @@ describe('medlemsdokumentets fältuppsättning är delad mellan createGroup och 
  * lets production accept any field set. Wildcard tokens are blanked first because
  * `{groupId}` is not a block delimiter and counting it corrupts the depth.
  */
-function ruleInviteKeys(): string[] {
-  const stripped = readFileSync(join(process.cwd(), 'firestore.rules'), 'utf8')
-    .replace(/\{[a-zA-Z]+\}/g, '<>');
+function ruleInviteKeys(rules = readFileSync(join(process.cwd(), 'firestore.rules'), 'utf8')): string[] {
+  const stripped = rules.replace(/\{[a-zA-Z]+\}/g, '<>');
   const start = stripped.indexOf('match /users/<>/groupInvites/<> {');
   if (start === -1) return [];
 
@@ -1017,8 +1016,23 @@ function ruleInviteKeys(): string[] {
 
   const list = stripped.slice(start, end).match(/hasOnly\(\s*\[([^\]]*)\]/);
   if (!list) return [];
-  return [...list[1].matchAll(/'([a-zA-Z]+)'/g)].map((m) => m[1]).sort();
+  // BIN-1270: båda citatformerna, som regelspråket tillåter. Radkommentarer i listan
+  // skalas bort först, så att ett citerat ord i en kommentar inte matar listan.
+  return [...list[1].replace(/\/\/.*$/gm, '').matchAll(/(['"])([a-zA-Z]+)\1/g)].map((m) => m[2]).sort();
 }
+
+describe('ruleInviteKeys läser båda citatformerna (BIN-1270)', () => {
+  it('fångar en dubbelciterad nyckel och hoppar över en i en kommentar', () => {
+    const rules = [
+      'match /users/{uid}/groupInvites/{groupId} {',
+      '  allow create: if request.resource.data.keys().hasOnly([',
+      `    'groupId', "fromUid", // "kommentar"`,
+      '  ]);',
+      '}',
+    ].join('\n');
+    expect(ruleInviteKeys(rules)).toEqual(['fromUid', 'groupId']);
+  });
+});
 
 describe('inbjudningens faltuppsattning ar pinnad mot regeln (BIN-1127, harledd i BIN-1146)', () => {
   // Nyckellistan kommer fran `ruleInviteKeys()` ovan, som laser den ur regeln.

@@ -475,32 +475,48 @@ describe('the erasure covers every uid-bearing field the group contracts pin', (
   // test: nothing went red. The set is DERIVED from firestore.rules' own field
   // contracts rather than restated here, so a fifth uid field added to a group
   // subcollection fails this instead of shipping unerased.
-  const uidFieldsInRules = (() => {
+  // BIN-1270. The rules language accepts both quote forms, so the name scan does too;
+  // line comments inside a list are stripped first so a quoted word in one cannot feed
+  // the set.
+  const uidFieldsIn = (rules: string) => {
     // Brace-match the groups tree rather than slicing a guessed window: a window
     // that is too short silently drops subcollections, and the floor below is the
     // only thing that would notice.
     const header = 'match /groups/{groupId}';
-    const start = RULES.indexOf(header);
+    const start = rules.indexOf(header);
     let depth = 0;
     let end = start;
     // Open the scan AFTER the path, whose own `{groupId}` is a brace pair that
     // would close the block on its first character.
-    for (let i = RULES.indexOf('{', start + header.length); i < RULES.length; i += 1) {
-      if (RULES[i] === '{') depth += 1;
-      else if (RULES[i] === '}') {
+    for (let i = rules.indexOf('{', start + header.length); i < rules.length; i += 1) {
+      if (rules[i] === '{') depth += 1;
+      else if (rules[i] === '}') {
         depth -= 1;
         if (depth === 0) { end = i; break; }
       }
     }
-    const groupsTree = RULES.slice(start, end);
+    const groupsTree = rules.slice(start, end);
     const found = new Set<string>();
     for (const block of groupsTree.matchAll(/hasOnly\(\[([^\]]*)\]\)/g)) {
-      for (const name of block[1].matchAll(/'([A-Za-z0-9_]+)'/g)) {
-        if (/uid/i.test(name[1])) found.add(name[1]);
+      const list = block[1].replace(/\/\/.*$/gm, '');
+      for (const name of list.matchAll(/(['"])([A-Za-z0-9_]+)\1/g)) {
+        if (/uid/i.test(name[2])) found.add(name[2]);
       }
     }
     return found;
-  })();
+  };
+  const uidFieldsInRules = uidFieldsIn(RULES);
+
+  it('the scan catches a double-quoted field and ignores one named in a comment (BIN-1270)', () => {
+    const rules = [
+      'match /groups/{groupId} {',
+      '  allow create: if request.resource.data.keys().hasOnly([',
+      `    "doubleUid", 'singleUid', // "commentUid"`,
+      '  ]);',
+      '}',
+    ].join('\n');
+    expect([...uidFieldsIn(rules)].sort()).toEqual(['doubleUid', 'singleUid']);
+  });
 
   // Without a floor the scan can break — a renamed rules block, a changed
   // `hasOnly` spelling — and report an empty set, which every subset assertion

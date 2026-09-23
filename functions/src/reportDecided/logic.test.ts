@@ -23,8 +23,9 @@ const ENTRY = readFileSync(join(HERE, 'index.ts'), 'utf8')
 // admin UI — the reporter of a report in that status would simply never be told.
 // Deriving the roster here makes both directions loud.
 //   grep -n "status in \[" firestore.rules
-const [REPORT_STATUSES, STATUS_LITERAL] = (() => {
-  const rules = readFileSync(join(REPO, 'firestore.rules'), 'utf8');
+// BIN-1270. Both quote forms, since the rules language accepts both; line comments
+// inside the literal are stripped first so a quoted word in one cannot feed the roster.
+function statusRosterIn(rules: string): readonly [string[], string] {
   // Brace-matched to the reports block rather than sliced to end of file. The bound
   // is not airtight: one unbalanced brace in a rules comment inside the block moves
   // where it ends. The exact partition below is what catches a roster read from the
@@ -42,14 +43,16 @@ const [REPORT_STATUSES, STATUS_LITERAL] = (() => {
     }
     return '';
   })();
-  const literal = /request\.resource\.data\.status in \[([^\]]+)\]/.exec(reportsBlock)?.[1] ?? '';
-  // `[^']+`, not a character class of what today's names happen to use. A narrower
+  const literal = (/request\.resource\.data\.status in \[([^\]]+)\]/.exec(reportsBlock)?.[1] ?? '')
+    .replace(/\/\/.*$/gm, '');
+  // `[^'"]+`, not a character class of what today's names happen to use. A narrower
   // class DROPS a status it cannot spell — `auto_actioned`, `needs-info` — and the
   // drop is invisible: the floor still clears, and the partition below still
   // balances because BOTH sides are missing it. The sibling watch-status vocabulary
   // in this repo already contains an underscore, so that is not a hypothetical.
-  return [(literal.match(/'([^']+)'/g) ?? []).map((q) => q.slice(1, -1)), literal] as const;
-})();
+  return [[...literal.matchAll(/(['"])([^'"]+)\1/g)].map((m) => m[2]), literal] as const;
+}
+const [REPORT_STATUSES, STATUS_LITERAL] = statusRosterIn(readFileSync(join(REPO, 'firestore.rules'), 'utf8'));
 
 describe('decidesReport — only a transition INTO a decided status (BIN-1259)', () => {
   it.each(DECIDED_STATUSES)('open → %s is a decision', (status) => {
@@ -166,7 +169,20 @@ describe('DECIDED_STATUSES against the whole status vocabulary (BIN-1259)', () =
   // reached the roster. This is what catches a future narrowing of the class above,
   // which the partition alone cannot see.
   it('drops no quoted token from the literal', () => {
-    expect(REPORT_STATUSES).toHaveLength((STATUS_LITERAL.match(/'/g) ?? []).length / 2);
+    expect(REPORT_STATUSES).toHaveLength((STATUS_LITERAL.match(/['"]/g) ?? []).length / 2);
+  });
+
+  it('catches a double-quoted status and ignores one named in a comment (BIN-1270)', () => {
+    const rules = [
+      'match /reports/{reportId} {',
+      '  allow update: if request.resource.data.status in [',
+      `    'open', "needs_info", // "commentStatus"`,
+      '  ];',
+      '}',
+    ].join('\n');
+    const [statuses, literal] = statusRosterIn(rules);
+    expect(statuses).toEqual(['open', 'needs_info']);
+    expect(statuses).toHaveLength((literal.match(/['"]/g) ?? []).length / 2);
   });
 
   // The statuses that deliberately do NOT notify the reporter. Written out here

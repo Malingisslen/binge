@@ -7,7 +7,7 @@ import {
   assertFails, assertSucceeds, initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, deleteField, serverTimestamp, writeBatch, query, where, limit, Timestamp, arrayUnion } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, deleteField, serverTimestamp, writeBatch, query, where, limit, Timestamp, arrayUnion, arrayRemove } from 'firebase/firestore';
 
 const PROJECT_ID = 'binge-rules-test';
 const OWNER = 'owner_uid';
@@ -4013,6 +4013,57 @@ describe('groups memberUids — en icke-ägande medlem kan inte läggas till ige
     await assertSucceeds(updateDoc(doc(otherDb(), 'groups', GROUP), {
       memberUids: [OWNER, 'other_uid'],
     }));
+  });
+});
+
+
+// BIN-1274. Reparationsvägen i docs/RUNBOOK.md §5h och posten `## BIN-1097` i
+// accepted-deviations.md: spöket lämnar gruppen och går med igen. Varje steg är
+// exakt den skrivning appen gör — utträdet som `removeMember`s batch, inträdet som
+// `joinGroupViaToken`s tre skrivningar — och ingen fixtur förseglar ett joinAttempt
+// åt den, så token-hashspärren är med i provet.
+describe('groups — en spöke-medlem kan lämna och gå med igen (BIN-1274)', () => {
+  const TOKEN = 'ghost-repair-token';
+
+  it('utträdet går igenom fast medlemsdokumentet saknas, och därefter ett nytt inträde via token', async () => {
+    await seedGroup({ memberUids: [OWNER, 'other_uid'], inviteTokenHash: sha256Hex(TOKEN) });
+    // Medlemsraden binds till skrivarens live-profil (`matchesOwnIdentity`), så
+    // profilen seedas och raden bär samma fält som `memberFields` skriver — annars
+    // vore identitetskontrollen vakuöst sann och provet bevisade en annan skrivning.
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', 'other_uid'), { displayName: 'Spöket', username: 'spoket' });
+    });
+    const db = otherDb();
+
+    // Förutsättningen: det är ett spöke, inte en vanlig medlem.
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const snap = await getDoc(doc(ctx.firestore(), 'groups', GROUP, 'members', 'other_uid'));
+      expect(snap.exists()).toBe(false);
+    });
+
+    const leave = writeBatch(db);
+    leave.update(doc(db, 'groups', GROUP), { memberUids: arrayRemove('other_uid'), updatedAt: serverTimestamp() });
+    leave.delete(doc(db, 'groups', GROUP, 'members', 'other_uid'));
+    leave.delete(doc(db, 'groups', GROUP, 'household', 'other_uid'));
+    await assertSucceeds(leave.commit());
+
+    await assertSucceeds(setDoc(doc(db, 'groups', GROUP, 'joinAttempts', 'other_uid'), {
+      token: TOKEN, createdAt: serverTimestamp(),
+    }));
+    await assertSucceeds(updateDoc(doc(db, 'groups', GROUP), {
+      memberUids: arrayUnion('other_uid'), updatedAt: serverTimestamp(),
+    }));
+    await assertSucceeds(setDoc(doc(db, 'groups', GROUP, 'members', 'other_uid'), {
+      uid: 'other_uid', displayName: 'Spöket', username: 'spoket', photoURL: null, providers: [8],
+      joinedAt: serverTimestamp(),
+    }));
+
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const group = await getDoc(doc(ctx.firestore(), 'groups', GROUP));
+      expect(group.data()?.memberUids).toEqual([OWNER, 'other_uid']);
+      const member = await getDoc(doc(ctx.firestore(), 'groups', GROUP, 'members', 'other_uid'));
+      expect(member.exists()).toBe(true);
+    });
   });
 });
 

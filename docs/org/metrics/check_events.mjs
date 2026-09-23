@@ -152,10 +152,8 @@ function correctionKey(ts, ticket) {
  *          correctedAway: number, grandfathered: number, unverified: number}} — the counts
  *          travel WITH the verdict rather than as properties hung on the array, so "clean",
  *          "checked nothing" and "could not check" can never read the same to a caller.
- *          `claimsChecked` is the total; the other four are the ways a claim stops
- *          standing, and they sum to it only when `violations` is empty. Do NOT re-derive
- *          `evidenced` by subtracting the others — that shape shipped for one round and
- *          was wrong, because it never subtracted the violations.
+ *          Do NOT re-derive `evidenced` by subtraction — that shape shipped for one round
+ *          and was wrong, because it never subtracted the violations.
  */
 export function findViolations(rows, resolveCommit, { historyAvailable = true } = {}) {
   const corrected = new Set();

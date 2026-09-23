@@ -1916,7 +1916,9 @@ Emulatortestet "en icke-ägande medlem kan inte läggas till igen (BIN-1063 steg
 
 **Reparationen** står i `docs/RUNBOOK.md` §5h. Medlemmen själv lämnar gruppen och går med
 igen; spöket står i `memberUids` och får därför gruppvyn med menyvalet "Lämna gruppen".
-Den vägen är läst ur regler och kod men inte körd mot emulatorn. Beslutet 2026-09-20 utgick
+"Den vägen är läst ur regler och kod men inte körd mot emulatorn." — struken 2026-09-23
+(BIN-1274). Emulatortestet `git grep -n "BIN-1274" -- src/test/rules/firestore-rules.test.ts`
+kör den. Beslutet 2026-09-20 utgick
 från att ägaren tar bort och bjuder in igen; i appen kan ägaren inte det, eftersom
 medlemslistan byggs av medlemsraderna och spöket saknar en. Den skillnaden är lyft till Malin
 i sprintrapporten 2026-09-23.
