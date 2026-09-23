@@ -2524,7 +2524,7 @@
         {
           "from": "admin-reports-page",
           "to": "firestore",
-          "payload": "updateReportStatus(reportId, status, actionedByUid) → updateDoc reports/{id}",
+          "payload": "updateReportStatus(reportId, status, actionedByUid, decisionNote?) → updateDoc reports/{id}. BIN-1250: an optional internal note is written only when the admin typed one (clamped to MAX_DECISION_NOTE, capped the same in firestore.rules); the reporter's decided-notice never reads it",
           "transport": "firestore-write",
           "verified": true
         },
