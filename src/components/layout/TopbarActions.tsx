@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { Fragment, useState, useRef, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { Bell, Users } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
@@ -10,6 +10,7 @@ import { useMySessions } from '@/hooks/useMySessions';
 import { useClickOutside } from '@/hooks/useClickOutside';
 import { useSenderProfile } from '@/hooks/useSenderProfile';
 import { getProvider } from '@/lib/tmdb/providers';
+import { notificationSections } from '@/lib/notificationSections';
 import { useSignedOutRedirect } from '@/hooks/useSignedOutRedirect';
 import { useFriendActionAlert } from '@/hooks/useFriendActionAlert';
 import { FRIEND_FAILURE_TEXT } from '@/lib/friendActionText';
@@ -156,17 +157,17 @@ export default function TopbarActions() {
                   ))}
                 </>
               )}
-              {notifications.length > 0 && (
-                <>
+              {notificationSections(notifications).map((section, si) => (
+                <Fragment key={section.heading}>
                   <div className="popover-head">
-                    <span>Streamingnyheter</span>
-                    {providerUnreadCount > 0 && (
+                    <span>{section.heading}</span>
+                    {si === 0 && providerUnreadCount > 0 && (
                       <button onClick={markAllRead} className="popover-action-link">
                         Markera alla lästa
                       </button>
                     )}
                   </div>
-                  {notifications.slice(0, 10).map(n => {
+                  {section.items.map(n => {
                     // BIN-163 veckodigest — rollup-kort, inte tmdbId-formad.
                     // Länkar till biblioteket istället för en titelsida.
                     if (n.kind === 'weekly_digest') {
@@ -239,8 +240,8 @@ export default function TopbarActions() {
                       </Link>
                     );
                   })}
-                </>
-              )}
+                </Fragment>
+              ))}
             </div>
           )}
         </div>

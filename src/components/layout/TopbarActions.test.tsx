@@ -226,6 +226,7 @@ describe('TopbarActions — systemnotiser med och utan länk (BIN-1259)', () => 
     vi.clearAllMocks();
     notif.friendRequests = [];
     notif.friendRequestsCount = 0;
+    notif.providerUnreadCount = 0;
   });
 
   const systemCard = (over: Record<string, unknown> = {}) => ({
@@ -277,6 +278,37 @@ describe('TopbarActions — systemnotiser med och utan länk (BIN-1259)', () => 
     const view = await openBellWith([systemCard()]);
     const row = view.getByText('Din anmälan').closest('a, button');
     expect(row!.outerHTML).not.toContain('/insikter');
+  });
+
+  // BIN-1265: ett systemkort står under "Från Binge", inte under "Streamingnyheter".
+  it('ett systemkort står under rubriken Från Binge, och ett streamingkort under Streamingnyheter', async () => {
+    const streaming = { ...systemCard({ id: 'n2', kind: 'availability', title: 'Dune', body: undefined }), providerName: 'Netflix', providerId: 8 };
+    const view = await openBellWith([streaming, systemCard()]);
+    const heads = view.getAllByText(/^(Från Binge|Streamingnyheter)$/).map((el) => el.textContent);
+    expect(heads).toEqual(['Från Binge', 'Streamingnyheter']);
+    const fromBinge = view.getByText('Från Binge').closest('.popover-head')!;
+    const streamingHead = view.getByText('Streamingnyheter').closest('.popover-head')!;
+    const report = view.getByText('Din anmälan');
+    const dune = view.getByText('Dune');
+    expect(fromBinge.compareDocumentPosition(report) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(report.compareDocumentPosition(streamingHead) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(streamingHead.compareDocumentPosition(dune) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('Markera alla lästa står under den första rubriken och inte under den andra', async () => {
+    notif.providerUnreadCount = 2;
+    const streaming = { ...systemCard({ id: 'n2', kind: 'availability', title: 'Dune', body: undefined }), providerName: 'Netflix', providerId: 8 };
+    const view = await openBellWith([streaming, systemCard()]);
+    const buttons = view.getAllByText('Markera alla lästa');
+    expect(buttons).toHaveLength(1);
+    const fromBinge = view.getByText('Från Binge').closest('.popover-head')!;
+    const streamingHead = view.getByText('Streamingnyheter').closest('.popover-head')!;
+    expect(fromBinge.contains(buttons[0])).toBe(true);
+    expect(streamingHead.contains(buttons[0])).toBe(false);
+    await act(async () => {
+      fireEvent.click(buttons[0]);
+    });
+    expect(notif.markAllRead).toHaveBeenCalledTimes(1);
   });
 
   it('en klickad rad markeras som läst oavsett form', async () => {

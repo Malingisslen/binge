@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 643,
+  "patternCount": 645,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -464,6 +464,8 @@
         "src/components/settings/",
         "src/lib/nextPath.test.ts",
         "src/lib/nextPath.ts",
+        "src/lib/notificationSections.test.ts",
+        "src/lib/notificationSections.ts",
         "src/lib/onboarding.test.ts",
         "src/lib/onboarding.ts"
       ]
