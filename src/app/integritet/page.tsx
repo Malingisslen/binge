@@ -10,8 +10,8 @@ export default function IntegritetPage() {
   return (
     <LegalPageShell
       title="Integritetspolicy"
-      lastUpdated="2026-09-18"
-      version="1.5"
+      lastUpdated="2026-09-23"
+      version="1.6"
     >
       <section>
         <h2>1. Vem är ansvarig?</h2>
@@ -38,12 +38,15 @@ export default function IntegritetPage() {
           <li><strong>Streamingrådgivaren-historik</strong> — dina pausa- och återuppta-beslut (sparbeslut) som rådgivaren sparar.</li>
           <li><strong>&quot;Inte intresserad&quot;-markeringar</strong> — titlar du gömt från rekommendationer.</li>
           <li><strong>Push-notistoken</strong> — om du aktiverat push-notiser sparar vi en enhetsspecifik token (Firebase Cloud Messaging) för att kunna skicka notiser.</li>
+          <li><strong>Hemkommun</strong> — om du själv väljer en kommun för att se vad som finns på ditt bibliotek. Den är frivillig och går att ta bort i inställningarna.</li>
+          <li><strong>Avsnittsreaktioner</strong> — reaktioner du lämnar på enskilda avsnitt. De är publika och visar att de kommer från ditt konto.</li>
+          <li><strong>Det du gör i en grupp</strong> — titlar du lägger till i gruppens lista och vilken titel ni valde på en filmkväll. Det visas för gruppens medlemmar tillsammans med vem som lade till eller valde den.</li>
           <li><strong>Teknisk logg-data</strong> — IP-adress och webbläsarens User-Agent hanteras av Firebase och Cloudflare för säkerhet och drift.</li>
         </ul>
         <p>
-          Vi samlar <strong>inte</strong> in: geografisk position, kontaktlista,
-          kalender, eller innehåll från andra appar. Vi säljer aldrig dina
-          uppgifter.
+          Vi samlar <strong>inte</strong> in din geografiska position (bara den
+          kommun du själv väljer, se ovan), kontaktlista, kalender eller innehåll
+          från andra appar. Vi säljer aldrig dina uppgifter.
         </p>
       </section>
 
@@ -70,7 +73,7 @@ export default function IntegritetPage() {
         <ul>
           <li><strong>Google / Firebase</strong> (autentisering, databas, push-notiser, drift) — behandlar uppgifterna enligt Googles databehandlaravtal (DPA). Dina uppgifter lagras inom EU: Firestore-databasen i multiregionen <code>eur3</code> (Belgien och Nederländerna) och serverfunktionerna i <code>europe-west1</code> (Belgien).</li>
           <li><strong>Google reCAPTCHA / Firebase App Check</strong> (bot- och missbruksskydd) — laddar ett skript från Google som analyserar webbläsarsignaler för att skilja människor från bottar. Sätter en teknisk token och skickar signaler till Google.</li>
-          <li><strong>Plausible Analytics</strong> (besöksstatistik) — cookiefri och IP-anonymiserad statistik över sidvisningar. Sätter inga cookies och lagrar varken din IP-adress eller andra personuppgifter.</li>
+          <li><strong>Plausible Analytics</strong> (besöksstatistik) — cookiefri och IP-anonymiserad statistik över sidvisningar och över hur funktioner används, till exempel att en titel lades till, en recension skrevs eller vilken inloggningsmetod som användes. Händelserna innehåller aldrig vem du är, vad du skrivit eller vad du sökt på, bara typ och antal. Sätter inga cookies och lagrar varken din IP-adress eller andra personuppgifter.</li>
           <li><strong>Cloudflare</strong> (CDN, DNS, brandvägg) — behandlar trafikdata under Cloudflares DPA.</li>
           <li><strong>The Movie Database (TMDB)</strong> — vi hämtar film- och serieinformation från TMDB. Dina personuppgifter överförs <em>inte</em> till TMDB; endast titel-ID:n och sökfrågor skickas.</li>
           <li><strong>Sentry</strong> (felövervakning) — tar emot teknisk information när något går fel i appen, så vi kan hitta och rätta buggar. Personuppgifter som e-post, användarnamn och användar-id rensas bort innan felrapporten skickas. Sentry är amerikanskt och anlitar i sin tur egna underleverantörer (bl.a. Intercom och OpenAI); aktuell lista finns hos <a href="https://sentry.io/legal/subprocessors/" target="_blank" rel="noopener noreferrer">Sentry</a>.</li>
@@ -100,7 +103,7 @@ export default function IntegritetPage() {
         <h2>6. Hur länge vi sparar uppgifterna</h2>
         <ul>
           <li>Din profil och bevakningslista sparas så länge ditt konto är aktivt.</li>
-          <li>Notifikationer sparas i upp till 180 dagar.</li>
+          <li>Notifikationer raderas automatiskt när de är 90 dagar gamla.</li>
           <li>Tillsammans-sessioner utgår automatiskt 7 dagar efter skapandet.</li>
           <li>Teknisk logg-data i Firebase/Cloudflare sparas enligt respektive leverantörs standardtid (typiskt 30 dagar).</li>
           <li>
@@ -111,7 +114,10 @@ export default function IntegritetPage() {
             blockeringar, vän- och följar-relationer (även de speglade hos
             motparten), dina recensioner inklusive likes och kommentarer på dem,
             kommentarer och likes du gjort på andras recensioner, dina listor,
-            samt Tillsammans-sessioner du är värd för. En grupp du äger lämnas i
+            samt Tillsammans-sessioner du är värd för. Har du deltagit i någon
+            annans Tillsammans-session ligger din plats där, med ditt
+            visningsnamn, dina streamingtjänster och dina röster, kvar tills
+            sessionen går ut, högst 7 dagar efter att den skapades. En grupp du äger lämnas i
             stället över till den medlem som varit med längst, om gruppen har kvar
             några medlemmar — annars raderas den, och dina egna spår i en
             överlämnad grupp tas bort ändå. Grupper du bara är medlem i lämnar du
@@ -127,9 +133,14 @@ export default function IntegritetPage() {
             innehåll för moderering kan själva anmälan sparas i moderationssyfte
             även efter att du raderat ditt konto — det vill säga ditt interna
             användar-id, vilket skäl du angav och en eventuell kommentar du
-            skrev. Det gör vi för att kunna hantera missbruk och försvara
-            moderationsbeslut (GDPR art. 17.3). Anmälan är aldrig publik och
-            syns bara för administratörer.
+            skrev. Samma sak gäller om någon annan har anmält dig eller något du
+            skrivit: anmälan sparar ditt interna användar-id och vad som
+            anmäldes, och den ligger kvar även om du raderar ditt konto. Det gör
+            vi för att kunna hantera missbruk och försvara moderationsbeslut
+            (GDPR art. 17.3). Anmälan är aldrig publik och syns bara för
+            administratörer. När en administratör avgör en anmälan kan en intern
+            anteckning om beslutet sparas med den. Den visas aldrig för någon
+            annan.
           </li>
         </ul>
       </section>
@@ -155,7 +166,7 @@ export default function IntegritetPage() {
           Binge sätter inga egna spårningscookies. Vi använder:
         </p>
         <ul>
-          <li><strong>IndexedDB</strong> — Firebase lagrar din inloggningssession här.</li>
+          <li><strong>IndexedDB</strong> — Firebase lagrar din inloggningssession här, och appen sparar en kopia av din egen data (till exempel ditt bibliotek och din profil) så att den laddar snabbt och fungerar utan anslutning. Kopien finns bara på din enhet och tas bort när du loggar ut eller raderar kontot, så långt webbläsaren tillåter.</li>
           <li><strong>Funktionella cookies från Cloudflare</strong> (<code>__cf_bm</code>, <code>__cflb</code>) — används för botskydd och lastbalansering och är nödvändiga för att tjänsten ska fungera.</li>
           <li><strong>Google reCAPTCHA</strong> (<code>_GRECAPTCHA</code>) — sätts av Googles reCAPTCHA/App Check för bot- och missbruksskydd. Räknas som nödvändig för tjänstens säkerhet.</li>
           <li>
@@ -190,13 +201,51 @@ export default function IntegritetPage() {
             <strong>Webbläsarens <code>localStorage</code></strong> — till skillnad
             från sessionStorage-värdena ovan finns dessa kvar även efter att du
             stängt fliken eller webbläsaren, tills du ändrar dem eller rensar
-            webbläsarens data. Värdet nedan är det vi hittills redovisat i detalj;
-            listan är inte fullständig, och vi utökar den efter hand.
+            webbläsarens data. Det här sparas (ingen av dem lämnar enheten eller
+            läses av tredje part):
             <ul>
               <li>
                 <code>binge:theme</code> — om du valt ljust läge, mörkt läge eller
                 att följa enhetens egen inställning. Innehåller bara det valet. Ingen
                 tredje part har åtkomst till det, och det lämnar aldrig din enhet.
+              </li>
+              <li>
+                <code>binge:groupInvite:&lt;grupp&gt;</code> — om du äger en grupp och
+                skapat en inbjudningslänk sparas själva länken här, så att du kan
+                kopiera den igen. Den som har tillgång till din webbläsare kan alltså
+                se länken. Den tas bort när du byter eller stänger av länken och när
+                du raderar kontot, men inte när du loggar ut.
+              </li>
+              <li>
+                <code>binge-session-pid-&lt;session&gt;</code> och{' '}
+                <code>binge-my-sessions</code> — vilka Tillsammans-sessioner du gått
+                med i på den här enheten, med din plats i dem (högst 20).
+              </li>
+              <li>
+                <code>binge:wasLoggedIn</code> — att någon varit inloggad på enheten,
+                så att appen kan ladda snabbare.
+              </li>
+              <li>
+                <code>binge:fcm:tokenId:&lt;id&gt;</code> — en hänvisning till enhetens
+                push-notistoken, om du slagit på notiser.
+              </li>
+              <li>
+                <code>binge:pubprofile-sig:&lt;id&gt;</code> — ett kontrollvärde för din
+                publika profil, så att appen vet om den behöver uppdateras.
+              </li>
+              <li>
+                <code>binge:deletionStarted:&lt;id&gt;</code> — sätts om en
+                kontoradering påbörjats men inte slutförts, så att appen kan slutföra
+                den.
+              </li>
+              <li>
+                <code>binge:rec-rotation:…</code> — vilka rekommendationer du nyss
+                sett, så att samma inte visas igen direkt.
+              </li>
+              <li>
+                <code>binge-rq-cache</code> — en tillfällig kopia av allmän film- och
+                seriedata (genrer, trender), högst ett dygn gammal. Den innehåller
+                inget om dig.
               </li>
             </ul>
           </li>

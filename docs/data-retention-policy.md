@@ -916,6 +916,12 @@ Policy ska omvärderas om:
 
 ## Ändringslogg
 
+- **2026-09-23 (BIN-1281, BIN-1250)** — Malins beslut (runda 2, A): en anmälan
+  som någon annan gjort mot en användare, med den anmäldas interna användar-id
+  (`targetOwnerUid`) och vad som anmäldes, behålls efter att den anmälda raderat
+  sitt konto, på samma grund som BIN-277. Detsamma gäller adminens interna
+  motivering (`decisionNote`). Integritetssidan v1.6 säger det.
+
 - **2026-07-22 (BIN-560)** — Personliga bibliotekets Firestore-doc-id:n
   namespacas till `${mediaType}_${tmdbId}` (t.ex. `movie_603`/`tv_1399`).
   Radering och GDPR-export är oförändrade i täckning (de skannar hela

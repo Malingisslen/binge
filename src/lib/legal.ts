@@ -5,7 +5,7 @@
 
 // Bump when the Terms of Service or Privacy Policy change materially (e.g. to
 // '2026-07-01').
-export const CURRENT_TERMS_VERSION = '2026-09-18';
+export const CURRENT_TERMS_VERSION = '2026-09-23';
 
 // Minimum age to create a Binge account (the lawful-basis floor we assert at
 // sign-up on both auth paths). (BIN-348)

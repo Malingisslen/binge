@@ -198,8 +198,7 @@ och triggern läser inte fältet. En tom motivering ändrar ingenting som redan 
 Motiveringen är en personuppgift om den anmälda personen, med samma rättsliga grund som
 resten av anmälningshanteringen: berättigat intresse (art. 6.1.f). Den sparas lika länge som
 rapporten själv och omfattas av samma undantag från radering som anmälningarna
-(BIN-277). Att rapporter om en person inte raderas när personen raderar sitt konto är en
-öppen fråga i BIN-1281, och den gäller motiveringen också.
+(BIN-277).
 
 ---
 
