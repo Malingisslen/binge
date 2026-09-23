@@ -8,6 +8,7 @@ import { useToast } from '@/contexts/ToastContext';
 import {
   listReports,
   updateReportStatus,
+  MAX_DECISION_NOTE,
   REPORT_REASON_LABELS,
   REPORT_STATUS_LABELS,
   type Report,
@@ -79,10 +80,10 @@ function ReportsDashboard() {
     void load(activeTab);
   }, [activeTab]);
 
-  const handleAction = async (reportId: string, newStatus: ReportStatus) => {
+  const handleAction = async (reportId: string, newStatus: ReportStatus, decisionNote?: string) => {
     if (!uid) return; // admin UI only renders for an authed admin; guard for the audit uid
     try {
-      await updateReportStatus(reportId, newStatus, uid);
+      await updateReportStatus(reportId, newStatus, uid, decisionNote);
       toast(`Rapport markerad som ${REPORT_STATUS_LABELS[newStatus].toLowerCase()}`);
       void load(activeTab);
     } catch {
@@ -141,8 +142,10 @@ function ReportRow({
   report, onAction,
 }: {
   report: Report;
-  onAction: (id: string, status: ReportStatus) => void;
+  onAction: (id: string, status: ReportStatus, decisionNote?: string) => void;
 }) {
+  // BIN-1250: intern motivering, skickas med beslutet. Visas aldrig för anmälaren.
+  const [note, setNote] = useState('');
   const reportedUid = report.targetType === 'user' ? report.targetOwnerUid : null;
   // BIN-1244: the reported profile comes from an admin-only server lookup, so a
   // private profile is visible here too. The link to /user/ is offered only for a
@@ -206,6 +209,11 @@ function ReportRow({
             Target ägare: {report.targetOwnerUid ? report.targetOwnerUid.slice(0, 8) : 'okänd (innehållet borttaget)'}
             {report.actionedByUid && <> • Åtgärdad av {report.actionedByUid.slice(0, 8)}</>}
           </div>
+          {report.decisionNote && (
+            <div className="text-xs text-ink-2 mt-1 px-2 py-1 bg-bg rounded-sm">
+              <span className="text-ink-3">Intern motivering: </span>{report.decisionNote}
+            </div>
+          )}
         </div>
         <div className="flex flex-col gap-1 shrink-0">
           {targetLink && (
@@ -229,20 +237,31 @@ function ReportRow({
           )}
           {report.status === 'open' && (
             <>
+              <label className="text-xxs text-ink-3" htmlFor={`decision-note-${report.id}`}>
+                Intern motivering (visas inte för anmälaren)
+              </label>
+              <textarea
+                id={`decision-note-${report.id}`}
+                value={note}
+                onChange={e => setNote(e.target.value)}
+                maxLength={MAX_DECISION_NOTE}
+                rows={2}
+                className="w-56 px-2 py-1 text-xs border border-rule rounded-sm bg-white"
+              />
               <button
-                onClick={() => onAction(report.id, 'reviewed')}
+                onClick={() => onAction(report.id, 'reviewed', note)}
                 className="px-3 py-[3px] text-xs border border-rule rounded-sm bg-white cursor-pointer hover:bg-bg-2"
               >
                 Granskad
               </button>
               <button
-                onClick={() => onAction(report.id, 'actioned')}
+                onClick={() => onAction(report.id, 'actioned', note)}
                 className="px-3 py-[3px] text-xs bg-acc-deep text-white border-none rounded-sm cursor-pointer"
               >
                 Åtgärda
               </button>
               <button
-                onClick={() => onAction(report.id, 'dismissed')}
+                onClick={() => onAction(report.id, 'dismissed', note)}
                 className="px-3 py-[3px] text-xs border border-rule rounded-sm bg-white text-ink-3 cursor-pointer hover:bg-bg-2"
               >
                 Avfärda

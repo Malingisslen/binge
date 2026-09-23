@@ -2759,6 +2759,36 @@ describe('reports admin-update actionedByUid pin (BIN-357)', () => {
       status: 'actioned', actionedByUid: 'other_admin_uid', updatedAt: serverTimestamp(),
     }));
   });
+
+  // BIN-1250. Samma giltiga uppdatering som ovan, med en motivering.
+  const decided = (decisionNote: unknown) => ({
+    status: 'dismissed', actionedByUid: ADMIN, updatedAt: serverTimestamp(), decisionNote,
+  });
+
+  it('admin kan spara en motivering på exakt taket (BIN-1250)', async () => {
+    await seedOpenReport();
+    await makeAdmin();
+    await assertSucceeds(updateDoc(doc(adminDb(), 'reports', 'rep1'), decided('a'.repeat(1000))));
+  });
+  it('en motivering över taket nekas (BIN-1250)', async () => {
+    await seedOpenReport();
+    await makeAdmin();
+    await assertFails(updateDoc(doc(adminDb(), 'reports', 'rep1'), decided('a'.repeat(1001))));
+  });
+  it('en motivering som inte är en sträng nekas (BIN-1250)', async () => {
+    await seedOpenReport();
+    await makeAdmin();
+    // En LISTA, inte ett tal: ett tal nekas redan av size()-klausulen utan typkontrollen,
+    // så bara en lista kan visa att `is string` gör något (samma fälla som displayName).
+    await assertFails(updateDoc(doc(adminDb(), 'reports', 'rep1'), decided(['a', 'b'])));
+  });
+  it('en icke-admin kan inte skriva en motivering (BIN-1250)', async () => {
+    await seedOpenReport();
+    const notAdmin = testEnv.authenticatedContext('someone_uid').firestore();
+    await assertFails(updateDoc(doc(notAdmin, 'reports', 'rep1'), {
+      status: 'dismissed', actionedByUid: 'someone_uid', updatedAt: serverTimestamp(), decisionNote: 'ok',
+    }));
+  });
 });
 
 // BIN-276 / BIN-327 — groups owner-update hardening + memberUids growth caps.

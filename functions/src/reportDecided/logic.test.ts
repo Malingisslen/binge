@@ -116,6 +116,13 @@ describe('the wording the reporter gets', () => {
     // that reintroduces per-outcome wording has to change this test on purpose.
     expect(Object.keys(REPORT_DECIDED_CARD).sort()).toEqual(['body', 'title']);
   });
+
+  // BIN-1250: admins interna motivering får aldrig nå anmälaren. Triggern ska inte
+  // ens läsa fältet — kommentarer är bortskalade ur ENTRY, så bara kod kan fälla det.
+  it('never reads the internal decisionNote', () => {
+    expect(ENTRY).not.toMatch(/decisionNote/);
+    expect(JSON.stringify(REPORT_DECIDED_CARD)).not.toMatch(/decisionNote/);
+  });
 });
 
 describe('reporterToNotify', () => {

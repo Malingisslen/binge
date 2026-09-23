@@ -1,6 +1,7 @@
 import type { QueryConstraint } from 'firebase/firestore';
 import { fsdb } from './db';
 import { toDate } from './utils';
+import { clampToCodeUnits } from '@/lib/clampText';
 
 /**
  * UGC-rapportering + admin-moderation. Skriv till top-level `reports/`,
@@ -51,7 +52,12 @@ export interface Report {
   // BIN-334: which admin last changed the status (audit trail). Absent on
   // reports created before this shipped / never actioned.
   actionedByUid?: string;
+  // BIN-1250: admins interna motivering till beslutet. Visas aldrig för anmälaren.
+  decisionNote?: string;
 }
+
+/** Taket `firestore.rules` sätter på `reports/{id}.decisionNote` (BIN-1250). */
+export const MAX_DECISION_NOTE = 1000;
 
 // Matchar cooldownen i submitReport-callablen (BIN-49). Klient-checken är bara
 // snabb, vänlig UX (slipper round-trip) — den hårda gränsen enforce:as
@@ -154,6 +160,7 @@ export async function listReports(options: {
       createdAt: toDate(data.createdAt),
       updatedAt: data.updatedAt ? toDate(data.updatedAt) : undefined,
       actionedByUid: data.actionedByUid as string | undefined,
+      decisionNote: data.decisionNote as string | undefined,
     };
   });
 }
@@ -161,15 +168,21 @@ export async function listReports(options: {
 // BIN-334: record which admin actioned the report. actionedByUid is the
 // acting admin's uid (passed from auth by the caller) — the reports update
 // rule already permits adding audit fields like this. updatedAt is the when.
+//
+// BIN-1250: `decisionNote` skrivs bara när admin skrivit något. En tom notering
+// skickar inte fältet alls, så en senare statusändring lämnar en sparad notering orörd.
 export async function updateReportStatus(
   reportId: string,
   status: ReportStatus,
   actionedByUid: string,
+  decisionNote?: string,
 ): Promise<void> {
   const { db, doc, updateDoc, serverTimestamp } = await fsdb();
+  const note = clampToCodeUnits(decisionNote?.trim() ?? '', MAX_DECISION_NOTE);
   await updateDoc(doc(db, 'reports', reportId), {
     status,
     actionedByUid,
     updatedAt: serverTimestamp(),
+    ...(note ? { decisionNote: note } : {}),
   });
 }

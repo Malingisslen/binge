@@ -187,6 +187,20 @@ förrän någon mätt det — hantera i stället ägaren eller medlemmen.
 Oftast om det är falsk flagga eller borderline-innehåll som inte bryter
 riktlinjerna: sätt rapporten som avfärdad i `/admin/reports`.
 
+### Intern motivering (BIN-1250)
+
+När du granskar, åtgärdar eller avfärdar en rapport i `/admin/reports` kan du skriva en kort
+motivering. Den sparas på rapporten som `decisionNote` (taket är `MAX_DECISION_NOTE` i
+`src/lib/firebase/reports.ts`) och syns bara för
+admin. Anmälaren får aldrig texten — beskedet till anmälaren är ett standardkort (BIN-1259)
+och triggern läser inte fältet. En tom motivering ändrar ingenting som redan sparats.
+
+Motiveringen är en personuppgift om den anmälda personen, med samma rättsliga grund som
+resten av anmälningshanteringen: berättigat intresse (art. 6.1.f). Den sparas lika länge som
+rapporten själv och omfattas av samma undantag från radering som anmälningarna
+(BIN-277). Att rapporter om en person inte raderas när personen raderar sitt konto är en
+öppen fråga i BIN-1281, och den gäller motiveringen också.
+
 ---
 
 ## 5. Rate-limiting / spam-protection

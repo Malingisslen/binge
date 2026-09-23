@@ -1068,7 +1068,13 @@ service cloud.firestore {
         // update path (updateReportStatus) always stamps actionedByUid from the
         // acting admin's auth uid, so this holds for every legit update; it blocks
         // a (future multi-admin) actor from framing another admin in the audit trail.
-        && request.resource.data.actionedByUid == request.auth.uid;
+        && request.resource.data.actionedByUid == request.auth.uid
+        // BIN-1250: admins interna motivering. Valfri, en sträng, högst 1000
+        // kodenheter — samma tak som MAX_DECISION_NOTE i src/lib/firebase/reports.ts.
+        // Läses bara av admin (allow read ovan) och når aldrig anmälaren.
+        && (!('decisionNote' in request.resource.data)
+          || (request.resource.data.decisionNote is string
+            && request.resource.data.decisionNote.size() <= 1000));
 
       allow delete: if false;
     }

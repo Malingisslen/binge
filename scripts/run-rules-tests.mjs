@@ -97,7 +97,10 @@ const REPO = resolve(HERE, '..');
 // BIN-1167, 2026-09-23: raised to what `numTotalTests` reported once the group member
 // rule stopped letting the owner write another member's row. The cases name themselves
 // `(BIN-1167)`. Measured with `npm run test:rules`, not counted by hand.
-export const MIN_TESTS = 750;
+// BIN-1250, 2026-09-23: raised to what `numTotalTests` reported with the report
+// decisionNote cases in place, named `(BIN-1250)`. Measured with
+// `npm run test:rules -- --port 8123`, not counted by hand.
+export const MIN_TESTS = 754;
 
 const VITEST_ARGS = ['run', '--config', 'vitest.rules.config.ts'];
 
