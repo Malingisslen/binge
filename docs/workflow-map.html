@@ -714,6 +714,12 @@
       "path": "src/components/layout/EmailVerificationBanner.tsx"
     },
     {
+      "id": "profile-offline-banner",
+      "label": "ProfileOfflineBanner",
+      "context": "web-app",
+      "path": "src/components/layout/ProfileOfflineBanner.tsx"
+    },
+    {
       "id": "static-passive-pages",
       "label": "Static & read-only library pages",
       "context": "web-app",
@@ -2847,6 +2853,20 @@
           "to": "firestore",
           "payload": "BIN-909/BIN-1032 — the returning-account branch. ensureUserProfile finds no users/{uid}, and instead of re-creating it with today's date it checks the Auth account's own age: older than 5 minutes means this is a RETURN, not a sign-up, so it sets pendingReconsent and writes nothing. ReconsentGate takes over the shell (no route, no URL change — you must not be able to deep-link past unresolved consent) and asks for both stamps; completeReconsent then calls assertProfileWritable and creates the doc in a transaction, both timestamps serverTimestamp() at the moment of the click. A deletion running elsewhere refuses the write, and the screen says so instead of blaming the connection",
           "transport": "Firestore transaction (create users/{uid})",
+          "verified": true
+        },
+        {
+          "from": "auth-context",
+          "to": "profile-offline-banner",
+          "payload": "BIN-559 — the profile read in ensureUserProfile rejects with code unavailable when the device is offline (measured against the emulator 2026-09-23). loadProfile sets profileLoadError to offline and the shell shows a red strip under the menu: Ingen anslutning, försök igen. Any other error keeps the old behaviour, a signed-in session without a profile and without the strip",
+          "transport": "react-context",
+          "verified": true
+        },
+        {
+          "from": "profile-offline-banner",
+          "to": "auth-context",
+          "payload": "Försök igen → retryProfileLoad → the same loadProfile the sign-in uses, so the deletion marker and the returning-account gate run again on every attempt; the button is disabled while an attempt is in flight",
+          "transport": "react-context",
           "verified": true
         },
         {
