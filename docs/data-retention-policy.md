@@ -120,8 +120,7 @@ publikt (skapandet går via den anropbara `submitReport`, och admin läser i
 `/admin/reports`; se `match /reports` i `firestore.rules`).
 
 **Transparens:** integritetspolicyn bör nämna att en anmälares uid kan behållas
-i moderationssyfte efter kontoradering (Art. 13/14). Spåras som copy-följdpunkt
-— ingen brådska nu när grunden är dokumenterad här.
+i moderationssyfte efter kontoradering (Art. 13/14).
 
 ### Grupp-medlemskap → Självborttag
 
@@ -474,11 +473,10 @@ markören, inte utfallet. Personuppgifter ska inte landa under ett uid vars rade
 ## Tekniska implikationer
 
 `AuthContext.deleteAccount` implementerar redan hård radering via
-`writeBatch` i 450-ops chunks. Ingen cascade-ändring krävs för Sprint 4,
-men:
+`writeBatch` i 450-ops chunks.
 
 - `firestore.indexes.json` har redan single-field collection-group-index
-  på `comments.uid` + `likes` documentId — behövs för delete-queryn.
+  på `comments.uid` + `likes.uid` — behövs för delete-queryn.
 
 ### Enhetslokal data vid radering (localStorage)
 
@@ -589,11 +587,7 @@ cascaden) — operationell metadata, inte användarens "lämnade" personuppgifte
   referenser filtreras lazy på läsning och städas av den veckovisa
   `reclaimOrphanFollows`-sweepen.
 
-**Täckningsgräns (ärlig):** kontraktet skyddar nycklar som finns i kärnan. En
-helt ny `users/{uid}/<x>`-subcollection som aldrig läggs till i helpern fångas
-INTE (den blir aldrig en `keyof`). Att täcka den klassen kräver ett emulator-
-backat raderingstest + en subcollection-enumeration mot `firestore.rules` —
-spårat som följdticket.
+**Täckningsgräns (ärlig):** kontraktet skyddar nycklar som finns i kärnan.
 
 **Console-bypass (känd begränsning):** `deleteAccount`-cascaden körs bara vid
 självservice-radering i appen. Raderar en admin ett konto direkt i Firebase
@@ -911,18 +905,14 @@ Policy ska omvärderas om:
   revisas BIN-277-beslutet
 - Threading blir djupare (kommentarer på kommentarer) och breakage
   blir användarfientligt
-- Cloud Functions finns — då kan vi göra "mjuk radering" med 30-dagars
-  ångra-fönster ovanpå hård radering
 
 ## Kopplingar
 
 - **Integritetspolicy** (`src/app/integritet/page.tsx`) ska reflektera
-  denna policy för användare — uppdateras i sprint 4 dag 5.
+  denna policy för användare.
 - **Terms of Service** (`src/app/villkor/page.tsx`) — ingen direkt
   ändring men nämner att borttaget innehåll inte återställs.
-- **Moderation-runbook** (`docs/moderation.md`, pending sprint 5) —
-  samma delete-cascade används när admin tar bort en användare för
-  policy-brott.
+- **Moderation-runbook** (`docs/moderation.md`).
 
 ## Ändringslogg
 
