@@ -35,7 +35,7 @@ import { clearNextPath } from '@/lib/nextPath';
 import { markTabSession } from '@/lib/tabSession';
 import { markDeletionStarted, clearDeletionStarted, isDeletionStarted, deletionMarkerKey } from '@/lib/deletionMarker';
 import { mergeUserDoc, assertProfileWritable } from '@/lib/firebase/userDocWrite';
-import { REQUIRES_RECENT_LOGIN, STALE_SESSION_PREFLIGHT, markHandedOff, markCascadePartial } from '@/lib/authErrors';
+import { REQUIRES_RECENT_LOGIN, STALE_SESSION_PREFLIGHT, markHandedOff, markCascadePartial, isOfflineProfileError } from '@/lib/authErrors';
 import { useOptimisticMirrorField } from '@/hooks/useOptimisticMirrorField';
 import { clampToCodeUnits, MAX_BIO, MAX_DISPLAY_NAME } from '@/lib/clampText';
 import { openProfileIdentityChannel, type ProfileIdentityChannel } from '@/lib/profileIdentityChannel';
@@ -53,6 +53,12 @@ interface AuthState {
    * på loading || profileLoading.
    */
   profileLoading: boolean;
+  /**
+   * BIN-559: 'offline' när profilen inte gick att läsa för att enheten saknar
+   * anslutning. Visas som en remsa i appskalet; `retryProfileLoad` försöker igen.
+   */
+  profileLoadError: 'offline' | null;
+  retryProfileLoad: () => Promise<void>;
   // Firebase Auth email-verification-state. Gör inte gating idag men UI:t
   // kan visa en banner när emailVerified=false (och resend därifrån).
   emailVerified: boolean;
@@ -127,6 +133,8 @@ const AuthContext = createContext<AuthState>({
   uid: null,
   loading: true,
   profileLoading: false,
+  profileLoadError: null,
+  retryProfileLoad: async () => {},
   emailVerified: false,
   signIn: async () => {},
   signInEmail: async () => {},
@@ -555,6 +563,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // BIN-909 — same shape as the line above, deliberately (#14 Software Architect's call:
   // reuse the mechanism, do not invent a third "don't write right now" idiom).
   const [pendingReconsent, setPendingReconsent] = useState(false);
+  // BIN-559 — profilen gick inte att läsa för att enheten saknar anslutning.
+  const [profileLoadError, setProfileLoadError] = useState<'offline' | null>(null);
   // Vilket uid vi redan gjort ett reparations-försök för i den här sessionen.
   // Ett försök per app-load — annars skulle en cascade som failar konstant
   // loopa mot Firestore (och kosta reads) hela sessionen.
@@ -621,6 +631,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // A ref, not state: it is read inside the auth callback, which never re-binds.
   const hadSessionRef = useRef(false);
 
+  // BIN-559. Profilladdningen, en väg för både inloggningen och "Försök igen". Den går
+  // alltid genom `ensureUserProfile`, så raderingsmarkören och återkommande-konto-
+  // grinden prövas vid varje försök. Löftet rejectar aldrig.
+  const loadProfile = useCallback((firebaseUser: User): Promise<void> => {
+    setProfileLoading(true);
+    return ensureUserProfile(firebaseUser)
+      .then(({ profile, visibilitySyncPending: pending, deletionInProgress: deleting, pendingReconsent: reconsent }) => {
+        // Account-switch-skydd: skriv bara om samma användare
+        // fortfarande är inloggad när profilen landar.
+        if (auth.currentUser?.uid !== firebaseUser.uid) return;
+        setUser(profile);
+        // BIN-816: en påbörjad radering är inte ett laddningsfel — appen
+        // ska visa limbo-skärmen, inte sitt vanliga skal.
+        //
+        // Markören läses OM här, inte bara vidare från `deleting`.
+        // `ensureUserProfile` samplade den för hundratals millisekunder
+        // sedan, och startar en annan flik en radering under tiden hinner
+        // storage-lyssnaren nedan sätta flaggan till true — som det här
+        // svaret sedan skrev tillbaka till false, permanent, eftersom
+        // inget nytt storage-event kommer förrän markören ändras igen.
+        // Fliken blev då fullt skrivbar mitt i en pågående radering
+        // (integrationsgranskningen 2026-08-13).
+        setDeletionInProgress(deleting || isDeletionStarted(firebaseUser.uid));
+        // BIN-909. Not re-read from anywhere: unlike the deletion marker there is no
+        // cross-tab signal for this state, and there deliberately is none — a durable
+        // marker is what ADR 0019/0022 forbid. Tab B stays gated until its own auth
+        // state re-evaluates, which self-heals on reload (#14's first concern).
+        setPendingReconsent(reconsent);
+        // BIN-587: en tidigare misslyckad synlighets-stämpling plockas
+        // upp här och driver både varningen och omförsöks-effekten.
+        visibilitySyncPendingRef.current = pending;
+        setVisibilitySyncPending(pending);
+        // BIN-559: felflaggan nollställs här för både första laddningen och ett omförsök.
+        setProfileLoadError(null);
+      })
+      .catch((err) => {
+        console.error('Failed to load user profile:', err);
+        // uid behålls — auth är giltig även om profil-läsningen
+        // failade; user-beroende ytor null-hanterar redan.
+        if (auth.currentUser?.uid !== firebaseUser.uid) return;
+        setUser(null);
+        // BIN-559: bara ett anslutningsfel får remsan. Ett nekande eller något annat
+        // stannar i dagens beteende och göms inte bakom ett omförsök.
+        setProfileLoadError(isOfflineProfileError(err) ? 'offline' : null);
+      })
+      .finally(() => {
+        if (auth.currentUser?.uid === firebaseUser.uid) setProfileLoading(false);
+      });
+  }, []);
+
   useEffect(() => {
     // App Check måste vara initierad innan onAuthStateChanged subscribar —
     // Auth attachar App Check-tokens till alla Identity Toolkit-calls (inkl.
@@ -657,45 +717,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // i en lazy useState-init innan hydration.
           try { window.localStorage.setItem('binge:wasLoggedIn', '1'); } catch { /* private mode */ }
 
-          void ensureUserProfile(firebaseUser)
-            .then(({ profile, visibilitySyncPending: pending, deletionInProgress: deleting, pendingReconsent: reconsent }) => {
-              // Account-switch-skydd: skriv bara om samma användare
-              // fortfarande är inloggad när profilen landar.
-              if (auth.currentUser?.uid !== firebaseUser.uid) return;
-              setUser(profile);
-              // BIN-816: en påbörjad radering är inte ett laddningsfel — appen
-              // ska visa limbo-skärmen, inte sitt vanliga skal.
-              //
-              // Markören läses OM här, inte bara vidare från `deleting`.
-              // `ensureUserProfile` samplade den för hundratals millisekunder
-              // sedan, och startar en annan flik en radering under tiden hinner
-              // storage-lyssnaren nedan sätta flaggan till true — som det här
-              // svaret sedan skrev tillbaka till false, permanent, eftersom
-              // inget nytt storage-event kommer förrän markören ändras igen.
-              // Fliken blev då fullt skrivbar mitt i en pågående radering
-              // (integrationsgranskningen 2026-08-13). Filen egen regel är att
-              // markören läses färskt vid varje grindat ställe; det här var det
-              // enda stället som cachade den.
-              setDeletionInProgress(deleting || isDeletionStarted(firebaseUser.uid));
-              // BIN-909. Not re-read from anywhere: unlike the deletion marker there is no
-              // cross-tab signal for this state, and there deliberately is none — a durable
-              // marker is what ADR 0019/0022 forbid. Tab B stays gated until its own auth
-              // state re-evaluates, which self-heals on reload (#14's first concern).
-              setPendingReconsent(reconsent);
-              // BIN-587: en tidigare misslyckad synlighets-stämpling plockas
-              // upp här och driver både varningen och omförsöks-effekten.
-              visibilitySyncPendingRef.current = pending;
-              setVisibilitySyncPending(pending);
-            })
-            .catch((err) => {
-              console.error('Failed to load user profile:', err);
-              // uid behålls — auth är giltig även om profil-läsningen
-              // failade; user-beroende ytor null-hanterar redan.
-              if (auth.currentUser?.uid === firebaseUser.uid) setUser(null);
-            })
-            .finally(() => {
-              if (auth.currentUser?.uid === firebaseUser.uid) setProfileLoading(false);
-            });
+          void loadProfile(firebaseUser);
         } else {
           // BIN-732 — the sign-out itself, not the tab that asked for it.
           // Firebase broadcasts a sign-out to every tab on the origin, but the
@@ -732,6 +754,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // session. Leaving it set would show "Välkommen tillbaka" to the next, unrelated
           // account on a shared device until its own profile load resolved.
           setPendingReconsent(false);
+          setProfileLoadError(null);
           visibilitySyncPendingRef.current = false;
           setVisibilitySyncPending(false);
           // BIN-617: the auto-repair is latched to one attempt per uid per app
@@ -752,7 +775,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       unsubscribe?.();
     };
-  }, []);
+  }, [loadProfile]);
 
   // BIN-748 — keep a record of which page this tab is showing a session on,
   // somewhere a RELOAD of the tab can still read it. `hadSessionRef` dies with
@@ -1627,9 +1650,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [runDeletionCascade]);
 
 
+  // BIN-559: omförsöket efter ett anslutningsfel. Samma väg som inloggningen,
+  // och det skriver bara tillstånd om samma användare fortfarande är inloggad.
+  const retryProfileLoad = useCallback(async () => {
+    const current = auth.currentUser;
+    if (!current) return;
+    await loadProfile(current);
+  }, [loadProfile]);
+
   const value = useMemo(
     () => ({
-      user, uid, loading, profileLoading, emailVerified,
+      user, uid, loading, profileLoading, profileLoadError, retryProfileLoad, emailVerified,
       signIn, signInEmail, register, resendEmailVerification, signOut,
       updateProviders, updateDefaultView, updateProviderCosts, updateHomeMunicipality, updateRotationSchedule, setProviderCost, setProviderRenewalDay, updateProviderTier, setProviderCampaign,
       pauseProvider, resumeProvider,
@@ -1637,7 +1668,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setCalibrationGenres, deleteAccount,
     }),
     [
-      user, uid, loading, profileLoading, emailVerified,
+      user, uid, loading, profileLoading, profileLoadError, retryProfileLoad, emailVerified,
       signIn, signInEmail, register, resendEmailVerification, signOut,
       updateProviders, updateDefaultView, updateProviderCosts, updateHomeMunicipality, updateRotationSchedule, setProviderCost, setProviderRenewalDay, updateProviderTier, setProviderCampaign,
       pauseProvider, resumeProvider,

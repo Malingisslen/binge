@@ -117,3 +117,15 @@ export function classifyDeletionFailure(message: string): DeletionFailureKind {
   if (message.includes(CASCADE_PARTIAL)) return 'partial';
   return 'untouched';
 }
+
+/**
+ * BIN-559 — a profile read that failed because the device has no connection.
+ *
+ * MEASURED 2026-09-23 against the Firestore emulator with the network disabled: the
+ * profile `getDoc` rejects at once with code `unavailable` ("Failed to get document
+ * because the client is offline"). Only that code counts. A `permission-denied` or
+ * anything else is not a connection problem and must not be shown as one.
+ */
+export function isOfflineProfileError(err: unknown): boolean {
+  return (err as { code?: unknown } | null)?.code === 'unavailable';
+}

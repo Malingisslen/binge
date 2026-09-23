@@ -10,6 +10,7 @@ import Subnav from '@/components/layout/Subnav';
 import MobileTabBar from '@/components/layout/MobileTabBar';
 import Footer from '@/components/layout/Footer';
 import { EmailVerificationBanner } from '@/components/layout/EmailVerificationBanner';
+import { ProfileOfflineBanner } from '@/components/layout/ProfileOfflineBanner';
 import { DeletionLimbo } from '@/components/layout/DeletionLimbo';
 import { ReconsentGate } from '@/components/layout/ReconsentGate';
 import { ShellChrome } from '@/components/layout/ShellChrome';
@@ -107,6 +108,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <AppTopbar />
         <Subnav />
         <EmailVerificationBanner />
+        <ProfileOfflineBanner />
         <main id="main" tabIndex={-1} className="canvas outline-none">{children}</main>
         <Footer />
       </div>

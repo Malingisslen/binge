@@ -82,6 +82,9 @@ vi.mock('@/lib/firebase/config', () => ({ auth: authObj }));
 const setDoc = vi.fn<(...args: unknown[]) => Promise<void>>(async () => {});
 const profileDocData: { current: Record<string, unknown> | null } = { current: null };
 const profileGate: { current: Promise<void> | null } = { current: null };
+// BIN-559: when set, the profile read rejects with this error instead of answering.
+const profileReadError: { current: unknown } = { current: null };
+const profileReadCount = { current: 0 };
 
 // BIN-535: default runTransaction stub re-reads the SAME profileDocData
 // mirror the plain getDoc above uses — so the normal (non-racing) create path
@@ -145,6 +148,8 @@ vi.mock('@/lib/firebase/db', () => ({
       // WHILE ensureUserProfile is in flight, then the stale sample resolving
       // on top of it. Null by default, so every other test is unaffected.
       if (profileGate.current) await profileGate.current;
+      profileReadCount.current += 1;
+      if (profileReadError.current) throw profileReadError.current;
       return {
         exists: () => profileDocData.current !== null,
         data: () => profileDocData.current ?? {},
@@ -416,6 +421,8 @@ beforeEach(() => {
   authObj.currentUser = null;
   profileDocData.current = null;
   profileGate.current = null;
+  profileReadError.current = null;
+  profileReadCount.current = 0;
   ctx = null;
   router.push.mockClear();
   nav.pathname = '/';
@@ -2639,5 +2646,85 @@ describe('AuthContext - bion klampas innan den skrivs (BIN-1253)', () => {
     // Anroparen far samma strang tillbaka, sa inställningarnas textfalt kan visa det
     // som faktiskt sparades.
     expect(stored).toBe(payload.bio);
+  });
+});
+
+// BIN-559. Offline på första inloggningen: profilläsningen rejectar med `unavailable`
+// (mätt mot emulatorn 2026-09-23, se isOfflineProfileError). Panelens villkor, i ordning:
+// bara den koden ger remsan, omförsöket går genom samma väg som inloggningen och
+// prövar grindarna igen, och ett andra misslyckande lämnar remsan kvar.
+describe('AuthContext — offline på första inloggningen (BIN-559)', () => {
+  const offline = Object.assign(new Error('Failed to get document because the client is offline.'), { code: 'unavailable' });
+
+  it('ett anslutningsfel ger profileLoadError offline, och ingen profil', async () => {
+    profileReadError.current = offline;
+    renderAuth();
+    await login(null);
+    expect(ctx!.profileLoadError).toBe('offline');
+    expect(ctx!.user).toBeNull();
+    expect(ctx!.uid).toBe('u1');
+  });
+
+  it('ett nekande är inget anslutningsfel och ger ingen remsa', async () => {
+    profileReadError.current = Object.assign(new Error('denied'), { code: 'permission-denied' });
+    renderAuth();
+    await login(null);
+    expect(ctx!.profileLoadError).toBeNull();
+  });
+
+  it('ett lyckat omförsök skapar profilen och tar bort felet', async () => {
+    profileReadError.current = offline;
+    renderAuth();
+    await login(null);
+    profileReadError.current = null;
+    await act(async () => { await ctx!.retryProfileLoad(); });
+    expect(ctx!.profileLoadError).toBeNull();
+    expect(ctx!.user).not.toBeNull();
+    expect(runTransaction).toHaveBeenCalled();
+  });
+
+  it('ett andra misslyckande lämnar felet kvar', async () => {
+    profileReadError.current = offline;
+    renderAuth();
+    await login(null);
+    const before = profileReadCount.current;
+    await act(async () => { await ctx!.retryProfileLoad(); });
+    // Omförsöket läste faktiskt profilen igen, och föll igen.
+    expect(profileReadCount.current).toBe(before + 1);
+    expect(ctx!.profileLoadError).toBe('offline');
+    expect(ctx!.user).toBeNull();
+  });
+
+  it('omförsöket för ett gammalt konto hamnar i återsamtycket, inte i en ny samtyckesstämpel', async () => {
+    fakeUser.metadata.creationTime = new Date(Date.now() - 60 * 60 * 1000).toUTCString();
+    profileReadError.current = offline;
+    renderAuth();
+    await login(null);
+    profileReadError.current = null;
+    runTransaction.mockClear();
+    await act(async () => { await ctx!.retryProfileLoad(); });
+    expect(ctx!.pendingReconsent).toBe(true);
+    expect(runTransaction).not.toHaveBeenCalled();
+  });
+
+  it('omförsöket för ett konto som hunnit märkas för radering hamnar i limbo', async () => {
+    profileReadError.current = offline;
+    renderAuth();
+    await login(null);
+    window.localStorage.setItem('binge:deletionStarted:u1', JSON.stringify({ startedAt: 1 }));
+    profileReadError.current = null;
+    runTransaction.mockClear();
+    await act(async () => { await ctx!.retryProfileLoad(); });
+    expect(ctx!.deletionInProgress).toBe(true);
+    expect(runTransaction).not.toHaveBeenCalled();
+  });
+
+  it('en utloggning tar bort felet', async () => {
+    profileReadError.current = offline;
+    renderAuth();
+    await login(null);
+    authObj.currentUser = null;
+    await act(async () => { authCallback!(null); });
+    expect(ctx!.profileLoadError).toBeNull();
   });
 });

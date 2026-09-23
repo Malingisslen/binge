@@ -2027,3 +2027,42 @@ lämnar just då.
 
 **Re-open when:** någon av punkterna ovan inträffar, eller en rapport om en ägare som saknar
 sin egen medlemsrad.
+
+---
+
+## BIN-559: registrering utan anslutning stöds inte, och det är ett beslut — 2026-09-23
+
+Malins beslut 2026-09-20 (bygg inte om registreringen) och 2026-09-23 (remsan under menyn).
+Fila inte "ett nytt konto kan inte skapas offline" och föreslå inte en molnfunktion som
+skapar profilen.
+
+**Läget.** Profilen skapas i `createProfileWithConsent` med `runTransaction`, som skyddar
+samtyckesfälten mot en kapplöpning med registreringens egen skrivning (BIN-535). Innan dess
+läser `ensureUserProfile` profilen. Mätt 2026-09-23 mot emulatorn med nätet avstängt: den
+läsningen rejectar direkt med koden `unavailable`. Härled klassificeringen:
+
+```
+git grep -n -A 3 "export function isOfflineProfileError" -- src/lib/authErrors.ts
+```
+
+**Vad användaren ser.** En röd remsa under menyn, "Ingen anslutning, försök igen.", med en
+knapp som försöker igen genom samma väg som inloggningen. Raderingsmarkören och
+återkommande-konto-grinden prövas alltså vid varje försök.
+
+**Accepterat:** att ett helt nytt konto inte får någon profil förrän anslutningen finns, och
+att ett fel som INTE är ett anslutningsfel fortfarande ger en session utan profil och utan
+remsa, som före beslutet.
+
+**Why:** transaktionen är det som skyddar samtyckesfälten, och en molnfunktion per nytt
+konto är ny serverkod mot kostnadstaket för ett fall som kräver att man är offline i just
+den sekunden.
+
+**Vad posten INTE rör:** posten 2026-08-15 om samtyckesstämpeln på en andra enhet efter en
+avbruten radering. Den gäller ett annat läge och står kvar oförändrad.
+
+**INTE accepterat, alltså fortfarande fileable:**
+1. Att ett nekande (`permission-denied`) eller annat fel visas som "Ingen anslutning".
+2. Att omförsöket går förbi `ensureUserProfile` och skapar profilen direkt.
+
+**Re-open when:** någon av punkterna ovan inträffar, eller en rapport om ett nytt konto som
+fastnat utan profil trots anslutning.
