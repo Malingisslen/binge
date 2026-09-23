@@ -29462,3 +29462,36 @@ instruction (mutate each guard alone, stub the child) is unchanged and is what t
 re-verified. Folded in place into that bullet.
 
 **Verdict: pass, 0 blocking.**
+
+## 2026-09-23 — BIN-1275: updateDisplayName returns the stored name, ProfileSection shows it
+
+**Diff reviewed (staged):** `src/contexts/AuthContext.tsx` (`updateDisplayName` now `Promise<string>`,
+returns `clamped`; default context stub echoes its argument), `src/contexts/AuthContext.test.tsx`
+(authSync test `resolves.toBeUndefined()` -> `resolves.toBe('Nytt namn')`; clamp test captures the
+return and asserts `stored === payload.displayName`), `src/components/settings/ProfileSection.tsx`
+(`const sent = nameInput; ... setNameInput(prev => (prev === sent ? stored : prev))`, same shape as
+the bio field in UsernameSection), `src/components/settings/ProfileSection.test.tsx` (mock echoes its
+argument; two new tests: stored value shown, typing during the save not overwritten).
+
+**Rig:** isolated worktree under the session scratchpad, staged blobs copied in, own `npm ci`,
+torn down with `node scripts/shared-guard.mjs worktree-cleanup` (shared node_modules 452 -> 452).
+Clean control: 120/120 across the two files. Each mutant: anchor checked to land, `.vite` cache
+removed, run, restored from the in-memory original.
+
+| Mutant | Result |
+|---|---|
+| P1 drop `setNameInput` write-back | 1 red — "fältet visar det lagrade namnet efter sparningen" |
+| P2 unconditional `setNameInput(stored)` | 1 red — "skriver inte över det användaren hunnit skriva under sparningen" |
+| P3 `prev === next` (trimmed) for `prev === sent` | 7/7 GREEN — survivor |
+| P4 write back `next` instead of `stored` | 1 red — "fältet visar det lagrade namnet" |
+| A1 `return name` | 1 red — "namnet skrivs klampat till Firestore-kopian" |
+| A2 `return trimmed` | 1 red — same test |
+| A3 `return clampToCodeUnits(name, MAX_DISPLAY_NAME)` (untrimmed) | 15/15 GREEN — survivor |
+| T1 old `resolves.toBeUndefined()` against new code | 1 red — authSync test |
+| New tests against HEAD production code | 3 red (clamp return, authSync return, stored-value field); the overwrite guard test is green on HEAD by construction (HEAD never writes back) and is reddened by P2 |
+
+**Verdict:** pass, 0 blocking. The authSync change is a strict-to-strict contract update, red on
+HEAD, not a weakening. Two non-blocking fixture gaps: P3 (no whitespace in the ProfileSection
+fixture, so `sent` vs `next` is indistinguishable) and A3 (no whitespace in the clamp fixture).
+Lesson folded into the core card's fixture-ordering bullet: a trim-then-clamp write has three
+candidate strings, and the fixture needs padding AND over-cap length.
