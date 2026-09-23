@@ -1824,16 +1824,23 @@ service cloud.firestore {
         allow read: if isSignedIn()
           && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids;
 
-        // Sig själv (men bara om man faktiskt är medlem i gruppen — L1) eller
-        // ägaren kan skriva. Utan medlemskaps-villkoret kunde vem som helst
-        // skriva en självmedlemskaps-doc i en godtycklig grupp.
+        // Utan medlemskaps-villkoret kunde vem som helst skriva en
+        // självmedlemskaps-doc i en godtycklig grupp (L1).
         //
         // BIN-1063 steg 1 delade den tidigare gemensamma create/update/delete-raden
-        // i tre. Uttrycket nedan ÄR den raden, oförändrat och bara namngivet — inget
-        // villkor tillkom. Delningen behövs för att create och update ska kunna bära
+        // i tre. Delningen behövs för att create och update ska kunna bära
         // olika joinedAt-krav utan att delete får någon referens till fältet alls:
         // en delete bär ingen request.resource, så ett gemensamt villkor som rörde
         // fältet hade nekat varje borttagning och gjort medlemsdokumentet oraderbart.
+        // BIN-1167, Malins beslut 2026-09-20: ägaren får RADERA en annan medlems rad
+        // (removeMember) men inte SKRIVA i den. create och update använder
+        // selfMember(), delete selfOrOwner().
+        function selfMember() {
+          return isSignedIn()
+            && request.auth.uid == memberUid
+            && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids;
+        }
+
         function selfOrOwner() {
           return isSignedIn() && (
             (
@@ -1905,7 +1912,7 @@ service cloud.firestore {
         // batch, där hela commiten delar en request.time. Härled vägarna i stället
         // för att lita på den här meningen:
         //   grep -n "'members'" src/lib/firebase/groups.ts
-        allow create: if selfOrOwner()
+        allow create: if selfMember()
           && isValidGroupMember(request.resource.data)
           && matchesOwnIdentity(request.resource.data)
           && request.resource.data.joinedAt == request.time;
@@ -1923,12 +1930,6 @@ service cloud.firestore {
         // den kopia som låg i minnet. Den invändningen är upplöst: kopian hålls färsk
         // mellan flikar sedan BIN-1163.
         //
-        // Villkoret gäller BÅDA grenarna i `selfOrOwner()` med flit. Ägargrenen kunde
-        // annars skriva ett godtyckligt namn på en ANNAN medlems rad — ingen klientväg
-        // gör det i dag (ägarens enda skrivning mot en främmande rad är en delete, som
-        // inte bär någon request.resource), men en bindning som bara gäller ena grenen
-        // hade lämnat formen öppen för nästa skrivare.
-        //
         // PÅ UPDATE binds bara ett fält som FAKTISKT ÄNDRAS, och det är inte en
         // uppmjukning utan en rättelse. `request.resource.data` är hela dokumentet
         // EFTER skrivningen, inte patchen, så en rad vars lagrade namn hunnit bli
@@ -1943,8 +1944,7 @@ service cloud.firestore {
         // null anda av typkontrollen i `isValidGroupMember`. Pa en UPDATE finns en tredje
         // form: `deleteField()` TAR BORT nyckeln, och da ser bade typkontrollen och
         // `isOwnIdentity` ett franvarande falt och slapper igenom. Utan villkoret nedan
-        // kunde alltsa vem som helst med skrivratt — inklusive agaren pa en ANNAN
-        // medlems rad — RADERA namnet i stallet for att andra det, och bindningen hade
+        // kunde alltsa vem som helst med skrivratt RADERA namnet i stallet for att andra det, och bindningen hade
         // inte jamfort mot nagot alls. Att forfalska ar stangt; att tomma var det inte.
         function keepsOrOwnsIdentity() {
           return (request.resource.data.get('displayName', null) == resource.data.get('displayName', null)
@@ -1955,7 +1955,7 @@ service cloud.firestore {
                 && isOwnIdentity(null, request.resource.data.get('username', null))));
         }
 
-        allow update: if selfOrOwner()
+        allow update: if selfMember()
           && isValidGroupMember(request.resource.data)
           && keepsOrOwnsIdentity()
           && request.resource.data.get('joinedAt', null) == resource.data.get('joinedAt', null);

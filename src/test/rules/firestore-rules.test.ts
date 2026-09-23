@@ -3583,18 +3583,17 @@ describe('groups members/{memberUid} joinedAt — pinnad vid create, oföränder
     ));
   });
 
-  // ---- CREATE, ägarens gren. Regeln har två oberoende lagliga vägar (|| i
-// selfOrOwner).
+  // ---- CREATE av en ANNAN medlems rad (BIN-1167) ----
 
-  it('ägaren KAN skapa ett annat medlems-doc med serverTimestamp()', async () => {
+  it('ägaren KAN INTE skapa ett annat medlems-doc, ens med ett giltigt joinedAt (BIN-1167)', async () => {
     await seedGroup({ memberUids: [OWNER, 'm2'] });
-    await assertSucceeds(setDoc(
+    await assertFails(setDoc(
       doc(ownerDb(), 'groups', GROUP, 'members', 'm2'),
       memberPayload('m2'),
     ));
   });
 
-  it('ägaren KAN INTE skapa ett annat medlems-doc med ett bakåtdaterat joinedAt', async () => {
+  it('ägaren KAN INTE skapa ett annat medlems-doc, inte heller med ett bakåtdaterat joinedAt (BIN-1167)', async () => {
     await seedGroup({ memberUids: [OWNER, 'm2'] });
     await assertFails(setDoc(
       doc(ownerDb(), 'groups', GROUP, 'members', 'm2'),
@@ -3642,7 +3641,7 @@ describe('groups members/{memberUid} joinedAt — pinnad vid create, oföränder
     ));
   });
 
-  it('ägaren KAN uppdatera ett annat medlems-doc utan att röra joinedAt', async () => {
+  it('ägaren KAN INTE uppdatera ett annat medlems-doc, ens utan att röra joinedAt (BIN-1167)', async () => {
     await seedGroup({ memberUids: [OWNER, 'm2'] });
     await seedMemberDoc('m2', {
       uid: 'm2',
@@ -3650,12 +3649,46 @@ describe('groups members/{memberUid} joinedAt — pinnad vid create, oföränder
     });
     // Fältet är `providers`, inte `notifications` som det var före BIN-1155:
     // `notifications` finns inte längre på dokumentet och fälls numera av
-    // nyckellistan, vilket hade gjort testet grönt av fel skäl — det hade prövat
-    // `hasOnly` i stället för ägargrenen och joinedAt, som är vad det heter efter.
-    await assertSucceeds(updateDoc(
+    // nyckellistan, vilket hade gjort testet grönt av fel skäl.
+    await assertFails(updateDoc(
       doc(ownerDb(), 'groups', GROUP, 'members', 'm2'),
       { providers: [8] },
     ));
+  });
+
+  // BIN-1167. Fixturen är ett fullt, giltigt dokument, så varje annat villkor på
+  // update är uppfyllt och nekandet kan bara komma från att skrivaren inte är raden.
+  // Kontrollen åt andra hållet: samma skrivning från medlemmen själv går igenom.
+  it('ägaren KAN INTE skriva photoURL eller providers på en annan medlems rad, medlemmen själv kan (BIN-1167)', async () => {
+    await seedGroup({ memberUids: [OWNER, 'm2'] });
+    await seedMemberDoc('m2', {
+      uid: 'm2',
+      photoURL: null,
+      providers: [8],
+      joinedAt: Timestamp.fromMillis(1_700_000_000_000),
+    });
+    const m2Db = () => testEnv.authenticatedContext('m2').firestore();
+    await assertFails(updateDoc(doc(ownerDb(), 'groups', GROUP, 'members', 'm2'), {
+      photoURL: 'https://example.com/annan.png',
+    }));
+    await assertFails(updateDoc(doc(ownerDb(), 'groups', GROUP, 'members', 'm2'), {
+      providers: [8, 119],
+    }));
+    await assertSucceeds(updateDoc(doc(m2Db(), 'groups', GROUP, 'members', 'm2'), {
+      photoURL: 'https://example.com/egen.png',
+      providers: [8, 119],
+    }));
+  });
+
+  it('ägaren kan fortfarande skapa och uppdatera sin EGEN rad (BIN-1167)', async () => {
+    await seedGroup({ memberUids: [OWNER, 'm2'] });
+    await assertSucceeds(setDoc(
+      doc(ownerDb(), 'groups', GROUP, 'members', OWNER),
+      memberPayload(OWNER),
+    ));
+    await assertSucceeds(updateDoc(doc(ownerDb(), 'groups', GROUP, 'members', OWNER), {
+      providers: [8],
+    }));
   });
 
   // Det bärande fallet. Ett medlems-doc utan joinedAt — skrivet utanför appen —
@@ -3869,9 +3902,7 @@ describe('groups members/{memberUid} — nyckellista, vardegranser och identitet
     }));
   });
 
-  // Agargrenen i selfOrOwner() far skriva en annan medlems rad. Den far inte forfalska
-  // identiteten pa den — bindningen galler BADA grenarna med flit.
-  it('agaren kan inte skriva ett namn pa en ANNAN medlems rad', async () => {
+  it('agaren kan inte skapa en ANNAN medlems rad, inte heller med ett namn (BIN-1167)', async () => {
     await seedGroup({ memberUids: [OWNER, 'm2'] });
     await seedProfile(OWNER, { displayName: 'Agaren' });
     await seedProfile('m2', { displayName: 'Medlemmen' });
@@ -3942,8 +3973,7 @@ describe('groups members/{memberUid} — nyckellista, vardegranser och identitet
   // Den tredje formen, och den som forsta versionen av regeln slappte igenom:
   // `deleteField()` TAR BORT nyckeln i stallet for att andra den, och da ser bade
   // typkontrollen och `isOwnIdentity` ett franvarande falt. Att forfalska var stangt;
-  // att TOMMA var det inte — och agargrenen racker till for att gora det pa nagon
-  // annans rad. Fyndet ar sakerhetsgranskarens, bevisat mot emulatorn.
+  // att TOMMA var det inte. Fyndet ar sakerhetsgranskarens, bevisat mot emulatorn.
   it('namnet kan inte RADERAS bort ur raden, varken av en sjalv eller av agaren', async () => {
     await seedGroup({ memberUids: [OWNER, 'other_uid'] });
     await seedProfile(OWNER, { displayName: 'Agaren' });

@@ -94,7 +94,10 @@ const REPO = resolve(HERE, '..');
 // and `size()`'s unit got a pair of tests driven by a Swedish name where UTF-8 bytes and
 // UTF-16 code units differ. Measured with `npm run test:rules -- --port 8123`, not
 // counted by hand.
-export const MIN_TESTS = 724;
+// BIN-1167, 2026-09-23: raised to what `numTotalTests` reported once the group member
+// rule stopped letting the owner write another member's row. The cases name themselves
+// `(BIN-1167)`. Measured with `npm run test:rules`, not counted by hand.
+export const MIN_TESTS = 750;
 
 const VITEST_ARGS = ['run', '--config', 'vitest.rules.config.ts'];
 
