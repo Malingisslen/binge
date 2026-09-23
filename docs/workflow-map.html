@@ -717,7 +717,7 @@
       "id": "profile-offline-banner",
       "label": "ProfileOfflineBanner",
       "context": "web-app",
-      "path": "src/components/layout/ProfileOfflineBanner.tsx"
+      "path": "src/components/layout/ProfileOfflineBanner.tsx, src/lib/onboarding.ts"
     },
     {
       "id": "static-passive-pages",
@@ -874,7 +874,7 @@
         {
           "from": "auth-context",
           "to": "web-app",
-          "payload": "BIN-645 landing — LoginPage redirects once `uid` exists AND `profileLoading` has settled either way, latched by a ref because takeNextPath() consumes. A profile that could not be read cannot claim the account needs onboarding, so it routes to the remembered path (or '/') rather than stranding a signed-in visitor on the sign-in form. A genuinely new account still goes to /onboarding/ first — and LoginPage is the app's ONLY router into it.",
+          "payload": "BIN-645 landing — LoginPage redirects once `uid` exists AND `profileLoading` has settled either way, latched by a ref because takeNextPath() consumes. A profile that could not be read cannot claim the account needs onboarding, so it routes to the remembered path (or '/') rather than stranding a signed-in visitor on the sign-in form. A genuinely new account still goes to /onboarding/ first.",
           "transport": "router.push",
           "verified": true
         },
@@ -2893,7 +2893,7 @@
         {
           "from": "profile-offline-banner",
           "to": "auth-context",
-          "payload": "Försök igen → retryProfileLoad → the same loadProfile the sign-in uses, so the deletion marker and the returning-account gate run again on every attempt; the button is disabled while an attempt is in flight",
+          "payload": "Försök igen → retryProfileLoad → the same loadProfile the sign-in uses, so the deletion marker and the returning-account gate run again on every attempt; the button is disabled while an attempt is in flight. BIN-1293: when a press ends with a profile that needsOnboarding (src/lib/onboarding.ts, the same predicate the login page uses), the strip clears and remembers the current page and pushes /onboarding/, never on a sign-in path and never without a press",
           "transport": "react-context",
           "verified": true
         },
