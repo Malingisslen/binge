@@ -2741,6 +2741,13 @@
           "payload": "getUsers() over the collected uids in batches of ≤100 (Admin SDK cap) → revoked = the response's own notFound entries + any user returned with disabled: true → batch.delete their fcmTokens docs. Read notFound explicitly, NEVER absence from users: disabled accounts are returned IN users, so inferring deletion from absence would over-delete live accounts' push registrations. A batch that throws is skipped and counted in skippedAuthBatches — \"could not verify\" is not \"gone\" — and the whole scan is caught separately. Needs firebaseauth.users.get on the runtime service account: without it every batch throws and the sweep is silently inert while the deploy stays green, which is what checkedUids in the summary log exists to expose",
           "transport": "admin-auth-lookup+firestore-batch-write",
           "verified": true
+        },
+        {
+          "from": "cf-retentionCleanup",
+          "to": "firestore",
+          "payload": "BIN-1294: for an account deleted in Firebase Console (a uid Auth no longer knows, past the observation floor), after the owned-group handover the sweep runs runSweptMemberGroupErasure over every group where memberUids array-contains the uid and the uid is not the owner: the same trace erasure the delete button runs (member row, household, joinAttempts, progress rows, addedBy, pickedByUid, participantUids), then arrayRemove of the uid from memberUids, last per group so a failed run finds the group again. planSweptMemberGroupErasure counts these writes into the all-or-nothing document budget first, and the step runs inside the same try that keeps the orphanWatch record on failure.",
+          "transport": "Admin SDK (scheduled)",
+          "verified": true
         }
       ],
       "area": "ops & compliance"
