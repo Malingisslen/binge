@@ -2154,3 +2154,28 @@ git grep -n "BIN-1174" -- firestore.rules src/contexts/AuthContext.tsx src/lib/f
 
 **Re-open when:** `kind: 'identityFanOut-friendRequest'` återkommer i Sentry-scopet `auth`,
 eller en användare rapporterar ett gammalt namn på en gruppinbjudan.
+
+---
+
+## BIN-1261: bekräftelsedialogens avbrottsvägar är ogrindade, med flit — 2026-09-23
+
+Efterföljare till `## BIN-1120` ovan, som står kvar ordagrant. Dess punkt 2 under "INTE
+accepterat" (`ConfirmDialog`s egna avbrottsvägar är ogrindade) är avgjord här: de förblir
+ogrindade. Fila inte "Escape stänger bekräftelsedialogen medan något pågår".
+
+**Vad som byggdes.** Skalet för modala dialoger — fokus, Tab-fälla, Escape och bakgrund — är
+`DialogShell`. `ConfirmDialog` och `HandOverGroupDialog` renderas båda genom det. Bara
+överlämningen skickar `dismissable={!working}`. Härled anroparna:
+
+```
+git grep -n "<DialogShell" -- src
+```
+
+**Varför bekräftelsedialogen inte spärras.** Anroparna som skickar `busy` håller det över en
+Firestore-skrivning som väntar på serverns kvittens. Utan anslutning kommer den aldrig, så en
+spärrad dialog låser skärmen med båda knapparna avstängda tills sidan laddas om. Att stänga
+dialogen avbryter inte skrivningen. Överlämningen spärras eftersom dess anrop är en funktion
+som alltid svarar till slut.
+
+**Re-open when:** en bekräftelsedialog får en åtgärd vars väntan har en övre gräns och som
+inte får avbrytas halvvägs — då skickar den anroparen en egen spärr, inte alla.

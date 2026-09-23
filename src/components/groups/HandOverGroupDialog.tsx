@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { UserCheck, X } from 'lucide-react';
+import { DialogShell } from '@/components/ui/DialogShell';
 import { handOverGroup } from '@/lib/firebase/groupHandover';
 import { captureError } from '@/lib/sentry';
 import type { GroupMember } from '@/types';
@@ -77,42 +78,21 @@ export function HandOverGroupDialog({
     }
   };
 
-  // `working` och `onCancel` står i beroendena i stället för bakom refs: en
-  // ref som skrivs under renderingen underkänns av `react-hooks/refs`, och
-  // `ConfirmDialog`s variant — ref satt i en effekt — finns där för att den
-  // också flyttar fokus och inte får köra om. Den här lyssnaren rör inte
-  // fokus, så en ombindning kostar ingenting.
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      e.stopImmediatePropagation();
-      if (!working) onCancel();
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [working, onCancel]);
-
   return (
-    <div
-      className="fixed inset-0 z-50 bg-ink/35 flex items-center justify-center p-4"
-      // `stopPropagation`: dialogen renderas som barn till `GroupSettingsModal`s
-      // egen bakgrund, som stänger modalen på klick. Utan detta stängde ett
-      // bakgrundsklick BÅDA. `ConfirmDialog` slipper det genom att göra exakt detta.
-      //
-      // `!working`: avbryt-knappen är avstängd medan anropet ligger ute, och
-      // bakgrunden är en andra väg till samma avbrott. Stängs dialogen mitt i
-      // anropet landar svaret i ett avmonterat träd och den som bad om
-      // överlämningen får ingen dom alls — anropet får ta 300 sekunder.
-      onClick={e => { e.stopPropagation(); if (!working) onCancel(); }}
-      role="presentation"
+    // BIN-1261: skalet — fokus, Tab, Escape och bakgrund — är `DialogShell`.
+    //
+    // `dismissable={!working}`: avbryt-knappen är avstängd medan anropet ligger
+    // ute, och Escape och bakgrunden är två andra vägar till samma avbrott.
+    // Stängs dialogen mitt i anropet landar svaret i ett avmonterat träd och den
+    // som bad om överlämningen får ingen dom alls — anropet får ta 300 sekunder.
+    // Bakgrundsklicket stoppar vidarebefordran oavsett, så `GroupSettingsModal`s
+    // egen bakgrund stänger inte modalen bakom.
+    <DialogShell
+      labelledBy="handover-title"
+      dismissable={!working}
+      onDismiss={onCancel}
+      className="bg-surface border border-rule rounded-md w-full max-w-[420px] overflow-hidden"
     >
-      <div
-        className="bg-surface border border-rule rounded-md w-full max-w-[420px] overflow-hidden"
-        onClick={e => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="handover-title"
-      >
         <div className="px-3 py-2 border-b border-rule flex items-center justify-between">
           <h2 id="handover-title" className="text-sm font-bold">Välj vem som tar över gruppen</h2>
           {/*
@@ -184,8 +164,7 @@ export function HandOverGroupDialog({
             {working ? 'Lämnar över…' : `Lämna över till ${pickedName}`}
           </button>
         </div>
-      </div>
-    </div>
+    </DialogShell>
   );
 }
 

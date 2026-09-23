@@ -38,6 +38,11 @@ function renderDialog(candidates: GroupMember[], onDone = vi.fn(), onCancel = vi
   return { onDone, onCancel };
 }
 
+function backdropClick(el: HTMLElement) {
+  fireEvent.mouseDown(el);
+  fireEvent.click(el);
+}
+
 describe('HandOverGroupDialog', () => {
   beforeEach(() => vi.clearAllMocks());
 
@@ -160,9 +165,11 @@ describe('HandOverGroupDialog', () => {
   // modalens egen bakgrund, som stänger på klick — utan spärren stängde ett
   // bakgrundsklick BÅDA, och mitt i ett anrop som får ta 300 sekunder landar
   // svaret i ett avmonterat träd.
+  // BIN-1261: bakgrunden är dragsäker (DialogShell), så ett klick räknas bara när
+  // även mousedown landade på den. Båda fallen driver därför hela klicket.
   it('ett bakgrundsklick avbryter när inget anrop pågår', () => {
     const { onCancel } = renderDialog([JONAS]);
-    fireEvent.click(screen.getByRole('presentation'));
+    backdropClick(screen.getByRole('presentation'));
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
@@ -173,8 +180,38 @@ describe('HandOverGroupDialog', () => {
     fireEvent.click(screen.getByText('Lämna över till Jonas'));
     await screen.findByText('Lämnar över…');
 
+    backdropClick(screen.getByRole('presentation'));
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it('ett drag från dialogen ut till bakgrunden avbryter inte', () => {
+    const { onCancel } = renderDialog([JONAS]);
+    fireEvent.mouseDown(screen.getByRole('dialog'));
     fireEvent.click(screen.getByRole('presentation'));
     expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it('fokus flyttas in i dialogen när den öppnas och tillbaka när den stängs', () => {
+    const opener = document.createElement('button');
+    document.body.appendChild(opener);
+    opener.focus();
+    const view = render(
+      <HandOverGroupDialog groupId="g1" groupName="Fredagsmys" candidates={[JONAS]} onDone={vi.fn()} onCancel={vi.fn()} />,
+    );
+    expect(screen.getByRole('dialog').contains(document.activeElement)).toBe(true);
+    view.unmount();
+    expect(document.activeElement).toBe(opener);
+    opener.remove();
+  });
+
+  it('Tab från något bakom dialogen hamnar i dialogen', () => {
+    const behind = document.createElement('button');
+    document.body.appendChild(behind);
+    renderDialog([JONAS]);
+    behind.focus();
+    fireEvent.keyDown(document, { key: 'Tab' });
+    expect(screen.getByRole('dialog').contains(document.activeElement)).toBe(true);
+    behind.remove();
   });
 
   // Samma skydd som klickhalvan ovan, i den andra hanteraren. Villkoret är
@@ -188,11 +225,8 @@ describe('HandOverGroupDialog', () => {
   });
 
   // Fallet ovan skjuter Escape PA overlayen, alltsa fran ett element inuti dialogen.
-  // Det sager ingenting om huruvida en verklig tangenttryckning nar dit: ingenting i
-  // dialogen ar fokuserat nar den oppnas, sa fokus star kvar pa knappen "Lamna over"
-  // i modalen bredvid. Hanteraren lag pa overlayen och kunde darfor inte kora alls,
-  // medan testet ovan var gront. Det har fallet driver tangenten fran `document`,
-  // dar ingen del av dialogen ar inblandad i vagen dit.
+  // Det har fallet driver tangenten fran `document`, dar ingen del av dialogen ar
+  // inblandad i vagen dit.
   it('Escape avbryter aven nar fokus star utanfor dialogen', () => {
     const { onCancel } = renderDialog([JONAS]);
     fireEvent.keyDown(document, { key: 'Escape' });
@@ -247,7 +281,7 @@ describe('HandOverGroupDialog', () => {
         />
       </div>,
     );
-    fireEvent.click(screen.getAllByRole('presentation')[1]);
+    backdropClick(screen.getAllByRole('presentation')[1]);
     expect(outer).not.toHaveBeenCalled();
   });
 

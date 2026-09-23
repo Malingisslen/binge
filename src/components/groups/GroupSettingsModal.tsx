@@ -92,10 +92,6 @@ export function GroupSettingsModal({
     <div
       className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
       onClick={onClose}
-      // Ett Escape efter klicket på "Lämna över" går den HÄR vägen: knappen ligger
-      // i modalens egen dialogruta, alltså som syskon till överlämningens overlay
-      // och inte under den. Ogrindad stängde den båda — mitt i ett anrop som får
-      // ta 300 sekunder. Testet `bakgrundsvägen` faller om klausulen tas bort.
       onKeyDown={e => { if (e.key === 'Escape' && !confirmingDelete && !handingOver) onClose(); }}
       role="presentation"
     >

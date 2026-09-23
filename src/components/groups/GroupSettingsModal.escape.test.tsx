@@ -1,7 +1,5 @@
 // src/components/groups/GroupSettingsModal.escape.test.tsx
 //
-// Modalens EGEN dokumentspärr mot Escape, ensam.
-//
 // Syskonfilen driver samma sak med den riktiga överlämningsdialogen monterad, och
 // det fallet kan inte falla på det villkor det är döpt efter: dialogen anropar
 // `stopImmediatePropagation` innan modalens hanterare hinner köra. Att ta bort
@@ -66,6 +64,20 @@ describe('GroupSettingsModal — dokumentspärren utan dialogens eget skydd (BIN
     expect(screen.getByTestId('handover-stub')).toBeInTheDocument();
 
     fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  // BIN-1261: bakgrundens `onKeyDown`, den andra vägen. Med den riktiga dialogen
+  // monterad stoppar `DialogShell`s lyssnare i infångningsfasen tangenten innan
+  // den når hit, så syskonfilens fall kan inte längre falla på den här klausulen.
+  // Tangenten skjuts på knappen i modalens egen ruta, så den bubblar till bakgrunden.
+  it('bakgrundsvägen stänger INTE modalen medan överlämningen är öppen', () => {
+    const onClose = renderModal();
+    const trigger = screen.getByText('Lämna över');
+    fireEvent.click(trigger);
+    expect(screen.getByTestId('handover-stub')).toBeInTheDocument();
+
+    fireEvent.keyDown(trigger, { key: 'Escape' });
     expect(onClose).not.toHaveBeenCalled();
   });
 });

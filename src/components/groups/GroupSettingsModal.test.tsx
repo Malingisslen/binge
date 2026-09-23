@@ -168,18 +168,9 @@ describe('GroupSettingsModal — Escape', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  // Den andra vagen, och den maste drivas fran ett element vars handelse
-  // FAKTISKT nar modalens egen bakgrund.
-  //
-  // Ett tidigare utkast skot Escape pa overlamningsdialogens INRE element. Det
-  // testet var gront, men av fel skal: dialogens egen overlay stoppar
-  // vidarebefordran innan den ens tittar pa tangenten, sa handelsen nadde aldrig
-  // modalens bakgrundshanterare — klausulen dar kunde tas bort med testet
-  // fortfarande gront. Har skjuts den i stallet pa knappen som just klickades.
-  // Den ligger i modalens egen dialogruta, alltsa som SYSKON till
-  // overlamningens overlay och inte under den, sa handelsen bubblar till
-  // modalens bakgrund. Det ar ocksa dar fokus faktiskt ligger i fallet
-  // komponentens kommentar beskriver.
+  // BIN-1261: med den riktiga dialogen monterad stoppar dess skal tangenten först,
+  // så det här fallet pinnar inte bakgrundens klausul. Den pinnas i
+  // `GroupSettingsModal.escape.test.tsx`, där dialogen är stubbad.
   it('stänger INTE modalen medan överlämningen är öppen — bakgrundsvägen', () => {
     const onClose = renderModal([ME, JONAS]);
     const trigger = screen.getByText('Lämna över');
