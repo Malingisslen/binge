@@ -5338,3 +5338,106 @@ describe('users/{uid}/notifications/{notifId} (BIN-1170)', () => {
     await assertFails(updateDoc(doc(otherDb(), 'users', OWNER, 'notifications', 'n7'), { read: true }));
   });
 });
+
+// BIN-1174: after a rename the SENDER may rewrite the name on their own pending
+// request, and nothing else. Each field is unchanged, or non-null and equal to the
+// sender's live profile — a null or a deleteField() must not clear it (BIN-1155).
+describe('users/{uid}/friendRequests/{fromUid} — sender renames (BIN-1174)', () => {
+  const SENDER = 'sender_uid';
+  const RECIPIENT = 'recipient_uid';
+  const THIRD = 'third_uid';
+  const reqRef = (db: ReturnType<typeof ownerDb>) => doc(db, 'users', RECIPIENT, 'friendRequests', SENDER);
+  const senderDb = () => testEnv.authenticatedContext(SENDER).firestore();
+  const recipientDb = () => testEnv.authenticatedContext(RECIPIENT).firestore();
+  const thirdDb = () => testEnv.authenticatedContext(THIRD).firestore();
+
+  // The profile carries the NEW name; the request still carries the old one.
+  async function seed(profile: Record<string, unknown> = { displayName: 'Nytt Namn', username: 'nytt' }) {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', SENDER), profile);
+      await setDoc(doc(ctx.firestore(), 'users', THIRD), { displayName: 'Nytt Namn', username: 'nytt' });
+      await setDoc(doc(ctx.firestore(), 'users', RECIPIENT), { displayName: 'Mottagare', username: 'mott' });
+      await setDoc(doc(ctx.firestore(), 'users', RECIPIENT, 'friendRequests', SENDER), {
+        fromUid: SENDER, fromDisplayName: 'Gammalt Namn', fromUsername: 'gammalt',
+        fromPhotoURL: null, sentAt: Timestamp.now(),
+      });
+    });
+  }
+
+  it('the sender rewrites both fields to their live identity', async () => {
+    await seed();
+    await assertSucceeds(updateDoc(reqRef(senderDb()), { fromDisplayName: 'Nytt Namn', fromUsername: 'nytt' }));
+  });
+
+  it('the sender rewrites the display name alone, leaving the username as it was', async () => {
+    await seed({ displayName: 'Nytt Namn', username: 'gammalt' });
+    await assertSucceeds(updateDoc(reqRef(senderDb()), { fromDisplayName: 'Nytt Namn', fromUsername: 'gammalt' }));
+  });
+
+  it('a name that is not the sender\'s live one is denied', async () => {
+    await seed();
+    await assertFails(updateDoc(reqRef(senderDb()), { fromDisplayName: 'Malin', fromUsername: 'nytt' }));
+  });
+
+  it('a username that is not the sender\'s live one is denied', async () => {
+    await seed();
+    await assertFails(updateDoc(reqRef(senderDb()), { fromDisplayName: 'Nytt Namn', fromUsername: 'malin' }));
+  });
+
+  it('deleteField() on the display name is denied', async () => {
+    await seed();
+    await assertFails(updateDoc(reqRef(senderDb()), { fromDisplayName: deleteField() }));
+  });
+
+  it('deleteField() on the username is denied', async () => {
+    await seed();
+    await assertFails(updateDoc(reqRef(senderDb()), { fromUsername: deleteField() }));
+  });
+
+  it('a null display name is denied even when the profile has none', async () => {
+    await seed({ username: 'nytt' });
+    await assertFails(updateDoc(reqRef(senderDb()), { fromDisplayName: null }));
+  });
+
+  it('changing fromUid is denied', async () => {
+    await seed();
+    await assertFails(updateDoc(reqRef(senderDb()), { fromDisplayName: 'Nytt Namn', fromUid: THIRD }));
+  });
+
+  it('changing sentAt is denied', async () => {
+    await seed();
+    await assertFails(updateDoc(reqRef(senderDb()), { fromDisplayName: 'Nytt Namn', sentAt: Timestamp.now() }));
+  });
+
+  it('changing the photo is denied', async () => {
+    await seed();
+    await assertFails(updateDoc(reqRef(senderDb()), { fromPhotoURL: 'https://example.com/a.png' }));
+  });
+
+  it('an extra key is denied', async () => {
+    await seed();
+    await assertFails(updateDoc(reqRef(senderDb()), { fromDisplayName: 'Nytt Namn', note: 'hej' }));
+  });
+
+  it('the recipient cannot update the request', async () => {
+    await seed({ displayName: 'Nytt Namn', username: 'nytt' });
+    await assertFails(updateDoc(reqRef(recipientDb()), { fromDisplayName: 'Mottagare' }));
+  });
+
+  it('a third party whose live name matches cannot update someone else\'s request', async () => {
+    await seed();
+    await assertFails(updateDoc(reqRef(thirdDb()), { fromDisplayName: 'Nytt Namn', fromUsername: 'nytt' }));
+  });
+
+  it('an update on an answered (deleted) request fails and does not recreate it', async () => {
+    await seed();
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await deleteDoc(doc(ctx.firestore(), 'users', RECIPIENT, 'friendRequests', SENDER));
+    });
+    await assertFails(updateDoc(reqRef(senderDb()), { fromDisplayName: 'Nytt Namn', fromUsername: 'nytt' }));
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const snap = await getDoc(doc(ctx.firestore(), 'users', RECIPIENT, 'friendRequests', SENDER));
+      expect(snap.exists()).toBe(false);
+    });
+  });
+});

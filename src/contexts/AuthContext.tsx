@@ -1133,6 +1133,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error('namnbytet nådde inga gruppmedlemsrader:', err);
       captureError(err, { scope: 'auth', kind: 'identityFanOut-query' });
     }
+    // BIN-1174: förfrågningar jag skickat och som ingen svarat på. Grupp-inbjudningar
+    // skrivs INTE om — det är en daterad post i accepted-deviations.
+    try {
+      const { updateSentFriendRequestIdentity } = await import('@/lib/firebase/friends');
+      const failures = await updateSentFriendRequestIdentity(uid, identity);
+      for (const err of failures) {
+        console.error('en vänförfrågan behöll det gamla namnet:', err);
+        captureError(err, { scope: 'auth', kind: 'identityFanOut-friendRequest' });
+      }
+    } catch (err) {
+      console.error('namnbytet nådde inga vänförfrågningar:', err);
+      captureError(err, { scope: 'auth', kind: 'identityFanOut-friendRequest' });
+    }
   }, [uid]);
 
   const updateDefaultView = useCallback((view: 'table' | 'grid' | 'cards') => updateUserField('defaultView', view), [updateUserField]);

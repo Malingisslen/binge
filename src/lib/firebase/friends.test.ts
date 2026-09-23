@@ -14,7 +14,9 @@ const mocks = vi.hoisted(() => {
   }));
   const getDocMock = vi.fn();
   const getDocsMock = vi.fn();
-  return { setMock, deleteMock, commitMock, writeBatchMock, getDocMock, getDocsMock };
+  const updateDocMock = vi.fn();
+  const limitMock = vi.fn((n: number) => ({ _limit: n }));
+  return { setMock, deleteMock, commitMock, writeBatchMock, getDocMock, getDocsMock, updateDocMock, limitMock };
 });
 
 // friends.ts hämtar firestore-fns via fsdb() (lazy-laddningen i ./db) —
@@ -27,11 +29,14 @@ vi.mock('firebase/firestore', () => ({
   doc: vi.fn((_db, ...path) => ({ _path: path.join('/') })),
   getDoc: (...args: unknown[]) => mocks.getDocMock(...args),
   getDocs: (...args: unknown[]) => mocks.getDocsMock(...args),
+  updateDoc: (...args: unknown[]) => mocks.updateDocMock(...args),
+  query: vi.fn((ref, ...cs) => ({ ...ref, _constraints: cs })),
+  limit: (n: number) => mocks.limitMock(n),
   serverTimestamp: vi.fn(() => 'SERVER_TIMESTAMP'),
   writeBatch: mocks.writeBatchMock,
 }));
 
-const { setMock, deleteMock, commitMock, writeBatchMock, getDocMock, getDocsMock } = mocks;
+const { setMock, deleteMock, commitMock, writeBatchMock, getDocMock, getDocsMock, updateDocMock, limitMock } = mocks;
 
 import {
   sendFriendRequest,
@@ -42,6 +47,8 @@ import {
   getFriendStatus,
   listFriends,
   listFriendRequests,
+  updateSentFriendRequestIdentity,
+  SENT_REQUESTS_IDENTITY_LIMIT,
 } from './friends';
 
 beforeEach(() => {
@@ -51,6 +58,8 @@ beforeEach(() => {
   writeBatchMock.mockClear();
   getDocMock.mockReset();
   getDocsMock.mockReset();
+  updateDocMock.mockReset();
+  limitMock.mockClear();
 });
 
 describe('sendFriendRequest', () => {
@@ -306,5 +315,44 @@ describe('listFriendRequests', () => {
       fromUsername: 'jonatan',
       sentAt: new Date('2026-01-01'),
     }]);
+  });
+});
+
+// BIN-1174: a rename rewrites the name on requests I sent and nobody has answered.
+describe('updateSentFriendRequestIdentity', () => {
+  const sentRows = (...ids: string[]) => ({ docs: ids.map((id) => ({ id })) });
+
+  it('skriver om namnet på mottagarens förfrågan, med updateDoc och bara de två fälten', async () => {
+    getDocsMock.mockResolvedValueOnce(sentRows('anna', 'bo'));
+    updateDocMock.mockResolvedValue(undefined);
+    const failures = await updateSentFriendRequestIdentity('me', { displayName: 'Nytt', username: 'nytt' });
+    expect(failures).toEqual([]);
+    expect(getDocsMock.mock.calls[0][0]._path).toBe('users/me/friendRequestsSent');
+    expect(updateDocMock.mock.calls.map((c) => c[0]._path)).toEqual([
+      'users/anna/friendRequests/me',
+      'users/bo/friendRequests/me',
+    ]);
+    expect(updateDocMock.mock.calls[0][1]).toEqual({ fromDisplayName: 'Nytt', fromUsername: 'nytt' });
+    expect(setMock).not.toHaveBeenCalled();
+  });
+
+  it('läser utgående förfrågningar med taket', async () => {
+    getDocsMock.mockResolvedValueOnce(sentRows());
+    await updateSentFriendRequestIdentity('me', { displayName: 'Nytt', username: null });
+    expect(limitMock).toHaveBeenCalledWith(SENT_REQUESTS_IDENTITY_LIMIT);
+    expect(getDocsMock.mock.calls[0][0]._constraints).toContainEqual({ _limit: SENT_REQUESTS_IDENTITY_LIMIT });
+  });
+
+  it('returnerar varje misslyckad skrivning, inklusive ett nekande, och fortsätter med resten', async () => {
+    getDocsMock.mockResolvedValueOnce(sentRows('anna', 'bo', 'cia'));
+    const denied = Object.assign(new Error('denied'), { code: 'permission-denied' });
+    const down = Object.assign(new Error('down'), { code: 'unavailable' });
+    updateDocMock
+      .mockRejectedValueOnce(denied)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(down);
+    const failures = await updateSentFriendRequestIdentity('me', { displayName: 'Nytt', username: 'nytt' });
+    expect(updateDocMock).toHaveBeenCalledTimes(3);
+    expect(failures).toEqual([denied, down]);
   });
 });

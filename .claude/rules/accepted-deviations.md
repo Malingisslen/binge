@@ -2119,3 +2119,38 @@ Det som redan skrivits före återkomsten står fast; det var den gamla medlemst
 
 **Re-open when:** någon av punkterna ovan inträffar, eller `kind: 'leaveGroup-traceErasure'`
 återkommer i Sentry-scopet `groups`.
+
+---
+
+## BIN-1174: ett namnbyte når skickade vänförfrågningar, inte gruppinbjudningar — 2026-09-23
+
+Malins beslut 2026-09-23 (runda 2, alternativ A). Fila inte "en skickad gruppinbjudan visar
+avsändarens gamla namn", och öppna inte en update-gren på `groupInvites` med den här posten
+som stöd.
+
+**Vad som byggdes.** `firestore.rules` låter avsändaren skriva om `fromDisplayName` och
+`fromUsername` på sin egen obesvarade förfrågan, per fält oförändrat eller lika med
+avsändarens live-profil. `publishIdentityChange` i `AuthContext` gör det efter ett namnbyte.
+Härled grenen och anropet:
+
+```
+git grep -n "BIN-1174" -- firestore.rules src/contexts/AuthContext.tsx src/lib/firebase/friends.ts
+```
+
+**Vad som accepteras, två saker:**
+
+1. **Gruppinbjudningar.** `users/{target}/groupInvites/{groupId}` behåller namnet från
+   utskicket tills mottagaren svarar. Regeln står kvar som `allow update: if false`.
+   Inbjudningar är kortlivade och bär avsändarens eget namn, ingen annans data.
+2. **Över taket.** Läsningen av egna `friendRequestsSent` är begränsad av
+   `SENT_REQUESTS_IDENTITY_LIMIT` i `src/lib/firebase/friends.ts`. Förfrågningar utöver
+   taket behåller det gamla namnet tills de besvaras.
+
+**Vad som INTE är accepterat, alltså fortfarande fileable:**
+1. Att update-grenen på `friendRequests` släpper igenom null eller `deleteField()` på
+   namnfälten, eller andra nycklar än de två.
+2. Att hjälparen skriver med `set`/merge, så att en besvarad förfrågan återskapas.
+3. Att rapporten `identityFanOut-friendRequest` tas bort.
+
+**Re-open when:** `kind: 'identityFanOut-friendRequest'` återkommer i Sentry-scopet `auth`,
+eller en användare rapporterar ett gammalt namn på en gruppinbjudan.

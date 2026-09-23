@@ -65,6 +65,37 @@ export async function sendFriendRequest(
   await batch.commit();
 }
 
+// BIN-1174: tak på hur många av mina obesvarade förfrågningar ett namnbyte skriver om.
+// Över taket behåller resten det gamla namnet tills mottagaren svarar — den resten är
+// en daterad post i `.claude/rules/accepted-deviations.md`.
+export const SENT_REQUESTS_IDENTITY_LIMIT = 50;
+
+// BIN-1174: skriver om mitt namn på förfrågningar jag skickat och som ingen svarat på.
+// Körs av `publishIdentityChange` i AuthContext, efter att namnet sparats.
+//
+// `updateDoc`, aldrig set/merge: en förfrågan mottagaren redan besvarat är raderad, och
+// en merge hade återskapat den med nytt namn. Varje misslyckad skrivning returneras så
+// anroparen kan rapportera den; ingenting kastas och ingenting sväljs.
+export async function updateSentFriendRequestIdentity(
+  myUid: string,
+  identity: { displayName: string; username: string | null },
+): Promise<unknown[]> {
+  const { db, collection, doc, getDocs, query, limit, updateDoc } = await fsdb();
+  const sent = await getDocs(query(collection(db, 'users', myUid, 'friendRequestsSent'), limit(SENT_REQUESTS_IDENTITY_LIMIT)));
+  const failures: unknown[] = [];
+  await Promise.all(sent.docs.map(async (d) => {
+    try {
+      await updateDoc(doc(db, 'users', d.id, 'friendRequests', myUid), {
+        fromDisplayName: identity.displayName,
+        fromUsername: identity.username,
+      });
+    } catch (err) {
+      failures.push(err);
+    }
+  }));
+  return failures;
+}
+
 // Avbryt egen utgående förfrågan (innan den accepteras).
 export async function cancelFriendRequest(myUid: string, toUid: string): Promise<void> {
   const { db, doc, writeBatch } = await fsdb();

@@ -239,6 +239,14 @@ vi.mock('@/lib/firebase/groupHandover', () => ({
 const groupsIdentity = vi.hoisted(() => ({
   updateMemberIdentity: vi.fn(async () => {}),
 }));
+// BIN-1174: the friend-request half of the rename fan-out. Its own logic is tested in
+// friends.test.ts; here only the call site — when it runs, with what, and what it reports.
+const friendsIdentity = vi.hoisted(() => ({
+  updateSentFriendRequestIdentity: vi.fn(async (): Promise<unknown[]> => []),
+}));
+vi.mock('@/lib/firebase/friends', () => ({
+  updateSentFriendRequestIdentity: friendsIdentity.updateSentFriendRequestIdentity,
+}));
 vi.mock('@/lib/firebase/groups', () => ({
   updateMemberProviders: vi.fn(async () => {}),
   updateMemberIdentity: groupsIdentity.updateMemberIdentity,
@@ -368,6 +376,8 @@ beforeEach(() => {
   FakeBroadcastChannel.open = [];
   (window as unknown as { BroadcastChannel: unknown }).BroadcastChannel = FakeBroadcastChannel;
   groupsIdentity.updateMemberIdentity.mockClear();
+  friendsIdentity.updateSentFriendRequestIdentity.mockReset();
+  friendsIdentity.updateSentFriendRequestIdentity.mockImplementation(async () => []);
   reconsentFlagRenders.length = 0;
   // BIN-909: default every test to a brand-new account, so only the tests that
   // deliberately age it reach the gate.
@@ -1172,6 +1182,61 @@ describe('AuthContext — ett namnbyte når andra flikar och gruppmedlemsraderna
     expect(captureErrorMock).toHaveBeenCalledWith(
       expect.any(Error),
       expect.objectContaining({ scope: 'auth', kind: 'identityFanOut-group' }),
+    );
+    errSpy.mockRestore();
+  });
+
+  it('ett namnbyte skriver om namnet på skickade vänförfrågningar, med båda fälten (BIN-1174)', async () => {
+    renderAuth();
+    await login({ displayName: 'Malin', username: 'malin' });
+
+    await act(async () => { await ctx!.updateDisplayName('Malin G'); });
+
+    expect(friendsIdentity.updateSentFriendRequestIdentity).toHaveBeenCalledTimes(1);
+    expect(friendsIdentity.updateSentFriendRequestIdentity).toHaveBeenCalledWith('u1', { displayName: 'Malin G', username: 'malin' });
+  });
+
+  it('en fallerad namnskrivning når ingen vänförfrågan (BIN-1174)', async () => {
+    renderAuth();
+    await login({ displayName: 'Malin', username: 'malin' });
+    setDoc.mockImplementationOnce(async () => { throw new Error('write-refused'); });
+
+    await act(async () => {
+      await expect(ctx!.updateDisplayName('Malin G')).rejects.toThrow('write-refused');
+    });
+
+    expect(friendsIdentity.updateSentFriendRequestIdentity).not.toHaveBeenCalled();
+  });
+
+  it('en vänförfrågan som behöll det gamla namnet rapporteras men fäller inte namnbytet (BIN-1174)', async () => {
+    const denied = Object.assign(new Error('denied'), { code: 'permission-denied' });
+    friendsIdentity.updateSentFriendRequestIdentity.mockImplementationOnce(async () => [denied]);
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    renderAuth();
+    await login({ displayName: 'Malin', username: 'malin' });
+
+    await act(async () => { await ctx!.updateDisplayName('Malin G'); });
+
+    expect(ctx!.user!.displayName).toBe('Malin G');
+    expect(captureErrorMock).toHaveBeenCalledWith(
+      denied,
+      expect.objectContaining({ scope: 'auth', kind: 'identityFanOut-friendRequest' }),
+    );
+    errSpy.mockRestore();
+  });
+
+  it('en kastande läsning av skickade förfrågningar rapporteras men fäller inte namnbytet (BIN-1174)', async () => {
+    friendsIdentity.updateSentFriendRequestIdentity.mockImplementationOnce(async () => { throw new Error('offline'); });
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    renderAuth();
+    await login({ displayName: 'Malin', username: 'malin' });
+
+    await act(async () => { await ctx!.updateDisplayName('Malin G'); });
+
+    expect(ctx!.user!.displayName).toBe('Malin G');
+    expect(captureErrorMock).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'offline' }),
+      expect.objectContaining({ scope: 'auth', kind: 'identityFanOut-friendRequest' }),
     );
     errSpy.mockRestore();
   });
