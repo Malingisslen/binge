@@ -23,7 +23,7 @@ export function HandOverGroupDialog({
 }: {
   groupId: string;
   groupName: string;
-  /** Alla utom ägaren. Anroparen filtrerar; den här listan renderas rakt av. */
+  /** Anroparen filtrerar; den här listan renderas rakt av. */
   candidates: GroupMember[];
   onDone: () => void;
   onCancel: () => void;

@@ -45,7 +45,7 @@ export function GroupSettingsModal({
   const [handingOver, setHandingOver] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // Everyone but the owner. An owner alone in their group has nobody to pick, so
+  // An owner alone in their group has nobody to pick, so
   // the button is disabled rather than opening a dialog with an empty list —
   // "Radera grupp" is the honest action there, and it is right next to it.
   //
