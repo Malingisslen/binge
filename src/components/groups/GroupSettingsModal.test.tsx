@@ -30,13 +30,17 @@ const member = (uid: string, displayName: string): GroupMember => ({
 
 const DEFAULTS = { providerMode: 'all', aggregation: 'union', mediaType: 'both' } as never;
 
-function renderModal(members: GroupMember[], onClose = vi.fn(), onHandedOver = vi.fn()) {
+function renderModal(
+  members: GroupMember[], onClose = vi.fn(), onHandedOver = vi.fn(),
+  memberUids: string[] = members.map(m => m.uid),
+) {
   render(
     <GroupSettingsModal
       groupId="g1"
       name="Fredagsmys"
       defaults={DEFAULTS}
       members={members}
+      memberUids={memberUids}
       myUid="me"
       onClose={onClose}
       onDelete={vi.fn()}
@@ -60,6 +64,21 @@ describe('GroupSettingsModal — överlämningen (BIN-1118)', () => {
     expect(dialog.textContent).toContain('Jonas');
     expect(dialog.textContent).toContain('Sara');
     expect(dialog.textContent).not.toContain('Malin');
+  });
+
+  // BIN-1269. En strandad medlemsrad (raden finns, uid:t står inte längre i
+  // gruppens memberUids) erbjöds förut och nekades sedan av servern.
+  it('erbjuder inte en medlemsrad vars uid saknas i gruppens memberUids', () => {
+    renderModal([ME, JONAS, SARA], vi.fn(), vi.fn(), ['me', 'jonas']);
+    fireEvent.click(screen.getByText('Lämna över'));
+    const dialog = screen.getByRole('dialog', { name: /tar över gruppen/ });
+    expect(dialog.textContent).toContain('Jonas');
+    expect(dialog.textContent).not.toContain('Sara');
+  });
+
+  it('stänger av knappen när den enda andra raden är strandad', () => {
+    renderModal([ME, SARA], vi.fn(), vi.fn(), ['me']);
+    expect(screen.getByText('Lämna över').closest('button')).toBeDisabled();
   });
 
   // En ägare ensam i sin grupp har ingen att peka ut. Knappen ska vara avstängd

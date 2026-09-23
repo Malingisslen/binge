@@ -39,6 +39,7 @@ function renderModal(onClose = vi.fn()) {
       name="Fredagsmys"
       defaults={DEFAULTS}
       members={[member('me', 'Malin'), member('jonas', 'Jonas')]}
+      memberUids={['me', 'jonas']}
       myUid="me"
       onClose={onClose}
       onDelete={vi.fn()}

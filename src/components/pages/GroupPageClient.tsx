@@ -429,6 +429,7 @@ function GroupView({
           name={group.name}
           defaults={group.defaults}
           members={members}
+          memberUids={group.memberUids}
           myUid={myUid}
           onClose={() => setShowSettings(false)}
           onHandedOver={() => router.push('/grupper')}

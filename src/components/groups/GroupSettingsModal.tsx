@@ -22,13 +22,15 @@ import type {
  * Escape eller backdrop-klick.
  */
 export function GroupSettingsModal({
-  groupId, name, defaults, members, myUid, onClose, onDelete, onHandedOver,
+  groupId, name, defaults, members, memberUids, myUid, onClose, onDelete, onHandedOver,
 }: {
   groupId: string;
   name: string;
   defaults: GroupDefaults;
   /** Everyone in the group, the owner included — the dialog filters themselves out. */
   members: GroupMember[];
+  /** The group document's `memberUids` — the ballot the server validates the pick against. */
+  memberUids: string[];
   myUid: string;
   onClose: () => void;
   onDelete: () => void;
@@ -46,7 +48,11 @@ export function GroupSettingsModal({
   // Everyone but the owner. An owner alone in their group has nobody to pick, so
   // the button is disabled rather than opening a dialog with an empty list —
   // "Radera grupp" is the honest action there, and it is right next to it.
-  const handoverCandidates = members.filter(m => m.uid !== myUid);
+  //
+  // BIN-1269, Malins beslut 2026-09-23: bara rader vars uid ocksa star i gruppens
+  // `memberUids`. Servern validerar valet mot den listan, sa en kvarliggande
+  // medlemsrad utan medlemskap hade erbjudits och sedan nekats efter klicket.
+  const handoverCandidates = members.filter(m => m.uid !== myUid && memberUids.includes(m.uid));
 
   // Stäng på Escape (tangentbord-a11y; klick-on-backdrop täcker mus).
   // ConfirmDialog stoppar Escape-propagering själv, men gate:a ändå så
