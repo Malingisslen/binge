@@ -439,9 +439,11 @@ Det är en spöke-medlem: kontots uid står i gruppens medlemslista men medlemsr
 Beslutet att inte bygga en egen reparation står i posten `## BIN-1097` i
 `.claude/rules/accepted-deviations.md`.
 
-1. Medlemmen öppnar gruppen, väljer menyn och "Lämna gruppen".
+1. Medlemmen öppnar gruppen, väljer menyn och "Lämna gruppen". Säg till medlemmen först:
+   utträdet raderar också hens tittarprogress i gruppen och "tillagd av" på titlar hen lagt
+   till (BIN-1260). Titlarna står kvar.
 2. Medlemmen går med igen via inbjudningslänken eller en ny inbjudan från ägaren.
-   Medlemsraden skrivs då på nytt.
+   Medlemsraden skrivs då på nytt. Den raderade progressen kommer inte tillbaka.
 
 Ägaren kan inte ta bort spöket i appen: medlemslistan byggs av medlemsraderna, så spöket har
 ingen rad där (`grep -n -A6 "export function subscribeToGroupMembers" src/lib/firebase/groups.ts`).

@@ -2244,3 +2244,39 @@ ligger bortom observationsgolvet — spåren står kvar tills golvet passerats.
 
 **Re-open when:** någon av punkterna ovan inträffar, eller en rapport visar ett konsolraderat
 uid kvar i en grupps `memberUids` efter en körning som passerat observationsgolvet.
+
+---
+
+## BIN-1297: `handOverOwnedGroups` utanför en radering tar bort anroparens medlemsrader — 2026-09-24
+
+Efterföljare till `## BIN-1260`, som står kvar ordagrant och bara motiverar räckvidden för
+överlämningen. Fila inte "den anropbara kan anropas utan att kontot raderas".
+
+**Läget.** `handOverOwnedGroups` är självanropad och nåbar för varje inloggad. Efter
+överlämningen kör den `runMemberGroupErasure`, som raderar anroparens egen `members/{uid}`,
+hushållsbidrag och spår i grupper hen bara är medlem i, men lämnar uid:t i `memberUids`
+(raderaknappens klientkaskad tar det därefter). Anropas den UTAN att kontot raderas blir
+anroparen en spöke-medlem i de grupperna — tillståndet i `## BIN-1097`. Härled stegen:
+
+```
+git grep -n "runMemberGroupErasure(" -- functions/src/groupHandover/index.ts
+```
+
+**Accepterat:** att det läget kan uppstå. Det drabbar anroparen själv, ingen annans data rörs,
+och lagningen är densamma som för varje spöke: lämna gruppen och gå med igen (RUNBOOK §5h).
+Härled var appen anropar funktionen:
+
+```
+git grep -n "handOverOwnedGroups(" -- src
+```
+
+**Why:** att grinda steget på att en radering pågår kräver en markör servern kan lita på, och
+raderingsmarkören ligger medvetet i webbläsarens lokala lagring (ADR 0019). Kostnaden för att bygga en
+står inte i proportion till ett självförvållat läge med en känd lagning.
+
+**INTE accepterat, alltså fortfarande fileable:**
+1. Att steget rör någon ANNANS medlemsrad.
+2. Att appen börjar anropa funktionen från något annat ställe än raderingen.
+
+**Re-open when:** någon av punkterna ovan inträffar, eller en rapport om en spöke-medlem som
+inte raderat sitt konto.

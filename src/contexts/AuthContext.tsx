@@ -1459,9 +1459,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // grupp andra fortfarande är med i, och en avbruten radering som går att
     // göra om är det bättre utfallet.
     // A failure that already WROTE must not fall through to the message promising
-    // nothing was deleted. The server marks its refusal when it attempted a write;
-    // ownership has moved, the uid has left `memberUids` and rows are gone, and
-    // getting back in needs a fresh invite. Same class as BIN-876, one layer up.
+    // nothing was deleted. The server marks its refusal when it attempted a write.
+    // Same class as BIN-876, one layer up.
     try {
       await handOverOwnedGroups();
     } catch (err) {
