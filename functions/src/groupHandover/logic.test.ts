@@ -418,6 +418,16 @@ describe('refusalForHandover — the caller must not fall through', () => {
   // point cannot be imported here (firebase-admin does not resolve under the root
   // runner). Anchor the whole block through its throw as ONE regex: an anchor on
   // the condition alone stays green while the body is deleted.
+  // BIN-1304: a throw from the handover itself (the owned-groups query) goes through
+  // the same "was anything written?" rule, with the invitations counted.
+  it('a throw from the handover carries the partial marker once invitations were erased', () => {
+    expect(ENTRY).toMatch(
+      /try \{\s*summary = await runGroupHandover\(io, uid\);\s*\} catch \(err\) \{[\s\S]*?throw new HttpsError\('internal', refusalAfterHandover\(invites\.found > 0\)\);\s*\}/,
+    );
+    expect(refusalAfterHandover(true)).toContain(HANDOVER_PARTIAL);
+    expect(refusalAfterHandover(false)).not.toContain(HANDOVER_PARTIAL);
+  });
+
   it('is wired into the callable, throw and all', () => {
     expect(ENTRY).toMatch(
       /const refusal = refusalForHandover\(summary, invites\.found > 0\);\s*if \(refusal\) \{\s*throw new HttpsError\('internal', refusal\);/,

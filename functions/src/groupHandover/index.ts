@@ -74,7 +74,16 @@ export const handOverOwnedGroups = onCall(
       throw new HttpsError('internal', err instanceof Error ? err.message : String(err));
     }
 
-    const summary = await runGroupHandover(io, uid);
+    // BIN-1304: the owned-groups query runs outside the loop's per-group catch, so a
+    // throw there skips `refusalForHandover`. By then the invitations may be gone,
+    // and the client must not be told that nothing was deleted.
+    let summary: Awaited<ReturnType<typeof runGroupHandover>>;
+    try {
+      summary = await runGroupHandover(io, uid);
+    } catch (err) {
+      logger.error('handOverOwnedGroups: handover threw', { err });
+      throw new HttpsError('internal', refusalAfterHandover(invites.found > 0));
+    }
 
     // A per-group failure is counted rather than thrown, so the rest of the
     // groups still get handed over. But the CALLER must not fall through: its
