@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, within } from '@testing-library/react';
 import { GroupMembersPanel } from './GroupMembersPanel';
 import type { GroupMember } from '@/types';
 
@@ -78,5 +78,29 @@ describe('GroupMembersPanel — användarnamnet skiljer två likadana namn åt (
     // testas här är bara att frånvaron renderas rent, inte som "@ ·".
     expect(container.textContent).not.toContain('@');
     expect(screen.getByText('Anna')).toBeTruthy();
+  });
+});
+
+// BIN-1302: bekräftelsen "Ta bort" måste nå `removeMemberAsOwner` med rätt grupp och
+// uid — det är den som också ber servern radera medlemmens spår (BIN-1296).
+describe('GroupMembersPanel — ägaren tar bort en medlem (BIN-1302)', () => {
+  it('bekräftelsen anropar removeMemberAsOwner med gruppen och medlemmens uid', async () => {
+    const { removeMemberAsOwner } = await import('@/lib/firebase/groups');
+    cleanup();
+    render(
+      <GroupMembersPanel
+        groupId="g1"
+        groupName="Filmklubben"
+        members={[member({ uid: 'owner', displayName: 'Malin' }), member({ uid: 'jonas', displayName: 'Jonas' })]}
+        ownerUid="owner"
+        myUid="owner"
+        isOwner
+      />,
+    );
+
+    fireEvent.click(screen.getByTitle('Ta bort'));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Ta bort' }));
+
+    expect(removeMemberAsOwner).toHaveBeenCalledWith('g1', 'jonas');
   });
 });

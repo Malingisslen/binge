@@ -106,6 +106,13 @@ const REPO = resolve(HERE, '..');
 // BIN-1291, 2026-09-23: raised to what `numTotalTests` reported with the group-id
 // denial, its control, and the availableNotify group-row case in place. Measured with
 // `npm run test:rules -- --port 8123`, not counted by hand.
+// BIN-1174, 2026-09-23: raised to what `numTotalTests` reported with the sender-rename
+// cases in place, in the describe block named `(BIN-1174)`. Measured with
+// `npm run test:rules -- --port 8123`, not counted by hand.
+// BIN-1296, 2026-09-23: raised to what `numTotalTests` reported with the owner-removal
+// erasure cases in place, in the describe block named `(BIN-1296)`. Measured the same way.
+// BIN-1294, 2026-09-23: raised to what `numTotalTests` reported with the sweep's
+// member-group cases in place. Measured the same way.
 export const MIN_TESTS = 784;
 
 const VITEST_ARGS = ['run', '--config', 'vitest.rules.config.ts'];
