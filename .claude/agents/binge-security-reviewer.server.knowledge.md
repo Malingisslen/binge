@@ -110,7 +110,8 @@ Read only when the staged diff touches this chapter's paths (see .claude/shared-
   ATTEMPTED counter (BIN-848).
 - **collectionGroup matches by LEAF collection id regardless of parent path** — grep other writers/readers of
   that leaf name before trusting one (`collectionGroup('watchlist')` also matches `groups/{id}/watchlist/{id}`,
-  safe only because those docs lack `status`). uid comes from the doc PATH (`d.ref.parent.parent?.id`), never
-  client content.
+  and any group member can write any field there — every reader must drop non-user rows with
+  `onlyUserWatchlistDocs`/`isUserWatchlistDocPath` from `functions/src/shared/watchlistPath.ts`, BIN-1291).
+  uid comes from the doc PATH (`d.ref.parent.parent?.id`), never client content.
 - Bare-tmdbId keying collides movie and TV — grouping keys, state doc ids, FCM `tag`s, inbox ids and action
   URLs all need `mediaTypeDocId`; fixing one means grepping every other collection on that bare id (BIN-523).

@@ -177,12 +177,6 @@ export interface NotifySummary {
 export const skipKey = (uid: string, mediaType: string, tmdbId: number): string =>
   `${uid}:${mediaType}:${tmdbId}`;
 
-/** The uid that owns `users/{uid}/watchlist/{docId}`, or '' if the path is not that shape. */
-function uidFromWatchlistPath(path: string): string {
-  const parts = path.split('/');
-  return parts.length >= 4 && parts[0] === 'users' ? parts[1] : '';
-}
-
 /** The document id of any Firestore path. */
 function docIdFromPath(path: string): string {
   const parts = path.split('/');
@@ -213,7 +207,8 @@ async function readWatchlistTitles(io: NotifyIo): Promise<WatchlistTitleLite[]> 
       if (!isUserWatchlistDocPath(d.path)) continue;
       const x = d.data;
       out.push({
-        uid: uidFromWatchlistPath(d.path),
+        // BIN-1299: the guard above is the one shape check; after it, segment 1 IS the uid.
+        uid: d.path.split('/')[1],
         tmdbId: resolveTmdbId(x.tmdbId as number | string | null | undefined, docIdFromPath(d.path)),
         mediaType: String(x.mediaType ?? ''),
         status: String(x.status ?? ''),

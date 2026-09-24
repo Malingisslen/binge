@@ -11505,3 +11505,12 @@ real list larger than the cap. The integration reviewer caught it on BIN-1207 (n
 BIN-1228, fixed in 342dfda5 with `beforeItemCount` (`is list ? size() : 0`) and emulator tests.
 In the benchmark this reviewer surfaced it 1 of 3 runs with the pre-split knowledge and 0 of 3 after:
 the nearest existing bullet covers the equality type-error brick, not `.size()` succeeding on the wrong type.
+
+### 2026-09-24 — server card: the collectionGroup('watchlist') clause replaced (BIN-1299)
+
+Replaced in place in `binge-security-reviewer.server.knowledge.md`. The old clause said group rows matched by
+`collectionGroup('watchlist')` were "safe only because those docs lack `status`". BIN-1291 showed a group member
+can write any field on `groups/{id}/watchlist/{id}`, including `status`, so the premise was false; every reader
+now filters rows through the shared path guard. The retired wording, verbatim:
+
+  safe only because those docs lack `status`).
