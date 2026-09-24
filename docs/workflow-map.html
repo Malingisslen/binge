@@ -2823,7 +2823,7 @@
         {
           "from": "cf-handOverOwnedGroups",
           "to": "firestore",
-          "payload": "query groups where ownerUid == uid; per group read members (joinedAt), watchlist and sessionHistory. The ballot is the group doc's memberUids and the member rows only supply joinedAt: a row can outlive the membership it stands for, and electing from the rows would hand the group to someone firestore.rules no longer counts as a member",
+          "payload": "query groups where ownerUid == uid; per group read members (joinedAt), watchlist and sessionHistory. The ballot is the group doc's memberUids and the member rows only supply joinedAt: a row can outlive the membership it stands for, and electing from the rows would hand the group to someone firestore.rules no longer counts as a member BIN-1304: the owned-groups query runs outside the per-group catch; a throw there is caught in handOverOwnedGroups and becomes refusalAfterHandover(invites.found > 0), partial once invitations were erased.",
           "transport": "firestore-query",
           "verified": true
         },
