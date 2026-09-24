@@ -406,13 +406,21 @@ describe('refusalForHandover — the caller must not fall through', () => {
     expect(untouched).not.toContain(HANDOVER_PARTIAL);
   });
 
+  // BIN-1295: the sent invitations are erased before the handover, so a refusal
+  // with no group written is still partial once they are gone.
+  it('marks the refusal partial when sent invitations were erased first', () => {
+    expect(refusalForHandover({ failed: 1, attempted: 0 }, true)).toContain(HANDOVER_PARTIAL);
+    expect(refusalForHandover({ failed: 1, attempted: 0 }, false)).not.toContain(HANDOVER_PARTIAL);
+    expect(refusalForHandover({ failed: 0, attempted: 0 }, true)).toBeNull();
+  });
+
   // "The guard exists" and "the guard runs" are different claims, and the entry
   // point cannot be imported here (firebase-admin does not resolve under the root
   // runner). Anchor the whole block through its throw as ONE regex: an anchor on
   // the condition alone stays green while the body is deleted.
   it('is wired into the callable, throw and all', () => {
     expect(ENTRY).toMatch(
-      /const refusal = refusalForHandover\(summary\);\s*if \(refusal\) \{\s*throw new HttpsError\('internal', refusal\);/,
+      /const refusal = refusalForHandover\(summary, invites\.found > 0\);\s*if \(refusal\) \{\s*throw new HttpsError\('internal', refusal\);/,
     );
   });
 

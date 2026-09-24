@@ -371,9 +371,14 @@ export const HANDOVER_PARTIAL = 'binge/handover-partial';
  */
 export function refusalForHandover(
   summary: { readonly failed: number; readonly attempted: number },
+  /**
+   * BIN-1295: the sent invitations the same call erased BEFORE the handover.
+   * Once they are gone, a refusal is not "nothing has been deleted" either.
+   */
+  invitesErased = false,
 ): string | null {
   if (summary.failed === 0) return null;
-  if (summary.attempted > 0) {
+  if (summary.attempted > 0 || invitesErased) {
     return `${HANDOVER_PARTIAL}: Kunde inte lämna över alla grupper, och en del ändringar hann göras. Försök igen.`;
   }
   return 'Kunde inte lämna över alla grupper. Försök igen.';

@@ -81,7 +81,7 @@ export const handOverOwnedGroups = onCall(
     // next step deletes what it still owns, and a group that failed here is a
     // group other people are still in. The predicate lives in `logic.ts` so a
     // test can call it.
-    const refusal = refusalForHandover(summary);
+    const refusal = refusalForHandover(summary, invites.found > 0);
     if (refusal) {
       throw new HttpsError('internal', refusal);
     }
