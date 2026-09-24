@@ -232,6 +232,22 @@ describe('initSentry — the lazy-load contract global-error.tsx depends on', ()
     expect(click.message).toBeUndefined();
   });
 
+  // BIN-1300: the SDK's message for a path with the wrong number of segments.
+  it('scrubs the path in an odd-segment reference message', async () => {
+    const { scrubFirestorePaths } = await loadSentry('');
+    expect(scrubFirestorePaths(
+      'Invalid document reference. Document references must have an even number of segments, but users/uid-7/watchlist has 3.',
+    )).toBe(
+      'Invalid document reference. Document references must have an even number of segments, but users/:id/watchlist has 3.',
+    );
+  });
+
+  // BIN-1300: a closing parenthesis after the path is not part of it.
+  it('stops a documents/ path at a closing parenthesis', async () => {
+    const { scrubFirestorePaths } = await loadSentry('');
+    expect(scrubFirestorePaths('(at documents/users/uid-1/watchlist/movie_1)')).toBe('(at documents/users/:id/watchlist/:id)');
+  });
+
   it('leaves the create pages and ordinary routes as they are', async () => {
     const { scrubUrlPath } = await loadSentry('');
     expect(scrubUrlPath('/tillsammans/ny/')).toBe('/tillsammans/ny/');

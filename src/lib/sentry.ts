@@ -41,8 +41,8 @@ const SCRUBBED_SEGMENTS: Record<string, string> = {
 };
 
 /** A Firestore document path in an error text, reduced to its collection names. */
-// Two shapes occur: the full resource name (`.../documents/users/<uid>/...`) and
-// the SDK's validation message (`... in document users/<uid>/...)`).
+// The full resource name (`.../documents/users/<uid>/...`), the SDK's validation
+// message (`... in document users/<uid>/...)`), and its odd-segment message below.
 export function scrubFirestorePaths(text: string): string {
   const ids = (path: string, skip: number) =>
     path
@@ -51,7 +51,9 @@ export function scrubFirestorePaths(text: string): string {
       .join('/');
   return text
     .replace(/documents\/[^\s"'`)]+/g, (path) => ids(path, 1))
-    .replace(/(in document )([^\s"'`)]+)/g, (_m, lead: string, path: string) => lead + ids(path, 0));
+    .replace(/(in document )([^\s"'`)]+)/g, (_m, lead: string, path: string) => lead + ids(path, 0))
+    // BIN-1300: the SDK's odd-segment message, "... but users/<uid>/watchlist has 3 ...".
+    .replace(/(but )([^\s"'`)]+\/[^\s"'`)]+)( has )/g, (_m, lead: string, path: string, tail: string) => lead + ids(path, 0) + tail);
 }
 
 export function scrubUrlPath(raw: string): string {
