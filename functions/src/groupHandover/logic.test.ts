@@ -564,9 +564,7 @@ describe('the erasure covers every uid-bearing field the group contracts pin', (
   const ERASURE_EXPRESSION: Record<string, string> = {
     pickedByUid: 'clearsAddedBy(row.pickedByUid, leavingUid)',
     participantUids: 'row.participantUids.includes(leavingUid)',
-    // Declared rather than derived. The scan reads `hasOnly` field contracts, and
-    // `groups/{gid}/watchlist/{tmdbId}` has none — its create is membership-only —
-    // so that collection is outside the scan's reach entirely, not merely its key.
+    // Declared rather than derived.
     addedBy: 'clearsAddedBy(row.addedBy, leavingUid)',
   };
 

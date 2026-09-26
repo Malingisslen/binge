@@ -2047,7 +2047,53 @@ service cloud.firestore {
         allow read: if isSignedIn()
           && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids;
 
-        allow create, update, delete: if isSignedIn()
+        // BIN-1298: the row's shape is bound to what the app writes —
+        // addToGroupWatchlist (create, or a merge re-add), setMemberRating (one
+        // member's own rating) and removeFromGroupWatchlist. Every member reads
+        // these rows, so a member can no longer store arbitrary fields on them.
+        function isGroupTitleShape(d) {
+          return d.title is string && d.title.size() >= 1 && d.title.size() <= 200
+            && (d.posterPath == null
+              || (d.posterPath is string && d.posterPath.size() >= 1 && d.posterPath.size() <= 300))
+            && (d.releaseYear == null || d.releaseYear is int)
+            && d.addedBy == request.auth.uid
+            && d.addedAt == request.time;
+        }
+
+        allow create: if isSignedIn()
+          && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids
+          && request.resource.data.keys().hasOnly([
+            'tmdbId', 'mediaType', 'title', 'posterPath', 'releaseYear', 'addedBy', 'addedAt'
+          ])
+          && request.resource.data.tmdbId is int
+          && request.resource.data.tmdbId > 0
+          && request.resource.data.mediaType in ['movie', 'tv']
+          // The id is the one mediaTypeDocId() builds; with tmdbId a positive int it
+          // cannot carry a leading zero or any other alias spelling.
+          && tmdbId == request.resource.data.mediaType + '_' + string(request.resource.data.tmdbId)
+          && isGroupTitleShape(request.resource.data);
+
+        // Two update shapes: a re-add (the merge write, which restamps who added
+        // the title and when) or a rating, where only the caller's own key in
+        // memberRatings changes.
+        allow update: if isSignedIn()
+          && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids
+          && (
+            (request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['title', 'posterPath', 'releaseYear', 'addedBy', 'addedAt'])
+              && isGroupTitleShape(request.resource.data))
+            || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberRatings'])
+              && request.resource.data.get('memberRatings', {}) is map
+              && request.resource.data.get('memberRatings', {})
+                  .diff(resource.data.get('memberRatings', {})).affectedKeys()
+                  .hasOnly([request.auth.uid])
+              && (!(request.auth.uid in request.resource.data.get('memberRatings', {}))
+                || (request.resource.data.memberRatings[request.auth.uid] is int
+                  && request.resource.data.memberRatings[request.auth.uid] >= 1
+                  && request.resource.data.memberRatings[request.auth.uid] <= 10)))
+          );
+
+        allow delete: if isSignedIn()
           && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids;
 
         // Per-medlem progress på en titel i gruppen. Möjliggör spoiler-skydd

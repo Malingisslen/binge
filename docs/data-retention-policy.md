@@ -219,6 +219,10 @@ mig. Titlarna och historikraderna blir kvar i gruppen.
 
 Steget är bäst-möjligt: faller det står utträdet ändå, och felet rapporteras.
 
+Mitt betyg på gruppens titlar (`watchlist.memberRatings.<uid>`) rensas inte av
+något av stegen i dag — `git grep -n "memberRatings" -- functions/src` ger ingen
+träff. Malins beslut 2026-09-26 är att det ska rensas; arbetet är BIN-1306.
+
 ### Hushålls-bidrag (delade prenumerationskostnader) → Samtyckesbaserad, självstyrd radering (BIN-184, 2026-07-05)
 
 `groups/{gid}/household/{uid}` — en OPT-IN "Hushåll"-yta i grupper. Varje
@@ -906,6 +910,10 @@ Policy ska omvärderas om:
 - **Moderation-runbook** (`docs/moderation.md`).
 
 ## Ändringslogg
+
+- **2026-09-26 (BIN-1298)** — Malins beslut (runda 3, A): gruppens titelrader
+  (`groups/{gid}/watchlist/{id}`) tar bara emot de fält appen skriver. En medlem kan
+  inte längre lagra godtyckliga fält där, och bara sätta eller ta bort sitt eget betyg.
 
 - **2026-09-26 (BIN-1301)** — Malins beslut (runda 3, A): en Tillsammans-session
   raderas av det första dagliga svepet efter att den blivit 7 dagar gammal, räknat på

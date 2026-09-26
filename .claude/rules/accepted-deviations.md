@@ -2280,3 +2280,21 @@ står inte i proportion till ett självförvållat läge med en känd lagning.
 
 **Re-open when:** någon av punkterna ovan inträffar, eller en rapport om en spöke-medlem som
 inte raderat sitt konto.
+
+---
+
+## BIN-1298: gruppens titelrader har en fältspärr — 2026-09-26
+
+Efterföljare till `## BIN-624` ovan, som står kvar ordagrant. Dess mening om att varje
+gruppmedlem kan skapa ett dokument i `groups/{gid}/watchlist` "med vilket id och vilka fält
+som helst" beskriver inte längre reglerna. Malins beslut 2026-09-26 (runda 3, A). Härled
+spärren:
+
+```
+git grep -n "isGroupTitleShape" -- firestore.rules
+```
+
+Rader som skrevs före spärren står kvar som de är. Uppdateringsgrenarna prövar bara de nycklar
+en skrivning ändrar, så en sådan rad går fortfarande att betygsätta och lägga till igen.
+
+**Re-open when:** en ny skrivare av gruppens titelrader läggs till i appen.

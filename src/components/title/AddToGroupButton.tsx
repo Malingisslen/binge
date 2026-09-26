@@ -10,6 +10,7 @@ import {
   hasInGroupWatchlist,
   removeFromGroupWatchlist,
 } from '@/lib/firebase/groups';
+import { captureError } from '@/lib/sentry';
 import type { MediaType } from '@/types';
 
 interface Props {
@@ -28,6 +29,9 @@ export default function AddToGroupButton({
   const [open, setOpen] = useState(false);
   const [presence, setPresence] = useState<Record<string, boolean>>({});
   const [working, setWorking] = useState<string | null>(null);
+  // BIN-1298: the group watchlist rule refuses a write it does not recognise, so a
+  // failed toggle has to say so instead of leaving the row looking unchanged.
+  const [failed, setFailed] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
   useClickOutside(ref, close);
@@ -69,6 +73,7 @@ export default function AddToGroupButton({
                 disabled={busy}
                 onClick={async () => {
                   setWorking(g.id);
+                  setFailed(null);
                   try {
                     if (isIn) {
                       await removeFromGroupWatchlist(mediaType, g.id, tmdbId);
@@ -79,6 +84,10 @@ export default function AddToGroupButton({
                       });
                       setPresence(p => ({ ...p, [g.id]: true }));
                     }
+                  } catch (err) {
+                    console.error('AddToGroupButton: group watchlist write failed', err);
+                    captureError(err, { scope: 'groups', kind: isIn ? 'groupWatchlist-remove' : 'groupWatchlist-add' });
+                    setFailed(g.id);
                   } finally {
                     setWorking(null);
                   }
@@ -89,6 +98,9 @@ export default function AddToGroupButton({
                   {isIn ? <Check size={11} /> : null}
                 </span>
                 <span className="truncate text-ink">{g.name}</span>
+                {failed === g.id && (
+                  <span role="alert" className="ml-auto shrink-0 text-danger-ink">Gick inte</span>
+                )}
               </button>
             );
           })}

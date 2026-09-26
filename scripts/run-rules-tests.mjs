@@ -115,7 +115,10 @@ const REPO = resolve(HERE, '..');
 // member-group cases in place. Measured the same way.
 // BIN-1301, 2026-09-26: raised to what `numTotalTests` reported with the session
 // lifetime cases in place, in the describe block named `(BIN-1301)`. Measured the same way.
-export const MIN_TESTS = 790;
+// BIN-1298, 2026-09-26: raised to what `numTotalTests` reported with the group
+// watchlist field-lock cases in place, in the describe block named `(BIN-1298)`.
+// Measured the same way.
+export const MIN_TESTS = 830;
 
 const VITEST_ARGS = ['run', '--config', 'vitest.rules.config.ts'];
 

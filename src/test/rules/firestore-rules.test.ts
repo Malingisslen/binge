@@ -3516,6 +3516,184 @@ describe('groups/{id} growth branches pin ownerUid/name/defaults (BIN-1135)', ()
 });
 
 
+// BIN-1298 — the group watchlist row's shape. The write shapes below mirror the app's
+// three writers in src/lib/firebase/groups.ts; derive them rather than trusting this:
+//   git grep -n -A 20 "export async function addToGroupWatchlist" -- src/lib/firebase/groups.ts
+//   git grep -n -A 12 "export async function setMemberRating" -- src/lib/firebase/groups.ts
+// Every denial writes as a member with an otherwise valid payload, so only the clause
+// the test names can be what denies.
+describe('groups/{id}/watchlist — field lock (BIN-1298)', () => {
+  const MEMBER = 'other_uid';
+  const OUTSIDER = 'outsider_uid';
+  const outsiderDb = () => testEnv.authenticatedContext(OUTSIDER).firestore();
+  const row = (db: ReturnType<typeof ownerDb>, id = 'movie_603') => doc(db, 'groups', GROUP, 'watchlist', id);
+
+  // addToGroupWatchlist's payload, written with { merge: true } like the app.
+  function addShape(uid: string, over: Record<string, unknown> = {}) {
+    return {
+      tmdbId: 603, mediaType: 'movie', title: 'The Matrix', posterPath: '/m.jpg',
+      releaseYear: 1999, addedBy: uid, addedAt: serverTimestamp(), ...over,
+    };
+  }
+
+  // A row as it may already be stored: written before this rule, carrying a stray
+  // field and another member's rating.
+  async function seedRow(extra: Record<string, unknown> = {}) {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'groups', GROUP, 'watchlist', 'movie_603'), {
+        tmdbId: 603, mediaType: 'movie', title: 'The Matrix', posterPath: '/m.jpg',
+        releaseYear: 1999, addedBy: MEMBER, addedAt: Timestamp.fromDate(new Date('2026-01-01')),
+        status: 'vill_se', ...extra,
+      });
+    });
+  }
+
+  beforeEach(async () => { await seedGroup({ memberUids: [OWNER, MEMBER] }); });
+
+  describe('the app write paths pass', () => {
+    it('a member adds a title', async () => {
+      await assertSucceeds(setDoc(row(ownerDb()), addShape(OWNER), { merge: true }));
+    });
+
+    it('a title without poster or year can be added', async () => {
+      await assertSucceeds(setDoc(row(ownerDb()), addShape(OWNER, { posterPath: null, releaseYear: null }), { merge: true }));
+    });
+
+    it('a title of 200 characters can be added', async () => {
+      await assertSucceeds(setDoc(row(ownerDb()), addShape(OWNER, { title: 'x'.repeat(200) }), { merge: true }));
+    });
+
+    it('a tv title keyed tv_<id> can be added', async () => {
+      await assertSucceeds(setDoc(row(ownerDb(), 'tv_1399'), addShape(OWNER, { tmdbId: 1399, mediaType: 'tv' }), { merge: true }));
+    });
+
+    // The merge re-add restamps addedBy to whoever added the title last.
+    it('another member re-adding an existing title restamps addedBy', async () => {
+      await seedRow({ memberRatings: { [MEMBER]: 7 } });
+      await assertSucceeds(setDoc(row(ownerDb()), addShape(OWNER), { merge: true }));
+    });
+
+    it('the first rating on a stored row without memberRatings passes', async () => {
+      await seedRow();
+      await assertSucceeds(updateDoc(row(ownerDb()), { [`memberRatings.${OWNER}`]: 8 }));
+    });
+
+    it('a member changes and clears their own rating next to another member\'s', async () => {
+      await seedRow({ memberRatings: { [MEMBER]: 7 } });
+      await assertSucceeds(updateDoc(row(ownerDb()), { [`memberRatings.${OWNER}`]: 3 }));
+      await assertSucceeds(updateDoc(row(ownerDb()), { [`memberRatings.${OWNER}`]: 10 }));
+      await assertSucceeds(updateDoc(row(ownerDb()), { [`memberRatings.${OWNER}`]: deleteField() }));
+    });
+
+    it('clearing a rating that was never set passes', async () => {
+      await seedRow();
+      await assertSucceeds(updateDoc(row(ownerDb()), { [`memberRatings.${OWNER}`]: deleteField() }));
+    });
+
+    it('a member removes a title', async () => {
+      await seedRow();
+      await assertSucceeds(deleteDoc(row(ownerDb())));
+    });
+  });
+
+  describe('create denials', () => {
+    it.each([
+      ['an unknown key', { status: 'vill_se' }],
+      ['memberRatings on create', { memberRatings: { [OWNER]: 5 } }],
+      ['a string tmdbId', { tmdbId: '603' }],
+      ['an empty title', { title: '' }],
+      ['a title of 201 characters', { title: 'x'.repeat(201) }],
+      ['a non-string title', { title: 42 }],
+      ['an empty posterPath', { posterPath: '' }],
+      ['a posterPath of 301 characters', { posterPath: '/' + 'x'.repeat(300) }],
+      ['a string releaseYear', { releaseYear: '1999' }],
+      ['addedBy naming another member', { addedBy: MEMBER }],
+      ['a client-set addedAt', { addedAt: Timestamp.fromDate(new Date('2026-01-01')) }],
+    ])('%s is denied', async (_label, over) => {
+      await assertFails(setDoc(row(ownerDb()), addShape(OWNER, over), { merge: true }));
+    });
+
+    it('an id that does not match mediaType and tmdbId is denied', async () => {
+      await assertFails(setDoc(row(ownerDb(), 'movie_604'), addShape(OWNER), { merge: true }));
+    });
+
+    it('a negative tmdbId under its own id is denied', async () => {
+      await assertFails(setDoc(row(ownerDb(), 'movie_-5'), addShape(OWNER, { tmdbId: -5 }), { merge: true }));
+    });
+
+    it('a mediaType outside movie and tv under its own id is denied', async () => {
+      await assertFails(setDoc(row(ownerDb(), 'person_603'), addShape(OWNER, { mediaType: 'person' }), { merge: true }));
+    });
+
+    it('a non-member cannot add a title', async () => {
+      await assertFails(setDoc(row(outsiderDb()), addShape(OUTSIDER), { merge: true }));
+    });
+  });
+
+  describe('update denials', () => {
+    beforeEach(async () => { await seedRow({ memberRatings: { [MEMBER]: 7 } }); });
+
+    it('a re-add naming another member as addedBy is denied', async () => {
+      await assertFails(setDoc(row(ownerDb()), addShape(OWNER, { addedBy: MEMBER }), { merge: true }));
+    });
+
+    it('a re-add deleting addedBy is denied', async () => {
+      await assertFails(setDoc(row(ownerDb()), addShape(OWNER, { addedBy: deleteField() }), { merge: true }));
+    });
+
+    it('a re-add with a client-set addedAt is denied', async () => {
+      await assertFails(setDoc(row(ownerDb()), addShape(OWNER, { addedAt: Timestamp.fromDate(new Date('2026-02-01')) }), { merge: true }));
+    });
+
+    it('a re-add that adds an unknown key is denied', async () => {
+      await assertFails(setDoc(row(ownerDb()), addShape(OWNER, { extra: 'x' }), { merge: true }));
+    });
+
+    it('a re-add that changes tmdbId is denied', async () => {
+      await assertFails(setDoc(row(ownerDb()), addShape(OWNER, { tmdbId: 604 }), { merge: true }));
+    });
+
+    it('a re-add with a title of 201 characters is denied', async () => {
+      await assertFails(setDoc(row(ownerDb()), addShape(OWNER, { title: 'x'.repeat(201) }), { merge: true }));
+    });
+
+    it('setting another member\'s rating is denied', async () => {
+      await assertFails(updateDoc(row(ownerDb()), { [`memberRatings.${MEMBER}`]: 1 }));
+    });
+
+    it('deleting another member\'s rating is denied', async () => {
+      await assertFails(updateDoc(row(ownerDb()), { [`memberRatings.${MEMBER}`]: deleteField() }));
+    });
+
+    it('setting your own and another member\'s rating in one write is denied', async () => {
+      await assertFails(updateDoc(row(ownerDb()), {
+        [`memberRatings.${OWNER}`]: 5, [`memberRatings.${MEMBER}`]: 1,
+      }));
+    });
+
+    it.each([
+      ['0', 0],
+      ['11', 11],
+      ['7.5', 7.5],
+      ['a string', '7'],
+    ])('a rating of %s is denied', async (_label, value) => {
+      await assertFails(updateDoc(row(ownerDb()), { [`memberRatings.${OWNER}`]: value }));
+    });
+
+    it('replacing memberRatings with a non-map is denied', async () => {
+      await assertFails(updateDoc(row(ownerDb()), { memberRatings: 'x' }));
+    });
+
+    it('a rating together with a title change is denied', async () => {
+      await assertFails(updateDoc(row(ownerDb()), { [`memberRatings.${OWNER}`]: 5, title: 'Annan' }));
+    });
+
+    it('a non-member cannot rate', async () => {
+      await assertFails(updateDoc(row(outsiderDb()), { [`memberRatings.${OUTSIDER}`]: 5 }));
+    });
+  });
+});
+
 // BIN-532/BIN-533: members/{memberUid} create rule (firestore.rules) gates on
 // `request.auth.uid in get(groups/{groupId}).data.memberUids` — a get() that
 // resolves against the database state BEFORE the whole batch/transaction,
