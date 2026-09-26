@@ -1354,7 +1354,16 @@ service cloud.firestore {
         && request.resource.data.candidates is list
         && request.resource.data.createdAt is timestamp
         && request.resource.data.updatedAt is timestamp
-        && request.resource.data.expiresAt is timestamp;
+        && request.resource.data.expiresAt is timestamp
+        // BIN-1301: the privacy page promises a seat is gone 7 days after the session
+        // was created. `createdAt` is the server's time (the app already sends
+        // serverTimestamp()), so the sweep can count 7 days from it. `expiresAt` is
+        // set on the host's device clock, so its ceiling carries a day of drift; the
+        // sweep's `SESSION_LIFETIME_MS` brings it back to 7. A session cannot be
+        // created already expired.
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.expiresAt > request.time
+        && request.resource.data.expiresAt <= request.time + duration.value(8, 'd');
       allow update: if isSignedIn() && resource.data.hostUid == request.auth.uid
         && request.resource.data.hostName is string
         && request.resource.data.hostName.size() <= 80

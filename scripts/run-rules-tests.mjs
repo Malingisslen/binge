@@ -113,7 +113,9 @@ const REPO = resolve(HERE, '..');
 // erasure cases in place, in the describe block named `(BIN-1296)`. Measured the same way.
 // BIN-1294, 2026-09-23: raised to what `numTotalTests` reported with the sweep's
 // member-group cases in place. Measured the same way.
-export const MIN_TESTS = 784;
+// BIN-1301, 2026-09-26: raised to what `numTotalTests` reported with the session
+// lifetime cases in place, in the describe block named `(BIN-1301)`. Measured the same way.
+export const MIN_TESTS = 790;
 
 const VITEST_ARGS = ['run', '--config', 'vitest.rules.config.ts'];
 

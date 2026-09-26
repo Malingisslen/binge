@@ -874,9 +874,13 @@ hittades. Profilens innehåll loggas aldrig.
 
 `retentionCleanup` raderar dagligen:
 
-- **`sessions/{id}`** när sessionens egen `expiresAt` har passerat, eller — för
-  äldre sessioner utan `expiresAt` — när `createdAt` är äldre än `SESSION_MAX_AGE_MS`
-  (30 dagar).
+- **`sessions/{id}`** när sessionens egen `expiresAt` har passerat, eller när
+  `createdAt` är äldre än `SESSION_LIFETIME_MS` (7 dagar), vilket som kommer först.
+  `createdAt` är serverns tid — `firestore.rules` kräver det när sessionen skapas — så
+  sjudagarslöftet räknas på en klocka värden inte kan flytta. `expiresAt` sätts på
+  värdens enhet och får enligt reglerna ligga högst 8 dagar fram, för att en enhet vars
+  klocka går före inte ska nekas. Äldre sessioner utan `expiresAt` raderas när
+  `createdAt` är äldre än `SESSION_MAX_AGE_MS` (30 dagar).
 - **`users/{uid}/notifications/{id}`** när `createdAt` är äldre än
   `NOTIFICATION_MAX_AGE_MS` (90 dagar).
 
@@ -902,6 +906,11 @@ Policy ska omvärderas om:
 - **Moderation-runbook** (`docs/moderation.md`).
 
 ## Ändringslogg
+
+- **2026-09-26 (BIN-1301)** — Malins beslut (runda 3, A): en Tillsammans-session
+  raderas av det första dagliga svepet efter att den blivit 7 dagar gammal, räknat på
+  serverns `createdAt`, även om dess `expiresAt` ligger längre fram. Reglerna nekar en ny session vars
+  `expiresAt` ligger mer än 8 dagar fram eller redan har passerat.
 
 - **2026-09-23 (BIN-1294)** — Malins beslut (runda 2, A): sopningen raderar nu ett
   konsolraderat kontos spår i grupper det bara var MEDLEM i, samma spår som

@@ -5,7 +5,7 @@
  * in docs/data-retention-policy.md so it doesn't accumulate forever — growing
  * Firestore storage + read cost on the 25 SEK/mån cap, and holding data longer
  * than the policy allows:
- *   - sessions/{id}        — past `expiresAt`, or (legacy, no expiresAt) >30 days
+ *   - sessions/{id}        — when `isExpiredSession` in ./logic.ts says so
  *   - users/{uid}/notifications/{id} — older than 90 days
  *   - groups/{id}/joinAttempts/{uid} — older than 1 hour (BIN-329): a spent
  *     plaintext invite token left by an abandoned/failed-cleanup token-join, or

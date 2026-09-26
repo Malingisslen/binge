@@ -4,12 +4,21 @@
  * (same split as reclaimOrphanFollows/logic.ts and episodeNotify/logic.ts).
  *
  * Thresholds come from docs/data-retention-policy.md §"Retention-policy för
- * icke-raderad data": Tillsammans-sessioner after 30 days, notifications after
- * 90 days.
+ * icke-raderad data".
  */
 
 /** Legacy sessions without an `expiresAt` are reaped once older than this. */
 export const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+/**
+ * BIN-1301: a session WITH `expiresAt` is also reaped once its `createdAt` is older
+ * than this, whatever its `expiresAt` says. Two thresholds because they answer
+ * different things: this one is the privacy page's "7 days after it was created",
+ * counted on the server's own `createdAt` (the rules pin it to `request.time`); the
+ * 30-day one above is the fallback for legacy rows written before `expiresAt`
+ * existed. `expiresAt` is set on the host's device clock, and the rules allow it up
+ * to a day past 7 for clock drift — this is what brings it back to 7.
+ */
+export const SESSION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
 /** Notifications are reaped once older than this. */
 export const NOTIFICATION_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
 /**
@@ -60,17 +69,18 @@ export function tsToMillis(raw: unknown): number | null {
 }
 
 /**
- * A Tillsammans session is reapable when its own `expiresAt` has passed, or —
- * for legacy sessions written before `expiresAt` existed — when it is older
- * than SESSION_MAX_AGE_MS. A session with neither timestamp is NEVER reaped
- * (conservative: never delete data we can't date).
+ * A session with neither timestamp is NEVER reaped (conservative: never delete
+ * data we can't date).
  */
 export function isExpiredSession(
   expiresAtMs: number | null,
   createdAtMs: number | null,
   nowMs: number,
 ): boolean {
-  if (expiresAtMs !== null) return expiresAtMs < nowMs;
+  if (expiresAtMs !== null) {
+    // BIN-1301: `createdAt`, never `expiresAt`, decides the 7-day promise.
+    return expiresAtMs < nowMs || (createdAtMs !== null && createdAtMs < nowMs - SESSION_LIFETIME_MS);
+  }
   if (createdAtMs !== null) return createdAtMs < nowMs - SESSION_MAX_AGE_MS;
   return false;
 }

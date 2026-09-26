@@ -9,6 +9,7 @@ import {
   isStaleReleaseMarker,
   tsToMillis,
   SESSION_MAX_AGE_MS,
+  SESSION_LIFETIME_MS,
   NOTIFICATION_MAX_AGE_MS,
   JOIN_ATTEMPT_MAX_AGE_MS,
   RELEASE_MARKER_MAX_AGE_MS,
@@ -54,9 +55,22 @@ describe('isExpiredSession', () => {
     expect(isExpiredSession(now, null, now)).toBe(false); // exactly now is not yet past
   });
 
-  it('expiresAt takes precedence over createdAt', () => {
-    // Old createdAt but a future expiresAt → kept (the session was extended).
-    expect(isExpiredSession(now + 1, now - 10 * SESSION_MAX_AGE_MS, now)).toBe(false);
+  // BIN-1301: the privacy page promises 7 days after creation, counted on the
+  // server's `createdAt`. A future `expiresAt` no longer keeps an older session.
+  it('reaps a session older than 7 days even when its expiresAt is far ahead', () => {
+    expect(isExpiredSession(now + 30 * 24 * 3600 * 1000, now - SESSION_LIFETIME_MS - 1, now)).toBe(true);
+  });
+
+  it('a session between day 7 and day 8 is reaped on createdAt before its own expiresAt', () => {
+    const createdAt = now - SESSION_LIFETIME_MS - 12 * 3600 * 1000; // 7.5 days old
+    const expiresAt = createdAt + 8 * 24 * 3600 * 1000; // the rules' drift ceiling
+    expect(expiresAt).toBeGreaterThan(now);
+    expect(isExpiredSession(expiresAt, createdAt, now)).toBe(true);
+  });
+
+  it('keeps a session exactly 7 days old, and one without createdAt', () => {
+    expect(isExpiredSession(now + 1, now - SESSION_LIFETIME_MS, now)).toBe(false); // exact boundary = kept
+    expect(isExpiredSession(now + 1, null, now)).toBe(false); // undateable createdAt → only expiresAt decides
   });
 
   it('legacy session (no expiresAt): reaps only past the 30-day age', () => {

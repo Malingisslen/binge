@@ -2017,6 +2017,56 @@ describe('sessions/{id} — nyckelmängd, typer och oföränderliga fält (BIN-1
   });
 });
 
+// BIN-1301 — the session's lifetime is bounded on create. Every denial below writes as
+// the host against validSession(), so hostUid, the key set and the types all pass and
+// only the named timestamp clause can be what denies.
+describe('sessions/{id} — livstid på create (BIN-1301)', () => {
+  const DAY = 24 * 3600 * 1000;
+  const inDays = (d: number) => Timestamp.fromDate(new Date(Date.now() + d * DAY));
+
+  it('the app write shape passes: server createdAt, expiresAt 7 days out', async () => {
+    await assertSucceeds(setDoc(doc(ownerDb(), 'sessions', 's_life_ok'), validSession()));
+  });
+
+  // A host device whose clock runs a few hours fast still gets its session.
+  it('expiresAt 7 days plus hours of clock drift passes', async () => {
+    await assertSucceeds(setDoc(
+      doc(ownerDb(), 'sessions', 's_life_skew'),
+      validSession({ expiresAt: inDays(7.5) }),
+    ));
+  });
+
+  it('expiresAt 30 days out is denied', async () => {
+    await assertFails(setDoc(
+      doc(ownerDb(), 'sessions', 's_life_30d'),
+      validSession({ expiresAt: inDays(30) }),
+    ));
+  });
+
+  it('expiresAt just past the 8-day ceiling is denied', async () => {
+    await assertFails(setDoc(
+      doc(ownerDb(), 'sessions', 's_life_8d'),
+      validSession({ expiresAt: inDays(8.1) }),
+    ));
+  });
+
+  it('expiresAt in the past is denied', async () => {
+    await assertFails(setDoc(
+      doc(ownerDb(), 'sessions', 's_life_past'),
+      validSession({ expiresAt: inDays(-1) }),
+    ));
+  });
+
+  // The sweep counts 7 days from createdAt, so a client-chosen createdAt would let a
+  // host move that clock.
+  it('a client-set createdAt is denied', async () => {
+    await assertFails(setDoc(
+      doc(ownerDb(), 'sessions', 's_life_created'),
+      validSession({ createdAt: Timestamp.fromDate(new Date(Date.now() + 30 * DAY)) }),
+    ));
+  });
+});
+
 // BIN-24 — Tillsammans participant uid anti-spoof. Anonymous participation stays
 // allowed (uid null), but a signed-in writer may only set their OWN uid, and an
 // anonymous writer may not carry a non-null uid (identity misattribution).
