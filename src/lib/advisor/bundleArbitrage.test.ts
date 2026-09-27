@@ -303,10 +303,11 @@ describe('tier-aware comparison (BIN-433)', () => {
 });
 
 describe('SWEDISH_BUNDLES seed integrity (BIN-429 verification → BIN-433 seeds)', () => {
-  it('seeds the three live-verified Telia bundles at their exact ordinary prices (2026-07-07)', () => {
+  it('seeds the live-verified bundles at their exact ordinary prices', () => {
     expect(SWEDISH_BUNDLES.map(b => b.id).sort()).toEqual([
-      'telia-streaming-maxad', 'telia-streaming-mer', 'telia-streaming-mest',
+      'tele2-streaming-max', 'telia-streaming-maxad', 'telia-streaming-mer', 'telia-streaming-mest',
     ]);
+    expect(SWEDISH_BUNDLES.find(b => b.id === 'tele2-streaming-max')?.monthlyKr).toBe(249);
     // Every seeded price pinned exactly — a typo'd real-money number must go red
     // (high-review 2026-07-07: an ordering assertion alone left Maxad unpinned).
     expect(SWEDISH_BUNDLES.find(b => b.id === 'telia-streaming-mer')?.monthlyKr).toBe(269);
@@ -379,5 +380,22 @@ describe('SWEDISH_BUNDLES seed integrity (BIN-429 verification → BIN-433 seeds
     expect(out[1].savingKr).toBe(77);
     expect(out[2].currentKr).toBe(327);
     expect(out[2].savingKr).toBe(58);
+  });
+
+  it('Tele2 Streaming Max yields a suggestion for a household on exactly its four ad tiers (BIN-1335)', () => {
+    // Guards the silent failure mode: a mistyped tier or provider id makes the
+    // bundle quietly produce no suggestion instead of a wrong number.
+    const user = { providerTiers: { 337: 'ads', 384: 'ads', 489: 'plus-ads', 431: 'ads' } };
+    const out = detectBundleArbitrage([337, 384, 489, 431], user, SWEDISH_BUNDLES, NOW);
+    const tele2 = out.find(s => s.bundle.id === 'tele2-streaming-max');
+    expect(tele2, 'Tele2 Streaming Max produced no suggestion').toBeDefined();
+    expect(tele2?.replacedProviderIds.slice().sort((a, b) => a - b)).toEqual([337, 384, 431, 489]);
+    expect(tele2?.currentKr).toBe(296); // 69 + 89 + 69 + 69 at catalog ad-tier prices
+    expect(tele2?.savingKr).toBe(47);
+    expect(tele2?.downgradeProviderIds).toEqual([]);
+  });
+
+  it('never maps provider 521 "Tele2 Play" (the app) into a bundle', () => {
+    for (const b of SWEDISH_BUNDLES) expect(b.includedProviderIds, b.id).not.toContain(521);
   });
 });

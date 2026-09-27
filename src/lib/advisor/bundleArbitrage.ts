@@ -56,7 +56,7 @@ export interface SwedishBundle {
    *  (the 180-day staleness bar covers all three — a bundle silently swapping a
    *  service's tier is exactly what the flag exists to catch). */
   verifiedDate: string;
-  /** Optional signup/marketing URL (for the eventual UI + BIN-173 affiliate wrap). */
+  /** Optional signup/marketing URL (BIN-173 affiliate wrap). */
   url?: string;
 }
 
@@ -209,6 +209,26 @@ const RAW_SWEDISH_BUNDLES: SwedishBundle[] = [
     includedTiers: { 8: 'standard', 384: 'ads', 337: 'ads', 489: 'plus', 76: 'standard' },
     verifiedDate: '2026-07-07',
     url: 'https://www.telia.se/tv/streaming/streaming-mest',
+  },
+  // BIN-1335 — verifierat 2026-09-27 ur sidans egen produktdata på
+  // https://www.tele2.se/tv/streaming-max: pris 119 kr mån 1–6, därefter 249 kr
+  // ("startMonth":7, "originalPrice":249) — ORDINARIE 249, kampanjen ignorerad per
+  // regel 1. Ingen bindningstid. Innehåll och nivå ordagrant ur produktnamnen:
+  // "Disney+ Standard med reklam" = 'ads'; "HBO Max Basic med reklam" = 'ads';
+  // "TV4 Play Plus med reklam" = 'plus-ads'; "SkyShowtime Standard med annonser" =
+  // 'ads'. Kräver bredband, men från vilken operatör som helst. Tele2:s övriga
+  // paket där man VÄLJER tjänster ("välj 3 av") passar inte modellen med fast
+  // innehåll och är inte inlagda. Katalogposten 521 "Tele2 Play" är appen, inte
+  // det här paketet.
+  {
+    id: 'tele2-streaming-max',
+    name: 'Tele2 Streaming Max',
+    vendor: 'Tele2',
+    monthlyKr: 249,
+    includedProviderIds: [337, 384, 489, 431],
+    includedTiers: { 337: 'ads', 384: 'ads', 489: 'plus-ads', 431: 'ads' },
+    verifiedDate: '2026-09-27',
+    url: 'https://www.tele2.se/tv/streaming-max',
   },
 ];
 
