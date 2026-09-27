@@ -356,6 +356,144 @@ describe('main against a real git repository', () => {
     expect(out).toContain('functions/src/foo.ts  (exported names changed)');
   });
 
+  test('a declared namespace that goes from types to values stays red', () => {
+    onBase();
+    write('functions/src/ns.ts', 'export declare namespace Foo { type T = number; }\n');
+    write('functions/src/reexport.ts', "export { Foo } from './ns';\n");
+    const typesOnly = commit('types-only namespace');
+    write('functions/src/ns.ts', 'export declare namespace Foo { const x: number; }\n');
+    const { code, out } = run(typesOnly, commit('namespace with a value'));
+    expect(code).toBe(1);
+    expect(out).toContain('functions/src/ns.ts  (exported names changed)');
+  });
+
+  test('a comment inside a declared namespace is not a deployed change', () => {
+    onBase();
+    write('functions/src/ns.ts', 'export declare namespace Foo { type T = number; }\n');
+    const plain = commit('namespace');
+    write('functions/src/ns.ts', 'export declare namespace Foo {\n  // the unit\n  type T = number;\n}\n');
+    const { code, out } = run(plain, commit('comment in namespace'));
+    expect(code).toBe(0);
+    expect(out).toContain('no deployed change: functions/src/ns.ts');
+  });
+
+  test('a built function file importing from outside functions/ fails closed on every push', () => {
+    onBase();
+    write('src/lib/shared.ts', 'export const K = 1;\n');
+    write('functions/src/uses-root.ts', "import { K } from '../../src/lib/shared';\nexport const M = K;\n");
+    const withImport = commit('import from the root tree');
+    write('src/lib/shared.ts', 'export const K = 2;\n');
+    const { code, out } = run(withImport, commit('change only the root file'));
+    expect(code).toBe(1);
+    expect(out).toContain('functions/src/uses-root.ts points at src/lib/shared, outside functions/');
+  });
+
+  test('an excluded test file that nothing imports may point outside functions/', () => {
+    onBase();
+    write('src/lib/shared.ts', 'export const K = 1;\n');
+    write('functions/src/root.test.ts', "import { K } from '../../src/lib/shared';\ntest('k', () => expect(K).toBe(1));\n");
+    const withImport = commit('test imports from the root tree');
+    write('src/lib/shared.ts', 'export const K = 2;\n');
+    expect(run(withImport, commit('change only the root file')).code).toBe(0);
+  });
+
+  test('an excluded file that a built file imports may not point outside functions/', () => {
+    onBase();
+    write('src/lib/shared.ts', 'export const K = 1;\n');
+    write('functions/src/bridge.test.ts', "export { K } from '../../src/lib/shared';\n");
+    write('functions/src/uses-bridge.ts', "import { K } from './bridge.test';\nexport const M = K;\n");
+    const withImport = commit('built file reaches the root tree through a test file');
+    write('README.md', 'z\n');
+    const { code, out } = run(withImport, commit('unrelated'));
+    expect(code).toBe(1);
+    expect(out).toContain('functions/src/bridge.test.ts points at src/lib/shared, outside functions/');
+  });
+
+  describe('firebase.json', () => {
+    const FIREBASE = {
+      hosting: { public: 'out' },
+      firestore: { rules: 'firestore.rules' },
+      functions: [{ source: 'functions', runtime: 'nodejs22' }],
+      emulators: { firestore: { port: 8080 } },
+    };
+    const DRIFT = 'firebase.json  (a firebase.json key other than hosting or emulators changed)';
+    const withFirebaseJson = () => {
+      onBase();
+      write('firebase.json', JSON.stringify(FIREBASE, null, 2));
+      return commit('firebase.json');
+    };
+
+    test('a hosting-only change is not a deployed change', () => {
+      const before = withFirebaseJson();
+      write('firebase.json', JSON.stringify({ ...FIREBASE, hosting: { public: 'dist' } }, null, 2));
+      const { code, out } = run(before, commit('hosting'));
+      expect(code).toBe(0);
+      expect(out).toContain('no deployed change: firebase.json');
+    });
+
+    test.each([
+      ['functions', { functions: [{ source: 'functions', runtime: 'nodejs20' }] }],
+      ['firestore', { firestore: { rules: 'other.rules' } }],
+    ])('a change to the %s block stays red', (_key, patch) => {
+      const before = withFirebaseJson();
+      write('firebase.json', JSON.stringify({ ...FIREBASE, ...patch }, null, 2));
+      const { code, out } = run(before, commit('deployed block'));
+      expect(code).toBe(1);
+      expect(out).toContain(DRIFT);
+    });
+
+    test('an emulator-only change is not a deployed change', () => {
+      const before = withFirebaseJson();
+      write('firebase.json', JSON.stringify({ ...FIREBASE, emulators: { firestore: { port: 8081 } } }, null, 2));
+      const { code, out } = run(before, commit('emulators'));
+      expect(code).toBe(0);
+      expect(out).toContain('no deployed change: firebase.json');
+    });
+
+    test('an added storage block stays red', () => {
+      const before = withFirebaseJson();
+      write('firebase.json', JSON.stringify({ ...FIREBASE, storage: { rules: 'storage.rules' } }, null, 2));
+      const { code, out } = run(before, commit('storage'));
+      expect(code).toBe(1);
+      expect(out).toContain(DRIFT);
+    });
+
+    test('a change to a key this check has never seen stays red', () => {
+      const before = withFirebaseJson();
+      write('firebase.json', JSON.stringify({ ...FIREBASE, somethingNew: { a: 1 } }, null, 2));
+      const unknownAdded = commit('unknown key');
+      write('firebase.json', JSON.stringify({ ...FIREBASE, somethingNew: { a: 2 } }, null, 2));
+      const { code, out } = run(unknownAdded, commit('unknown key changed'));
+      expect(code).toBe(1);
+      expect(out).toContain(DRIFT);
+      expect(run(before, unknownAdded).code).toBe(1);
+    });
+
+    test('a firebase.json that is not an object fails closed', () => {
+      const before = withFirebaseJson();
+      write('firebase.json', 'null');
+      const { code, out } = run(before, commit('null firebase.json'));
+      expect(code).toBe(1);
+      expect(out).toContain('Could not compare');
+    });
+
+    test('a new firebase.json stays red', () => {
+      onBase();
+      write('firebase.json', JSON.stringify(FIREBASE));
+      const { code, out } = run(base, commit('add firebase.json'));
+      expect(code).toBe(1);
+      expect(out).toContain('firebase.json  (added)');
+    });
+
+    test('a firebase.json that no longer parses fails closed', () => {
+      const before = withFirebaseJson();
+      write('firebase.json', '{ "hosting": ');
+      const { code, out } = run(before, commit('broken firebase.json'));
+      expect(code).toBe(1);
+      expect(out).toContain('Could not compare');
+    });
+  });
+
   test('a new function file stays red', () => {
     onBase();
     write('functions/src/other.ts', '// only a comment\n');

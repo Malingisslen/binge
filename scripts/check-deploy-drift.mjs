@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * The deploy workflow ships hosting only. `firestore.rules` and `functions/` are
  * deployed by hand, so a push that changes what those deploy must fail loudly —
@@ -11,14 +10,15 @@
  * this the guard compared file NAMES, so a comment-only push needed the manual
  * "Run workflow" detour.
  *
- * Only two kinds of change are ever let through, and each is COMPARED, not
- * assumed:
+ * The kinds of change let through are these, and each is COMPARED, not assumed:
  *   · `firestore.rules`, modified: equal once comments are removed and whitespace
  *     outside strings is collapsed.
  *   · `functions/src/**\/*.ts`, modified: equal once transpiled with comments
  *     removed, and exporting the same names — or matched by the build's own
  *     `exclude` in functions/tsconfig.json
  *     and not found by `isImported`.
+ *   · `firebase.json`, modified: equal once the keys in FIREBASE_JSON_UNDEPLOYED_KEYS
+ *     are removed. Any other key, known or not, is compared.
  * Everything else under those paths is a real change without further thought:
  * added, deleted or renamed files, manifests, lockfiles, tsconfig, functions/scripts.
  *
@@ -36,6 +36,16 @@ const RULES = 'firestore.rules';
 const FUNCTIONS = 'functions/';
 const FUNCTIONS_SRC = 'functions/src/';
 const FUNCTIONS_TSCONFIG = 'functions/tsconfig.json';
+const FIREBASE_JSON = 'firebase.json';
+// The firebase.json keys a manual deploy never reads. Every key NOT listed here is
+// compared, so a key this check has never seen (storage, database, extensions, one
+// Firebase adds later) counts as drift rather than slipping through.
+const FIREBASE_JSON_UNDEPLOYED_KEYS = [
+  // Deployed by this workflow itself, not by hand.
+  'hosting',
+  // Read only by the local emulator suite; no deploy target consumes it.
+  'emulators',
+];
 
 function runGit(args) {
   return execFileSync('git', args, {
@@ -58,7 +68,7 @@ export function assertRefReachable(ref, { git = runGit } = {}) {
  * `-z` so a path is never split on whitespace.
  */
 export function listChanges(before, after, { git = runGit } = {}) {
-  const out = git(['diff', '--name-status', '--no-renames', '-z', before, after, '--', RULES, FUNCTIONS]);
+  const out = git(['diff', '--name-status', '--no-renames', '-z', before, after, '--', RULES, FUNCTIONS, FIREBASE_JSON]);
   const parts = out.split('\0').filter((p) => p !== '');
   if (parts.length % 2 !== 0) throw new Error('could not parse git diff --name-status output');
   const changes = [];
@@ -217,6 +227,12 @@ export function classifyChange(change, before, after, { git = runGit, tsconfig, 
     return normalizeRules(show(before)) === normalizeRules(show(after)) ? null : 'rules content changed';
   }
 
+  if (path === FIREBASE_JSON) {
+    return firebaseDeployedBlocks(show(before)) === firebaseDeployedBlocks(show(after))
+      ? null
+      : `a firebase.json key other than ${FIREBASE_JSON_UNDEPLOYED_KEYS.join(' or ')} changed`;
+  }
+
   if (path.startsWith(FUNCTIONS_SRC) && path.endsWith('.ts') && !path.endsWith('.d.ts')) {
     const relative = path.slice(FUNCTIONS.length);
     const config = tsconfig();
@@ -235,6 +251,24 @@ export function classifyChange(change, before, after, { git = runGit, tsconfig, 
 }
 
 /**
+ * firebase.json without the keys a manual deploy never reads. A file that does not
+ * parse, or does not parse to an object, throws.
+ */
+export function firebaseDeployedBlocks(text) {
+  const config = JSON.parse(text);
+  if (config === null || typeof config !== 'object' || Array.isArray(config)) {
+    throw new Error(`${FIREBASE_JSON} is not a JSON object`);
+  }
+  const deployed = Object.keys(config)
+    .filter((key) => !FIREBASE_JSON_UNDEPLOYED_KEYS.includes(key))
+    .sort()
+    .map((key) => [key, config[key]]);
+  return JSON.stringify(deployed);
+}
+
+const printer = ts.createPrinter({ removeComments: true });
+
+/**
  * Every name the file exports, each with the kind of statement that declares it —
  * a type becoming a value under the same name must count as a change.
  */
@@ -242,6 +276,12 @@ export function exportedNames(source, fileName) {
   const sf = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, false);
   const names = [];
   for (const statement of sf.statements) {
+    // Whether a namespace holds values or only types decides whether a file
+    // re-exporting it emits the name, and neither the statement's kind nor this
+    // file's own output shows it — so the whole namespace is compared, comments removed.
+    if (ts.isModuleDeclaration(statement)) {
+      names.push(printer.printNode(ts.EmitHint.Unspecified, statement, sf).replace(/\s+/g, ' '));
+    }
     if (ts.isExportDeclaration(statement) || ts.isExportAssignment(statement)) {
       names.push(statement.getText(sf).replace(/\s+/g, ' '));
       continue;
@@ -295,6 +335,27 @@ export function pointersAt(ref, { git = runGit } = {}) {
   return pointers;
 }
 
+const insideFunctions = (path) => path === 'functions' || path.startsWith(FUNCTIONS);
+
+/**
+ * A relative import out of functions/ pulls a file into the functions build that
+ * the diff above never lists, so a change to it would pass unseen. A built file
+ * pointing outside functions/ fails the check instead. A file the build excludes
+ * and nothing imports is not built, so what it points at does not count.
+ */
+export function assertNoImportOutsideFunctions({ tsconfig, pointers }) {
+  const all = pointers();
+  const escaping = all.filter(({ to }) => !insideFunctions(to));
+  if (escaping.length === 0) return;
+  const { exclude } = tsconfig();
+  for (const { from, to } of escaping) {
+    const excluded = exclude.some((re) => re.test(from.slice(FUNCTIONS.length)));
+    if (!excluded || isImported(from, null, { pointers: all })) {
+      throw new Error(`${from} points at ${to}, outside functions/, which this check does not follow`);
+    }
+  }
+}
+
 function statusWord(status) {
   if (status === 'A') return 'added';
   if (status === 'D') return 'deleted';
@@ -308,6 +369,7 @@ export function findDrift(before, after, { git = runGit } = {}) {
   let cachedPointers;
   const tsconfig = () => (cachedConfig ??= readFunctionsTsconfig(after, { git }));
   const pointers = () => (cachedPointers ??= pointersAt(after, { git }));
+  assertNoImportOutsideFunctions({ tsconfig, pointers });
   return listChanges(before, after, { git }).map((change) => ({
     ...change,
     reason: classifyChange(change, before, after, { git, tsconfig, pointers }),
@@ -325,7 +387,7 @@ export function main(argv, { git = runGit, log = console.log, err = console.erro
   try {
     changes = findDrift(before, after, { git });
   } catch (error) {
-    err(`::error::Could not compare firestore.rules / functions between ${before} and ${after} — ${error.message}`);
+    err(`::error::Could not compare firestore.rules / functions / firebase.json between ${before} and ${after} — ${error.message}`);
     err('Treating this push as a rules/functions change.');
     err('Deploy manually:  firebase deploy --only firestore:rules    # and/or --only functions');
     err("Then ship hosting via the 'Run workflow' button (workflow_dispatch) — that skips this guard.");
@@ -342,7 +404,7 @@ export function main(argv, { git = runGit, log = console.log, err = console.erro
     return 0;
   }
 
-  err('::error::firestore.rules or functions/** changed — these are NOT auto-deployed by this workflow.');
+  err('::error::firestore.rules, functions/** or firebase.json changed — these are NOT auto-deployed by this workflow.');
   err('Changed files:');
   for (const c of real) err(`${c.path}  (${c.reason})`);
   err('Deploy manually:  firebase deploy --only firestore:rules    # and/or --only functions');
