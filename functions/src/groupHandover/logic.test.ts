@@ -43,13 +43,22 @@ import { eraseReminderMarkers } from '../rotationReminder/markers';
 // the working directory also means the test cannot pass by reading the wrong tree.
 const HERE = join(fileURLToPath(import.meta.url), '..');
 const REPO = join(HERE, '..', '..', '..');
-/** The callable, with `//` comments stripped, so a scan reads code not prose. */
-const ENTRY = readFileSync(join(HERE, 'index.ts'), 'utf8').replace(/^\s*\/\/.*$/gm, '');
-/** The loop, same treatment — it declares the erasure's field set. */
-const LOOP = readFileSync(join(HERE, 'runHandover.ts'), 'utf8').replace(/^\s*\/\/.*$/gm, '');
-/** The pure logic, same treatment — it builds the group document's own handover write. */
-const LOGIC = readFileSync(join(HERE, 'logic.ts'), 'utf8').replace(/^\s*\/\/.*$/gm, '');
-const RULES = readFileSync(join(REPO, 'firestore.rules'), 'utf8');
+/**
+ * A source file as LF text. The scans below spell a line break as `\n`, and a Windows
+ * checkout with `core.autocrlf` hands them CRLF (BIN-1321, BIN-1316).
+ */
+const readSource = (path: string) => readFileSync(path, 'utf8').replace(/\r\n/g, '\n');
+/** A source file with `//` comments stripped, so a scan reads code not prose. */
+const readCode = (path: string) => readSource(path).replace(/^\s*\/\/.*$/gm, '');
+/** The callable. */
+const ENTRY = readCode(join(HERE, 'index.ts'));
+/** The loop — it declares the erasure's field set. */
+const LOOP = readCode(join(HERE, 'runHandover.ts'));
+/** The pure logic — it builds the group document's own handover write. */
+const LOGIC = readCode(join(HERE, 'logic.ts'));
+/** The Admin port — the production reads and writes the loop is handed. */
+const ADMIN_IO = readCode(join(HERE, 'adminIo.ts'));
+const RULES = readSource(join(REPO, 'firestore.rules'));
 
 const member = (uid: string, joinedAtMs: number | null): MemberRow => ({ uid, joinedAtMs });
 
@@ -384,10 +393,7 @@ describe('refusalForHandover — the caller must not fall through', () => {
   // divergence is silent: the client's classifier would fall to `untouched` and
   // toast the promise that nothing was deleted.
   it('the client declares the same marker', () => {
-    const client = readFileSync(
-      join(REPO, 'src', 'lib', 'firebase', 'groupHandover.ts'),
-      'utf8',
-    );
+    const client = readSource(join(REPO, 'src', 'lib', 'firebase', 'groupHandover.ts'));
     expect(client).toContain(`export const HANDOVER_PARTIAL = '${HANDOVER_PARTIAL}';`);
   });
 
@@ -401,10 +407,7 @@ describe('refusalForHandover — the caller must not fall through', () => {
     // Comment-stripped like ENTRY: a future comment carrying a `timeout: <n>`
     // form would otherwise be matched first and satisfy this without the call
     // site setting anything.
-    const client = readFileSync(
-      join(REPO, 'src', 'lib', 'firebase', 'groupHandover.ts'),
-      'utf8',
-    ).replace(/^\s*\/\/.*$/gm, '');
+    const client = readCode(join(REPO, 'src', 'lib', 'firebase', 'groupHandover.ts'));
     // Every declaration, and paired BY NAME rather than by position.
     //
     // A single `exec` covered the first callable only, so the second one's value
@@ -1250,8 +1253,7 @@ describe('the delete door runs the new steps after the handover (BIN-1278, BIN-1
   // deleted, or the writes moved to a batch outside the transaction, with every
   // suite green. ONE pattern, so no half can go while the other stays.
   it('the Admin port re-reads the group inside each chunk transaction and writes through it', () => {
-    const adminIo = readFileSync(join(HERE, 'adminIo.ts'), 'utf8').replace(/^\s*\/\/.*$/gm, '');
-    const body = /eraseLeaverTraces: async \(groupId, uid, erasure, requiredOwner\) => \{[\s\S]*?\n {4}\},\n/.exec(adminIo)?.[0] ?? '';
+    const body = /eraseLeaverTraces: async \(groupId, uid, erasure, requiredOwner\) => \{[\s\S]*?\n {4}\},\n/.exec(ADMIN_IO)?.[0] ?? '';
     expect(body, 'eraseLeaverTraces not found in adminIo.ts').not.toBe('');
     expect(body).toMatch(
       /const wrote = await db\.runTransaction\(async \(tx\) => \{\s*const fresh = await tx\.get\(groupRef\);[\s\S]*?if \(!leaverChunkMayCommit\(group, uid, requiredOwner\)\) return false;\s*for \(const w of chunk\) \{[\s\S]*?tx\.delete\(ref\);[\s\S]*?tx\.update\(ref,[\s\S]*?tx\.update\(ref,[\s\S]*?return true;\s*\}\);\s*if \(!wrote\) return \{ kind: 'stopped' \};/,
@@ -1259,6 +1261,19 @@ describe('the delete door runs the new steps after the handover (BIN-1278, BIN-1
     expect(body).not.toMatch(/batch/);
     // BIN-1296: the owner check needs the owner from the SAME read.
     expect(body).toMatch(/const fresh = await tx\.get\(groupRef\);[\s\S]*?ownerUid: \(fresh\.get\('ownerUid'\)/);
+  });
+
+  // BIN-1311. Every loop test hands in its own `readWatchlist` double that already
+  // carries `memberRatings`, so the production read could stop returning the field and
+  // every suite stay green while a leaver's ratings are never found. This pins the
+  // Admin port's read, and that the leaver's port is that same read.
+  it('the Admin port reads each group title with its memberRatings', () => {
+    const read = /readWatchlist: async \(groupId\) => \{[\s\S]*?\n {4}\},\n/.exec(ADMIN_IO)?.[0] ?? '';
+    expect(read, 'readWatchlist not found in adminIo.ts').not.toBe('');
+    expect(read).toMatch(
+      /return snap\.docs\.map\(\(d\) => \(\{[^}]*?\bmemberRatings: d\.get\('memberRatings'\),[^}]*?\}\)\);/,
+    );
+    expect(ADMIN_IO).toMatch(/\n {4}readWatchlist: base\.readWatchlist,\n/);
   });
 
   // BIN-1296 (#27's condition): a caller naming themselves takes the unchanged self
