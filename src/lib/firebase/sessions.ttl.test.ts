@@ -24,7 +24,7 @@ function ruleCeilingDays(): number {
 }
 
 describe('Tillsammans session lifetime (BIN-1301)', () => {
-  it('the app lifetime is the 7 days the privacy page promises', () => {
+  it('the app lifetime is 7 days', () => {
     expect(appTtlDays()).toBe(7);
   });
 

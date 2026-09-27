@@ -55,8 +55,7 @@ describe('isExpiredSession', () => {
     expect(isExpiredSession(now, null, now)).toBe(false); // exactly now is not yet past
   });
 
-  // BIN-1301: the privacy page promises 7 days after creation, counted on the
-  // server's `createdAt`. A future `expiresAt` no longer keeps an older session.
+  // BIN-1301: a future `expiresAt` no longer keeps an older session.
   it('reaps a session older than 7 days even when its expiresAt is far ahead', () => {
     expect(isExpiredSession(now + 30 * 24 * 3600 * 1000, now - SESSION_LIFETIME_MS - 1, now)).toBe(true);
   });

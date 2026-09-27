@@ -12,10 +12,9 @@ export const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 /**
  * BIN-1301: a session WITH `expiresAt` is also reaped once its `createdAt` is older
  * than this, whatever its `expiresAt` says. Two thresholds because they answer
- * different things: this one is the privacy page's "7 days after it was created",
- * counted on the server's own `createdAt` (the rules pin it to `request.time`); the
- * 30-day one above is the fallback for legacy rows written before `expiresAt`
- * existed. `expiresAt` is set on the host's device clock, and the rules allow it up
+ * different things: this one is counted on the server's own `createdAt` (the rules
+ * pin it to `request.time`); the 30-day one above is the fallback for legacy rows
+ * written before `expiresAt` existed. `expiresAt` is set on the host's device clock, and the rules allow it up
  * to a day past 7 for clock drift — this is what brings it back to 7.
  */
 export const SESSION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
@@ -78,7 +77,7 @@ export function isExpiredSession(
   nowMs: number,
 ): boolean {
   if (expiresAtMs !== null) {
-    // BIN-1301: `createdAt`, never `expiresAt`, decides the 7-day promise.
+    // BIN-1301: `createdAt`, never `expiresAt`, decides the `SESSION_LIFETIME_MS` cut-off.
     return expiresAtMs < nowMs || (createdAtMs !== null && createdAtMs < nowMs - SESSION_LIFETIME_MS);
   }
   if (createdAtMs !== null) return createdAtMs < nowMs - SESSION_MAX_AGE_MS;
