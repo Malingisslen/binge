@@ -669,7 +669,7 @@
       "id": "cf-retentionCleanup",
       "label": "retentionCleanup scheduled sweep",
       "context": "backend-api",
-      "path": "functions/src/retentionCleanup/index.ts, functions/src/retentionCleanup/runCleanup.ts, functions/src/retentionCleanup/logic.ts, functions/src/retentionCleanup/orphans.ts, functions/src/retentionCleanup/fieldOwned.ts, functions/src/groupHandover/runHandover.ts, functions/src/groupHandover/logic.ts, functions/src/friendRequestPush/logic.ts"
+      "path": "functions/src/retentionCleanup/index.ts, functions/src/retentionCleanup/runCleanup.ts, functions/src/retentionCleanup/logic.ts, functions/src/retentionCleanup/orphans.ts, functions/src/retentionCleanup/fieldOwned.ts, functions/src/retentionCleanup/runHealth.ts, functions/src/groupHandover/runHandover.ts, functions/src/groupHandover/logic.ts, functions/src/friendRequestPush/logic.ts"
     },
     {
       "id": "data-export-section",
@@ -2747,6 +2747,20 @@
           "to": "firestore",
           "payload": "BIN-1294: for an account deleted in Firebase Console (a uid Auth no longer knows, past the observation floor), after the owned-group handover the sweep runs runSweptMemberGroupErasure over every group where memberUids array-contains the uid and the uid is not the owner: the same trace erasure the delete button runs (member row, household, joinAttempts, progress rows, addedBy, the uid's own key in watchlist.memberRatings (BIN-1306), pickedByUid, participantUids), then arrayRemove of the uid from memberUids, last per group so a failed run finds the group again. planSweptMemberGroupErasure counts these writes into the all-or-nothing document budget first, and the step runs inside the same try that keeps the orphanWatch record on failure.",
           "transport": "Admin SDK (scheduled)",
+          "verified": true
+        },
+        {
+          "from": "cf-retentionCleanup",
+          "to": "firestore",
+          "payload": "BIN-1317: the schedule wrapper watches its own run through runWatched (runHealth.ts). Before sweeping it reads retentionCleanupHealth/current, judges the PREVIOUS run with previousRunProblems — started but never done after it logged 'retentionCleanup: scheduled sweeps done', started but never reached either line, or no run started within the missed-run window — and stamps lastStartedAt. It stamps lastScheduledSweepsDoneAt when the sweep logs that first line, and lastDoneAt plus lastErrorCount when runRetentionCleanup returns. Every health step is caught on its own and never stops the sweep",
+          "transport": "Firestore read + merge write",
+          "verified": true
+        },
+        {
+          "from": "cf-retentionCleanup",
+          "to": "firestore",
+          "payload": "BIN-1317: a non-empty problem list — the previous run's, sent BEFORE this run sweeps, and this run's own logged errors or throw, sent after — becomes one sendAdminSystemNotification card in users/{ADMIN_UID}/notifications (the admin inbox, Malin's channel choice 2026-09-27; no push, no Sentry). ADMIN_UID unbound → the send no-ops and the run logs 'retentionCleanup: alert not sent'. A schedule that stops firing altogether is not seen: no run is left to notice",
+          "transport": "Firestore write",
           "verified": true
         }
       ],
