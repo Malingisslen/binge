@@ -10,8 +10,8 @@ export default function IntegritetPage() {
   return (
     <LegalPageShell
       title="Integritetspolicy"
-      lastUpdated="2026-09-23"
-      version="1.6"
+      lastUpdated="2026-09-27"
+      version="1.7"
     >
       <section>
         <h2>1. Vem är ansvarig?</h2>
@@ -104,7 +104,7 @@ export default function IntegritetPage() {
         <ul>
           <li>Din profil och bevakningslista sparas så länge ditt konto är aktivt.</li>
           <li>Notifikationer raderas automatiskt när de är 90 dagar gamla.</li>
-          <li>Tillsammans-sessioner utgår automatiskt 7 dagar efter skapandet.</li>
+          <li>Tillsammans-sessioner raderas automatiskt senast ett dygn efter att de blivit 7 dagar gamla.</li>
           <li>Teknisk logg-data i Firebase/Cloudflare sparas enligt respektive leverantörs standardtid (typiskt 30 dagar).</li>
           <li>
             <strong>Om du tar bort ditt konto</strong> raderar vi all din data
@@ -117,7 +117,7 @@ export default function IntegritetPage() {
             samt Tillsammans-sessioner du är värd för. Har du deltagit i någon
             annans Tillsammans-session ligger din plats där, med ditt
             visningsnamn, dina streamingtjänster och dina röster, kvar tills
-            sessionen går ut, högst 7 dagar efter att den skapades. En grupp du äger lämnas i
+            sessionen raderas, senast ett dygn efter att den blivit 7 dagar gammal. En grupp du äger lämnas i
             stället över till den medlem som varit med längst, om gruppen har kvar
             några medlemmar — annars raderas den, och dina egna spår i en
             överlämnad grupp tas bort ändå. Grupper du bara är medlem i lämnar du
