@@ -66,6 +66,10 @@ const REQUIRED = [
   // rules suite at all, so this wrapper is the only thing asserting that suite ever
   // RAN — a floor that stops measuring is indistinguishable from a healthy run.
   'run-rules-tests.test.mjs',
+  // The deploy workflow's rules/functions guard. It decides whether a push may ship
+  // hosting without a manual rules/functions deploy, so a test file that stops running
+  // leaves that decision unverified in both directions.
+  'check-deploy-drift.test.mjs',
 ];
 
 // A LITERAL, deliberately not `REQUIRED.length`. Deriving it made this assertion unable
@@ -74,7 +78,7 @@ const REQUIRED = [
 // replaced BIN-838's floor to prevent, reproduced inside its own replacement. Growth is
 // free at the runner; raising this number is the deliberate act that keeps the new file
 // protected, and lowering it is the deliberate act a shrink must perform out loud.
-const MIN = 8;
+const MIN = 9;
 
 // Reads the DISK set, recursively and on both suffixes, to line up as closely as a
 // directory read can with what vitest's `scripts/**/*.{test,spec}.mjs` collects. It is not

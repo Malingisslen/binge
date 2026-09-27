@@ -32,28 +32,6 @@ jobs:
           # push (github.event.before..sha) to see which files changed.
           fetch-depth: 0
 
-      # Drift guard: firestore.rules + functions/** are NOT auto-deployed — only
-      # hosting is. If a push to main changed them, fail loudly so prod can't
-      # silently run the old version. Deploy them manually, then ship hosting via
-      # the "Run workflow" button (workflow_dispatch), which skips this guard.
-      - name: Guard — rules/functions changed (deploy them manually)
-        if: github.event_name == 'push'
-        run: |
-          BEFORE="${{ github.event.before }}"
-          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
-            BEFORE=$(git rev-parse HEAD~1)
-          fi
-          CHANGED=$(git diff --name-only "$BEFORE" "${{ github.sha }}" -- firestore.rules 'functions/**')
-          if [ -n "$CHANGED" ]; then
-            echo "::error::firestore.rules or functions/** changed — these are NOT auto-deployed by this workflow."
-            echo "Changed files:"
-            echo "$CHANGED"
-            echo "Deploy manually:  firebase deploy --only firestore:rules    # and/or --only functions"
-            echo "Then ship hosting via the 'Run workflow' button (workflow_dispatch) — that skips this guard."
-            exit 1
-          fi
-          echo "No firestore.rules / functions changes in this push — proceeding."
-
       - uses: actions/setup-node@v7
         with:
           node-version: 22
@@ -61,6 +39,22 @@ jobs:
 
       - name: Install deps
         run: npm ci
+
+      # Drift guard: firestore.rules + functions/** are NOT auto-deployed — only
+      # hosting is. If a push to main changed what they deploy, fail loudly so prod
+      # can't silently run the old version. Deploy them manually, then ship hosting
+      # via the "Run workflow" button (workflow_dispatch), which skips this guard.
+      # A change there that cannot reach production (a comment, a test file the
+      # functions build excludes) passes — see scripts/check-deploy-drift.mjs. It
+      # uses TypeScript from the root install, hence its place after npm ci.
+      - name: Guard — rules/functions changed (deploy them manually)
+        if: github.event_name == 'push'
+        run: |
+          BEFORE="${{ github.event.before }}"
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            BEFORE=$(git rev-parse HEAD~1)
+          fi
+          node scripts/check-deploy-drift.mjs "$BEFORE" "${{ github.sha }}"
 
       # Quality gates — run here so a direct push to main can never deploy red code. If this slows releases, we can move to
       # required status checks via branch protection instead.

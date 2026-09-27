@@ -181,6 +181,11 @@ export const TOOLING_CODE_FILES = new Set([
   // widening one has never widened the other.
   'scripts/check-dependency-diff.mjs',
   'scripts/check-dependency-diff.test.mjs',
+  // The deploy workflow's rules/functions drift guard. It decides whether hosting may
+  // ship while production rules or functions are out of date. Added in the same commit
+  // as its `reviewGates` pattern, per BIN-830.
+  'scripts/check-deploy-drift.mjs',
+  'scripts/check-deploy-drift.test.mjs',
   'scripts/check-workflow-map.mjs',
   'scripts/check-workflow-map.test.mjs',
   'scripts/check-public-env.mjs',

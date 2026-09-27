@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 647,
+  "patternCount": 649,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -139,6 +139,8 @@
         ".github/workflows/secret-scan.yml",
         "docs/analysis/EXTERNAL_ACTIONS.md",
         "firebase.json",
+        "scripts/check-deploy-drift.mjs",
+        "scripts/check-deploy-drift.test.mjs",
         "src/lib/platform.test.ts",
         "src/lib/platform.ts"
       ]

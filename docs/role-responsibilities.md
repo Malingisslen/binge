@@ -273,7 +273,7 @@ Owns CI/CD, hosting, observability, and incident response.
 
 - The GitHub Actions workflows; the rules-tests deploy gate; the **drift-guard**
   blocking silent rules/functions deploys.
-  → `.github/workflows/deploy.yml`, `.github/workflows/pr-checks.yml`
+  → `.github/workflows/deploy.yml`, `.github/workflows/pr-checks.yml`, `scripts/check-deploy-drift.mjs`, `scripts/check-deploy-drift.test.mjs`
 - **The gitleaks secret scan** (BIN-922). It was the one workflow with no owning role:
   the blocking gate covers the whole workflows directory by prefix, so a change to it
   was stopped at commit time by a reviewer while the advising side called it
