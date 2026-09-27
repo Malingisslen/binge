@@ -120,7 +120,7 @@ function clientIo(): HandoverIo & { errors: unknown[] } {
 
     readWatchlist: async (groupId) => {
       const snap = await getDocs(collection(d, 'groups', groupId, 'watchlist'));
-      return snap.docs.map((x) => ({ id: x.id, addedBy: x.data().addedBy }));
+      return snap.docs.map((x) => ({ id: x.id, addedBy: x.data().addedBy, memberRatings: x.data().memberRatings }));
     },
 
     readSessionHistory: async (groupId) => {
@@ -159,6 +159,11 @@ function clientIo(): HandoverIo & { errors: unknown[] } {
       }
       for (const itemId of erasure.clearAddedByIds) {
         batch.update(doc(d, 'groups', groupId, 'watchlist', itemId), { addedBy: deleteField() });
+      }
+      for (const itemId of erasure.clearRatingIds) {
+        batch.update(doc(d, 'groups', groupId, 'watchlist', itemId), {
+          [`memberRatings.${leavingUid}`]: deleteField(),
+        });
       }
       for (const rowId of erasure.clearPickedByIds) {
         batch.update(doc(d, 'groups', groupId, 'sessionHistory', rowId), { pickedByUid: deleteField() });

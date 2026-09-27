@@ -462,7 +462,7 @@ function handoverIo(db: Firestore): HandoverIo {
       }),
     readWatchlist: async (groupId) =>
       (await getDocs(collection(db, 'groups', groupId, 'watchlist'))).docs
-        .map((x) => ({ id: x.id, addedBy: x.data().addedBy })),
+        .map((x) => ({ id: x.id, addedBy: x.data().addedBy, memberRatings: x.data().memberRatings })),
     readSessionHistory: async (groupId) =>
       (await getDocs(collection(db, 'groups', groupId, 'sessionHistory'))).docs.map((x) => ({
         id: x.id,
@@ -495,6 +495,11 @@ function handoverIo(db: Firestore): HandoverIo {
       }
       for (const itemId of erasure.clearAddedByIds) {
         batch.update(doc(db, 'groups', groupId, 'watchlist', itemId), { addedBy: deleteField() });
+      }
+      for (const itemId of erasure.clearRatingIds) {
+        batch.update(doc(db, 'groups', groupId, 'watchlist', itemId), {
+          [`memberRatings.${leavingUid}`]: deleteField(),
+        });
       }
       for (const rowId of erasure.clearPickedByIds) {
         batch.update(doc(db, 'groups', groupId, 'sessionHistory', rowId), { pickedByUid: deleteField() });

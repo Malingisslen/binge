@@ -247,7 +247,11 @@ export function planClaim(
  * file list instead of naming one.
  */
 export function buildTraceErasure(
-  watchlist: readonly { readonly id: string; readonly addedBy?: unknown }[],
+  watchlist: readonly {
+    readonly id: string;
+    readonly addedBy?: unknown;
+    readonly memberRatings?: unknown;
+  }[],
   history: readonly {
     readonly id: string;
     readonly pickedByUid?: unknown;
@@ -259,6 +263,9 @@ export function buildTraceErasure(
     itemIds: watchlist.map((row) => row.id),
     clearAddedByIds: watchlist
       .filter((row) => clearsAddedBy(row.addedBy, leavingUid))
+      .map((row) => row.id),
+    clearRatingIds: watchlist
+      .filter((row) => holdsRatingBy(row.memberRatings, leavingUid))
       .map((row) => row.id),
     clearPickedByIds: history
       .filter((row) => clearsAddedBy(row.pickedByUid, leavingUid))
@@ -277,6 +284,32 @@ export function buildTraceErasure(
  */
 export function clearsAddedBy(addedBy: unknown, leavingUid: string): boolean {
   return addedBy === leavingUid;
+}
+
+/**
+ * Whether a `groups/{gid}/watchlist/{id}` row's `memberRatings` map holds the
+ * departing member's own rating.
+ *
+ * BIN-1306, Malin's decision of 2026-09-26: the rating goes with the member, the
+ * other members' ratings on the same title stay. A row that never had the map, or
+ * holds it in some other shape, has nothing of theirs to clear.
+ */
+export function holdsRatingBy(memberRatings: unknown, leavingUid: string): boolean {
+  return typeof memberRatings === 'object'
+    && memberRatings !== null
+    && !Array.isArray(memberRatings)
+    && Object.prototype.hasOwnProperty.call(memberRatings, leavingUid);
+}
+
+/**
+ * The field path of one member's key inside `memberRatings`.
+ *
+ * Both SDKs read a dotted update key as a nested field path, so this removes the
+ * one key and leaves the other members' ratings untouched. The client already
+ * writes the same path (`setMemberRating` in `src/lib/firebase/groups.ts`).
+ */
+export function memberRatingField(uid: string): string {
+  return `memberRatings.${uid}`;
 }
 
 /**
@@ -314,6 +347,9 @@ export function memberTraceWrites(leavingUid: string, erasure: TraceErasure): Tr
   }
   for (const itemId of erasure.clearAddedByIds) {
     writes.push({ op: 'clear', collection: 'watchlist', doc: itemId, field: 'addedBy' });
+  }
+  for (const itemId of erasure.clearRatingIds) {
+    writes.push({ op: 'clear', collection: 'watchlist', doc: itemId, field: memberRatingField(leavingUid) });
   }
   for (const rowId of erasure.clearPickedByIds) {
     writes.push({ op: 'clear', collection: 'sessionHistory', doc: rowId, field: 'pickedByUid' });
@@ -505,7 +541,9 @@ export const OWNER_REMOVAL_REFUSALS: Record<'still-member', string> = {
 };
 
 /**
- * The error the account-delete door throws when a step AFTER the handover fails.
+ * The error the account-delete door throws when the handover itself throws, or
+ * when a step after it fails (BIN-1304). Derive the call sites:
+ *   git grep -n "refusalAfterHandover(" -- functions/src/groupHandover/index.ts
  *
  * `anyWriteAttempted` must be conservative in the same way `HandoverSummary.
  * attempted` is: true as soon as a write was attempted, not once one landed.

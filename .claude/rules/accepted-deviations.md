@@ -2298,3 +2298,22 @@ Rader som skrevs före spärren står kvar som de är. Uppdateringsgrenarna prö
 en skrivning ändrar, så en sådan rad går fortfarande att betygsätta och lägga till igen.
 
 **Re-open when:** en ny skrivare av gruppens titelrader läggs till i appen.
+
+---
+
+## BIN-1305: partial-märket kan skickas utan sammanfattning — 2026-09-27
+
+Efterföljare till "2026-09-07 — BIN-1063 steg 3, bunt 2", som står kvar ordagrant. Första
+punkten under "Tva saker om vad anvandaren FAR LASA" säger: "Markoren som gor ett delvis fel
+till `partial` kan bara skickas av kod som kor klart och returnerar en sammanfattning." Den
+meningen beskriver inte längre koden: sedan BIN-1304 skickar fångsten runt `runGroupHandover`
+märket utan någon sammanfattning. Härled den:
+
+```
+git grep -n "refusalAfterHandover(invites.found > 0)" -- functions/src/groupHandover/index.ts
+```
+
+Det accepterade utfallet i samma punkt är oförändrat: en instans som dödas mitt i loopen når
+ingen fångst, och klassas fortfarande som "ingenting raderat".
+
+**Re-open when:** samma som bunt 2-postens.

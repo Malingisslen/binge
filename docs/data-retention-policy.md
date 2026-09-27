@@ -151,8 +151,9 @@ När användaren raderas:
   Mina egna spår i den överlämnade gruppen raderas ändå: `members/{uid}` (som
   bär en kopia av namn och bild), `household/{uid}`, `joinAttempts/{uid}` och
   varje `watchlist/*/progress/{uid}`. De uid-bärande FÄLTEN rensas i stället för
-  att raden tas bort: `watchlist.addedBy`, `sessionHistory.pickedByUid` och mitt
-  uid ur `sessionHistory.participantUids`. Raden blir kvar — gruppens egen
+  att raden tas bort: `watchlist.addedBy`, mitt betyg i `watchlist.memberRatings`
+  (BIN-1306), `sessionHistory.pickedByUid` och mitt uid ur
+  `sessionHistory.participantUids`. Raden blir kvar — gruppens egen
   historik är inte min att radera — men den pekar inte längre på mig.
 
   Raderingen görs FÖRE ägarbytet, och ordningen bär: båda dörrarna hittar en
@@ -203,8 +204,8 @@ När användaren raderas:
   glida isär.
 - **Mina spår i grupper jag bara är MEDLEM i raderas också** (BIN-1278, Malins
   beslut 2026-09-23). Samma spår som i ägarfallet ovan: `watchlist.addedBy`,
-  `sessionHistory.pickedByUid` och mitt uid ur `sessionHistory.participantUids`,
-  utöver raderna under mitt eget uid. Görs av servern, i samma anropbara funktion,
+  mitt betyg i `watchlist.memberRatings`, `sessionHistory.pickedByUid` och mitt
+  uid ur `sessionHistory.participantUids`, utöver raderna under mitt eget uid. Görs av servern, i samma anropbara funktion,
   EFTER överlämningen. Mitt uid tas sedan ur `memberUids` av klientkaskaden, som
   förut.
 
@@ -213,15 +214,19 @@ När användaren raderas:
 Själva utträdet är en klientskrivning och oförändrat: mitt uid ur `memberUids`,
 `members/{uid}` och `household/{uid}` raderas. Efteråt anropar appen den anropbara
 `eraseMyGroupTraces`, som raderar resten: `joinAttempts/{uid}`, varje
-`watchlist/*/progress/{uid}`, och rensar `watchlist.addedBy`,
-`sessionHistory.pickedByUid` och `sessionHistory.participantUids` där de pekar på
-mig. Titlarna och historikraderna blir kvar i gruppen.
+`watchlist/*/progress/{uid}`, och rensar `watchlist.addedBy`, mitt betyg i
+`watchlist.memberRatings`, `sessionHistory.pickedByUid` och
+`sessionHistory.participantUids` där de pekar på mig. Titlarna, historikraderna och
+de andra medlemmarnas betyg blir kvar i gruppen.
 
 Steget är bäst-möjligt: faller det står utträdet ändå, och felet rapporteras.
 
-Mitt betyg på gruppens titlar (`watchlist.memberRatings.<uid>`) rensas inte av
-något av stegen i dag — `git grep -n "memberRatings" -- functions/src` ger ingen
-träff. Malins beslut 2026-09-26 är att det ska rensas; arbetet är BIN-1306.
+Betyget (`watchlist.memberRatings.<uid>`) rensas sedan BIN-1306, Malins beslut
+2026-09-26, i samma steg som `addedBy`. Härled steget:
+
+```
+git grep -n -e clearRatingIds -e clearAddedByIds -- functions/src/groupHandover/logic.ts
+```
 
 ### Hushålls-bidrag (delade prenumerationskostnader) → Samtyckesbaserad, självstyrd radering (BIN-184, 2026-07-05)
 

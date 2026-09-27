@@ -105,7 +105,11 @@ export function adminHandoverIo(db: Firestore, log: HandoverIo['log']): Handover
 
     readWatchlist: async (groupId) => {
       const snap = await db.collection(`groups/${groupId}/watchlist`).get();
-      return snap.docs.map((d) => ({ id: d.id, addedBy: d.get('addedBy') }));
+      return snap.docs.map((d) => ({
+        id: d.id,
+        addedBy: d.get('addedBy'),
+        memberRatings: d.get('memberRatings'),
+      }));
     },
 
     readSessionHistory: async (groupId) => {

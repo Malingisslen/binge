@@ -22,6 +22,7 @@ import {
 export interface WatchlistRow {
   readonly id: string;
   readonly addedBy: unknown;
+  readonly memberRatings: unknown;
 }
 
 /** One `groups/{gid}/sessionHistory/{id}` row, narrowed the same way. */
@@ -58,10 +59,12 @@ export interface HandoverWrite {
  * holds a plaintext invite token (BIN-329).
  *
  * The uid-bearing FIELDS are cleared rather than deleting the row they sit on:
- * `watchlist.addedBy`, and `sessionHistory`'s `pickedByUid` and `participantUids`.
+ * `watchlist.addedBy` and the member's own key in `watchlist.memberRatings`, and
+ * `sessionHistory`'s `pickedByUid` and `participantUids`.
  * Malin's decision of 2026-09-06 was about `addedBy` — the title stays, the note
  * saying who added it goes — and the others are the same shape one collection
- * over. Derive the set rather than trusting this list:
+ * over. The rating is Malin's decision of 2026-09-26 (BIN-1306). Derive the set
+ * rather than trusting this list:
  *   grep -n "Uid" src/types/social.ts src/lib/firebase/groups.ts
  */
 export interface TraceErasure {
@@ -69,6 +72,8 @@ export interface TraceErasure {
   readonly itemIds: readonly string[];
   /** The subset whose `addedBy` names the departing member. */
   readonly clearAddedByIds: readonly string[];
+  /** The subset whose `memberRatings` holds a rating keyed by the departing member (BIN-1306). */
+  readonly clearRatingIds: readonly string[];
   /** Session-history row ids whose `pickedByUid` names the departing member. */
   readonly clearPickedByIds: readonly string[];
   /** Session-history row ids whose `participantUids` contains the departing member. */

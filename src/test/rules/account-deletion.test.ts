@@ -116,7 +116,7 @@ function handoverIo(): HandoverIo {
     }),
     readWatchlist: (groupId) => withDb(async d => {
       const snap = await fsMod.getDocs(fsMod.collection(d, 'groups', groupId, 'watchlist'));
-      return snap.docs.map(x => ({ id: x.id, addedBy: x.data().addedBy }));
+      return snap.docs.map(x => ({ id: x.id, addedBy: x.data().addedBy, memberRatings: x.data().memberRatings }));
     }),
     readSessionHistory: (groupId) => withDb(async d => {
       const snap = await fsMod.getDocs(fsMod.collection(d, 'groups', groupId, 'sessionHistory'));
@@ -148,6 +148,11 @@ function handoverIo(): HandoverIo {
       }
       for (const itemId of erasure.clearAddedByIds) {
         batch.update(fsMod.doc(d, 'groups', groupId, 'watchlist', itemId), { addedBy: fsMod.deleteField() });
+      }
+      for (const itemId of erasure.clearRatingIds) {
+        batch.update(fsMod.doc(d, 'groups', groupId, 'watchlist', itemId), {
+          [`memberRatings.${leavingUid}`]: fsMod.deleteField(),
+        });
       }
       for (const rowId of erasure.clearPickedByIds) {
         batch.update(fsMod.doc(d, 'groups', groupId, 'sessionHistory', rowId), { pickedByUid: fsMod.deleteField() });

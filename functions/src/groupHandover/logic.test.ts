@@ -8,7 +8,9 @@ import {
   pickGroupSuccessor,
   buildHandoverUpdate,
   buildOwnerPickedHandover,
+  buildTraceErasure,
   clearsAddedBy,
+  holdsRatingBy,
   isEmptyExcept,
   refusalForHandover,
   refusalForSentInvites,
@@ -315,6 +317,47 @@ describe('clearsAddedBy — the departed name goes, the title stays', () => {
   });
 });
 
+describe('holdsRatingBy — the departed rating goes, the others stay (BIN-1306)', () => {
+  it('matches only a map that holds the departing uid as a key', () => {
+    expect(holdsRatingBy({ gone: 7, stays: 8 }, 'gone')).toBe(true);
+    expect(holdsRatingBy({ stays: 8 }, 'gone')).toBe(false);
+  });
+
+  it('leaves a row without a usable rating map alone', () => {
+    expect(holdsRatingBy(undefined, 'gone')).toBe(false);
+    expect(holdsRatingBy(null, 'gone')).toBe(false);
+    expect(holdsRatingBy('gone', 'gone')).toBe(false);
+    expect(holdsRatingBy(['gone'], 'gone')).toBe(false);
+  });
+
+  // An inherited key is not the member's rating. Without the own-property check a
+  // uid such as `constructor` would match every map.
+  it('does not read an inherited key as a rating', () => {
+    expect(holdsRatingBy({}, 'constructor')).toBe(false);
+  });
+});
+
+describe('buildTraceErasure — the rating category (BIN-1306)', () => {
+  it('names only the rows where the departing member left a rating', () => {
+    const erasure = buildTraceErasure([
+      { id: 'rated', addedBy: 'other', memberRatings: { gone: 7, stays: 8 } },
+      { id: 'others-only', addedBy: 'gone', memberRatings: { stays: 8 } },
+      { id: 'no-map', addedBy: 'other' },
+    ], [], 'gone');
+    expect(erasure.clearRatingIds).toEqual(['rated']);
+    expect(erasure.clearAddedByIds).toEqual(['others-only']);
+    expect(erasure.itemIds).toEqual(['rated', 'others-only', 'no-map']);
+  });
+
+  it('removes one key inside the map, never the map', () => {
+    const writes = memberTraceWrites('gone', buildTraceErasure(
+      [{ id: 'rated', memberRatings: { gone: 7, stays: 8 } }], [], 'gone',
+    ));
+    expect(writes).toContainEqual({ op: 'clear', collection: 'watchlist', doc: 'rated', field: 'memberRatings.gone' });
+    expect(writes.some((w) => w.field === 'memberRatings')).toBe(false);
+  });
+});
+
 describe('refusalForHandover — the caller must not fall through', () => {
   // The one thing standing between a group that failed to hand over and the
   // account cascade's owner branch, which deletes the WHOLE group — other
@@ -566,7 +609,11 @@ describe('the erasure covers every uid-bearing field the group contracts pin', (
     participantUids: 'row.participantUids.includes(leavingUid)',
     // Declared rather than derived.
     addedBy: 'clearsAddedBy(row.addedBy, leavingUid)',
+    // Declared rather than derived too (BIN-1306): the uid is a KEY inside the map,
+    // not a field value, so the name-based scan cannot see it.
+    memberRatings: 'holdsRatingBy(row.memberRatings, leavingUid)',
   };
+  const DECLARED_NOT_DERIVED = new Set(['addedBy', 'memberRatings']);
 
   // The second way a uid field is dealt with, and the reason this map exists at all.
   // BIN-1140/1128 gave the group DOCUMENT its own `hasOnly`, and the scan above reads
@@ -623,9 +670,9 @@ describe('the erasure covers every uid-bearing field the group contracts pin', (
         .toContain(field);
     }
     // ← A handler for a field the rules no longer pin is dead weight, except the
-    // one that is deliberately not derivable.
+    // ones that are deliberately not derivable.
     for (const field of declared) {
-      if (field === 'addedBy') continue;
+      if (DECLARED_NOT_DERIVED.has(field)) continue;
       expect([...uidFieldsInRules], `${field} has a handler but nothing pins it`).toContain(field);
     }
   });
@@ -672,6 +719,7 @@ describe('memberTraceWrites', () => {
   const erasure = (over: Partial<TraceErasure> = {}): TraceErasure => ({
     itemIds: [],
     clearAddedByIds: [],
+    clearRatingIds: [],
     clearPickedByIds: [],
     dropParticipantIds: [],
     ...over,
@@ -704,11 +752,13 @@ describe('memberTraceWrites', () => {
   it('names the exact field for every clear and drop', () => {
     const writes = memberTraceWrites('U9', erasure({
       clearAddedByIds: ['IT1'],
+      clearRatingIds: ['IT3'],
       clearPickedByIds: ['S1'],
       dropParticipantIds: ['S2'],
     }));
     expect(writes.slice(3)).toEqual([
       { op: 'clear', collection: 'watchlist', doc: 'IT1', field: 'addedBy' },
+      { op: 'clear', collection: 'watchlist', doc: 'IT3', field: 'memberRatings.U9' },
       { op: 'clear', collection: 'sessionHistory', doc: 'S1', field: 'pickedByUid' },
       { op: 'drop', collection: 'sessionHistory', doc: 'S2', field: 'participantUids' },
     ]);
@@ -723,6 +773,7 @@ describe('memberTraceWrites', () => {
     expect(memberTraceWrites('U9', erasure({
       itemIds: ['IT1'],
       clearAddedByIds: ['IT2'],
+      clearRatingIds: ['IT3'],
       clearPickedByIds: ['S1'],
       dropParticipantIds: ['S2'],
     }))).toEqual([
@@ -731,6 +782,7 @@ describe('memberTraceWrites', () => {
       { op: 'delete', collection: 'joinAttempts', doc: 'U9' },
       { op: 'delete', collection: 'watchlist/IT1/progress', doc: 'U9' },
       { op: 'clear', collection: 'watchlist', doc: 'IT2', field: 'addedBy' },
+      { op: 'clear', collection: 'watchlist', doc: 'IT3', field: 'memberRatings.U9' },
       { op: 'clear', collection: 'sessionHistory', doc: 'S1', field: 'pickedByUid' },
       { op: 'drop', collection: 'sessionHistory', doc: 'S2', field: 'participantUids' },
     ]);
@@ -742,10 +794,12 @@ describe('memberTraceWrites', () => {
     const writes = memberTraceWrites('U9', erasure({
       itemIds: ['A', 'B', 'C'],
       clearAddedByIds: ['A'],
+      clearRatingIds: ['B', 'C'],
       clearPickedByIds: ['S1', 'S2'],
       dropParticipantIds: ['S3'],
     }));
-    expect(writes.length).toBe(3 + 3 + 1 + 2 + 1);
+    expect(writes.length).toBe(3 + 3 + 1 + 2 + 2 + 1);
+    expect(writes.filter((w) => w.field === 'memberRatings.U9')).toHaveLength(2);
     expect(writes.filter((w) => w.collection === 'watchlist/B/progress')).toHaveLength(1);
     expect(writes.filter((w) => w.field === 'participantUids')).toHaveLength(1);
   });
@@ -994,7 +1048,7 @@ describe('runLeaverErasure — reads the group before anything unbounded (BIN-12
     const port: LeaverIo = {
       log: fakeLog(),
       readGroup: async () => { calls.push('readGroup'); return group; },
-      readWatchlist: async () => { calls.push('readWatchlist'); return [{ id: 'movie_1', addedBy: 'me' }]; },
+      readWatchlist: async () => { calls.push('readWatchlist'); return [{ id: 'movie_1', addedBy: 'me', memberRatings: undefined }]; },
       readSessionHistory: async () => { calls.push('readSessionHistory'); return []; },
       eraseLeaverTraces: async () => { calls.push('erase'); return { kind: 'done' }; },
     };
@@ -1033,7 +1087,7 @@ describe('runOwnerRemovalErasure — group first, one answer for strangers (BIN-
     const port: LeaverIo = {
       log: fakeLog(),
       readGroup: async () => { calls.push('readGroup'); return group; },
-      readWatchlist: async () => { calls.push('readWatchlist'); return [{ id: 'movie_1', addedBy: 'gone' }]; },
+      readWatchlist: async () => { calls.push('readWatchlist'); return [{ id: 'movie_1', addedBy: 'gone', memberRatings: undefined }]; },
       readSessionHistory: async () => { calls.push('readSessionHistory'); return []; },
       eraseLeaverTraces: async (_g, uid, _e, requiredOwner) => {
         calls.push('erase');
@@ -1072,7 +1126,7 @@ describe('the sweep’s member-group step (BIN-1294)', () => {
     const port = {
       log: fakeLog(),
       memberGroups: async () => [{ id: 'mine', ownerUid: 'me' }, { id: 'theirs', ownerUid: 'o' }],
-      readWatchlist: async () => [{ id: 'movie_1', addedBy: 'me' }],
+      readWatchlist: async () => [{ id: 'movie_1', addedBy: 'me', memberRatings: { me: 7, other: 8 } }],
       readSessionHistory: async () => [],
       eraseMemberTraces: async (groupId: string) => { calls.push(`erase:${groupId}`); },
       stripMemberUid: async (groupId: string) => {
@@ -1083,7 +1137,7 @@ describe('the sweep’s member-group step (BIN-1294)', () => {
     return { port, calls };
   }
   const writesFor = (uid: string) =>
-    memberTraceWrites(uid, { itemIds: ['movie_1'], clearAddedByIds: ['movie_1'], clearPickedByIds: [], dropParticipantIds: [] }).length;
+    memberTraceWrites(uid, { itemIds: ['movie_1'], clearAddedByIds: ['movie_1'], clearRatingIds: ['movie_1'], clearPickedByIds: [], dropParticipantIds: [] }).length;
 
   it('plans the trace writes plus the memberUids strip, for groups it does not own', async () => {
     const { port, calls } = io();
