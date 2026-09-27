@@ -1683,7 +1683,7 @@
         {
           "from": "cf-handOverGroup",
           "to": "firestore",
-          "payload": "läser groups/{id} + watchlist + sessionHistory, raderar den avgående ägarens spår (members/{uid}, household/{uid}, progress/{uid}, joinAttempts/{uid}) och rensar addedBy/pickedByUid/participantUids",
+          "payload": "läser groups/{id} + watchlist + sessionHistory, raderar den avgående ägarens spår (members/{uid}, household/{uid}, progress/{uid}, joinAttempts/{uid}) och rensar addedBy/pickedByUid/participantUids samt ägarens egen nyckel i watchlist.memberRatings (BIN-1306; de andra medlemmarnas betyg står kvar)",
           "transport": "Firestore batch write",
           "verified": true
         },
@@ -1732,7 +1732,7 @@
         {
           "from": "cf-eraseMyGroupTraces",
           "to": "firestore",
-          "payload": "runLeaverErasure: läser groups/{id} FÖRST och vägrar den som står i memberUids eller äger gruppen, innan titellistan och sessionshistoriken läses. Sedan memberTraceWrites för anroparens uid (joinAttempts/{uid}, varje watchlist/*/progress/{uid}, addedBy och pickedByUid där de pekar på anroparen, anroparen ur participantUids), i chunkar där varje chunk är en egen transaktion som läser om gruppen och stannar om anroparen gått med igen (leaverChunkMayCommit).",
+          "payload": "runLeaverErasure: läser groups/{id} FÖRST och vägrar den som står i memberUids eller äger gruppen, innan titellistan och sessionshistoriken läses. Sedan memberTraceWrites för anroparens uid (joinAttempts/{uid}, varje watchlist/*/progress/{uid}, addedBy och pickedByUid där de pekar på anroparen, anroparens egen nyckel i watchlist.memberRatings (BIN-1306), anroparen ur participantUids), i chunkar där varje chunk är en egen transaktion som läser om gruppen och stannar om anroparen gått med igen (leaverChunkMayCommit).",
           "transport": "firestore-transaction-write",
           "verified": true
         }
@@ -2745,7 +2745,7 @@
         {
           "from": "cf-retentionCleanup",
           "to": "firestore",
-          "payload": "BIN-1294: for an account deleted in Firebase Console (a uid Auth no longer knows, past the observation floor), after the owned-group handover the sweep runs runSweptMemberGroupErasure over every group where memberUids array-contains the uid and the uid is not the owner: the same trace erasure the delete button runs (member row, household, joinAttempts, progress rows, addedBy, pickedByUid, participantUids), then arrayRemove of the uid from memberUids, last per group so a failed run finds the group again. planSweptMemberGroupErasure counts these writes into the all-or-nothing document budget first, and the step runs inside the same try that keeps the orphanWatch record on failure.",
+          "payload": "BIN-1294: for an account deleted in Firebase Console (a uid Auth no longer knows, past the observation floor), after the owned-group handover the sweep runs runSweptMemberGroupErasure over every group where memberUids array-contains the uid and the uid is not the owner: the same trace erasure the delete button runs (member row, household, joinAttempts, progress rows, addedBy, the uid's own key in watchlist.memberRatings (BIN-1306), pickedByUid, participantUids), then arrayRemove of the uid from memberUids, last per group so a failed run finds the group again. planSweptMemberGroupErasure counts these writes into the all-or-nothing document budget first, and the step runs inside the same try that keeps the orphanWatch record on failure.",
           "transport": "Admin SDK (scheduled)",
           "verified": true
         }
@@ -2837,7 +2837,7 @@
         {
           "from": "cf-handOverOwnedGroups",
           "to": "firestore",
-          "payload": "eraseMemberTraces — batched (≤450 ops): delete members/{uid}, household/{uid}, joinAttempts/{uid} (plaintext invite token, BIN-329) and every watchlist/*/progress/{uid}; remove watchlist.addedBy and sessionHistory.pickedByUid where they name the departing member. Handing the group over must not become an exemption from the erasure a plain member-leave already performs (#5's binding condition)",
+          "payload": "eraseMemberTraces — batched (≤450 ops): delete members/{uid}, household/{uid}, joinAttempts/{uid} (plaintext invite token, BIN-329) and every watchlist/*/progress/{uid}; remove watchlist.addedBy and sessionHistory.pickedByUid where they name the departing member, and the departing member's own key in watchlist.memberRatings (BIN-1306; the other members' ratings on the same title stay). Handing the group over must not become an exemption from the erasure a plain member-leave already performs (#5's binding condition)",
           "transport": "firestore-batch-write",
           "verified": true
         },
