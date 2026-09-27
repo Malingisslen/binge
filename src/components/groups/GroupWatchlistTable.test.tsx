@@ -154,4 +154,86 @@ describe('GroupWatchlistTable — a refused write (BIN-1308)', () => {
     expect(await within(rowOf('Game of Thrones')).findByRole('alert')).toHaveTextContent('Betyget sparades inte');
     expect(within(rowOf('The Matrix')).getByRole('alert')).toHaveTextContent('Betyget sparades inte');
   });
+
+  it('a refused "Rensa" (rating null) shows the failure on the row and reports it under the rate kind (BIN-1314)', async () => {
+    const err = Object.assign(new Error('denied'), { code: 'permission-denied' });
+    setMemberRating.mockRejectedValue(err);
+    renderTable();
+    pickRating('Rensa');
+    await waitFor(() => expect(setMemberRating).toHaveBeenCalledWith({
+      groupId: 'g1', mediaType: 'movie', tmdbId: 603, uid: 'me', rating: null,
+    }));
+    expect(await within(rowOf('The Matrix')).findByRole('alert')).toHaveTextContent('Betyget sparades inte');
+    expect(captureError).toHaveBeenCalledWith(err, { scope: 'groups', kind: 'groupWatchlistTable-rate' });
+  });
+
+  it('an older rating refused after a newer one saved shows no failure (BIN-1315)', async () => {
+    let rejectFirst!: (e: unknown) => void;
+    setMemberRating
+      .mockImplementationOnce(() => new Promise((_, reject) => { rejectFirst = reject; }))
+      .mockResolvedValueOnce(undefined);
+    renderTable();
+    pickRating('7');
+    pickRating('8');
+    await waitFor(() => expect(setMemberRating).toHaveBeenCalledTimes(2));
+    rejectFirst(new Error('denied'));
+    await waitFor(() => expect(captureError).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('an older rating saved after a newer one was refused keeps the failure (BIN-1315)', async () => {
+    let resolveFirst!: () => void;
+    setMemberRating
+      .mockImplementationOnce(() => new Promise<void>(resolve => { resolveFirst = resolve; }))
+      .mockRejectedValueOnce(new Error('denied'));
+    renderTable();
+    pickRating('7');
+    pickRating('8');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Betyget sparades inte');
+    resolveFirst();
+    await new Promise(r => setTimeout(r, 0));
+    expect(screen.getByRole('alert')).toHaveTextContent('Betyget sparades inte');
+  });
+
+  it('a removal on the same row leaves its rating failure showing (BIN-1315)', async () => {
+    setMemberRating.mockRejectedValue(new Error('denied'));
+    removeFromGroupWatchlist.mockResolvedValue(undefined);
+    renderTable();
+    pickRating('7');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Betyget sparades inte');
+    confirmRemoval();
+    await waitFor(() => expect(removeFromGroupWatchlist).toHaveBeenCalledWith('movie', 'g1', 603));
+    expect(within(rowOf('The Matrix')).getByRole('alert')).toHaveTextContent('Betyget sparades inte');
+  });
+
+  it('a refused removal on a row with a rating failure shows both failures at once (BIN-1315)', async () => {
+    setMemberRating.mockRejectedValue(new Error('denied'));
+    removeFromGroupWatchlist.mockRejectedValue(new Error('denied'));
+    renderTable();
+    pickRating('7');
+    expect(await within(rowOf('The Matrix')).findByRole('alert')).toHaveTextContent('Betyget sparades inte');
+    confirmRemoval();
+    expect(await within(rowOf('The Matrix')).findByText('Gick inte att ta bort')).toBeInTheDocument();
+    const alerts = within(rowOf('The Matrix')).getAllByRole('alert').map(a => a.textContent);
+    expect(alerts).toEqual(expect.arrayContaining(['Betyget sparades inte', 'Gick inte att ta bort']));
+    expect(alerts).toHaveLength(2);
+  });
+
+  it('a rating attempt, saved or refused, leaves the row removal failure showing (BIN-1315)', async () => {
+    removeFromGroupWatchlist.mockRejectedValue(new Error('denied'));
+    setMemberRating.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('denied'));
+    renderTable();
+    confirmRemoval();
+    expect(await within(rowOf('The Matrix')).findByRole('alert')).toHaveTextContent('Gick inte att ta bort');
+    pickRating('7');
+    await waitFor(() => expect(setMemberRating).toHaveBeenCalledTimes(1));
+    await new Promise(r => setTimeout(r, 0));
+    const afterSaved = within(rowOf('The Matrix')).getAllByRole('alert').map(a => a.textContent);
+    expect(afterSaved).toEqual(['Gick inte att ta bort']);
+    pickRating('8');
+    expect(await within(rowOf('The Matrix')).findByText('Betyget sparades inte')).toBeInTheDocument();
+    const afterRefused = within(rowOf('The Matrix')).getAllByRole('alert').map(a => a.textContent);
+    expect(afterRefused).toEqual(expect.arrayContaining(['Betyget sparades inte', 'Gick inte att ta bort']));
+    expect(afterRefused).toHaveLength(2);
+  });
 });

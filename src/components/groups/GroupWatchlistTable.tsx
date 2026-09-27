@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Trash2 } from 'lucide-react';
 import { posterUrl, titleHref } from '@/lib/tmdb/client';
@@ -52,16 +52,24 @@ export function GroupWatchlistTable({
     });
   };
 
+  // BIN-1315: only the row's latest rating attempt may set or clear its failure, so an
+  // older attempt that is refused late cannot mark a newer, saved rating as failed.
+  const rateAttempts = useRef<Record<string, number>>({});
+
   const rate = async (item: GroupWatchlistItem, rating: number | null) => {
     const key = failureKey('rate', item);
+    const attempt = (rateAttempts.current[key] ?? 0) + 1;
+    rateAttempts.current[key] = attempt;
     markFailed(key, false);
+    let failedNow = false;
     try {
       await setMemberRating({ groupId, mediaType: item.mediaType, tmdbId: item.tmdbId, uid: myUid, rating });
     } catch (err) {
       console.error('GroupWatchlistTable: rating write failed', err);
       captureError(err, { scope: 'groups', kind: 'groupWatchlistTable-rate' });
-      markFailed(key, true);
+      failedNow = true;
     }
+    if (rateAttempts.current[key] === attempt) markFailed(key, failedNow);
   };
 
   const remove = async (item: GroupWatchlistItem) => {
