@@ -28,10 +28,6 @@
 //   3. Seed only what is live-verified (dated + sourced), exactly like the price
 //      comments in providers.ts — price, contents AND tier mix. A test fails
 //      loudly if a seeded bundle is stale or names a tier id the catalog lacks.
-//
-// The advisor UI that surfaces these is a separate Tier-B follow-up (BIN-430); the
-// engine ships without a consumer yet, like applyAffiliate + AFFILIATE_PROGRAMS
-// in providers.ts.
 
 import { canonicalProviderId, canonicalUniqueProviders, getProvider, resolveProviderMonthlyCost } from '@/lib/tmdb/providers';
 import { resolveEffectiveMonthlyCost, type CampaignCostSettings } from '@/lib/advisor/effectiveCost';
