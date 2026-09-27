@@ -5634,7 +5634,7 @@ describe('users/{uid}/friendRequests/{fromUid} — sender renames (BIN-1174)', (
 
   it('changing sentAt is denied', async () => {
     await seed();
-    await assertFails(updateDoc(reqRef(senderDb()), { fromDisplayName: 'Nytt Namn', sentAt: Timestamp.now() }));
+    await assertFails(updateDoc(reqRef(senderDb()), { fromDisplayName: 'Nytt Namn', sentAt: Timestamp.fromMillis(Date.now() + 60_000) }));
   });
 
   it('changing the photo is denied', async () => {
