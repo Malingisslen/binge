@@ -9,6 +9,7 @@ import { removeFromGroupWatchlist, setMemberRating } from '@/lib/firebase/groups
 import { toneForId } from '@/lib/duotone';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { captureError } from '@/lib/sentry';
 import type { GroupMember, GroupWatchlistItem } from '@/types';
 
 /**
@@ -36,6 +37,44 @@ export function GroupWatchlistTable({
 
   const memberProgress = useGroupMemberProgress(groupId);
   const [itemToRemove, setItemToRemove] = useState<GroupWatchlistItem | null>(null);
+  // BIN-1308: a refused rating or removal has to say so on its row, instead of the
+  // row simply staying as it was.
+  // Keyed per row and action, so a write on one row never clears another row's
+  // unresolved failure.
+  const [failed, setFailed] = useState<Record<string, true>>({});
+  const markFailed = (key: string, failedNow: boolean) => {
+    setFailed(prev => {
+      if (!failedNow && !(key in prev)) return prev;
+      const next = { ...prev };
+      if (failedNow) next[key] = true;
+      else delete next[key];
+      return next;
+    });
+  };
+
+  const rate = async (item: GroupWatchlistItem, rating: number | null) => {
+    const key = failureKey('rate', item);
+    markFailed(key, false);
+    try {
+      await setMemberRating({ groupId, mediaType: item.mediaType, tmdbId: item.tmdbId, uid: myUid, rating });
+    } catch (err) {
+      console.error('GroupWatchlistTable: rating write failed', err);
+      captureError(err, { scope: 'groups', kind: 'groupWatchlistTable-rate' });
+      markFailed(key, true);
+    }
+  };
+
+  const remove = async (item: GroupWatchlistItem) => {
+    const key = failureKey('remove', item);
+    markFailed(key, false);
+    try {
+      await removeFromGroupWatchlist(item.mediaType, groupId, item.tmdbId);
+    } catch (err) {
+      console.error('GroupWatchlistTable: removal failed', err);
+      captureError(err, { scope: 'groups', kind: 'groupWatchlistTable-remove' });
+      markFailed(key, true);
+    }
+  };
 
   return (
     <div className="bg-surface border border-rule rounded-sm">
@@ -74,8 +113,11 @@ export function GroupWatchlistTable({
               // Skicka groupId i URL:en så title-page kan aktivera spoiler-skydd
               // (Fas 2b) — `?fromGroup={id}` läses av TVShowPageClient.
               const href = titleHref(item.mediaType, item.tmdbId, { fromGroup: groupId });
+              const rowKey = mediaTypeDocId(item.mediaType, item.tmdbId);
+              const rateFailed = failed[failureKey('rate', item)] === true;
+              const removeFailed = failed[failureKey('remove', item)] === true;
               return (
-                <tr key={mediaTypeDocId(item.mediaType, item.tmdbId)} className="border-t border-rule-2 hover:bg-rule-2/30">
+                <tr key={rowKey} className="border-t border-rule-2 hover:bg-rule-2/30">
                   <td className="px-3 py-[6px]">
                     <div className="flex items-center gap-2">
                       {item.posterPath && (
@@ -118,12 +160,15 @@ export function GroupWatchlistTable({
                     return (
                       <td key={m.uid} className="text-center px-2 py-[6px]">
                         {mine ? (
-                          <RatingPicker
-                            value={r}
-                            onChange={async v => {
-                              await setMemberRating({ groupId, mediaType: item.mediaType, tmdbId: item.tmdbId, uid: myUid, rating: v });
-                            }}
-                          />
+                          <>
+                            <RatingPicker
+                              value={r}
+                              onChange={v => { void rate(item, v); }}
+                            />
+                            {rateFailed && (
+                              <div role="alert" className="text-xxs text-danger-ink">Betyget sparades inte</div>
+                            )}
+                          </>
                         ) : (
                           <span className={r != null ? 'text-ink-2' : 'text-ink-3'}>
                             {r != null ? r : '—'}
@@ -145,6 +190,9 @@ export function GroupWatchlistTable({
                         <Trash2 size={11} />
                       </button>
                     )}
+                    {removeFailed && (
+                      <div role="alert" className="text-xxs text-danger-ink whitespace-nowrap">Gick inte att ta bort</div>
+                    )}
                   </td>
                 </tr>
               );
@@ -158,7 +206,7 @@ export function GroupWatchlistTable({
           body={`"${itemToRemove.title}" tas bort från gruppens gemensamma bibliotek, inklusive allas betyg på den.`}
           confirmLabel="Ta bort"
           onConfirm={() => {
-            void removeFromGroupWatchlist(itemToRemove.mediaType, groupId, itemToRemove.tmdbId);
+            void remove(itemToRemove);
             setItemToRemove(null);
           }}
           onCancel={() => setItemToRemove(null)}
@@ -166,6 +214,10 @@ export function GroupWatchlistTable({
       )}
     </div>
   );
+}
+
+function failureKey(action: 'rate' | 'remove', item: GroupWatchlistItem): string {
+  return `${action}:${mediaTypeDocId(item.mediaType, item.tmdbId)}`;
 }
 
 function abbrev(name: string): string {
