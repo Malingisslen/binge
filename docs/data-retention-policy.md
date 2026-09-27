@@ -916,11 +916,18 @@ Policy ska omvärderas om:
 
 ## Ändringslogg
 
+- **2026-09-27 (BIN-1317)** — `retentionCleanup` larmar nu admin-inkorgen (Malins val
+  2026-09-27) när en körning loggar fel, när förra körningen aldrig blev klar — oavsett
+  om den hann logga `retentionCleanup: scheduled sweeps done` eller ingen av raderna —
+  och när en schemalagd körning uteblivit. En körning som dör eller uteblir syns först
+  vid nästa körning. Slutar schemat köra helt larmar ingenting.
+  Körningen sparar bara sina egna tidsstämplar (`retentionCleanupHealth/current`),
+  inga personuppgifter.
+
 - **2026-09-27 (BIN-1307)** — Malins beslut: integritetssidan (v1.7) säger nu att en
   Tillsammans-session raderas "senast ett dygn efter att den blivit 7 dagar gammal", i
   stället för "högst 7 dagar". Sessionens livslängd är oförändrad. Löftet förutsätter att
-  det dagliga svepet lyckas radera sessionen. Ett svep som fallerar eller inte körs larmar
-  ingen i dag (BIN-1317), och då kan en session ligga kvar längre utan att någon vet om det.
+  det dagliga svepet lyckas radera sessionen.
   En session utan `expiresAt` raderas först efter 30 dagar och skulle bryta löftet.
 
 - **2026-09-26 (BIN-1298)** — Malins beslut (runda 3, A): gruppens titelrader

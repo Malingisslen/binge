@@ -90,6 +90,12 @@ import { handoverEstimate, type CategoryFindings } from './fieldOwned';
 import { isEmptyExcept } from '../groupHandover/logic';
 import { planSweptMemberGroupErasure, runGroupHandover, runSweptMemberGroupErasure } from '../groupHandover/runHandover';
 import { adminHandoverIo, adminLeaverIo } from '../groupHandover/adminIo';
+import { defineSecret } from 'firebase-functions/params';
+import { sendAdminSystemNotification } from '../util/notifyOnce';
+import { RETENTION_TIMEOUT_SECONDS, RUN_HEALTH_DOC_PATH, runWatched, type RunHealthRecord } from './runHealth';
+
+// BIN-1317: the recipient of the run's own failure alert, as in streamingOffers.
+const ADMIN_UID = defineSecret('ADMIN_UID');
 
 /** Firestore's per-commit write ceiling is 500; leave headroom like the client. */
 const BATCH_SIZE = 450;
@@ -408,9 +414,43 @@ const adminIo: CleanupIo = {
   },
 };
 
+/**
+ * BIN-1317: the schedule wrapper also watches the run. The order of the steps and
+ * every decision are in `runWatched` (./runHealth.ts); this supplies the ports.
+ */
 export const retentionCleanup = onSchedule(
-  { schedule: 'every 24 hours', region: 'europe-west1', timeoutSeconds: 300, memory: '512MiB' },
+  {
+    schedule: 'every 24 hours',
+    region: 'europe-west1',
+    timeoutSeconds: RETENTION_TIMEOUT_SECONDS,
+    memory: '512MiB',
+    secrets: [ADMIN_UID],
+  },
   async () => {
-    await runRetentionCleanup(adminIo);
+    const healthRef = getFirestore().doc(RUN_HEALTH_DOC_PATH);
+    await runWatched({
+      now: () => Date.now(),
+      readHealth: async () => ((await healthRef.get()).data() as RunHealthRecord | undefined) ?? null,
+      writeHealth: async (patch) => {
+        await healthRef.set(patch, { merge: true });
+      },
+      notify: sendAdminSystemNotification,
+      sweep: async (tap) => {
+        await runRetentionCleanup({
+          ...adminIo,
+          log: {
+            info: (message, data) => {
+              logger.info(message, data);
+              tap.onInfo(message);
+            },
+            error: (message, data) => {
+              tap.onError(message);
+              logger.error(message, data);
+            },
+          },
+        });
+      },
+      logError: (message, data) => logger.error(message, data),
+    });
   },
 );

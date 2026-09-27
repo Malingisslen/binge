@@ -302,7 +302,21 @@ Console, i den här ordningen:
   sweeps done` finns: körningen dog i en av de sopningar som kör EFTER den
   raden, inom 300 s-budgeten. De som kör före gick igenom — det är just därför
   raden skrivs separat. Vilka som ligger på vilken sida framgår av
-  `runRetentionCleanup` i `functions/src/retentionCleanup/runCleanup.ts`. Ingen larmar på detta idag (BIN-468 är öppen).
+  `runRetentionCleanup` i `functions/src/retentionCleanup/runCleanup.ts`.
+- **Saknas BÅDA raderna** för en körning som startade: den dog före
+  `scheduled sweeps done` — i de parallella skanningarna eller i raderingarna
+  som kör före den raden. Frånvaron är signalen; härled ordningen med
+  `grep -n "await Promise.all\|scheduled sweeps done\|retentionCleanup done" functions/src/retentionCleanup/runCleanup.ts`.
+- **Larmet (BIN-1317).** Admin-inkorgen får en systemnotis "Rensningen
+  (retentionCleanup) behöver tittas på". Notisen säger vilken av de två
+  signaturerna ovan förra körningen dog med, att en schemalagd körning
+  uteblivit, eller att körningen loggade fel eller kastade. Gränserna och
+  texterna står i `functions/src/retentionCleanup/runHealth.ts`; körningen
+  håller sina tidsstämplar i `retentionCleanupHealth/current`. Döda körningar
+  och uteblivna körningar syns först när NÄSTA körning startar. Slutar schemat
+  köra helt larmar ingenting — funktionen vakar över sig själv. Notisen skickas
+  bara om hemligheten `ADMIN_UID` är bunden; annars står `alert not sent` i
+  loggen.
 
 ### 5e. "Mitt gamla användarnamn är upptaget av ingen"
 

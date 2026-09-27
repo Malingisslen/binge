@@ -2367,3 +2367,58 @@ saknar ett pass från dataskyddsrollen. Om ett sådant pass ska köras är Malin
 byggbeslut.
 
 **Re-open when:** Malin har avgjort frågan — då ersätts posten av en daterad efterföljare.
+
+---
+
+## BIN-1317: rensningen larmar själv när en körning dör eller uteblir — 2026-09-27
+
+Efterföljare till `## BIN-1193` (2026-09-20), som står kvar ordagrant. Tre saker i den
+gäller inte längre, och den här posten stänger dem uttryckligen.
+
+**Hänvisningarna till BIN-468 i den posten.** Den biljetten gick inte att hitta i Linear
+2026-09-27 (BIN-1317:s beskrivning). Larmet byggdes under BIN-1317; läs varje "BIN-468" i
+BIN-1193-postens stycke om vad accepten vilar på, i punkt 4 och 5 under "INTE accepterat"
+och i sista meningen som BIN-1317.
+
+**Punkt 4 under "INTE accepterat" är stängd.** Övervakningsluckan är byggd för båda
+signaturerna. Körningen stämplar i `retentionCleanupHealth/current` när den startar, när den
+loggar `retentionCleanup: scheduled sweeps done` och när den blivit klar. Nästa körning läser
+stämplarna innan den sopar och skickar en systemnotis till admin-inkorgen, med olika text för
+de två signaturerna och för en schemalagd körning som uteblivit. Härled besluten och testerna:
+
+```
+git grep -n "export function previousRunProblems" -- functions/src/retentionCleanup/runHealth.ts
+git grep -n "signature (a)\|signature (b)\|no run at all" -- functions/src/retentionCleanup/runHealth.test.ts
+```
+
+**Punkt 5 är stängd.** `docs/RUNBOOK.md` §5d beskriver nu båda signaturerna.
+
+**"Re-open when" är inte längre manuell.** Utlösaren är densamma — någon av de två
+signaturerna — men den kommer nu som en notis i admin-inkorgen i stället för att kontrolleras
+för hand. Meningen "Nar BIN-468 shippar blir bada larmade i stallet for manuella" är uppfylld
+av den här posten.
+
+**Kanalen är admin-inkorgen, Malins val 2026-09-27.** #27:s villkor i kritiken nämnde
+Sentry/`captureError`; funktionerna har ingen Sentry, och notisen går genom
+`sendAdminSystemNotification`, samma väg som `streamingOffers` och `leavingRollup` redan
+använder, med samma `ADMIN_UID`-hemlighet. Ingen ny betald tjänst och ingen ny schemalagd
+funktion: kontrollen körs inuti den befintliga `retentionCleanup`-körningen.
+
+**Timeouten är oförändrad** men värdet står nu på ett annat ställe. BIN-1193-postens kommando
+`grep -n "timeoutSeconds" functions/src/retentionCleanup/index.ts` visar en konstant; härled
+värdet med:
+
+```
+git grep -n "RETENTION_TIMEOUT_SECONDS =" -- functions/src/retentionCleanup/runHealth.ts
+```
+
+**Vad larmet INTE ser, och som inte är accepterat av den här posten:**
+1. Ett schema som slutar köra helt. Funktionen vakar över sig själv, så ingen körning finns
+   kvar som kan märka det.
+2. En död körning syns först när nästa körning startar, inte i samma stund.
+3. En körning som dör innan den hunnit skriva stämpeln för den första raden rapporteras som
+   att ingen av raderna loggades.
+
+**Re-open when:** loggen visar `retentionCleanup: alert not sent` eller
+`retentionCleanup: alert send failed`, eller en notis kommer som pekar på någon av
+signaturerna — det senare är BIN-1193-postens egen utlösare.

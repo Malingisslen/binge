@@ -807,9 +807,6 @@ findings here too.
 - 🟡 `retentionCleanup` + `reclaimOrphanFollows` are **live** (see
   `docs/analysis/EXTERNAL_ACTIONS.md`), but absent from `deploy.yml` **by design** —
   it ships hosting only, so every functions change needs a manual targeted deploy.
-  The real residual is that there is still **no health metric** for last-run /
-  docs-deleted: a sweep that silently stops running raises no alert. Closest thing
-  today is the per-run `retentionCleanup done` log line, which must be read by hand.
 - 🔴 **PITR och schemalagda backuper är påslagna** (mätt läge, datum och
   härledningskommandon i `docs/analysis/EXTERNAL_ACTIONS.md`, "Open infra items");
   det som saknas är en skriptad backup-hälsokoll, en restore-dry-run och en
@@ -929,7 +926,7 @@ dir. Grounded findings, roughly by severity:
 | Gap | What's missing | Touches |
 |---|---|---|
 | **Backup / DR verification** | PITR och schemalagda backuper är påslagna (se `docs/analysis/EXTERNAL_ACTIONS.md`), men inget larmar om ett schema slutar köra, och ingen återställning har provats. DR is runbook-only and untested. | DevOps (#8), Security (#4), DPO (#6), DBA (#27) |
-| **No health metric for the retention sweeps** | `retentionCleanup` + `reclaimOrphanFollows` are deployed and running, but absent from `deploy.yml` by design (hosting-only) — so each functions change needs a manual targeted deploy, and nothing alerts if a sweep stops running or starts failing. The `retentionCleanup done` log line must be read by hand. | DevOps (#8), DPO (#6), Controller (#3), DBA (#27) |
+| **No health metric for the retention sweeps** | `retentionCleanup` + `reclaimOrphanFollows` are deployed and running, but absent from `deploy.yml` by design (hosting-only) — so each functions change needs a manual targeted deploy. | DevOps (#8), DPO (#6), Controller (#3), DBA (#27) |
 | **Schema-version safety** | No `schemaVersion` on Firestore docs — lazy migration can't prove completeness, and a stale legacy value can persist indefinitely undetected. | Architect (#14), QA (#7), DBA (#27) |
 | **Recommendation/taste drift** | Cascade + taste weights are frozen constants; no engagement tracking, A/B test, or drift detector validates them post-launch. | Data Analyst (#22), Architect (#14), Scoring (#28) |
 | **Notification delivery** | At-most-once is enforced, but there's no per-user delivery record, no user-facing "did you get this?", and no admin delivery-rate SLO. | DevOps (#8), Trust & Safety (#12), PM (#9) |
