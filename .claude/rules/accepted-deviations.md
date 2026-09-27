@@ -2317,3 +2317,53 @@ Det accepterade utfallet i samma punkt är oförändrat: en instans som dödas m
 ingen fångst, och klassas fortfarande som "ingenting raderat".
 
 **Re-open when:** samma som bunt 2-postens.
+
+---
+
+## BIN-1313: BIN-1306:s eskalering är återfunnen, dataskyddsrollens pass är Malins beslut — 2026-09-27
+
+Ingen avvikelse accepteras i den här posten. Den skriver ned vad `"escalations":1` på BIN-1306:s
+kritikrad betyder, och lämnar en fråga öppen för Malin. Härled raden:
+
+```
+git grep -n "BIN-1306 — blind critique" -- docs/org/metrics/events.jsonl
+```
+
+**Eskaleringen.** Sprintmotorn sätter fältet till 1 när kritiken vidgar filuppsättningen. Härled
+det i delivery-pluginets checkout:
+
+```
+git -C C:/claude-plugins grep -n "escalations: p.widened" -- plugins/delivery/workflows/sprint-execute-parallel.js
+```
+
+Kritiken från Database Administrator / Data-layer Engineer lade till
+`functions/src/groupHandover/adminIo.ts`, eftersom hämtningen där bara läste vem som lade till en
+titel och inte vem som betygsatt den. Routern kördes om på den vidgade uppsättningen och svarade
+`single`. Kritiken och dess villkor skrevs som en kommentar på BIN-1306 innan bygget började.
+Innehållet låg alltså på biljetten, inte i körloggen eller sprintplanen som BIN-1313 sökte i.
+
+**Dataskyddsrollen.** BIN-1313 säger att rollen Data Protection Officer "ärvdes". Routern listar den
+under `dropped`, inte under `inherited`, när den körs på gallringsdokumentet tillsammans med
+överlämningens kod:
+
+```
+node docs/org/route.mjs docs/data-retention-policy.md functions/src/groupHandover/logic.ts
+```
+
+Raderna i granskningsloggen som namnger BIN-1306:
+
+```
+git grep -n "BIN-1306" -- docs/org/metrics/events.jsonl
+```
+
+Ändringen i gallringsdokumentet som ingen dataskyddskritik läste före commit:
+
+```
+git show 4e0cbb21 -- docs/data-retention-policy.md
+```
+
+**INTE accepterat, alltså öppet:** att raderingens innebörd och gallringsdokumentets nya lydelse
+saknar ett pass från dataskyddsrollen. Om ett sådant pass ska köras är Malins beslut, inte ett
+byggbeslut.
+
+**Re-open when:** Malin har avgjort frågan — då ersätts posten av en daterad efterföljare.
