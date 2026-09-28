@@ -13,7 +13,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import ts from 'typescript';
-import { normalizeRules, transpileForComparison, globToRegExp, main } from './check-deploy-drift.mjs';
+import { normalizeRules, transpileForComparison, globToRegExp, deployedPathsIn, main } from './check-deploy-drift.mjs';
 
 const OPTIONS = { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 };
 
@@ -492,6 +492,96 @@ describe('main against a real git repository', () => {
       const { code, out } = run(before, commit('broken firebase.json'));
       expect(code).toBe(1);
       expect(out).toContain('Could not compare');
+    });
+
+    // BIN-1346: the watched paths come from what firebase.json names, so a file
+    // outside the floor is diffed the moment a deployed block points at it.
+    const withStorage = () => {
+      onBase();
+      write('firebase.json', JSON.stringify({ ...FIREBASE, storage: { rules: 'storage.rules' } }, null, 2));
+      write('storage.rules', "rules_version = '2';\n");
+      return commit('storage block and its rules');
+    };
+
+    test('a change to a rules file firebase.json names outside the floor stays red', () => {
+      const before = withStorage();
+      write('storage.rules', "rules_version = '2';\nservice firebase.storage {}\n");
+      const { code, out } = run(before, commit('storage rules'));
+      expect(code).toBe(1);
+      expect(out).toContain('storage.rules  (not a file this check can compare)');
+    });
+
+    test('the same file goes unwatched while no firebase.json names it', () => {
+      onBase();
+      write('storage.rules', "rules_version = '2';\n");
+      const before = commit('an unnamed rules file');
+      write('storage.rules', "rules_version = '2';\nservice firebase.storage {}\n");
+      expect(run(before, commit('edit it')).code).toBe(0);
+    });
+
+    test('a push that repoints a rules path is diffed at the new place', () => {
+      const before = withFirebaseJson();
+      write('rules/main.rules', 'x\n');
+      write('firebase.json', JSON.stringify({ ...FIREBASE, firestore: { rules: 'rules/main.rules' } }, null, 2));
+      const { code, out } = run(before, commit('move rules'));
+      expect(code).toBe(1);
+      expect(out).toContain('rules/main.rules  (added)');
+    });
+
+    // The firebase.json change alone is red here, so only the storage.rules line
+    // shows that the path the OLD firebase.json named was still diffed.
+    test('a push that drops a rules path from firebase.json is still diffed at the old place', () => {
+      const before = withStorage();
+      write('firebase.json', JSON.stringify(FIREBASE, null, 2));
+      write('storage.rules', "rules_version = '2';\nservice firebase.storage {}\n");
+      const { code, out } = run(before, commit('drop storage block and edit its rules'));
+      expect(code).toBe(1);
+      expect(out).toContain('storage.rules  (not a file this check can compare)');
+    });
+
+    test('an unrelated push with a storage block goes green', () => {
+      const before = withStorage();
+      write('README.md', 'unrelated\n');
+      expect(run(before, commit('readme')).code).toBe(0);
+    });
+
+    test('a deployed path pointing outside the repository fails closed', () => {
+      onBase();
+      write('firebase.json', JSON.stringify({ ...FIREBASE, database: { rules: '../elsewhere.json' } }, null, 2));
+      const before = commit('outside path');
+      write('README.md', 'y\n');
+      const { code, out } = run(before, commit('readme'));
+      expect(code).toBe(1);
+      expect(out).toContain('points outside the repository');
+    });
+  });
+
+  describe('deployedPathsIn', () => {
+    test('reads rules, indexes, sources and templates from every deployed block, arrays included', () => {
+      const config = {
+        hosting: { source: 'not-read' },
+        emulators: { ui: { enabled: true } },
+        firestore: { rules: 'firestore.rules', indexes: 'firestore.indexes.json' },
+        storage: [{ bucket: 'a', rules: './storage.rules' }],
+        database: { rules: 'database.rules.json' },
+        functions: [{ source: 'functions/' }, { source: 'other' }],
+        remoteconfig: { template: 'remoteconfig.template.json' },
+      };
+      expect(deployedPathsIn(JSON.stringify(config)).sort()).toEqual(
+        [
+          'database.rules.json',
+          'firestore.indexes.json',
+          'firestore.rules',
+          'functions',
+          'other',
+          'remoteconfig.template.json',
+          'storage.rules',
+        ].sort(),
+      );
+    });
+
+    test('a path that is not a string fails closed', () => {
+      expect(() => deployedPathsIn(JSON.stringify({ storage: { rules: 1 } }))).toThrow(/not a path/);
     });
   });
 

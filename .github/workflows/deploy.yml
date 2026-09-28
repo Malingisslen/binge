@@ -28,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # Full history so the rules/functions drift-guard below can diff this
+          # Full history so the drift-guard below can diff this
           # push (github.event.before..sha) to see which files changed.
           fetch-depth: 0
 
@@ -40,14 +40,14 @@ jobs:
       - name: Install deps
         run: npm ci
 
-      # Drift guard: firestore.rules + functions/** are NOT auto-deployed — only
-      # hosting is. If a push to main changed what they deploy, fail loudly so prod
-      # can't silently run the old version. Deploy them manually, then ship hosting
-      # via the "Run workflow" button (workflow_dispatch), which skips this guard.
-      # A change there that cannot reach production (a comment, a test file the
-      # functions build excludes) passes — see scripts/check-deploy-drift.mjs. It
-      # uses TypeScript from the root install, hence its place after npm ci.
-      - name: Guard — rules/functions changed (deploy them manually)
+      # Drift guard: only hosting is auto-deployed. If a push to main changed a file
+      # a manual deploy ships, fail loudly so prod can't silently run the old version.
+      # Which files it watches is watchedPaths in scripts/check-deploy-drift.mjs,
+      # derived from firebase.json. Deploy them manually, then ship hosting via the
+      # "Run workflow" button (workflow_dispatch), which skips this guard. A change
+      # that cannot reach production passes — see that script. It uses TypeScript
+      # from the root install, hence its place after npm ci.
+      - name: Guard — a hand-deployed file changed (deploy it manually)
         if: github.event_name == 'push'
         run: |
           BEFORE="${{ github.event.before }}"

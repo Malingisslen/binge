@@ -90,7 +90,8 @@ version of this section claimed Next 14 while the app ran 16).
 ## Commands
 
 `package.json` holds the script list. These are the ones that are NOT in it — `deploy.yml`
-ships hosting only, so rules and functions are always manual:
+ships hosting only; what else must be deployed by hand is what its guard watches,
+`watchedPaths` in `scripts/check-deploy-drift.mjs`:
 
 ```bash
 firebase deploy --only hosting

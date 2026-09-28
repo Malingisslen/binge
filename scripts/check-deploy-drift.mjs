@@ -42,8 +42,12 @@ const FUNCTIONS_TSCONFIG = 'functions/tsconfig.json';
 const FIREBASE_JSON = 'firebase.json';
 const INDEXES = 'firestore.indexes.json';
 const FIREBASERC = '.firebaserc';
-// The paths this check diffs.
-const WATCHED = [RULES, FUNCTIONS, FIREBASE_JSON, INDEXES, FIREBASERC];
+// Always diffed, whatever firebase.json says: firebase.json and .firebaserc steer a
+// manual deploy themselves, and the rest keeps the guard from narrowing when a
+// firebase.json stops naming one of them. watchedPaths adds what firebase.json names.
+const WATCHED_FLOOR = [RULES, FUNCTIONS, FIREBASE_JSON, INDEXES, FIREBASERC];
+// Keys inside a deployed firebase.json block whose value is a path a manual deploy reads.
+const FIREBASE_JSON_PATH_KEYS = ['rules', 'indexes', 'source', 'template'];
 // The firebase.json keys a manual deploy never reads. Every key NOT listed here is
 // compared, so a key this check has never seen (storage, database, extensions, one
 // Firebase adds later) counts as drift rather than slipping through.
@@ -74,8 +78,8 @@ export function assertRefReachable(ref, { git = runGit } = {}) {
  * `--no-renames` so a rename arrives as a delete plus an add, both real changes.
  * `-z` so a path is never split on whitespace.
  */
-export function listChanges(before, after, { git = runGit } = {}) {
-  const out = git(['diff', '--name-status', '--no-renames', '-z', before, after, '--', ...WATCHED]);
+export function listChanges(before, after, { git = runGit, watched = WATCHED_FLOOR } = {}) {
+  const out = git(['diff', '--name-status', '--no-renames', '-z', before, after, '--', ...watched]);
   const parts = out.split('\0').filter((p) => p !== '');
   if (parts.length % 2 !== 0) throw new Error('could not parse git diff --name-status output');
   const changes = [];
@@ -277,6 +281,46 @@ export function firebaseDeployedBlocks(text) {
   return JSON.stringify(deployed);
 }
 
+/**
+ * Every path a deployed firebase.json block names under FIREBASE_JSON_PATH_KEYS,
+ * read one level into each block, or into each entry of a block that is an array.
+ * A path value that is not a string, or points outside the repository, throws.
+ */
+export function deployedPathsIn(text) {
+  const paths = [];
+  for (const [key, block] of JSON.parse(firebaseDeployedBlocks(text))) {
+    for (const entry of Array.isArray(block) ? block : [block]) {
+      if (entry === null || typeof entry !== 'object') continue;
+      for (const pathKey of FIREBASE_JSON_PATH_KEYS) {
+        const value = entry[pathKey];
+        if (value === undefined) continue;
+        if (typeof value !== 'string') throw new Error(`${FIREBASE_JSON} ${key}.${pathKey} is not a path`);
+        const path = posix.normalize(value.split('\\').join('/')).replace(/\/+$/, '');
+        if (path === '' || path === '.' || path === '..' || path.startsWith('/') || path.startsWith('../')) {
+          throw new Error(`${FIREBASE_JSON} ${key}.${pathKey} points outside the repository: ${value}`);
+        }
+        paths.push(path);
+      }
+    }
+  }
+  return paths;
+}
+
+/**
+ * WATCHED_FLOOR plus every path firebase.json names at EITHER ref, so a push that
+ * moves a rules file is diffed at its old place and its new one. A ref without a
+ * firebase.json adds nothing; one that does not parse throws.
+ */
+export function watchedPaths(before, after, { git = runGit } = {}) {
+  const paths = new Set(WATCHED_FLOOR);
+  for (const ref of [before, after]) {
+    const listed = git(['ls-tree', '--name-only', '-z', ref, '--', FIREBASE_JSON]).split('\0');
+    if (!listed.includes(FIREBASE_JSON)) continue;
+    for (const path of deployedPathsIn(git(['show', `${ref}:${FIREBASE_JSON}`]))) paths.add(path);
+  }
+  return [...paths].sort();
+}
+
 /** The file parsed and re-serialized. A file that does not parse throws. */
 export function parsedJson(text, path) {
   try {
@@ -390,7 +434,8 @@ export function findDrift(before, after, { git = runGit } = {}) {
   const tsconfig = () => (cachedConfig ??= readFunctionsTsconfig(after, { git }));
   const pointers = () => (cachedPointers ??= pointersAt(after, { git }));
   assertNoImportOutsideFunctions({ tsconfig, pointers });
-  return listChanges(before, after, { git }).map((change) => ({
+  const watched = watchedPaths(before, after, { git });
+  return listChanges(before, after, { git, watched }).map((change) => ({
     ...change,
     reason: classifyChange(change, before, after, { git, tsconfig, pointers }),
   }));
@@ -407,7 +452,7 @@ export function main(argv, { git = runGit, log = console.log, err = console.erro
   try {
     changes = findDrift(before, after, { git });
   } catch (error) {
-    err(`::error::Could not compare ${WATCHED.join(' / ')} between ${before} and ${after} — ${error.message}`);
+    err(`::error::Could not compare the files a manual deploy ships between ${before} and ${after} — ${error.message}`);
     err('Treating this push as a rules/functions change.');
     err('Deploy manually:  firebase deploy --only firestore:rules    # and/or --only firestore:indexes, --only functions');
     err("Then ship hosting via the 'Run workflow' button (workflow_dispatch) — that skips this guard.");
@@ -420,11 +465,11 @@ export function main(argv, { git = runGit, log = console.log, err = console.erro
     log(`  no deployed change: ${c.path}`);
   }
   if (real.length === 0) {
-    log(`No change to ${WATCHED.join(' / ')} that reaches production in this push — proceeding.`);
+    log('No change to a file a manual deploy ships reaches production in this push — proceeding.');
     return 0;
   }
 
-  err(`::error::A change under ${WATCHED.join(' / ')} is NOT auto-deployed by this workflow.`);
+  err('::error::A change to a file a manual deploy ships is NOT auto-deployed by this workflow.');
   err('Changed files:');
   for (const c of real) err(`${c.path}  (${c.reason})`);
   err('Deploy manually:  firebase deploy --only firestore:rules    # and/or --only firestore:indexes, --only functions');
