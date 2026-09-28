@@ -6,6 +6,7 @@ import { fsdb, lazySubscribe } from '@/lib/firebase/db';
 import { toDate } from '@/lib/firebase/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFriendRequests } from '@/hooks/useFriends';
+import { useBlockedUsers } from '@/hooks/useBlockedUsers';
 import { getRecentSessionPicksAcrossGroups } from '@/lib/firebase/groups';
 import { captureError } from '@/lib/sentry';
 import { markOneRead, markManyRead } from './useNotifications.helpers';
@@ -61,7 +62,11 @@ export interface RecentGroupPick {
 
 export function useNotifications() {
   const { uid, user } = useAuth();
-  const { data: friendRequests = [] } = useFriendRequests();
+  const { data: allFriendRequests = [] } = useFriendRequests();
+  // BIN-1345. A request from someone I blocked is neither listed nor counted in the
+  // bell, the same filter the Vänner page's requests tab uses (BIN-1341).
+  const { isBlocked } = useBlockedUsers();
+  const friendRequests = allFriendRequests.filter(r => !isBlocked(r.fromUid));
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
   // Subscribera på provider-availability-notifs (legacy).

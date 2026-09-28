@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useFriends } from '@/hooks/useFriends';
+import { useBlockedUsers } from '@/hooks/useBlockedUsers';
 
 // Right rail's Vänner tile. The Direction H mockup shows a recent-activity
 // feed ("Johan släppte Mörker efter S1E03", "Sara gav Bron betyget 4,5"),
@@ -45,7 +46,10 @@ function toDate(val: unknown): Date | null {
 }
 
 export default function VannerTile() {
-  const { data: friends, isLoading } = useFriends();
+  const { data: allFriends, isLoading } = useFriends();
+  // BIN-1345. Someone I blocked is left out, the same filter the Vänner page uses (BIN-1341).
+  const { isBlocked } = useBlockedUsers();
+  const friends = allFriends?.filter(f => !isBlocked(f.uid));
 
   if (isLoading) return null;
 
