@@ -26,8 +26,14 @@
 //      ad tiers — this rule is what lets the engine serve exactly the users
 //      those bundles genuinely fit.
 //   3. Seed only what is live-verified (dated + sourced), exactly like the price
-//      comments in providers.ts — price, contents AND tier mix. A test fails
-//      loudly if a seeded bundle is stale or names a tier id the catalog lacks.
+//      comments in providers.ts — price, contents, tier mix, binding period AND
+//      start fee. A test fails loudly if a seeded bundle is stale, names a tier id
+//      the catalog lacks, or leaves binding/start fee undeclared.
+//   4. A START FEE is part of the price (BIN-1335, Malin 2026-09-28, variant A):
+//      it is spread over the binding period and counted against the saving, so a
+//      bundle that only wins before its fee is never suggested. The per-month
+//      share is rounded UP (never flatters the bundle) and the SAME integer feeds
+//      both savingKr and the card's "räknad som X kr/mån" line.
 
 import { canonicalProviderId, canonicalUniqueProviders, getProvider, resolveProviderMonthlyCost } from '@/lib/tmdb/providers';
 import { resolveEffectiveMonthlyCost, type CampaignCostSettings } from '@/lib/advisor/effectiveCost';
@@ -52,9 +58,13 @@ export interface SwedishBundle {
    * bug must never fabricate a saving).
    */
   includedTiers?: Record<number, string>;
-  /** ISO date (YYYY-MM-DD) the price, contents AND TIER MIX were last hand-verified
-   *  (the 180-day staleness bar covers all three — a bundle silently swapping a
-   *  service's tier is exactly what the flag exists to catch). */
+  /** Binding period in months; 0 = none. Declared on every seeded bundle (rule 3). */
+  bindingMonths?: number;
+  /** One-time start fee in kr; 0 = none. Declared on every seeded bundle (rule 3). */
+  startFeeKr?: number;
+  /** ISO date (YYYY-MM-DD) the price, contents, TIER MIX, binding and start fee were
+   *  last hand-verified (the 180-day staleness bar covers all of them — a bundle
+   *  silently swapping a service's tier is exactly what the flag exists to catch). */
   verifiedDate: string;
   /** Optional signup/marketing URL (BIN-173 affiliate wrap). */
   url?: string;
@@ -70,10 +80,19 @@ export interface BundleSuggestion {
   currentKr: number;
   /** The bundle's ordinary monthly price (mirror of bundle.monthlyKr). */
   bundleKr: number;
+  /** Binding period in months (0 = none). */
+  bindingMonths: number;
+  /** One-time start fee in kr (0 = none). */
+  startFeeKr: number;
+  /** The start fee's per-month share counted against savingKr (rule 4); 0 when no fee. */
+  startFeeMonthlyKr: number;
+  /** bindingMonths × bundleKr + startFeeKr when there is a binding period, else null. */
+  commitmentTotalKr: number | null;
   /**
-   * currentKr − bundleKr (always > 0 for a returned suggestion). Computed over the
-   * REPLACED set ONLY — bonus services are qualitative and are NEVER folded in, so
-   * this headline number can't be inflated by "extra stuff you'd also get".
+   * currentKr − bundleKr − startFeeMonthlyKr (always > 0 for a returned suggestion).
+   * Computed over the REPLACED set ONLY — bonus services are qualitative and are
+   * NEVER folded in, so this headline number can't be inflated by "extra stuff
+   * you'd also get".
    */
   savingKr: number;
   /** Bundle services the user does NOT already own — extra value, never priced into savingKr. */
@@ -94,6 +113,21 @@ export interface BundleSuggestion {
    * the UI MUST surface this ("priser verifierade [datum] — kan vara inaktuella").
    */
   stale: boolean;
+}
+
+/**
+ * The shortest period a start fee is spread over (rule 4). Chosen 2026-09-28
+ * (BIN-1335): a fee on a bundle with no or a short binding is still paid in full
+ * up front, and spreading it over less than a year would count it harder than a
+ * year-long bundle's fee; a year is also the horizon the savings page speaks in.
+ */
+export const START_FEE_MIN_SPREAD_MONTHS = 12;
+
+/** A bundle's start fee as a per-month amount, rounded UP (rule 4). Pure. */
+export function startFeeMonthlyKr(bundle: Pick<SwedishBundle, 'startFeeKr' | 'bindingMonths'>): number {
+  const fee = bundle.startFeeKr ?? 0;
+  if (fee <= 0) return 0;
+  return Math.ceil(fee / Math.max(bundle.bindingMonths ?? 0, START_FEE_MIN_SPREAD_MONTHS));
 }
 
 /** How many days a hand-curated bundle price is trusted before it's flagged stale. */
@@ -178,7 +212,9 @@ function namesOf(ids: readonly number[]): string[] {
 // disclaimar reklam ENDAST på livesändningar/tv-kanaler — TV4:s standardcaveat
 // på den reklamfria Plus-nivån); Viaplay "Film & serier" ("Ingen reklam") =
 // 'standard'. Kontroll: Mer 327 kr à la carte vs 269 = 58 kr — matchar Telias
-// egen "du sparar 58 kr/mån"-uppgift exakt.
+// egen "du sparar 58 kr/mån"-uppgift exakt. Bindning och startavgift lästa ur samma
+// tre sidor 2026-09-28 (BIN-1335): "Ingen bindningstid. 30 dagars uppsägningstid.",
+// och ingen startavgift anges.
 const RAW_SWEDISH_BUNDLES: SwedishBundle[] = [
   {
     id: 'telia-streaming-mer',
@@ -187,6 +223,8 @@ const RAW_SWEDISH_BUNDLES: SwedishBundle[] = [
     monthlyKr: 269,
     includedProviderIds: [8, 384, 337],
     includedTiers: { 8: 'standard', 384: 'ads', 337: 'ads' },
+    bindingMonths: 0,
+    startFeeKr: 0,
     verifiedDate: '2026-07-07',
     url: 'https://www.telia.se/tv/streaming/streaming-mer',
   },
@@ -197,6 +235,8 @@ const RAW_SWEDISH_BUNDLES: SwedishBundle[] = [
     monthlyKr: 319,
     includedProviderIds: [8, 384, 337, 119],
     includedTiers: { 8: 'standard', 384: 'ads', 337: 'ads' }, // Prime (119) otierad → bas
+    bindingMonths: 0,
+    startFeeKr: 0,
     verifiedDate: '2026-07-07',
     url: 'https://www.telia.se/tv/streaming/streaming-maxad',
   },
@@ -207,13 +247,16 @@ const RAW_SWEDISH_BUNDLES: SwedishBundle[] = [
     monthlyKr: 499,
     includedProviderIds: [8, 384, 337, 119, 489, 76],
     includedTiers: { 8: 'standard', 384: 'ads', 337: 'ads', 489: 'plus', 76: 'standard' },
+    bindingMonths: 0,
+    startFeeKr: 0,
     verifiedDate: '2026-07-07',
     url: 'https://www.telia.se/tv/streaming/streaming-mest',
   },
   // BIN-1335 — verifierat 2026-09-27 ur sidans egen produktdata på
   // https://www.tele2.se/tv/streaming-max: pris 119 kr mån 1–6, därefter 249 kr
   // ("startMonth":7, "originalPrice":249) — ORDINARIE 249, kampanjen ignorerad per
-  // regel 1. Ingen bindningstid. Innehåll och nivå ordagrant ur produktnamnen:
+  // regel 1. Ingen bindningstid ("bindingPeriodMonths":0), ingen startavgift anges.
+  // Innehåll och nivå ordagrant ur produktnamnen:
   // "Disney+ Standard med reklam" = 'ads'; "HBO Max Basic med reklam" = 'ads';
   // "TV4 Play Plus med reklam" = 'plus-ads'; "SkyShowtime Standard med annonser" =
   // 'ads'. Kräver bredband, men från vilken operatör som helst. Tele2:s övriga
@@ -227,8 +270,45 @@ const RAW_SWEDISH_BUNDLES: SwedishBundle[] = [
     monthlyKr: 249,
     includedProviderIds: [337, 384, 489, 431],
     includedTiers: { 337: 'ads', 384: 'ads', 489: 'plus-ads', 431: 'ads' },
+    bindingMonths: 0,
+    startFeeKr: 0,
     verifiedDate: '2026-09-27',
     url: 'https://www.tele2.se/tv/streaming-max',
+  },
+  // BIN-1335 — verifierat 2026-09-28 ur sidans egen produktdata på
+  // https://www.allente.se/bredbands-tv/ (+ /standard/ och /premium/): ordinarie
+  // "Tv-paket Standard" 559.0 och "Tv-paket Premium" 899.0 kr/mån, "Startavgift TV"
+  // 695.0, "bindingPeriod":"12". Kampanjpriset (349/499 i 12 mån) och kampanjens
+  // avskrivna startavgift ignoreras per regel 1. Leverans via bredband; parabol har
+  // andra priser plus en månadsavgift och är inte inlagd. Nivåer ordagrant ur
+  // produktnamnen: "Viaplay Total" = 'total', Standards "Viaplay Film & Serier" =
+  // 'standard', "HBO Max Basic med reklam" = 'ads', "TV4 Play Plus (med reklam)" =
+  // 'plus-ads'; Amazon Prime och Apple TV+ saknar nivåer i katalogen. SkyShowtime
+  // ingår i båda men nivån anges inte, så den står inte med (räknas varken som
+  // besparing eller bonus). Tjänster utan katalogpost (BBC Nordic+ m.fl.) står inte med.
+  {
+    id: 'allente-standard',
+    name: 'Allente Standard',
+    vendor: 'Allente',
+    monthlyKr: 559,
+    includedProviderIds: [76, 489, 350],
+    includedTiers: { 76: 'standard', 489: 'plus-ads' },
+    bindingMonths: 12,
+    startFeeKr: 695,
+    verifiedDate: '2026-09-28',
+    url: 'https://www.allente.se/bredbands-tv/standard/',
+  },
+  {
+    id: 'allente-premium',
+    name: 'Allente Premium',
+    vendor: 'Allente',
+    monthlyKr: 899,
+    includedProviderIds: [76, 384, 119, 489, 350],
+    includedTiers: { 76: 'total', 384: 'ads', 489: 'plus-ads' },
+    bindingMonths: 12,
+    startFeeKr: 695,
+    verifiedDate: '2026-09-28',
+    url: 'https://www.allente.se/bredbands-tv/premium/',
   },
 ];
 
@@ -314,9 +394,12 @@ export function detectBundleArbitrage(
       }
     }
     if (replaced.length < 2) continue; // gate counts LIKE-FOR-LIKE replacements only
-    const savingKr = currentKr - bundle.monthlyKr;
-    if (savingKr <= 0) continue; // break-even-or-worse is never a "saving"
+    const feeMonthly = startFeeMonthlyKr(bundle);
+    const savingKr = currentKr - bundle.monthlyKr - feeMonthly;
+    if (savingKr <= 0) continue; // break-even-or-worse, fee included, is never a "saving"
 
+    const bindingMonths = bundle.bindingMonths ?? 0;
+    const startFeeKr = bundle.startFeeKr ?? 0;
     const bonus = included.filter((id) => !owned.has(id));
     suggestions.push({
       bundle,
@@ -324,6 +407,10 @@ export function detectBundleArbitrage(
       replacedNames: namesOf(replaced),
       currentKr,
       bundleKr: bundle.monthlyKr,
+      bindingMonths,
+      startFeeKr,
+      startFeeMonthlyKr: feeMonthly,
+      commitmentTotalKr: bindingMonths > 0 ? bindingMonths * bundle.monthlyKr + startFeeKr : null,
       savingKr,
       bonusProviderIds: bonus,
       bonusNames: namesOf(bonus),

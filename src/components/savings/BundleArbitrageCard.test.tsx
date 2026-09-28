@@ -27,6 +27,10 @@ function suggestion(over: Partial<BundleSuggestion> = {}): BundleSuggestion {
     replacedNames: ['Netflix', 'Max'],
     currentKr: 327,
     bundleKr: 269,
+    bindingMonths: 0,
+    startFeeKr: 0,
+    startFeeMonthlyKr: 0,
+    commitmentTotalKr: null,
     savingKr: 58,
     bonusProviderIds: [337],
     bonusNames: ['Disney+'],
@@ -100,5 +104,65 @@ describe('BundleArbitrageCard (BIN-430)', () => {
     // Order preserved: the engine sorts best-first; the card must not reorder.
     const savings = screen.getAllByText(/spara \d+ kr\/mån/).map(n => n.textContent);
     expect(savings).toEqual(['spara 120 kr/mån', 'spara 40 kr/mån']);
+  });
+
+  describe('binding period and start fee (BIN-1335)', () => {
+    const withFee = () =>
+      suggestion({
+        bundle: bundle({ id: 'allente-premium', name: 'Allente Premium', vendor: 'Allente', monthlyKr: 899 }),
+        bundleKr: 899,
+        currentKr: 1095,
+        bindingMonths: 12,
+        startFeeKr: 695,
+        startFeeMonthlyKr: 58,
+        commitmentTotalKr: 11_483,
+        savingKr: 138,
+      });
+
+    it('states binding, the start fee in kronor and its "räknad som" share on one line', () => {
+      render(<BundleArbitrageCard suggestions={[withFee()]} />);
+      const box = screen.getByTestId('bundle-commitment');
+      expect(box).toHaveTextContent(
+        '12 mån bindningstid · startavgift 695 kr (räknad som 58 kr/mån i besparingen)',
+      );
+    });
+
+    it('shows the total for the whole binding period', () => {
+      render(<BundleArbitrageCard suggestions={[withFee()]} />);
+      expect(screen.getByTestId('bundle-commitment')).toHaveTextContent(
+        /Totalt under bindningstiden: 11\s483 kr/,
+      );
+    });
+
+    it('sits directly under the headline, before the explanation — never tucked away', () => {
+      render(<BundleArbitrageCard suggestions={[withFee()]} />);
+      const box = screen.getByTestId('bundle-commitment');
+      const headline = screen.getByText('spara 138 kr/mån').parentElement!;
+      expect(headline.nextElementSibling).toBe(box);
+      expect(box.nextElementSibling).toHaveTextContent(/^Du betalar 1095 kr\/mån/);
+    });
+
+    it('the "räknad som" figure is the same number the saving deducted', () => {
+      const s = withFee();
+      render(<BundleArbitrageCard suggestions={[s]} />);
+      expect(s.currentKr - s.bundleKr - s.startFeeMonthlyKr).toBe(s.savingKr);
+      expect(screen.getByTestId('bundle-commitment')).toHaveTextContent(`räknad som ${s.startFeeMonthlyKr} kr/mån`);
+    });
+
+    it('a fee without binding shows the fee but no binding and no total', () => {
+      render(
+        <BundleArbitrageCard
+          suggestions={[suggestion({ startFeeKr: 120, startFeeMonthlyKr: 10, savingKr: 48 })]}
+        />,
+      );
+      const box = screen.getByTestId('bundle-commitment');
+      expect(box).toHaveTextContent('Startavgift 120 kr (räknad som 10 kr/mån i besparingen)');
+      expect(box).not.toHaveTextContent(/bindningstid/);
+    });
+
+    it('bundles with neither show no extra line at all', () => {
+      render(<BundleArbitrageCard suggestions={[suggestion()]} />);
+      expect(screen.queryByTestId('bundle-commitment')).toBeNull();
+    });
   });
 });
