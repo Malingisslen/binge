@@ -236,4 +236,94 @@ describe('GroupWatchlistTable — a refused write (BIN-1308)', () => {
     expect(afterRefused).toEqual(expect.arrayContaining(['Betyget sparades inte', 'Gick inte att ta bort']));
     expect(afterRefused).toHaveLength(2);
   });
+
+  it('an older removal refused after a newer one succeeded shows no failure (BIN-1330)', async () => {
+    let rejectFirst!: (e: unknown) => void;
+    removeFromGroupWatchlist
+      .mockImplementationOnce(() => new Promise((_, reject) => { rejectFirst = reject; }))
+      .mockResolvedValueOnce(undefined);
+    renderTable();
+    confirmRemoval();
+    confirmRemoval();
+    await waitFor(() => expect(removeFromGroupWatchlist).toHaveBeenCalledTimes(2));
+    await new Promise(r => setTimeout(r, 0));
+    rejectFirst(new Error('denied'));
+    await waitFor(() => expect(captureError).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('an older removal saved after a newer one was refused keeps the failure (BIN-1330)', async () => {
+    let resolveFirst!: () => void;
+    removeFromGroupWatchlist
+      .mockImplementationOnce(() => new Promise<void>(resolve => { resolveFirst = resolve; }))
+      .mockRejectedValueOnce(new Error('denied'));
+    renderTable();
+    confirmRemoval();
+    confirmRemoval();
+    expect(await screen.findByRole('alert')).toHaveTextContent('Gick inte att ta bort');
+    resolveFirst();
+    await new Promise(r => setTimeout(r, 0));
+    expect(screen.getByRole('alert')).toHaveTextContent('Gick inte att ta bort');
+  });
+});
+
+// BIN-1333. The watchlist prop is what Firestore's listener hands the table, so these
+// drive it by rerendering with a new array: a row that leaves and comes back.
+describe('GroupWatchlistTable — failures follow the row out of the watchlist (BIN-1333)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  function renderWith(watchlist: GroupWatchlistItem[]) {
+    const view = render(
+      <GroupWatchlistTable groupId="g1" watchlist={watchlist} members={members} myUid="me" isOwner={false} />,
+    );
+    return (next: GroupWatchlistItem[]) => view.rerender(
+      <GroupWatchlistTable groupId="g1" watchlist={next} members={members} myUid="me" isOwner={false} />,
+    );
+  }
+
+  it('a row removed and added again comes back without its old removal failure', async () => {
+    removeFromGroupWatchlist.mockRejectedValue(new Error('denied'));
+    const setWatchlist = renderWith([item, otherItem]);
+    confirmRemoval();
+    expect(await within(rowOf('The Matrix')).findByRole('alert')).toHaveTextContent('Gick inte att ta bort');
+    setWatchlist([otherItem]);
+    setWatchlist([{ ...item }, otherItem]);
+    expect(within(rowOf('The Matrix')).queryByRole('alert')).toBeNull();
+  });
+
+  it('a row removed and added again comes back without its old rating failure', async () => {
+    setMemberRating.mockRejectedValue(new Error('denied'));
+    const setWatchlist = renderWith([item]);
+    pickRating('7');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Betyget sparades inte');
+    setWatchlist([]);
+    setWatchlist([{ ...item }]);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('another row leaving the watchlist leaves this row failure showing', async () => {
+    setMemberRating.mockRejectedValue(new Error('denied'));
+    const setWatchlist = renderWith([item, otherItem]);
+    pickRating('7');
+    expect(await within(rowOf('The Matrix')).findByRole('alert')).toHaveTextContent('Betyget sparades inte');
+    setWatchlist([item]);
+    expect(within(rowOf('The Matrix')).getByRole('alert')).toHaveTextContent('Betyget sparades inte');
+  });
+
+  it('a refused removal whose row was hidden while it waited shows the failure when the row returns', async () => {
+    let rejectRemoval!: (e: unknown) => void;
+    removeFromGroupWatchlist.mockImplementationOnce(() => new Promise((_, reject) => { rejectRemoval = reject; }));
+    const setWatchlist = renderWith([item, otherItem]);
+    confirmRemoval();
+    await waitFor(() => expect(removeFromGroupWatchlist).toHaveBeenCalledTimes(1));
+    setWatchlist([otherItem]);
+    rejectRemoval(new Error('denied'));
+    await waitFor(() => expect(captureError).toHaveBeenCalledTimes(1));
+    setWatchlist([{ ...otherItem }]);
+    setWatchlist([{ ...item }, otherItem]);
+    expect(within(rowOf('The Matrix')).getByRole('alert')).toHaveTextContent('Gick inte att ta bort');
+  });
 });

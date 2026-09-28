@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Trash2 } from 'lucide-react';
 import { posterUrl, titleHref } from '@/lib/tmdb/client';
@@ -52,37 +52,55 @@ export function GroupWatchlistTable({
     });
   };
 
-  // BIN-1315: only the row's latest rating attempt may set or clear its failure, so an
-  // older attempt that is refused late cannot mark a newer, saved rating as failed.
-  const rateAttempts = useRef<Record<string, number>>({});
+  // BIN-1315, BIN-1330: only the row's latest attempt of an action may set or clear its
+  // failure, so an older attempt that is refused late cannot mark a newer, successful
+  // one as failed.
+  const attempts = useRef<Record<string, number>>({});
 
-  const rate = async (item: GroupWatchlistItem, rating: number | null) => {
-    const key = failureKey('rate', item);
-    const attempt = (rateAttempts.current[key] ?? 0) + 1;
-    rateAttempts.current[key] = attempt;
+  const runAttempt = async (key: string, write: () => Promise<void>, onError: (err: unknown) => void) => {
+    const attempt = (attempts.current[key] ?? 0) + 1;
+    attempts.current[key] = attempt;
     markFailed(key, false);
     let failedNow = false;
     try {
-      await setMemberRating({ groupId, mediaType: item.mediaType, tmdbId: item.tmdbId, uid: myUid, rating });
+      await write();
     } catch (err) {
-      console.error('GroupWatchlistTable: rating write failed', err);
-      captureError(err, { scope: 'groups', kind: 'groupWatchlistTable-rate' });
+      onError(err);
       failedNow = true;
     }
-    if (rateAttempts.current[key] === attempt) markFailed(key, failedNow);
+    if (attempts.current[key] === attempt) markFailed(key, failedNow);
   };
 
-  const remove = async (item: GroupWatchlistItem) => {
-    const key = failureKey('remove', item);
-    markFailed(key, false);
-    try {
-      await removeFromGroupWatchlist(item.mediaType, groupId, item.tmdbId);
-    } catch (err) {
+  // BIN-1333: a row that leaves the watchlist takes its failures with it, so a row that
+  // is removed and added again does not come back already marked as failed. Only the
+  // moment of leaving clears them: Firestore hides a deleted row before the server
+  // answers, so a refusal can land while the row is still hidden, and the row then
+  // comes back carrying it.
+  const liveRowIds = useRef<ReadonlySet<string>>(new Set());
+  useEffect(() => {
+    const live = new Set(watchlist.map(w => mediaTypeDocId(w.mediaType, w.tmdbId)));
+    const left = [...liveRowIds.current].filter(id => !live.has(id));
+    liveRowIds.current = live;
+    if (left.length > 0) setFailed(prev => dropFailuresFor(prev, new Set(left)));
+  }, [watchlist]);
+
+  const rate = (item: GroupWatchlistItem, rating: number | null) => runAttempt(
+    failureKey('rate', item),
+    () => setMemberRating({ groupId, mediaType: item.mediaType, tmdbId: item.tmdbId, uid: myUid, rating }),
+    err => {
+      console.error('GroupWatchlistTable: rating write failed', err);
+      captureError(err, { scope: 'groups', kind: 'groupWatchlistTable-rate' });
+    },
+  );
+
+  const remove = (item: GroupWatchlistItem) => runAttempt(
+    failureKey('remove', item),
+    () => removeFromGroupWatchlist(item.mediaType, groupId, item.tmdbId),
+    err => {
       console.error('GroupWatchlistTable: removal failed', err);
       captureError(err, { scope: 'groups', kind: 'groupWatchlistTable-remove' });
-      markFailed(key, true);
-    }
-  };
+    },
+  );
 
   return (
     <div className="bg-surface border border-rule rounded-sm">
@@ -226,6 +244,14 @@ export function GroupWatchlistTable({
 
 function failureKey(action: 'rate' | 'remove', item: GroupWatchlistItem): string {
   return `${action}:${mediaTypeDocId(item.mediaType, item.tmdbId)}`;
+}
+
+function dropFailuresFor(failed: Record<string, true>, rowIds: ReadonlySet<string>): Record<string, true> {
+  const stale = Object.keys(failed).filter(key => rowIds.has(key.slice(key.indexOf(':') + 1)));
+  if (stale.length === 0) return failed;
+  const next = { ...failed };
+  for (const key of stale) delete next[key];
+  return next;
 }
 
 function abbrev(name: string): string {
