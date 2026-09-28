@@ -2808,6 +2808,13 @@
         },
         {
           "from": "data-export-lib",
+          "to": "firestore",
+          "payload": "BIN-1337: groupTitleRatings (schema 2.3) — per group I'm a member of, inline getDocs groups/{gid}/watchlist, alongside the household and member-row reads; each group's list read is caught on its own. ownGroupTitleRatings keeps only my own value from each row's memberRatings map; other members' ratings never enter the export.",
+          "transport": "firestore-query",
+          "verified": true
+        },
+        {
+          "from": "data-export-lib",
           "to": "web-app",
           "payload": "downloadExport(data) — client-local JSON file download, no network call",
           "transport": "browser-download",
