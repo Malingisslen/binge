@@ -61,6 +61,17 @@ describe('BundleArbitrageCard (BIN-430)', () => {
     expect(screen.getByText(/för 269 kr\/mån/)).toBeInTheDocument();
   });
 
+  it('writes four-digit amounts with the same Swedish thousands grouping as the binding total (BIN-1339)', () => {
+    render(
+      <BundleArbitrageCard
+        suggestions={[suggestion({ currentKr: 2350, bundleKr: 1150, savingKr: 1200 })]}
+      />,
+    );
+    expect(screen.getByText(/^spara 1\s200 kr\/mån$/)).toBeInTheDocument();
+    expect(screen.getByText(/Du betalar 2\s350 kr\/mån/)).toBeInTheDocument();
+    expect(screen.getByText(/för 1\s150 kr\/mån\./)).toBeInTheDocument();
+  });
+
   it('shows bonus services qualitatively and never priced or folded into the saving', () => {
     render(<BundleArbitrageCard suggestions={[suggestion()]} />);
     const bonus = screen.getByText(/Ingår dessutom: Disney\+/);
@@ -102,7 +113,7 @@ describe('BundleArbitrageCard (BIN-430)', () => {
     // Mutually-exclusive hint appears only with >1 option.
     expect(screen.getByText(/gäller inte tillsammans/)).toBeInTheDocument();
     // Order preserved: the engine sorts best-first; the card must not reorder.
-    const savings = screen.getAllByText(/spara \d+ kr\/mån/).map(n => n.textContent);
+    const savings = screen.getAllByText(/spara [\d\s]+ kr\/mån/).map(n => n.textContent);
     expect(savings).toEqual(['spara 120 kr/mån', 'spara 40 kr/mån']);
   });
 
@@ -139,7 +150,7 @@ describe('BundleArbitrageCard (BIN-430)', () => {
       const box = screen.getByTestId('bundle-commitment');
       const headline = screen.getByText('spara 138 kr/mån').parentElement!;
       expect(headline.nextElementSibling).toBe(box);
-      expect(box.nextElementSibling).toHaveTextContent(/^Du betalar 1095 kr\/mån/);
+      expect(box.nextElementSibling).toHaveTextContent(/^Du betalar 1\s095 kr\/mån/);
     });
 
     it('the "räknad som" figure is the same number the saving deducted', () => {

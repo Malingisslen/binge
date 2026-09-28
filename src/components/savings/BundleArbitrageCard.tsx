@@ -78,7 +78,7 @@ export default function BundleArbitrageCard({ suggestions }: { suggestions: Bund
               <div className="flex items-baseline justify-between gap-3">
                 <div className="text-sm font-semibold text-ink">{s.bundle.name}</div>
                 <div className="text-xs text-acc-deep font-semibold whitespace-nowrap tabular-nums">
-                  spara {s.savingKr} kr/mån
+                  spara {formatKr(s.savingKr)} kr/mån
                 </div>
               </div>
 
@@ -94,8 +94,8 @@ export default function BundleArbitrageCard({ suggestions }: { suggestions: Bund
               )}
 
               <p className="text-xs text-ink-2 mt-[4px]">
-                Du betalar {s.currentKr} kr/mån för {joinNames(s.replacedNames)} var för sig.{' '}
-                Samma tjänster ingår i {s.bundle.name} för {s.bundleKr} kr/mån.
+                Du betalar {formatKr(s.currentKr)} kr/mån för {joinNames(s.replacedNames)} var för sig.{' '}
+                Samma tjänster ingår i {s.bundle.name} för {formatKr(s.bundleKr)} kr/mån.
               </p>
 
               {s.bonusNames.length > 0 && (
