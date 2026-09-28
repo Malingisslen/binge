@@ -327,3 +327,79 @@ describe('GroupWatchlistTable — failures follow the row out of the watchlist (
     expect(within(rowOf('The Matrix')).getByRole('alert')).toHaveTextContent('Gick inte att ta bort');
   });
 });
+
+// BIN-1350. A re-add writes a fresh `addedAt`; a row Firestore restores after a
+// refused removal keeps its old one. That is what these vary.
+describe('GroupWatchlistTable — a title added again starts without the old failure (BIN-1350)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  function renderWith(watchlist: GroupWatchlistItem[]) {
+    const view = render(
+      <GroupWatchlistTable groupId="g1" watchlist={watchlist} members={members} myUid="me" isOwner={false} />,
+    );
+    return (next: GroupWatchlistItem[]) => view.rerender(
+      <GroupWatchlistTable groupId="g1" watchlist={next} members={members} myUid="me" isOwner={false} />,
+    );
+  }
+
+  const readded = { ...item, addedAt: new Date('2026-09-20') } as GroupWatchlistItem;
+
+  function pendingRemoval() {
+    let settle!: { resolve: () => void; reject: (e: unknown) => void };
+    removeFromGroupWatchlist.mockImplementationOnce(
+      () => new Promise<void>((resolve, reject) => { settle = { resolve, reject }; }),
+    );
+    return () => settle;
+  }
+
+  it('a removal refused while its row was hidden does not show on the title added again', async () => {
+    const settle = pendingRemoval();
+    const setWatchlist = renderWith([item, otherItem]);
+    confirmRemoval();
+    await waitFor(() => expect(removeFromGroupWatchlist).toHaveBeenCalledTimes(1));
+    setWatchlist([otherItem]);
+    settle().reject(new Error('denied'));
+    await waitFor(() => expect(captureError).toHaveBeenCalledTimes(1));
+    setWatchlist([readded, otherItem]);
+    expect(within(rowOf('The Matrix')).queryByRole('alert')).toBeNull();
+  });
+
+  it('a rating refused while its row was hidden does not show on the title added again', async () => {
+    let rejectRating!: (e: unknown) => void;
+    setMemberRating.mockImplementationOnce(() => new Promise((_, reject) => { rejectRating = reject; }));
+    const setWatchlist = renderWith([item, otherItem]);
+    pickRating('7');
+    await waitFor(() => expect(setMemberRating).toHaveBeenCalledTimes(1));
+    setWatchlist([otherItem]);
+    rejectRating(new Error('denied'));
+    await waitFor(() => expect(captureError).toHaveBeenCalledTimes(1));
+    setWatchlist([readded, otherItem]);
+    expect(within(rowOf('The Matrix')).queryByRole('alert')).toBeNull();
+  });
+
+  it('a removal still pending when the title is added again shows its own refusal', async () => {
+    const settle = pendingRemoval();
+    const setWatchlist = renderWith([item, otherItem]);
+    confirmRemoval();
+    await waitFor(() => expect(removeFromGroupWatchlist).toHaveBeenCalledTimes(1));
+    setWatchlist([otherItem]);
+    setWatchlist([readded, otherItem]);
+    settle().reject(new Error('denied'));
+    expect(await within(rowOf('The Matrix')).findByRole('alert')).toHaveTextContent('Gick inte att ta bort');
+  });
+
+  it('a removal still pending when the title is added again shows no failure once it is saved', async () => {
+    const settle = pendingRemoval();
+    const setWatchlist = renderWith([item, otherItem]);
+    confirmRemoval();
+    await waitFor(() => expect(removeFromGroupWatchlist).toHaveBeenCalledTimes(1));
+    setWatchlist([otherItem]);
+    setWatchlist([readded, otherItem]);
+    settle().resolve();
+    await waitFor(() => expect(within(rowOf('The Matrix')).queryByRole('alert')).toBeNull());
+    expect(captureError).not.toHaveBeenCalled();
+  });
+});

@@ -76,12 +76,30 @@ export function GroupWatchlistTable({
   // moment of leaving clears them: Firestore hides a deleted row before the server
   // answers, so a refusal can land while the row is still hidden, and the row then
   // comes back carrying it.
-  const liveRowIds = useRef<ReadonlySet<string>>(new Set());
+  //
+  // BIN-1350: a refusal can also land while the row is hidden and the row never come
+  // back, so the title's next add starts with that refusal. A row that returns with a
+  // different `addedAt` than it left with is such a new add, and its failures are
+  // cleared too. A row Firestore restores after a refusal carries its old `addedAt`, so
+  // that refusal still shows.
+  const liveRows = useRef<ReadonlyMap<string, number>>(new Map());
+  const departedRows = useRef<Map<string, number>>(new Map());
   useEffect(() => {
-    const live = new Set(watchlist.map(w => mediaTypeDocId(w.mediaType, w.tmdbId)));
-    const left = [...liveRowIds.current].filter(id => !live.has(id));
-    liveRowIds.current = live;
-    if (left.length > 0) setFailed(prev => dropFailuresFor(prev, new Set(left)));
+    const live = new Map(watchlist.map(w => [mediaTypeDocId(w.mediaType, w.tmdbId), w.addedAt.getTime()]));
+    const stale = new Set<string>();
+    for (const [id, addedAt] of liveRows.current) {
+      if (live.has(id)) continue;
+      stale.add(id);
+      departedRows.current.set(id, addedAt);
+    }
+    for (const [id, addedAt] of live) {
+      const departedAddedAt = departedRows.current.get(id);
+      if (departedAddedAt === undefined) continue;
+      departedRows.current.delete(id);
+      if (departedAddedAt !== addedAt) stale.add(id);
+    }
+    liveRows.current = live;
+    if (stale.size > 0) setFailed(prev => dropFailuresFor(prev, stale));
   }, [watchlist]);
 
   const rate = (item: GroupWatchlistItem, rating: number | null) => runAttempt(
