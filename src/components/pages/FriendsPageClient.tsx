@@ -7,6 +7,7 @@ import { useFollowList, type FollowListUser } from '@/hooks/useFollowList';
 import { useFollowing } from '@/hooks/useFollow';
 import { useFriends, useFriendRequests, useFriendActions } from '@/hooks/useFriends';
 import { useAuth } from '@/hooks/useAuth';
+import { useBlockedUsers } from '@/hooks/useBlockedUsers';
 import { useSenderProfile } from '@/hooks/useSenderProfile';
 import { useFriendActionAlert } from '@/hooks/useFriendActionAlert';
 import { FRIEND_FAILURE_TEXT } from '@/lib/friendActionText';
@@ -20,10 +21,19 @@ type Tab = 'friends' | 'requests' | 'following' | 'followers';
 export default function FriendsPageClient() {
   // X5: 'Vänner' saknade — Binge.nu-suffix i dokumenttiteln.
   usePageMeta({ title: 'Vänner' });
-  const { following, followers, isLoading: followLoading } = useFollowList();
-  const { data: friends = [], isLoading: friendsLoading } = useFriends();
-  const { data: requests = [], isLoading: requestsLoading } = useFriendRequests();
+  const { following: allFollowing, followers: allFollowers, isLoading: followLoading } = useFollowList();
+  const { data: allFriends = [], isLoading: friendsLoading } = useFriends();
+  const { data: allRequests = [], isLoading: requestsLoading } = useFriendRequests();
   const [tab, setTab] = useState<Tab>('friends');
+
+  // BIN-1341. Someone I blocked is left out of every tab, the same client-side
+  // hygiene filter the feed and reviews use. The tab counts read the filtered lists,
+  // so a count never promises a row that is not rendered.
+  const { isBlocked } = useBlockedUsers();
+  const friends = allFriends.filter(f => !isBlocked(f.uid));
+  const requests = allRequests.filter(r => !isBlocked(r.fromUid));
+  const following = allFollowing.filter(u => !isBlocked(u.uid));
+  const followers = allFollowers.filter(u => !isBlocked(u.uid));
 
   const isLoading = followLoading || friendsLoading || requestsLoading;
   const list = tab === 'following' ? following : tab === 'followers' ? followers : [];

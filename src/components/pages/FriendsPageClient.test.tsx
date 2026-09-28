@@ -24,13 +24,24 @@ const actions = vi.hoisted(() => ({
 const data = vi.hoisted(() => ({
   friends: [] as { uid: string; displayName: string; photoURL: string | null; username?: string }[],
   requests: [] as { fromUid: string; fromDisplayName: string; fromPhotoURL: string | null }[],
+  following: [] as { uid: string; displayName: string; photoURL: string | null; username?: string }[],
+  followers: [] as { uid: string; displayName: string; photoURL: string | null; username?: string }[],
+  blocked: new Set<string>(),
 }));
 
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ uid: 'me' }) }));
 vi.mock('@/hooks/usePageMeta', () => ({ usePageMeta: () => {} }));
 vi.mock('@/hooks/useSenderProfile', () => ({ useSenderProfile: () => ({ data: null }) }));
 vi.mock('@/hooks/useFollowList', () => ({
-  useFollowList: () => ({ following: [], followers: [], isLoading: false }),
+  useFollowList: () => ({ following: data.following, followers: data.followers, isLoading: false }),
+}));
+vi.mock('@/hooks/useBlockedUsers', () => ({
+  useBlockedUsers: () => ({
+    blockedUids: data.blocked,
+    isBlocked: (uid: string) => data.blocked.has(uid),
+    blockUser: vi.fn(),
+    unblockUser: vi.fn(),
+  }),
 }));
 vi.mock('@/hooks/useFollow', () => ({
   useFollowing: () => ({ isFollowing: () => false, followUser: vi.fn(), unfollowUser: vi.fn() }),
@@ -68,6 +79,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   data.friends = [];
   data.requests = [];
+  data.following = [];
+  data.followers = [];
+  data.blocked = new Set();
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 
@@ -187,5 +201,47 @@ describe('FriendsPageClient — a refused friend write says so, on its own row',
     });
 
     expect(view.queryByRole('alert')).toBeNull();
+  });
+});
+
+// BIN-1341. Someone I blocked stays out of every tab, and out of that tab's count.
+// Each case puts the blocked person AND an unblocked one in the same list, so the
+// assertion that the unblocked one is shown proves the list rendered at all.
+describe('FriendsPageClient — a blocked person is left out of every tab', () => {
+  const tabs = [
+    { label: 'Vänner', seed: () => { data.friends = [friend('x', 'Xerxes'), friend('a', 'Anna')]; } },
+    { label: 'Förfrågningar', seed: () => { data.requests = [request('x', 'Xerxes'), request('a', 'Anna')]; } },
+    { label: 'Följer', seed: () => { data.following = [friend('x', 'Xerxes'), friend('a', 'Anna')]; } },
+    { label: 'Följare', seed: () => { data.followers = [friend('x', 'Xerxes'), friend('a', 'Anna')]; } },
+  ];
+
+  // Roster floor outside the parameterised cases: the tab labels are read from the
+  // page itself, so a tab added without a case here fails this test.
+  it('has a case for every tab the page renders', () => {
+    const view = render(<FriendsPageClient />);
+    const rendered = view.getAllByRole('button')
+      .map((b) => b.textContent?.replace(/ \(\d+\)$/, ''))
+      .sort();
+    expect(rendered).toEqual(tabs.map((t) => t.label).sort());
+  });
+
+  it.each(tabs)('$label hides the blocked person and does not count them', async ({ label, seed }) => {
+    seed();
+    data.blocked = new Set(['x']);
+    const view = await open(label);
+
+    expect(view.getByText('Anna')).toBeTruthy();
+    expect(view.queryByText('Xerxes')).toBeNull();
+    const tab = view.getAllByRole('button').find((b) => b.textContent?.startsWith(label));
+    expect(tab?.textContent).toBe(`${label} (1)`);
+  });
+
+  it.each(tabs)('$label shows the same person when nobody is blocked', async ({ label, seed }) => {
+    seed();
+    const view = await open(label);
+
+    expect(view.getByText('Xerxes')).toBeTruthy();
+    const tab = view.getAllByRole('button').find((b) => b.textContent?.startsWith(label));
+    expect(tab?.textContent).toBe(`${label} (2)`);
   });
 });
