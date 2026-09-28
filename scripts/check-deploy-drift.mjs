@@ -19,6 +19,9 @@
  *     and not found by `isImported`.
  *   · `firebase.json`, modified: equal once the keys in FIREBASE_JSON_UNDEPLOYED_KEYS
  *     are removed. Any other key, known or not, is compared.
+ *   · `firestore.indexes.json` and `.firebaserc`, modified: equal once parsed as
+ *     JSON, so a whitespace-only edit passes. The indexes are deployed by hand
+ *     alongside the rules; `.firebaserc` names the project a manual deploy targets.
  * Everything else under those paths is a real change without further thought:
  * added, deleted or renamed files, manifests, lockfiles, tsconfig, functions/scripts.
  *
@@ -37,6 +40,10 @@ const FUNCTIONS = 'functions/';
 const FUNCTIONS_SRC = 'functions/src/';
 const FUNCTIONS_TSCONFIG = 'functions/tsconfig.json';
 const FIREBASE_JSON = 'firebase.json';
+const INDEXES = 'firestore.indexes.json';
+const FIREBASERC = '.firebaserc';
+// The paths this check diffs.
+const WATCHED = [RULES, FUNCTIONS, FIREBASE_JSON, INDEXES, FIREBASERC];
 // The firebase.json keys a manual deploy never reads. Every key NOT listed here is
 // compared, so a key this check has never seen (storage, database, extensions, one
 // Firebase adds later) counts as drift rather than slipping through.
@@ -68,7 +75,7 @@ export function assertRefReachable(ref, { git = runGit } = {}) {
  * `-z` so a path is never split on whitespace.
  */
 export function listChanges(before, after, { git = runGit } = {}) {
-  const out = git(['diff', '--name-status', '--no-renames', '-z', before, after, '--', RULES, FUNCTIONS, FIREBASE_JSON]);
+  const out = git(['diff', '--name-status', '--no-renames', '-z', before, after, '--', ...WATCHED]);
   const parts = out.split('\0').filter((p) => p !== '');
   if (parts.length % 2 !== 0) throw new Error('could not parse git diff --name-status output');
   const changes = [];
@@ -233,6 +240,10 @@ export function classifyChange(change, before, after, { git = runGit, tsconfig, 
       : `a firebase.json key other than ${FIREBASE_JSON_UNDEPLOYED_KEYS.join(' or ')} changed`;
   }
 
+  if (path === INDEXES || path === FIREBASERC) {
+    return parsedJson(show(before), path) === parsedJson(show(after), path) ? null : `${path} content changed`;
+  }
+
   if (path.startsWith(FUNCTIONS_SRC) && path.endsWith('.ts') && !path.endsWith('.d.ts')) {
     const relative = path.slice(FUNCTIONS.length);
     const config = tsconfig();
@@ -264,6 +275,15 @@ export function firebaseDeployedBlocks(text) {
     .sort()
     .map((key) => [key, config[key]]);
   return JSON.stringify(deployed);
+}
+
+/** The file parsed and re-serialized. A file that does not parse throws. */
+export function parsedJson(text, path) {
+  try {
+    return JSON.stringify(JSON.parse(text));
+  } catch (error) {
+    throw new Error(`${path} does not parse: ${error.message}`);
+  }
 }
 
 const printer = ts.createPrinter({ removeComments: true });
@@ -387,9 +407,9 @@ export function main(argv, { git = runGit, log = console.log, err = console.erro
   try {
     changes = findDrift(before, after, { git });
   } catch (error) {
-    err(`::error::Could not compare firestore.rules / functions / firebase.json between ${before} and ${after} — ${error.message}`);
+    err(`::error::Could not compare ${WATCHED.join(' / ')} between ${before} and ${after} — ${error.message}`);
     err('Treating this push as a rules/functions change.');
-    err('Deploy manually:  firebase deploy --only firestore:rules    # and/or --only functions');
+    err('Deploy manually:  firebase deploy --only firestore:rules    # and/or --only firestore:indexes, --only functions');
     err("Then ship hosting via the 'Run workflow' button (workflow_dispatch) — that skips this guard.");
     err('If the cause is a setting this check does not follow, the lists it reads are in scripts/check-deploy-drift.mjs.');
     return 1;
@@ -400,14 +420,17 @@ export function main(argv, { git = runGit, log = console.log, err = console.erro
     log(`  no deployed change: ${c.path}`);
   }
   if (real.length === 0) {
-    log('No firestore.rules / functions change that reaches production in this push — proceeding.');
+    log(`No change to ${WATCHED.join(' / ')} that reaches production in this push — proceeding.`);
     return 0;
   }
 
-  err('::error::firestore.rules, functions/** or firebase.json changed — these are NOT auto-deployed by this workflow.');
+  err(`::error::A change under ${WATCHED.join(' / ')} is NOT auto-deployed by this workflow.`);
   err('Changed files:');
   for (const c of real) err(`${c.path}  (${c.reason})`);
-  err('Deploy manually:  firebase deploy --only firestore:rules    # and/or --only functions');
+  err('Deploy manually:  firebase deploy --only firestore:rules    # and/or --only firestore:indexes, --only functions');
+  if (real.some((c) => c.path === FIREBASERC)) {
+    err(`${FIREBASERC} names the project a manual deploy targets — check it before deploying by hand.`);
+  }
   err("Then ship hosting via the 'Run workflow' button (workflow_dispatch) — that skips this guard.");
   return 1;
 }

@@ -475,6 +475,7 @@ describe('main against a real git repository', () => {
       const { code, out } = run(before, commit('null firebase.json'));
       expect(code).toBe(1);
       expect(out).toContain('Could not compare');
+      expect(out).toContain('firebase.json is not a JSON object');
     });
 
     test('a new firebase.json stays red', () => {
@@ -491,6 +492,69 @@ describe('main against a real git repository', () => {
       const { code, out } = run(before, commit('broken firebase.json'));
       expect(code).toBe(1);
       expect(out).toContain('Could not compare');
+    });
+  });
+
+  describe('firestore.indexes.json and .firebaserc', () => {
+    const INDEXES = { indexes: [{ collectionGroup: 'a', queryScope: 'COLLECTION', fields: [{ fieldPath: 'x', order: 'ASCENDING' }] }], fieldOverrides: [] };
+    const FIREBASERC = { projects: { default: 'binge-nu' } };
+    const withBoth = () => {
+      onBase();
+      write('firestore.indexes.json', JSON.stringify(INDEXES, null, 2));
+      write('.firebaserc', JSON.stringify(FIREBASERC, null, 2));
+      return commit('indexes and firebaserc');
+    };
+
+    test('a changed index stays red', () => {
+      const before = withBoth();
+      const changed = { ...INDEXES, indexes: [{ ...INDEXES.indexes[0], fields: [{ fieldPath: 'y', order: 'ASCENDING' }] }] };
+      write('firestore.indexes.json', JSON.stringify(changed, null, 2));
+      const { code, out } = run(before, commit('change index'));
+      expect(code).toBe(1);
+      expect(out).toContain('firestore.indexes.json  (firestore.indexes.json content changed)');
+      expect(out).toContain('--only firestore:indexes');
+    });
+
+    test('a whitespace-only reformat of the index file is not a deployed change', () => {
+      const before = withBoth();
+      write('firestore.indexes.json', JSON.stringify(INDEXES));
+      const { code, out } = run(before, commit('reformat index'));
+      expect(code).toBe(0);
+      expect(out).toContain('no deployed change: firestore.indexes.json');
+    });
+
+    test('an added index file stays red', () => {
+      onBase();
+      write('firestore.indexes.json', JSON.stringify(INDEXES));
+      const { code, out } = run(base, commit('add index file'));
+      expect(code).toBe(1);
+      expect(out).toContain('firestore.indexes.json  (added)');
+    });
+
+    test('an index file that no longer parses fails closed', () => {
+      const before = withBoth();
+      write('firestore.indexes.json', '{ "indexes": ');
+      const { code, out } = run(before, commit('broken index file'));
+      expect(code).toBe(1);
+      expect(out).toContain('Could not compare');
+      expect(out).toContain('firestore.indexes.json does not parse');
+    });
+
+    test('a changed project in .firebaserc stays red and says what it steers', () => {
+      const before = withBoth();
+      write('.firebaserc', JSON.stringify({ projects: { default: 'someone-else' } }, null, 2));
+      const { code, out } = run(before, commit('switch project'));
+      expect(code).toBe(1);
+      expect(out).toContain('.firebaserc  (.firebaserc content changed)');
+      expect(out).toContain('.firebaserc names the project a manual deploy targets');
+    });
+
+    test('a whitespace-only reformat of .firebaserc is not a deployed change', () => {
+      const before = withBoth();
+      write('.firebaserc', JSON.stringify(FIREBASERC));
+      const { code, out } = run(before, commit('reformat firebaserc'));
+      expect(code).toBe(0);
+      expect(out).toContain('no deployed change: .firebaserc');
     });
   });
 
