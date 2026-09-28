@@ -7,7 +7,7 @@ Filen är en JSON med följande top-level-struktur (se
 
 ```jsonc
 {
-  "schemaVersion": "2.2",
+  "schemaVersion": "2.3",
   "exportedAt": "2026-04-24T10:30:00.000Z",
   "userId": "firebase-uid",
   "readme": "…",
@@ -39,7 +39,8 @@ Filen är en JSON med följande top-level-struktur (se
   "sessions":        [ … ],
   "groupMemberships":[ … ],
   "householdContributions": [ … ],
-  "groupMemberRows": [ … ]
+  "groupMemberRows": [ … ],
+  "groupTitleRatings": [ … ]
 }
 ```
 
@@ -70,10 +71,11 @@ Filen är en JSON med följande top-level-struktur (se
 | `listFollows` | `users/{uid}/listFollows/{listId}` | Listor du följer (BIN-96) |
 | `lists` | `lists/{listId}` (where uid==me) | Dina egenkurerade listor + items |
 | `editableLists` | `lists/{listId}` (editors array-contains me) | Listor du är medredigerare i (BIN-100) |
-| `sessions` | `sessions/{sessionId}` (where hostUid==me) | Tillsammans-sessioner du är värd för |
+| `sessions` | `sessions/{sessionId}` (where hostUid==me) | Tillsammans-sessioner du är värd för. Ditt deltagande och dina röster i någon annans session ingår inte; de raderas när sessionen gallras (BIN-1342, se `.claude/rules/accepted-deviations.md`) |
 | `groupMemberships` | `groups/{groupId}` (array-contains me) | Grupper du är medlem i + gruppdata |
 | `householdContributions` | `groups/{groupId}/household/{uid}` (endast grupper du opt:at in i, BIN-184) | Ditt delade hushålls-bidrag per grupp: providerIds, providerCosts (kr/tjänst, ordinarie pris — inga tier-namn), providerCampaigns (kampanjpris + slutdatum), activeProviderIds (tjänster med minst en osedd backlog-titel — usage-härlett, inte självrapporterat), updatedAt |
 | `groupMemberRows` | `groups/{groupId}/members/{uid}` (bara din egen rad, BIN-1172) | Raden om dig som gruppens medlemmar kan läsa, med alla fält den bär |
+| `groupTitleRatings` | `groups/{groupId}/watchlist/{titleId}` → `memberRatings.<uid>` (bara ditt eget värde, BIN-1337) | Ditt betyg per titel i varje grupps lista, som gruppens medlemmar kan se: groupId, titleId, tmdbId, mediaType, title, rating (heltal 1–10, en annan skala än `watchlist.rating`). id = `<groupId>/<titleId>` |
 
 ## Datumserialisering
 
@@ -164,3 +166,7 @@ Dokumentera ändringar i CHANGELOG.md-sektionen nedan.
   medlemsrad i varje grupp du är med i, `groups/{groupId}/members/{uid}`, med
   `id` = groupId). Kontoraderingen raderade redan raden; exporten tog inte med den.
   Additivt fält → minor-bump 2.1 → 2.2.
+- **2.3 (2026-09-28, BIN-1337)** — Lade till `groupTitleRatings` (ditt eget betyg
+  per titel i varje grupps lista, `id` = `<groupId>/<titleId>`). Bara ditt eget
+  värde ur radens `memberRatings`, aldrig de andra medlemmarnas. Additivt fält →
+  minor-bump 2.2 → 2.3.

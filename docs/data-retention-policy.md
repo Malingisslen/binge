@@ -95,6 +95,9 @@ Så vid radering:
   fältägda innehållet, för konton som raderas utanför app-cascaden.
 - `lists/{listId}` där `uid == me` → **delete**
 - `sessions/{sessionId}` där `hostUid == me` → **delete**
+  - Undantag (BIN-1342, Malins beslut 2026-09-28): din deltagarrad och dina röster i en
+    session någon ANNAN är värd för raderas inte med kontot. De försvinner när sessionen
+    gallras av `retentionCleanup` (se nedan). Beslutet står i `.claude/rules/accepted-deviations.md`.
 
 ### Moderationsrapporter → Retention (Art. 17(3))
 

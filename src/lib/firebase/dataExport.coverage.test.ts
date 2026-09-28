@@ -1,9 +1,9 @@
-import { describe, it, expect, vi, beforeAll } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DocumentSnapshot, QuerySnapshot } from 'firebase/firestore';
 import type { UserDataSnapshots } from './userData';
-import { buildUserExport, type BingeExport } from './dataExport';
+import { buildUserExport, ownGroupTitleRatings, type BingeExport } from './dataExport';
 import { collectUserDataSnapshots } from './userData';
 
 /**
@@ -153,7 +153,9 @@ vi.mock('./userData', () => ({
 // BIN-1172: `getDoc` is hoisted so a test can see WHICH paths were read, and answers
 // by path — the member row carries member-shaped data, everything else the household
 // seed the BIN-184 assertion below expects.
-const dbMock = vi.hoisted(() => ({ getDoc: vi.fn() }));
+// BIN-1337: `getDocs` answers each group's title list; default is an empty list so the
+// earlier suites see no ratings.
+const dbMock = vi.hoisted(() => ({ getDoc: vi.fn(), getDocs: vi.fn() }));
 const MEMBER_ROW = {
   uid: 'test-uid', displayName: 'Malin', username: 'malin', photoURL: null, providers: [8],
 };
@@ -168,8 +170,15 @@ vi.mock('./db', () => ({
     db: {},
     doc: vi.fn((_db: unknown, ...segs: string[]) => ({ path: segs.join('/') })),
     getDoc: dbMock.getDoc,
+    collection: vi.fn((_db: unknown, ...segs: string[]) => ({ path: segs.join('/') })),
+    getDocs: dbMock.getDocs,
   })),
 }));
+
+function titleList(rows: { id: string; data: Record<string, unknown> }[]) {
+  return { docs: rows.map(r => ({ id: r.id, data: () => r.data })) };
+}
+dbMock.getDocs.mockImplementation(async () => titleList([]));
 
 // BIN-184: BingeExport keys that are GROUP-scoped (groups/{gid}/household/{uid})
 // and therefore deliberately NOT backed by a users/{uid}-shaped kernel snap —
@@ -177,7 +186,10 @@ vi.mock('./db', () => ({
 // accountDeletion groups-loop (emulator-asserted in account-deletion.test.ts).
 // Adding a key here is a reviewable widening, same discipline as the skip-sets.
 // BIN-1172 adds `groupMemberRows`: groups/{gid}/members/{uid}, fetched inline.
-const GROUP_SCOPED_EXPORT_KEYS = new Set<keyof BingeExport>(['householdContributions', 'groupMemberRows']);
+// BIN-1337 adds `groupTitleRatings`: own values from groups/{gid}/watchlist, fetched inline.
+const GROUP_SCOPED_EXPORT_KEYS = new Set<keyof BingeExport>([
+  'householdContributions', 'groupMemberRows', 'groupTitleRatings',
+]);
 
 function snapsWithGroups(groupIds: string[]): UserDataSnapshots {
   return Object.fromEntries(
@@ -352,5 +364,87 @@ describe('BIN-1172: your own group member row is in the export', () => {
 
     expect(out.groupMemberRows.map(r => r.id)).toEqual(['has']);
     expect(out.householdContributions.map(r => r.id)).toEqual(['has', 'ghost', 'broken']);
+  });
+});
+
+describe('BIN-1337: your own ratings on group titles are in the export', () => {
+  const ROW_MINE = { tmdbId: 603, mediaType: 'movie', title: 'The Matrix', memberRatings: { 'test-uid': 8, other: 3 } };
+  const ROW_OTHERS = { tmdbId: 1399, mediaType: 'tv', title: 'Game of Thrones', memberRatings: { other: 9 } };
+
+  beforeAll(() => {
+    dbMock.getDoc.mockImplementation(async (ref: { path: string }) => answerByPath(ref));
+  });
+  afterAll(() => {
+    dbMock.getDocs.mockImplementation(async () => titleList([]));
+  });
+
+  it('carries only the exporting uid’s own value, never another member’s', async () => {
+    vi.mocked(collectUserDataSnapshots).mockResolvedValueOnce(snapsWithGroups(['g1']));
+    dbMock.getDocs.mockImplementation(async () =>
+      titleList([{ id: 'movie_603', data: ROW_MINE }, { id: 'tv_1399', data: ROW_OTHERS }]));
+
+    const out = await buildUserExport('test-uid');
+
+    expect(out.groupTitleRatings).toEqual([{
+      id: 'g1/movie_603',
+      data: { groupId: 'g1', titleId: 'movie_603', tmdbId: 603, mediaType: 'movie', title: 'The Matrix', rating: 8 },
+    }]);
+    expect(JSON.stringify(out.groupTitleRatings)).not.toContain('memberRatings');
+    expect(JSON.stringify(out.groupTitleRatings)).not.toContain('"other"');
+  });
+
+  it('a row rated only by others produces no entry', () => {
+    expect(ownGroupTitleRatings('g1', [{ id: 'tv_1399', data: ROW_OTHERS }], 'test-uid')).toEqual([]);
+  });
+
+  it('reads each group’s own title list and nothing else', async () => {
+    vi.mocked(collectUserDataSnapshots).mockResolvedValueOnce(snapsWithGroups(['g1', 'g2']));
+    dbMock.getDocs.mockClear();
+    dbMock.getDocs.mockImplementation(async () => titleList([]));
+
+    await buildUserExport('test-uid');
+
+    const paths = dbMock.getDocs.mock.calls.map(([ref]) => (ref as { path: string }).path);
+    expect(paths.sort()).toEqual(['groups/g1/watchlist', 'groups/g2/watchlist']);
+  });
+
+  it('a group whose list read THROWS is skipped, and a sibling group’s rating still arrives', async () => {
+    vi.mocked(collectUserDataSnapshots).mockResolvedValueOnce(snapsWithGroups(['broken', 'ok']));
+    dbMock.getDocs.mockImplementation(async (ref: { path: string }) => {
+      if (ref.path === 'groups/broken/watchlist') throw new Error('permission-denied');
+      return titleList([{ id: 'movie_603', data: ROW_MINE }]);
+    });
+
+    const out = await buildUserExport('test-uid');
+
+    expect(out.groupTitleRatings.map(r => r.id)).toEqual(['ok/movie_603']);
+  });
+
+  it('no groups gives an empty list', async () => {
+    vi.mocked(collectUserDataSnapshots).mockResolvedValueOnce(snapsWithGroups([]));
+    const out = await buildUserExport('test-uid');
+    expect(out.groupTitleRatings).toEqual([]);
+  });
+});
+
+// BIN-1337, test reviewer: a freshly added group title carries NO `memberRatings` field
+// (`addToGroupWatchlist` merge-writes without it), so this is the common shape, not an
+// edge case. Without the type guard the lookup throws and takes the whole export down.
+describe('BIN-1337: an unrated group title does not break the export', () => {
+  afterAll(() => {
+    dbMock.getDocs.mockImplementation(async () => titleList([]));
+  });
+
+  it('a row with no memberRatings field produces no entry, and the export completes', async () => {
+    vi.mocked(collectUserDataSnapshots).mockResolvedValueOnce(snapsWithGroups(['g1']));
+    dbMock.getDoc.mockImplementation(async (ref: { path: string }) => answerByPath(ref));
+    dbMock.getDocs.mockImplementation(async () => titleList([
+      { id: 'movie_1', data: { tmdbId: 1, mediaType: 'movie', title: 'Unrated' } },
+      { id: 'movie_603', data: { tmdbId: 603, mediaType: 'movie', title: 'The Matrix', memberRatings: { 'test-uid': 7 } } },
+    ]));
+
+    const out = await buildUserExport('test-uid');
+
+    expect(out.groupTitleRatings.map(r => r.id)).toEqual(['g1/movie_603']);
   });
 });

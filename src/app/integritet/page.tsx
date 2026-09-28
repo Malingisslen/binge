@@ -10,8 +10,8 @@ export default function IntegritetPage() {
   return (
     <LegalPageShell
       title="Integritetspolicy"
-      lastUpdated="2026-09-27"
-      version="1.7"
+      lastUpdated="2026-09-28"
+      version="1.8"
     >
       <section>
         <h2>1. Vem är ansvarig?</h2>
@@ -40,7 +40,7 @@ export default function IntegritetPage() {
           <li><strong>Push-notistoken</strong> — om du aktiverat push-notiser sparar vi en enhetsspecifik token (Firebase Cloud Messaging) för att kunna skicka notiser.</li>
           <li><strong>Hemkommun</strong> — om du själv väljer en kommun för att se vad som finns på ditt bibliotek. Den är frivillig och går att ta bort i inställningarna.</li>
           <li><strong>Avsnittsreaktioner</strong> — reaktioner du lämnar på enskilda avsnitt. De är publika och visar att de kommer från ditt konto.</li>
-          <li><strong>Det du gör i en grupp</strong> — titlar du lägger till i gruppens lista och vilken titel ni valde på en filmkväll. Det visas för gruppens medlemmar tillsammans med vem som lade till eller valde den.</li>
+          <li><strong>Det du gör i en grupp</strong> — titlar du lägger till i gruppens lista, betyg du sätter på dem och vilken titel ni valde på en filmkväll. Det visas för gruppens medlemmar tillsammans med vem som lade till eller valde den.</li>
           <li><strong>Teknisk logg-data</strong> — IP-adress och webbläsarens User-Agent hanteras av Firebase och Cloudflare för säkerhet och drift.</li>
         </ul>
         <p>
@@ -53,7 +53,7 @@ export default function IntegritetPage() {
       <section>
         <h2>3. Varför vi behandlar uppgifterna (rättslig grund)</h2>
         <ul>
-          <li><strong>Avtal (GDPR art. 6.1.b)</strong> — för att leverera tjänsten: spara din bevakningslista, visa rätt streaming-info, köra rådgivaren, och visa de grupper du är medlem i vilka streamingtjänster du har, eftersom det är så gruppen räknar ut vad ni kan se tillsammans (se §10).</li>
+          <li><strong>Avtal (GDPR art. 6.1.b)</strong> — för att leverera tjänsten: spara din bevakningslista, visa rätt streaming-info, köra rådgivaren, och visa de grupper du är medlem i vilka streamingtjänster du har, eftersom det är så gruppen räknar ut vad ni kan se tillsammans, och visa gruppens medlemmar de betyg du sätter på gruppens titlar (se §10).</li>
           <li><strong>Berättigat intresse (art. 6.1.f)</strong> — för driftlogg, felsökning, felövervakning, bot- och missbruksskydd, samt cookiefri och anonymiserad besöksstatistik (se §4).</li>
           <li><strong>Samtycke (art. 6.1.a)</strong> — för Hushåll, den frivilliga delningen av prenumerationskostnader i grupper (se §10), samt eventuella framtida inslag som kräver samtycke, t.ex. marknadsföring eller cookie-baserad spårning. Inga marknadsföringsinslag används idag.</li>
         </ul>
@@ -279,6 +279,12 @@ export default function IntegritetPage() {
           lista rad för rad. Den tas bort ur gruppen när du lämnar gruppen,
           blir borttagen ur den eller tar bort ditt konto. Hushåll nedan är något annat: att dela vad
           tjänsterna kostar är frivilligt och kräver ett eget samtycke.
+        </p>
+        <p>
+          <strong>Betyg på gruppens titlar.</strong> Sätter du ett betyg på en titel i
+          gruppens lista kan gruppens övriga medlemmar, nuvarande och framtida, se det.
+          Betyget raderas när du lämnar gruppen, blir borttagen ur den eller tar bort ditt
+          konto. Dina egna betyg ingår i din dataexport (se §7).
         </p>
         <p>
           Om du går med i en grupp kan du välja att aktivera <strong>Hushåll</strong> —

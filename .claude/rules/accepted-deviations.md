@@ -2422,3 +2422,75 @@ git grep -n "RETENTION_TIMEOUT_SECONDS =" -- functions/src/retentionCleanup/runH
 **Re-open when:** loggen visar `retentionCleanup: alert not sent` eller
 `retentionCleanup: alert send failed`, eller en notis kommer som pekar på någon av
 signaturerna — det senare är BIN-1193-postens egen utlösare.
+
+---
+
+## BIN-1342: deltagande i någon annans Tillsammans-session exporteras och raderas inte — 2026-09-28
+
+Malins beslut 2026-09-28 (alternativ B), efter full blind panel (#5, #6, #4, #27, #25). Fila inte
+"röster i andras sessioner saknas i exporten" eller "kontoraderingen lämnar deltagarrader kvar".
+
+**Läget.** Exporten och kontoraderingen läser sessionerna ur samma fråga i `userData.ts`, och
+serversvepet för konsolraderade konton har en egen. Båda frågar på `hostUid`. Deltar man i någon
+annans session ligger deltagarraden (`participants/*`) och rösterna (`swipes/*`) kvar i den
+sessionen. Härled frågorna:
+
+```
+git grep -n "hostUid" -- src/lib/firebase/userData.ts functions/src/retentionCleanup/index.ts
+```
+
+**Vad som tar bort dem.** `retentionCleanup` raderar hela sessionsträdet, undersamlingarna
+inräknade, när `isExpiredSession` svarar ja. Reglerna kräver `expiresAt` och `createdAt` när en
+session skapas, och för en sådan session är gränsen `SESSION_LIFETIME_MS` räknat från
+`createdAt`. Svepet körs på ett schema, så en session kan överleva gränsen med upp till ett
+schemaintervall. Härled beslutet, kravet, schemat och raderingen:
+
+```
+git grep -n -A 11 "export function isExpiredSession" -- functions/src/retentionCleanup/logic.ts
+grep -n "request.resource.data.expiresAt is timestamp" firestore.rules
+git grep -n "onSchedule(" -- functions/src/retentionCleanup/index.ts
+git grep -n "recursiveDelete" -- functions/src/retentionCleanup/index.ts
+```
+
+Accepten gäller sessioner som bär båda tidsstämplarna. En äldre session utan `expiresAt` följer
+en längre gräns, och en utan båda raderas inte av svepet; det läses ur funktionen ovan och är
+inte prövat mot produktionen här.
+
+**Why:** datan har en kort, bunden livslängd och raderas utan att någon behöver göra något.
+Att bygga export och radering av deltagande i andras sessioner är mer kod i raderingsvägen för
+data som ändå försvinner. Undantaget står också i `docs/data-export-format.md` och i
+`docs/data-retention-policy.md`.
+
+**INTE accepterat, alltså fortfarande fileable:**
+1. Att en session som bär båda tidsstämplarna kan leva längre än `SESSION_LIFETIME_MS` plus ett
+   schemaintervall utan ett eget beslut — en höjning av gränsen eller ett glesare schema ändrar
+   den här accepten.
+2. Att svepet slutar radera sessionens undersamlingar.
+3. Att deltagande börjar lagras någon annanstans än under sessionen, med längre livslängd.
+
+**Re-open when:** någon av punkterna ovan inträffar, eller en registerutdragsbegäran efterfrågar
+deltagande i en session man inte var värd för.
+
+---
+
+## BIN-1313 avgjord: dataskyddsrollens pass är kört, och dess villkor är byggda — 2026-09-28
+
+Efterföljare till `## BIN-1313` (2026-09-27), som står kvar ordagrant och lämnade frågan
+öppen för Malin.
+
+**Beslutet.** Malin valde 2026-09-27 att köra passet (BIN-1338:s beskrivning). Utfallet var
+"stöd med villkor", och villkoren var två biljetter: BIN-1337 (exporten saknade ens egna betyg
+på gruppens titlar) och BIN-1338 (integritetssidan sa inte att betygen syns för gruppen). Båda
+är byggda 2026-09-28, efter en full blind panel där #6 Data Protection Officer ingick.
+
+**Gallringsdokumentets lydelse är prövad mot koden i det passet.** Meningen om att mitt betyg i
+`watchlist.memberRatings` rensas när jag lämnar en grupp motsvarar överlämningens steg. Härled
+båda sidorna:
+
+```
+git grep -n "memberRatings" -- docs/data-retention-policy.md
+git grep -n "clearRatingIds" -- functions/src/groupHandover/logic.ts
+```
+
+**Re-open when:** gallringsdokumentets mening om `memberRatings` eller `clearRatingIds` ändras
+utan att den andra följer med.

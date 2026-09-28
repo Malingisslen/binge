@@ -31,7 +31,10 @@ import type { QuerySnapshot } from 'firebase/firestore';
 // 2.2 (BIN-1172, 2026-09-13): additive — new `groupMemberRows` array (your own
 //     groups/{gid}/members/{uid} row per group; id = groupId). The account deletion
 //     already erased that row; the export never carried it.
-export const SCHEMA_VERSION = '2.2' as const;
+// 2.3 (BIN-1337, 2026-09-28): additive — new `groupTitleRatings` array: your OWN rating
+//     on each title in each group's list (id = "<groupId>/<titleId>"). Only your own
+//     value from `memberRatings` is carried, never the map and never another member's.
+export const SCHEMA_VERSION = '2.3' as const;
 
 export interface ExportDoc {
   id: string;
@@ -78,6 +81,8 @@ export interface BingeExport {
   householdContributions: ExportDoc[];
   // BIN-1172: min egen medlemsrad i varje grupp. id är groupId.
   groupMemberRows: ExportDoc[];
+  // BIN-1337: mitt eget betyg per titel i varje grupps lista. id är "<groupId>/<titelns doc-id>".
+  groupTitleRatings: ExportDoc[];
 }
 
 const README_TEXT = `Detta är en komplett GDPR Art. 20-export av dina personuppgifter från Binge.nu.
@@ -109,6 +114,7 @@ Filen innehåller:
 - Tillsammans-sessioner du är värd för (sessions)
 - Grupper du är medlem i (groupMemberships)
 - Din egen medlemsrad i varje grupp, som gruppens medlemmar kan läsa (groupMemberRows)
+- Dina egna betyg på titlar i gruppernas listor, som gruppens medlemmar kan se (groupTitleRatings)
 
 Datumfält serialiseras som Firestore-timestamps; om du re-importerar måste
 de konverteras tillbaka. Schema-version framgår i "schemaVersion".
@@ -148,15 +154,24 @@ export async function buildUserExport(uid: string): Promise<BingeExport> {
   // låter en medlem läsa VARJE medlems rad, så det är den här raden som håller
   // exporten till ens egen. En rad som saknas (en spökmedlem, BIN-1097) eller en
   // läsning som fallerar hoppas över i stället för att fälla hela exporten.
+  //
+  // BIN-1337: mina betyg på gruppens titlar läses ur hela titellistan, eftersom betyget
+  // ligger i en map på varje rad. Varje grupps läsning fångas för sig, så en nekad lista
+  // fäller inte de andra grupperna. Anropas bara med den inloggades eget uid
+  // (`DataExportSection`): reglerna prövar medlemskap, inte att uid:t är anroparens,
+  // så ett annat uid skulle exportera den medlemmens betyg.
   const householdContributions: ExportDoc[] = [];
   const groupMemberRows: ExportDoc[] = [];
+  const groupTitleRatings: ExportDoc[] = [];
   if (s.groupsSnap.docs.length > 0) {
     const { fsdb } = await import('./db');
-    const { db, doc, getDoc } = await fsdb();
-    const [householdSnaps, memberSnaps] = await Promise.all([
+    const { db, doc, getDoc, collection, getDocs } = await fsdb();
+    const [householdSnaps, memberSnaps, titleSnaps] = await Promise.all([
       Promise.all(s.groupsSnap.docs.map(g => getDoc(doc(db, 'groups', g.id, 'household', uid)))),
       Promise.all(s.groupsSnap.docs.map(g =>
         getDoc(doc(db, 'groups', g.id, 'members', uid)).catch(() => null))),
+      Promise.all(s.groupsSnap.docs.map(g =>
+        getDocs(collection(db, 'groups', g.id, 'watchlist')).catch(() => null))),
     ]);
     s.groupsSnap.docs.forEach((g, i) => {
       const snap = householdSnaps[i];
@@ -166,6 +181,14 @@ export async function buildUserExport(uid: string): Promise<BingeExport> {
       const member = memberSnaps[i];
       if (member?.exists()) {
         groupMemberRows.push({ id: g.id, data: member.data() as Record<string, unknown> });
+      }
+      const titles = titleSnaps[i];
+      if (titles) {
+        groupTitleRatings.push(...ownGroupTitleRatings(
+          g.id,
+          titles.docs.map(t => ({ id: t.id, data: t.data() as Record<string, unknown> })),
+          uid,
+        ));
       }
     });
   }
@@ -204,7 +227,38 @@ export async function buildUserExport(uid: string): Promise<BingeExport> {
     groupMemberships: toExportDocs(s.groupsSnap),
     householdContributions,
     groupMemberRows,
+    groupTitleRatings,
   };
+}
+
+/**
+ * BIN-1337: the exporting user's own rating on each of one group's title rows. A row
+ * without the user's key yields nothing; a row with it yields ONLY that value — other
+ * members' ratings in the same map never leave this function.
+ */
+export function ownGroupTitleRatings(
+  groupId: string,
+  rows: ExportDoc[],
+  uid: string,
+): ExportDoc[] {
+  const out: ExportDoc[] = [];
+  for (const row of rows) {
+    const ratings = row.data.memberRatings;
+    if (typeof ratings !== 'object' || ratings === null || Array.isArray(ratings)) continue;
+    if (!Object.prototype.hasOwnProperty.call(ratings, uid)) continue;
+    out.push({
+      id: `${groupId}/${row.id}`,
+      data: {
+        groupId,
+        titleId: row.id,
+        tmdbId: row.data.tmdbId ?? null,
+        mediaType: row.data.mediaType ?? null,
+        title: row.data.title ?? null,
+        rating: (ratings as Record<string, unknown>)[uid],
+      },
+    });
+  }
+  return out;
 }
 
 export function downloadExport(data: BingeExport): void {
