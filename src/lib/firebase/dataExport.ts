@@ -167,7 +167,8 @@ export async function buildUserExport(uid: string): Promise<BingeExport> {
     const { fsdb } = await import('./db');
     const { db, doc, getDoc, collection, getDocs } = await fsdb();
     const [householdSnaps, memberSnaps, titleSnaps] = await Promise.all([
-      Promise.all(s.groupsSnap.docs.map(g => getDoc(doc(db, 'groups', g.id, 'household', uid)))),
+      Promise.all(s.groupsSnap.docs.map(g =>
+        getDoc(doc(db, 'groups', g.id, 'household', uid)).catch(() => null))),
       Promise.all(s.groupsSnap.docs.map(g =>
         getDoc(doc(db, 'groups', g.id, 'members', uid)).catch(() => null))),
       Promise.all(s.groupsSnap.docs.map(g =>
@@ -175,7 +176,7 @@ export async function buildUserExport(uid: string): Promise<BingeExport> {
     ]);
     s.groupsSnap.docs.forEach((g, i) => {
       const snap = householdSnaps[i];
-      if (snap.exists()) {
+      if (snap?.exists()) {
         householdContributions.push({ id: g.id, data: snap.data() as Record<string, unknown> });
       }
       const member = memberSnaps[i];

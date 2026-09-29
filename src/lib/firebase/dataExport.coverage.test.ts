@@ -367,6 +367,23 @@ describe('BIN-1172: your own group member row is in the export', () => {
   });
 });
 
+// BIN-1352: the household read sits in the same Promise.all as the member row and the
+// title list. Without its own catch, one group's denied read rejected the whole export.
+describe('BIN-1352: a group whose household read THROWS is skipped', () => {
+  it('still completes, and the other group’s contribution and every member row arrive', async () => {
+    vi.mocked(collectUserDataSnapshots).mockResolvedValueOnce(snapsWithGroups(['broken', 'ok']));
+    dbMock.getDoc.mockImplementation(async (ref: { path: string }) => {
+      if (ref.path === 'groups/broken/household/test-uid') throw new Error('permission-denied');
+      return answerByPath(ref);
+    });
+
+    const out = await buildUserExport('test-uid');
+
+    expect(out.householdContributions).toEqual([{ id: 'ok', data: { seeded: 'household' } }]);
+    expect(out.groupMemberRows.map(r => r.id)).toEqual(['broken', 'ok']);
+  });
+});
+
 describe('BIN-1337: your own ratings on group titles are in the export', () => {
   const ROW_MINE = { tmdbId: 603, mediaType: 'movie', title: 'The Matrix', memberRatings: { 'test-uid': 8, other: 3 } };
   const ROW_OTHERS = { tmdbId: 1399, mediaType: 'tv', title: 'Game of Thrones', memberRatings: { other: 9 } };

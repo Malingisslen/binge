@@ -2795,7 +2795,7 @@
         {
           "from": "data-export-lib",
           "to": "firestore",
-          "payload": "BIN-184: householdContributions (schema 1.2) — per group I'm a member of, inline getDoc groups/{gid}/household/{myUid}; only opted-in (existing) docs are included",
+          "payload": "BIN-184: householdContributions (schema 1.2) — per group I'm a member of, inline getDoc groups/{gid}/household/{myUid}; only opted-in (existing) docs are included. BIN-1352: each group's household read is caught on its own, so a failed read skips that group rather than failing the export",
           "transport": "firestore-query",
           "verified": true
         },
