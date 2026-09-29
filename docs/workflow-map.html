@@ -2604,6 +2604,13 @@
           "payload": "create users/{reporterUid}/notifications/report_{reportId} {kind:system, title, body, read:false} — ingen actionUrl, anmälaren kan inte läsa reports/",
           "transport": "Firestore write",
           "verified": true
+        },
+        {
+          "from": "ugc-actions-menu",
+          "to": "firestore",
+          "payload": "BIN-1349: Blockera användare → blockUserAndEndFriendship: EN klientbatch som skriver users/{me}/blocked/{them} och raderar båda vänskapsspeglarna och väntande förfrågningar åt båda hållen (vägarna i relationshipDocsToClear). Den blockerade tappar direkt vänner-delade titlar och profilkortet. Ingen regeländring: raderingsreglerna låter båda parter radera. Efter en lyckad blockering rensar menyn vänskapens cache via useFriendActions().refreshFriendship, så vänknappen på profilen inte står kvar på Vän. Beskedet väntar på skrivningen; nekas den visas ett felbesked och felet rapporteras som social/blockUser. En avblockering återställer ingen vänskap.",
+          "transport": "Firestore batch write",
+          "verified": true
         }
       ],
       "area": "ops & compliance"
