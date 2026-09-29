@@ -4,7 +4,9 @@ import { useState, useRef, useEffect, type ReactNode } from 'react';
 import { MoreHorizontal, Flag, UserX, UserCheck } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useBlockedUsers } from '@/hooks/useBlockedUsers';
+import { useFriendActions } from '@/hooks/useFriends';
 import { useToast } from '@/contexts/ToastContext';
+import { captureError } from '@/lib/sentry';
 import {
   createReport,
   REPORT_REASON_LABELS,
@@ -84,6 +86,7 @@ export function UgcActionsMenu({
 }) {
   const { uid } = useAuth();
   const { isBlocked, blockUser, unblockUser } = useBlockedUsers();
+  const { refreshFriendship } = useFriendActions();
   const { show: toast } = useToast();
   const [open, setOpen] = useState(false);
   const [reporting, setReporting] = useState(false);
@@ -120,8 +123,20 @@ export function UgcActionsMenu({
       await unblockUser(targetOwnerUid);
       toast(`Avblockerade ${targetOwnerName ?? 'användaren'}.`);
     } else {
-      await blockUser(targetOwnerUid);
-      toast(`Blockerade ${targetOwnerName ?? 'användaren'}. Du ser inte deras innehåll längre.`);
+      // BIN-1349: blockeringen kan nu nekas eller falla utan anslutning, så beskedet
+      // kedjas på skrivningen i stället för att visas ovillkorligt.
+      const name = targetOwnerName ?? 'användaren';
+      try {
+        const { endedFriendship } = await blockUser(targetOwnerUid);
+        refreshFriendship(targetOwnerUid);
+        toast(endedFriendship
+          ? `Blockerade ${name}. Ni är inte vänner längre, och du ser inte deras innehåll.`
+          : `Blockerade ${name}. Du ser inte deras innehåll längre.`);
+      } catch (err) {
+        console.error('blockUser failed', err);
+        captureError(err, { scope: 'social', kind: 'blockUser' });
+        toast(`Kunde inte blockera ${name}. Försök igen.`);
+      }
     }
   };
 

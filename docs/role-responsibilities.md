@@ -475,7 +475,7 @@ Owns every Swedish word.
   Tillsammans co-watching sessions; activity feed + follow-trending;
   reviews/comments/likes; three-tier visibility; **taste-match** compatibility
   scoring.
-  → `src/lib/firebase/friends.ts`, `src/hooks/{useFollow,useReviewSocial,useTasteVector}.ts`, `src/app/feed/page.tsx`, `src/lib/taste/`
+  → `src/lib/firebase/friends.ts`, `src/lib/blockRelationship.ts`, `src/hooks/{useFollow,useReviewSocial,useTasteVector}.ts`, `src/app/feed/page.tsx`, `src/lib/taste/`
 - Per-episode reaction threads (BIN-95) — UGC keyed per episode, double
   spoiler-gated: the thread stays shut until the viewer has marked that episode
   watched, and inside it a reaction its author flagged as a spoiler is blurred

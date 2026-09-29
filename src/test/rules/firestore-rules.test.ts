@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildAddWrite } from '@/lib/watchlistWrites';
+import { relationshipDocsToClear } from '@/lib/blockRelationship';
 import {
   assertFails, assertSucceeds, initializeTestEnvironment,
   type RulesTestEnvironment,
@@ -5667,5 +5668,123 @@ describe('users/{uid}/friendRequests/{fromUid} — sender renames (BIN-1174)', (
       const snap = await getDoc(doc(ctx.firestore(), 'users', RECIPIENT, 'friendRequests', SENDER));
       expect(snap.exists()).toBe(false);
     });
+  });
+});
+
+// ---- BIN-1349: a block ends the friendship ----
+//
+// The app writes the block and deletes the relationship docs in one batch; the paths come
+// from `relationshipDocsToClear`, the same list the app uses. These tests prove the RULES
+// accept that batch from the blocker, including the deletes in the other user's tree, and
+// that each friendship mirror is load-bearing for a different read.
+describe('blocking ends the friendship (BIN-1349)', () => {
+  const BLOCKER = 'blocker_uid';
+  const BLOCKED = 'blocked_uid';
+  const blockerDb = () => testEnv.authenticatedContext(BLOCKER).firestore();
+  const blockedDb = () => testEnv.authenticatedContext(BLOCKED).firestore();
+  const friendsItem = () => ({ ...validWatchlist(), effectiveVisibility: 'friends', isPublic: false });
+
+  async function seed(opts: { friends: boolean; requests: boolean }) {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      for (const uid of [BLOCKER, BLOCKED]) {
+        await setDoc(doc(db, 'users', uid), { defaultVisibility: 'private', isPublic: false });
+        await setDoc(doc(db, 'users', uid, 'watchlist', 'movie_603'), friendsItem());
+      }
+      await setDoc(doc(db, 'publicProfiles', BLOCKER), { displayName: 'B' });
+      if (opts.friends) {
+        await setDoc(doc(db, 'users', BLOCKER, 'friends', BLOCKED), { uid: BLOCKED, since: serverTimestamp() });
+        await setDoc(doc(db, 'users', BLOCKED, 'friends', BLOCKER), { uid: BLOCKER, since: serverTimestamp() });
+      }
+      if (opts.requests) {
+        await setDoc(doc(db, 'users', BLOCKER, 'friendRequests', BLOCKED), { fromUid: BLOCKED });
+        await setDoc(doc(db, 'users', BLOCKED, 'friendRequestsSent', BLOCKER), { uid: BLOCKER });
+        await setDoc(doc(db, 'users', BLOCKED, 'friendRequests', BLOCKER), { fromUid: BLOCKER });
+        await setDoc(doc(db, 'users', BLOCKER, 'friendRequestsSent', BLOCKED), { uid: BLOCKED });
+      }
+    });
+  }
+
+  function blockBatch() {
+    const db = blockerDb();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'users', BLOCKER, 'blocked', BLOCKED), { blockedAt: serverTimestamp() });
+    for (const [root, ...rest] of relationshipDocsToClear(BLOCKER, BLOCKED)) batch.delete(doc(db, root, ...rest));
+    return batch.commit();
+  }
+
+  function acceptBatch() {
+    // acceptFriendRequest(BLOCKED, BLOCKER): the blocked user accepts the blocker's request.
+    const db = blockedDb();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'users', BLOCKED, 'friends', BLOCKER), { uid: BLOCKER, since: serverTimestamp() });
+    batch.set(doc(db, 'users', BLOCKER, 'friends', BLOCKED), { uid: BLOCKED, since: serverTimestamp() });
+    batch.delete(doc(db, 'users', BLOCKED, 'friendRequests', BLOCKER));
+    batch.delete(doc(db, 'users', BLOCKER, 'friendRequestsSent', BLOCKED));
+    return batch.commit();
+  }
+
+  async function remaining() {
+    const found: string[] = [];
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      for (const segs of relationshipDocsToClear(BLOCKER, BLOCKED)) {
+        const [root, ...rest] = segs;
+        if ((await getDoc(doc(ctx.firestore(), root, ...rest))).exists()) found.push(segs.join('/'));
+      }
+    });
+    return found;
+  }
+
+  it("control: before the block, each side reads the other's friends-only title and the profile card", async () => {
+    await seed({ friends: true, requests: false });
+    await assertSucceeds(getDoc(doc(blockedDb(), 'users', BLOCKER, 'watchlist', 'movie_603')));
+    await assertSucceeds(getDoc(doc(blockedDb(), 'publicProfiles', BLOCKER)));
+    await assertSucceeds(getDoc(doc(blockerDb(), 'users', BLOCKED, 'watchlist', 'movie_603')));
+  });
+
+  it("the blocker's batch is allowed and removes both friendship docs", async () => {
+    await seed({ friends: true, requests: false });
+    await assertSucceeds(blockBatch());
+    expect(await remaining()).toEqual([]);
+  });
+
+  // The blocked user's access hangs on the blocker's own doc users/{BLOCKER}/friends/{BLOCKED}.
+  it("the blocked user loses the blocker's friends-only title and profile card", async () => {
+    await seed({ friends: true, requests: false });
+    await assertSucceeds(blockBatch());
+    await assertFails(getDoc(doc(blockedDb(), 'users', BLOCKER, 'watchlist', 'movie_603')));
+    await assertFails(getDoc(doc(blockedDb(), 'publicProfiles', BLOCKER)));
+  });
+
+  // The blocker's access hangs on the MIRROR users/{BLOCKED}/friends/{BLOCKER}. Without the
+  // mirror delete this is the assertion that fails.
+  it("the blocker loses the blocked user's friends-only title too", async () => {
+    await seed({ friends: true, requests: false });
+    await assertSucceeds(blockBatch());
+    await assertFails(getDoc(doc(blockerDb(), 'users', BLOCKED, 'watchlist', 'movie_603')));
+  });
+
+  it('pending requests in both directions are withdrawn by the same batch', async () => {
+    await seed({ friends: false, requests: true });
+    expect((await remaining()).length).toBeGreaterThan(0);
+    await assertSucceeds(blockBatch());
+    expect(await remaining()).toEqual([]);
+  });
+
+  // #27's race, ordering (a): the block lands first and deletes the request the other party
+  // would accept, so the accept's friendship create has no proof doc and is refused.
+  it('an accept that arrives after the block is refused', async () => {
+    await seed({ friends: false, requests: true });
+    await assertSucceeds(blockBatch());
+    await assertFails(acceptBatch());
+    expect(await remaining()).toEqual([]);
+  });
+
+  // Ordering (b): the accept lands first, then the block removes the friendship it made.
+  it('a block that arrives after an accept still ends the friendship', async () => {
+    await seed({ friends: false, requests: true });
+    await assertSucceeds(acceptBatch());
+    await assertSucceeds(blockBatch());
+    expect(await remaining()).toEqual([]);
   });
 });

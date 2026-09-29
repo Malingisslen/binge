@@ -66,6 +66,7 @@ vi.mock('@/components/groups/GroupWatchlistTable', () => ({ GroupWatchlistTable:
 vi.mock('@/components/lists/ListCheapestPlanPanel', () => ({ default: () => null }));
 vi.mock('@/components/groups/GroupSessionHistoryPanel', () => ({ GroupSessionHistoryPanel: () => null }));
 vi.mock('@/components/groups/HouseholdPanel', () => ({ default: () => null }));
+vi.mock('@/hooks/useFriends', () => ({ useFriendActions: () => ({ refreshFriendship: vi.fn() }) }));
 vi.mock('@/hooks/useBlockedUsers', () => ({
   useBlockedUsers: () => ({ isBlocked: () => false, blockUser: vi.fn(), unblockUser: vi.fn() }),
 }));

@@ -4,19 +4,24 @@
 // så länge menyn bara satt på recensioner och kommentarer; profilen gör målet till en
 // PERSON, och då är ordet fel.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { UgcActionsMenu } from './UgcActionsMenu';
 
 vi.mock('@/lib/firebase/config', () => ({ auth: {}, default: {} }));
 
 const createReport = vi.hoisted(() => vi.fn());
 const show = vi.hoisted(() => vi.fn());
+const blockUser = vi.hoisted(() => vi.fn());
+const captureError = vi.hoisted(() => vi.fn());
+const refreshFriendship = vi.hoisted(() => vi.fn());
 
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ uid: 'me' }) }));
 vi.mock('@/hooks/useBlockedUsers', () => ({
-  useBlockedUsers: () => ({ isBlocked: () => false, blockUser: vi.fn(), unblockUser: vi.fn() }),
+  useBlockedUsers: () => ({ isBlocked: () => false, blockUser, unblockUser: vi.fn() }),
 }));
 vi.mock('@/contexts/ToastContext', () => ({ useToast: () => ({ show }) }));
+vi.mock('@/lib/sentry', () => ({ captureError }));
+vi.mock('@/hooks/useFriends', () => ({ useFriendActions: () => ({ refreshFriendship }) }));
 vi.mock('@/lib/firebase/reports', () => ({
   createReport,
   REPORT_REASON_LABELS: { spam: 'Spam / reklam', other: 'Annat' },
@@ -128,5 +133,47 @@ describe('UgcActionsMenu — gruppytan (BIN-1120)', () => {
   it('ägaren ser ingen meny på sin egen grupp', () => {
     render(<UgcActionsMenu targetType="group" targetId="g1" targetOwnerUid="me" triggerLabel="Mer" />);
     expect(screen.queryByLabelText('Åtgärder')).toBeNull();
+  });
+});
+
+// BIN-1349. En blockering avslutar numera vänskapen, och skrivningen kan nekas. Beskedet
+// måste följa vad som faktiskt hände, inte visas ovillkorligt.
+describe('UgcActionsMenu — beskedet efter en blockering (BIN-1349)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  async function block() {
+    render(<UgcActionsMenu targetType="user" targetId="them" targetOwnerUid="them" targetOwnerName="Kim" />);
+    fireEvent.click(screen.getByLabelText('Åtgärder'));
+    fireEvent.click(screen.getByText('Blockera användare'));
+    await waitFor(() => expect(show).toHaveBeenCalledTimes(1));
+    return show.mock.calls[0][0] as string;
+  }
+
+  it('säger att vänskapen tog slut när det fanns en', async () => {
+    blockUser.mockResolvedValueOnce({ endedFriendship: true });
+    expect(await block()).toBe('Blockerade Kim. Ni är inte vänner längre, och du ser inte deras innehåll.');
+  });
+
+  // Vänknappen på profilen läser en cache som annars står kvar på "Vän" en minut.
+  it('rensar vänskapens cache efter en lyckad blockering', async () => {
+    blockUser.mockResolvedValueOnce({ endedFriendship: true });
+    await block();
+    expect(refreshFriendship).toHaveBeenCalledWith('them');
+  });
+
+  it('nämner ingen vänskap när det inte fanns någon', async () => {
+    blockUser.mockResolvedValueOnce({ endedFriendship: false });
+    expect(await block()).toBe('Blockerade Kim. Du ser inte deras innehåll längre.');
+  });
+
+  it('en nekad blockering ger ett felbesked och rapporteras, aldrig "Blockerade"', async () => {
+    blockUser.mockRejectedValueOnce(new Error('permission-denied'));
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const message = await block();
+    expect(message).toBe('Kunde inte blockera Kim. Försök igen.');
+    expect(message).not.toContain('Blockerade');
+    expect(captureError).toHaveBeenCalledWith(expect.any(Error), { scope: 'social', kind: 'blockUser' });
+    expect(refreshFriendship).not.toHaveBeenCalled();
+    errSpy.mockRestore();
   });
 });

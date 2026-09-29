@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 649,
+  "patternCount": 650,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -436,6 +436,7 @@
         "src/hooks/useSessionTasteVectors.ts",
         "src/hooks/useTasteVector.ts",
         "src/hooks/useUserSearch.ts",
+        "src/lib/blockRelationship.ts",
         "src/lib/feedTrending.test.ts",
         "src/lib/feedTrending.ts",
         "src/lib/firebase/friends.test.ts",

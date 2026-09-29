@@ -14,6 +14,7 @@ import { render, screen } from '@testing-library/react';
 vi.mock('@/lib/firebase/config', () => ({ auth: {}, default: {} }));
 // Menyn anropar useBlockedUsers, som prenumererar på Firestore. Mot den stubbade appen
 // ovan kastar den initieringen.
+vi.mock('@/hooks/useFriends', () => ({ useFriendActions: () => ({ refreshFriendship: vi.fn() }) }));
 vi.mock('@/hooks/useBlockedUsers', () => ({
   useBlockedUsers: () => ({ isBlocked: () => false, blockUser: vi.fn(), unblockUser: vi.fn() }),
 }));

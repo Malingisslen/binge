@@ -49,6 +49,7 @@ import {
   listFriendRequests,
   updateSentFriendRequestIdentity,
   SENT_REQUESTS_IDENTITY_LIMIT,
+  blockUserAndEndFriendship,
 } from './friends';
 
 beforeEach(() => {
@@ -149,6 +150,43 @@ describe('removeFriend', () => {
     expect(deleteMock).toHaveBeenCalledTimes(2);
     expect(deleteMock.mock.calls[0][0]._path).toBe('users/me/friends/jonatan');
     expect(deleteMock.mock.calls[1][0]._path).toBe('users/jonatan/friends/me');
+  });
+});
+
+// BIN-1349: en blockering avslutar vänskapen och drar tillbaka förfrågningar åt båda
+// hållen, i SAMMA batch. Vägarna står utskrivna, inte räknade: ett byte av en väg mot en
+// dubblett ska också fälla testet.
+describe('blockUserAndEndFriendship', () => {
+  it('skriver blocket och raderar båda speglarna och alla förfrågningar i en batch', async () => {
+    getDocMock.mockResolvedValueOnce({ exists: () => true });
+    await blockUserAndEndFriendship('me', 'kim');
+    expect(writeBatchMock).toHaveBeenCalledTimes(1);
+    expect(setMock).toHaveBeenCalledTimes(1);
+    expect(setMock.mock.calls[0][0]._path).toBe('users/me/blocked/kim');
+    expect(setMock.mock.calls[0][1]).toEqual({ blockedAt: 'SERVER_TIMESTAMP' });
+    expect(deleteMock.mock.calls.map(c => c[0]._path).sort()).toEqual([
+      'users/kim/friendRequests/me',
+      'users/kim/friendRequestsSent/me',
+      'users/kim/friends/me',
+      'users/me/friendRequests/kim',
+      'users/me/friendRequestsSent/kim',
+      'users/me/friends/kim',
+    ]);
+    expect(commitMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('svarar endedFriendship efter om vänskapsdokumentet fanns', async () => {
+    getDocMock.mockResolvedValueOnce({ exists: () => true });
+    expect(await blockUserAndEndFriendship('me', 'kim')).toEqual({ endedFriendship: true });
+    getDocMock.mockResolvedValueOnce({ exists: () => false });
+    expect(await blockUserAndEndFriendship('me', 'kim')).toEqual({ endedFriendship: false });
+    expect(getDocMock.mock.calls[0][0]._path).toBe('users/me/friends/kim');
+  });
+
+  it('en nekad batch kastar vidare, så anroparen inte bekräftar något', async () => {
+    getDocMock.mockResolvedValueOnce({ exists: () => true });
+    commitMock.mockRejectedValueOnce(new Error('permission-denied'));
+    await expect(blockUserAndEndFriendship('me', 'kim')).rejects.toThrow('permission-denied');
   });
 });
 

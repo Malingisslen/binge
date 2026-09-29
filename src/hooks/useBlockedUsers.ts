@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { fsdb, lazySubscribe } from '@/lib/firebase/db';
 import { useAuth } from '@/hooks/useAuth';
+import { blockUserAndEndFriendship } from '@/lib/firebase/friends';
 
 /**
  * Block-system för UGC-moderering.
@@ -19,7 +20,7 @@ import { useAuth } from '@/hooks/useAuth';
  * Returnerar:
  * - blockedUids: Set<string> — snabb lookup
  * - isBlocked(uid): helper
- * - blockUser(uid): skapar blockdoc
+ * - blockUser(uid): skapar blockdoc och avslutar vänskapen (BIN-1349)
  * - unblockUser(uid): tar bort blockdoc
  */
 export function useBlockedUsers() {
@@ -42,13 +43,11 @@ export function useBlockedUsers() {
     [blockedUids],
   );
 
+  // BIN-1349: blockeringen avslutar också vänskapen — se blockUserAndEndFriendship.
   const blockUser = useCallback(
-    async (targetUid: string) => {
-      if (!uid || targetUid === uid) return;
-      const { db, doc, setDoc, serverTimestamp } = await fsdb();
-      await setDoc(doc(db, 'users', uid, 'blocked', targetUid), {
-        blockedAt: serverTimestamp(),
-      });
+    async (targetUid: string): Promise<{ endedFriendship: boolean }> => {
+      if (!uid || targetUid === uid) return { endedFriendship: false };
+      return blockUserAndEndFriendship(uid, targetUid);
     },
     [uid],
   );

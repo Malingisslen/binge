@@ -1,5 +1,6 @@
 import { fsdb } from './db';
 import { getPublicProfileCards } from './publicProfile';
+import { relationshipDocsToClear } from '@/lib/blockRelationship';
 
 // Friend-system: mutuell relation som kompletterar ensidiga follow.
 // Vänner får läsa privata watchlist-items (visibility='friends').
@@ -146,6 +147,29 @@ export async function removeFriend(myUid: string, targetUid: string): Promise<vo
   batch.delete(doc(db, 'users', myUid, 'friends', targetUid));
   batch.delete(doc(db, 'users', targetUid, 'friends', myUid));
   await batch.commit();
+}
+
+// BIN-1349 (Malins beslut 2026-09-28): en blockering avslutar också vänskapen, så den
+// blockerade tappar direkt åtkomsten till det man delat med vänner. Blockdokumentet,
+// båda vänskapsspeglarna och väntande förfrågningar åt båda hållen skrivs i SAMMA batch,
+// så en blockering landar aldrig utan att vänskapen går. Raderingsreglerna låter båda
+// parter radera varje spegel. En avblockering återställer ingenting.
+//
+// Läsningen före batchen väljer bara vilket besked användaren får; den styr inte vad
+// som raderas.
+export async function blockUserAndEndFriendship(
+  myUid: string,
+  targetUid: string,
+): Promise<{ endedFriendship: boolean }> {
+  const { db, doc, getDoc, writeBatch, serverTimestamp } = await fsdb();
+  const friendship = await getDoc(doc(db, 'users', myUid, 'friends', targetUid));
+  const batch = writeBatch(db);
+  batch.set(doc(db, 'users', myUid, 'blocked', targetUid), { blockedAt: serverTimestamp() });
+  for (const [root, ...rest] of relationshipDocsToClear(myUid, targetUid)) {
+    batch.delete(doc(db, root, ...rest));
+  }
+  await batch.commit();
+  return { endedFriendship: friendship.exists() };
 }
 
 // Härleder relation-status mellan myUid och targetUid genom att kolla:

@@ -2494,3 +2494,40 @@ git grep -n "clearRatingIds" -- functions/src/groupHandover/logic.ts
 
 **Re-open when:** gallringsdokumentets mening om `memberRatings` eller `clearRatingIds` ändras
 utan att den andra följer med.
+
+---
+
+## BIN-1349: en blockering avslutar vänskapen och drar tillbaka förfrågningar — 2026-09-29
+
+Efterföljare till `## BIN-1129` (2026-09-15), som står kvar ordagrant. Dess mening att
+blockeringen inte tar bort "en förfrågan som redan landat innan blockeringen" beskriver inte
+längre koden.
+
+**Vad som ändrades (Malins beslut 2026-09-28, alternativ 1).** Blockeringen skriver
+blockdokumentet och raderar båda vänskapsspeglarna och väntande förfrågningar åt båda hållen,
+i samma batch. Härled vägarna:
+
+```
+git grep -n -A 10 "export function relationshipDocsToClear" -- src/lib/blockRelationship.ts
+```
+
+Ingen regeländring: raderingsreglerna på `friends`, `friendRequests` och `friendRequestsSent`
+låter redan båda parter radera. Emulatortesterna under `blocking ends the friendship (BIN-1349)`
+i `src/test/rules/firestore-rules.test.ts` prövar batchen mot reglerna.
+
+**Två beslut Malin tog 2026-09-29, efter #12 Trust & Safetys kritik:**
+1. Par som blockerats före ändringen och fortfarande var vänner städas inte. Malins svar:
+   det finns inga. Det är hennes uppgift och är inte mätt ur repot.
+2. Blockeringen är ett klick, utan bekräftelsesteg och utan ångra-knapp.
+
+**En avblockering återställer ingenting.** Den som vill vara vän igen skickar en ny förfrågan.
+
+**Vad som fortfarande är hygien, oförändrat:** posten `[Security] Blocking is hygiene-level`
+gäller fortfarande för recensioner, kommentarer och flödet.
+
+**INTE accepterat, alltså fortfarande fileable:**
+1. Att blockdokumentet skrivs utan att vänskapen raderas i samma batch.
+2. Att en vänskap återskapas efter en blockering utan en ny förfrågan.
+
+**Re-open when:** en rapport om att en blockerad person fortfarande ser ens vänner-delade
+titlar eller profilkort.
