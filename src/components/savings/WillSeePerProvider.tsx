@@ -1,6 +1,6 @@
 'use client';
 
-import { formatKr } from '@/components/savings/formatKr';
+import { formatKr } from '@/lib/formatKr';
 import { Check } from 'lucide-react';
 import ProviderDot from '@/components/ui/ProviderDot';
 import SrOnlyTableHeader from '@/components/ui/SrOnlyTableHeader';

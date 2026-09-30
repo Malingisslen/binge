@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 650,
+  "patternCount": 652,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -544,6 +544,8 @@
         "src/hooks/useStreamingOffers.test.ts",
         "src/hooks/useStreamingOffers.ts",
         "src/lib/advisor/serviceValue.ts",
+        "src/lib/formatKr.test.ts",
+        "src/lib/formatKr.ts",
         "src/lib/renewal.test.ts",
         "src/lib/renewal.ts",
         "src/lib/spendSnapshot.test.ts",

@@ -1,6 +1,6 @@
 'use client';
 
-import { formatKr } from '@/components/savings/formatKr';
+import { formatKr } from '@/lib/formatKr';
 import type { BundleSuggestion } from '@/types';
 
 // BIN-430 — UI-yta för paket-arbitrage (motorn: src/lib/advisor/bundleArbitrage.ts,

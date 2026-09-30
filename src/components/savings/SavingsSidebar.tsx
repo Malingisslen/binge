@@ -1,6 +1,6 @@
 'use client';
 
-import { formatKr } from '@/components/savings/formatKr';
+import { formatKr } from '@/lib/formatKr';
 import { usePauseHistory, type PauseHistoryEntry } from '@/hooks/usePauseHistory';
 import { useAuth } from '@/hooks/useAuth';
 import { formatSwedishDate, daysBetween, pluralSv, localIsoDate } from '@/lib/utils';

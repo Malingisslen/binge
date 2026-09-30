@@ -1,6 +1,6 @@
 'use client';
 
-import { formatKr } from '@/components/savings/formatKr';
+import { formatKr } from '@/lib/formatKr';
 import ProviderDot from '@/components/ui/ProviderDot';
 import SrOnlyTableHeader from '@/components/ui/SrOnlyTableHeader';
 import { pluralSv } from '@/lib/utils';

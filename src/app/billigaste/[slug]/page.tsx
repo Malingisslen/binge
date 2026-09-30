@@ -8,6 +8,7 @@ import { jsonLd } from '@/lib/seo/jsonLd';
 import { withRetry } from '@/lib/seo/withRetry';
 import { canonicalProviderId, getProvider } from '@/lib/tmdb/providers';
 import { fetchForBuild } from '@/lib/tmdb/buildFetch';
+import { formatKr } from '@/lib/formatKr';
 import type { TMDBCollectionPart } from '@/types/tmdb';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -155,7 +156,7 @@ export default async function BilligastePage({ params }: { params: Promise<PageP
   const best = plan.bestProviderId != null ? getProvider(plan.bestProviderId) : null;
 
   const verdict = best
-    ? `${best.name}${best.defaultMonthlyCost ? ` (${best.defaultMonthlyCost} kr/mån)` : ''} täcker ${plan.coveredCount} av ${plan.totalFilms} ${plan.totalFilms === 1 ? 'film' : 'filmer'}`
+    ? `${best.name}${best.defaultMonthlyCost ? ` (${formatKr(best.defaultMonthlyCost)} kr/mån)` : ''} täcker ${plan.coveredCount} av ${plan.totalFilms} ${plan.totalFilms === 1 ? 'film' : 'filmer'}`
     : `Ingen enskild streamingtjänst täcker ${franchise.name} i Sverige just nu`;
   const remainderLine = [
     plan.rentCount > 0 ? `${plan.rentCount} att hyra eller köpa` : '',

@@ -3,6 +3,7 @@
 import ProviderDot from '@/components/ui/ProviderDot';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { getProvider } from '@/lib/tmdb/providers';
+import { formatKr } from '@/lib/formatKr';
 import { pluralSv } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useListCheapestPlan, type ListPlanItem } from '@/hooks/useListCheapestPlan';
@@ -31,7 +32,7 @@ function providerName(id: number): string {
 function CostLabel({ kr }: { kr: number | null }) {
   if (kr == null) return null;
   if (kr === 0) return <span className="text-ink-3">0 kr — ingår i en tjänst du har</span>;
-  return <span className="tabular-nums">{kr} kr/mån</span>;
+  return <span className="tabular-nums">{formatKr(kr)} kr/mån</span>;
 }
 
 export default function ListCheapestPlanPanel({ items }: { items: ListPlanItem[] }) {
@@ -106,11 +107,11 @@ export default function ListCheapestPlanPanel({ items }: { items: ListPlanItem[]
                   </span>
                 ))}
               </span>
-              <span className="text-xs text-ink shrink-0 tabular-nums">{fullPlan.monthlyKr} kr/mån</span>
+              <span className="text-xs text-ink shrink-0 tabular-nums">{formatKr(fullPlan.monthlyKr)} kr/mån</span>
             </div>
             {savingKr > 0 && (
               <div className="text-xxs text-acc-deep mt-[3px]">
-                Spara {savingKr} kr/mån mot att teckna alla var för sig ({naiveMonthlyKr} kr)
+                Spara {formatKr(savingKr)} kr/mån mot att teckna alla var för sig ({formatKr(naiveMonthlyKr)} kr)
               </div>
             )}
           </div>

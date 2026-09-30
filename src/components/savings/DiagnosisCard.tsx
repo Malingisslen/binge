@@ -1,6 +1,6 @@
 'use client';
 
-import { formatKr } from '@/components/savings/formatKr';
+import { formatKr } from '@/lib/formatKr';
 import type { AdvisorResult } from '@/types';
 
 // Streamingrådgivarens "diagnos-mening" — en enda framing-mening som

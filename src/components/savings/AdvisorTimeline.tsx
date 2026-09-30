@@ -1,6 +1,6 @@
 'use client';
 
-import { formatKr } from '@/components/savings/formatKr';
+import { formatKr } from '@/lib/formatKr';
 import { Fragment, useState, useCallback } from 'react';
 import Link from 'next/link';
 import ProviderDot from '@/components/ui/ProviderDot';

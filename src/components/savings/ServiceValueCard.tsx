@@ -5,7 +5,7 @@
 // Distinct from ProvidersByValue (kr per *followed* series) — this measures
 // *value received this month* (kr/film, kr/h). Films-this-month lens.
 
-import { formatKr } from '@/components/savings/formatKr';
+import { formatKr } from '@/lib/formatKr';
 import ProviderDot from '@/components/ui/ProviderDot';
 import SrOnlyTableHeader from '@/components/ui/SrOnlyTableHeader';
 import { pluralSv } from '@/lib/utils';

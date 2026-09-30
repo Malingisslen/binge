@@ -2166,3 +2166,13 @@ falt skrivaren skriver - den andrades aldrig. Commitens faktiska union byter dar
 **Regel:** kontrollera flaggan igen omedelbart före commit. Den stämplas av en hook på VARJE redigering av en bevakad sökväg, så varje rättelse efter rensningen sätter tillbaka den — och eftersom filen är gitignorerad ser ingen diffbaserad grind den.
 
 **Exempel:** BIN-1120, 2026-09-21. `.claude/state/workflow-map-stale.json` rensades, varpå två granskningsfynd rättades i bevakade filer och flaggan stod där igen. Omspårningen den tvingade fram hittade en riktig lucka: kartan beskrev överlämningen men hade inget steg för utträdet, trots att bunten var det som flyttade utträdet in i menyn.
+
+---
+
+### [Workflow] En granskare som godkänner det utfallskontrollen underkänner kanske aldrig fick villkoret
+
+**Trigger:** en granskare och utfallskontrollen är oense om samma bytes, och du ska skriva varför granskaren missade något.
+
+**Regel:** läs granskarens UPPDRAG innan du skriver en rad om vad den missade. Parallellsprintens granskaruppdrag bär filerna och granskarens fokus, inte rollkritikens villkor; utfallskontrollen får villkoren som klarkriterier. Ett villkor som bara står i kritiken granskas därför bara av utfallskontrollen.
+
+**Exempel:** BIN-1343/1359, 2026-09-30. Integrationsgranskaren passerade en rad i `docs/analysis/EXTERNAL_ACTIONS.md` som #8:s villkor förbjöd, och en mening om nattstädningens hälsopost som inte nämnde `lastErrorCount`. Granskarens uppdrag i körningen sprint-20260930-082237 nämnde varken villkoret eller biljetten; utfallskontrollens uppdrag bar villkoret ordagrant. Integrationsgranskaren har ingen kunskapsfil (BIN-997), så lärdomen står här.

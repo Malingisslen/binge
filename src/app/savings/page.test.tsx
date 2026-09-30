@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, getDefaultNormalizer } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import type { AdvisorResult, BundleSuggestion } from '@/types';
 
@@ -36,6 +36,16 @@ vi.mock('@/hooks/useSubscriptionAdvisor', () => ({
 }));
 
 vi.mock('@/lib/analytics', () => ({ trackEvent: vi.fn() }));
+
+// BIN-1366: the full (providers-present) render path mounts sibling panels that
+// read their own hooks, so they render nothing here; the existing
+// providers-empty tests never reach them.
+vi.mock('@/components/savings/CampaignExpiryNudges', () => ({ default: () => null }));
+vi.mock('@/components/savings/ProvidersByValue', () => ({ default: () => null }));
+vi.mock('@/components/savings/ServiceValueCard', () => ({ default: () => null }));
+vi.mock('@/components/savings/RotationCalendar', () => ({ default: () => null }));
+vi.mock('@/components/savings/SavingsSidebar', () => ({ default: () => null }));
+vi.mock('@/components/savings/UpcomingEpisodes', () => ({ default: () => null }));
 
 import SavingsPage from './page';
 
@@ -149,5 +159,38 @@ describe('SavingsPage — bundle card survives a TMDB outage (BIN-442)', () => {
     expect(
       screen.queryByText('Kunde inte räkna på dina tjänster just nu'),
     ).not.toBeInTheDocument();
+  });
+});
+
+// BIN-1366: formatKr's own test proves the helper groups thousands, but not that
+// the page calls it. The paused-services section is the page's own kr call site:
+// a regression to a raw `{totalSaved}` would print "1234" and stay green there.
+describe('SavingsPage — paused-service amounts are grouped by thousands (BIN-1366)', () => {
+  const NBSP = ' ';
+  // The default normalizer collapses every \s run, NBSP included, to a plain
+  // space; keep whitespace verbatim so the assertion sees the separator itself.
+  const exact = { normalizer: getDefaultNormalizer({ collapseWhitespace: false }) };
+
+  beforeEach(() => {
+    advisorMock.mockReset();
+  });
+
+  it('writes a four-digit saved-so-far total and row amount with a thousands separator', () => {
+    advisorMock.mockReturnValue(
+      baseAdvisor({
+        providers: [
+          { providerId: 8, providerName: 'Netflix', shortName: 'Netflix', color: '#e50914', shows: [], monthlyCost: 149, status: 'active', nextAirDate: null },
+        ],
+        hasConfiguredProviders: true,
+        activePauses: [
+          { providerId: 384, providerName: 'Max', shortName: 'Max', color: '#002be7', pausedAt: '2025-01-01', resumeAt: null, monthlyCost: 129, savingsSoFar: 1000 },
+          { providerId: 337, providerName: 'Disney+', shortName: 'Disney+', color: '#113ccf', pausedAt: '2025-06-01', resumeAt: null, monthlyCost: 119, savingsSoFar: 234 },
+        ],
+      }),
+    );
+    render(<SavingsPage />);
+
+    expect(screen.getByText(`Sparat hittills: 1${NBSP}234 kr`, exact)).toBeInTheDocument();
+    expect(screen.getByText(`+1${NBSP}000 kr`, exact)).toBeInTheDocument();
   });
 });

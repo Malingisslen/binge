@@ -1,6 +1,6 @@
 'use client';
 
-import { formatKr } from '@/components/savings/formatKr';
+import { formatKr } from '@/lib/formatKr';
 import Link from 'next/link';
 import { addDaysFromToday, pluralSv } from '@/lib/utils';
 import type { AdvisorResult, PrimaryAction } from '@/types';

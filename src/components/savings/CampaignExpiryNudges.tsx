@@ -1,6 +1,6 @@
 'use client';
 
-import { formatKr } from '@/components/savings/formatKr';
+import { formatKr } from '@/lib/formatKr';
 import { useMemo } from 'react';
 import ProviderDot from '@/components/ui/ProviderDot';
 import { useAuth } from '@/hooks/useAuth';

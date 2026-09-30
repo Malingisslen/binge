@@ -17,6 +17,11 @@ import { normalizeRules, transpileForComparison, globToRegExp, deployedPathsIn, 
 
 const OPTIONS = { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 };
 
+// BIN-1371: the tests against a real git repository spawn git repeatedly, and more than
+// one of them has measured past the 5 000 ms default on Windows. Their own clock, not a
+// global one.
+const REAL_GIT_TIMEOUT_MS = 30_000;
+
 describe('normalizeRules', () => {
   test('a line comment and a block comment do not count', () => {
     const a = "allow read: if isSignedIn()\n  && x == 'a';\n";
@@ -108,7 +113,7 @@ describe('globToRegExp', () => {
   });
 });
 
-describe('main against a real git repository', () => {
+describe('main against a real git repository', { timeout: REAL_GIT_TIMEOUT_MS }, () => {
   let dir;
   let base;
   const git = (args) =>
