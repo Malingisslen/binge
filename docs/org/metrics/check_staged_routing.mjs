@@ -237,7 +237,7 @@ export function refusalLines(verdict) {
     '',
     'Then either convene the missing role\'s blind critique and log a row naming it, or commit',
     'the files SPLIT so each commit routes to the critique that actually ran. Do not widen the',
-    'logged panel to match — the row records who reviewed, not who should have.',
+    'logged panel to match.',
   ];
 }
 

@@ -145,8 +145,7 @@ describe('gradeStagedRouting — both directions, against the real router', () =
   });
 
   // BIN-1368. The shape is copied from a real `declined-unattended` row the sprint engine
-  // wrote: bare titles, `ran:false`, and the ticket id only at the head of `plan`. Under
-  // `panelPolicy: "park"` that is the row a parked top-tier batch commits against.
+  // wrote: bare titles, `ran:false`, and the ticket id only at the head of `plan`.
   const TOP_STAGED = ['firestore.rules'];
   const declinedRow = (ticket, panel) => ({
     type: 'review', tier: 'full', panel, outcome: 'declined-unattended', ran: false,

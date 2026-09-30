@@ -401,7 +401,7 @@
         "medium": "single",
         "skip": "skip"
       },
-      "_panelPolicy": "Malin, 2026-09-30: 'park'. A full-panel ticket is built by the unattended sprint and parked In Review instead of pulled out; the per-commit reviewers still run. BIN-1368: the engine's declined rows name roles by bare title, which check_staged_routing.mjs read as naming nobody. Still refused BY DESIGN (BIN-1059): a batch whose staged files route to a role that no row for its tickets names, which is what a widened file set or a worker-discovered owed role produces. Do not widen the logged panel to get past it.",
+      "_panelPolicy": "Malin, 2026-09-30: 'park'. A full-panel ticket is built by the unattended sprint and parked In Review instead of pulled out; the per-commit reviewers still run. BIN-1368: the engine's declined rows name roles by bare title, which check_staged_routing.mjs read as naming nobody.",
       "panelPolicy": "park",
       "dossierPath": "docs/role-responsibilities.md"
     },
