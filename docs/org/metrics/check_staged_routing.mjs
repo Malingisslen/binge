@@ -38,6 +38,7 @@
 
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseEvents, ticketOf } from './check_events.mjs';
 import { ticketsInSubject, stagedEventsLog, REPO_ROOT } from './check_review_coverage.mjs';
@@ -79,16 +80,70 @@ export function stagedRoutingUnion(stagedPaths) {
  *
  *     node -e "const fs=require('fs');const c={};for(const l of fs.readFileSync('docs/org/metrics/events.jsonl','utf8').split(/\r?\n/)){if(!l)continue;const o=JSON.parse(l);if(o.type!=='review')continue;const p=o.panel;const k=Array.isArray(p)?(p.length?typeof p[0]:'empty'):'missing';c[k]=(c[k]||0)+1}console.log(c)"
  */
-export function panelNumbers(panel) {
+export function panelNumbers(panel, roles = ROLE_SLUGS) {
   if (!Array.isArray(panel)) return [];
   const out = [];
   for (const entry of panel) {
     if (typeof entry === 'number' && Number.isInteger(entry)) { out.push(entry); continue; }
     if (typeof entry !== 'string') continue;
+    // The name first: a role's own title can carry digits ("Localization / i18n"), and read
+    // as a number it would credit #18. "#25 Engineering Manager …" names no role by slug, so
+    // it still falls through to its number.
+    const n = roleNumberByName(entry, roles);
+    if (n !== null) { out.push(n); continue; }
     const m = entry.match(/\d+/);
     if (m) out.push(Number(m[0]));
   }
   return out;
+}
+
+/**
+ * BIN-1368. The sprint engine also writes a panel entry WITHOUT its number — a bare title
+ * (`"DevOps / SRE"`) or a slug (`"security-architect"`, `"database-administrator"`). Read
+ * digits only and such a row names no role, so this gate refuses a commit whose critique ran.
+ *
+ * A name resolves to a role when, slugified, it equals that role's slug, is a word-boundary
+ * prefix of exactly ONE role's slug, or is one of `ROLE_ALIASES`. Anything else — an
+ * ambiguous prefix, a persona that is not a routed role — resolves to nothing, so the gate
+ * never credits a role nobody named. Replay the live log to see what stays unresolved:
+ *
+ *     node -e "import('./docs/org/metrics/check_staged_routing.mjs').then(m=>m.unresolvedPanelNames())"
+ */
+const ROLE_ALIASES = { dpo: 6, dba: 27 };
+
+const slugify = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+
+function loadRoleSlugs() {
+  try {
+    const map = JSON.parse(readFileSync(join(REPO_ROOT, 'docs', 'org', 'ownership-map.json'), 'utf8'));
+    return Object.entries(map.roles).map(([num, r]) => [Number(num), r.slug]);
+  } catch {
+    return [];
+  }
+}
+const ROLE_SLUGS = loadRoleSlugs();
+
+export function roleNumberByName(name, roles = ROLE_SLUGS) {
+  const s = slugify(name);
+  if (!s) return null;
+  if (Object.hasOwn(ROLE_ALIASES, s)) return ROLE_ALIASES[s];
+  const exact = roles.find(([, slug]) => slug === s);
+  if (exact) return exact[0];
+  const prefixed = roles.filter(([, slug]) => slug.startsWith(`${s}-`));
+  return prefixed.length === 1 ? prefixed[0][0] : null;
+}
+
+/** Digit-less panel strings in the live log that resolve to no role (condition 1 of #25). */
+export function unresolvedPanelNames(file = join(REPO_ROOT, 'docs', 'org', 'metrics', 'events.jsonl')) {
+  const counts = {};
+  for (const row of parseEvents(readFileSync(file, 'utf8'))) {
+    if (row.type !== 'review' || !Array.isArray(row.panel)) continue;
+    for (const e of row.panel) {
+      if (typeof e === 'string' && !/\d/.test(e) && roleNumberByName(e) === null) counts[e] = (counts[e] || 0) + 1;
+    }
+  }
+  console.log(counts);
+  return counts;
 }
 
 /** Every role number logged across the `review` rows belonging to `tickets`. */

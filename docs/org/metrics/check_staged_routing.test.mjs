@@ -6,6 +6,7 @@ import {
   REVIEWER_ARTIFACT,
   stagedRoutingUnion,
   panelNumbers,
+  roleNumberByName,
   loggedPanel,
   gradeStagedRouting,
   refusalLines,
@@ -27,6 +28,30 @@ describe('panelNumbers — the log writes the panel two ways', () => {
     // docblock in the module carries the command that re-derives the mix.
     expect(panelNumbers(['#25 Engineering Manager / Release Manager'])).toEqual([25]);
     expect(panelNumbers(['#4 Security Architect', '#27 DBA'])).toEqual([4, 27]);
+  });
+
+  it('reads a panel written by bare title or slug, without a number (BIN-1368)', () => {
+    expect(panelNumbers(['DevOps / SRE'])).toEqual([8]);
+    expect(panelNumbers(['Trust & Safety / Content Moderation'])).toEqual([12]);
+    expect(panelNumbers(['security-architect', 'Data Protection Officer'])).toEqual([4, 6]);
+    // A word-boundary prefix of exactly one role's slug, and the two short aliases in the log.
+    expect(panelNumbers(['database-administrator', 'qa-test-engineer'])).toEqual([27, 7]);
+    expect(panelNumbers(['dpo', 'DBA'])).toEqual([6, 27]);
+  });
+
+  it('every role in the ownership map round-trips by title AND by slug to its own number', () => {
+    const roles = Object.entries(JSON.parse(readFileSync(join(ROOT, 'docs', 'org', 'ownership-map.json'), 'utf8')).roles);
+    expect(roles.length).toBeGreaterThan(0);
+    for (const [num, r] of roles) {
+      expect(panelNumbers([r.title]), r.title).toEqual([Number(num)]);
+      expect(panelNumbers([r.slug]), r.slug).toEqual([Number(num)]);
+    }
+  });
+
+  it('a name that is ambiguous or no routed role resolves to NOTHING — the gate credits no one by guess', () => {
+    // `data` prefixes three roles' slugs; `product` two; the archaeologist is a persona, not a role.
+    expect(panelNumbers(['data', 'product', 'Codebase Archaeologist', 'security-arch'])).toEqual([]);
+    expect(roleNumberByName('')).toBe(null);
   });
 
   it('an empty or missing panel is no roles, never a crash', () => {
@@ -117,6 +142,39 @@ describe('gradeStagedRouting — both directions, against the real router', () =
       rows: [row('BIN-1059', asStrings)],
     });
     expect(v.ok, 'a string-shaped panel was read as covering nothing').toBe(true);
+  });
+
+  // BIN-1368. The shape is copied from a real `declined-unattended` row the sprint engine
+  // wrote: bare titles, `ran:false`, and the ticket id only at the head of `plan`. Under
+  // `panelPolicy: "park"` that is the row a parked top-tier batch commits against.
+  const TOP_STAGED = ['firestore.rules'];
+  const declinedRow = (ticket, panel) => ({
+    type: 'review', tier: 'full', panel, outcome: 'declined-unattended', ran: false,
+    via: 'sprint-parallel', plan: `${ticket} — pulled out before the build; an unattended sprint cannot convene this review`,
+  });
+  const titleOf = (n) => gradeStagedRouting({ subject: 'x (BIN-1368)', stagedPaths: TOP_STAGED, rows: [] }).roleTitles.get(n);
+
+  it('a declined row naming the top panel by bare TITLE covers it (BIN-1368)', () => {
+    const { routed, tier } = gradeStagedRouting({ subject: 'fix(rules): x (BIN-1368)', stagedPaths: TOP_STAGED, rows: [] });
+    expect(tier).toBe('top');
+    const v = gradeStagedRouting({
+      subject: 'fix(rules): x (BIN-1368)',
+      stagedPaths: TOP_STAGED,
+      rows: [declinedRow('BIN-1368', routed.map(titleOf))],
+    });
+    expect(v.ok, `titles ${routed.map(titleOf)} were read as naming nobody`).toBe(true);
+  });
+
+  it('a declined row that leaves out one routed role is still REFUSED (BIN-1368)', () => {
+    const { routed } = gradeStagedRouting({ subject: 'fix(rules): x (BIN-1368)', stagedPaths: TOP_STAGED, rows: [] });
+    const [dropped, ...kept] = routed;
+    const v = gradeStagedRouting({
+      subject: 'fix(rules): x (BIN-1368)',
+      stagedPaths: TOP_STAGED,
+      rows: [declinedRow('BIN-1368', kept.map(titleOf))],
+    });
+    expect(v.ok).toBe(false);
+    expect(v.missing).toEqual([dropped]);
   });
 
   it('a subject naming no ticket passes — there is nothing to compare against', () => {
