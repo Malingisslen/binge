@@ -1,8 +1,7 @@
 /**
- * The deploy workflow ships hosting only. `firestore.rules` and `functions/` are
- * deployed by hand, so a push that changes what those deploy must fail loudly —
- * otherwise production keeps running the old rules or functions without anyone
- * noticing. That part is unchanged.
+ * The deploy workflow ships hosting only. What `watchedPaths` returns is deployed by
+ * hand, so a push that changes what those deploy must fail loudly — otherwise
+ * production keeps running the old version without anyone noticing.
  *
  * What this adds: a push whose change to those paths CANNOT reach production —
  * a comment in the rules, a comment or a type in a function source file, a test
@@ -441,6 +440,57 @@ export function findDrift(before, after, { git = runGit } = {}) {
   }));
 }
 
+// The deploy target for each floor path, used when no firebase.json block names the path.
+const FLOOR_TARGETS = { [RULES]: 'firestore:rules', [INDEXES]: 'firestore:indexes', functions: 'functions' };
+// Every deploy target except the one this workflow ships itself.
+const DEPLOY_ALL = 'firebase deploy --except hosting';
+
+/** `firestore` deploys as two targets; every other firebase.json key is a target of its own. */
+function targetFor(key, pathKey) {
+  return key === 'firestore' ? `firestore:${pathKey}` : key;
+}
+
+const within = (path, root) => path === root || path.startsWith(`${root}/`);
+
+/**
+ * The `firebase deploy` command that ships the changed paths: `--only` the targets
+ * whose firebase.json block names each path, at either ref. `DEPLOY_ALL` when some
+ * path maps to no target (firebase.json and .firebaserc themselves, for instance),
+ * or when anything here throws — a hint that covers too much beats one that misses.
+ */
+export function deployCommand(changes, before, after, { git = runGit } = {}) {
+  try {
+    const named = [];
+    for (const ref of [before, after]) {
+      const listed = git(['ls-tree', '--name-only', '-z', ref, '--', FIREBASE_JSON]).split('\0');
+      if (!listed.includes(FIREBASE_JSON)) continue;
+      for (const [key, block] of JSON.parse(firebaseDeployedBlocks(git(['show', `${ref}:${FIREBASE_JSON}`])))) {
+        for (const entry of Array.isArray(block) ? block : [block]) {
+          if (entry === null || typeof entry !== 'object') continue;
+          for (const pathKey of FIREBASE_JSON_PATH_KEYS) {
+            if (typeof entry[pathKey] !== 'string') continue;
+            const root = posix.normalize(entry[pathKey].split('\\').join('/')).replace(/\/+$/, '');
+            named.push({ root, target: targetFor(key, pathKey) });
+          }
+        }
+      }
+    }
+    const targets = new Set();
+    for (const { path } of changes) {
+      const hits = named.filter(({ root }) => within(path, root)).map(({ target }) => target);
+      if (hits.length === 0) {
+        const floor = Object.keys(FLOOR_TARGETS).find((root) => within(path, root));
+        if (!floor) return DEPLOY_ALL;
+        hits.push(FLOOR_TARGETS[floor]);
+      }
+      for (const target of hits) targets.add(target);
+    }
+    return `firebase deploy --only ${[...targets].sort().join(',')}`;
+  } catch {
+    return DEPLOY_ALL;
+  }
+}
+
 export function main(argv, { git = runGit, log = console.log, err = console.error } = {}) {
   const [before, after] = argv;
   if (!before || !after) {
@@ -453,8 +503,8 @@ export function main(argv, { git = runGit, log = console.log, err = console.erro
     changes = findDrift(before, after, { git });
   } catch (error) {
     err(`::error::Could not compare the files a manual deploy ships between ${before} and ${after} — ${error.message}`);
-    err('Treating this push as a rules/functions change.');
-    err('Deploy manually:  firebase deploy --only firestore:rules    # and/or --only firestore:indexes, --only functions');
+    err('Treating this push as a change a manual deploy must ship.');
+    err(`Deploy manually:  ${DEPLOY_ALL}`);
     err("Then ship hosting via the 'Run workflow' button (workflow_dispatch) — that skips this guard.");
     err('If the cause is a setting this check does not follow, the lists it reads are in scripts/check-deploy-drift.mjs.');
     return 1;
@@ -472,7 +522,7 @@ export function main(argv, { git = runGit, log = console.log, err = console.erro
   err('::error::A change to a file a manual deploy ships is NOT auto-deployed by this workflow.');
   err('Changed files:');
   for (const c of real) err(`${c.path}  (${c.reason})`);
-  err('Deploy manually:  firebase deploy --only firestore:rules    # and/or --only firestore:indexes, --only functions');
+  err(`Deploy manually:  ${deployCommand(real, before, after, { git })}`);
   if (real.some((c) => c.path === FIREBASERC)) {
     err(`${FIREBASERC} names the project a manual deploy targets — check it before deploying by hand.`);
   }

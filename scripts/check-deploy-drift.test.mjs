@@ -266,8 +266,9 @@ describe('main against a real git repository', () => {
     const { code, out } = run(configured, commit('comment'));
     expect(code).toBe(1);
     expect(out).toContain(`sets ${key}`);
-    // A refusal tells the operator what to do, as a real change does.
-    expect(out).toContain('firebase deploy --only firestore:rules');
+    // A refusal tells the operator what to do, as a real change does. It cannot know
+    // which files changed, so the command covers every manually deployed target.
+    expect(out).toContain('Deploy manually:  firebase deploy --except hosting');
   });
 
   test('a failed import search fails closed rather than reading as "not imported"', () => {
@@ -323,6 +324,8 @@ describe('main against a real git repository', () => {
     const { code, out } = run(base, commit('triple'));
     expect(code).toBe(1);
     expect(out).toContain('functions/src/send.ts  (compiled code changed)');
+    // No firebase.json in this repository, so the target comes from the floor path.
+    expect(out).toContain('Deploy manually:  firebase deploy --only functions\n');
   });
 
   test('a type-only edit in a function file is not a deployed change', () => {
@@ -509,6 +512,32 @@ describe('main against a real git repository', () => {
       const { code, out } = run(before, commit('storage rules'));
       expect(code).toBe(1);
       expect(out).toContain('storage.rules  (not a file this check can compare)');
+    });
+
+    // BIN-1353: the deploy hint names the target that ships the changed file.
+    test('a changed storage rules file is told to deploy storage', () => {
+      const before = withStorage();
+      write('storage.rules', "rules_version = '2';\nservice firebase.storage {}\n");
+      const { code, out } = run(before, commit('storage rules'));
+      expect(code).toBe(1);
+      expect(out).toContain('Deploy manually:  firebase deploy --only storage\n');
+    });
+
+    test('a push touching rules and a function is told to deploy both targets', () => {
+      const before = withFirebaseJson();
+      write('firestore.rules', RULES.replace('request.auth != null', 'true'));
+      write('functions/src/send.ts', SRC.replace('n * 2', 'n * 3'));
+      const { code, out } = run(before, commit('rules and function'));
+      expect(code).toBe(1);
+      expect(out).toContain('Deploy manually:  firebase deploy --only firestore:rules,functions\n');
+    });
+
+    test('a changed firebase.json is told to deploy every target but hosting', () => {
+      const before = withFirebaseJson();
+      write('firebase.json', JSON.stringify({ ...FIREBASE, storage: { rules: 'storage.rules' } }, null, 2));
+      const { code, out } = run(before, commit('storage block'));
+      expect(code).toBe(1);
+      expect(out).toContain('Deploy manually:  firebase deploy --except hosting');
     });
 
     test('the same file goes unwatched while no firebase.json names it', () => {
