@@ -37,6 +37,15 @@ Read only when the staged diff touches this chapter's paths (see .claude/shared-
   AND a per-field bind; one unrecognized key rejects the ENTIRE write (BIN-349/93). A `hasOnly` field with no
   value bind is fine unbound if a SIBLING shipped field of identical shape (rendered only through an
   id→lookup table, never interpolated) is unbound too (BIN-814).
+- **A staged size/count bound is a claim against the PLAN, not just against itself.** When a ticket names a
+  full-panel plan, diff every literal bound the rule ships (`<= N`, `>= N`) against that plan's own numbers
+  and its "panelvillkor" list — not just against the diff's own tests, which will happily pin whatever the
+  code does. BIN-1298's staged diff carried `title.size() <= 300` (and test fixtures at 300/301) while the plan
+  text and a binding panel condition both said 200/201 — an unlogged widening of a security-panel-approved bound,
+  caught before commit by reading the plan alongside the rule (`git show 82ea7379:firestore.rules` has 200).
+  `posterPath`'s bound matched exactly, so this is a per-FIELD check, not a whole-function skip. `tasks/` is
+  disposable and the plan may be gone: the conditions also live in the ticket's critique comment and in the
+  `must_haves` of its `review` rows in `docs/org/metrics/events.jsonl`.
 - **A "does an unrelated write survive on an already-contaminated doc" ratchet test must seed via
   `withSecurityRulesDisabled`** — a live seed is rejected by the same `hasOnly` before the target line runs.
   Same for any GRANDFATHERED shape a tightened create rule now refuses.

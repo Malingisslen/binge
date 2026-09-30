@@ -11514,3 +11514,26 @@ can write any field on `groups/{id}/watchlist/{id}`, including `status`, so the 
 now filters rows through the shared path guard. The retired wording, verbatim:
 
   safe only because those docs lack `status`).
+
+### 2026-09-26 — BIN-1298: staged title cap (300/301) diverges from the approved panel plan (200/201)
+
+`firestore.rules`' new `isGroupTitleShape(d)` (`match /watchlist/{tmdbId}` under `groups/{groupId}`) binds
+`d.title.size() <= 300`, pinned by tests in `src/test/rules/firestore-rules.test.ts`: "a title of 300
+characters can be added" and "a title of 301 characters is denied" (create denials) / "a re-add with a title
+of 301 characters is denied" (update denials).
+
+`tasks/todo.md`'s own plan for the ticket (`## BIN-1298 — plan`, "Regel för groups/{gid}/watchlist/{tmdbId}")
+says "title sträng 1–200", and the full-panel binding condition list right below it
+(`### BIN-1298 — panelvillkor (full panel 2026-09-26, alla approve-with-conditions)`, item 9) says explicitly
+"Titel 200 ok / 201 nekas (#13)". `posterPath`'s bound (null eller sträng ≤ 300) matches the plan exactly —
+only `title` drifted. No dated entry in `.claude/rules/accepted-deviations.md` explains the widening from 200
+to 300, and no comment in `firestore.rules` flags the number as a deliberate departure from the plan.
+
+Not a live exploit — the field is still bounded, and the write is already restricted to group members writing
+their own attribution. The finding is process: an implementation staged a wider bound than a full security
+panel signed off on, silently, on a field this same panel explicitly numbered. Filed as the review's sole
+blocking finding (BIN-1298 security review, 2026-09-26); the fix is either (a) tighten to `<= 200` and move
+the two tests' literals to 200/201, or (b) get Malin's sign-off and log a dated `accepted-deviations.md` entry
+naming why 300 was chosen. The transferable shape — diff a staged literal bound against the ticket's own
+`tasks/todo.md` plan and panel-conditions text, not just against the diff's own tests — is folded into the
+rules chapter in place, next to the `hasOnly` bullet it is a sibling of.
