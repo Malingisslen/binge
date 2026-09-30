@@ -13,6 +13,9 @@ const removeFromGroupWatchlist = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/firebase/groups', () => ({ setMemberRating, removeFromGroupWatchlist }));
 const captureError = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/sentry', () => ({ captureError }));
+// The real `watchlistDocToObject` is loaded below via importActual; its module reaches
+// for Firestore only through `./db`, which is stubbed so no SDK loads.
+vi.mock('@/lib/firebase/db', () => ({ fsdb: vi.fn(), lazySubscribe: vi.fn() }));
 vi.mock('@/hooks/useGroupMemberProgress', () => ({ useGroupMemberProgress: () => new Map() }));
 vi.mock('next/link', () => ({
   default: ({ children, href }: { children: React.ReactNode; href: string }) =>
@@ -401,5 +404,105 @@ describe('GroupWatchlistTable — a title added again starts without the old fai
     settle().resolve();
     await waitFor(() => expect(within(rowOf('The Matrix')).queryByRole('alert')).toBeNull());
     expect(captureError).not.toHaveBeenCalled();
+  });
+});
+
+// BIN-1354. An older row saved without `addedAt` is read with a stand-in date that
+// moves on every snapshot (`addedAtKnown: false`), so each snapshot below hands the
+// table a different stand-in, as the real listener does.
+describe('GroupWatchlistTable — a row without a stored addedAt (BIN-1354)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  function renderWith(watchlist: GroupWatchlistItem[]) {
+    const view = render(
+      <GroupWatchlistTable groupId="g1" watchlist={watchlist} members={members} myUid="me" isOwner={false} />,
+    );
+    return (next: GroupWatchlistItem[]) => view.rerender(
+      <GroupWatchlistTable groupId="g1" watchlist={next} members={members} myUid="me" isOwner={false} />,
+    );
+  }
+
+  const undated = (standIn: string) =>
+    ({ ...item, addedAt: new Date(standIn), addedAtKnown: false }) as GroupWatchlistItem;
+
+  it('a removal refused while the undated row was hidden shows the failure when Firestore restores it', async () => {
+    let rejectRemoval!: (e: unknown) => void;
+    removeFromGroupWatchlist.mockImplementationOnce(() => new Promise((_, reject) => { rejectRemoval = reject; }));
+    const setWatchlist = renderWith([undated('2026-09-30T10:00:00Z'), otherItem]);
+    confirmRemoval();
+    await waitFor(() => expect(removeFromGroupWatchlist).toHaveBeenCalledTimes(1));
+    setWatchlist([otherItem]);
+    rejectRemoval(new Error('denied'));
+    await waitFor(() => expect(captureError).toHaveBeenCalledTimes(1));
+    setWatchlist([undated('2026-09-30T10:00:05Z'), otherItem]);
+    expect(within(rowOf('The Matrix')).getByRole('alert')).toHaveTextContent('Gick inte att ta bort');
+    setWatchlist([undated('2026-09-30T10:00:09Z'), { ...otherItem }]);
+    expect(within(rowOf('The Matrix')).getByRole('alert')).toHaveTextContent('Gick inte att ta bort');
+  });
+
+  it('a removal refused while the undated row was hidden does not show once the title is added again with a stamp', async () => {
+    let rejectRemoval!: (e: unknown) => void;
+    removeFromGroupWatchlist.mockImplementationOnce(() => new Promise((_, reject) => { rejectRemoval = reject; }));
+    const setWatchlist = renderWith([undated('2026-09-30T10:00:00Z'), otherItem]);
+    confirmRemoval();
+    await waitFor(() => expect(removeFromGroupWatchlist).toHaveBeenCalledTimes(1));
+    setWatchlist([otherItem]);
+    rejectRemoval(new Error('denied'));
+    await waitFor(() => expect(captureError).toHaveBeenCalledTimes(1));
+    // The re-add's server stamp is still pending, then arrives.
+    setWatchlist([undated('2026-09-30T10:00:05Z'), otherItem]);
+    setWatchlist([{ ...item, addedAt: new Date('2026-09-30T10:00:06Z') }, otherItem]);
+    expect(within(rowOf('The Matrix')).queryByRole('alert')).toBeNull();
+  });
+
+  it('a removal refused while a dated row was hidden does not show on the re-add whose stamp is still pending', async () => {
+    let rejectRemoval!: (e: unknown) => void;
+    removeFromGroupWatchlist.mockImplementationOnce(() => new Promise((_, reject) => { rejectRemoval = reject; }));
+    const setWatchlist = renderWith([item, otherItem]);
+    confirmRemoval();
+    await waitFor(() => expect(removeFromGroupWatchlist).toHaveBeenCalledTimes(1));
+    setWatchlist([otherItem]);
+    rejectRemoval(new Error('denied'));
+    await waitFor(() => expect(captureError).toHaveBeenCalledTimes(1));
+    setWatchlist([undated('2026-09-30T10:00:05Z'), otherItem]);
+    expect(within(rowOf('The Matrix')).queryByRole('alert')).toBeNull();
+  });
+});
+
+// BIN-1354. The producer of `addedAtKnown`, which the fixtures above set by hand.
+// Mirrors the `memberDocToObject` joinedAtKnown suite in groups.test.ts (BIN-1118).
+describe('watchlistDocToObject — addedAtKnown follows the RAW field (BIN-1354)', () => {
+  async function load() {
+    const actual = await vi.importActual<typeof import('@/lib/firebase/groups')>('@/lib/firebase/groups');
+    return actual.watchlistDocToObject;
+  }
+  const stamp = (d: Date) => ({ toDate: () => d });
+
+  it('a Timestamp-like stamp is known, and addedAt is its date', async () => {
+    const watchlistDocToObject = await load();
+    const row = watchlistDocToObject('603', { addedAt: stamp(new Date('2026-09-01')) });
+    expect(row.addedAtKnown).toBe(true);
+    expect(row.addedAt.toISOString()).toBe('2026-09-01T00:00:00.000Z');
+  });
+
+  it('a real Date is known', async () => {
+    const watchlistDocToObject = await load();
+    expect(watchlistDocToObject('603', { addedAt: new Date('2026-09-01') }).addedAtKnown).toBe(true);
+  });
+
+  it.each([
+    ['missing', {}],
+    ['null (a pending serverTimestamp)', { addedAt: null }],
+    ['a number', { addedAt: 1756684800000 }],
+    ['a string', { addedAt: '2026-09-01' }],
+    ['a toDate that is not a function', { addedAt: { toDate: 'not a function' } }],
+  ])('addedAt %s is unknown, and addedAt is still a Date', async (_label, data) => {
+    const watchlistDocToObject = await load();
+    const row = watchlistDocToObject('603', data as Record<string, unknown>);
+    expect(row.addedAtKnown).toBe(false);
+    expect(row.addedAt).toBeInstanceOf(Date);
   });
 });

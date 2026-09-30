@@ -1213,7 +1213,15 @@ export function memberDocToObject(id: string, data: Record<string, unknown>): Gr
   };
 }
 
-export function watchlistDocToObject(id: string, data: Record<string, unknown>): GroupWatchlistItem {
+/**
+ * BIN-1354: `addedAtKnown` is false when the doc carries no parseable `addedAt` — an
+ * older row saved without one, or a fresh add whose server stamp has not arrived yet.
+ * `addedAt` is then `toDate`'s stand-in `new Date()`, which moves on every snapshot, so
+ * it must not be compared across snapshots.
+ */
+export type GroupWatchlistRow = GroupWatchlistItem & { addedAtKnown: boolean };
+
+export function watchlistDocToObject(id: string, data: Record<string, unknown>): GroupWatchlistRow {
   return {
     // Prefer the stored field; parse the doc id as fallback. Once group watchlist
     // ids are namespaced (movie_123) in Phase 5, a bare Number(id) would be NaN.
@@ -1224,6 +1232,9 @@ export function watchlistDocToObject(id: string, data: Record<string, unknown>):
     releaseYear: (data.releaseYear as number | null) ?? null,
     addedBy: (data.addedBy as string) ?? '',
     addedAt: toDate(data.addedAt),
+    // Read the RAW field, as `memberDocToObject` does for `joinedAt`.
+    addedAtKnown: typeof (data.addedAt as { toDate?: unknown } | undefined)?.toDate === 'function'
+      || data.addedAt instanceof Date,
     memberRatings: (data.memberRatings as Record<string, number>) ?? {},
   };
 }

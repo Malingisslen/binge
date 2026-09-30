@@ -6,6 +6,7 @@ import { Trash2 } from 'lucide-react';
 import { posterUrl, titleHref } from '@/lib/tmdb/client';
 import { useGroupMemberProgress } from '@/hooks/useGroupMemberProgress';
 import { removeFromGroupWatchlist, setMemberRating } from '@/lib/firebase/groups';
+import type { GroupWatchlistRow } from '@/lib/firebase/groups';
 import { toneForId } from '@/lib/duotone';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -82,10 +83,15 @@ export function GroupWatchlistTable({
   // different `addedAt` than it left with is such a new add, and its failures are
   // cleared too. A row Firestore restores after a refusal carries its old `addedAt`, so
   // that refusal still shows.
-  const liveRows = useRef<ReadonlyMap<string, number>>(new Map());
-  const departedRows = useRef<Map<string, number>>(new Map());
+  //
+  // BIN-1354: a row with no stored `addedAt` compares as `null`, never as the stand-in
+  // date it is read with. When it left and came back undated, a restore cannot be told
+  // from a re-add whose stamp is still on its way, so the decision waits for a snapshot
+  // that carries a stamp and the refusal shows meanwhile.
+  const liveRows = useRef<ReadonlyMap<string, number | null>>(new Map());
+  const departedRows = useRef<Map<string, number | null>>(new Map());
   useEffect(() => {
-    const live = new Map(watchlist.map(w => [mediaTypeDocId(w.mediaType, w.tmdbId), w.addedAt.getTime()]));
+    const live = new Map(watchlist.map(w => [mediaTypeDocId(w.mediaType, w.tmdbId), storedAddedAt(w)]));
     const stale = new Set<string>();
     for (const [id, addedAt] of liveRows.current) {
       if (live.has(id)) continue;
@@ -93,8 +99,9 @@ export function GroupWatchlistTable({
       departedRows.current.set(id, addedAt);
     }
     for (const [id, addedAt] of live) {
+      if (!departedRows.current.has(id)) continue;
       const departedAddedAt = departedRows.current.get(id);
-      if (departedAddedAt === undefined) continue;
+      if (departedAddedAt === null && addedAt === null) continue;
       departedRows.current.delete(id);
       if (departedAddedAt !== addedAt) stale.add(id);
     }
@@ -262,6 +269,10 @@ export function GroupWatchlistTable({
 
 function failureKey(action: 'rate' | 'remove', item: GroupWatchlistItem): string {
   return `${action}:${mediaTypeDocId(item.mediaType, item.tmdbId)}`;
+}
+
+function storedAddedAt(item: GroupWatchlistItem & Partial<Pick<GroupWatchlistRow, 'addedAtKnown'>>): number | null {
+  return item.addedAtKnown === false ? null : item.addedAt.getTime();
 }
 
 function dropFailuresFor(failed: Record<string, true>, rowIds: ReadonlySet<string>): Record<string, true> {
