@@ -2865,7 +2865,7 @@
         {
           "from": "cf-handOverOwnedGroups",
           "to": "firestore",
-          "payload": "eraseMemberTraces — batched (≤450 ops): delete members/{uid}, household/{uid}, joinAttempts/{uid} (plaintext invite token, BIN-329) and every watchlist/*/progress/{uid}; remove watchlist.addedBy and sessionHistory.pickedByUid where they name the departing member, and the departing member's own key in watchlist.memberRatings (BIN-1306; the other members' ratings on the same title stay). Handing the group over must not become an exemption from the erasure a plain member-leave already performs (#5's binding condition)",
+          "payload": "eraseMemberTraces — batched (≤450 ops): delete members/{uid}, household/{uid}, joinAttempts/{uid} (plaintext invite token, BIN-329) and every watchlist/*/progress/{uid}; remove watchlist.addedBy and sessionHistory.pickedByUid where they name the departing member, remove the departing member from sessionHistory.participantUids (arrayRemove), and the departing member's own key in watchlist.memberRatings (BIN-1306; the other members' ratings on the same title stay). Handing the group over must not become an exemption from the erasure a plain member-leave already performs (#5's binding condition)",
           "transport": "firestore-batch-write",
           "verified": true
         },
