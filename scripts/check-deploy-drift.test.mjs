@@ -13,7 +13,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import ts from 'typescript';
-import { normalizeRules, transpileForComparison, globToRegExp, deployedPathsIn, main } from './check-deploy-drift.mjs';
+import { normalizeRules, transpileForComparison, globToRegExp, deployedPathsIn, deployCommand, main } from './check-deploy-drift.mjs';
 
 const OPTIONS = { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 };
 
@@ -315,7 +315,7 @@ describe('main against a real git repository', () => {
     const { code, out } = run(base, commit('open rules'));
     expect(code).toBe(1);
     expect(out).toContain('firestore.rules  (rules content changed)');
-    expect(out).toContain('firebase deploy --only firestore:rules');
+    expect(out).toContain('Deploy manually:  firebase deploy --only firestore:rules\n');
   });
 
   test('a real function change stays red, even when the same push also edits a comment', () => {
@@ -596,7 +596,7 @@ describe('main against a real git repository', () => {
         functions: [{ source: 'functions/' }, { source: 'other' }],
         remoteconfig: { template: 'remoteconfig.template.json' },
       };
-      expect(deployedPathsIn(JSON.stringify(config)).sort()).toEqual(
+      expect(deployedPathsIn(JSON.stringify(config)).map(({ path }) => path).sort()).toEqual(
         [
           'database.rules.json',
           'firestore.indexes.json',
@@ -611,6 +611,29 @@ describe('main against a real git repository', () => {
 
     test('a path that is not a string fails closed', () => {
       expect(() => deployedPathsIn(JSON.stringify({ storage: { rules: 1 } }))).toThrow(/not a path/);
+    });
+
+    test('names the block and the key each path came from', () => {
+      const config = { firestore: { rules: './firestore.rules' }, functions: [{ source: 'functions/' }] };
+      expect(deployedPathsIn(JSON.stringify(config))).toEqual([
+        { key: 'firestore', pathKey: 'rules', path: 'firestore.rules' },
+        { key: 'functions', pathKey: 'source', path: 'functions' },
+      ]);
+    });
+  });
+
+  describe('deployCommand', () => {
+    const gitWith = (config) => (args) => (args[0] === 'ls-tree' ? 'firebase.json\0' : JSON.stringify(config));
+
+    test('a root that is a string prefix of another root does not claim its files', () => {
+      const git = gitWith({ functions: { source: 'app' }, storage: { rules: 'app.rules' } });
+      expect(deployCommand([{ path: 'app.rules' }], 'a', 'b', { git })).toBe('firebase deploy --only storage');
+      expect(deployCommand([{ path: 'app/index.ts' }], 'a', 'b', { git })).toBe('firebase deploy --only functions');
+    });
+
+    test('a path firebase.json cannot name falls back to deploying every target but hosting', () => {
+      const git = gitWith({ storage: { rules: 1 } });
+      expect(deployCommand([{ path: 'firestore.rules' }], 'a', 'b', { git })).toBe('firebase deploy --except hosting');
     });
   });
 

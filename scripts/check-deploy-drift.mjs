@@ -281,7 +281,8 @@ export function firebaseDeployedBlocks(text) {
 }
 
 /**
- * Every path a deployed firebase.json block names under FIREBASE_JSON_PATH_KEYS,
+ * Every path a deployed firebase.json block names under FIREBASE_JSON_PATH_KEYS, as
+ * `{ key, pathKey, path }` so watchedPaths and deployCommand read the same walk —
  * read one level into each block, or into each entry of a block that is an array.
  * A path value that is not a string, or points outside the repository, throws.
  */
@@ -298,11 +299,17 @@ export function deployedPathsIn(text) {
         if (path === '' || path === '.' || path === '..' || path.startsWith('/') || path.startsWith('../')) {
           throw new Error(`${FIREBASE_JSON} ${key}.${pathKey} points outside the repository: ${value}`);
         }
-        paths.push(path);
+        paths.push({ key, pathKey, path });
       }
     }
   }
   return paths;
+}
+
+/** The firebase.json text at `ref`, or `null` when that ref has none. */
+function firebaseJsonAt(ref, { git }) {
+  const listed = git(['ls-tree', '--name-only', '-z', ref, '--', FIREBASE_JSON]).split('\0');
+  return listed.includes(FIREBASE_JSON) ? git(['show', `${ref}:${FIREBASE_JSON}`]) : null;
 }
 
 /**
@@ -313,9 +320,9 @@ export function deployedPathsIn(text) {
 export function watchedPaths(before, after, { git = runGit } = {}) {
   const paths = new Set(WATCHED_FLOOR);
   for (const ref of [before, after]) {
-    const listed = git(['ls-tree', '--name-only', '-z', ref, '--', FIREBASE_JSON]).split('\0');
-    if (!listed.includes(FIREBASE_JSON)) continue;
-    for (const path of deployedPathsIn(git(['show', `${ref}:${FIREBASE_JSON}`]))) paths.add(path);
+    const text = firebaseJsonAt(ref, { git });
+    if (text === null) continue;
+    for (const { path } of deployedPathsIn(text)) paths.add(path);
   }
   return [...paths].sort();
 }
@@ -462,17 +469,10 @@ export function deployCommand(changes, before, after, { git = runGit } = {}) {
   try {
     const named = [];
     for (const ref of [before, after]) {
-      const listed = git(['ls-tree', '--name-only', '-z', ref, '--', FIREBASE_JSON]).split('\0');
-      if (!listed.includes(FIREBASE_JSON)) continue;
-      for (const [key, block] of JSON.parse(firebaseDeployedBlocks(git(['show', `${ref}:${FIREBASE_JSON}`])))) {
-        for (const entry of Array.isArray(block) ? block : [block]) {
-          if (entry === null || typeof entry !== 'object') continue;
-          for (const pathKey of FIREBASE_JSON_PATH_KEYS) {
-            if (typeof entry[pathKey] !== 'string') continue;
-            const root = posix.normalize(entry[pathKey].split('\\').join('/')).replace(/\/+$/, '');
-            named.push({ root, target: targetFor(key, pathKey) });
-          }
-        }
+      const text = firebaseJsonAt(ref, { git });
+      if (text === null) continue;
+      for (const { key, pathKey, path } of deployedPathsIn(text)) {
+        named.push({ root: path, target: targetFor(key, pathKey) });
       }
     }
     const targets = new Set();
