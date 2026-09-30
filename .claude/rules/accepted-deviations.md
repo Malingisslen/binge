@@ -2531,3 +2531,32 @@ gäller fortfarande för recensioner, kommentarer och flödet.
 
 **Re-open when:** en rapport om att en blockerad person fortfarande ser ens vänner-delade
 titlar eller profilkort.
+
+## BIN-1367: en pushad commit utan biljett-id kopplas till sin biljett via sin sha — 2026-09-30
+
+Malins beslut 2026-09-30. Sprinten sprint-20260930-135445 pushade `e318b680` med ämnesraden
+`refactor(deploy): driftvarningens bevakningslista …` utan biljett-id. Historiken på main
+skrivs inte om, så granskningstäckningens livetest i `npm test` hade stoppat varje
+produktionsdeploy för alltid.
+
+`TICKET_BY_SHA` i `docs/org/metrics/check_review_coverage.mjs` knyter den fullständiga
+shan till BIN-1367. Det är en koppling, inget undantag: BIN-1367 måste fortfarande ha en
+`review`-rad. Commit-msg-kroken läser inte kartan, så en ny commit utan id nekas som förut.
+
+#25:s villkor, bindande för varje ny post i kartan: commiten ligger redan i historiken,
+ämnesraden namnger inget id, biljetten har redan en äkta `review`-rad, och posten följer med
+i samma commit som en egen daterad post här.
+
+```
+git grep -n -A 6 "export const TICKET_BY_SHA" -- docs/org/metrics/check_review_coverage.mjs
+```
+
+Posten besvarar återöppningsvillkoret i `## 2026-08-29 — kodändrande commits FÖRE
+COVERAGE_EFFECTIVE_FROM …(BIN-938)` för just `e318b680`. Den posten står kvar ordagrant, och
+dess härledningskommando visar numera den här shan.
+
+**INTE accepterat, alltså fortfarande fileable:**
+1. En post i kartan utan en daterad post här.
+2. En post för en commit vars ämnesrad redan namnger ett id, eller vars biljett saknar
+   `review`-rad.
+3. Att kartan används i stället för att skriva id:t vid commit.

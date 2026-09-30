@@ -321,6 +321,26 @@ export function filesOfCommit(sha) {
   }).split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
 }
 
+/**
+ * Pushed commits whose subject lost its BIN-id, mapped by FULL sha to the ticket they built.
+ * History on main cannot be rewritten, so without this one such commit reds `npm test` —
+ * and with it every production deploy — permanently.
+ *
+ * This ATTRIBUTES, it does not exempt: the named ticket must still carry a `review` row.
+ *
+ * An entry may be added only for a commit that (a) is already in history, (b) has a subject
+ * naming no BIN-id, and (c) built a ticket that already has a genuine `review` row. Never as
+ * a substitute for writing the id at commit time — `gradeSubject` (the commit-msg hook)
+ * does not read this map. Each entry ships in the same commit as its own dated entry in
+ * `.claude/rules/accepted-deviations.md`, and the live tests in this module's test file
+ * refuse an entry that breaks (a) or (b) or that no longer changes the verdict.
+ */
+export const TICKET_BY_SHA = new Map([
+  // 2026-09-30, Malin's decision. Unattended sprint sprint-20260930-135445 wrote this
+  // commit's subject without its id.
+  ['e318b680bede6a51c460070f88a86731a164e78e', 'BIN-1367'],
+]);
+
 /** The BIN-ids a commit subject names, deduplicated and in order. */
 export function ticketsInSubject(subject) {
   return [...new Set(subject.match(TICKET_IN_SUBJECT) ?? [])];
@@ -415,6 +435,9 @@ export function findCoverageGaps(commits, reviewed, {
   // exactly as this file did before the path rule existed.
   filesOf = () => [],
   instructionsFrom = INSTRUCTIONS_EFFECTIVE_FROM,
+  // Defaults to "nothing attributed", so a caller that does not pass it grades exactly as
+  // this file did before TICKET_BY_SHA existed.
+  ticketBySha = new Map(),
 } = {}) {
   // A depth-1 checkout can see exactly one commit, so it does not get to answer a question
   // about history at all. Reported, never assumed either way.
@@ -440,7 +463,11 @@ export function findCoverageGaps(commits, reviewed, {
     if (Date.parse(commit.date) < epoch) { grandfathered++; continue; }
 
     eligible++;
-    const tickets = ticketsInSubject(commit.subject);
+    const named = ticketsInSubject(commit.subject);
+    // Consulted ONLY when the subject names nothing, and keyed on the full sha. The
+    // attributed ticket is then graded like a named one: it still needs a `review` row.
+    const attributed = named.length === 0 ? ticketBySha.get(commit.sha) : undefined;
+    const tickets = attributed ? [attributed] : named;
 
     if (tickets.length === 0) {
       violations.push({
@@ -509,6 +536,7 @@ export function exemptionInputs(historyAvailable) {
     // BIN-959 del 3: the path rule needs each commit's files, and it goes through here for
     // the same reason the exemption does — both callers must grade identically.
     filesOf: historyAvailable ? filesOfCommit : () => [],
+    ticketBySha: TICKET_BY_SHA,
   };
 }
 

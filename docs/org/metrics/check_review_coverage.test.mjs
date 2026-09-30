@@ -47,6 +47,7 @@ import {
   changesReviewerInstructions,
   filesOfCommit,
   stagedFiles,
+  TICKET_BY_SHA,
 } from './check_review_coverage.mjs';
 import { EVENTS_PATH, parseEvents, historyIsAvailable } from './check_events.mjs';
 
@@ -827,4 +828,77 @@ describe('reviewer instructions owe a review row whatever the type (BIN-959 del 
     expect(src).toMatch(/export function mainMessage\(messagePath, staged = stagedFiles\(\)\)/);
     expect(src).toMatch(/gradeSubject\(subject, reviewed, staged\)/);
   });
+});
+
+describe('TICKET_BY_SHA — a pushed commit whose subject lost its id', () => {
+  const reviewed = new Set(['BIN-100']);
+  const SHA = 'a'.repeat(40);
+
+  it('attributes the listed sha to its ticket, which then counts as covered', () => {
+    const r = findCoverageGaps([commit(SHA, 'refactor(x): no id here')], reviewed, {
+      ticketBySha: new Map([[SHA, 'BIN-100']]),
+    });
+    expect(r.violations).toEqual([]);
+    expect(r.covered).toBe(1);
+  });
+
+  it('still charges the attributed ticket when it has no review row — attribution is not exemption', () => {
+    const r = findCoverageGaps([commit(SHA, 'refactor(x): no id here')], reviewed, {
+      ticketBySha: new Map([[SHA, 'BIN-999']]),
+    });
+    expect(r.violations).toHaveLength(1);
+    expect(r.violations[0].reason).toContain('BIN-999');
+  });
+
+  it('matches the FULL sha only — an abbreviated key attributes nothing', () => {
+    const r = findCoverageGaps([commit(SHA, 'refactor(x): no id here')], reviewed, {
+      ticketBySha: new Map([[SHA.slice(0, 8), 'BIN-100']]),
+    });
+    expect(r.violations).toHaveLength(1);
+    expect(r.violations[0].reason).toContain('no BIN-id');
+  });
+
+  it('is ignored when the subject names an id, so it cannot relabel a named commit', () => {
+    const r = findCoverageGaps([commit(SHA, 'fix(x): thing (BIN-999)')], reviewed, {
+      ticketBySha: new Map([[SHA, 'BIN-100']]),
+    });
+    expect(r.violations).toHaveLength(1);
+    expect(r.violations[0].reason).toContain('BIN-999');
+  });
+
+  it('attributes nothing by default', () => {
+    const r = findCoverageGaps([commit(SHA, 'refactor(x): no id here')], reviewed);
+    expect(r.violations).toHaveLength(1);
+    expect(r.violations[0].reason).toContain('no BIN-id');
+  });
+
+  it('every entry is a full sha mapped to one BIN-id, and there is at least one', () => {
+    expect(TICKET_BY_SHA.size).toBeGreaterThan(0);
+    for (const [sha, ticket] of TICKET_BY_SHA) {
+      expect(sha).toMatch(/^[0-9a-f]{40}$/);
+      expect(ticket).toMatch(/^BIN-\d+$/);
+    }
+  });
+
+  it('is wired into exemptionInputs, the builder both callers use', () => {
+    expect(exemptionInputs(true).ticketBySha).toBe(TICKET_BY_SHA);
+    expect(exemptionInputs(false).ticketBySha).toBe(TICKET_BY_SHA);
+  });
+
+  it('every live entry is in history, names no id, and is load-bearing', () => {
+    if (!historyIsAvailable()) return;
+    const log = readGitLog();
+    const reviewedLive = ticketsWithAReviewRow(parseEvents(readFileSync(EVENTS_PATH, 'utf8')));
+    const inputs = exemptionInputs(true);
+    for (const [sha, ticket] of TICKET_BY_SHA) {
+      const found = log.find((c) => c.sha === sha);
+      expect(found, `${sha} is not in this history`).toBeDefined();
+      expect(ticketsInSubject(found.subject), `${sha} already names an id`).toEqual([]);
+      expect(reviewedLive.has(ticket), `${ticket} has no review row`).toBe(true);
+      const withIt = findCoverageGaps([found], reviewedLive, inputs);
+      const without = findCoverageGaps([found], reviewedLive, { ...inputs, ticketBySha: new Map() });
+      expect(withIt.violations, `${sha} is not covered with its entry`).toEqual([]);
+      expect(without.violations, `${sha}'s entry changes nothing`).toHaveLength(1);
+    }
+  }, LIVE_WALK_TIMEOUT_MS);
 });
