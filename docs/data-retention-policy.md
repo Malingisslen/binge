@@ -924,8 +924,9 @@ Policy ska omvärderas om:
   om den hann logga `retentionCleanup: scheduled sweeps done` eller ingen av raderna —
   och när en schemalagd körning uteblivit. En körning som dör eller uteblir syns först
   vid nästa körning. Slutar schemat köra helt larmar ingenting.
-  Körningen sparar bara sina egna tidsstämplar (`retentionCleanupHealth/current`),
-  inga personuppgifter.
+  Körningen sparar sina egna tidsstämplar och `lastErrorCount`, antalet fel den
+  loggade (`retentionCleanupHealth/current`), inga personuppgifter. Härled fälten:
+  `git grep -n "writeHealth(" -- functions/src`.
 
 - **2026-09-27 (BIN-1307)** — Malins beslut: integritetssidan (v1.7) säger nu att en
   Tillsammans-session raderas "senast ett dygn efter att den blivit 7 dagar gammal", i
