@@ -34,11 +34,24 @@ import type { QuerySnapshot } from 'firebase/firestore';
 // 2.3 (BIN-1337, 2026-09-28): additive — new `groupTitleRatings` array: your OWN rating
 //     on each title in each group's list (id = "<groupId>/<titleId>"). Only your own
 //     value from `memberRatings` is carried, never the map and never another member's.
-export const SCHEMA_VERSION = '2.3' as const;
+// 2.4 (BIN-1357, 2026-09-30): additive — new `skippedGroups` array: each group whose
+//     household, member-row or title-list read threw, with the export fields that lack
+//     that group's data. Before this the group was dropped without a trace.
+export const SCHEMA_VERSION = '2.4' as const;
 
 export interface ExportDoc {
   id: string;
   data: Record<string, unknown>;
+}
+
+/** The group-scoped export fields whose per-group read can fail without failing the export. */
+export type GroupScopedExportField = 'householdContributions' | 'groupMemberRows' | 'groupTitleRatings';
+
+/** BIN-1357: a group whose read threw, so the named fields lack that group's data. */
+export interface SkippedGroup {
+  groupId: string;
+  groupName: string | null;
+  missing: GroupScopedExportField[];
 }
 
 export interface BingeExport {
@@ -46,6 +59,9 @@ export interface BingeExport {
   exportedAt: string;
   userId: string;
   readme: string;
+  // BIN-1357: grupper vars läsning fallerade. Står en grupp här saknas dess data i
+  // fälten under `missing`, och filen är ofullständig för den gruppen.
+  skippedGroups: SkippedGroup[];
   tmdbAttribution: string;
   justwatchAttribution: string;
   profile: Record<string, unknown> | null;
@@ -85,7 +101,7 @@ export interface BingeExport {
   groupTitleRatings: ExportDoc[];
 }
 
-const README_TEXT = `Detta är en komplett GDPR Art. 20-export av dina personuppgifter från Binge.nu.
+const README_TEXT = `Detta är en GDPR Art. 20-export av dina personuppgifter från Binge.nu.
 
 Filen innehåller:
 - Din profil (profile)
@@ -115,6 +131,13 @@ Filen innehåller:
 - Grupper du är medlem i (groupMemberships)
 - Din egen medlemsrad i varje grupp, som gruppens medlemmar kan läsa (groupMemberRows)
 - Dina egna betyg på titlar i gruppernas listor, som gruppens medlemmar kan se (groupTitleRatings)
+- Grupper vars data inte gick att läsa när filen skapades (skippedGroups)
+
+Om läsningen av en grupps hushållsbidrag, din medlemsrad eller gruppens titellista
+misslyckas när filen skapas, hoppas den delen över i stället för att hela exporten
+avbryts. Gruppen står då i "skippedGroups" med sitt id, sitt namn och de fält som
+saknar gruppens data ("missing"). För en sådan grupp är filen ofullständig —
+exportera gärna igen senare.
 
 Datumfält serialiseras som Firestore-timestamps; om du re-importerar måste
 de konverteras tillbaka. Schema-version framgår i "schemaVersion".
@@ -129,6 +152,12 @@ första "_". Fälten "tmdbId" och "mediaType" i själva posten innehåller dem o
 Metadata om filmer och serier (titel, poster, genrer etc.) kommer från
 TMDB och är inte dina personuppgifter — vi cachear dem på watchlist-items
 som bekvämlighet, men källan är TMDB.`;
+
+const READ_FAILED = Symbol('read-failed');
+
+function orReadFailed<T>(read: Promise<T>): Promise<T | typeof READ_FAILED> {
+  return read.catch(() => READ_FAILED);
+}
 
 function toExportDocs(snap: QuerySnapshot): ExportDoc[] {
   return snap.docs.map(d => ({
@@ -160,36 +189,51 @@ export async function buildUserExport(uid: string): Promise<BingeExport> {
   // fäller inte de andra grupperna. Anropas bara med den inloggades eget uid
   // (`DataExportSection`): reglerna prövar medlemskap, inte att uid:t är anroparens,
   // så ett annat uid skulle exportera den medlemmens betyg.
+  //
+  // BIN-1357: en läsning som kastar fångas som READ_FAILED i stället för null, så att
+  // gruppen kan märkas i `skippedGroups`. En rad som bara saknas är inget fel och märks inte.
   const householdContributions: ExportDoc[] = [];
   const groupMemberRows: ExportDoc[] = [];
   const groupTitleRatings: ExportDoc[] = [];
+  const skippedGroups: SkippedGroup[] = [];
   if (s.groupsSnap.docs.length > 0) {
     const { fsdb } = await import('./db');
     const { db, doc, getDoc, collection, getDocs } = await fsdb();
     const [householdSnaps, memberSnaps, titleSnaps] = await Promise.all([
       Promise.all(s.groupsSnap.docs.map(g =>
-        getDoc(doc(db, 'groups', g.id, 'household', uid)).catch(() => null))),
+        orReadFailed(getDoc(doc(db, 'groups', g.id, 'household', uid))))),
       Promise.all(s.groupsSnap.docs.map(g =>
-        getDoc(doc(db, 'groups', g.id, 'members', uid)).catch(() => null))),
+        orReadFailed(getDoc(doc(db, 'groups', g.id, 'members', uid))))),
       Promise.all(s.groupsSnap.docs.map(g =>
-        getDocs(collection(db, 'groups', g.id, 'watchlist')).catch(() => null))),
+        orReadFailed(getDocs(collection(db, 'groups', g.id, 'watchlist'))))),
     ]);
     s.groupsSnap.docs.forEach((g, i) => {
+      const missing: GroupScopedExportField[] = [];
       const snap = householdSnaps[i];
-      if (snap?.exists()) {
+      if (snap === READ_FAILED) {
+        missing.push('householdContributions');
+      } else if (snap.exists()) {
         householdContributions.push({ id: g.id, data: snap.data() as Record<string, unknown> });
       }
       const member = memberSnaps[i];
-      if (member?.exists()) {
+      if (member === READ_FAILED) {
+        missing.push('groupMemberRows');
+      } else if (member.exists()) {
         groupMemberRows.push({ id: g.id, data: member.data() as Record<string, unknown> });
       }
       const titles = titleSnaps[i];
-      if (titles) {
+      if (titles === READ_FAILED) {
+        missing.push('groupTitleRatings');
+      } else {
         groupTitleRatings.push(...ownGroupTitleRatings(
           g.id,
           titles.docs.map(t => ({ id: t.id, data: t.data() as Record<string, unknown> })),
           uid,
         ));
+      }
+      if (missing.length > 0) {
+        const name = (g.data() as Record<string, unknown> | undefined)?.name;
+        skippedGroups.push({ groupId: g.id, groupName: typeof name === 'string' ? name : null, missing });
       }
     });
   }
@@ -199,6 +243,7 @@ export async function buildUserExport(uid: string): Promise<BingeExport> {
     exportedAt: new Date().toISOString(),
     userId: uid,
     readme: README_TEXT,
+    skippedGroups,
     tmdbAttribution: TMDB_ATTRIBUTION_EN,
     justwatchAttribution: JUSTWATCH_ATTRIBUTION_EN,
     profile: s.profileSnap.exists() ? (s.profileSnap.data() as Record<string, unknown>) : null,

@@ -126,6 +126,8 @@ const EXPORT_METADATA_KEYS = new Set<keyof BingeExport>([
   'readme',
   'tmdbAttribution',
   'justwatchAttribution',
+  // BIN-1357: which groups' reads failed — a statement about this export, not user data.
+  'skippedGroups',
 ]);
 
 const coverageKeys = Object.keys(COVERAGE) as (keyof UserDataSnapshots)[];
@@ -463,5 +465,86 @@ describe('BIN-1337: an unrated group title does not break the export', () => {
     const out = await buildUserExport('test-uid');
 
     expect(out.groupTitleRatings.map(r => r.id)).toEqual(['g1/movie_603']);
+  });
+});
+
+// BIN-1357: a group whose read throws is still skipped (BIN-1352), but the file now says
+// so. A row that merely does not exist is not a failure and must not be marked.
+describe('BIN-1357: a group whose read fails is marked in skippedGroups', () => {
+  beforeAll(() => {
+    dbMock.getDoc.mockImplementation(async (ref: { path: string }) => answerByPath(ref));
+  });
+  afterAll(() => {
+    dbMock.getDoc.mockImplementation(async (ref: { path: string }) => answerByPath(ref));
+    dbMock.getDocs.mockImplementation(async () => titleList([]));
+  });
+
+  it('names each failed group and exactly the fields that lack its data', async () => {
+    vi.mocked(collectUserDataSnapshots).mockResolvedValueOnce(
+      snapsWithGroups(['ok', 'noHousehold', 'noMember', 'noTitles', 'noneReadable']));
+    dbMock.getDoc.mockImplementation(async (ref: { path: string }) => {
+      if (ref.path === 'groups/noHousehold/household/test-uid') throw new Error('permission-denied');
+      if (ref.path === 'groups/noMember/members/test-uid') throw new Error('permission-denied');
+      if (ref.path.startsWith('groups/noneReadable/')) throw new Error('permission-denied');
+      return answerByPath(ref);
+    });
+    dbMock.getDocs.mockImplementation(async (ref: { path: string }) => {
+      if (ref.path === 'groups/noTitles/watchlist' || ref.path === 'groups/noneReadable/watchlist') {
+        throw new Error('permission-denied');
+      }
+      return titleList([]);
+    });
+
+    const out = await buildUserExport('test-uid');
+
+    expect(out.skippedGroups).toEqual([
+      { groupId: 'noHousehold', groupName: 'noHousehold', missing: ['householdContributions'] },
+      { groupId: 'noMember', groupName: 'noMember', missing: ['groupMemberRows'] },
+      { groupId: 'noTitles', groupName: 'noTitles', missing: ['groupTitleRatings'] },
+      {
+        groupId: 'noneReadable',
+        groupName: 'noneReadable',
+        missing: ['householdContributions', 'groupMemberRows', 'groupTitleRatings'],
+      },
+    ]);
+    // BIN-1352 still holds: the readable parts of every group arrive.
+    expect(out.householdContributions.map(r => r.id)).toEqual(['ok', 'noMember', 'noTitles']);
+    expect(out.groupMemberRows.map(r => r.id)).toEqual(['ok', 'noHousehold', 'noTitles']);
+  });
+
+  it('a row that does not exist is not a failure and is not marked', async () => {
+    vi.mocked(collectUserDataSnapshots).mockResolvedValueOnce(snapsWithGroups(['ghost']));
+    dbMock.getDoc.mockImplementation(async () => ({ exists: () => false, data: () => undefined }));
+    dbMock.getDocs.mockImplementation(async () => titleList([]));
+
+    const out = await buildUserExport('test-uid');
+
+    expect(out.skippedGroups).toEqual([]);
+    expect(out.groupMemberRows).toEqual([]);
+    expect(out.householdContributions).toEqual([]);
+  });
+
+  it('a group without a string name is marked with groupName null', async () => {
+    const snaps = snapsWithGroups([]);
+    (snaps as unknown as { groupsSnap: unknown }).groupsSnap =
+      { docs: [{ id: 'nameless', data: () => ({}) }] };
+    vi.mocked(collectUserDataSnapshots).mockResolvedValueOnce(snaps);
+    dbMock.getDoc.mockImplementation(async () => { throw new Error('unavailable'); });
+
+    const out = await buildUserExport('test-uid');
+
+    expect(out.skippedGroups).toEqual([
+      { groupId: 'nameless', groupName: null, missing: ['householdContributions', 'groupMemberRows'] },
+    ]);
+  });
+
+  it('the readme no longer claims completeness and points at skippedGroups', async () => {
+    vi.mocked(collectUserDataSnapshots).mockResolvedValueOnce(snapsWithGroups([]));
+
+    const out = await buildUserExport('test-uid');
+
+    expect(out.readme).not.toMatch(/komplett/i);
+    expect(out.readme).toContain('skippedGroups');
+    expect(out.skippedGroups).toEqual([]);
   });
 });
