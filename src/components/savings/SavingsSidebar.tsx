@@ -1,5 +1,6 @@
 'use client';
 
+import { formatKr } from '@/components/savings/formatKr';
 import { usePauseHistory, type PauseHistoryEntry } from '@/hooks/usePauseHistory';
 import { useAuth } from '@/hooks/useAuth';
 import { formatSwedishDate, daysBetween, pluralSv, localIsoDate } from '@/lib/utils';
@@ -75,7 +76,7 @@ export default function SavingsSidebar({ advisor, activePauses }: Props) {
       <div className={BLOCK}>
         <h3 className={HEAD}>Sparat hittills</h3>
         <div className="text-[24px] font-bold text-season-done tabular-nums leading-none mb-[6px]">
-          {totalSaved} kr
+          {formatKr(totalSaved)} kr
         </div>
         <p className="text-[11px] text-ink-3 leading-[1.45]">
           {accountMonths > 0
@@ -104,7 +105,7 @@ export default function SavingsSidebar({ advisor, activePauses }: Props) {
                   </div>
                 </div>
                 <div className="text-[11px] font-bold text-season-done tabular-nums whitespace-nowrap">
-                  +{e.savedAmount} kr
+                  +{formatKr(e.savedAmount)} kr
                 </div>
               </div>
             ))}

@@ -1,5 +1,6 @@
 'use client';
 
+import { formatKr } from '@/components/savings/formatKr';
 import { useEffect, useMemo, useRef } from 'react';
 import ProviderDot from '@/components/ui/ProviderDot';
 import { formatSwedishDate } from '@/lib/utils';
@@ -59,7 +60,7 @@ export default function RotationCalendar() {
         <h2 className="text-[11px] font-bold uppercase tracking-[0.5px] text-ink-3">Rotationskalender</h2>
         {calendar.totalProjectedSavings > 0 && (
           <span className="text-xxs text-season-done font-semibold">
-            Spara ~{calendar.totalProjectedSavings} kr
+            Spara ~{formatKr(calendar.totalProjectedSavings)} kr
           </span>
         )}
       </div>
@@ -80,7 +81,7 @@ export default function RotationCalendar() {
                     <span className="text-xxs text-ink-3">· öppen paus</span>
                   ) : (
                     <span className="text-xxs text-season-done font-semibold ml-auto">
-                      spara ~{e.projectedSavings} kr
+                      spara ~{formatKr(e.projectedSavings)} kr
                     </span>
                   )}
                 </div>
@@ -92,7 +93,7 @@ export default function RotationCalendar() {
                       {' '}<span className="text-ink-3">({e.daysPaused} dagar)</span>
                     </>
                   ) : (
-                    <> · inget planerat — <span className="text-ink-3">~{e.cancel.monthlyCost} kr/mån sparat</span></>
+                    <> · inget planerat — <span className="text-ink-3">~{formatKr(e.cancel.monthlyCost)} kr/mån sparat</span></>
                   )}
                 </div>
                 <div className="text-xxs text-ink-3 mt-[3px]">{e.cancel.reason}</div>
@@ -109,7 +110,7 @@ export default function RotationCalendar() {
         <div className="bg-surface border border-rule rounded-sm px-3 py-[10px] mt-2">
           <div className="text-xs text-ink-2">
             Du har sparat{' '}
-            <strong className="text-season-done">{ledger.savedThisYear} kr</strong> i år genom rotation
+            <strong className="text-season-done">{formatKr(ledger.savedThisYear)} kr</strong> i år genom rotation
             {ledger.rotationCount > 0 && (
               <span className="text-ink-3">
                 {' '}· {ledger.rotationCount} {ledger.rotationCount === 1 ? 'rotation' : 'rotationer'}
@@ -125,7 +126,7 @@ export default function RotationCalendar() {
             <div className="flex flex-wrap gap-x-3 gap-y-1 mt-[6px]">
               {ledger.byProvider.map(p => (
                 <span key={p.providerId} className="inline-flex items-center gap-1 text-xxs text-ink-3">
-                  {p.shortName} <span className="text-season-done font-semibold">{p.saved} kr</span>
+                  {p.shortName} <span className="text-season-done font-semibold">{formatKr(p.saved)} kr</span>
                 </span>
               ))}
             </div>

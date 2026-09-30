@@ -1,5 +1,6 @@
 'use client';
 
+import { formatKr } from '@/components/savings/formatKr';
 import ProviderDot from '@/components/ui/ProviderDot';
 import SrOnlyTableHeader from '@/components/ui/SrOnlyTableHeader';
 import { pluralSv } from '@/lib/utils';
@@ -56,10 +57,10 @@ export default function CoverageOptimizer({ rows }: { rows: WillSeePerProviderRo
                     {detail ? <span className="text-ink-3"> ({detail})</span> : null}
                   </td>
                   <td className="px-3 py-[7px] text-xxs text-ink-3 text-right whitespace-nowrap tabular-nums">
-                    {o.monthlyCost} kr/mån
+                    {formatKr(o.monthlyCost)} kr/mån
                   </td>
                   <td className="px-3 py-[7px] text-xxs text-ink-3 text-right whitespace-nowrap tabular-nums">
-                    ≈{o.krPerTitle} kr/titel
+                    ≈{formatKr(o.krPerTitle)} kr/titel
                   </td>
                 </tr>
               );

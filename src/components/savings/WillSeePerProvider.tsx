@@ -1,5 +1,6 @@
 'use client';
 
+import { formatKr } from '@/components/savings/formatKr';
 import { Check } from 'lucide-react';
 import ProviderDot from '@/components/ui/ProviderDot';
 import SrOnlyTableHeader from '@/components/ui/SrOnlyTableHeader';
@@ -52,7 +53,7 @@ export default function WillSeePerProvider({ rows }: { rows: WillSeePerProviderR
                 </td>
                 <td className="px-3 py-[6px] text-xxs text-ink-3 text-right whitespace-nowrap">
                   {row.monthlyCost != null && row.monthlyCost > 0
-                    ? `${row.monthlyCost} kr/mån`
+                    ? `${formatKr(row.monthlyCost)} kr/mån`
                     : '—'}
                 </td>
                 <td className="px-3 py-[6px] text-right whitespace-nowrap w-[80px]">

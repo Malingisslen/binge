@@ -1,5 +1,6 @@
 'use client';
 
+import { formatKr } from '@/components/savings/formatKr';
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import AuthGuard from '@/components/AuthGuard';
@@ -106,7 +107,7 @@ function ActivePausesSection({ pauses, onResume }: { pauses: ActivePause[]; onRe
       <div className="flex items-baseline justify-between mb-[6px]">
         <h2 className="text-[11px] font-bold uppercase tracking-[0.5px] text-ink-3">Dina pausade tjänster</h2>
         {totalSaved > 0 && (
-          <span className="text-xxs text-season-done font-semibold">Sparat hittills: {totalSaved} kr</span>
+          <span className="text-xxs text-season-done font-semibold">Sparat hittills: {formatKr(totalSaved)} kr</span>
         )}
       </div>
       <div className="bg-surface border border-rule rounded-sm overflow-hidden">
@@ -126,7 +127,7 @@ function ActivePausesSection({ pauses, onResume }: { pauses: ActivePause[]; onRe
                   {p.resumeAt ? ` · återuppta ${formatSwedishDate(p.resumeAt)}` : ''}
                 </td>
                 <td className="px-3 py-[6px] text-xxs text-season-done font-semibold text-right whitespace-nowrap">
-                  +{p.savingsSoFar} kr
+                  +{formatKr(p.savingsSoFar)} kr
                 </td>
                 <td className="px-3 py-[6px] text-right">
                   <button

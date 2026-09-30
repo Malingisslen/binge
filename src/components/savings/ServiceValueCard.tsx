@@ -5,6 +5,7 @@
 // Distinct from ProvidersByValue (kr per *followed* series) — this measures
 // *value received this month* (kr/film, kr/h). Films-this-month lens.
 
+import { formatKr } from '@/components/savings/formatKr';
 import ProviderDot from '@/components/ui/ProviderDot';
 import SrOnlyTableHeader from '@/components/ui/SrOnlyTableHeader';
 import { pluralSv } from '@/lib/utils';
@@ -45,9 +46,9 @@ export default function ServiceValueCard({ nowMs }: { nowMs: number }) {
               const valueText = r.isDeadWeight
                 ? 'inget sett'
                 : r.krPerHour != null
-                  ? `${r.krPerHour} kr/h`
+                  ? `${formatKr(r.krPerHour)} kr/h`
                   : r.krPerTitle != null
-                    ? `${r.krPerTitle} kr/film`
+                    ? `${formatKr(r.krPerTitle)} kr/film`
                     : '—';
               return (
                 <tr key={r.providerId} className="border-b border-rule-2 last:border-b-0">
@@ -61,7 +62,7 @@ export default function ServiceValueCard({ nowMs }: { nowMs: number }) {
                     {pluralSv(r.titlesWatched, 'film', 'filmer')}
                   </td>
                   <td className="px-3 py-[6px] text-xs text-ink-2 text-right whitespace-nowrap tabular-nums">
-                    {r.monthlyCost} kr/mån
+                    {formatKr(r.monthlyCost)} kr/mån
                   </td>
                   <td className={`px-3 py-[6px] text-xs text-right whitespace-nowrap tabular-nums ${r.isDeadWeight ? 'text-danger font-semibold' : 'text-ink-2'}`}>
                     {valueText}

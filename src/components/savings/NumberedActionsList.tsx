@@ -1,5 +1,6 @@
 'use client';
 
+import { formatKr } from '@/components/savings/formatKr';
 import Link from 'next/link';
 import { addDaysFromToday, pluralSv } from '@/lib/utils';
 import type { AdvisorResult, PrimaryAction } from '@/types';
@@ -54,7 +55,7 @@ function buildSteps(advisor: AdvisorResult, ctx: BuildStepsContext): Step[] {
       title: `Pausa ${primary.providerName} när du är klar`,
       desc: 'Inga andra serier från din Följer eller Vill se ligger där de närmaste 60 dagarna.',
       active: false,
-      badge: { label: `Spar ${primary.monthlyCost} kr/mån` },
+      badge: { label: `Spar ${formatKr(primary.monthlyCost)} kr/mån` },
     });
   } else if (primary.kind === 'pause' && advisor.secondaryAction?.kind === 'catchup') {
     // Vid pause-primary kan secondaryAction vara catchup — vi visar den
@@ -94,7 +95,7 @@ function stepFromPrimary(action: PrimaryAction, ctx: BuildStepsContext): Step {
       const defaultResume = action.nextAirDate ?? addDaysFromToday(30);
       return {
         number: 1,
-        title: `Pausa ${action.providerName} — spar ${action.monthlyCost} kr/mån`,
+        title: `Pausa ${action.providerName} — spar ${formatKr(action.monthlyCost)} kr/mån`,
         desc: action.nextAirDate
           ? 'Inget från din Följer eller Vill se ligger där tills återupptags-datumet.'
           : 'Inget från din Följer eller Vill se ligger där de närmaste 60 dagarna.',

@@ -1,5 +1,6 @@
 'use client';
 
+import { formatKr } from '@/components/savings/formatKr';
 import type { AdvisorResult } from '@/types';
 
 // Streamingrådgivarens "diagnos-mening" — en enda framing-mening som
@@ -19,7 +20,7 @@ export default function DiagnosisCard({ advisor, activeProviderCount }: Props) {
   const action = advisor.primaryAction;
 
   const lead = cost > 0
-    ? <>Du betalar <strong className="text-ink">{cost} kr/mån</strong> för {activeProviderCount} {activeProviderCount === 1 ? 'tjänst' : 'tjänster'}.</>
+    ? <>Du betalar <strong className="text-ink">{formatKr(cost)} kr/mån</strong> för {activeProviderCount} {activeProviderCount === 1 ? 'tjänst' : 'tjänster'}.</>
     : <>Du har {activeProviderCount} {activeProviderCount === 1 ? 'tjänst' : 'tjänster'}.</>;
 
   let suggestion: React.ReactNode;
@@ -29,7 +30,7 @@ export default function DiagnosisCard({ advisor, activeProviderCount }: Props) {
         <>
           {' '}
           <strong className="text-ink">{action.providerName}</strong> kan pausas — spar{' '}
-          <strong className="text-ink">{action.monthlyCost} kr/mån</strong>.
+          <strong className="text-ink">{formatKr(action.monthlyCost)} kr/mån</strong>.
         </>
       );
       break;
@@ -43,7 +44,7 @@ export default function DiagnosisCard({ advisor, activeProviderCount }: Props) {
           </strong>
           .{' '}
           <span className="text-ink-3">Slutför dem så öppnas ett pausfönster värt</span>{' '}
-          <strong className="text-ink">{action.monthlyCost} kr/mån</strong>
+          <strong className="text-ink">{formatKr(action.monthlyCost)} kr/mån</strong>
           <span className="text-ink-3">.</span>
         </>
       );

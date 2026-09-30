@@ -1,5 +1,6 @@
 'use client';
 
+import { formatKr } from '@/components/savings/formatKr';
 import type { BundleSuggestion } from '@/types';
 
 // BIN-430 — UI-yta för paket-arbitrage (motorn: src/lib/advisor/bundleArbitrage.ts,
@@ -24,10 +25,6 @@ import type { BundleSuggestion } from '@/types';
 function joinNames(names: string[]): string {
   if (names.length <= 1) return names[0] ?? '';
   return `${names.slice(0, -1).join(', ')} och ${names[names.length - 1]}`;
-}
-
-function formatKr(kr: number): string {
-  return kr.toLocaleString('sv-SE');
 }
 
 // Bindning och startavgift (BIN-1335, juridikens villkor): står alltid direkt under

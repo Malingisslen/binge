@@ -1,5 +1,6 @@
 'use client';
 
+import { formatKr } from '@/components/savings/formatKr';
 import ProviderDot from '@/components/ui/ProviderDot';
 import SrOnlyTableHeader from '@/components/ui/SrOnlyTableHeader';
 import { pluralSv } from '@/lib/utils';
@@ -97,7 +98,7 @@ export default function ProvidersByValue({ providers, activePauses }: Props) {
                     {pluralSv(row.activeCount, 'aktiv', 'aktiva')}
                   </td>
                   <td className="px-3 py-[6px] text-xs text-ink-2 text-right whitespace-nowrap tabular-nums">
-                    {row.isFree ? '0 kr' : `${row.monthlyCost} kr/mån`}
+                    {row.isFree ? '0 kr' : `${formatKr(row.monthlyCost)} kr/mån`}
                     {renewalDay != null && !row.isFree && (
                       <span className="block text-xxs text-ink-3">förnyas om {daysUntilRenewal(renewalDay, new Date())} d</span>
                     )}

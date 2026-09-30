@@ -1,5 +1,6 @@
 'use client';
 
+import { formatKr } from '@/components/savings/formatKr';
 import { useMemo } from 'react';
 import ProviderDot from '@/components/ui/ProviderDot';
 import { useAuth } from '@/hooks/useAuth';
@@ -36,8 +37,8 @@ export default function CampaignExpiryNudges() {
           <span className="text-ink">
             <span className="font-semibold">{r.providerName}</span>-kampanjen löper ut{' '}
             {r.nudge.daysUntilEnd === 0 ? 'idag' : `om ${pluralSv(r.nudge.daysUntilEnd, 'dag', 'dagar')}`} — sedan{' '}
-            <span className="tabular-nums">{r.nudge.ordinaryMonthlyCost} kr/mån</span>{' '}
-            <span className="text-ink-3">(+{r.nudge.increaseKr} kr)</span>.
+            <span className="tabular-nums">{formatKr(r.nudge.ordinaryMonthlyCost)} kr/mån</span>{' '}
+            <span className="text-ink-3">(+{formatKr(r.nudge.increaseKr)} kr)</span>.
           </span>
         </div>
       ))}

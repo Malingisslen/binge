@@ -1,5 +1,6 @@
 'use client';
 
+import { formatKr } from '@/components/savings/formatKr';
 import { useMemo } from 'react';
 import ProviderDot from '@/components/ui/ProviderDot';
 import { rotationPlan, type RotationProviderInput } from '@/lib/advisor/rotationPlan';
@@ -77,7 +78,7 @@ export default function RotationPlanner({ advisor, now }: { advisor: AdvisorResu
         Rotationsplan — en tjänst i taget
       </h2>
       <p className="text-xs text-ink-2 mb-[10px]">
-        Rotera istället för att ha allt samtidigt: {plan.totalCost} kr över {scheduled.length} månader röjer{' '}
+        Rotera istället för att ha allt samtidigt: {formatKr(plan.totalCost)} kr över {scheduled.length} månader röjer{' '}
         {plan.totalBacklogCleared} titlar/avsnitt i din kö.
       </p>
 
@@ -101,7 +102,7 @@ export default function RotationPlanner({ advisor, now }: { advisor: AdvisorResu
                   <span className="text-[13px] font-medium text-ink">{m.provider.shortName}</span>
                 </div>
                 <div className="text-[11px] text-ink-3 mt-[3px]">
-                  {m.cost} kr · {m.backlogCleared} i kö
+                  {formatKr(m.cost)} kr · {m.backlogCleared} i kö
                 </div>
               </>
             ) : (

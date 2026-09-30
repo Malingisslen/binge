@@ -1,5 +1,6 @@
 'use client';
 
+import { formatKr } from '@/components/savings/formatKr';
 import { Fragment, useState, useCallback } from 'react';
 import Link from 'next/link';
 import ProviderDot from '@/components/ui/ProviderDot';
@@ -286,7 +287,7 @@ function LaneFooter({ lane }: { lane: TimelineLane }) {
       return <span className="text-ink-3">Gratis</span>;
     default:
       return lane.monthlyCost != null && lane.monthlyCost > 0
-        ? <span className="text-ink-3">{lane.monthlyCost} kr/mån</span>
+        ? <span className="text-ink-3">{formatKr(lane.monthlyCost)} kr/mån</span>
         : null;
   }
 }
