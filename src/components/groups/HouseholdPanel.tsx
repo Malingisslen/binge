@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { useGroupHousehold } from '@/hooks/useGroupHousehold';
 import { useMountTime } from '@/hooks/useMountTime';
 import { aggregateHousehold, HOUSEHOLD_STALE_DAYS } from '@/lib/advisor/householdAggregate';
+import { formatKr } from '@/lib/formatKr';
 
 // BIN-184 — "Hushåll"-panelen i gruppens vänsterspalt. Aggregat-ENDAST i UI:t
 // ("Disney+ betalas av 2 av er"), aldrig per person. Opt-in via en explicit
@@ -101,7 +102,7 @@ export default function HouseholdPanel({ groupId }: { groupId: string }) {
       {status === 'active' && overview && (
         <div className="px-3 py-2 space-y-2">
           <div>
-            <span className="text-[17px] font-bold text-ink">{overview.totalKr} kr</span>
+            <span className="text-[17px] font-bold text-ink">{formatKr(overview.totalKr)} kr</span>
             <span className="text-xxs text-ink-3"> /mån sammanlagt · {overview.memberCount} delar</span>
           </div>
 
@@ -111,7 +112,7 @@ export default function HouseholdPanel({ groupId }: { groupId: string }) {
                 <li key={row.providerId} className="text-xxs leading-relaxed">
                   <span className="text-ink font-semibold">{row.name}</span>
                   <span className="text-ink-2">
-                    {' '}· betalas av {row.paidByCount} · {row.totalKr} kr
+                    {' '}· betalas av {row.paidByCount} · {formatKr(row.totalKr)} kr
                   </span>
                   {row.unknownCostCount > 0 && (
                     <span className="text-ink-3"> · {row.unknownCostCount} med okänd kostnad</span>

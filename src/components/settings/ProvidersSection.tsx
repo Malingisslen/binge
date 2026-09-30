@@ -7,6 +7,7 @@ import { SWEDISH_PROVIDERS, canonicalProviderId, type SwedishProvider } from '@/
 import { useDebouncedCommit } from '@/hooks/useDebouncedCommit';
 import { isValidBillingDay, daysUntilRenewal } from '@/lib/renewal';
 import { trackEvent } from '@/lib/analytics';
+import { formatKr } from '@/lib/formatKr';
 import { SettingsSection } from './SettingsSection';
 import {
   readableTextColor,
@@ -210,7 +211,7 @@ export function ProvidersSection() {
             <span className="text-[11px] text-ink-3">
               {pendingSave ? 'Sparar…' : '✓ Sparat automatiskt'}
             </span>
-            <span className="text-[13px] font-bold tabular-nums">{total} kr/mån</span>
+            <span className="text-[13px] font-bold tabular-nums">{formatKr(total)} kr/mån</span>
           </div>
         </div>
       )}

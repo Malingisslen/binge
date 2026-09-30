@@ -8,6 +8,7 @@
 import { cheapestPath } from '@/lib/streaming/cheapestPath';
 import type { Offer } from '@/lib/streaming/offers';
 import { getProvider } from '@/lib/tmdb/providers';
+import { formatKr } from '@/lib/formatKr';
 
 export function CheapestPathVerdict({
   subscriptionProviderIds,
@@ -49,7 +50,8 @@ export function CheapestPathVerdict({
       positive = true;
       break;
     case 'rent':
-      text = `Billigast: hyr för ${v.priceAmount} kr på ${name}`;
+      // cheapestPath() filters rent offers on `priceAmount != null` before picking one.
+      text = `Billigast: hyr för ${formatKr(v.priceAmount as number)} kr på ${name}`;
       break;
     case 'subscribe': {
       // Render the price FROM the verdict (BIN-322): priceAmount is the cheapest
@@ -58,8 +60,8 @@ export function CheapestPathVerdict({
       // title actually needs (the bug this fixed).
       if (v.priceAmount != null) {
         text = v.tierLabel
-          ? `Billigaste väg: ${name} från ${v.priceAmount} kr/mån (${v.tierLabel})`
-          : `Billigaste väg: ${name} ${v.priceAmount} kr/mån`;
+          ? `Billigaste väg: ${name} från ${formatKr(v.priceAmount)} kr/mån (${v.tierLabel})`
+          : `Billigaste väg: ${name} ${formatKr(v.priceAmount)} kr/mån`;
       } else {
         text = `Finns på ${name}`;
       }
