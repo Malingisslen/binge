@@ -17,7 +17,9 @@ const exportMock = vi.hoisted(() => ({
 
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ uid: 'u1' }) }));
 vi.mock('@/contexts/ToastContext', () => ({ useToast: () => toast }));
+const sentry = vi.hoisted(() => ({ captureError: vi.fn() }));
 vi.mock('@/lib/firebase/dataExport', () => exportMock);
+vi.mock('@/lib/sentry', () => sentry);
 
 const TAIL = 'Försök exportera igen om en stund. Fungerar det inte nästa gång heller? Skriv till hej@binge.nu.';
 
@@ -150,5 +152,46 @@ describe('DataExportSection — the confirmation after an export (BIN-1380)', ()
     await waitFor(() => expect(toast.show).toHaveBeenCalledWith('Kunde inte skapa exporten. Försök igen.'));
     expect(screen.queryByRole('status')).toBeNull();
     expect(exportMock.downloadExport).not.toHaveBeenCalled();
+  });
+});
+
+// BIN-1394: a whole export failing reached only the console. It now reaches Sentry under
+// its own kind, with nothing attached that could name the user, and reporting can never
+// cost the user the error toast.
+describe('DataExportSection — a failed export is reported (BIN-1394)', () => {
+  beforeEach(() => {
+    toast.show.mockReset();
+    exportMock.buildUserExport.mockReset();
+    exportMock.downloadExport.mockReset();
+    sentry.captureError.mockReset();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  it('reports the thrown error once, under its own kind and with no extra', async () => {
+    const boom = new Error('boom');
+    exportMock.buildUserExport.mockRejectedValueOnce(boom);
+    render(<DataExportSection />);
+    await clickExport();
+    await waitFor(() => expect(toast.show).toHaveBeenCalledWith('Kunde inte skapa exporten. Försök igen.'));
+    expect(sentry.captureError).toHaveBeenCalledTimes(1);
+    expect(sentry.captureError).toHaveBeenCalledWith(boom, { scope: 'dataExport', kind: 'dataExport-exportFailed' });
+  });
+
+  it('still shows the error toast when reporting itself throws', async () => {
+    sentry.captureError.mockImplementationOnce(() => { throw new Error('sentry down'); });
+    exportMock.buildUserExport.mockRejectedValueOnce(new Error('boom'));
+    render(<DataExportSection />);
+    await clickExport();
+    await waitFor(() => expect(toast.show).toHaveBeenCalledWith('Kunde inte skapa exporten. Försök igen.'));
+    expect(sentry.captureError).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Ladda ner mina data' })).not.toBeDisabled();
+  });
+
+  it('a successful export reports nothing', async () => {
+    exportMock.buildUserExport.mockResolvedValueOnce(exportWith([]));
+    render(<DataExportSection />);
+    await clickExport();
+    await waitFor(() => expect(toast.show).toHaveBeenCalledWith('Dataexport nedladdad.'));
+    expect(sentry.captureError).not.toHaveBeenCalled();
   });
 });

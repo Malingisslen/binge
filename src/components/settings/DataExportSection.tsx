@@ -5,6 +5,7 @@ import { Download } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/contexts/ToastContext';
 import { SettingsSection } from './SettingsSection';
+import { captureError } from '@/lib/sentry';
 import type { SkippedGroup } from '@/lib/firebase/dataExport';
 
 const NAMED_GROUPS_SHOWN = 3;
@@ -55,8 +56,15 @@ export function DataExportSection() {
         toast('Dataexport nedladdad.');
       }
     } catch (err) {
-
       console.error('[data-export]', err);
+      // BIN-1394: a whole export failing reaches Sentry under its own kind. No `extra`:
+      // it would carry no id, name or path. Monitoring must not stand between the user
+      // and the toast (BIN-1166).
+      try {
+        captureError(err, { scope: 'dataExport', kind: 'dataExport-exportFailed' });
+      } catch {
+        // best effort
+      }
       toast('Kunde inte skapa exporten. Försök igen.');
     } finally {
       setExporting(false);
