@@ -211,7 +211,7 @@ Set via `firebase functions:secrets:set NAME` **before** deploying the function 
 | `TMDB_API_KEY` | `episodeReleaseNotify` etc. | same value as `NEXT_PUBLIC_TMDB_API_KEY`, but functions need it as a secret |
 | `OMDB_API_KEY` | `titleRatings` | OMDb free tier 1,000/day |
 | `MOTN_API_KEY` | `streamingOffersRefresh` | RapidAPI (Movie of the Night), free 100/day |
-| `ADMIN_UID` | MOTN + Cineasterna crons | rot/warn notifications target `users/{ADMIN_UID}` |
+| `ADMIN_UID` | | rot/warn notifications target `users/{ADMIN_UID}` |
 
 Cineasterna reuses `TMDB_API_KEY` (for `/find`) + `ADMIN_UID`; no new external account.
 

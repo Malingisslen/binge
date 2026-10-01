@@ -573,6 +573,8 @@ Owns the nascent revenue surface.
   → `src/lib/advisor/serviceValue.ts`, `src/lib/tmdb/providers.ts`, `src/lib/streaming/cheapestPath.ts`, `src/hooks/useCineasternaCatalog.ts` (library-card wedge; phase-2 scope in Linear BIN-493)
 - **Filer som saknade en ägande roll** (BIN-871). Abonnemangsekonomin: priser, utgifter, förnyelser och billigaste väg.
   → `src/hooks/useListCheapestPlan.ts`, `src/hooks/usePriceHistory.ts`, `src/hooks/useServiceValue.test.ts`, `src/hooks/useServiceValue.ts`, `src/hooks/useStreamingLeaving.ts`, `src/hooks/useStreamingOffers.test.ts`, `src/hooks/useStreamingOffers.ts`, `src/lib/formatKr.test.ts`, `src/lib/formatKr.ts`, `src/lib/renewal.test.ts`, `src/lib/renewal.ts`, `src/lib/spendSnapshot.test.ts`, `src/lib/spendSnapshot.ts`, `src/lib/streaming/cheapestPath.test.ts`, `src/lib/streaming/offers.test.ts`, `src/lib/streaming/offers.ts`, `src/lib/streaming/priceStats.test.ts`, `src/lib/streaming/priceStats.ts`, `src/lib/tmdb/providers.affiliate.test.ts`, `src/lib/tmdb/providers.identityGuard.test.ts`, `src/lib/tmdb/providers.test.ts`
+- **Sparsidan och dess kort** (BIN-1340), däribland paketkortet med juridikens villkor om bindning och startavgift.
+  → `src/app/savings/`, `src/components/savings/`
 
 
 ## 25. Engineering Manager / Release Manager
@@ -807,6 +809,8 @@ findings here too.
 - 🟡 `retentionCleanup` + `reclaimOrphanFollows` are **live** (see
   `docs/analysis/EXTERNAL_ACTIONS.md`), but absent from `deploy.yml` **by design** —
   it ships hosting only, so every functions change needs a manual targeted deploy.
+  `reclaimOrphanFollows` still has **no health metric**: a sweep that silently stops
+  running raises no alert.
 - 🔴 **PITR och schemalagda backuper är påslagna** (mätt läge, datum och
   härledningskommandon i `docs/analysis/EXTERNAL_ACTIONS.md`, "Open infra items");
   det som saknas är en skriptad backup-hälsokoll, en restore-dry-run och en
@@ -926,7 +930,7 @@ dir. Grounded findings, roughly by severity:
 | Gap | What's missing | Touches |
 |---|---|---|
 | **Backup / DR verification** | PITR och schemalagda backuper är påslagna (se `docs/analysis/EXTERNAL_ACTIONS.md`), men inget larmar om ett schema slutar köra, och ingen återställning har provats. DR is runbook-only and untested. | DevOps (#8), Security (#4), DPO (#6), DBA (#27) |
-| **No health metric for the retention sweeps** | `retentionCleanup` + `reclaimOrphanFollows` are deployed and running, but absent from `deploy.yml` by design (hosting-only) — so each functions change needs a manual targeted deploy. | DevOps (#8), DPO (#6), Controller (#3), DBA (#27) |
+| **No health metric for `reclaimOrphanFollows`** | `retentionCleanup` + `reclaimOrphanFollows` are deployed and running, but absent from `deploy.yml` by design (hosting-only) — so each functions change needs a manual targeted deploy. Nothing alerts if `reclaimOrphanFollows` stops running or starts failing, or if `retentionCleanup`'s schedule stops firing altogether. | DevOps (#8), DPO (#6), Controller (#3), DBA (#27) |
 | **Schema-version safety** | No `schemaVersion` on Firestore docs — lazy migration can't prove completeness, and a stale legacy value can persist indefinitely undetected. | Architect (#14), QA (#7), DBA (#27) |
 | **Recommendation/taste drift** | Cascade + taste weights are frozen constants; no engagement tracking, A/B test, or drift detector validates them post-launch. | Data Analyst (#22), Architect (#14), Scoring (#28) |
 | **Notification delivery** | At-most-once is enforced, but there's no per-user delivery record, no user-facing "did you get this?", and no admin delivery-rate SLO. | DevOps (#8), Trust & Safety (#12), PM (#9) |
