@@ -2828,6 +2828,13 @@
           "verified": true
         },
         {
+          "from": "data-export-section",
+          "to": "sentry-lib",
+          "payload": "BIN-1394: when the whole export throws, DataExportSection reports the error via captureError under scope dataExport, kind dataExport-exportFailed, with no extra data. Reporting is best effort in its own try/catch, so the error toast still shows and the button can be pressed again",
+          "transport": "function call",
+          "verified": true
+        },
+        {
           "from": "data-export-lib",
           "to": "web-app",
           "payload": "downloadExport(data) — client-local JSON file download, no network call. BIN-1380: when skippedGroups is non-empty, DataExportSection shows a status line under the button naming the groups instead of the plain toast; it stays until the next export",
