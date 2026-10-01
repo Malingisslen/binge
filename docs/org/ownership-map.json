@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 654,
+  "patternCount": 656,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -405,6 +405,7 @@
         "src/components/groups/GroupWatchlistTable.tsx",
         "src/components/groups/HandOverGroupDialog.test.tsx",
         "src/components/groups/HandOverGroupDialog.tsx",
+        "src/components/groups/HouseholdPanel.test.tsx",
         "src/components/groups/HouseholdPanel.tsx",
         "src/components/social/FollowButton.tsx",
         "src/components/social/FriendButton.test.tsx",
@@ -546,6 +547,7 @@
         "src/hooks/useStreamingOffers.test.ts",
         "src/hooks/useStreamingOffers.ts",
         "src/lib/advisor/serviceValue.ts",
+        "src/lib/formatKr.guard.test.ts",
         "src/lib/formatKr.test.ts",
         "src/lib/formatKr.ts",
         "src/lib/renewal.test.ts",

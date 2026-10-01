@@ -150,7 +150,7 @@ export function ProvidersSection() {
                     >
                       <option value="">Egen kostnad…</option>
                       {provider.tiers!.map(t => (
-                        <option key={t.id} value={t.id}>{t.name} — {t.cost} kr</option>
+                        <option key={t.id} value={t.id}>{t.name} — {formatKr(t.cost)} kr</option>
                       ))}
                     </select>
                   ) : null}
@@ -265,7 +265,7 @@ function ProviderCampaignRow({
           <>
             <span className="text-ink-3">
               Kampanj:{' '}
-              <span className="text-ink font-semibold tabular-nums">{campaign.monthlyCost} kr</span>{' '}
+              <span className="text-ink font-semibold tabular-nums">{formatKr(campaign.monthlyCost)} kr</span>{' '}
               t.o.m. {campaign.endDate}
             </span>
             <button type="button" onClick={startEdit} className="text-acc-deep bg-transparent border-none p-0 cursor-pointer">Ändra</button>

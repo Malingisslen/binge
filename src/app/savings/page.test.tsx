@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, getDefaultNormalizer } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import type { AdvisorResult, BundleSuggestion } from '@/types';
 
@@ -48,6 +48,7 @@ vi.mock('@/components/savings/SavingsSidebar', () => ({ default: () => null }));
 vi.mock('@/components/savings/UpcomingEpisodes', () => ({ default: () => null }));
 
 import SavingsPage from './page';
+import { krText, verbatim } from '@/test/krText';
 
 function baseAdvisor(over: Partial<AdvisorResult> = {}): AdvisorResult {
   return {
@@ -166,11 +167,6 @@ describe('SavingsPage — bundle card survives a TMDB outage (BIN-442)', () => {
 // the page calls it. The paused-services section is the page's own kr call site:
 // a regression to a raw `{totalSaved}` would print "1234" and stay green there.
 describe('SavingsPage — paused-service amounts are grouped by thousands (BIN-1366)', () => {
-  const NBSP = ' ';
-  // The default normalizer collapses every \s run, NBSP included, to a plain
-  // space; keep whitespace verbatim so the assertion sees the separator itself.
-  const exact = { normalizer: getDefaultNormalizer({ collapseWhitespace: false }) };
-
   beforeEach(() => {
     advisorMock.mockReset();
   });
@@ -190,7 +186,7 @@ describe('SavingsPage — paused-service amounts are grouped by thousands (BIN-1
     );
     render(<SavingsPage />);
 
-    expect(screen.getByText(`Sparat hittills: 1${NBSP}234 kr`, exact)).toBeInTheDocument();
-    expect(screen.getByText(`+1${NBSP}000 kr`, exact)).toBeInTheDocument();
+    expect(screen.getByText(krText('Sparat hittills: 1 234 kr'), verbatim)).toBeInTheDocument();
+    expect(screen.getByText(krText('+1 000 kr'), verbatim)).toBeInTheDocument();
   });
 });
