@@ -1,5 +1,6 @@
 import { TMDB_ATTRIBUTION_EN, JUSTWATCH_ATTRIBUTION_EN } from '@/lib/tmdb/attribution';
 import { collectUserDataSnapshots } from './userData';
+import { captureError } from '@/lib/sentry';
 import type { QuerySnapshot } from 'firebase/firestore';
 
 /**
@@ -153,10 +154,37 @@ Metadata om filmer och serier (titel, poster, genrer etc.) kommer från
 TMDB och är inte dina personuppgifter — vi cachear dem på watchlist-items
 som bekvämlighet, men källan är TMDB.`;
 
-const READ_FAILED = Symbol('read-failed');
+// BIN-1379: the failed read keeps its error so it can be reported after the export is
+// assembled. Reporting inside this catch would let a throwing reporter reject the
+// Promise.all the swallow exists to protect.
+class ReadFailed {
+  constructor(readonly error: unknown) {}
+}
 
-function orReadFailed<T>(read: Promise<T>): Promise<T | typeof READ_FAILED> {
-  return read.catch(() => READ_FAILED);
+function orReadFailed<T>(read: Promise<T>): Promise<T | ReadFailed> {
+  return read.catch((error: unknown) => new ReadFailed(error));
+}
+
+const READ_FAILURE_KIND: Record<GroupScopedExportField, string> = {
+  householdContributions: 'dataExport-householdRead',
+  groupMemberRows: 'dataExport-memberRowRead',
+  groupTitleRatings: 'dataExport-titleListRead',
+};
+
+// BIN-1379: one event per failing read kind per export, carrying the first failure's
+// own error (so beforeSend scrubs its path) and a bare count. Never a group id, a group
+// name or a uid: `extra` is not scrubbed. Best effort; a failure here never reaches
+// the user's export.
+function reportReadFailures(failures: Map<GroupScopedExportField, { error: unknown; count: number }>): void {
+  failures.forEach(({ error, count }, field) => {
+    const kind = READ_FAILURE_KIND[field];
+    try {
+      console.error('dataExport: en gruppläsning fallerade (' + kind + ')', error);
+      captureError(error, { scope: 'groups', kind, extra: { failedGroups: count } });
+    } catch {
+      // Monitoring must not turn a delivered export into a failed one (BIN-1166).
+    }
+  });
 }
 
 function toExportDocs(snap: QuerySnapshot): ExportDoc[] {
@@ -190,12 +218,18 @@ export async function buildUserExport(uid: string): Promise<BingeExport> {
   // (`DataExportSection`): reglerna prövar medlemskap, inte att uid:t är anroparens,
   // så ett annat uid skulle exportera den medlemmens betyg.
   //
-  // BIN-1357: en läsning som kastar fångas som READ_FAILED i stället för null, så att
+  // BIN-1357: en läsning som kastar fångas som ReadFailed i stället för null, så att
   // gruppen kan märkas i `skippedGroups`. En rad som bara saknas är inget fel och märks inte.
   const householdContributions: ExportDoc[] = [];
   const groupMemberRows: ExportDoc[] = [];
   const groupTitleRatings: ExportDoc[] = [];
   const skippedGroups: SkippedGroup[] = [];
+  const readFailures = new Map<GroupScopedExportField, { error: unknown; count: number }>();
+  const noteFailure = (field: GroupScopedExportField, failed: ReadFailed) => {
+    const seen = readFailures.get(field);
+    if (seen) seen.count += 1;
+    else readFailures.set(field, { error: failed.error, count: 1 });
+  };
   if (s.groupsSnap.docs.length > 0) {
     const { fsdb } = await import('./db');
     const { db, doc, getDoc, collection, getDocs } = await fsdb();
@@ -210,20 +244,23 @@ export async function buildUserExport(uid: string): Promise<BingeExport> {
     s.groupsSnap.docs.forEach((g, i) => {
       const missing: GroupScopedExportField[] = [];
       const snap = householdSnaps[i];
-      if (snap === READ_FAILED) {
+      if (snap instanceof ReadFailed) {
         missing.push('householdContributions');
+        noteFailure('householdContributions', snap);
       } else if (snap.exists()) {
         householdContributions.push({ id: g.id, data: snap.data() as Record<string, unknown> });
       }
       const member = memberSnaps[i];
-      if (member === READ_FAILED) {
+      if (member instanceof ReadFailed) {
         missing.push('groupMemberRows');
+        noteFailure('groupMemberRows', member);
       } else if (member.exists()) {
         groupMemberRows.push({ id: g.id, data: member.data() as Record<string, unknown> });
       }
       const titles = titleSnaps[i];
-      if (titles === READ_FAILED) {
+      if (titles instanceof ReadFailed) {
         missing.push('groupTitleRatings');
+        noteFailure('groupTitleRatings', titles);
       } else {
         groupTitleRatings.push(...ownGroupTitleRatings(
           g.id,
@@ -237,6 +274,7 @@ export async function buildUserExport(uid: string): Promise<BingeExport> {
       }
     });
   }
+  reportReadFailures(readFailures);
 
   return {
     schemaVersion: SCHEMA_VERSION,

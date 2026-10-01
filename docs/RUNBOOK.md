@@ -585,6 +585,10 @@ längre kunna fälla bygget efter 2026-06 (AbortSignal.timeout i
 4. Samma error förut? Sök på error-message i Sentry
 5. Om nytt: reproducera lokalt, fixa, deploy
 
+`tags.kind` som börjar på `dataExport-` (scope `groups`, BIN-1379) betyder att en användare
+kan ha fått en ofullständig dataexport; grupperna står i filens `skippedGroups`. Matcha mot ett
+mejl till hej@binge.nu och hantera det som en Art. 20-begäran.
+
 ### 7b. Noise-errors att ignorera
 
 Redan ignoreras (se `src/lib/sentry.ts` `ignoreErrors`):

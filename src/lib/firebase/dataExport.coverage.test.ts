@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DocumentSnapshot, QuerySnapshot } from 'firebase/firestore';
@@ -148,6 +148,11 @@ function fakeDocSnap(): DocumentSnapshot {
 vi.mock('./userData', () => ({
   collectUserDataSnapshots: vi.fn(),
 }));
+
+// BIN-1379: the export reports a failed group read to Sentry. Mocked so a test can read
+// what was sent; the real `captureError` is a no-op without a DSN and would prove nothing.
+const sentryMock = vi.hoisted(() => ({ captureError: vi.fn() }));
+vi.mock('@/lib/sentry', () => ({ captureError: sentryMock.captureError }));
 
 // BIN-184: buildUserExport fetches group-scoped household contributions inline
 // (dynamic import('./db')) — mock the kit so the export path flows without
@@ -546,5 +551,104 @@ describe('BIN-1357: a group whose read fails is marked in skippedGroups', () => 
     expect(out.readme).not.toMatch(/komplett/i);
     expect(out.readme).toContain('skippedGroups');
     expect(out.skippedGroups).toEqual([]);
+  });
+});
+
+// BIN-1379 (Malin 2026-10-01, attended panel): a failed per-group read is reported under
+// its own kind, at most once per kind per export, with no group id, group name or uid in
+// what is sent, and the report can never break the export.
+describe('BIN-1379: a failed group read is reported to Sentry', () => {
+  beforeEach(() => {
+    sentryMock.captureError.mockReset();
+  });
+  afterAll(() => {
+    sentryMock.captureError.mockReset();
+    dbMock.getDoc.mockImplementation(async (ref: { path: string }) => answerByPath(ref));
+    dbMock.getDocs.mockImplementation(async () => titleList([]));
+  });
+
+  function failEveryReadOf(groups: string[]) {
+    const errors = new Map<string, Error>();
+    const fail = (path: string) => {
+      const err = new Error(`permission-denied: ${path}`);
+      errors.set(path, err);
+      throw err;
+    };
+    dbMock.getDoc.mockImplementation(async (ref: { path: string }) =>
+      groups.some(g => ref.path.startsWith(`groups/${g}/`)) ? fail(ref.path) : answerByPath(ref));
+    dbMock.getDocs.mockImplementation(async (ref: { path: string }) =>
+      groups.some(g => ref.path.startsWith(`groups/${g}/`)) ? fail(ref.path) : titleList([]));
+    return errors;
+  }
+
+  it('reports once per read kind, not once per group, with the original error and a count', async () => {
+    vi.mocked(collectUserDataSnapshots).mockResolvedValueOnce(snapsWithGroups(['g1', 'g2', 'ok']));
+    const errors = failEveryReadOf(['g1', 'g2']);
+
+    await buildUserExport('test-uid');
+
+    expect(sentryMock.captureError).toHaveBeenCalledTimes(3);
+    expect(sentryMock.captureError).toHaveBeenCalledWith(
+      errors.get('groups/g1/household/test-uid'),
+      { scope: 'groups', kind: 'dataExport-householdRead', extra: { failedGroups: 2 } },
+    );
+    expect(sentryMock.captureError).toHaveBeenCalledWith(
+      errors.get('groups/g1/members/test-uid'),
+      { scope: 'groups', kind: 'dataExport-memberRowRead', extra: { failedGroups: 2 } },
+    );
+    expect(sentryMock.captureError).toHaveBeenCalledWith(
+      errors.get('groups/g1/watchlist'),
+      { scope: 'groups', kind: 'dataExport-titleListRead', extra: { failedGroups: 2 } },
+    );
+  });
+
+  it('reports only the kind that failed', async () => {
+    vi.mocked(collectUserDataSnapshots).mockResolvedValueOnce(snapsWithGroups(['g1']));
+    dbMock.getDoc.mockImplementation(async (ref: { path: string }) => answerByPath(ref));
+    dbMock.getDocs.mockImplementation(async () => { throw new Error('permission-denied'); });
+
+    await buildUserExport('test-uid');
+
+    expect(sentryMock.captureError).toHaveBeenCalledTimes(1);
+    expect(sentryMock.captureError.mock.calls[0][1]).toEqual(
+      { scope: 'groups', kind: 'dataExport-titleListRead', extra: { failedGroups: 1 } });
+  });
+
+  it('sends no group id, group name or uid beside the error', async () => {
+    vi.mocked(collectUserDataSnapshots).mockResolvedValueOnce(snapsWithGroups(['secretGroup']));
+    failEveryReadOf(['secretGroup']);
+
+    await buildUserExport('test-uid');
+
+    expect(sentryMock.captureError).toHaveBeenCalled();
+    for (const [, context] of sentryMock.captureError.mock.calls) {
+      const sent = JSON.stringify(context);
+      expect(sent).not.toContain('secretGroup');
+      expect(sent).not.toContain('test-uid');
+    }
+  });
+
+  it('a row that does not exist is not reported', async () => {
+    vi.mocked(collectUserDataSnapshots).mockResolvedValueOnce(snapsWithGroups(['ghost']));
+    dbMock.getDoc.mockImplementation(async () => ({ exists: () => false, data: () => undefined }));
+    dbMock.getDocs.mockImplementation(async () => titleList([]));
+
+    await buildUserExport('test-uid');
+
+    expect(sentryMock.captureError).not.toHaveBeenCalled();
+  });
+
+  it('a reporter that throws does not break the export', async () => {
+    vi.mocked(collectUserDataSnapshots).mockResolvedValueOnce(snapsWithGroups(['g1']));
+    failEveryReadOf(['g1']);
+    sentryMock.captureError.mockImplementation(() => { throw new Error('sentry down'); });
+
+    const out = await buildUserExport('test-uid');
+
+    expect(out.skippedGroups).toEqual([{
+      groupId: 'g1',
+      groupName: 'g1',
+      missing: ['householdContributions', 'groupMemberRows', 'groupTitleRatings'],
+    }]);
   });
 });
