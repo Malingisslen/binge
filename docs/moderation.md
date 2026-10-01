@@ -229,13 +229,18 @@ Användare kan också blockera andra användare via UgcActionsMenu. Det skriver
 till `users/{uid}/blocked/{targetUid}`. **Detta är inte moderation** — det
 är en självhjälpsfunktion. Ägaren själv kontrollerar sina blocks.
 
+En blockering avslutar också en befintlig vänskap mellan de två och drar
+tillbaka väntande vänförfrågningar, i samma skrivning som blockdokumentet
+(BIN-1349, `blockUserAndEndFriendship` i `src/lib/firebase/friends.ts`; vilka
+dokument som raderas härleds ur `relationshipDocsToClear` i
+`src/lib/blockRelationship.ts`).
+
 Filter sker klient-sidigt i:
 - `ReviewList` (filter på `!isBlocked(review.uid)`)
 - `ReviewComments` (filter på `!isBlocked(comment.uid)`)
 - `FeedPage` (filter på `!isBlocked(item.uid)`)
 
-Admin behöver inte vidta åtgärd på blocks — de är symmetriska själv-
-kontrollverktyg.
+Admin behöver inte vidta åtgärd på blocks — de är själv-kontrollverktyg.
 
 ### Vänförfrågningar (BIN-1129, 2026-09-15)
 

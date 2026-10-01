@@ -526,7 +526,8 @@ service cloud.firestore {
 
     // Blockerade användare — endast ägaren läser/skriver. Klient-filter i UI
     // gömmer blockerad användares innehåll (hygien-nivå, inte säkerhetsgräns).
-    // BIN-1170: blockUser i src/hooks/useBlockedUsers.ts skriver bara blockedAt.
+    // BIN-1129: create-regeln i match /users/{uid}/friendRequests/{fromUid} läser detta dokument.
+    // BIN-1170: blockUserAndEndFriendship i src/lib/firebase/friends.ts skriver bara blockedAt.
     match /users/{uid}/blocked/{targetUid} {
       allow read, delete: if isOwner(uid);
       allow create, update: if isOwner(uid)
