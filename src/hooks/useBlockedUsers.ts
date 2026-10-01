@@ -13,7 +13,8 @@ import { blockUserAndEndFriendship } from '@/lib/firebase/friends';
  *
  * Filtrering sker klient-side i review/feed/follow-listor eftersom vi
  * inte vill att Firestore ska behöva joina block-data i varje query.
- * Det är en hygien-nivå som räcker för v1 — inte en säkerhetsgräns.
+ * Den filtreringen är en hygien-nivå som räcker för v1 — inte en säkerhetsgräns.
+ * En vänförfrågan från den blockerade nekas däremot av firestore.rules (BIN-1129).
  * En hård gräns kräver server-side filter, vilket vi gör när vi flyttar
  * review-läsning till en Cloud Function.
  *
