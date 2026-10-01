@@ -115,9 +115,12 @@ import {
   GROUP_WRITE_REFUSED,
   MY_GROUPS_LIMIT,
   memberDocToObject,
+  watchlistDocToObject,
+  subscribeToGroupWatchlist,
   leaveGroup,
   removeMemberAsOwner,
 } from './groups';
+import type { GroupWatchlistRow } from './groups';
 
 function groupsQueryConstraints() {
   const call = queryMock.mock.calls.find(([coll]) => (coll as { _path?: string })?._path === 'groups');
@@ -1493,6 +1496,80 @@ describe('memberDocToObject — joinedAtKnown följer det RÅA fältet (BIN-1118
     expect(Number.isFinite(fresh.joinedAt.getTime())).toBe(true);
     expect(unknown.joinedAtKnown).toBe(false);
     expect(fresh.joinedAtKnown).toBe(true);
+  });
+});
+
+// BIN-1383. `addedAtKnown` is what keeps GroupWatchlistTable from comparing `toDate`'s
+// moving stand-in across snapshots (BIN-1354). The table's own tests set it by hand,
+// so these pin the producer and the subscription that carries it to the table.
+// GroupWatchlistTable.test.tsx keeps its own BIN-1354 mapper suite: it also asserts that
+// `addedAt` is a Date for every unknown shape, which this suite does not.
+describe('watchlistDocToObject — addedAtKnown följer det RÅA fältet (BIN-1383)', () => {
+  it('en rad utan addedAtKnown är ett typfel (fältet är obligatoriskt)', () => {
+    const withoutField: Omit<GroupWatchlistRow, 'addedAtKnown'> & { addedAtKnown?: boolean } =
+      { ...watchlistDocToObject('movie_603', {}) };
+    delete withoutField.addedAtKnown;
+    // @ts-expect-error -- GroupWatchlistRow kräver addedAtKnown, så en rad som tappat fältet ska fällas av typkontrollen.
+    const row: GroupWatchlistRow = withoutField;
+    expect(row).not.toHaveProperty('addedAtKnown');
+  });
+
+  const stamp = (d: Date) => ({ toDate: () => d });
+
+  it('en Firestore-tidsstämpel räknas som känd', () => {
+    const row = watchlistDocToObject('movie_603', { tmdbId: 603, addedAt: stamp(new Date('2026-09-01')) });
+    expect(row.addedAtKnown).toBe(true);
+    expect(row.addedAt).toEqual(new Date('2026-09-01'));
+  });
+
+  it('ett Date-värde räknas som känt', () => {
+    expect(watchlistDocToObject('movie_603', { addedAt: new Date('2026-09-01') }).addedAtKnown).toBe(true);
+  });
+
+  it('ett saknat fält är okänt', () => {
+    expect(watchlistDocToObject('movie_603', {}).addedAtKnown).toBe(false);
+  });
+
+  it('null (en serverTimestamp som inte kommit än) är okänt', () => {
+    expect(watchlistDocToObject('movie_603', { addedAt: null }).addedAtKnown).toBe(false);
+  });
+
+  it('ett värde av fel typ är okänt', () => {
+    expect(watchlistDocToObject('movie_603', { addedAt: 1756684800000 }).addedAtKnown).toBe(false);
+    expect(watchlistDocToObject('movie_603', { addedAt: '2026-09-01' }).addedAtKnown).toBe(false);
+    expect(watchlistDocToObject('movie_603', { addedAt: { toDate: 'inte en funktion' } }).addedAtKnown).toBe(false);
+  });
+
+  it('en okänd rad går inte att skilja från en färsk på addedAt allena', () => {
+    const unknown = watchlistDocToObject('movie_603', {});
+    const fresh = watchlistDocToObject('movie_604', { addedAt: stamp(new Date()) });
+    expect(Number.isFinite(unknown.addedAt.getTime())).toBe(true);
+    expect(Number.isFinite(fresh.addedAt.getTime())).toBe(true);
+    expect(unknown.addedAtKnown).toBe(false);
+    expect(fresh.addedAtKnown).toBe(true);
+  });
+});
+
+describe('subscribeToGroupWatchlist lämnar addedAtKnown vidare från det råa dokumentet (BIN-1383)', () => {
+  it('varje rad i snapshoten bär addedAtKnown som det råa addedAt avgör', async () => {
+    const seen: GroupWatchlistRow[][] = [];
+    subscribeToGroupWatchlist('g-wl', items => seen.push(items));
+    await vi.waitUntil(() => onSnapshotMock.mock.calls.length > 0);
+    const [ref, next] = onSnapshotMock.mock.calls[0];
+    expect((ref as { _path: string })._path).toBe('groups/g-wl/watchlist');
+
+    const docOf = (id: string, data: Record<string, unknown>) => ({ id, data: () => data });
+    (next as (snap: unknown) => void)({
+      docs: [
+        docOf('movie_603', { tmdbId: 603, mediaType: 'movie', addedAt: { toDate: () => new Date('2026-09-01') } }),
+        docOf('movie_604', { tmdbId: 604, mediaType: 'movie', addedAt: null }),
+        docOf('tv_1399', { tmdbId: 1399, mediaType: 'tv' }),
+      ],
+    });
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0].map(r => [r.tmdbId, r.addedAtKnown]))
+      .toEqual([[603, true], [604, false], [1399, false]]);
   });
 });
 

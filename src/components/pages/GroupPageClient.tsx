@@ -38,9 +38,9 @@ import { NotFound } from '@/components/ui/NotFound';
 import type {
   Group,
   GroupMember,
-  GroupWatchlistItem,
   SessionConfig,
 } from '@/types';
+import type { GroupWatchlistRow } from '@/lib/firebase/groups';
 
 const GroupSettingsModal = dynamic(
   () => import('@/components/groups/GroupSettingsModal').then(m => m.GroupSettingsModal),
@@ -222,7 +222,7 @@ function GroupView({
   groupId: string;
   group: Group;
   members: GroupMember[];
-  watchlist: GroupWatchlistItem[];
+  watchlist: GroupWatchlistRow[];
   myUid: string;
   isOwner: boolean;
 }) {

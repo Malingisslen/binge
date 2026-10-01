@@ -26,7 +26,7 @@ export function GroupWatchlistTable({
   groupId, watchlist, members, myUid, isOwner,
 }: {
   groupId: string;
-  watchlist: GroupWatchlistItem[];
+  watchlist: GroupWatchlistRow[];
   members: GroupMember[];
   myUid: string;
   isOwner: boolean;
@@ -271,8 +271,8 @@ function failureKey(action: 'rate' | 'remove', item: GroupWatchlistItem): string
   return `${action}:${mediaTypeDocId(item.mediaType, item.tmdbId)}`;
 }
 
-function storedAddedAt(item: GroupWatchlistItem & Partial<Pick<GroupWatchlistRow, 'addedAtKnown'>>): number | null {
-  return item.addedAtKnown === false ? null : item.addedAt.getTime();
+function storedAddedAt(item: GroupWatchlistRow): number | null {
+  return item.addedAtKnown ? item.addedAt.getTime() : null;
 }
 
 function dropFailuresFor(failed: Record<string, true>, rowIds: ReadonlySet<string>): Record<string, true> {

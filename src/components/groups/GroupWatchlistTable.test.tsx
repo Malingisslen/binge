@@ -6,7 +6,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { GroupWatchlistTable } from './GroupWatchlistTable';
-import type { GroupMember, GroupWatchlistItem } from '@/types';
+import type { GroupMember } from '@/types';
+import type { GroupWatchlistRow } from '@/lib/firebase/groups';
 
 const setMemberRating = vi.hoisted(() => vi.fn());
 const removeFromGroupWatchlist = vi.hoisted(() => vi.fn());
@@ -35,8 +36,9 @@ const item = {
   releaseYear: 1999,
   addedBy: 'me',
   addedAt: new Date('2026-09-01'),
+  addedAtKnown: true,
   memberRatings: {},
-} as unknown as GroupWatchlistItem;
+} as unknown as GroupWatchlistRow;
 
 const otherItem = {
   ...item,
@@ -44,9 +46,9 @@ const otherItem = {
   mediaType: 'tv',
   title: 'Game of Thrones',
   addedAt: new Date('2026-08-01'),
-} as unknown as GroupWatchlistItem;
+} as unknown as GroupWatchlistRow;
 
-function renderTable(watchlist: GroupWatchlistItem[] = [item]) {
+function renderTable(watchlist: GroupWatchlistRow[] = [item]) {
   render(
     <GroupWatchlistTable groupId="g1" watchlist={watchlist} members={members} myUid="me" isOwner={false} />,
   );
@@ -278,11 +280,11 @@ describe('GroupWatchlistTable — failures follow the row out of the watchlist (
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
-  function renderWith(watchlist: GroupWatchlistItem[]) {
+  function renderWith(watchlist: GroupWatchlistRow[]) {
     const view = render(
       <GroupWatchlistTable groupId="g1" watchlist={watchlist} members={members} myUid="me" isOwner={false} />,
     );
-    return (next: GroupWatchlistItem[]) => view.rerender(
+    return (next: GroupWatchlistRow[]) => view.rerender(
       <GroupWatchlistTable groupId="g1" watchlist={next} members={members} myUid="me" isOwner={false} />,
     );
   }
@@ -339,16 +341,16 @@ describe('GroupWatchlistTable — a title added again starts without the old fai
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
-  function renderWith(watchlist: GroupWatchlistItem[]) {
+  function renderWith(watchlist: GroupWatchlistRow[]) {
     const view = render(
       <GroupWatchlistTable groupId="g1" watchlist={watchlist} members={members} myUid="me" isOwner={false} />,
     );
-    return (next: GroupWatchlistItem[]) => view.rerender(
+    return (next: GroupWatchlistRow[]) => view.rerender(
       <GroupWatchlistTable groupId="g1" watchlist={next} members={members} myUid="me" isOwner={false} />,
     );
   }
 
-  const readded = { ...item, addedAt: new Date('2026-09-20') } as GroupWatchlistItem;
+  const readded = { ...item, addedAt: new Date('2026-09-20') } as GroupWatchlistRow;
 
   function pendingRemoval() {
     let settle!: { resolve: () => void; reject: (e: unknown) => void };
@@ -416,17 +418,17 @@ describe('GroupWatchlistTable — a row without a stored addedAt (BIN-1354)', ()
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
-  function renderWith(watchlist: GroupWatchlistItem[]) {
+  function renderWith(watchlist: GroupWatchlistRow[]) {
     const view = render(
       <GroupWatchlistTable groupId="g1" watchlist={watchlist} members={members} myUid="me" isOwner={false} />,
     );
-    return (next: GroupWatchlistItem[]) => view.rerender(
+    return (next: GroupWatchlistRow[]) => view.rerender(
       <GroupWatchlistTable groupId="g1" watchlist={next} members={members} myUid="me" isOwner={false} />,
     );
   }
 
   const undated = (standIn: string) =>
-    ({ ...item, addedAt: new Date(standIn), addedAtKnown: false }) as GroupWatchlistItem;
+    ({ ...item, addedAt: new Date(standIn), addedAtKnown: false }) as GroupWatchlistRow;
 
   it('a removal refused while the undated row was hidden shows the failure when Firestore restores it', async () => {
     let rejectRemoval!: (e: unknown) => void;

@@ -11,10 +11,11 @@ import {
   acceptGroupInvite as acceptInvite,
   declineGroupInvite as declineInvite,
   type GroupInvite,
+  type GroupWatchlistRow,
 } from '@/lib/firebase/groups';
 import { useAuth } from '@/hooks/useAuth';
 import type { AcceptInviteResult } from '@/lib/firebase/groups';
-import type { Group, GroupMember, GroupWatchlistItem } from '@/types';
+import type { Group, GroupMember } from '@/types';
 
 export function useMyGroups(uid: string | null) {
   const [groups, setGroups] = useState<Group[]>([]);
@@ -48,7 +49,7 @@ export function useMyGroups(uid: string | null) {
 export function useGroup(groupId: string | null) {
   const [group, setGroup] = useState<Group | null>(null);
   const [members, setMembers] = useState<GroupMember[]>([]);
-  const [watchlist, setWatchlist] = useState<GroupWatchlistItem[]>([]);
+  const [watchlist, setWatchlist] = useState<GroupWatchlistRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [denied, setDenied] = useState(false);

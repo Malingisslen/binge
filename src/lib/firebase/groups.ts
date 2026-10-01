@@ -1288,7 +1288,7 @@ export function subscribeToGroupMembers(
 
 export function subscribeToGroupWatchlist(
   groupId: string,
-  cb: (items: GroupWatchlistItem[]) => void,
+  cb: (items: GroupWatchlistRow[]) => void,
 ): () => void {
   return lazySubscribe(({ db, collection, onSnapshot }) =>
     onSnapshot(collection(db, 'groups', groupId, 'watchlist'), snap => {
