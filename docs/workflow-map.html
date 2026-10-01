@@ -2822,8 +2822,15 @@
         },
         {
           "from": "data-export-lib",
+          "to": "sentry-lib",
+          "payload": "BIN-1379: once every per-group read has settled, a read that THREW (not a row that is merely absent) is reported via captureError under scope groups, with one kind per read (dataExport-householdRead, dataExport-memberRowRead, dataExport-titleListRead) and only a failed-group count — no group id, name or uid. Reporting sits in its own try/catch, so it cannot fail the export",
+          "transport": "function call",
+          "verified": true
+        },
+        {
+          "from": "data-export-lib",
           "to": "web-app",
-          "payload": "downloadExport(data) — client-local JSON file download, no network call",
+          "payload": "downloadExport(data) — client-local JSON file download, no network call. BIN-1380: when skippedGroups is non-empty, DataExportSection shows a status line under the button naming the groups instead of the plain toast; it stays until the next export",
           "transport": "browser-download",
           "verified": true
         },
