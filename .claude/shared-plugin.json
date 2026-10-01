@@ -411,7 +411,9 @@
     "verify": {
       "formatCommand": "npx eslint --fix",
       "formatAllCommand": "npm run lint",
-      "testPathTemplate": "src/**/*.test.ts"
+      "testPathTemplate": "src/**/*.test.ts",
+      "_worktreeRunHint": "BIN-1351, 2026-10-01: a sprint worktree has no node_modules, and a junction to the shared one is what emptied it on 2026-08-08 (BIN-836). Node finds packages by walking up to the main checkout, so tools are run by path. Measured in a fresh worktree the same day: vitest ran a suite green and tsc exited 0.",
+      "worktreeRunHint": "This worktree has no node_modules of its own. Do NOT run npm install or npm ci, and do NOT create a junction or symlink to node_modules. Run tools by path from the main checkout: tests with `node \"$(git rev-parse --path-format=absolute --git-common-dir)/../node_modules/vitest/vitest.mjs\" run <test file>`, types with `node \"$(git rev-parse --path-format=absolute --git-common-dir)/../node_modules/typescript/bin/tsc\" --noEmit -p .`"
     },
     "hygiene": {
       "fileSizeLines": 400,
@@ -475,6 +477,13 @@
     ],
     "ship": {
       "pushTriggersDeploy": true,
+      "_prePushChecks": "BIN-1362, 2026-10-01: the deploy's coverage test failed twice on review rows the sprint left uncommitted. The sprint now runs the same check on its own branch before it pushes, and does not push when it fails.",
+      "prePushChecks": [
+        {
+          "name": "review coverage",
+          "command": "node docs/org/metrics/check_review_coverage.mjs"
+        }
+      ],
       "deployAfterCommit": [
         {
           "name": "await-deploy",

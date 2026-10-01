@@ -54,7 +54,17 @@ function resolveRepoRoot() {
       }).toString().trim();
     } catch { /* */ }
   }
-  return repoRoot || process.cwd();
+  return mainCheckoutOf(repoRoot || process.cwd());
+}
+
+// BIN-1397 (#25's condition 3): when the hook runs with a sprint worktree as its root,
+// its `.claude/state/` is deleted with the worktree, and the work order with it. A
+// worktree under `.claude/worktrees/<name>` belongs to the checkout above it, so the
+// flag is written there. A string rule, not a git call: this hook runs on every edit.
+export function mainCheckoutOf(root) {
+  const posix = String(root).replace(/\\/g, '/').replace(/\/$/, '');
+  const m = posix.match(/^(.*)\/\.claude\/worktrees\/[^/]+$/i);
+  return m ? m[1] : root;
 }
 
 // Repo-relative, forward-slash. Case-insensitive prefix strip: on Windows the path Claude
@@ -67,6 +77,14 @@ export function toRepoRelative(filePath, repoRoot) {
     rel = rel.slice(rootPosix.length + 1);
   }
   return rel.replace(/^\.\//, '');
+}
+
+// BIN-1397: a sprint builder edits inside its own worktree, `.claude/worktrees/<name>/`, so
+// the path above came out starting with `.claude/` and BOTH stampers' anti-loop guards
+// skipped it — sprint work never stamped the map flag. A worktree is a checkout of this
+// repo, so the path inside it is the repo path.
+export function stripWorktreePrefix(rel) {
+  return String(rel).replace(/^\.claude\/worktrees\/[^/]+\//i, '');
 }
 
 export function globToRegExp(pattern) {
@@ -287,7 +305,7 @@ function main() {
   if (!filePath || !String(filePath).trim()) return;
 
   const repoRoot = resolveRepoRoot();
-  const rel = toRepoRelative(filePath, repoRoot);
+  const rel = stripWorktreePrefix(toRepoRelative(filePath, repoRoot));
 
   // Isolated: a throw in one stamper must never cost the other its run.
   try { stampDossier(payload, repoRoot, rel); } catch { /* fail open */ }

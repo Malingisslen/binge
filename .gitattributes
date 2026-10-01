@@ -1,0 +1,5 @@
+# The org's metrics log is append-only, and since BIN-1362 the sprint commits its own
+# review rows into it on the sprint branch. When main gains rows while a sprint runs,
+# the sprint's rebase before the push would conflict on two appends at the end of the
+# file. `union` keeps both sides' lines, which is the correct merge for this file.
+docs/org/metrics/events.jsonl merge=union
