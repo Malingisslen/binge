@@ -2769,6 +2769,13 @@
           "payload": "BIN-1317: a non-empty problem list — the previous run's, sent BEFORE this run sweeps, and this run's own logged errors or throw, sent after — becomes one sendAdminSystemNotification card in users/{ADMIN_UID}/notifications (the admin inbox, Malin's channel choice 2026-09-27; no push, no Sentry). ADMIN_UID unbound → the send no-ops and the run logs 'retentionCleanup: alert not sent'. A schedule that stops firing altogether is not seen: no run is left to notice",
           "transport": "Firestore write",
           "verified": true
+        },
+        {
+          "from": "cf-retentionCleanup",
+          "to": "firestore",
+          "payload": "BIN-1422: after the start stamp, runWatched lists the database's backups through the readBackups port — GET firestore.googleapis.com/v1/projects/<GCLOUD_PROJECT>/locations/eur3/backups with the runtime service account's token, bounded by BACKUP_CHECK_TIMEOUT_MS. Only READY backups of (default) count. A newest backup older than BACKUP_MAX_AGE_MS, no backup at all, or a list that could not be read (non-2xx, unreachable locations, throw, timeout) each becomes its own sendAdminSystemNotification card titled 'Säkerhetskopiorna av databasen behöver tittas på'. The check is caught on its own and never stops the sweep; it runs only when retentionCleanup runs",
+          "transport": "Firestore Admin REST (GET) + Firestore write",
+          "verified": true
         }
       ],
       "area": "ops & compliance"
