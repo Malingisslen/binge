@@ -166,12 +166,12 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
     // i vanlig webbläsare; agenten fastnade på samtyckesväggen (BIN-1071). Höjningen har
     // alltså slagit igenom, tidigare än den oktober biljettens sekundärkällor angav — och de
     // hade dessutom fel om Student, som de uppgav vara oförändrad på 95. Storefronten: 109.
-    // Skärmbilden visade tre kort (Enskild, Familj, Student); om Premium Lite finns i SE syntes
-    // den inte, och en ny nivå läggs aldrig till utan att klassas för hand.
+    // Skärmbilden visade tre kort (Enskild, Familj, Student). Nivån Lite: BIN-1400.
     id: 335, name: 'YouTube Premium', shortName: 'YT', color: '#FF0000', type: 'flatrate', defaultMonthlyCost: 169,
     // 188 = TMDB:s nuvarande SE-id för YouTube Premium (katalog-endpoint 2026-06-20). (BIN-64)
     aliases: [188],
     tiers: [
+      { id: 'lite', name: 'Lite', cost: 99 },
       { id: 'student', name: 'Student', cost: 109 },
       { id: 'solo', name: 'Enskild', cost: 169 },
       { id: 'family', name: 'Familj', cost: 309 },
@@ -194,6 +194,20 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
   // omläst 2026-09-02 svarar `provider_name: "Plex"`. TMDB mot TMDB, ingen extern källa.
   // (BIN-1077)
   { id: 538, name: 'Plex', shortName: 'Plex', color: '#E5A00D', type: 'flatrate', defaultMonthlyCost: 0, isAds: true },
+  // live-verifierat 2026-10-02 — https://mubi.com/en/se/memberships (dit /sv/se omdirigerar) —
+  // agenten läste sidans planlista med geoLocation SE: månadsplanen 129 SEK. Årsplanen och
+  // studentplanen modelleras inte. Färgen är den som sidan använder. (BIN-1401)
+  { id: 11, name: 'MUBI', shortName: 'MUBI', color: '#001489', type: 'flatrate', defaultMonthlyCost: 129 },
+  {
+    // live-verifierat 2026-10-02 — https://www.drakenfilm.se — sidans planlista, månadspris i
+    // SEK. Färgen är sidans accentfärg. (BIN-1401; nivåerna: Malins val 2026-10-02, BIN-1418)
+    id: 435, name: 'Draken Film', shortName: 'Draken', color: '#EC6446', type: 'flatrate', defaultMonthlyCost: 125,
+    tiers: [
+      { id: 'bas', name: 'Bas', cost: 95 },
+      { id: 'standard', name: 'Standard', cost: 125 },
+      { id: 'premium', name: 'Premium', cost: 165 },
+    ],
+  },
   // live-verifierat 2026-07-02 — https://www.triartplay.se — INTE längre fri flatrate-streaming:
   // numera en hyr-tjänst med medlemsklubb ("Klubben" 49 kr/mån = en gratisfilm + hyrrabatter). (BIN-406)
   { id: 578, name: 'TriArt Play', shortName: 'TriArt', color: '#222222', type: 'rent', aliases: [517] },
