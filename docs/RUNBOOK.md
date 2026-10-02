@@ -177,9 +177,41 @@ raderingsskyldigheterna.
 gcloud firestore backups list --location=eur3 --project=binge-nu
 ```
 
-Något återställningskommando publiceras inte här: inget har körts i projektet, och
-det som stod här pekade på en GCS-export i stället för på de säkerhetskopior
-kommandot ovan listar. Spårat i BIN-1212.
+**Återställ alltid till en NY databas, aldrig över `(default)`.** Provkört
+2026-10-02 (BIN-1212) med säkerhetskopian från 2026-10-01: återställningen tog
+ungefär 15 minuter (mätt på en liten databas), och den nya databasen hade samma
+rotsamlingar och samma antal dokument i `users` och `watchlist` som `(default)`.
+Den raderades efteråt.
+
+```bash
+# <backup-id> är NAME-kolumnen ur listan ovan. Databasnamnet är fritt valt,
+# 4–63 tecken, små bokstäver, siffror och bindestreck.
+gcloud firestore databases restore \
+  --source-backup=projects/binge-nu/locations/eur3/backups/<backup-id> \
+  --destination-database=<nytt-namn> --project=binge-nu
+
+# <operation> står under sourceInfo.operation i utskriften ovan. Klart när
+# done är True och metadata.operationState är SUCCESSFUL.
+gcloud firestore operations describe <operation> \
+  --format="value(done,metadata.operationState)"
+```
+
+Provet läste den återställda databasen via Firestores REST-API
+(`https://firestore.googleapis.com/v1/projects/binge-nu/databases/<nytt-namn>/documents`)
+med en token från `gcloud auth print-access-token`. Att läsa den i Firebase Console
+är inte provat.
+
+Kopian bär personuppgifter, också från konton som raderats efter säkerhetskopian.
+Radera den när ärendet är avslutat. `<nytt-namn>` är aldrig `(default)`: kör
+`gcloud firestore databases list --project=binge-nu` först och kopiera namnet därifrån.
+
+```bash
+gcloud firestore databases delete --database=<nytt-namn> --project=binge-nu
+```
+
+Appen och molnfunktionerna läser bara `(default)`, så en återställd databas rör
+ingenting förrän data flyttas därifrån för hand. Hur det görs för ett enskilt konto
+är inte provat.
 
 `deleteAccount`-cascaden är designad för att vara irreversibel (GDPR-krav). När
 ingen återställning görs: beklaga och guida användaren till att börja om.
