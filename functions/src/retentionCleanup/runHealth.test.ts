@@ -6,6 +6,12 @@ import {
   thisRunProblems,
   retentionAlert,
   runWatched,
+  backupProblems,
+  backupReadFromResponse,
+  backupsListUrl,
+  newestUsableBackupMs,
+  BACKUP_MAX_AGE_MS,
+  BACKUP_CHECK_TIMEOUT_MS,
   RUN_IN_PROGRESS_GRACE_MS,
   MISSED_RUN_AFTER_MS,
   MAX_QUOTED_ERRORS,
@@ -134,6 +140,7 @@ function harness(store: { health: RunHealthRecord | null }, nowMs: number) {
       events.push('sweep');
       return new Promise<void>(() => {});
     },
+    readBackups: async () => ({ ok: true, newestMs: nowMs - HOUR }),
     logError: vi.fn(),
   };
   return { io, events, notes };
@@ -310,6 +317,166 @@ describe('runWatched (BIN-1317)', () => {
     expect(swept).toBe(true);
     expect(h.io.logError).toHaveBeenCalledWith('retentionCleanup: run health read/stamp failed', expect.anything());
     expect(h.io.logError).toHaveBeenCalledWith('retentionCleanup: alert send failed', expect.anything());
+  });
+});
+
+describe('backup check (BIN-1422)', () => {
+  const MIN = 60_000;
+
+  it('the age limit: 35 h 59 min is quiet, 36 h 01 min alerts', () => {
+    expect(BACKUP_MAX_AGE_MS).toBe(36 * HOUR);
+    expect(backupProblems({ ok: true, newestMs: NOW - (36 * HOUR - MIN) }, NOW)).toEqual([]);
+    const late = backupProblems({ ok: true, newestMs: NOW - (36 * HOUR + MIN) }, NOW);
+    expect(late).toHaveLength(1);
+    expect(late[0]).toContain('36 timmar gammal');
+  });
+
+  it('no backup and an unreadable list are two different alerts', () => {
+    const none = backupProblems({ ok: true, newestMs: null }, NOW);
+    const unread = backupProblems({ ok: false, reason: 'HTTP 403' }, NOW);
+    expect(none[0]).toContain('Inga säkerhetskopior');
+    expect(unread[0]).toContain('Kan inte läsa listan');
+    expect(unread[0]).toContain('HTTP 403');
+    expect(unread[0]).toContain('behörigheten');
+    expect(none[0]).not.toEqual(unread[0]);
+  });
+
+  it('counts only READY backups of (default), newest first whatever the order', () => {
+    const db = 'projects/binge-nu/databases/(default)';
+    const newest = newestUsableBackupMs([
+      { database: db, state: 'READY', snapshotTime: '2026-09-29T13:18:00Z' },
+      { database: db, state: 'CREATING', snapshotTime: '2026-10-02T13:40:00Z' },
+      { database: 'projects/binge-nu/databases/other', state: 'READY', snapshotTime: '2026-10-02T12:00:00Z' },
+      { database: db, state: 'READY', snapshotTime: '2026-10-01T13:38:02.177Z' },
+      { database: db, state: 'READY', snapshotTime: '2026-09-30T13:27:00Z' },
+    ]);
+    expect(newest).toBe(Date.parse('2026-10-01T13:38:02.177Z'));
+    expect(newestUsableBackupMs([{ database: db, state: 'CREATING', snapshotTime: '2026-10-02T13:40:00Z' }])).toBeNull();
+  });
+
+  it('reads the list answer: a failed status or an unreachable location is never "no backups"', () => {
+    const db = 'projects/binge-nu/databases/(default)';
+    expect(backupReadFromResponse(403, null)).toEqual({ ok: false, reason: 'HTTP 403' });
+    expect(backupReadFromResponse(200, { backups: [], unreachable: ['eur3'] })).toEqual({ ok: false, reason: 'oåtkomliga platser: eur3' });
+    expect(backupReadFromResponse(200, {})).toEqual({ ok: true, newestMs: null });
+    expect(backupReadFromResponse(200, { backups: [{ database: db, state: 'READY', snapshotTime: '2026-10-01T13:38:00Z' }] }))
+      .toEqual({ ok: true, newestMs: Date.parse('2026-10-01T13:38:00Z') });
+  });
+
+  it('names the project and the eur3 location in the list call', () => {
+    expect(backupsListUrl('binge-nu')).toBe('https://firestore.googleapis.com/v1/projects/binge-nu/locations/eur3/backups');
+  });
+
+  it('a stale backup alerts before the sweep, under its own title', async () => {
+    const store = { health: { lastStartedAt: NOW - 24 * HOUR, lastDoneAt: NOW - 24 * HOUR + 60_000 } as RunHealthRecord };
+    const h = harness(store, NOW);
+    const titles: string[] = [];
+    h.io.notify = async (title, body) => {
+      h.events.push('notify');
+      titles.push(title);
+      h.notes.push(body);
+      return true;
+    };
+    h.io.readBackups = async () => ({ ok: true, newestMs: NOW - 48 * HOUR });
+    h.io.sweep = async () => {
+      h.events.push('sweep');
+    };
+    await runWatched(h.io);
+    expect(h.events).toEqual(['notify', 'sweep']);
+    expect(titles[0]).toContain('Säkerhetskopiorna');
+    expect(h.notes[0]).toContain('48 timmar gammal');
+  });
+
+  it('a backup port that never answers is cut off, alerts, and the sweep still runs', async () => {
+    vi.useFakeTimers();
+    try {
+      const store = { health: null };
+      const h = harness(store, NOW);
+      h.io.readBackups = () => new Promise(() => {});
+      let swept = false;
+      h.io.sweep = async () => {
+        swept = true;
+      };
+      const run = runWatched(h.io);
+      await vi.advanceTimersByTimeAsync(BACKUP_CHECK_TIMEOUT_MS - 1);
+      expect(swept).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await run;
+      expect(swept).toBe(true);
+      expect(h.notes[0]).toContain('Kan inte läsa listan');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a backup port that throws, with the health read down too, still lets the sweep run', async () => {
+    const store = { health: null };
+    const h = harness(store, NOW);
+    h.io.readHealth = async () => {
+      throw new Error('read down');
+    };
+    h.io.readBackups = async () => {
+      throw new Error('token down');
+    };
+    let swept = false;
+    h.io.sweep = async () => {
+      swept = true;
+    };
+    await runWatched(h.io);
+    expect(swept).toBe(true);
+    expect(h.notes[0]).toContain('token down');
+  });
+
+  // The own try/catch around the backup step: an inbox that throws while the
+  // backup alert is sent must not stop the sweep.
+  it('a backup alert whose send throws is logged, and the sweep still runs', async () => {
+    const store = { health: { lastStartedAt: NOW - 24 * HOUR, lastDoneAt: NOW - 24 * HOUR + 60_000 } as RunHealthRecord };
+    const h = harness(store, NOW);
+    h.io.readBackups = async () => ({ ok: true, newestMs: NOW - 48 * HOUR });
+    h.io.notify = async () => {
+      throw new Error('inbox down');
+    };
+    let swept = false;
+    h.io.sweep = async () => {
+      swept = true;
+    };
+    await expect(runWatched(h.io)).resolves.toBeUndefined();
+    expect(swept).toBe(true);
+    expect(h.io.logError).toHaveBeenCalledWith('retentionCleanup: backup check failed', expect.anything());
+  });
+
+  it('a backup alert with no recipient is logged as not sent', async () => {
+    const store = { health: { lastStartedAt: NOW - 24 * HOUR, lastDoneAt: NOW - 24 * HOUR + 60_000 } as RunHealthRecord };
+    const h = harness(store, NOW);
+    h.io.readBackups = async () => ({ ok: true, newestMs: null });
+    h.io.notify = async () => false;
+    h.io.sweep = async () => {};
+    await runWatched(h.io);
+    expect(h.io.logError).toHaveBeenCalledWith('retentionCleanup: backup alert not sent — ADMIN_UID unbound', expect.anything());
+  });
+
+  it('the backup check runs after the start stamp', async () => {
+    const store: { health: RunHealthRecord | null } = { health: null };
+    const h = harness(store, NOW);
+    let stampedFirst: boolean | null = null;
+    h.io.readBackups = async () => {
+      stampedFirst = store.health?.lastStartedAt === NOW;
+      return { ok: true, newestMs: NOW - HOUR };
+    };
+    h.io.sweep = async () => {};
+    await runWatched(h.io);
+    expect(stampedFirst).toBe(true);
+  });
+
+  it('a fresh backup sends nothing', async () => {
+    const store = { health: { lastStartedAt: NOW - 24 * HOUR, lastDoneAt: NOW - 24 * HOUR + 60_000 } as RunHealthRecord };
+    const h = harness(store, NOW);
+    h.io.readBackups = async () => ({ ok: true, newestMs: NOW - 20 * HOUR });
+    h.io.sweep = async () => {
+      h.events.push('sweep');
+    };
+    await runWatched(h.io);
+    expect(h.events).toEqual(['sweep']);
   });
 });
 

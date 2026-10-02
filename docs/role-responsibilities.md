@@ -813,8 +813,8 @@ findings here too.
   running raises no alert.
 - 🔴 **PITR och schemalagda backuper är påslagna** (mätt läge, datum och
   härledningskommandon i `docs/analysis/EXTERNAL_ACTIONS.md`, "Open infra items");
-  det som saknas är en skriptad backup-hälsokoll, en restore-dry-run och en
-  playbook för validering efter återställning.
+  det som saknas är en playbook för validering efter återställning och en provad
+  återflytt av ett enskilt konto (BIN-1422).
 - 🟠 **No `schemaVersion` stamp anywhere.** Indexes, the field whitelist, mutation
   payloads, and `buildUserExport` must be kept in sync by hand; nothing audits
   migration completeness or alerts when `migrateStatus()` hits its default case.
@@ -929,7 +929,7 @@ dir. Grounded findings, roughly by severity:
 
 | Gap | What's missing | Touches |
 |---|---|---|
-| **Backup / DR verification** | PITR och schemalagda backuper är påslagna (se `docs/analysis/EXTERNAL_ACTIONS.md`), men inget larmar om ett schema slutar köra. | DevOps (#8), Security (#4), DPO (#6), DBA (#27) |
+| **Backup / DR verification** | PITR och schemalagda backuper är påslagna (se `docs/analysis/EXTERNAL_ACTIONS.md`), och `retentionCleanup` larmar när den senaste kopian är för gammal (BIN-1422). Slutar `retentionCleanup` själv köra larmar ingenting. | DevOps (#8), Security (#4), DPO (#6), DBA (#27) |
 | **No health metric for `reclaimOrphanFollows`** | `retentionCleanup` + `reclaimOrphanFollows` are deployed and running, but absent from `deploy.yml` by design (hosting-only) — so each functions change needs a manual targeted deploy. Nothing alerts if `reclaimOrphanFollows` stops running or starts failing, or if `retentionCleanup`'s schedule stops firing altogether. | DevOps (#8), DPO (#6), Controller (#3), DBA (#27) |
 | **Schema-version safety** | No `schemaVersion` on Firestore docs — lazy migration can't prove completeness, and a stale legacy value can persist indefinitely undetected. | Architect (#14), QA (#7), DBA (#27) |
 | **Recommendation/taste drift** | Cascade + taste weights are frozen constants; no engagement tracking, A/B test, or drift detector validates them post-launch. | Data Analyst (#22), Architect (#14), Scoring (#28) |

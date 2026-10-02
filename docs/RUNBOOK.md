@@ -349,6 +349,18 @@ Console, i den här ordningen:
   köra helt larmar ingenting — funktionen vakar över sig själv. Notisen skickas
   bara om hemligheten `ADMIN_UID` är bunden; annars står `alert not sent` i
   loggen.
+- **Säkerhetskopiornas larm (BIN-1422).** Samma körning listar databasens
+  säkerhetskopior. Admin-inkorgen får "Säkerhetskopiorna av databasen behöver
+  tittas på" när den senaste är för gammal, när ingen finns, eller när listan
+  inte gick att läsa. Det sista betyder oftast behörighet, inte saknade kopior.
+  Gränsen och texterna står i `functions/src/retentionCleanup/runHealth.ts`.
+  Notisen kommer varje körning så länge felet består. Larmet körs inuti
+  `retentionCleanup`, så slutar den köra larmar inte heller det här. Kontrollera
+  för hand:
+
+  ```bash
+  gcloud firestore backups list --location=eur3 --project=binge-nu --sort-by=~snapshotTime
+  ```
 
 ### 5e. "Mitt gamla användarnamn är upptaget av ingen"
 

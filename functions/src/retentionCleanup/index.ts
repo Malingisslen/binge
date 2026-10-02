@@ -92,7 +92,18 @@ import { planSweptMemberGroupErasure, runGroupHandover, runSweptMemberGroupErasu
 import { adminHandoverIo, adminLeaverIo } from '../groupHandover/adminIo';
 import { defineSecret } from 'firebase-functions/params';
 import { sendAdminSystemNotification } from '../util/notifyOnce';
-import { RETENTION_TIMEOUT_SECONDS, RUN_HEALTH_DOC_PATH, runWatched, type RunHealthRecord } from './runHealth';
+import { applicationDefault } from 'firebase-admin/app';
+import {
+  BACKUP_CHECK_TIMEOUT_MS,
+  RETENTION_TIMEOUT_SECONDS,
+  RUN_HEALTH_DOC_PATH,
+  backupReadFromResponse,
+  backupsListUrl,
+  runWatched,
+  type BackupEntry,
+  type BackupRead,
+  type RunHealthRecord,
+} from './runHealth';
 
 // BIN-1317: the recipient of the run's own failure alert, as in streamingOffers.
 const ADMIN_UID = defineSecret('ADMIN_UID');
@@ -415,6 +426,23 @@ const adminIo: CleanupIo = {
 };
 
 /**
+ * BIN-1422: lists the database's backups through the Firestore Admin API, as the
+ * function's own service account. Every way it can fail is a failed read, never
+ * an empty list, so a lost permission is not reported as missing backups.
+ */
+async function readBackups(): Promise<BackupRead> {
+  const projectId = process.env.GCLOUD_PROJECT;
+  if (!projectId) return { ok: false, reason: 'GCLOUD_PROJECT saknas' };
+  const { access_token: token } = await applicationDefault().getAccessToken();
+  const res = await fetch(backupsListUrl(projectId), {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(BACKUP_CHECK_TIMEOUT_MS),
+  });
+  if (!res.ok) return backupReadFromResponse(res.status, null);
+  return backupReadFromResponse(res.status, (await res.json()) as { backups?: BackupEntry[]; unreachable?: string[] });
+}
+
+/**
  * BIN-1317: the schedule wrapper also watches the run. The order of the steps and
  * every decision are in `runWatched` (./runHealth.ts); this supplies the ports.
  */
@@ -435,6 +463,7 @@ export const retentionCleanup = onSchedule(
         await healthRef.set(patch, { merge: true });
       },
       notify: sendAdminSystemNotification,
+      readBackups,
       sweep: async (tap) => {
         await runRetentionCleanup({
           ...adminIo,

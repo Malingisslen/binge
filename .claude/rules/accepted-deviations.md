@@ -2564,3 +2564,24 @@ dess härledningskommando visar numera den här shan.
 2. En post för en commit vars ämnesrad redan namnger ett id, eller vars biljett saknar
    `review`-rad.
 3. Att kartan används i stället för att skriva id:t vid commit.
+
+## BIN-1422: BIN-1193-postens klock-sökning träffar nu backupkontrollen — 2026-10-02
+
+Efterföljare till `## BIN-1193` (2026-09-20), som står kvar ordagrant. Den postens kommando
+ska ge tom utdata så länge sopningens skanningar saknar egen klocka. Det ger numera träffar:
+
+```
+grep -rn "AbortController\|Promise.race\|setTimeout\|withTimeout" functions/src/retentionCleanup/
+```
+
+Varje träff ligger i `readBackupsBounded` i `functions/src/retentionCleanup/runHealth.ts`.
+Den klockan begränsar BIN-1422:s kontroll av säkerhetskopiorna, som körs före sopningen. Den
+rör inte skanningarna, så det BIN-1193-posten avgör gäller oförändrat: skanningarna har
+fortfarande ingen egen klocka. Härled att träffarna bara finns i den filen:
+
+```
+grep -rln "AbortController\|Promise.race\|setTimeout\|withTimeout" functions/src/retentionCleanup/
+```
+
+**Re-open when:** det andra kommandot listar någon annan fil än `runHealth.ts`, eller
+`readBackupsBounded` flyttas in i sopningen. Då beskriver ingen av posterna koden.

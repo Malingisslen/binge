@@ -123,6 +123,108 @@ export function retentionAlert(problems: readonly string[]): { title: string; bo
   };
 }
 
+// ── BIN-1422: the Firestore backups are checked from the same run ─────────────
+//
+// The backup schedule is daily (`gcloud firestore backups schedules list
+// --database="(default)" --project=binge-nu`). Nothing else notices if it stops.
+// The check lives here because this run already has an alert path; the cost is
+// that it stops with this function, which RUNBOOK §5d names.
+
+/**
+ * How old the newest usable backup may be before it alerts. A daily schedule
+ * plus margin for the drift between backups and for when in the day this run
+ * lands. A missed backup can therefore take up to about two runs to alert.
+ */
+export const BACKUP_MAX_AGE_MS = 36 * 60 * 60 * 1000;
+
+/** How long the backup check may take before the run goes on without it. */
+export const BACKUP_CHECK_TIMEOUT_MS = 15_000;
+
+/** The location the `(default)` database and its backups live in. */
+export const BACKUP_LOCATION = 'eur3';
+
+/** The Firestore Admin API call that lists the project's backups. */
+export function backupsListUrl(projectId: string): string {
+  return `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/locations/${BACKUP_LOCATION}/backups`;
+}
+
+/** One entry of the API's `backups` array, as far as this check reads it. */
+export interface BackupEntry {
+  database?: string;
+  state?: string;
+  snapshotTime?: string;
+}
+
+/**
+ * The newest READY backup of `(default)`, in ms, or null when there is none.
+ * The API's order is not relied on, and a backup still being created, or one of
+ * another database, does not count.
+ */
+export function newestUsableBackupMs(backups: readonly BackupEntry[]): number | null {
+  let newest: number | null = null;
+  for (const b of backups) {
+    if (b.state !== 'READY' || !String(b.database ?? '').endsWith('/databases/(default)')) continue;
+    const t = Date.parse(String(b.snapshotTime ?? ''));
+    if (Number.isFinite(t) && (newest === null || t > newest)) newest = t;
+  }
+  return newest;
+}
+
+/** What the backup port found: a newest backup (or none), or that it could not read the list. */
+export type BackupRead = { ok: true; newestMs: number | null } | { ok: false; reason: string };
+
+/**
+ * The list call's answer as a read. A non-2xx status or any unreachable location
+ * is a failed read: a partial list must not look like a list with no backups.
+ */
+export function backupReadFromResponse(
+  status: number,
+  body: { backups?: BackupEntry[]; unreachable?: string[] } | null,
+): BackupRead {
+  if (status < 200 || status >= 300) return { ok: false, reason: `HTTP ${status}` };
+  const unreachable = body?.unreachable ?? [];
+  if (unreachable.length > 0) return { ok: false, reason: `oåtkomliga platser: ${unreachable.join(', ')}` };
+  return { ok: true, newestMs: newestUsableBackupMs(body?.backups ?? []) };
+}
+
+/** What the backup read says is wrong. Two different texts: a missing list is not missing backups. */
+export function backupProblems(read: BackupRead, nowMs: number): string[] {
+  if (!read.ok) {
+    return [`Kan inte läsa listan över säkerhetskopior (${read.reason}). Kontrollera behörigheten innan du drar slutsatsen att kopiorna saknas.`];
+  }
+  if (read.newestMs === null) {
+    return ['Inga säkerhetskopior av databasen finns. Schemat eller lagringstiden kan ha tagits bort.'];
+  }
+  const ageMs = nowMs - read.newestMs;
+  if (ageMs > BACKUP_MAX_AGE_MS) {
+    return [`Den senaste säkerhetskopian är ${Math.floor(ageMs / 3_600_000)} timmar gammal (${new Date(read.newestMs).toISOString()}); schemat är dagligt.`];
+  }
+  return [];
+}
+
+/** The admin-inbox notification for backup problems. */
+export function backupAlert(problems: readonly string[]): { title: string; body: string } {
+  return {
+    title: 'Säkerhetskopiorna av databasen behöver tittas på',
+    body: `${problems.join(' ')} Se RUNBOOK §5d.`,
+  };
+}
+
+/** The backup port's answer, or a failed read once BACKUP_CHECK_TIMEOUT_MS has passed. */
+async function readBackupsBounded(io: WatchedRunIo): Promise<BackupRead> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expiry = new Promise<BackupRead>((resolve) => {
+    timer = setTimeout(() => resolve({ ok: false, reason: `inget svar inom ${BACKUP_CHECK_TIMEOUT_MS / 1000} s` }), BACKUP_CHECK_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([io.readBackups(), expiry]);
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.message : String(err) };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 /** What the sweep port hands back to `runWatched`: one callback per log level. */
 export interface SweepLogTap {
   /** The message of every error the sweep logs. */
@@ -140,6 +242,8 @@ export interface WatchedRunIo {
   notify: (title: string, body: string) => Promise<boolean>;
   /** Runs the sweep, reporting its log lines through `tap`. */
   sweep: (tap: SweepLogTap) => Promise<void>;
+  /** Lists the database's backups (BIN-1422). Bounded by `runWatched`, so it may hang or throw. */
+  readBackups: () => Promise<BackupRead>;
   logError: (message: string, data?: unknown) => void;
 }
 
@@ -173,6 +277,20 @@ export async function runWatched(io: WatchedRunIo): Promise<void> {
     io.logError('retentionCleanup: run health read/stamp failed', err);
   }
   await sendAlert(io, previous);
+
+  // BIN-1422: after the start stamp and apart from the previous run's alert, so
+  // a failure here can drop neither. Bounded, so it cannot eat the sweep's time.
+  try {
+    const problems = backupProblems(await readBackupsBounded(io), io.now());
+    if (problems.length > 0) {
+      const { title, body } = backupAlert(problems);
+      if (!(await io.notify(title, body))) {
+        io.logError('retentionCleanup: backup alert not sent — ADMIN_UID unbound', { problems });
+      }
+    }
+  } catch (err) {
+    io.logError('retentionCleanup: backup check failed', err);
+  }
 
   const loggedErrors: string[] = [];
   // The midway stamp is written while the sweep carries on; it is awaited
