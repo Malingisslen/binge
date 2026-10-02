@@ -132,6 +132,8 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
     // Fan 85 och Mega Fan 99 står kvar oförändrade: den prishöjning biljettens sekundärkällor
     // varnade för har inte nått Sverige. Skärmbilden visade två nivåer; fanns en tredje under
     // vikningen syntes den inte, och en ny nivå klassas för hand.
+    // live-verifierat 2026-10-02 — https://www.crunchyroll.com/ — Malin läste sidan i vanlig
+    // webbläsare (BIN-1399): Fan SEK 85.00/mo, Mega Fan SEK 99.00/mo, VAT inclusive.
     // Katalogen modellerar inte årspriserna (850 respektive 990).
     id: 323, name: 'Crunchyroll', shortName: 'CR', color: '#F47521', type: 'flatrate', defaultMonthlyCost: 85,
     // 1968 = "Crunchyroll Amazon Channel" (live-verifierat SE-id 2026-06-10).
