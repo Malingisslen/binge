@@ -340,3 +340,26 @@ Vad som INTE är löst: `Promise.allSettled` sväljer fortfarande de listsidor s
 så raden mäter utfallet, inte orsaken. Och `REFRESH_DERIVE_TIMEOUT_MS` är oförändrad —
 den kräver några veckors data och är fortfarande spårad i
 BIN-826, som därför inte får stängas som helt klar.
+
+### Efterföljare 2026-10-02 (BIN-1114): 150 minuter står kvar
+
+Stycket "Bara räddningsvägen är faktiskt skyddad" under *Alternatives considered* och
+efterföljaren ovan säger att `REFRESH_DERIVE_TIMEOUT_MS` väntar på data. Båda står kvar
+ordagrant. Beslutet nu (Malin, 2026-10-02): värdet 150 min står kvar, och BIN-1114 stängs.
+
+Det stycket räknade med en rendrering på 90–120 min. Veckobyggets loggar säger något annat.
+Härled:
+
+```
+gh run view 36411465144 --log
+gh run view 34104584836 --log
+```
+
+Den första är veckobygget 2026-09-28. Raden `✓ Generating static pages` säger 5.1min, och
+de tre `[selection]`-raderna ligger inom 25 sekunder efter `Collecting page data`. Den
+andra är veckobygget 2026-09-07, där filmhärledningen nådde taket (`nådde sitt tak
+(9000000 ms)`). Bygget gick sedan vidare på det befintliga urvalet: sidgenereringen tog
+3.8min, och körningen blev grön.
+
+Vad mätningen INTE täcker: ett bygge med kall `.tmdb-cache`. Varför filmhärledningen
+hängde 2026-09-07 är inte utrett här; det har en egen biljett.

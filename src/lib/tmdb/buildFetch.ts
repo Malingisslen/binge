@@ -232,22 +232,11 @@ export const RESCUE_DERIVE_TIMEOUT_MS = 15 * 60_000;
 // Veckobygget SKA få ta 1,5–2 h (eget 175-minuterstak). Ett gemensamt kort tak
 // hade fällt den körning som är hela poängen med regimen.
 //
-// ASYMMETRI ATT KÄNNA TILL: räddningsparet fungerar som avsett (15 inom 45 —
-// gott om tid att bygga färdigt på det gamla urvalet), men det HÄR paret gör det
-// inte. Slår 150-minuterstaket till återstår ~25 min av 175 för en sidrendrering
-// som tar 90–120 min, så den mjuka reträtten hinner inte i mål och körningen
-// slutar som steg-timeout ändå. Det är ofarligt — ett rött veckobygge är precis
-// beteendet före BIN-823, och det deployar ingenting — men konstanten ska inte
-// läsas som ett fungerande skydd på refresh-vägen. Där är reträtten best-effort.
-//
 // SÄNK DEN INTE PÅ KÄNSLA. Granskningen 2026-08-08 föreslog 45 min ("en frisk
 // härledning tar ~40 s"). Men de 40 sekunderna gäller VARM cache; den enda kalla
 // mätningen vi har är 2 672 s = 44,5 min för person ensam — ett 45-minuterstak
 // hade dödat den med en halv minuts marginal, alltså precis den körning taket
-// ska rädda. Taket ska rymmas i `175 − rendreringstiden`, och rendreringen mättes
-// till 90–120 min, vilket ger ett fönster på 55–85 min. 44,5 under 55 med tio minuters
-// marginal — för tunt för att välja blint när båda ändarna är enskilda mätningar.
-// Rätt värde kräver några veckors data. Spårat i BIN-826.
+// ska rädda. Byggtiderna som 150 vilar på: ADR 0018, efterföljaren 2026-10-02 (BIN-1114).
 export const REFRESH_DERIVE_TIMEOUT_MS = 150 * 60_000;
 
 /**
