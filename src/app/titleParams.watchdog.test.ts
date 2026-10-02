@@ -40,7 +40,7 @@ vi.mock('@/lib/tmdb/client', async (importOriginal) => {
   };
 });
 
-import { __resetBuildFetchState, __setBuildFetchLogger } from '@/lib/tmdb/buildFetch';
+import { __resetBuildFetchState, __setBuildFetchLogger, buildCallStats } from '@/lib/tmdb/buildFetch';
 import { generateStaticParams as movieParams } from './movie/[id]/page';
 import { generateStaticParams as tvParams } from './tv/[id]/page';
 import { generateStaticParams as personParams } from './person/[id]/page';
@@ -98,9 +98,13 @@ describe.each(ROUTES)('$name generateStaticParams — build watchdog (BIN-815)',
     __setBuildFetchLogger((m) => lines.push(m));
     for (const m of route.mocks) m.mockReset();
     getMovie.mockReset();
+    // resolveSelection writes its [selection] lines straight to stderr; keep them
+    // out of the test run's output, where they would read as GitHub annotations.
+    vi.spyOn(process.stderr, 'write').mockReturnValue(true);
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     __resetBuildFetchState();
     vi.useRealTimers();
     rmSync(cacheDir, { recursive: true, force: true });
@@ -181,6 +185,8 @@ describe.each(ROUTES)('$name generateStaticParams — build watchdog (BIN-815)',
     expect(got).toContain('5001');
     expect(got).not.toContain('1001');
     expect(lines.some((l) => l.includes('ABANDONED') && l.includes(route.label))).toBe(true);
+    // BIN-1423: the call site files the abandoned page under its own type.
+    expect(buildCallStats(route.name === 'movie/[id]' ? 'movie' : 'tv').abandonedLabels).toEqual([route.label]);
   });
 
   it.runIf(route.second !== null)('rapporterar de äldsta och räknar resten — inte 1000 rader per puls', async () => {

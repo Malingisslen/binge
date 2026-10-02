@@ -22,7 +22,7 @@ vi.mock('@/lib/tmdb/buildFetch', async (importOriginal) => ({
 }));
 
 import { getPopularMovies, getMovie } from '@/lib/tmdb/client';
-import { fetchForBuild, __resetBuildFetchState, __setBuildFetchLogger } from '@/lib/tmdb/buildFetch';
+import { fetchForBuild, __resetBuildFetchState, __setBuildFetchLogger, buildCallStats } from '@/lib/tmdb/buildFetch';
 import { collectPersonIds } from './seoPersonIds';
 import { SEO_PERSON_CAST_PER_MOVIE } from './seoCoverage';
 
@@ -110,6 +110,7 @@ describe('collectPersonIds — BIN-337 shared person pipeline', () => {
       void collectPersonIds().then((r) => { ids = r; });
       await vi.advanceTimersByTimeAsync(60_000);
       expect(ids).toEqual([200, 300]);
+      expect(buildCallStats('person').abandonedLabels).toEqual(['params:person-popular/p1']);
     });
 
     it('a movie detail that never answers', async () => {
@@ -120,6 +121,7 @@ describe('collectPersonIds — BIN-337 shared person pipeline', () => {
       void collectPersonIds().then((r) => { ids = r; });
       await vi.advanceTimersByTimeAsync(60_000);
       expect(ids).toEqual([222]);
+      expect(buildCallStats('person').abandonedLabels).toEqual(['params:person-movie/1']);
     });
   });
 

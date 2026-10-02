@@ -53,7 +53,7 @@ export async function collectPersonIds(
   // yttre `params:person-ids` är ett aggregat och överges aldrig själv.
   const pages = Array.from({ length: SEO_PERSON_SOURCE_MOVIE_PAGES }, (_, i) => i + 1);
   const popularResults = await Promise.allSettled(
-    pages.map(p => trackBuildCall(`params:person-popular/p${p}`, () => getPopularMovies(p, fetchOpts()))),
+    pages.map(p => trackBuildCall(`params:person-popular/p${p}`, () => getPopularMovies(p, fetchOpts()), { group: 'person' })),
   );
   const movieIds = new Set<number>();
   for (const r of popularResults) {
@@ -67,7 +67,7 @@ export async function collectPersonIds(
   // förbi cachen hämtade om dem varje bygge helt i onödan. Nu delar
   // personhärledningen den varma cachen med resten av bygget.
   const movieDetails = await Promise.allSettled(
-    Array.from(movieIds).map(id => trackBuildCall(`params:person-movie/${id}`, () => fetchForBuild('movie', getMovie, id))),
+    Array.from(movieIds).map(id => trackBuildCall(`params:person-movie/${id}`, () => fetchForBuild('movie', getMovie, id), { group: 'person' })),
   );
   const peopleIds = new Set<number>();
   for (const r of movieDetails) {

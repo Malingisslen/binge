@@ -35,10 +35,12 @@ import { readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildCacheDir } from './buildCache';
 import {
+  buildCallStats,
   isSelectionRefresh,
   withAggregateTimeout,
   RESCUE_DERIVE_TIMEOUT_MS,
   REFRESH_DERIVE_TIMEOUT_MS,
+  type BuildCallStats,
 } from './buildFetch';
 
 export type SelectionType = 'movie' | 'tv' | 'person';
@@ -342,12 +344,36 @@ export function writeSelectionManifest(manifest: SelectionManifest): void {
  */
 const EXCHANGE_SAMPLE_LIMIT = 5;
 
-function sample(ids: readonly number[]): string {
+function sample(ids: readonly (number | string)[]): string {
   if (ids.length === 0) return '—';
   const head = ids.slice(0, EXCHANGE_SAMPLE_LIMIT).join(', ');
   return ids.length > EXCHANGE_SAMPLE_LIMIT
     ? `${head} … och ${ids.length - EXCHANGE_SAMPLE_LIMIT} till`
     : head;
+}
+
+/**
+ * BIN-1423: vad härledningen tappade på vägen. Räknas ur buildFetch.ts räknare
+ * mellan att `derive` startar och att den avgörs eller når sitt tak; ett anrop
+ * som överges efter det hör inte till den här härledningen.
+ */
+interface AbandonedDuringDerive {
+  started: number;
+  abandoned: number;
+  labels: string[];
+}
+
+function abandonedSince(type: SelectionType, before: BuildCallStats): AbandonedDuringDerive {
+  const after = buildCallStats(type);
+  return {
+    started: after.started - before.started,
+    abandoned: after.abandoned - before.abandoned,
+    labels: after.abandonedLabels.slice(before.abandonedLabels.length),
+  };
+}
+
+function abandonedNote(a: AbandonedDuringDerive): string {
+  return `Övergivna anrop ${a.abandoned} av ${a.started}${a.abandoned > 0 ? ` (${sample(a.labels)})` : ''}.`;
 }
 
 /**
@@ -367,6 +393,7 @@ function reportExchange(
   previous: SelectionManifest | null,
   freshIds: readonly number[],
   merged: SelectionManifest,
+  abandoned: AbandonedDuringDerive,
 ): void {
   const before = new Set((previous?.ids ?? []).map(e => e.id));
   const after = new Set(merged.ids.map(e => e.id));
@@ -379,13 +406,15 @@ function reportExchange(
   let refreshed = 0;
   for (const id of before) if (fresh.has(id)) refreshed += 1;
 
+  // En härledning som tappat anrop blir en varning, så en krympt vecka syns i sammanfattningen.
+  const level = abandoned.abandoned > 0 ? 'warning' : 'notice';
   process.stderr.write(
-    `::notice::[selection] ${type} utbyte: behållna ${retained.length}, ` +
+    `::${level}::[selection] ${type} utbyte: behållna ${retained.length}, ` +
       `evakuerade ${evicted.length}, nytillkomna ${added.length}, ` +
       `varav omhärledda ${refreshed} av ${before.size}. ` +
       `Härledningen gav ${freshIds.length} id, manifestet håller ${after.size} ` +
       `(tak ${SELECTION_CEILING[type]}). Evakuerade: ${sample(evicted)}. ` +
-      `Nytillkomna: ${sample(added)}.\n`,
+      `Nytillkomna: ${sample(added)}. ${abandonedNote(abandoned)}\n`,
   );
 
   // Över taket degraderar spärrhaken TYST till rotation: allt som härleds får
@@ -477,18 +506,22 @@ export async function resolveSelection(opts: {
     // (Den överlappningen gjorde också att ett test på ::warning::-prefixet
     // kunde uppfyllas av grannraden; testgranskningen 2026-08-08.)
     let derived: { ok: true; value: number[] } | { ok: false };
+    const callsBefore = buildCallStats(type);
+    let abandoned: AbandonedDuringDerive;
     try {
       derived = await withAggregateTimeout(derive, budget);
+      abandoned = abandonedSince(type, callsBefore);
       if (!derived.ok) {
         process.stderr.write(
           `::warning::[selection] ${type}: härledningen nådde sitt tak (${budget} ms). ` +
-            `Behåller befintligt urval; täckningsgolvet avgör om bygget får fortsätta.\n`,
+            `Behåller befintligt urval; täckningsgolvet avgör om bygget får fortsätta. ${abandonedNote(abandoned)}\n`,
         );
       }
     } catch (err) {
+      abandoned = abandonedSince(type, callsBefore);
       process.stderr.write(
         `::warning::[selection] ${type}: härledningen kastade (${String(err)}). ` +
-          `Behåller befintligt urval; täckningsgolvet avgör om bygget får fortsätta.\n`,
+          `Behåller befintligt urval; täckningsgolvet avgör om bygget får fortsätta. ${abandonedNote(abandoned)}\n`,
       );
       derived = { ok: false };
     }
@@ -502,12 +535,12 @@ export async function resolveSelection(opts: {
       if (derived.value.length === 0) {
         process.stderr.write(
           `::warning::[selection] ${type}: härledningen returnerade TOM lista utan att ` +
-            `misslyckas. Ingen id-hämtning skedde.\n`,
+            `misslyckas. Ingen id-hämtning skedde. ${abandonedNote(abandoned)}\n`,
         );
       }
       manifest = mergeManifest(previous, type, derived.value, now);
       writeSelectionManifest(manifest);
-      reportExchange(type, previous, derived.value, manifest);
+      reportExchange(type, previous, derived.value, manifest, abandoned);
     }
   }
 

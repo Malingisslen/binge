@@ -181,12 +181,14 @@ export function startBuildWatchdog(): void {
 export async function trackBuildCall<T>(
   label: string,
   run: () => Promise<T>,
-  opts?: { aggregate?: boolean },
+  opts?: { aggregate?: boolean; group?: BuildCallGroup },
 ): Promise<T> {
   const token = ++inFlightSeq;
   const aggregate = opts?.aggregate === true;
   inFlight.set(token, { label, startedAt: Date.now(), aggregate });
   startWatchdog();
+  const stats = !aggregate && opts?.group ? statsFor(opts.group) : null;
+  if (stats) stats.started += 1;
   let work: Promise<T>;
   try {
     work = run();
@@ -199,8 +201,46 @@ export async function trackBuildCall<T>(
   work.then(() => inFlight.delete(token), () => inFlight.delete(token));
   // Ett aggregat har inget 20 s-tak att mäta mot; det skyddas av withAggregateTimeout.
   if (aggregate) return work;
-  return abandonAfter(work, STUCK_AFTER_MS, label);
+  return abandonAfter(work, STUCK_AFTER_MS, label, stats);
 }
+
+// ── BIN-1423: övergivna anrop räknas per urvalstyp ───────────────────────────
+//
+// Utbytesraden i selectionManifest.ts läser räknarna före och efter sin
+// härledning och skriver "Övergivna anrop N av M".
+
+/** Urvalstypen ett byggtidsanrop hör till. Samma värden som SelectionType. */
+export type BuildCallGroup = 'movie' | 'tv' | 'person';
+
+/** Startade och övergivna enskilda anrop i en grupp, med de övergivnas etiketter i ordning. */
+export interface BuildCallStats {
+  started: number;
+  abandoned: number;
+  abandonedLabels: string[];
+}
+
+const groupStats = new Map<BuildCallGroup, BuildCallStats>();
+
+function statsFor(group: BuildCallGroup): BuildCallStats {
+  let stats = groupStats.get(group);
+  if (!stats) {
+    stats = { started: 0, abandoned: 0, abandonedLabels: [] };
+    groupStats.set(group, stats);
+  }
+  return stats;
+}
+
+/** En kopia av gruppens räknare just nu, för att jämföra före och efter en härledning. */
+export function buildCallStats(group: BuildCallGroup): BuildCallStats {
+  const stats = statsFor(group);
+  return { started: stats.started, abandoned: stats.abandoned, abandonedLabels: [...stats.abandonedLabels] };
+}
+
+/**
+ * Tak för ABANDONED-raderna per worker. Varje övergivet anrop räknas ändå.
+ */
+export const ABANDONED_REPORT_LIMIT = 10;
+let abandonedLinesWritten = 0;
 
 // BIN-1420: körning 34104584836 (veckobygget 2026-09-07) hade
 // `params:popular-movies/p281` STUCK i 9 217 s trots sin 20 s-abort, och hela
@@ -208,16 +248,27 @@ export async function trackBuildCall<T>(
 // den. Loggen säger inte var anropet stod. Oavsett var: ett enskilt anrop som
 // överlevt sin abort överges här, så att `Promise.allSettled` i collectIds kan
 // räkna sidan som misslyckad och resten av listan blir klar.
-function abandonAfter<T>(work: Promise<T>, ms: number, label: string): Promise<T> {
+function abandonAfter<T>(work: Promise<T>, ms: number, label: string, stats: BuildCallStats | null): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const expiry = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
+      if (stats) {
+        stats.abandoned += 1;
+        stats.abandonedLabels.push(label);
+      }
+      abandonedLinesWritten += 1;
       // `::warning::` så att GitHub visar den i körningens sammanfattning: en vecka
       // med övergivna sidor ska synas som en mindre vecka, inte som en vanlig.
-      logLine(
-        `::warning::[build-fetch] ABANDONED ${label} — ingen avgörelse ${Math.round(ms / 1000)} s efter start, ` +
-          `trots sin abort efter ${Math.round(BUILD_FETCH_TIMEOUT_MS / 1000)} s; bygget går vidare utan den (BIN-1420)`,
-      );
+      if (abandonedLinesWritten <= ABANDONED_REPORT_LIMIT) {
+        logLine(
+          `::warning::[build-fetch] ABANDONED ${label} — ingen avgörelse ${Math.round(ms / 1000)} s efter start, ` +
+            `trots sin abort efter ${Math.round(BUILD_FETCH_TIMEOUT_MS / 1000)} s; bygget går vidare utan den (BIN-1420)`,
+        );
+      } else if (abandonedLinesWritten === ABANDONED_REPORT_LIMIT + 1) {
+        logLine(
+          `::warning::[build-fetch] fler övergivna anrop skrivs inte ut här; se [selection]-raderna (BIN-1423)`,
+        );
+      }
       reject(new Error(`${label}: övergiven efter ${Math.round(ms / 1000)} s (BIN-1420)`));
     }, ms);
     // Samma regel som vakthunden: timern får aldrig hålla processen vid liv.
@@ -233,6 +284,8 @@ export function __resetBuildFetchState(): void {
   networkFetches = 0;
   inFlight.clear();
   inFlightSeq = 0;
+  groupStats.clear();
+  abandonedLinesWritten = 0;
   stopWatchdog();
   logLine = (msg) => process.stderr.write(`${msg}\n`);
 }

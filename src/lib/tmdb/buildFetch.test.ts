@@ -9,6 +9,8 @@ import {
   __setBuildFetchLogger,
   trackBuildCall,
   startBuildWatchdog,
+  buildCallStats,
+  ABANDONED_REPORT_LIMIT,
 } from './buildFetch';
 import { readBuildCacheEntry, writeBuildCache } from './buildCache';
 
@@ -365,6 +367,35 @@ describe('vakthund (BIN-815)', () => {
     lines.length = 0;
     await vi.advanceTimersByTimeAsync(30_000);
     expect(lines[0]).toContain('inflight=0');
+  });
+
+  // BIN-1423: om många anrop överges på en gång ska loggen inte få en rad per anrop.
+  it('ABANDONED-raderna har ett tak och en rad som säger var resten finns', async () => {
+    // The cap's size is pinned on its own; the fixture below is built from it.
+    expect(ABANDONED_REPORT_LIMIT).toBe(10);
+    const total = ABANDONED_REPORT_LIMIT + 5;
+    for (let i = 0; i < total; i++) {
+      void trackBuildCall(`params:popular-movies/p${i}`, () => new Promise(() => {}), { group: 'movie' }).catch(() => {});
+    }
+    await vi.advanceTimersByTimeAsync(31_000);
+    expect(lines.filter((l) => l.includes('ABANDONED'))).toHaveLength(ABANDONED_REPORT_LIMIT);
+    const rest = lines.filter((l) => l.includes('fler övergivna anrop skrivs inte ut'));
+    expect(rest).toHaveLength(1);
+    expect(rest[0]).toContain('se [selection]-raderna');
+    // Every abandoned call is still counted, and every label kept, past the cap.
+    const stats = buildCallStats('movie');
+    expect(stats.abandoned).toBe(total);
+    expect(stats.abandonedLabels).toHaveLength(total);
+  });
+
+  it('räknar startade och övergivna per typ, och aldrig ett aggregat', async () => {
+    void trackBuildCall('params:popular-tv/p1', () => new Promise(() => {}), { group: 'tv' }).catch(() => {});
+    await trackBuildCall('params:popular-tv/p2', async () => 1, { group: 'tv' });
+    void trackBuildCall('params:person-ids', () => new Promise(() => {}), { aggregate: true, group: 'person' }).catch(() => {});
+    await vi.advanceTimersByTimeAsync(31_000);
+    expect(buildCallStats('tv')).toEqual({ started: 2, abandoned: 1, abandonedLabels: ['params:popular-tv/p1'] });
+    expect(buildCallStats('person')).toEqual({ started: 0, abandoned: 0, abandonedLabels: [] });
+    expect(buildCallStats('movie')).toEqual({ started: 0, abandoned: 0, abandonedLabels: [] });
   });
 
   it('ett anrop som kastar direkt lämnar inget kvar i registret', async () => {

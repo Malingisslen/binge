@@ -56,7 +56,7 @@ export async function generateStaticParams(): Promise<{ id: string }[]> {
     const ids = new Set<number>();
     const pages = Array.from({ length: pageCount }, (_, i) => i + 1);
     const results = await Promise.allSettled(
-      pages.map(p => trackBuildCall(`params:${kind}/p${p}`, () => fetcher(p))),
+      pages.map(p => trackBuildCall(`params:${kind}/p${p}`, () => fetcher(p), { group: 'tv' })),
     );
     for (const r of results) {
       if (r.status === 'fulfilled') {

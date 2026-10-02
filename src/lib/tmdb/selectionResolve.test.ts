@@ -10,7 +10,7 @@ import {
   readSelectionManifest,
   writeSelectionManifest,
 } from './selectionManifest';
-import { RESCUE_DERIVE_TIMEOUT_MS, REFRESH_DERIVE_TIMEOUT_MS } from './buildFetch';
+import { RESCUE_DERIVE_TIMEOUT_MS, REFRESH_DERIVE_TIMEOUT_MS, trackBuildCall, __resetBuildFetchState } from './buildFetch';
 
 /**
  * resolveSelection är hela vinsten i BIN-823: den avgör OM de ~8 200 dyra
@@ -472,7 +472,8 @@ describe('resolveSelection — utbytesraden och de två varningarna (BIN-826)', 
     // Pinnas på den avgränsade uppräkningen SJÄLV, inte på frånvaron av "12":
     // det talet står ändå kvar i räknarna ("nytillkomna 12", "gav 12 id"), så en
     // frånvaro-assertion hade varit falsk av rätt skäl och sann av fel.
-    expect(line.split('Nytillkomna: ')[1].trim()).toBe('1, 2, 3, 4, 5 … och 7 till.');
+    // BIN-1423 lade "Övergivna anrop …" efter uppräkningen; skär av där.
+    expect(line.split('Nytillkomna: ')[1].split(' Övergivna anrop')[0].trim()).toBe('1, 2, 3, 4, 5 … och 7 till.');
   });
 
   it('räknar EVAKUERADE när taket faktiskt trycker ut poster', async () => {
@@ -570,5 +571,155 @@ describe('resolveSelection — utbytesraden och de två varningarna (BIN-826)', 
     expect(written().some(l => l.includes('ingen luft kvar'))).toBe(false);
     // Men utbytesraden skrivs ändå — den är inte ett larm.
     expect(written().some(l => l.includes('utbyte:'))).toBe(true);
+  });
+});
+
+// BIN-1423: varje härledning säger hur många av dess egna anrop som övergavs.
+// `trackBuildCall` är den riktiga — det är dess räknare raden läser.
+describe('resolveSelection — övergivna anrop i raden (BIN-1423)', () => {
+  const lines = (): string[] => stderr.mock.calls.map((c: unknown[]) => String(c[0]));
+  const hang = () => new Promise<never>(() => {});
+  // En härledning med tre listsidor där `stuck` aldrig svarar, som collectIds gör den.
+  const deriveWith = (group: 'movie' | 'tv', stuck: number[]) => async () => {
+    const results = await Promise.allSettled([1, 2, 3].map(p =>
+      trackBuildCall(`params:test/p${p}`, () => (stuck.includes(p) ? hang() : Promise.resolve(p * 10)), { group })));
+    return results.flatMap(r => (r.status === 'fulfilled' ? [r.value] : []));
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    __resetBuildFetchState();
+    process.env.TMDB_SELECTION_REFRESH = '1';
+  });
+  afterEach(() => {
+    __resetBuildFetchState();
+  });
+
+  it('en lyckad härledning som tappade ett anrop blir en varning med antal, nämnare och etikett', async () => {
+    seedManifest('movie', [7]);
+    const p = resolveSelection({ type: 'movie', seedIds: [], fallbackIds: [], derive: deriveWith('movie', [2]), now: NOW + 1 });
+    await vi.advanceTimersByTimeAsync(60_000);
+    await p;
+    const line = lines().find(l => l.includes('utbyte:'))!;
+    expect(line.startsWith('::warning::')).toBe(true);
+    expect(line).toContain('Övergivna anrop 1 av 3 (params:test/p2).');
+  });
+
+  it('etiketterna på raden kortas av som de andra uppräkningarna', async () => {
+    seedManifest('movie', [7]);
+    const derive = async () => {
+      const results = await Promise.allSettled([1, 2, 3, 4, 5, 6, 7].map(p =>
+        trackBuildCall(`params:test/p${p}`, () => (p <= 6 ? hang() : Promise.resolve(70)), { group: 'movie' })));
+      return results.flatMap(r => (r.status === 'fulfilled' ? [r.value] : []));
+    };
+    const p = resolveSelection({ type: 'movie', seedIds: [], fallbackIds: [], derive, now: NOW + 1 });
+    await vi.advanceTimersByTimeAsync(60_000);
+    await p;
+    const line = lines().find(l => l.includes('utbyte:'))!;
+    expect(line).toContain(
+      'Övergivna anrop 6 av 7 (params:test/p1, params:test/p2, params:test/p3, params:test/p4, params:test/p5 … och 1 till).',
+    );
+  });
+
+  it('ett anrop som övergavs innan härledningen startade räknas inte', async () => {
+    void trackBuildCall('params:test/earlier', hang, { group: 'movie' }).catch(() => {});
+    await vi.advanceTimersByTimeAsync(31_000);
+    seedManifest('movie', [7]);
+    // One call is also lost DURING the derivation, so the label list is printed.
+    const p = resolveSelection({ type: 'movie', seedIds: [], fallbackIds: [], derive: deriveWith('movie', [2]), now: NOW + 1 });
+    await vi.advanceTimersByTimeAsync(60_000);
+    await p;
+    const line = lines().find(l => l.includes('utbyte:'))!;
+    expect(line).toContain('Övergivna anrop 1 av 3 (params:test/p2).');
+    expect(line).not.toContain('params:test/earlier');
+  });
+
+  it('utan övergivna anrop förblir raden en notis och säger noll', async () => {
+    seedManifest('movie', [7]);
+    const p = resolveSelection({ type: 'movie', seedIds: [], fallbackIds: [], derive: deriveWith('movie', []), now: NOW + 1 });
+    await vi.advanceTimersByTimeAsync(60_000);
+    await p;
+    const line = lines().find(l => l.includes('utbyte:'))!;
+    expect(line.startsWith('::notice::')).toBe(true);
+    expect(line).toContain('Övergivna anrop 0 av 3.');
+  });
+
+  it('antalet står också på raden när härledningen når sitt tak', async () => {
+    seedManifest('movie', [7]);
+    const derive = async () => {
+      await deriveWith('movie', [3])();
+      return hang();
+    };
+    const p = resolveSelection({ type: 'movie', seedIds: [], fallbackIds: [], derive, now: NOW + 1 });
+    await vi.advanceTimersByTimeAsync(REFRESH_DERIVE_TIMEOUT_MS + 1);
+    await p;
+    const line = lines().find(l => l.includes('nådde sitt tak'))!;
+    expect(line).toContain('Övergivna anrop 1 av 3 (params:test/p3).');
+  });
+
+  it('antalet står också på raden när härledningen kastar', async () => {
+    seedManifest('movie', [7]);
+    const derive = async () => {
+      await deriveWith('movie', [1])();
+      throw new Error('oväntad form');
+    };
+    const p = resolveSelection({ type: 'movie', seedIds: [], fallbackIds: [], derive, now: NOW + 1 });
+    await vi.advanceTimersByTimeAsync(60_000);
+    await p;
+    const line = lines().find(l => l.includes('kastade'))!;
+    expect(line).toContain('Övergivna anrop 1 av 3 (params:test/p1).');
+  });
+
+  it('antalet står också på raden när härledningen ger tom lista', async () => {
+    seedManifest('movie', [7]);
+    const p = resolveSelection({ type: 'movie', seedIds: [], fallbackIds: [], derive: deriveWith('movie', [1, 2, 3]), now: NOW + 1 });
+    await vi.advanceTimersByTimeAsync(60_000);
+    await p;
+    const line = lines().find(l => l.includes('TOM lista'))!;
+    expect(line).toContain('Övergivna anrop 3 av 3');
+  });
+
+  it('räknar bara anrop som övergavs medan härledningen pågick, och bara den egna typens', async () => {
+    seedManifest('movie', [7]);
+    const derive = async () => {
+      // En annan typs anrop som överges MEDAN härledningen pågår (vid 30 s).
+      await trackBuildCall('params:other/p1', hang, { group: 'tv' }).catch(() => {});
+      // Startas sist och inväntas inte: överges först 30 s efter att härledningen svarat.
+      void trackBuildCall('params:test/late', hang, { group: 'movie' }).catch(() => {});
+      return [10];
+    };
+    const p = resolveSelection({ type: 'movie', seedIds: [], fallbackIds: [], derive, now: NOW + 1 });
+    await vi.advanceTimersByTimeAsync(31_000);
+    await p;
+    const line = lines().find(l => l.includes('movie utbyte:'))!;
+    expect(line).toContain('Övergivna anrop 0 av 1.');
+    await vi.advanceTimersByTimeAsync(60_000);
+    // The late call WAS abandoned — just outside the window the line counts.
+    expect(lines().some(l => l.includes('ABANDONED params:test/late'))).toBe(true);
+  });
+
+  it('ett antal över noll ändrar inte vilka id som behålls, evakueras eller tillkommer', async () => {
+    const run = async (loseOne: boolean) => {
+      __resetBuildFetchState();
+      seedManifest('movie', [7, 8]);
+      const p = resolveSelection({
+        type: 'movie', seedIds: [], fallbackIds: [], now: NOW + 1,
+        derive: async () => {
+          if (loseOne) await trackBuildCall('params:test/lost', hang, { group: 'movie' }).catch(() => {});
+          return [10, 20, 30];
+        },
+      });
+      await vi.advanceTimersByTimeAsync(60_000);
+      const ids = await p;
+      const line = lines().filter(l => l.includes('movie utbyte:')).pop()!;
+      return { ids, manifest: readSelectionManifest('movie')!.ids.map(e => e.id), counts: line.split(' Evakuerade:')[0] };
+    };
+    const withLoss = await run(true);
+    const withoutLoss = await run(false);
+    expect(lines().filter(l => l.includes('movie utbyte:')).some(l => l.includes('Övergivna anrop 1 av 1'))).toBe(true);
+    expect(withLoss.ids).toEqual(withoutLoss.ids);
+    expect(withLoss.manifest).toEqual(withoutLoss.manifest);
+    // The counts before "Evakuerade:" match exactly; only the level prefix (warning vs notice) differs.
+    expect(withLoss.counts.replace(/^::\w+::/, '')).toEqual(withoutLoss.counts.replace(/^::\w+::/, ''));
   });
 });
