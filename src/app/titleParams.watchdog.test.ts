@@ -19,6 +19,7 @@ const getTopRatedMovies = vi.fn();
 const getPopularTV = vi.fn();
 const getTopRatedTV = vi.fn();
 const getPerson = vi.fn();
+const getMovie = vi.fn();
 
 // The page modules import their client components, which reach Firebase. Only
 // generateStaticParams is under test here, so stub the render side out.
@@ -35,6 +36,7 @@ vi.mock('@/lib/tmdb/client', async (importOriginal) => {
     getPopularTV: (...a: unknown[]) => getPopularTV(...a),
     getTopRatedTV: (...a: unknown[]) => getTopRatedTV(...a),
     getPerson: (...a: unknown[]) => getPerson(...a),
+    getMovie: (...a: unknown[]) => getMovie(...a),
   };
 });
 
@@ -62,17 +64,14 @@ const ROUTES = [
   },
   {
     // The biggest caller in this phase: 100 list pages + up to 2000 detail
-    // fetches inside collectPersonIds. Registered as one unit — the hang we
-    // need to see is "this whole pipeline never returned".
+    // fetches inside collectPersonIds. Since BIN-1421 each of those calls is
+    // registered on its own, so the one that never returns is named by its page.
     name: 'person/[id]',
     run: personParams,
     mocks: [getPopularMovies],
-    label: 'params:person-ids',
+    label: 'params:person-popular/p1',
     second: null,
-    // One label over ~2100 calls has no 20s ceiling of its own, so it carries a
-    // deliberately generous stuck threshold — otherwise a healthy build reports
-    // STUCK every tick and the line stops meaning anything.
-    stuckAfterMs: 300_000,
+    stuckAfterMs: 60_000,
   },
 ] as const;
 
@@ -98,6 +97,7 @@ describe.each(ROUTES)('$name generateStaticParams — build watchdog (BIN-815)',
     lines = [];
     __setBuildFetchLogger((m) => lines.push(m));
     for (const m of route.mocks) m.mockReset();
+    getMovie.mockReset();
   });
 
   afterEach(() => {
@@ -147,10 +147,17 @@ describe.each(ROUTES)('$name generateStaticParams — build watchdog (BIN-815)',
   // every green build would print STUCK every tick until the line meant nothing.
   // This pins the flag at the CALL SITE; the helper's branch is pinned separately
   // in buildFetch.test.ts.
+  // Healthy and slow: every call answers within its own abort, but the two phases
+  // together outlast the single-call threshold. Only the aggregate flag keeps the
+  // whole-pipeline label from being reported, or abandoned, at 30 s.
   it.runIf(route.second === null)('en frisk aggregat-körning rapporteras inte som STUCK', async () => {
-    for (const m of route.mocks) m.mockImplementation(() => new Promise(() => {}));
-    void route.run().catch(() => {});
+    const later = <T,>(value: T) => new Promise<T>((r) => setTimeout(() => r(value), 25_000));
+    getPopularMovies.mockImplementation(() => later({ results: [{ id: 7, title: 'Abc' }] }));
+    getMovie.mockImplementation(() => later({ id: 7, credits: { cast: [{ id: 70, name: 'Abc' }] } }));
+    let ids = null as { id: string }[] | null;
+    void route.run().then((r) => { ids = r as { id: string }[]; }, () => {});
     await vi.advanceTimersByTimeAsync(90_000);
+    expect((ids ?? []).map((x) => x.id)).toContain('70');
     expect(lines.some((l) => l.startsWith('[build-fetch] pid='))).toBe(true);
     expect(lines.some((l) => l.includes('STUCK'))).toBe(false);
   });

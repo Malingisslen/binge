@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock the TMDB client — collectPersonIds is the only thing under test; we feed
 // it fixtures and assert the merge/dedup/slice order (which determines WHICH ids
@@ -22,7 +22,7 @@ vi.mock('@/lib/tmdb/buildFetch', async (importOriginal) => ({
 }));
 
 import { getPopularMovies, getMovie } from '@/lib/tmdb/client';
-import { fetchForBuild } from '@/lib/tmdb/buildFetch';
+import { fetchForBuild, __resetBuildFetchState, __setBuildFetchLogger } from '@/lib/tmdb/buildFetch';
 import { collectPersonIds } from './seoPersonIds';
 import { SEO_PERSON_CAST_PER_MOVIE } from './seoCoverage';
 
@@ -86,6 +86,41 @@ describe('collectPersonIds — BIN-337 shared person pipeline', () => {
     expect(mockFetchForBuild).toHaveBeenCalledTimes(1);
     expect(mockFetchForBuild.mock.calls[0][0]).toBe('movie');
     expect(mockFetchForBuild.mock.calls[0][2]).toBe(7);
+  });
+
+  // BIN-1421: the person derivation is ONE aggregate label, so the per-call
+  // abandon from BIN-1420 never reached the calls inside it. A single call that
+  // outlives its own abort must not hold the whole person selection.
+  describe('a call that never answers is abandoned, and the rest still counts (BIN-1421)', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      __resetBuildFetchState();
+      __setBuildFetchLogger(() => {});
+    });
+    afterEach(() => {
+      __resetBuildFetchState();
+      vi.useRealTimers();
+    });
+
+    it('a popular-list page that never answers', async () => {
+      mockPopular.mockImplementation((p?: number) =>
+        p === 1 ? new Promise(() => {}) : Promise.resolve(movieList([p === 2 ? 20 : 30])));
+      mockGetMovie.mockImplementation((id: number) => Promise.resolve(movieDetail([id * 10])));
+      let ids: number[] | null = null;
+      void collectPersonIds().then((r) => { ids = r; });
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(ids).toEqual([200, 300]);
+    });
+
+    it('a movie detail that never answers', async () => {
+      mockPopular.mockResolvedValue(movieList([1, 2]));
+      mockGetMovie.mockImplementation((id: number) =>
+        id === 1 ? new Promise(() => {}) : Promise.resolve(movieDetail([222])));
+      let ids: number[] | null = null;
+      void collectPersonIds().then((r) => { ids = r; });
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(ids).toEqual([222]);
+    });
   });
 
   it('passes a fresh signal per popular-list fetch when a signal factory is supplied', async () => {

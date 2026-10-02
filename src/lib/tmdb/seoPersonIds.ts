@@ -1,5 +1,5 @@
 import { getPopularMovies, getMovie } from '@/lib/tmdb/client';
-import { fetchForBuild } from '@/lib/tmdb/buildFetch';
+import { fetchForBuild, trackBuildCall } from '@/lib/tmdb/buildFetch';
 import {
   SEO_PERSON_SOURCE_MOVIE_PAGES,
   SEO_PERSON_CAST_PER_MOVIE,
@@ -48,8 +48,13 @@ export async function collectPersonIds(
   const sig = opts?.signal;
   const fetchOpts = () => (sig ? { signal: sig() } : undefined);
 
+  // BIN-1421: varje enskilt anrop registreras för sig, så ett som inte avgjorts
+  // 30 s efter start överges (BIN-1420) och allSettled hoppar över det. Den
+  // yttre `params:person-ids` är ett aggregat och överges aldrig själv.
   const pages = Array.from({ length: SEO_PERSON_SOURCE_MOVIE_PAGES }, (_, i) => i + 1);
-  const popularResults = await Promise.allSettled(pages.map(p => getPopularMovies(p, fetchOpts())));
+  const popularResults = await Promise.allSettled(
+    pages.map(p => trackBuildCall(`params:person-popular/p${p}`, () => getPopularMovies(p, fetchOpts()))),
+  );
   const movieIds = new Set<number>();
   for (const r of popularResults) {
     if (r.status === 'fulfilled') {
@@ -62,7 +67,7 @@ export async function collectPersonIds(
   // förbi cachen hämtade om dem varje bygge helt i onödan. Nu delar
   // personhärledningen den varma cachen med resten av bygget.
   const movieDetails = await Promise.allSettled(
-    Array.from(movieIds).map(id => fetchForBuild('movie', getMovie, id)),
+    Array.from(movieIds).map(id => trackBuildCall(`params:person-movie/${id}`, () => fetchForBuild('movie', getMovie, id))),
   );
   const peopleIds = new Set<number>();
   for (const r of movieDetails) {
