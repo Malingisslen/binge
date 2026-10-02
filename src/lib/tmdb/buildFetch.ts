@@ -184,13 +184,48 @@ export async function trackBuildCall<T>(
   opts?: { aggregate?: boolean },
 ): Promise<T> {
   const token = ++inFlightSeq;
-  inFlight.set(token, { label, startedAt: Date.now(), aggregate: opts?.aggregate === true });
+  const aggregate = opts?.aggregate === true;
+  inFlight.set(token, { label, startedAt: Date.now(), aggregate });
   startWatchdog();
+  let work: Promise<T>;
   try {
-    return await run();
-  } finally {
+    work = run();
+  } catch (err) {
     inFlight.delete(token);
+    throw err;
   }
+  // Registret släpps när anropet SJÄLVT avgörs, inte när anroparen slutar vänta:
+  // ett övergivet anrop ska synas som STUCK så länge det lever.
+  work.then(() => inFlight.delete(token), () => inFlight.delete(token));
+  // Ett aggregat har inget 20 s-tak att mäta mot; det skyddas av withAggregateTimeout.
+  if (aggregate) return work;
+  return abandonAfter(work, STUCK_AFTER_MS, label);
+}
+
+// BIN-1420: körning 34104584836 (veckobygget 2026-09-07) hade
+// `params:popular-movies/p281` STUCK i 9 217 s trots sin 20 s-abort, och hela
+// filmhärledningen väntade på den sidan tills REFRESH_DERIVE_TIMEOUT_MS bröt
+// den. Loggen säger inte var anropet stod. Oavsett var: ett enskilt anrop som
+// överlevt sin abort överges här, så att `Promise.allSettled` i collectIds kan
+// räkna sidan som misslyckad och resten av listan blir klar.
+function abandonAfter<T>(work: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expiry = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      // `::warning::` så att GitHub visar den i körningens sammanfattning: en vecka
+      // med övergivna sidor ska synas som en mindre vecka, inte som en vanlig.
+      logLine(
+        `::warning::[build-fetch] ABANDONED ${label} — ingen avgörelse ${Math.round(ms / 1000)} s efter start, ` +
+          `trots sin abort efter ${Math.round(BUILD_FETCH_TIMEOUT_MS / 1000)} s; bygget går vidare utan den (BIN-1420)`,
+      );
+      reject(new Error(`${label}: övergiven efter ${Math.round(ms / 1000)} s (BIN-1420)`));
+    }, ms);
+    // Samma regel som vakthunden: timern får aldrig hålla processen vid liv.
+    timer.unref?.();
+  });
+  return Promise.race([work, expiry]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
 }
 
 /** Nollställ budget-räknaren, vakthunden och in-flight-registret. Endast för tester. */
@@ -249,8 +284,7 @@ export const REFRESH_DERIVE_TIMEOUT_MS = 150 * 60_000;
  * ingen övre gräns i den konstruktionen, bara varje enskild plats i den.
  *
  * Vid timeout returneras `{ ok: false }` och den övergivna promisen lämnas att
- * lösa sig själv. Varje enskild förfrågan i den dör fortfarande på sin egen
- * abort, så den kan inte hänga FASEN — men påstå inte att den är borta:
+ * lösa sig själv. Påstå inte att den är borta:
  * mätningen ovan är just en pipeline som levde 2 672 s med 20-sekundersaborter
  * på varje led. Takets EGEN timer är unref:ad; den övergivna kön är det inte —
  * dess köade semaforväntare och 429-backoff (upp till 5 s per försök, se

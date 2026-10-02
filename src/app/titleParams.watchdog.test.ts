@@ -155,6 +155,27 @@ describe.each(ROUTES)('$name generateStaticParams — build watchdog (BIN-815)',
     expect(lines.some((l) => l.includes('STUCK'))).toBe(false);
   });
 
+  // BIN-1420: a single list page that never answers must not hold the whole
+  // derivation. On 2026-09-07 `params:popular-movies/p281` did exactly that for
+  // 150 minutes. The page is abandoned; every other page still counts.
+  it.runIf(route.second !== null)('en sida som aldrig svarar överges, och resten av urvalet blir klart', async () => {
+    const [first, second] = route.mocks;
+    // The two lists get ids that cannot overlap, so a surviving page of the
+    // HANGING list is only ever counted by that list's own results.
+    const page = (base: number, p: number) => ({ results: [{ id: base + p, title: 'Abc', name: 'Abc' }] });
+    first.mockImplementation((p: number) => (p === 1 ? new Promise(() => {}) : Promise.resolve(page(1000, p))));
+    second?.mockImplementation((p: number) => Promise.resolve(page(5000, p)));
+    let ids = null as { id: string }[] | null;
+    void route.run().then((r) => { ids = r as { id: string }[]; }, () => {});
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(ids).not.toBeNull();
+    const got = (ids ?? []).map((x) => x.id);
+    expect(got).toContain('1002');
+    expect(got).toContain('5001');
+    expect(got).not.toContain('1001');
+    expect(lines.some((l) => l.includes('ABANDONED') && l.includes(route.label))).toBe(true);
+  });
+
   it.runIf(route.second !== null)('rapporterar de äldsta och räknar resten — inte 1000 rader per puls', async () => {
     for (const m of route.mocks) m.mockImplementation(() => new Promise(() => {}));
     void route.run().catch(() => {});

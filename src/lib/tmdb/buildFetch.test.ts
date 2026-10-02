@@ -335,6 +335,61 @@ describe('vakthund (BIN-815)', () => {
     expect(lines.some((l) => l.includes('STUCK'))).toBe(true);
   });
 
+  // BIN-1420: körning 34104584836 hade `params:popular-movies/p281` STUCK i 9 217 s
+  // trots sin 20 s-abort, och hela filmhärledningen väntade på den sidan tills
+  // fastaket bröt den efter 150 min. Ett enskilt anrop som överlevt sin abort
+  // överges nu, så resten av listan kan bli klar.
+  it('ett enskilt anrop som aldrig avgörs överges efter tröskeln', async () => {
+    let settled: string | null = null;
+    trackBuildCall('params:popular-movies/p281', () => new Promise(() => {}))
+      .then(() => { settled = 'resolved'; }, (e: Error) => { settled = e.message; });
+    await vi.advanceTimersByTimeAsync(BUILD_FETCH_TIMEOUT_MS + 9_000);
+    expect(settled).toBeNull();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(settled).toContain('params:popular-movies/p281');
+    // Raden börjar med GitHubs varningsprefix, så den syns i körningens sammanfattning.
+    expect(lines.some((l) => l.startsWith('::warning::') && l.includes('ABANDONED') && l.includes('params:popular-movies/p281'))).toBe(true);
+  });
+
+  // Vakthunden ska fortsätta säga att anropet lever. Att överge det är inte att det är borta.
+  it('ett övergivet anrop står kvar som STUCK tills det självt avgörs', async () => {
+    let finish: () => void = () => {};
+    void trackBuildCall('params:top-movies/p9', () => new Promise<void>((r) => { finish = r; })).catch(() => {});
+    // Pulsen vid 30 s skrivs före övergivandet, så den räknas inte: mät pulsen EFTER.
+    await vi.advanceTimersByTimeAsync(30_000);
+    lines.length = 0;
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(lines.some((l) => l.includes('STUCK 60s') && l.includes('params:top-movies/p9'))).toBe(true);
+    finish();
+    await vi.advanceTimersByTimeAsync(0);
+    lines.length = 0;
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(lines[0]).toContain('inflight=0');
+  });
+
+  it('ett anrop som kastar direkt lämnar inget kvar i registret', async () => {
+    await expect(trackBuildCall('params:popular-tv/p3', () => { throw new Error('direkt'); })).rejects.toThrow('direkt');
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(lines[0]).toContain('inflight=0');
+  });
+
+  it('ett aggregat överges aldrig — det har sitt eget tak i withAggregateTimeout', async () => {
+    let settled = false;
+    trackBuildCall('params:person-ids', () => new Promise(() => {}), { aggregate: true })
+      .then(() => { settled = true; }, () => { settled = true; });
+    await vi.advanceTimersByTimeAsync(600_000);
+    expect(settled).toBe(false);
+    expect(lines.some((l) => l.includes('ABANDONED'))).toBe(false);
+  });
+
+  it('ett anrop som blir klart före tröskeln påverkas inte av den', async () => {
+    const p = trackBuildCall('params:popular-tv/p2', () => new Promise<number>((r) => setTimeout(() => r(42), 25_000)));
+    await vi.advanceTimersByTimeAsync(25_000);
+    await expect(p).resolves.toBe(42);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(lines.some((l) => l.includes('ABANDONED'))).toBe(false);
+  });
+
   it('trackBuildCall avregistrerar både vid klart och vid fel', async () => {
     await trackBuildCall('a', async () => 1);
     await expect(trackBuildCall('b', async () => { throw new Error('nej'); })).rejects.toThrow('nej');
