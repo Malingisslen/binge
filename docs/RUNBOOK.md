@@ -192,7 +192,7 @@ gcloud firestore databases restore \
 
 # <operation> står under sourceInfo.operation i utskriften ovan. Klart när
 # done är True och metadata.operationState är SUCCESSFUL.
-gcloud firestore operations describe <operation> \
+gcloud firestore operations describe <operation> --project=binge-nu \
   --format="value(done,metadata.operationState)"
 ```
 
