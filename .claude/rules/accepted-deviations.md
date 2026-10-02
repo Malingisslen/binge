@@ -50,6 +50,10 @@ comments. A security review will notice it's bypassable — that is accepted. **
 here is a comfort feature (hide content), not access control; the data it "hides" is public
 UGC anyway. Do not file "blocking must be enforced in rules". — 2026-06
 
+**Successors (Malin's decision 2026-10-01):** `## BIN-1129` (creating a friend request is blocked
+in `firestore.rules`) and `## BIN-1349` (blocking ends the friendship) narrow this entry. Reviews,
+comments and the feed stay hygiene-level, per those entries.
+
 ### [Moderation] Reports are client-create-only with no in-app admin surface
 `reports/{reportId}`: clients can only create, never read; the admin flow is the Firebase
 Console per `docs/moderation.md`. **Why:** solo-founder moderation at pre-launch scale does

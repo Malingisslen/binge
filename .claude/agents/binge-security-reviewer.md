@@ -33,9 +33,14 @@ before you finish:
 
 Then read `.claude/rules/accepted-deviations.md`. Several entries there are security
 calls Malin already made against a full panel (Tillsammans anon-vote forgery, the
-missing session-expiry gate, blocking-as-hygiene, create-only reports). Re-raising one
+missing session-expiry gate, blocking's client filter on reviews/comments/feed, create-only
+reports). Re-raising one
 as a finding is noise, not diligence — a genuinely new deviation gets appended there
-(dated) instead.
+(dated) instead. The blocking exemption does not cover friend requests: a `friendRequests`
+create on `blocked/$(request.auth.uid)` is rule-enforced, not hygiene, per `## BIN-1129` in that
+file, and `describe('friendRequests and blocking (BIN-1129)')` tests it. A diff removing that
+clause is a finding. So is a diff that writes a block without clearing the friendship, per
+`## BIN-1349` in that file.
 
 ## Scope (what makes a change security-sensitive)
 - `firestore.rules`, `firestore.indexes.json` — auth/ownership checks, public-read
