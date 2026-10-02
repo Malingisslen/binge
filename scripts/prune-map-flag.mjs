@@ -26,15 +26,25 @@
 // THE RULE, therefore, asks more than one question. Per trigger, in this order:
 //
 //   • the file differs from HEAD in the working tree       → KEEP (the edit is still live)
-//   • a commit since the trigger's stamp touched the file  → KEEP (committed, map lagging)
+//   • a commit on HEAD or a local branch, since the
+//     trigger's stamp, touched the file                    → KEEP (committed, map lagging)
 //   • a stash or a parked patch file, created AFTER that
 //     stamp, names the file                                → KEEP (held to land later)
+//   • the file differs from HEAD in ANOTHER work folder
+//     that `git worktree list` names                       → KEEP (live in a sprint folder)
 //   • none of those                                        → DROP (ghost: it was withdrawn)
 //
 // The third question is BIN-1082: a batch that is stashed or parked as a patch file under
 // `.claude/state/sprint-patches/` satisfies neither of the first two, so it looked exactly
 // like a ghost and its work order was deleted — and the later landing stamps nothing,
 // because `freshness.mjs` is a PostToolUse hook and sees no git operation (BIN-969).
+//
+// The fourth question, and the branch half of the second, are BIN-1408: since BIN-1397 a
+// sprint editing inside its own work folder stamps the MAIN checkout's flag, while the edit
+// sits uncommitted in that other folder — or committed on that folder's branch, which a
+// HEAD-only `git log` does not walk. Asked from the main checkout alone, that is a ghost.
+// The worktree list is fetched lazily, once per run, and only for a trigger that failed
+// every earlier question; a list that cannot be read keeps the trigger.
 //
 // NEVER BLOCKS. This exits 0 unconditionally — on a corrupt flag, a missing flag, a failing
 // git call, anything. It is a cleanup, not a gate, and that is what keeps it outside the
@@ -93,7 +103,13 @@ export function hasWorkingTreeChange(root, rel, run = git) {
 }
 
 /**
- * Did any commit since `since` touch this path?
+ * Did any commit since `since`, on HEAD or on a local branch, touch this path?
+ *
+ * `--branches` rather than `--all` (BIN-1408): a sprint folder's commits live on its own
+ * local branch, which HEAD in the main checkout does not reach. `--all` would also walk
+ * `refs/stash` and remote-tracking refs — stashes have their own date-gated question in
+ * `collectHeld`, and a remote ref is work that already landed elsewhere, so neither should
+ * keep a trigger alive here.
  *
  * `--since` is compared by git against the COMMITTER date. `firstStampedAt` is written by
  * the hook as an ISO-8601 UTC string with a `Z`, and git parses that offset rather than
@@ -102,7 +118,47 @@ export function hasWorkingTreeChange(root, rel, run = git) {
  * test drives a commit inside the same minute as the stamp to hold that down.
  */
 export function hasCommitSince(root, rel, since, run = git) {
-  return run(root, ['log', '--oneline', `--since=${since}`, '--', rel]).trim() !== '';
+  return run(root, ['log', '--oneline', '--branches', 'HEAD', `--since=${since}`, '--', rel]).trim() !== '';
+}
+
+function samePath(a, b) {
+  const norm = (p) => resolve(p).replace(/[\\/]+$/, '');
+  return process.platform === 'win32'
+    ? norm(a).toLowerCase() === norm(b).toLowerCase()
+    : norm(a) === norm(b);
+}
+
+/**
+ * The OTHER work folders of this repo, from `git worktree list --porcelain` (BIN-1408).
+ *
+ * Skipped without throwing: the current root (the first question already asked it), a bare
+ * entry (it has no working tree), and an entry git marks `prunable` or whose directory is
+ * gone — a folder that no longer exists cannot be holding an edit. A DETACHED entry is
+ * still checked: it has a working tree, and skipping it is the direction that loses a
+ * work order.
+ *
+ * THROWS when git fails or the output does not parse, so the caller keeps the trigger.
+ */
+export function listOtherWorktrees(root, deps = {}) {
+  const { gitRunner = git, exists = existsSync } = deps;
+  const text = String(gitRunner(root, ['worktree', 'list', '--porcelain']));
+  const blocks = text.split(/\r?\n\s*\r?\n/).map((b) => b.trim()).filter(Boolean);
+  // git always lists the folder it was asked from, so an empty answer is not "none".
+  if (blocks.length === 0) throw new Error('worktree list: empty output');
+  const others = [];
+  for (const block of blocks) {
+    const lines = block.split(/\r?\n/);
+    if (!lines[0].startsWith('worktree ')) {
+      throw new Error(`worktree list: unparsable entry: ${lines[0]}`);
+    }
+    const path = lines[0].slice('worktree '.length).trim();
+    if (!path) throw new Error('worktree list: entry without a path');
+    if (lines.some((l) => l === 'bare' || l === 'prunable' || l.startsWith('prunable '))) continue;
+    if (samePath(path, root)) continue;
+    if (!exists(path)) continue;
+    others.push(path);
+  }
+  return others;
 }
 
 /**
@@ -223,6 +279,7 @@ export function pruneTriggers(root, flag, deps = {}) {
     workingTreeChange = hasWorkingTreeChange,
     commitSince = hasCommitSince,
     heldFiles = collectHeld,
+    otherWorktrees = listOtherWorktrees,
     gitRunner = git,
   } = deps;
   const kept = [];
@@ -240,6 +297,27 @@ export function pruneTriggers(root, flag, deps = {}) {
     return held;
   };
 
+  // Same shape as `heldOnce`, for the same reason: the list is identical for every trigger.
+  // A failed enumeration is memoised too, as a sentinel that KEEPS — never as an empty list.
+  const WORKTREES_UNKNOWN = Symbol('worktrees-unknown');
+  let worktrees = null;
+  const worktreesOnce = () => {
+    if (worktrees === null) {
+      try { worktrees = otherWorktrees(root, { gitRunner }); } catch { worktrees = WORKTREES_UNKNOWN; }
+    }
+    return worktrees;
+  };
+  const editedInOtherWorktree = (rel, since) => {
+    const list = worktreesOnce();
+    if (!Array.isArray(list)) return true;
+    // A status probe that throws inside one folder reaches the per-trigger catch below,
+    // which keeps the trigger.
+    // Asked FROM each folder, so a detached folder's own HEAD is walked too.
+    return list.some(
+      (wt) => workingTreeChange(wt, rel, gitRunner) || commitSince(wt, rel, since, gitRunner),
+    );
+  };
+
   for (const rel of flag.triggers ?? []) {
     // This path's OWN stamp (BIN-1081), falling back to the flag-wide one for a flag written
     // before that field existed. No date at all means we cannot tell a ghost from a
@@ -251,7 +329,8 @@ export function pruneTriggers(root, flag, deps = {}) {
         live =
           workingTreeChange(root, rel, gitRunner) ||
           commitSince(root, rel, since, gitRunner) ||
-          isHeldSince(heldOnce(), rel, since);
+          isHeldSince(heldOnce(), rel, since) ||
+          editedInOtherWorktree(rel, since);
       }
     } catch {
       live = true;
@@ -305,8 +384,9 @@ export function run({
   // the commit output, because a work order disappearing without a word is the same
   // invisibility the flag itself keeps producing.
   out.write(
-    `[map-flag] släppte ${dropped.length} spöktrigger (oförändrad mot HEAD, ingen commit ` +
-      `sedan stämplingen, inte hållen i stash eller patchfil): ${dropped.join(', ')}\n`,
+    `[map-flag] släppte ${dropped.length} spöktrigger (oförändrad mot HEAD i varje arbetsmapp, ` +
+      `ingen commit på HEAD eller någon lokal gren sedan stämplingen, inte hållen i stash ` +
+      `eller patchfil): ${dropped.join(', ')}\n`,
   );
 
   try {
