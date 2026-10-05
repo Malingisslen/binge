@@ -814,6 +814,12 @@
       "label": "notifyReportDecided trigger",
       "context": "backend-api",
       "path": "functions/src/reportDecided/index.ts, functions/src/reportDecided/logic.ts"
+    },
+    {
+      "id": "pricing-ui",
+      "label": "Pengakollen (kalkylator, prissida, gästdemo)",
+      "context": "web-app",
+      "path": "src/components/pricing, src/lib/advisor/guestCost.ts, src/lib/guestProviders.ts, src/lib/priceFreshness.ts, src/lib/priceTableRows.ts, src/lib/tmdb/providers.ts"
     }
   ],
   "actions": [
@@ -3218,6 +3224,53 @@
         }
       ],
       "area": "library"
+    },
+    {
+      "id": "flow-guest-pricing",
+      "label": "Pengakollen publikt (kalkylator, prissida, gästdemo)",
+      "description": "The money layer for visitors who are not signed in (Malin's picks 1A, 2A, 3B, 2026-10-05). /streamingkostnad is the indexable calculator, /streamingpriser the price table (noindex via its own layout until the price agent is scheduled), and the guest landing on '/' carries a six-button demo that HomePageClient mounts ONLY in its resolved signed-out branch, never in the pre-rendered auth-loading pair. None of it reads or writes Firestore and none of it calls TMDB: every number comes from the static catalog in src/lib/tmdb/providers.ts (tier prices, priceVerifiedDate, PRICE_CHANGES) through the same summarizeMonthlySpend + detectBundleArbitrage chain the signed-in advisor uses — guestCost passes providerTiers and nothing else, because a guest has no campaign and no custom cost. The guest's choice lives in sessionStorage under the one GUEST_PROVIDERS_KEY in src/lib/guestProviders.ts, validated on read, and is the only thing that crosses into the signed-in world: 'Logga in och spara' goes through useSignedOutRedirect to /login, and onboarding step 2 prefills from that key only when the account has no providers, then clears it after a successful save.",
+      "covers": [
+        "/streamingkostnad",
+        "/streamingpriser"
+      ],
+      "steps": [
+        {
+          "from": "pricing-ui",
+          "to": "pricing-ui",
+          "payload": "computeGuestCost(selection, now) → summarizeMonthlySpend(ids, {providerTiers}) for totalKr/paidCount/estimated ('Vet inte' = list price, marked uppskattat) and detectBundleArbitrage(ids, {providerTiers}, SWEDISH_BUNDLES)[0] for the best bundle (savingKr, binding, start fee, stale, downgrades shown as returned). Pure — no network.",
+          "transport": "method call",
+          "verified": true
+        },
+        {
+          "from": "pricing-ui",
+          "to": "web-app",
+          "payload": "saveGuestSelection() writes {canonicalProviderId: tierId|null} to sessionStorage 'binge:guestProviders' on every change (calculator and home demo share it, so 'Visa mer' opens the calculator pre-checked); 'Logga in och spara' → useSignedOutRedirect → rememberNextPath + router.push('/login/'). Nothing is sent to a server as a guest.",
+          "transport": "sessionStorage + router.push",
+          "verified": true
+        },
+        {
+          "from": "pricing-ui",
+          "to": "analytics-lib",
+          "payload": "trackEvent('price_check_total_shown', {surface: 'calculator'|'home', paidCount}) once per page view when a selection first yields a total, and trackEvent('price_check_save_clicked', {paidCount}) on 'Logga in och spara' — counts only, never which services; silent no-op without the Plausible script",
+          "transport": "function call",
+          "verified": true
+        },
+        {
+          "from": "pricing-ui",
+          "to": "pricing-ui",
+          "payload": "Price table: buildPriceRows() reads tier prices and priceVerifiedDate from the catalog; after mount priceFreshness(date, clientNow) gives '–' for missing/malformed/future dates and 'kan vara inaktuell' past PRICE_STALE_DAYS. PriceChangeLog lists PRICE_CHANGES newest first, labelled 'från' (service-stated) or 'upptäckt' (noticed by a price check).",
+          "transport": "method call (client clock)",
+          "verified": true
+        },
+        {
+          "from": "onboarding-flow",
+          "to": "auth-context",
+          "payload": "Step 2 reads loadGuestSelection() only when user.myProviders is empty (never overwrites), prefills selected + tiers, then updateProviders(selected) and updateProviderTiers(changed) as before; clearGuestSelection() runs only after both writes resolve, so a failed save keeps the key for the retry.",
+          "transport": "sessionStorage read + React context",
+          "verified": true
+        }
+      ],
+      "area": "user features"
     }
   ]
 }
