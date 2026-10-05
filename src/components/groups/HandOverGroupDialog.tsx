@@ -151,14 +151,14 @@ export function HandOverGroupDialog({
           <button
             onClick={onCancel}
             disabled={working}
-            className="px-3 py-[5px] border border-rule rounded-sm text-xs bg-white cursor-pointer disabled:opacity-50"
+            className="px-3 py-[5px] border border-rule rounded-sm text-xs bg-surface cursor-pointer disabled:opacity-50"
           >
             Avbryt
           </button>
           <button
             onClick={submit}
             disabled={working || done || !picked}
-            className="ml-auto inline-flex items-center gap-1 px-3 py-[5px] border border-danger/40 text-danger-ink rounded-sm text-xs bg-white cursor-pointer hover:bg-danger-soft disabled:opacity-50"
+            className="ml-auto inline-flex items-center gap-1 px-3 py-[5px] border border-danger/40 text-danger-ink rounded-sm text-xs bg-surface cursor-pointer hover:bg-danger-soft disabled:opacity-50"
           >
             <UserCheck size={11} />
             {working ? 'Lämnar över…' : `Lämna över till ${pickedName}`}
