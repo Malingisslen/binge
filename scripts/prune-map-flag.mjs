@@ -356,7 +356,7 @@ export function run({
   // var down there made an injected `cwd` silently useless: a test that hands in a scratch
   // repo would resolve `root` to the REAL one whenever the variable happened to be set,
   // read the real flag, drop every trigger against a stubbed git, and `unlinkSync` a
-  // genuine work order as a side effect of `npm test`. The flag is gitignored, so nothing
+  // genuine work order as a side effect of `npm run test:process`. The flag is gitignored, so nothing
   // would have shown it. Found by the integration review before this ever ran that way.
   projectDir = process.env.CLAUDE_PROJECT_DIR,
   gitRunner = git,

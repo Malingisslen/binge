@@ -271,8 +271,8 @@ code:
   role should own the file — baselining is how a gap becomes permanent.
 - `--check` grades the COMMITTED map without writing anything.
 
-The same check runs under `npm test`, which gates CI and the deploy, so skipping it here
-only moves the failure later.
+The same check runs under `npm run test:process`, which the deploy runs as a warning, so
+skipping it here only moves the failure later.
 
 **Contract.** The hook only ever writes documentation-freshness markers — never touches
 app code, never blocks, fails open. It skips the docs that *define* the system

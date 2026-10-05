@@ -265,7 +265,14 @@ assertion to go green").
 - Regression guards — design anti-patterns, forced `Europe/Stockholm` TZ to
   catch off-by-one date bugs, `assertNever` exhaustiveness.
   → `vitest.config.ts`, `src/lib/design/consistency.test.ts`
+- **The split between the suite that stops a deploy and the one that warns** (BIN-1426),
+  and the check that every test file runs in exactly one place.
+  → `src/test/vitestProjects.test.ts`
 - MSW network mocking; CI quality gates.
+  → `src/test/server.ts`, `src/test/handlers.ts`
+- The kronbelopp matcher that holds whichever space the runtime puts between thousands
+  (BIN-1386).
+  → `src/test/krText.ts`, `src/test/krText.test.ts`
 
 ## 8. DevOps / SRE
 
@@ -587,7 +594,8 @@ Owns the process.
   into acceptance criteria, for ad-hoc work as well as sprints); the deploy
   drift-guard (rules/functions never auto-ship); the quality gates that run on the
   push-to-main path;
-  `deploy.yml` downgrades `npm audit` to advisory by BIN-344's decision; BIN-* issue
+  `deploy.yml` downgrades `npm audit` to advisory by BIN-344's decision, and the process
+  tests to a warning by BIN-1426's decision; BIN-* issue
   taxonomy + sprint cadence; Dependabot grouping + framework upgrades (React 19 /
   Next 16 landed); the "explain in product terms" communication norm.
   → `CLAUDE.md` (working agreement + cast-the-panel rule), `.github/workflows/deploy.yml`, `.github/dependabot.yml`

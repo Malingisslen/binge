@@ -355,16 +355,14 @@ describe('the live events.jsonl', () => {
     // have cost: the stub denies every sha, so the FIRST row written the way README's tense
     // rule instructs — a real `commit_sha` that predates its row — would have turned
     // `npm test` red with "does not exist in this repo", while the CLI reported clean. Two
-    // answers for one file, and the suite is what gates deploy. A check that punishes the
-    // first person to obey it gets switched off, which is how this whole class of thing
-    // dies. It passed only because no live row carries the field yet.
+    // answers for one file. A check that punishes the first person to obey it gets
+    // switched off, which is how this whole class of thing dies. It passed only because no
+    // live row carries the field yet.
     //
-    // KNOW WHAT THIS ASSERTION COSTS: it reads the LIVE log, and `npm test` is a blocking
-    // step in deploy.yml. The next `declined-unattended-shipped` row the
-    // sprint engine writes turns this red and holds the production deploy of unrelated
-    // code. Deliberate — such a row means unreviewed code reached main — but the remedy is
-    // append a `correction` keyed on {ts, ticket}, or add the missing `commit_sha`. Do not
-    // weaken the rule to clear it; move this one assertion to a CLI-only check instead.
+    // It reads the LIVE log under `npm run test:process`, which deploy.yml runs as a warning
+    // (BIN-1426). The next `declined-unattended-shipped` row the sprint engine writes turns
+    // this red; the remedy is append a `correction` keyed on {ts, ticket}, or add the
+    // missing `commit_sha`. Do not weaken the rule to clear it.
     //
     // And know where it shows up FIRST, which is not CI: the engine writes these rows
     // unstaged ("Do not commit and do not stage"), and shared-plugin.json's

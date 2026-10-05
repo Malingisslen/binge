@@ -376,7 +376,8 @@ describe('gradeSubject — the COMMIT-TIME half (BIN-917 criterion 4)', () => {
 
   it('agrees with the history rule about what owes a row', () => {
     // Two graders, one denominator. If they ever disagree, a commit passes the hook and then
-    // fails the deploy — the "two answers to one question" defect, split across two modes.
+    // fails `npm run test:process` — the "two answers to one question" defect, split across
+    // two modes.
     for (const subject of [
       'test(radering): pinna felet (BIN-100)',
       'refactor(push): move a port (BIN-100)',
@@ -394,7 +395,7 @@ describe('mainMessage — the exit code the commit-msg hook acts on', () => {
   // The test reviewer found this branch untested and PROVED it by inverting it: the whole
   // suite stayed green with the hook's verdict backwards. That is survivable on a reporting
   // script and is not survivable here — an inverted commit gate either blocks every clean
-  // commit or waves through every violating one, silently, with `npm test` green throughout.
+  // commit or waves through every violating one, silently.
   // Its two siblings (check-public-env, gen-ownership-map) have the same gap; this is the
   // first one on a gate that runs before a commit, so it is the first one worth closing.
   const tmp = (name, body) => {
@@ -552,12 +553,10 @@ describe('the live repo', () => {
   it('every feat/fix commit since the epoch carries a review row', () => {
     // The real log and the real history, the way the sibling's live case works.
     //
-    // KNOW WHAT THIS ASSERTION COSTS: `npm test` is a blocking step in deploy.yml,
-    // so the next feat/fix commit that ships without anyone logging a review
-    // row turns this red and holds the production deploy of unrelated code. Deliberate —
-    // that is the silence the check exists to remove — but the remedy is to LOG THE ROW
-    // (`ran:true`, or `ran:false` with the pull-out reason written on the ticket), never to
-    // weaken the rule to clear it.
+    // It runs under `npm run test:process`, which deploy.yml runs as a warning (BIN-1426),
+    // so the next feat/fix commit that ships without anyone logging a review row turns
+    // this red. The remedy is to LOG THE ROW (`ran:true`, or `ran:false` with the
+    // pull-out reason written on the ticket), never to weaken the rule to clear it.
     //
     // On its first run this found two: 634d62e (BIN-565) and 2e5993a (BIN-911), whose
     // critiques demonstrably ran — the sprint plan at 6d157c5 records #18/#27 and #19/#5
@@ -568,8 +567,8 @@ describe('the live repo', () => {
     const reviewed = ticketsWithAReviewRow(parseEvents(readFileSync(EVENTS_PATH, 'utf8')));
     // BIN-1040: the exemption inputs go HERE too, from the SAME builder `main()` uses.
     // Nothing automated calls `main()` — `lefthook.yml` invokes the `--message` mode — and
-    // the path that turns the DEPLOY red is `npm test` reaching this assertion. Wiring the
-    // exemption into `main()` alone left the defect exactly where it was reported from,
+    // the path deploy.yml runs is `npm run test:process` reaching this assertion.
+    // Wiring the exemption into `main()` alone left the defect exactly where it was reported from,
     // under a docblock saying it was fixed. Found by the integration review before this
     // shipped; "check WHERE the rule runs, not only where it was written" (BIN-744/776/917).
     const result = findCoverageGaps(readGitLog(), reviewed, exemptionInputs(true));

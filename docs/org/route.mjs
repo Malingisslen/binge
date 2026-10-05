@@ -693,8 +693,8 @@ function selftest() {
     // not a hook — so a stale pin here could not fail a deploy, and a
     // documented command ("exit non-zero on fail" in the Usage block above) that nobody
     // runs teaches the next reader to ignore it. BIN-880 wired it: docs/org/gate-symmetry
-    // .test.mjs spawns this exact command and fails if it exits non-zero, and `npm test`
-    // gates deploy.yml. A red case here now stops a release.
+    // .test.mjs spawns this exact command and fails if it exits non-zero, under
+    // `npm run test:process`.
     { paths: ['docs/org/gen-ownership-map.mjs'], tier: 'medium', mustSeat: 25, reasonCode: 'owned' },
     { paths: ['scripts/check-public-env.mjs'], tier: 'medium', mustSeat: 4, reasonCode: 'owned' },
     // A high-stakes path outranks everything, even when nothing else in the set is owned.

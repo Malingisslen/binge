@@ -10,8 +10,8 @@
 // So this exits 0 on an overrun, on purpose. What it does NOT do quietly is disappear:
 // finding FEWER files than the floor exits non-zero, because a glob that stops matching
 // looks exactly like a clean run (BIN-838/850/852 — a zero-match check exits 0 having
-// checked nothing). The floor is asserted for real by check-knowledge-caps.test.mjs under
-// `npm test`; this script carries it too so a direct invocation cannot be fooled either.
+// checked nothing). The floor is asserted by check-knowledge-caps.test.mjs under
+// `npm run test:process`; this script carries it too so a direct invocation cannot be fooled either.
 //
 // WHERE IT RUNS. .github/workflows/deploy.yml already carries the weekly sweep
 // (`schedule: cron '0 4 * * 1'`). The step added there is gated on that event and marked

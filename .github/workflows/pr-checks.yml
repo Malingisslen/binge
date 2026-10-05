@@ -125,10 +125,21 @@ jobs:
         # tsconfig.typecheck.json, which covers the sources AND the tests.
         run: npm run typecheck
 
-      # The same suite deploy.yml gates on. It carries the org checks that read
-      # the working tree — the ownership map and the route selftests — so a
-      # dependency bump that breaks one of those is caught here rather than on the
-      # deploy. The history-reading checks are NOT covered: this is a shallow
-      # checkout, and they bail to `unverified` rather than assert on one commit.
+      # The same suite deploy.yml gates on.
       - name: Test
         run: npm test
+
+      # The org checks, which deploy.yml runs as a warning (BIN-1426). The ones that read
+      # the working tree — the ownership map and the route selftests — show a dependency
+      # bump that breaks them here. The history-reading checks are NOT covered: this is a
+      # shallow checkout, and they bail to `unverified` rather than assert on one commit.
+      # The time cap is there because `continue-on-error` does not cover a hang.
+      - name: Process tests (warning only)
+        id: process-tests
+        continue-on-error: true
+        timeout-minutes: 5
+        run: npm run test:process
+
+      - name: Warn when the process tests failed
+        if: steps.process-tests.outcome == 'failure'
+        run: echo "::warning::npm run test:process failed. It does not block this pull request (BIN-1426)."

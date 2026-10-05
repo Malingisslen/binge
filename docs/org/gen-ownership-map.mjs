@@ -9,7 +9,7 @@
 // --check grades GAPS against the committed map; it deliberately does not report that the
 // committed map itself has drifted from the doc. That comparison is a test's job and
 // gen-ownership-map.test.mjs makes it ("regenerates the committed ownership-map.json
-// identically"), where it runs under `npm test` instead of waiting for someone to
+// identically"), where it runs under `npm run test:process` instead of waiting for someone to
 // remember a flag.
 //
 // Used by the freshness PostToolUse hook (.claude/hooks/freshness.mjs, stampDossier):
@@ -148,7 +148,8 @@ export function buildMap(tracked) {
       generatedBy: 'docs/org/gen-ownership-map.mjs',
       note: 'Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs',
       roleCount: Object.keys(roles).length,
-      patternCount: Object.values(roles).reduce((n, r) => n + r.patterns.length, 0),
+      // No pattern total: two branches that each seat a file would both edit that one line
+      // and conflict on it, even when their patterns merge cleanly (BIN-1426).
       roles,
     },
     dropped,
@@ -193,14 +194,13 @@ export function buildMap(tracked) {
 // reach for --update-gaps only when no role should own them, because baselining is a
 // permanent record that they have no owner.
 //
-// WHERE this actually blocks (BIN-830: check where a rule RUNS, not where it is written).
+// WHERE this actually runs (BIN-830: check where a rule RUNS, not where it is written).
 // Nothing calls this script automatically — not package.json, not any workflow or hook;
 // only the interactive /refresh-dossiers skill runs it. The enforcement is
-// gen-ownership-map.test.mjs, which `vitest.config.ts` includes and `npm test` runs, and
-// `npm test` gates deploy.yml — the only production path. So a new gap fails
-// the DEPLOY. For that reason the test asserts the ratchet's DIRECTION, never equality
-// with the baseline: shrinking the gap list is the desired outcome and must never break
-// a deploy, even though `main()` below only logs it and returns 0.
+// gen-ownership-map.test.mjs, which `npm run test:process` runs and deploy.yml runs as a
+// warning. The test asserts the ratchet's DIRECTION, never equality with the baseline:
+// shrinking the gap list is the desired outcome and must never turn the check red, even
+// though `main()` below only logs it and returns 0.
 export function findGaps(tracked) {
   const codeFiles = [...tracked.files].filter((f) => f.includes('/'));
   const r = route(codeFiles);
@@ -233,8 +233,8 @@ function writeAcceptedGaps(gaps) {
           'Accepted ownership gaps: tracked code files sitting in a directory the ownership map ' +
           'enumerates file-by-file, without a pattern of their own. The router still reviews them by ' +
           'directory inheritance, but no role has named them. This is the BASELINE the generator ' +
-          'ratchets against — a NEW gap fails `npm test` (docs/org/gen-ownership-map.test.mjs), ' +
-          'which gates deploy.yml — so a new gap fails the DEPLOY, not just this script. ' +
+          'ratchets against — a NEW gap fails docs/org/gen-ownership-map.test.mjs under ' +
+          '`npm run test:process`, not just this script. ' +
           'Shrink it by naming files in docs/role-responsibilities.md; re-baseline only on purpose.',
         generatedBy: 'docs/org/gen-ownership-map.mjs --update-gaps',
         count: gaps.length,
@@ -255,7 +255,8 @@ export function main(argv) {
   if (!checkOnly) {
     writeFileSync(outPath, JSON.stringify(map, null, 2) + '\n');
     const withPaths = Object.values(map.roles).filter((r) => r.patterns.length).length;
-    console.log(`ownership-map.json: ${map.roleCount} roles (${withPaths} with paths), ${map.patternCount} patterns`);
+    const patterns = Object.values(map.roles).reduce((n, r) => n + r.patterns.length, 0);
+    console.log(`ownership-map.json: ${map.roleCount} roles (${withPaths} with paths), ${patterns} patterns`);
     console.log(`dropped ${dropped.length} non-existent/non-path tokens (e.g. ${[...new Set(dropped)].slice(0, 6).join(', ')})`);
   }
 

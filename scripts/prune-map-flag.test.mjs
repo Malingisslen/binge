@@ -1,8 +1,8 @@
 // Tests for the pre-commit workflow-map flag pruner (BIN-790).
 //
-// Run: npm test — matched by vitest.config.ts's `scripts/**/*.{test,spec}.mjs` include.
+// Run: npm run test:process — named in vitest.config.ts's PROCESS_SCRIPTS.
 // A test file outside the runner's globs is silently never run while passing when invoked
-// by hand (BIN-802), so if you move this file, move that glob.
+// by hand (BIN-802), so if you move this file, update that list.
 //
 // WHY THIS FILE EXISTS. `prune-map-flag.mjs` DELETES work orders. Both directions cost, and
 // they cost differently:
