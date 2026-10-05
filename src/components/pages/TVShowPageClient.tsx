@@ -56,6 +56,7 @@ import PriceHistoryChart from '@/components/title/PriceHistoryChart';
 import { offerForProvider, isLeavingSoon, formatLeaving } from '@/lib/streaming/offers';
 import type { TMDBTVShow } from '@/types';
 import { trackEvent } from '@/lib/analytics';
+import ShareButton from '@/components/share/ShareButton';
 
 export default function TVShowPageClient({ id, initialData }: { id: string; initialData?: TMDBTVShow }) {
   const showId = parseInt(id, 10);
@@ -197,7 +198,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   }, [itemExists, showIdForEffect, showStatus, cachedTmdbStatus, updateTmdbStatus]);
 
   if (isLoading) return <LoadingView variant="detail" label="Laddar serien…" />;
-  if (!show) return <NotFound crumb="Serie" title="Serien hittades inte." body="Vi kunde inte hitta den här serien i TMDB." />;
+  if (!show) return <NotFound crumb="Serie" title="Serien hittades inte." body="Den här serien gick inte att hitta." />;
 
   const poster = posterUrl(show.poster_path, 'w500');
   const tone = toneForGenreIds(show.genres.map(g => g.id));
@@ -355,6 +356,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
                 releaseYear={show.first_air_date ? parseInt(show.first_air_date.substring(0, 4), 10) : null}
               />
               <NotInterestedButton tmdbId={show.id} mediaType="tv" title={displayTitle} />
+              <ShareButton path={`/tv/${show.id}/`} title={displayTitle} text={`Se var ${displayTitle} går att streama.`} surface="title" />
             </div>
           </ClientOnly>
 

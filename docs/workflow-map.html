@@ -1330,6 +1330,13 @@
         },
         {
           "from": "list-page-client",
+          "to": "analytics-lib",
+          "payload": "public list only: ShareButton → trackEvent('share_clicked', {surface:'list', method}) then navigator.share or clipboard with /list/{id}/?utm_source=share&utm_medium=list. The link opens the prerendered list shell, which carries its own link preview",
+          "transport": "function call + Web Share / Clipboard API",
+          "verified": true
+        },
+        {
+          "from": "list-page-client",
           "to": "uselists-hook",
           "payload": "usePublicList(listId) → single getDoc lists/{listId} (react-query cached, staleTime 60s)",
           "transport": "Firestore read",
@@ -1366,6 +1373,13 @@
           "to": "user-profile-page",
           "payload": "resolveRoute(pathname) matches kind:'user' → renders UserProfilePageClient(username)",
           "transport": "client-side route dispatch",
+          "verified": true
+        },
+        {
+          "from": "user-profile-page",
+          "to": "analytics-lib",
+          "payload": "public or own profile: ShareButton → trackEvent('share_clicked', {surface:'profile', method}) then navigator.share or clipboard with /user/{username}/?utm_source=share&utm_medium=profile; served from the out/user/_/index.html shell with its own link preview",
+          "transport": "function call + Web Share / Clipboard API",
           "verified": true
         },
         {
@@ -2433,6 +2447,13 @@
           "to": "tmdb-api",
           "payload": "getMovie/getTVShow(id) — full detail incl. credits, videos, watch/providers.SE, recommendations (pre-rendered for top-N via generateStaticParams; catch-all client fetch for long tail)",
           "transport": "fetch (TMDB)",
+          "verified": true
+        },
+        {
+          "from": "movie-tv-page",
+          "to": "analytics-lib",
+          "payload": "outbound service link click → trackEvent('provider_clicked', {providerId, offerType, mediaType}); ShareButton → trackEvent('share_clicked', {surface:'title', method}) then navigator.share or clipboard with the title URL + utm_source=share&utm_medium=title",
+          "transport": "function call",
           "verified": true
         },
         {

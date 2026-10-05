@@ -65,7 +65,7 @@ const show = {
   genres: [{ id: 18, name: 'Drama' }],
   credits: { cast: [{ id: 1, name: 'Emilia Clarke', character: 'Daenerys', profile_path: null, order: 0 }], crew: [] },
   'watch/providers': {
-    results: { SE: { link: 'x', flatrate: [{ provider_id: 384, provider_name: 'HBO Max', logo_path: '' }] } },
+    results: { SE: { link: 'x', flatrate: [{ provider_id: 1825, provider_name: 'HBO Max Amazon Channel', logo_path: '' }] } },
   },
 } as unknown as TMDBTVShow;
 
@@ -78,8 +78,7 @@ describe('tvContentFloorInput', () => {
     expect(input.seasons).toBe(8);
     expect(input.runtimeMin).toBeNull();
     expect(input.genreIds).toEqual([18]);
-    // canonicalised: TMDB "HBO Max" (id 384) → app label "Max"
-    expect(input.providers.stream).toContain('Max');
+    expect(input.providers.stream).toContain('HBO Max');
   });
 });
 

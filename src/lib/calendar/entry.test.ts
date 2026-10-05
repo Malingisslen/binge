@@ -25,10 +25,10 @@ describe('entry helpers', () => {
     expect(entryHref(movie)).toBe('/movie/500/');
   });
 
-  it('entryMetaLine shows episode code or lowercase "digital release"', () => {
+  it('entryMetaLine shows episode code or lowercase "digitalt släpp"', () => {
     expect(entryMetaLine(episode)).toBe('S2E5');
     // Gemener för att matcha entryBadge/HemFocal (BIN-16).
-    expect(entryMetaLine(movie)).toBe('digital release');
+    expect(entryMetaLine(movie)).toBe('digitalt släpp');
   });
 
   it('entryBadge reflects today, premiere and movie', () => {
@@ -36,7 +36,7 @@ describe('entry helpers', () => {
     expect(entryBadge({ ...episode, isPremiere: true, season: 1 }, false)).toBe('premiär');
     expect(entryBadge({ ...episode, isPremiere: true, season: 3 }, false)).toBe('ny säsong');
     expect(entryBadge({ ...episode, isFinale: true }, false)).toBe('säsongsfinal');
-    expect(entryBadge(movie, false)).toBe('digital release');
+    expect(entryBadge(movie, false)).toBe('digitalt släpp');
     expect(entryBadge(movie, true)).toBe('släpps i dag');
   });
 
