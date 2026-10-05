@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildAddWrite } from '@/lib/watchlistWrites';
+import { buildRestoreWrites } from '@/lib/watchlist/restoreRemoved';
 import { relationshipDocsToClear } from '@/lib/blockRelationship';
 import {
   assertFails, assertSucceeds, initializeTestEnvironment,
@@ -174,6 +175,65 @@ describe('BIN-655 — buildAddWrite payloads satisfy the hasOnly allowlist', () 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const body = buildAddWrite(payload() as any, 'viewing', writeCtx() as any);
     await assertFails(setDoc(ref, { ...body, countsAsViewing: true }, { merge: true }));
+  });
+});
+
+describe('BIN-1430 — "Ångra": a removed title written back exactly as it was read', () => {
+  const ITEM = 'movie_603';
+  const path = (col: string) => doc(ownerDb(), 'users', OWNER, col, ITEM);
+
+  // Read the stored row the way the client's cache holds it — server Timestamps and all —
+  // then delete it, which is the state "Ångra" starts from.
+  async function storeReadAndRemove(seed: Record<string, unknown>) {
+    await testEnv.withSecurityRulesDisabled(async ctx => {
+      await setDoc(doc(ctx.firestore(), 'users', OWNER, 'watchlist', ITEM), seed);
+    });
+    const stored = (await getDoc(path('watchlist'))).data()!;
+    await assertSucceeds(deleteDoc(path('watchlist')));
+    return stored;
+  }
+
+  it('accepts the row restored with its stored Timestamps (addedAt, updatedAt, watchedAt)', async () => {
+    const stored = await storeReadAndRemove({
+      ...validWatchlist(), status: 'sedd', rating: 4.5,
+      addedAt: Timestamp.fromDate(new Date('2021-02-03')),
+      updatedAt: Timestamp.fromDate(new Date('2024-05-06')),
+      watchedAt: Timestamp.fromDate(new Date('2021-02-04')),
+    });
+    expect(stored.addedAt).toBeInstanceOf(Timestamp); // guard the guard: a raw read, not a fixture
+
+    const writes = buildRestoreWrites({
+      mediaType: 'movie', tmdbId: 603, docId: ITEM, removalGen: 1, item: stored,
+      tags: { tags: ['favorit'], mediaType: 'movie' }, notes: { note: 'Se om', mediaType: 'movie' },
+    });
+    await assertSucceeds(setDoc(path('watchlist'), writes.item));
+    await assertSucceeds(setDoc(path('watchlistTags'), writes.tags!));
+    await assertSucceeds(setDoc(path('watchlistNotes'), writes.notes!));
+    expect((await getDoc(path('watchlist'))).data()).toEqual(stored);
+  });
+
+  it('a legacy row with an inline note: verbatim is refused, the built restore is accepted', async () => {
+    const stored = await storeReadAndRemove({
+      ...validWatchlist(), notes: 'gammal anteckning',
+      addedAt: Timestamp.fromDate(new Date('2020-01-01')),
+      updatedAt: Timestamp.fromDate(new Date('2020-01-01')),
+    });
+    // Why buildRestoreWrites moves the note: the rules refuse a non-null inline note on create.
+    await assertFails(setDoc(path('watchlist'), stored));
+
+    const writes = buildRestoreWrites({ mediaType: 'movie', tmdbId: 603, docId: ITEM, removalGen: 1, item: stored, tags: null, notes: null });
+    await assertSucceeds(setDoc(path('watchlist'), writes.item));
+    await assertSucceeds(setDoc(path('watchlistNotes'), writes.notes!));
+    expect((await getDoc(path('watchlistNotes'))).data()).toEqual({ note: 'gammal anteckning', mediaType: 'movie' });
+  });
+
+  it('another account cannot restore into the owner\'s library', async () => {
+    const stored = await storeReadAndRemove({
+      ...validWatchlist(),
+      addedAt: Timestamp.fromDate(new Date('2021-02-03')),
+      updatedAt: Timestamp.fromDate(new Date('2021-02-03')),
+    });
+    await assertFails(setDoc(doc(otherDb(), 'users', OWNER, 'watchlist', ITEM), stored));
   });
 });
 
