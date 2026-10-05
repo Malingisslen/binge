@@ -4,6 +4,7 @@ import {
   franchiseLinks,
   leavingLinks,
   genreLinks,
+  costLinks,
   hubSections,
   providerHubHref,
   leavingHubHref,
@@ -60,13 +61,14 @@ describe('hubLinks — genre coverage (BIN-461)', () => {
 });
 
 describe('hubLinks — sections', () => {
-  it('exposes exactly the four hub groups with links', () => {
+  it('exposes exactly the five hub groups with links', () => {
     const sections = hubSections();
     expect(sections.map((s) => s.id)).toEqual([
       'streamingtjanster',
       'billigaste',
       'forsvinner',
       'genre',
+      'kostnad',
     ]);
     for (const s of sections) {
       expect(s.links.length).toBeGreaterThan(0);
@@ -119,5 +121,20 @@ describe('hubLinks — links from title pages into hubs (SEO-4)', () => {
     // 53 Thriller has a movie hub only (TV has no Thriller genre).
     expect(genreHubHref('movie', 53)).toBe('/genre/thriller/');
     expect(genreHubHref('tv', 53)).toBeNull();
+  });
+});
+
+// #26:s villkor 1 och 4 (pengakollen publikt, 2026-10-05): kalkylatorn länkas från
+// hubben, prissidan gör det inte så länge den är noindex.
+describe('hubLinks — kostnadslänkar', () => {
+  it('links the calculator /streamingkostnad/ from the hub', () => {
+    expect(costLinks()).toContainEqual({ href: '/streamingkostnad/', label: 'Räkna ut din streamingkostnad' });
+    const all = hubSections().flatMap((s) => s.links.map((l) => l.href));
+    expect(all).toContain('/streamingkostnad/');
+  });
+
+  it('does NOT link the noindex price page /streamingpriser/', () => {
+    const all = hubSections().flatMap((s) => s.links.map((l) => l.href));
+    expect(all.some((h) => h.startsWith('/streamingpriser'))).toBe(false);
   });
 });

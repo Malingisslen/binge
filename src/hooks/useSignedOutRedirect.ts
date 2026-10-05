@@ -19,6 +19,7 @@ import { rememberNextPath } from '@/lib/nextPath';
  *   · `HomePageClient`   — the landing CTA
  *   · `MoviePageClient`  — the cinema-countdown strip's "Bevaka släpp" (BIN-731)
  *   · `CompanionSection` — the companion strip's "Lägg i vill se" (BIN-731)
+ *   · `CostCalculator`   — the calculator's "Logga in och spara" (BIN-1437)
  *
  * The last two are the reason this list is worth keeping: both were shipped
  * hidden or permanently disabled for signed-out visitors, because their

@@ -188,7 +188,7 @@ export default function IntegritetPage() {
           <li><strong>Google reCAPTCHA</strong> (<code>_GRECAPTCHA</code>) — sätts av Googles reCAPTCHA/App Check för bot- och missbruksskydd. Räknas som nödvändig för tjänstens säkerhet.</li>
           <li><strong>YouTube</strong> — sätts bara om du trycker på en trailer. Spelaren laddas från <code>youtube-nocookie.com</code>, men YouTube kan ändå lagra cookies eller lokal lagring i din webbläsare medan videon spelas.</li>
           <li>
-            <strong>Tre värden i webbläsarens <code>sessionStorage</code></strong> — till
+            <strong>Fyra värden i webbläsarens <code>sessionStorage</code></strong> — till
             skillnad från cookies och IndexedDB ovan är de bundna till den enskilda fliken
             och försvinner när du stänger fliken eller webbläsaren. Ingen tredje part har
             åtkomst till dem, och de lämnar aldrig din enhet.
@@ -212,6 +212,11 @@ export default function IntegritetPage() {
                 <code>binge:lastReportAt</code> — en tidsstämpel som bromsar hur ofta samma
                 flik kan skicka in anmälningar av olämpligt innehåll. Innehåller bara
                 klockslaget för din senaste anmälan, ingenting om vad du anmälde.
+              </li>
+              <li>
+                <code>binge:guestProviders</code> — vilka betaltjänster du kryssat i på
+                kalkylatorn eller startsidan, så att valet följer med om du skapar ett konto.
+                Raderas när du sparat dina tjänster.
               </li>
             </ul>
           </li>

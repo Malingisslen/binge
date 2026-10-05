@@ -26,6 +26,16 @@ den kräver ett konto/miljö som får pusha till `main`.
   visar ett tydligt, **ordinarie** (icke-kampanj) pris i **SEK**.
 - Varje ändrad rad ska få en kommentar med **käll-URL + datum**, i filens befintliga stil
   (`// live-verifierat YYYY-MM-DD — <url>`).
+- `priceVerifiedDate` (YYYY-MM-DD) på en tjänst agenten **själv** läst priserna för i
+  körningen — även när inget pris ändrades. Aldrig ett framtida datum, aldrig på en tjänst
+  vars sida inte gick att läsa. Prissidan (`/streamingpriser/`) visar datumet som
+  "Kontrollerat".
+- En ny rad sist i `PRICE_CHANGES` för varje **ordinarie** prisändring den shippar:
+  `date` (körningens datum), `dateKind: 'noticed'` (eller `'effective'` bara när
+  tjänsten själv anger från vilket datum priset gäller), `providerId`, `tierId` (null
+  för en tjänst utan nivåer), `fromKr`, `toKr`, `source` (URL). Aldrig en kampanj —
+  osäkerhetsregel 1 nedan gäller fullt ut, och ett kampanjpris landar varken i
+  katalogen eller i loggen.
 
 ### Får ALDRIG ändras av agenten (→ Linear-ärende, aldrig auto-ship)
 - Nivåers `id`-strängar, `name`-strängar, `kind: 'sport'`.
@@ -45,6 +55,10 @@ den kräver ett konto/miljö som får pusha till `main`.
    stort *fall*).
 7. **Sanity-brott** — pris ≤ 0, billigaste nivån dyrare än nästa, nivåpris orimligt vs
    `defaultMonthlyCost`.
+
+`src/lib/tmdb/providers.priceData.test.ts` fäller en `PRICE_CHANGES`-rad som pekar på en
+okänd tjänst eller nivå, ett framtida eller felformaterat `priceVerifiedDate`, och en
+nivå vars senaste loggade `toKr` inte är katalogens nuvarande pris.
 
 ### Efter varje körning
 - Kör `npm run lint && npm run typecheck && npm test` — **grönt krävs** före commit.

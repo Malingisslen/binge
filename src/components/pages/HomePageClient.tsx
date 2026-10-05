@@ -28,6 +28,7 @@ import { pickFocalEntry, focalEntryKey } from '@/components/home/focalPick';
 import { seedCalendarEntries } from '@/lib/calendar/seedEntries';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import { useSignedOutRedirect } from '@/hooks/useSignedOutRedirect';
+import GuestCostDemo from '@/components/pricing/GuestCostDemo';
 import type { TMDBSearchResult } from '@/types';
 
 // LandingPage tar trending-sektionen som ReactNode-prop istället för en
@@ -36,7 +37,11 @@ import type { TMDBSearchResult } from '@/types';
 // HTML får crawlbara titellänkar — medan anonym-grenen skickar den hookade
 // <LandingPageTrending> (live-fetch med seed-fallback). Två syskon-
 // komponenter, aldrig en villkorlig hook.
-function LandingPage({ trending }: { trending?: React.ReactNode }) {
+//
+// guestDemo följer samma mönster: bara anonym-grenen skickar <GuestCostDemo>
+// (#26:s villkor 5). Auth-loading-grenen renderas även för återvändande
+// inloggade (den döljs med CSS), så demon får aldrig stå där.
+function LandingPage({ trending, guestDemo }: { trending?: React.ReactNode; guestDemo?: React.ReactNode }) {
   const goToLogin = useSignedOutRedirect();
   const { searchQuery, setSearchQuery, debouncedQuery, searchFocused, setSearchFocused, searchRef, clearSearch } = useSearchBox();
 
@@ -112,6 +117,7 @@ function LandingPage({ trending }: { trending?: React.ReactNode }) {
         </div>
       </section>
 
+      {guestDemo}
       {trending}
     </div>
   );
@@ -389,7 +395,7 @@ export default function HomePageClient({
   // (Gatear på uid — inte user — eftersom profilen numera laddas parallellt
   // och kan landa något senare än auth-beskedet.)
   if (!uid) {
-    return <LandingPage trending={<LandingPageTrending seed={seed} />} />;
+    return <LandingPage trending={<LandingPageTrending seed={seed} />} guestDemo={<GuestCostDemo />} />;
   }
 
   // Auth resolverat med user: dashboard.
