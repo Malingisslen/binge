@@ -105,7 +105,7 @@ function NyContent() {
             onChange={e => setHostName(e.target.value)}
             placeholder="T.ex. Lisa"
             maxLength={MAX_SESSION_DISPLAY_NAME}
-            className="w-full max-w-[260px] px-2 py-1 text-base border border-rule rounded-sm bg-white"
+            className="w-full max-w-[260px] px-2 py-1 text-base border border-rule rounded-sm bg-surface"
           />
         </FormSection>
 
@@ -118,7 +118,7 @@ function NyContent() {
                 <label
                   key={p.id}
                   className={`flex items-center gap-[6px] px-2 py-[3px] border rounded-sm cursor-pointer text-xs ${
-                    selected ? 'border-acc-deep bg-acc-deep/[0.08]' : 'border-rule bg-white'
+                    selected ? 'border-acc-deep bg-acc-deep/[0.08]' : 'border-rule bg-surface'
                   }`}
                 >
                   <input
@@ -181,7 +181,7 @@ function NyContent() {
             placeholder="T.ex. 120 (lämna tomt för ingen gräns)"
             min="30"
             max="400"
-            className="w-full max-w-[220px] px-2 py-1 text-base border border-rule rounded-sm bg-white"
+            className="w-full max-w-[220px] px-2 py-1 text-base border border-rule rounded-sm bg-surface"
           />
           <p className="text-xxs text-ink-3 mt-1">Gäller bara filmer.</p>
         </FormSection>
@@ -216,7 +216,7 @@ function NyContent() {
           <button
             type="button"
             onClick={() => router.push('/')}
-            className="px-3 py-[5px] border border-rule rounded-sm text-xs bg-white cursor-pointer"
+            className="px-3 py-[5px] border border-rule rounded-sm text-xs bg-surface cursor-pointer"
           >
             Avbryt
           </button>

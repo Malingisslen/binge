@@ -144,3 +144,28 @@ describe('design consistency — savings cluster tokens (BIN-441)', () => {
     expect(savingsFiles().length).toBeGreaterThan(0);
   });
 });
+
+// UX-2 (mörkt läge): en hårdkodad vit yta förblir vit i mörkt tema medan texten
+// ovanpå blir ljus — inskriven text i inloggningen blev vitt på vitt. Ytor tar
+// bg-surface, som följer temat. bg-white/<opacitet> är undantaget: det är en
+// genomskinlig ljusning ovanpå något som redan är mörkt (startsidans hero).
+const HARDCODED_WHITE_SURFACE = /\bbg-white\b(?!\/)/;
+
+describe('design consistency — no hard-coded white surfaces (UX-2)', () => {
+  it('the pattern flags bg-white and lets bg-white/<opacity> through', () => {
+    expect(HARDCODED_WHITE_SURFACE.test('border bg-white px-2')).toBe(true);
+    expect(HARDCODED_WHITE_SURFACE.test('className="bg-white"')).toBe(true);
+    expect(HARDCODED_WHITE_SURFACE.test('hover:bg-white')).toBe(true);
+    expect(HARDCODED_WHITE_SURFACE.test('bg-white/[0.08] border')).toBe(false);
+    expect(HARDCODED_WHITE_SURFACE.test('bg-white/10')).toBe(false);
+    expect(HARDCODED_WHITE_SURFACE.test('bg-surface')).toBe(false);
+  });
+
+  it('no .tsx under src uses bg-white as a surface (use bg-surface)', () => {
+    const files = tsxFilesRecursive(join(process.cwd(), 'src'));
+    // Floor: an empty sweep would pass silently.
+    expect(files.length).toBeGreaterThan(0);
+    const offenders = files.filter(f => HARDCODED_WHITE_SURFACE.test(readFileSync(f, 'utf8')));
+    expect(offenders.map(f => f.replace(process.cwd(), ''))).toEqual([]);
+  }, TREE_SWEEP_TIMEOUT_MS);
+});

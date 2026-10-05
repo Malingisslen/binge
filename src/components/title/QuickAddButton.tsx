@@ -115,6 +115,16 @@ export default function QuickAddButton({
     }
   }
 
+  // Also the aria-label: title= never renders on touch (BIN-596 above).
+  const buttonLabel =
+    authLoading ? 'Laddar…'
+    : signedOut ? (current ? labelFor(current.status) : 'Lägg till')
+    : listenerFailed ? LIBRARY_UNAVAILABLE
+    // Ordered after listenerFailed, so this branch is "settled has not
+    // happened yet" — the transient half of !libraryKnown.
+    : !libraryKnown ? 'Laddar…'
+    : current ? labelFor(current.status) : 'Lägg till';
+
   return (
     <div
       ref={ref}
@@ -154,15 +164,8 @@ export default function QuickAddButton({
             ? 'bg-acc-deep text-white'
             : 'bg-black/60 text-white hover:bg-acc-deep'
         }`}
-        title={
-          authLoading ? 'Laddar…'
-          : signedOut ? (current ? labelFor(current.status) : 'Lägg till')
-          : listenerFailed ? LIBRARY_UNAVAILABLE
-          // Ordered after listenerFailed, so this branch is "settled has not
-          // happened yet" — the transient half of !libraryKnown.
-          : !libraryKnown ? 'Laddar…'
-          : current ? labelFor(current.status) : 'Lägg till'
-        }
+        title={buttonLabel}
+        aria-label={buttonLabel}
       >
         {current ? <Check size={13} /> : <Plus size={13} />}
       </button>
