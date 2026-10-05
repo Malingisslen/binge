@@ -383,7 +383,7 @@ button { font: inherit; cursor: pointer; }
   gap: 8px;
   padding: 0 14px;
 }
-.topbar-rhs .search-wrap { flex: 1; position: relative; }
+.topbar-rhs .search-wrap { flex: 1; min-width: 0; position: relative; }
 .topbar-rhs .search {
   background: var(--bg);
   border: 1px solid var(--rule);
