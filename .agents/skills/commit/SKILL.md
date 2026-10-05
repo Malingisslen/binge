@@ -64,18 +64,22 @@ git push origin main
 
 Push till `main` triggar `.github/workflows/deploy.yml`. Du behöver alltså inte deploya lokalt.
 
+Undantag: en push som bara rör det `paths`-filtret i `deploy.yml` undantar startar ingen körning, och inget nytt går ut. Hoppa då över steg 5 och 6.
+
 ### 5. Vänta in GitHub Actions-deployen
 
 ```bash
-gh run list --workflow=deploy.yml --branch=main --limit=1 --json databaseId,status,conclusion,headSha,createdAt
+gh run list --workflow=deploy.yml --json databaseId,headSha,status,conclusion
 ```
 
-Hitta runet som matchar den nyss pushade commiten (`headSha` ska börja med `git rev-parse HEAD`). Pollla status med `gh run view <id> --json status,conclusion` tills `status` = `completed`.
+Ta körningen vars `headSha` är `git rev-parse HEAD`. Finns ingen sådan har GitHub inte skapat den än: fråga igen. Välj körningen i svaret, inte med ett filter i frågan: GitHubs lista filtrerad på gren var gammal för det här repot 2026-10-05. Jämför `gh run list --workflow=deploy.yml --branch=main --limit=1` med samma kommando utan `--branch=main`. Pollla status med `gh run view <id> --json status,conclusion` tills `status` = `completed`.
 
 - `conclusion` = `success`: gå vidare till purge.
 - `conclusion` = `failure`/`cancelled`: stoppa, visa `gh run view <id> --log-failed` och be användaren titta. Purga **inte** cachen om deployen failar — då skulle besökare få den gamla versionen serverad utan cache-skydd.
+- `status` = `waiting`, eller körningen står på *Waiting for review*: den väntar på Malins godkännande av regler och funktioner (jobbet `backend`, BIN-1426, `docs/RUNBOOK.md` §6e). Säg det till användaren med länken till körningen och sluta polla. Godkänn aldrig själv (CLAUDE.md). Purga först när körningen är klar och grön.
+- `status` = `pending`: körningen står i kö bakom en annan körning av `deploy.yml`. Visar `gh run list --workflow=deploy.yml --limit=5 --json databaseId,status` en körning med `status` = `waiting`, gör som i punkten ovan. Annars polla vidare.
 
-Polla med ~30s mellan checks. Bygget tar typiskt 3–5 min.
+Polla med ~30s mellan checks.
 
 ### 6. Purga Cloudflare-cachen
 
@@ -101,6 +105,6 @@ Kort summering till användaren:
 
 - **Aldrig push --force till main.** Om push avvisas pga non-fast-forward: kör `git pull --rebase` (steg 3) igen, lös eventuella konflikter, försök igen.
 - **Aldrig --no-verify.** Om pre-commit-hook failar: fixa felet och gör om committen.
-- **Skippa inte deploy-väntan.** Att purga cachen innan deployen är klar tjänar ingenting — den gamla buildet ligger fortfarande på Firebase Hosting tills GH Actions är klart.
+- **Skippa inte deploy-väntan.** Att purga cachen innan deployen är klar tjänar ingenting — den gamla buildet ligger fortfarande på Firebase Hosting tills GH Actions är klart. Väntar körningen på Malins godkännande: säg till och sluta polla (steg 5).
 - **Om `.env.local` saknar `CF_*`:** purgen kan inte köras. Säg till användaren att lägga in `CF_ZONE_ID` och `CF_API_TOKEN`.
 - **Quality gates körs i workflow, inte här.** Om du är osäker på om koden är grön kan du köra `npm run lint && npm run typecheck` lokalt innan steg 4 — men det är inte ett krav. Workflow-en är auktoritativ.

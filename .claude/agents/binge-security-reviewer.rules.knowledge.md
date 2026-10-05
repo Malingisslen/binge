@@ -140,8 +140,8 @@ Read only when the staged diff touches this chapter's paths (see .claude/shared-
   (Art. 17). Export/erasure stay whole only because they carry
   `d.id`/`d.ref` from the snapshot and never re-derive an id — pin BOTH, live.
 
-## Deploy order (deploy.yml is hosting-only)
-- Order is direction-dependent — decide it. Name a TARGETED command (`--only
-  functions:availableNotify`), never a blanket `--only functions`. Rules/indexes go FIRST when new client code
-  depends on them (a CG export query deployed before its rules makes export AND deletion throw for everyone);
-  AFTER hosting when a new constraint would deny writes from the OLD still-running client (BIN-540).
+## Deploy order (deploy.yml ships rules and functions before the site, BIN-1426)
+- Order is direction-dependent — decide it. One run deploys rules, indexes and functions, after Malin's
+  approval, and then the site: right when new client code depends on them (a CG export query deployed before
+  its rules makes export AND deletion throw for everyone). A new constraint that would deny writes from the
+  OLD still-running client needs that client in an EARLIER push (BIN-540).

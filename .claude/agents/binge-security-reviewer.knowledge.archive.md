@@ -11537,3 +11537,19 @@ the two tests' literals to 200/201, or (b) get Malin's sign-off and log a dated 
 naming why 300 was chosen. The transferable shape — diff a staged literal bound against the ticket's own
 `tasks/todo.md` plan and panel-conditions text, not just against the diff's own tests — is folded into the
 rules chapter in place, next to the `hasOnly` bullet it is a sibling of.
+
+### 2026-10-05 — BIN-1426: deploy.yml deploys rules and functions after Malin's approval
+
+`.github/workflows/deploy.yml` gained a `backend` job. After the rules tests, and once Malin approves the run
+in the `backend` environment, it deploys the rules, indexes and functions that changed since the last
+successful run, before the hosting job starts. The rules chapter's deploy-order bullet assumed a hosting-only
+workflow and hand deploys by exact function name; it is superseded in place in
+`binge-security-reviewer.rules.knowledge.md`. The ordering it carried (rules before new client code that needs
+them, the client first for a constraint the old client would fail) survives there. The retired wording,
+verbatim:
+
+  ## Deploy order (deploy.yml is hosting-only)
+  - Order is direction-dependent — decide it. Name a TARGETED command (`--only
+    functions:availableNotify`), never a blanket `--only functions`. Rules/indexes go FIRST when new client code
+    depends on them (a CG export query deployed before its rules makes export AND deletion throw for everyone);
+    AFTER hosting when a new constraint would deny writes from the OLD still-running client (BIN-540).

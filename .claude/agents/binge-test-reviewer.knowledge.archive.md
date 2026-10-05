@@ -29495,3 +29495,195 @@ HEAD, not a weakening. Two non-blocking fixture gaps: P3 (no whitespace in the P
 fixture, so `sent` vs `next` is indistinguishable) and A3 (no whitespace in the clamp fixture).
 Lesson folded into the core card's fixture-ordering bullet: a trim-then-clamp write has three
 candidate strings, and the fixture needs padding AND over-cap length.
+
+## 2026-10-05 — BIN-1426 part 2: the approval gate and the site gate (check-deploy-drift.test.mjs)
+
+**Diff reviewed.** Staged on `claude/project-thread-01w0zn` over HEAD 8443e2a6. Index blobs:
+`scripts/check-deploy-drift.mjs` 205879fa, `scripts/check-deploy-drift.test.mjs` 81f4f3b0,
+`scripts/scripts-self-tests-present.test.mjs` a1706740, `.github/workflows/deploy.yml` 71015b6b.
+The test diff removes no assertion: its only `-` lines are the header comment and two import
+lines. The self-tests-present change is comment-only (REQUIRED and MIN unchanged).
+
+**Rig.** `git worktree add --detach <scratchpad>/rig HEAD`, then `git apply` of
+`git diff --cached --binary`; all four rig blobs hash-equal to the index. `npm --prefix rig ci`
+(a real directory, no symlink leaving the rig). Harness: `node_modules/.vite/vitest` removed
+before every run; clean control first as an abort condition: 168/168 in the drift file
+(172/172 with self-tests-present). Each mutant: exact anchor matched once, landing proven by a
+changed `git hash-object`, restored from a snapshot and hash-verified against the index.
+
+**Mutants and the tests that failed** (`npx vitest run --project product <file> --reporter=json`):
+- M1 `gateMain` `return 1`→`return 0`: SURVIVED, 168/168.
+- M2 `siteGateMain` `return 1`→`return 0`: SURVIVED, 168/168.
+- M3 deploy.yml `if: false` on the Approval gate step: SURVIVED.
+- M4 deploy.yml `if: always()` on "Deploy rules and functions": SURVIVED.
+- M5 `shallow !== 'false'`→`shallow === 'true'`: SURVIVED.
+- M6 `if (run.head_sha === sha) continue;` deleted: 1 failed, the real-git "the site gate
+  refuses a commit older than one a successful run deployed". The `newerDeployedRun` unit
+  stub answers `merge-base --is-ancestor A A` with a throw, where real git exits 0.
+- M7 deploy.yml `- if: false` as the Site gate step's first key: SURVIVED
+  (`not.toMatch(/^\s*if:/m)` does not see `- if:`).
+- M8 Approval gate `run:` + `|| true`: SURVIVED. M9 Site gate `run:` + `|| true`: SURVIVED.
+- A1 gate reads `origin/main`: 4 failed (real-git re-run test, 2 gateProblem, wiring).
+- A2 shallow check deleted: 1 failed. A3 stale ancestry reversed: 4 failed. A4 site gate
+  always null: 1 failed (real-git). A5 unfetched-tip try/catch deleted: 1 failed.
+  A6 hosting checkout `fetch-depth: 1`: 1 failed.
+- B1 rejection beside approval ignored: 1. B2 `if (refused) return refused;` deleted: 1.
+  B3 mainTip type check deleted: 1. B4 COMMIT_ID filter deleted: 1 (lastDeployedRun only).
+  B5 sort deleted: 3. B6 newer ancestry swapped: 2. B7 stale filter on `reason` deleted: 1.
+  B8 `approvalProblem(raw, 'production')`: 5. B9 head check deleted: 1.
+  B10 stale ancestry try/catch deleted: 2. B11 stale drift ignored: 2.
+
+**Probes** (rig-only test files, deleted before teardown):
+- `main(['--approval-gate'], {env, git, gh, log, err})` → 1 with `[]` approvals, 0 with an
+  approval; `main(['--site-gate'], …)` → 0 with no runs, 1 with a newer successful run.
+  Clean 2/2; M1 killed by the approval probe only; M2 by the site probe only.
+- The staged describe's own parse, plus: gate `run:` by equality, `/^\s*(- )?if:/m` absent
+  on both gate steps and on the key step. Clean 2/2; M3, M4, M7, M8, M9 each killed.
+
+**Verdict:** fail, 1 blocking. Neither gate mode's exit code is executed by any test, and #25's
+binding condition says both gates refuse and are tested. Non-blocking: the deploy.yml
+refusal routes above; the shallow check's fail-closed direction (M5); the `newerDeployedRun`
+stub's non-reflexive ancestry (M6).
+
+**Teardown.** `node scripts/shared-guard.mjs worktree-cleanup <rig>` failed open (the
+workflow-guards plugin is not installed in this container). The rig's `node_modules` was a
+real directory with no outward symlink, so `git worktree remove --force` plus
+`git worktree prune`; the shared `node_modules` held 449 entries before and after.
+
+**Knowledge fold:** two existing bullets in `binge-test-reviewer.tooling.knowledge.md`, the
+text-level wiring bullet (workflow refusal routes) and the CLI exit-code bullet.
+
+## 2026-10-05 — BIN-1426 part 2, round 2: round-1 findings closed; job-level routes in deploy.yml unpinned
+
+**Diff reviewed.** Same branch over HEAD 8443e2a6. Index blobs: `scripts/check-deploy-drift.mjs`
+983b56f8 (round 1: 205879fa), `scripts/check-deploy-drift.test.mjs` 709ade0b (round 1: 81f4f3b0),
+`scripts/scripts-self-tests-present.test.mjs` a1706740 and `.github/workflows/deploy.yml` 71015b6b
+(both unchanged since round 1). Prod delta, `git diff 205879fa 983b56f8`: `RUNS_PER_PAGE = 100`;
+`deployedRunsPath` drops `branch=main&status=success` for `per_page=${RUNS_PER_PAGE}`;
+`successfulRuns` filters `head_branch === 'main'` itself; the no-run fallback sentence names the
+page size. Test delta, `git diff 81f4f3b0 709ade0b`: its `-` lines are round 1's weaker forms
+(`toContain('Hittade ingen lyckad körning')`, a lone `/^\s*if:/m`, one shallow answer, the
+non-reflexive stub, the old path), each replaced by a stricter one. Against HEAD the test diff
+still removes no assertion.
+
+**Rig.** `git worktree add --detach <scratchpad>/tr2rig HEAD`, `git apply` of
+`git diff --cached --binary`; all four blobs hash-equal to the index. `npm ci --ignore-scripts`
+(lefthook is a devDependency; skipping scripts keeps its postinstall away from the shared
+`.git/hooks`, whose sha1s matched before and after). `node_modules/.vite` removed before every
+run; a clean control first as an abort condition, 175/175 (171 drift + 4 self-tests) in each of
+three passes. Each mutant: anchor matched exactly once (M1's first anchor matched both gate mains
+and was re-anchored as M1b), landing proven by content and a changed `git hash-object`, still in
+place after the run, restored and hash-verified against the index.
+
+**Mutants** (`npx vitest run --project product scripts/check-deploy-drift.test.mjs --reporter=json`),
+failed tests per mutant:
+- Round 1's survivors, all killed now: M1b `gateMain` `return 1`→`0`: 2 (real-git re-run test,
+  gateProblem through main). M2 `siteGateMain`: 2 (real-git site test, siteGateProblem through
+  main). M3 `if: false` on Approval gate: 1. M4 `if: always()` on Deploy rules and functions: 1.
+  M5 `shallow === 'true'`: 1. M6 own-commit skip deleted: 3 (real-git site test and both
+  newerDeployedRun unit tests). M7 `- if: false` first key on Site gate: 1. M8, M9 `|| true` on
+  either gate `run:`: 1 each.
+- New pins: M10 `if: always()` on the hosting deploy step: 1. M11 hosting deploy step moved
+  before Build: 1. M12 `continue-on-error` on Deploy rules and functions: 1. M14
+  `continue-on-error` on Site gate: 1.
+- This change: N1 path filtered again: 3. N2 `head_branch` filter dropped: 3. N3
+  `RUNS_PER_PAGE = 50`: 4. Also A4 site gate always null: 2. B5 sort deleted: 3. X7 GITHUB_REF
+  check disabled: 4. X8 shallow compared with an untrimmed `'true\n'`: 1.
+- SURVIVED, 171/171: X1 `(run?.head_branch ?? 'main') === 'main'` (inert: every trigger of
+  deploy.yml sets `head_branch`; not filed). X2 job-level `continue-on-error: true` on `backend`.
+  X3 the same on `rules-tests`. X6 the same on `deploy`. X4 hosting job `if:` with
+  `needs.checks.result == 'success' &&` turned into `||`. X5 hosting job `if:` prefixed
+  `always() ||`.
+
+**Full product project in the rig:** 4867 tests, 4862 passed, 5 skipped, 0 failed. The process
+project was not re-run.
+
+**Verdict:** pass, 0 blocking. Non-blocking: the hosting job's `if:` is pinned conjunct by
+conjunct with `toContain`, so X4/X5 let the site deploy past a red `checks` job with the suite
+green; pin the line by equality. X2/X3: GitHub's workflow-syntax docs say job-level
+`continue-on-error` keeps the run from failing when the job fails, and `lastDeployedRun` then
+takes that commit as the next base, so a refused or untested rules change is neither deployed nor
+named again; the step-level form (M12) is pinned, the job-level form is not. X6: a refused site
+gate or a failed build ends in a green run. What `needs.<job>.result` reads for such a job was not
+verified here. Info, wording: three test names say the code asks GitHub "for the successful runs";
+since this change the request is unfiltered.
+
+**Teardown.** `node scripts/shared-guard.mjs worktree-cleanup <rig>` failed open (plugin absent).
+The rig's `node_modules` was a real directory and no symlink in it resolved outside the rig, so
+`git worktree remove --force` plus `git worktree prune`; the shared `node_modules` held 449
+entries before and after.
+
+**Knowledge fold:** the tooling chapter's workflow-text bullet gained the job-level twins (a job
+`if:` pinned by equality; job-level `continue-on-error` once a later run reads this run's
+conclusion).
+
+## 2026-10-05 — BIN-1426 part 2, round 3: the runner buffer pin, and the ENOBUFS my round-2 pass missed
+
+**Diff reviewed.** Same branch over HEAD 8443e2a6. Index blobs: `scripts/check-deploy-drift.mjs`
+93fe3615 (round 2: 983b56f8), `scripts/check-deploy-drift.test.mjs` 0f353fa4 (round 2: 709ade0b),
+`.github/workflows/deploy.yml` 172f686c (round 2: 71015b6b; its delta is a comment beside the
+backend deploy step), `scripts/scripts-self-tests-present.test.mjs` a1706740 (unchanged). The
+round's delta came from the coordinator as an index-to-index diff. Prod: `RUN_OPTIONS` (utf8,
+piped stdio, `maxBuffer` 64 MiB) exported and passed verbatim by `runGit` and `runGh`; `runGh`
+had no `maxBuffer` before. Tests: new "both runners read an answer past the default buffer"
+(a 2 MiB answer from a node child through `RUN_OPTIONS`, plus a text pin of each runner's call);
+the hosting job's `if:` pinned by one equality on the whole line, replacing the per-conjunct
+`toContain`s (each old substring is inside the new expected line, so strictly stronger); new
+"no job is marked continue-on-error" (`/^ {4}continue-on-error:/` per job); four renames, the
+backend-job one narrowed to "its npm installs run no install script" with its assertions
+unchanged. Against HEAD the test diff still removes no assertion (`git diff --cached` `-` lines:
+the header comment and two import lines).
+
+**Measured.** `gh api "repos/Malingisslen/binge/actions/workflows/deploy.yml/runs?per_page=100"`
+written to a file, then `wc -c`: 1265359 bytes. `execFileSync('cat', [that file], { encoding: 'utf8', stdio })`
+without `maxBuffer` threw ENOBUFS; with `RUN_OPTIONS` it read the answer and parsed 100 runs.
+The test's 2 MiB fixture is larger than the real answer.
+
+**Rig.** `git worktree add --detach <scratchpad>/tr3rig HEAD`, `git apply` of
+`git diff --cached --binary`; the four blobs hash-equal to the index, and the rig's diff stat
+against HEAD equal to the index's. `npm ci --ignore-scripts`; `.git/hooks` sha1s equal before and
+after. `node_modules/.vite` removed before every run; clean control 173/173 first (abort
+condition) and again after each pass. Each mutant: anchor matched once, landing proven by
+content and a changed `git hash-object`, still in place after the run, restored and
+hash-verified against the index.
+
+**Mutants** (`npx vitest run --project product scripts/check-deploy-drift.test.mjs --reporter=json`):
+- M1 `RUN_OPTIONS` without `maxBuffer`: 1 failed, "both runners read an answer past the default
+  buffer". M2 `maxBuffer` 1.5 MiB: 1, same test. M4 `runGh` with the pre-fix inline options: 1,
+  same test. M5 `runGit` with its own inline options: 1, same test.
+- M3 `RUN_OPTIONS` without `encoding`: SURVIVED 173/173 — `toHaveLength` also passes a Buffer.
+  Live against real git with a stub `gh` answering an empty run list: clean, `--site-gate` exit 0
+  and `--since-last-deploy` exit 0 writing its output file; M3, `--site-gate` exit 1 "kan inte
+  läsa om klonen har hela historiken" and `--since-last-deploy` exit 1 "git(...).trim is not a
+  function" with no output file. Fails closed.
+- M6 hosting `if:` prefixed `always() ||`: 1 failed, "the report step fails the checks job when
+  it fails, and the site requires its answer". M7 the `&&` after `needs.checks.result == 'success'` turned into `||`: 1, same test. (Round 2's
+  X4/X5 survivors.)
+- M8–M11 job-level `continue-on-error: true` on checks, rules-tests, backend, deploy: 1 failed
+  each, "no job is marked continue-on-error". (Round 2's X2/X3/X6 and the checks twin.)
+- M12 the same on backend with a quoted key, `"continue-on-error": true`: SURVIVED. js-yaml
+  parses it to the same `continue-on-error` key.
+- S1 step-level `continue-on-error: true` on the checks job's `Test` step: SURVIVED. S2 the same
+  on `Rules tests (Firestore emulator)`: SURVIVED. Either lets failing tests end in a green job
+  that the backend job's `needs` and the hosting `if:` accept. Not introduced this round.
+
+**Also in the rig:** full product project 4869 tests, 4864 passed, 5 skipped, 0 failed; process
+project 447/447; `node scripts/check-workflow-map.mjs` exit 0 with one baseline-staleness warning
+on flow2, which the staged map change does not touch.
+
+**Verdict:** pass, 0 blocking. Non-blocking: M3 (assert the answer is a string); M12/S1/S2 (the
+`continue-on-error` pins are per form and per step — one allowlist over every job and step would
+close all three).
+
+**My round-2 miss.** Round 2 passed the unfiltered `per_page=100` request with every `gh` call
+injected. The real answer outgrew `execFileSync`'s default buffer, so `--since-last-deploy` and
+`--site-gate` would have died ENOBUFS on the first real run. The coordinator found it, not me.
+
+**Teardown.** `node scripts/shared-guard.mjs worktree-cleanup <rig>` failed open (plugin absent).
+The rig's `node_modules` was a real directory and no symlink in the rig resolved outside it, so
+`git worktree remove --force` plus `git worktree prune`; the shared `node_modules` held 449
+entries before and after, and the reviewed files' worktree blobs still equal the index.
+
+**Knowledge fold:** the tooling chapter's Extract-then-test bullet gained the injected-runner
+blind spot (measure the real answer; one execution through the exported options with a bigger
+fixture, asserted as a string).

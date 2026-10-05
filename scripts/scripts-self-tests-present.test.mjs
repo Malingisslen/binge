@@ -66,9 +66,9 @@ const REQUIRED = [
   // rules suite at all, so this wrapper is the only thing asserting that suite ever
   // RAN — a floor that stops measuring is indistinguishable from a healthy run.
   'run-rules-tests.test.mjs',
-  // The deploy workflow's rules/functions guard. It decides whether a push may ship
-  // hosting without a manual rules/functions deploy, so a test file that stops running
-  // leaves that decision unverified in both directions.
+  // BIN-1426. The deploy workflow's rules/functions check. It decides what the backend job
+  // deploys and refuses a run nobody approved, so a test file that stops running leaves
+  // both decisions unverified.
   'check-deploy-drift.test.mjs',
 ];
 

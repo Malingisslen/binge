@@ -463,7 +463,7 @@
       "Firestore migrations"
     ],
     "tierDExamples": [
-      "rules/functions deploy (deploy.yml does NOT do these)",
+      "approving the rules/functions deploy (deploy.yml's backend environment)",
       "Firebase Console step",
       "Cloudflare action",
       "TMDB key",
@@ -492,7 +492,7 @@
       "deployAfterCommit": [
         {
           "name": "await-deploy",
-          "run": "poll `gh run list --workflow=deploy.yml --branch=main` for the run matching HEAD until completed (~30s apart, build takes 3-5 min)",
+          "run": "poll `gh run list --workflow=deploy.yml --json databaseId,headSha,status,conclusion` for the run whose headSha is HEAD until completed (~30s apart); no such run yet means GitHub has not created it, so ask again. Pick the run in the answer, not with a filter in the query: GitHub's branch-filtered list was stale for this repo on 2026-10-05 (compare `gh run list --workflow=deploy.yml --branch=main --limit=1` with the same command without `--branch=main`). A push that touches only what deploy.yml's paths filter excludes starts no run: skip this step and the purge. Status `waiting` (Waiting for review) means the backend job waits for Malin's approval (BIN-1426): tell her, never approve it, stop polling, and purge only once the run completes green. Status `pending` means it queues behind another deploy.yml run: if `gh run list --workflow=deploy.yml --limit=5 --json databaseId,status` shows one `waiting`, do the same; otherwise keep polling.",
           "guard": "conclusion must be success â€” on failure show `gh run view <id> --log-failed`, STOP, and do NOT purge (visitors would get the old build unshielded)"
         },
         {

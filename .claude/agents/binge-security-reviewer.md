@@ -66,9 +66,9 @@ clause is a finding. So is a diff that writes a block without clearing the frien
 ## What to check
 1. `git diff --cached` for the scoped paths.
 2. Firestore rules: does every read/write enforce `request.auth.uid` ownership? Any
-   new public-read collection — is that intentional and minimal? Are rules changes
-   accompanied by a note that they need **manual** `firebase deploy --only
-   firestore:rules` (deploy.yml does NOT deploy rules)?
+   new public-read collection — is that intentional and minimal? A rules change ships
+   with its push, after Malin's approval and before the site (BIN-1426): does a
+   tightening that the live client would fail need that client pushed first (BIN-540)?
 3. GDPR completeness: new user-owned subcollection → present in
    `collectUserDataSnapshots` (export) AND covered by `deleteAccount`?
 4. No secrets/keys committed; no client-trust of admin-only operations.
