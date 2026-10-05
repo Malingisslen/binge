@@ -100,11 +100,11 @@ export default function SeasonEpisodePanel({
 
   return (
     <div className="bg-bg-2 border-t border-rule-2">
-      <div className="px-4 pt-2 pb-2 flex gap-2">
+      <div className="px-0 sm:px-4 pt-2 pb-2 flex gap-2">
         {!allWatched && airedCount > 0 && (
           <button
             onClick={() => markSeasonWatched(seasonNumber, episodes.length)}
-            className="px-[10px] py-[3px] rounded-sm text-xxs font-semibold border-none cursor-pointer bg-acc-deep text-on-acc"
+            className="min-h-[28px] px-[10px] py-[3px] rounded-sm text-xxs font-semibold border-none cursor-pointer bg-acc-deep text-on-acc"
           >
             Markera alla sedda
           </button>
@@ -115,13 +115,13 @@ export default function SeasonEpisodePanel({
               seasonNumber,
               episodes.filter(ep => isWatched(seasonNumber, ep.episode_number)).map(ep => ep.episode_number),
             )}
-            className="px-[10px] py-[3px] rounded-sm text-xxs font-semibold border border-rule cursor-pointer bg-surface text-ink-2"
+            className="min-h-[28px] px-[10px] py-[3px] rounded-sm text-xxs font-semibold border border-rule cursor-pointer bg-surface text-ink-2"
           >
             Avmarkera alla
           </button>
         )}
       </div>
-      <div className="px-4 pb-3">
+      <div className="px-0 sm:px-4 pb-3">
         <div className="eps">
           {episodes.map(ep => (
             <PanelEpisodeRow

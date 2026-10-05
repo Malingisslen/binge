@@ -6,6 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useMarkSeen } from '@/hooks/useMarkSeen';
 import { useClickOutside } from '@/hooks/useClickOutside';
+import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useToast } from '@/contexts/ToastContext';
 import { statusLabel, statusMenuLabel, statusOptionsFor } from '@/lib/watchStatus';
 import { clearEpisodeProgress } from '@/lib/firebase/episodeProgress';
@@ -106,6 +107,10 @@ export default function StatusButton({
   const labelFor = (s: WatchStatus) => statusLabel(s, mediaType);
   const close = useCallback(() => setOpen(false), []);
   useClickOutside(ref, close);
+  // A11Y-2: Escape closes the menu and puts focus back on the button that opened it.
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const closeAndRefocus = useCallback(() => { setOpen(false); triggerRef.current?.focus(); }, []);
+  useEscapeKey(open, closeAndRefocus);
 
   async function handleSelect(status: WatchStatus, countsAsViewing = false) {
     setOpen(false);
@@ -172,6 +177,8 @@ export default function StatusButton({
   return (
     <div className="relative" ref={ref}>
       <button
+        ref={triggerRef}
+        aria-expanded={open}
         onClick={() => {
           // BIN-714: first, and before every library gate — see the hook.
           if (signedOut) { goToLogin(); return; }

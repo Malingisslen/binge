@@ -131,6 +131,20 @@ describe('EpisodeRow — the group spoiler mask (BIN-821)', () => {
     expect(screen.queryByText('Visa ändå')).toBeNull();
   });
 
+  it('reveals from a real button, so a keyboard can open it too (A11Y-2)', () => {
+    // The reveal used to sit on a click-only <div>: no tab stop, no role, nothing for a
+    // switch or screen reader to press. A <button> gets Enter and Space for free, so the
+    // proof is the role and its name, plus the press itself.
+    renderRow({}, { spoilerMasked: true });
+
+    const reveal = screen.getByRole('button', { name: /S2E05.*Visa ändå/ });
+    expect(reveal.tagName).toBe('BUTTON');
+    expect(reveal).toHaveAttribute('type', 'button');
+    fireEvent.click(reveal);
+
+    expect(screen.getByText('Fly')).toBeInTheDocument();
+  });
+
   it('renders normally when no mask was requested', () => {
     // The false branch. Without it, "mask everything, always" is green.
     renderRow();
