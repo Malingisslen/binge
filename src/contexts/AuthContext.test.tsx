@@ -635,6 +635,99 @@ describe('AuthContext — setProviderCost/setProviderCampaign rollback vid write
   });
 });
 
+// Paket I (2026-10-05): introduktionen sparar flera nivåer i en skrivning.
+describe('AuthContext — updateProviderTiers', () => {
+  it('skriver varje nivå per nyckel och behåller alla lokalt', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerTiers: { 337: 'ads' }, providerCosts: { 8: 150 } });
+    setDoc.mockClear();
+
+    await act(async () => { await ctx!.updateProviderTiers({ 8: 'basic', 76: 'reklam' }); });
+
+    const writes = userDocWrites();
+    expect(writes).toHaveLength(1);
+    const [, payload] = writes[0] as [unknown, Record<string, unknown>];
+    expect(payload.providerTiers).toEqual({ 8: 'basic', 76: 'reklam' });
+    expect(payload.providerCosts).toEqual({ 8: '__delete__', 76: '__delete__' });
+    expect(ctx!.user?.providerTiers).toEqual({ 337: 'ads', 8: 'basic', 76: 'reklam' });
+    expect(ctx!.user?.providerCosts).toEqual({});
+  });
+
+  it('"ingen nivå" tar bort nyckeln på servern, inte bara lokalt', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerTiers: { 8: 'premium', 337: 'ads' } });
+    setDoc.mockClear();
+
+    await act(async () => { await ctx!.updateProviderTier(8, null); });
+
+    const [, payload] = userDocWrites()[0] as [unknown, Record<string, unknown>];
+    expect(payload.providerTiers).toEqual({ 8: '__delete__' });
+    expect('providerCosts' in payload).toBe(false);
+    expect(ctx!.user?.providerTiers).toEqual({ 337: 'ads' });
+  });
+
+  it('en blandad omgång: vald nivå tar bort egen kostnad, borttagen nivå rör den inte', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerTiers: { 337: 'ads' }, providerCosts: { 8: 150, 337: 60, 119: 59 } });
+    setDoc.mockClear();
+
+    await act(async () => { await ctx!.updateProviderTiers({ 8: 'basic', 337: null }); });
+
+    const [, payload] = userDocWrites()[0] as [unknown, Record<string, unknown>];
+    expect(payload.providerTiers).toEqual({ 8: 'basic', 337: '__delete__' });
+    expect(payload.providerCosts).toEqual({ 8: '__delete__' });
+    expect(ctx!.user?.providerTiers).toEqual({ 8: 'basic' });
+    expect(ctx!.user?.providerCosts).toEqual({ 337: 60, 119: 59 });
+  });
+
+  it('skriver på det kanoniska id:t och hoppar över okända tjänster', async () => {
+    renderAuth();
+    await login({ username: 'malin' });
+    setDoc.mockClear();
+
+    // 1899 är ett alias för Max (384); 999999 finns inte i katalogen.
+    await act(async () => { await ctx!.updateProviderTiers({ 1899: 'ads', 999999: 'x' }); });
+
+    const [, payload] = userDocWrites()[0] as [unknown, Record<string, unknown>];
+    expect(payload.providerTiers).toEqual({ 384: 'ads' });
+    expect(ctx!.user?.providerTiers).toEqual({ 384: 'ads' });
+  });
+
+  it('två samtidiga anrop för olika tjänster behåller båda lokalt', async () => {
+    renderAuth();
+    await login({ username: 'malin' });
+
+    await act(async () => {
+      await Promise.all([ctx!.updateProviderTier(8, 'basic'), ctx!.updateProviderTier(76, 'reklam')]);
+    });
+
+    expect(ctx!.user?.providerTiers).toEqual({ 8: 'basic', 76: 'reklam' });
+  });
+
+  it('en nekad skrivning ändrar ingenting lokalt och når anroparen', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerTiers: { 8: 'premium' } });
+    setDoc.mockRejectedValueOnce(new Error('permission-denied'));
+
+    await act(async () => {
+      await expect(ctx!.updateProviderTiers({ 8: 'basic' })).rejects.toThrow('permission-denied');
+    });
+    expect(ctx!.user?.providerTiers).toEqual({ 8: 'premium' });
+  });
+
+  it('en nivå katalogen inte känner till behandlas som "ingen nivå"', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerTiers: { 8: 'premium' } });
+    setDoc.mockClear();
+
+    await act(async () => { await ctx!.updateProviderTier(8, 'finns-inte'); });
+
+    const [, payload] = userDocWrites()[0] as [unknown, Record<string, unknown>];
+    expect(payload.providerTiers).toEqual({ 8: '__delete__' });
+    expect(ctx!.user?.providerTiers).toEqual({});
+  });
+});
+
 // BIN-531: setProviderRenewalDay shared the same mirror-ref-poisoning pattern
 // BIN-516 fixed in setProviderCost/setProviderCampaign — same test shape.
 describe('AuthContext — setProviderRenewalDay rollback vid write-fel (BIN-531)', () => {
@@ -2025,6 +2118,7 @@ describe('AuthContext — an aborted deletion is not resurrected (BIN-816)', () 
       ['updateNotificationSettings', () => ctx!.updateNotificationSettings({ priceDrops: true })],
       ['updateDefaultVisibility', () => ctx!.updateDefaultVisibility('public')],
       ['updateProviderTier', () => ctx!.updateProviderTier(8, null)],
+      ['updateProviderTiers', () => ctx!.updateProviderTiers({ 8: 'basic' })],
       // BIN-1154: den har skrivaren har en ANDRA lagring utanfor chokepointen,
       // sa den pinnar ocksa att en markerad session inte nar Auth-posten.
       // Ordningen mellan de tva skrivningarna ar hela skalet.
