@@ -435,6 +435,11 @@ Owns acquisition and the top of the funnel.
   `first_title_added`, `onboarding_completed` by step); group/session invite-share
   loops.
   → `src/app/page.tsx`, `src/lib/analytics.ts`
+- Sharing: the Dela button's UTM-tagged links and each shareable prefix's own link-preview
+  shell (BIN-1431).
+  → `src/lib/shareLink.ts`, `src/lib/shareLink.test.ts`, `src/lib/seo/shareShells.ts`,
+  `src/lib/seo/shareShells.test.ts`, `src/components/share/ShareButton.tsx`,
+  `src/components/share/ShareButton.test.tsx`
 - **Filer som saknade en ägande roll** (BIN-871). SEO-ytan, sidmetadata, sök och mätningen.
   → `src/app/sitemap.test.ts`, `src/hooks/usePageMeta.test.ts`, `src/hooks/usePageMeta.ts`, `src/hooks/useSearchBox.ts`, `src/hooks/useTitleLinkPrefetch.ts`, `src/lib/analytics.test.ts`, `src/lib/seo/contentFloor.test.ts`, `src/lib/seo/contentFloor.ts`, `src/lib/seo/contentFloorInput.test.ts`, `src/lib/seo/contentFloorInput.ts`, `src/lib/seo/franchiseCheapest.test.ts`, `src/lib/seo/franchiseCheapest.ts`, `src/lib/seo/genreHubs.test.ts`, `src/lib/seo/hubLinks.test.ts`, `src/lib/seo/hubLinks.ts`, `src/lib/seo/hubSeeds.test.ts`, `src/lib/seo/hubSeeds.ts`, `src/lib/seo/jsonLd.test.ts`, `src/lib/seo/selectionSeed.test.ts`, `src/lib/seo/withRetry.test.ts`, `src/lib/seo/withRetry.ts`, `src/lib/tmdb/selectionManifest.io.test.ts`, `src/lib/tmdb/selectionManifest.test.ts`, `src/lib/tmdb/seoCoverage.latinFilter.test.ts`, `src/lib/tmdb/seoCoverage.test.ts`, `src/lib/tmdb/selectionResolve.test.ts`
 
