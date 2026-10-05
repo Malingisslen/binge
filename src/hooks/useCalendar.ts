@@ -191,24 +191,6 @@ export function getWeekStart(date: Date): Date {
   return d;
 }
 
-export function formatWeekday(date: Date): string {
-  return date.toLocaleDateString('sv-SE', { weekday: 'short' }).slice(0, 3);
-}
-
-export function getMonthDays(year: number, month: number): Date[] {
-  const first = new Date(year, month, 1);
-  const startDay = first.getDay() || 7; // Monday=1
-  const start = new Date(first);
-  start.setDate(start.getDate() - (startDay - 1));
-  const days: Date[] = [];
-  for (let i = 0; i < 42; i++) {
-    const d = new Date(start);
-    d.setDate(d.getDate() + i);
-    days.push(d);
-  }
-  return days;
-}
-
 export function getWeekNumber(date: Date): number {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
   d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));

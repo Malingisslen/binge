@@ -50,7 +50,7 @@ export default function ForsvinnerListClient({
     return (
       <EmptyState
         title={`Inget känt försvinner från ${providerName} just nu`}
-        body="Vi vet inte om några titlar som lämnar den här tjänsten den närmaste tiden. Datumen kommer från Movie of the Night och uppdateras löpande — titta in igen."
+        body="Inga kända titlar lämnar den här tjänsten den närmaste tiden. Datumen kommer från Movie of the Night och uppdateras löpande, så titta in igen."
       />
     );
   }

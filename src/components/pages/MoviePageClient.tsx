@@ -174,7 +174,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   });
 
   if (isLoading) return <LoadingView variant="detail" label="Laddar filmen…" />;
-  if (!movie) return <NotFound crumb="Film" title="Filmen hittades inte." body="Vi kunde inte hitta den här filmen i TMDB." />;
+  if (!movie) return <NotFound crumb="Film" title="Filmen hittades inte." body="Den här filmen gick inte att hitta." />;
 
   // BIN-422: känd franchise → statisk, crawlbar /billigaste-länk (renderas
   // utanför ClientOnly nedan). Härledd ur build-initialData, inte ur den
