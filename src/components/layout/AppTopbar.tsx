@@ -8,6 +8,7 @@ import TopbarActions from './TopbarActions';
 import { useSearchBox } from '@/hooks/useSearchBox';
 import { detectMacLike, shortcutHint } from '@/lib/platform';
 import SearchDropdown from '@/components/search/SearchDropdown';
+import { TOPBAR_SEARCH_ID } from './MobileTabBar';
 
 // The new Direction-H topbar. Grid: 200px brand · 1fr week strip · 240px
 // search+avatar. On narrow screens the grid collapses to a single column
@@ -53,6 +54,7 @@ export default function AppTopbar() {
             <Search size={12} className="search-icon" aria-hidden="true" />
             <input
               ref={inputRef}
+              id={TOPBAR_SEARCH_ID}
               type="text"
               placeholder="Sök titel, person eller vän…"
               value={searchQuery}

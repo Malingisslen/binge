@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 672,
+  "patternCount": 673,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -67,6 +67,7 @@
         "src/hooks/useFcmToken.ts",
         "src/hooks/useSignedOutRedirect.ts",
         "src/lib/authErrors.ts",
+        "src/lib/cspHosts.test.ts",
         "src/lib/firebase/appCheck.ts",
         "src/lib/firebase/db.test.ts",
         "src/lib/firebase/db.ts",

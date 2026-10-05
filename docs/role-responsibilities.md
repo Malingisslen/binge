@@ -164,7 +164,7 @@ is the real boundary.
 - Server-authoritative rate limiting (`submitReport` callable).
 - App Check (reCAPTCHA v3, fail-closed default), CSP/HSTS headers, secrets via
   `NEXT_PUBLIC_*` / `defineSecret`, cache-clear on logout for shared devices.
-  → `firestore.rules`, `firebase.json`, `src/lib/firebase/appCheck.ts`, `src/lib/firebase/db.ts`
+  → `firestore.rules`, `firebase.json`, `src/lib/firebase/appCheck.ts`, `src/lib/firebase/db.ts`, `src/lib/cspHosts.test.ts`
 - **Which workflow actually runs on the path code takes** (BIN-1028). Read the `on:`
   block of every file in the workflows directory (written without backticks on purpose: the generator harvests every
   backtick-quoted tracked path in a section, so quoting the directory would seat this
