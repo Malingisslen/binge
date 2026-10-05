@@ -38,6 +38,7 @@ Alla färgvärden är oklch CSS-variabler i `globals.css :root`, speglade som Ta
 
 **Tvåaccentregel (bryt den inte):**
 - `--acc` / `acc`, `--acc-deep` / `acc-deep`, `--acc-soft` / `acc-soft` — **saffran** = "nu / live / avgörande" (CTA-knappar, live-indikatorer, veto, brand-mark)
+- `--on-acc` / `on-acc` — text på en `acc-deep`-fyllning. Aldrig `text-white` där: i mörkt läge är `on-acc` mörk (BIN-1434).
 - `--cal-deep` / `cal-deep`, `--cal-soft` / `cal-soft` — **plum** = "idag / tidpositionering" (WeekStrip today-cell, kalender today-kolumn)
 
 Blanda dem inte. Saffran är inte "kalender" och plum är inte "CTA".

@@ -201,7 +201,7 @@ function TodayMarker({ todayWeekIndex }: { todayWeekIndex: number }) {
       />
       <div
         aria-hidden
-        className="absolute px-[6px] py-[2px] bg-acc-deep text-white rounded-[2px] text-[9px] font-bold uppercase tracking-[0.5px] pointer-events-none z-30 whitespace-nowrap"
+        className="absolute px-[6px] py-[2px] bg-acc-deep text-on-acc rounded-[2px] text-[9px] font-bold uppercase tracking-[0.5px] pointer-events-none z-30 whitespace-nowrap"
         style={{ left: lineLeft, top: 0, transform: 'translateX(-50%)' }}
       >
         Idag ↓

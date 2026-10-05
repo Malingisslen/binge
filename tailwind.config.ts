@@ -36,6 +36,8 @@ const config: Config = {
         acc: 'var(--acc)',
         'acc-deep': 'var(--acc-deep)',
         'acc-soft': 'var(--acc-soft)',
+        'on-acc': 'var(--on-acc)',
+        'acc-deep-hover': 'var(--acc-deep-hover)',
 
         // Plum — today/picker/time-position
         'cal-deep': 'var(--cal-deep)',

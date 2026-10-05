@@ -199,7 +199,7 @@ function JoinSessionForm({
           <button
             type="submit"
             disabled={submitting}
-            className="px-3 py-[5px] bg-acc-deep text-white border-none rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
+            className="px-3 py-[5px] bg-acc-deep text-on-acc border-none rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
           >
             {submitting ? 'Går med…' : 'Gå med'}
           </button>
@@ -507,7 +507,7 @@ function SwipeCard({
           </button>
           <button
             onClick={() => onVote(cand, 'yes')}
-            className="flex-1 px-3 py-2 bg-acc-deep text-white rounded-sm text-xs font-semibold cursor-pointer flex items-center justify-center gap-1"
+            className="flex-1 px-3 py-2 bg-acc-deep text-on-acc rounded-sm text-xs font-semibold cursor-pointer flex items-center justify-center gap-1"
           >
             <Check size={14} /> Ja
           </button>
@@ -567,7 +567,7 @@ function CandidateTable({
                     </button>
                     <button
                       onClick={() => onVote(r.candidate, 'yes')}
-                      className={`px-[6px] py-[1px] rounded-sm border text-xxs cursor-pointer ${myVote === 'yes' ? 'border-acc-deep bg-acc-deep text-white' : 'border-rule bg-surface text-ink-2'}`}
+                      className={`px-[6px] py-[1px] rounded-sm border text-xxs cursor-pointer ${myVote === 'yes' ? 'border-acc-deep bg-acc-deep text-on-acc' : 'border-rule bg-surface text-ink-2'}`}
                     >
                       Ja
                     </button>
@@ -674,7 +674,7 @@ function MatchList({
                   <button
                     onClick={() => recordPick(m)}
                     disabled={pickingKey === key}
-                    className="px-2 py-[2px] text-xxs border border-acc-deep bg-acc-deep text-white rounded-sm cursor-pointer font-[inherit] disabled:opacity-50"
+                    className="px-2 py-[2px] text-xxs border border-acc-deep bg-acc-deep text-on-acc rounded-sm cursor-pointer font-[inherit] disabled:opacity-50"
                     title="Logga till gruppens filmkvällshistorik"
                   >
                     {pickingKey === key ? 'Sparar…' : 'Den här tar vi'}
