@@ -6,9 +6,10 @@ import { useAuth } from '@/hooks/useAuth';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useMarkSeen } from '@/hooks/useMarkSeen';
 import { useClickOutside } from '@/hooks/useClickOutside';
+import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useToast } from '@/contexts/ToastContext';
 import { statusLabel, statusMenuLabel, statusOptionsFor } from '@/lib/watchStatus';
-import { clearEpisodeProgress } from '@/lib/firebase/episodeProgress';
+import { useRemoveWithUndo } from '@/hooks/useRemoveWithUndo';
 import { buildWatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
 import { rewatchFields } from '@/lib/watchlistWrites';
 import { LIBRARY_UNAVAILABLE } from './libraryHold';
@@ -42,7 +43,8 @@ export default function StatusButton({
   tmdbStatus,
 }: StatusButtonProps) {
   const { uid, loading: authLoading } = useAuth();
-  const { getItem, upsertTitle, removeItem, listenerFailed, libraryKnown } = useWatchlist();
+  const { getItem, upsertTitle, listenerFailed, libraryKnown } = useWatchlist();
+  const removeWithUndo = useRemoveWithUndo();
   const markSeen = useMarkSeen();
   const goToLogin = useSignedOutRedirect();
   const { show: toast } = useToast();
@@ -106,6 +108,10 @@ export default function StatusButton({
   const labelFor = (s: WatchStatus) => statusLabel(s, mediaType);
   const close = useCallback(() => setOpen(false), []);
   useClickOutside(ref, close);
+  // A11Y-2: Escape closes the menu and puts focus back on the button that opened it.
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const closeAndRefocus = useCallback(() => { setOpen(false); triggerRef.current?.focus(); }, []);
+  useEscapeKey(open, closeAndRefocus);
 
   async function handleSelect(status: WatchStatus, countsAsViewing = false) {
     setOpen(false);
@@ -148,30 +154,17 @@ export default function StatusButton({
     // Same gate, same reason as handleSelect: no write, and therefore no
     // "borttagen" toast about a removal that did not happen.
     if (!ready) return;
-    // Serie med påbörjad historik: per-avsnitt-historiken sparas medvetet
-    // (återtillägg återupptar där man var) — säg det och erbjud full
-    // rensning. Se clearEpisodeProgress + docs/data-retention-policy.md.
     const ownerUid = uid;
     const hadProgress =
       mediaType === 'tv' && ownerUid != null && current?.lastWatchedSeason != null;
-    void removeItem(mediaType, tmdbId);
-    if (hadProgress && ownerUid) {
-      toast(`${title} borttagen. Avsnittshistoriken sparas.`, {
-        label: 'Rensa helt',
-        onClick: () => {
-          void clearEpisodeProgress(ownerUid, tmdbId)
-            .then(() => toast('Historiken rensad.'))
-            .catch(() => toast('Kunde inte rensa historiken. Försök igen om en stund.'));
-        },
-      });
-    } else {
-      toast(`${title} borttagen`);
-    }
+    removeWithUndo({ mediaType, tmdbId, title, progressOwnerUid: hadProgress ? ownerUid : null });
   }
 
   return (
     <div className="relative" ref={ref}>
       <button
+        ref={triggerRef}
+        aria-expanded={open}
         onClick={() => {
           // BIN-714: first, and before every library gate — see the hook.
           if (signedOut) { goToLogin(); return; }
