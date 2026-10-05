@@ -20,6 +20,10 @@
         "source": "/api/insights",
         "function": { "functionId": "apiInsights", "region": "europe-west1" }
       },
+      { "source": "/tillsammans/**", "destination": "/tillsammans/_/index.html" },
+      { "source": "/grupper/**", "destination": "/grupper/_/index.html" },
+      { "source": "/list/**", "destination": "/list/_/index.html" },
+      { "source": "/user/**", "destination": "/user/_/index.html" },
       { "source": "**", "destination": "/_/index.html" }
     ],
     "headers": [
