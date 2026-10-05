@@ -10,7 +10,7 @@ import { entryKey, entryHref, entryMetaLine } from '@/lib/calendar/entry';
 
 // Direction H filmstrip: up to 5 upcoming events (TV episodes or digital movie
 // releases) for the rest of this week. Each card is a duotone 2:3 poster +
-// title + meta line (day · S/E or "Digital release" · provider — provider
+// title + meta line (day · S/E or "Digitalt släpp" · provider — provider
 // visas när TMDB vet var titeln streamas, se streamingProviderName i
 // buildEntries; saknas data visas bara dag · kod).
 //
