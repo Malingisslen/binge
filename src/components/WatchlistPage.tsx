@@ -7,7 +7,7 @@ import {
   Search, Film, Tv, X, Check, SlidersHorizontal, ChevronDown, Library,
   Rows3, LayoutGrid, Grid3x3, CloudOff,
 } from 'lucide-react';
-import { posterUrl, titleHref } from '@/lib/tmdb/client';
+import { posterUrl, posterSrcSet, titleHref } from '@/lib/tmdb/client';
 import { getProvider } from '@/lib/tmdb/providers';
 import { seenDate } from '@/lib/seenDate';
 import ProviderDot from '@/components/ui/ProviderDot';
@@ -838,7 +838,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                 <>
                   <div className={`poster duo-${toneForId(item.tmdbId)} mb-[3px] ${selectMode && isSel ? 'outline outline-2 outline-acc-deep' : ''}`}>
                     {poster ? (
-                      <img src={poster} alt={item.title} loading="lazy" decoding="async" width={342} height={513} />
+                      <img src={poster} srcSet={posterSrcSet(item.posterPath, 'w342')} sizes="(max-width: 767px) 45vw, 140px" alt={item.title} loading="lazy" decoding="async" width={342} height={513} />
                     ) : (
                       <div className="absolute inset-0 flex flex-col items-center justify-center px-2 gap-1">
                         <Icon size={20} className="text-ink-3 opacity-40" />

@@ -35,14 +35,22 @@ export function buildCalendarEntries(
     // det seedade avsnittet ofta självaste säsongsfinalen. Utan detta skulle
     // det märkas isFinale: false eftersom array-maxet bara är E9.
     const seeded = show.next_episode_to_air;
-    const sameSeasonSeed =
-      seeded && (episodes.length === 0 || seeded.season_number === episodes[0].season_number)
-        ? seeded.episode_number
-        : 0;
+    // PERF-1: serier som slutat sända hämtar ingen säsong (needsSeasonFetch), så
+    // seriens senaste sända avsnitt seedas också — "Fortsätt titta" läser det via
+    // latestAiredEpisodeByShow. Specialavsnitt (säsong 0) seedas inte: ett S0-avsnitt
+    // som enda post skulle se ut som att man är ikapp.
+    const lastSeed =
+      show.last_episode_to_air && show.last_episode_to_air.season_number > 0
+        ? show.last_episode_to_air
+        : null;
+    const seasonNumber = episodes[0]?.season_number ?? seeded?.season_number ?? lastSeed?.season_number;
+    const sameSeasonSeeds = [seeded, lastSeed]
+      .filter((e): e is TMDBEpisode => e != null && e.season_number === seasonNumber)
+      .map(e => e.episode_number);
     const maxKnownEp = Math.max(
       0,
       ...episodes.map(e => e.episode_number),
-      sameSeasonSeed,
+      ...sameSeasonSeeds,
     );
     // BIN-13: korskolla mot säsongens FAKTISKA episode_count innan ett avsnitt
     // flaggas som final. TMDB:s säsong-array är community-redigerad och back-half-
@@ -50,7 +58,6 @@ export function buildCalendarEntries(
     // ett mittenavsnitt och ge fel "säsongsfinal"-badge. Sätt finaleEp bara när
     // listningen är KÄND komplett (når episode_count). Saknas episode_count →
     // ingen final (hellre fel åt säkra hållet).
-    const seasonNumber = episodes[0]?.season_number ?? seeded?.season_number;
     const seasonEpisodeCount = show.seasons?.find(s => s.season_number === seasonNumber)?.episode_count;
     const finaleEp =
       seasonEpisodeCount != null && maxKnownEp >= seasonEpisodeCount ? maxKnownEp : 0;
@@ -76,13 +83,14 @@ export function buildCalendarEntries(
         provider: providerName,
         runtime: ep.runtime ?? undefined,
         isPremiere: ep.episode_number === 1,
-        isFinale: finaleEp > 0 && ep.episode_number === finaleEp,
+        isFinale: finaleEp > 0 && ep.season_number === seasonNumber && ep.episode_number === finaleEp,
         genreIds: showGenreIds,
       });
     };
 
     for (const ep of episodes) push(ep);
     if (show.next_episode_to_air) push(show.next_episode_to_air);
+    if (lastSeed) push(lastSeed);
   }
 
   return result;

@@ -6,7 +6,7 @@ import { ChevronDown, ChevronUp, Film } from 'lucide-react';
 import { useMovie } from '@/hooks/useTMDB';
 import { usePageMeta } from '@/hooks/usePageMeta';
 import { JsonLd, movieSchema, breadcrumbSchema } from '@/components/title/JsonLd';
-import { posterUrl, profileUrl, logoUrl } from '@/lib/tmdb/client';
+import { posterUrl, posterSrcSet, profileUrl, logoUrl } from '@/lib/tmdb/client';
 import StatusButton from '@/components/title/StatusButton';
 import WatchedDateEditor from '@/components/title/WatchedDateEditor';
 import NotInterestedButton from '@/components/title/NotInterestedButton';
@@ -302,7 +302,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
           <div className={`poster duo-${tone}`}>
             {poster ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={poster} alt={displayTitle} loading="eager" fetchPriority="high" decoding="async" width={342} height={513} />
+              <img src={poster} srcSet={posterSrcSet(movie.poster_path)} sizes="(max-width: 760px) 140px, 240px" alt={displayTitle} loading="eager" fetchPriority="high" decoding="async" width={342} height={513} />
             ) : (
               <div style={{
                 width: '100%', height: '100%',

@@ -58,12 +58,46 @@ function getFreshMyGroups(uid: string): string[] | null {
 // nya grupp-id-listan (skulle kräva att känna till hela den gamla listan
 // eller ett extra read) — river bara cachen så nästa getFreshMyGroups-läsning
 // (t.ex. nästa syncProgressToGroups-anrop) tvingar en färsk bounded query.
-// Medlemskaps-BORTTAG (removeMember/deleteGroup) river inte cachen med
-// avsikt: en stale post där gör högst att syncProgressToGroups försöker
-// skriva progress till en grupp man precis lämnat — det failar tyst
-// (per-grupp try/catch, se syncProgressToGroups) och är ofarligt.
+// PERF-6: medlemskaps-BORTTAG (removeMember/deleteGroup) river den också, sedan
+// titelsidans gruppknapp läser cachen för att avgöra om den ska synas.
 function invalidateMyGroupsCache(uid: string): void {
   myGroupsCache.delete(uid);
+  // A read started before the change must not refill the cache with the old answer.
+  myGroupIdsInFlight.delete(uid);
+}
+
+const myGroupIdsInFlight = new Map<string, { promise: Promise<string[]> }>();
+
+/**
+ * PERF-6: användarens grupp-id:n — ur TTL-cachen om den är färsk, annars EN bounded
+ * query som fyller den. Samtidiga anrop delar samma läsning. Ett misslyckat svar
+ * cachas aldrig (som tom lista), det kastas till anroparen.
+ */
+export function getMyGroupIds(uid: string): Promise<string[]> {
+  const fresh = getFreshMyGroups(uid);
+  if (fresh != null) return Promise.resolve(fresh);
+  const pending = myGroupIdsInFlight.get(uid);
+  if (pending) return pending.promise;
+  // `read` identifies THIS read; an invalidation removes it, and a removed read must
+  // not cache its (pre-change) answer.
+  const read = {} as { promise: Promise<string[]> };
+  read.promise = (async () => {
+    const { db, collection, getDocs, query, where, limit: queryLimit } = await fsdb();
+    const snap = await getDocs(
+      query(
+        collection(db, 'groups'),
+        where('memberUids', 'array-contains', uid),
+        queryLimit(MY_GROUPS_LIMIT),
+      ),
+    );
+    const groupIds = snap.docs.map(d => d.id);
+    if (myGroupIdsInFlight.get(uid) === read) cacheMyGroups(uid, groupIds);
+    return groupIds;
+  })().finally(() => {
+    if (myGroupIdsInFlight.get(uid) === read) myGroupIdsInFlight.delete(uid);
+  });
+  myGroupIdsInFlight.set(uid, read);
+  return read.promise;
 }
 
 // Skapar en grupp och returnerar både groupId och plaintext-tokenet. Tokenet
@@ -738,6 +772,7 @@ export async function removeMember(groupId: string, uid: string): Promise<void> 
   // (no-op när medlemmen aldrig opt:at in; rules tillåter self + owner).
   batch.delete(doc(db, 'groups', groupId, 'household', uid));
   await batch.commit();
+  invalidateMyGroupsCache(uid);
 }
 
 /**
@@ -852,6 +887,7 @@ export async function deleteGroup(groupId: string, currentUid: string): Promise<
     refs.slice(i, i + CHUNK).forEach(ref => batch.delete(ref));
     await batch.commit();
   }
+  invalidateMyGroupsCache(currentUid);
 }
 
 export async function updateMemberProviders(
@@ -1138,19 +1174,7 @@ export async function syncProgressToGroups(params: {
   status?: string | null;
 }): Promise<void> {
   try {
-    let groupIds = getFreshMyGroups(params.uid);
-    if (groupIds == null) {
-      const { db, collection, getDocs, query, where, limit: queryLimit } = await fsdb();
-      const groupsSnap = await getDocs(
-        query(
-          collection(db, 'groups'),
-          where('memberUids', 'array-contains', params.uid),
-          queryLimit(MY_GROUPS_LIMIT),
-        ),
-      );
-      groupIds = groupsSnap.docs.map(d => d.id);
-      cacheMyGroups(params.uid, groupIds);
-    }
+    const groupIds = await getMyGroupIds(params.uid);
     if (groupIds.length === 0) return;
     const { db, doc, getDoc } = await fsdb();
     await Promise.all(groupIds.map(async groupId => {

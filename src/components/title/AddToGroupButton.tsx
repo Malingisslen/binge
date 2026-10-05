@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { UsersRound, Check } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useMyGroups } from '@/hooks/useGroups';
 import { useClickOutside } from '@/hooks/useClickOutside';
 import {
+  getMyGroupIds,
   addToGroupWatchlist,
   hasInGroupWatchlist,
   removeFromGroupWatchlist,
@@ -25,8 +26,21 @@ export default function AddToGroupButton({
   tmdbId, mediaType, title, posterPath, releaseYear,
 }: Props) {
   const { uid } = useAuth();
-  const { groups } = useMyGroups(uid);
   const [open, setOpen] = useState(false);
+  // PERF-6: whether to show the button at all comes from a one-shot, 5-min-cached read of
+  // the user's group ids (shared with syncProgressToGroups). The live group listener only
+  // opens with the menu. If that read fails the button shows anyway; the menu reads live.
+  const [hasGroups, setHasGroups] = useState(false);
+  useEffect(() => {
+    setHasGroups(false);
+    if (!uid) return;
+    let cancelled = false;
+    getMyGroupIds(uid)
+      .then(ids => { if (!cancelled) setHasGroups(ids.length > 0); })
+      .catch(() => { if (!cancelled) setHasGroups(true); });
+    return () => { cancelled = true; };
+  }, [uid]);
+  const { groups, loading: groupsLoading } = useMyGroups(uid, { enabled: open });
   const [presence, setPresence] = useState<Record<string, boolean>>({});
   const [working, setWorking] = useState<string | null>(null);
   // BIN-1298: the group watchlist rule refuses a write it does not recognise, so a
@@ -43,15 +57,18 @@ export default function AddToGroupButton({
     setPresence(Object.fromEntries(checks));
   }, [groups, mediaType, tmdbId]);
 
-  const onOpen = () => {
-    setOpen(v => {
-      const next = !v;
-      if (next) void refreshPresence();
-      return next;
-    });
-  };
+  // The live list lands after the menu opens, so presence is checked when it does.
+  const groupIdsKey = groups.map(g => g.id).join(',');
+  useEffect(() => {
+    if (open && groupIdsKey) void refreshPresence();
+    // Re-read presence when the menu opens or the set of groups changes, not on every
+    // live emission (a rename or member change re-emits the same groups).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, groupIdsKey]);
 
-  if (!uid || groups.length === 0) return null;
+  const onOpen = () => setOpen(v => !v);
+
+  if (!uid || !hasGroups) return null;
 
   return (
     <div className="relative inline-block" ref={ref}>
@@ -104,6 +121,12 @@ export default function AddToGroupButton({
               </button>
             );
           })}
+          {groupsLoading && (
+            <div className="px-2 py-[5px] text-xs text-ink-3">Hämtar grupper…</div>
+          )}
+          {!groupsLoading && groups.length === 0 && (
+            <div className="px-2 py-[5px] text-xs text-ink-3">Du är inte med i någon grupp.</div>
+          )}
         </div>
       )}
     </div>

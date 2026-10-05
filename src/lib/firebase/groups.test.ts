@@ -104,6 +104,8 @@ import {
   getPublicGroupName,
   addToGroupWatchlist,
   syncProgressToGroups,
+  getMyGroupIds,
+  removeMember,
   subscribeToMyGroups,
   getRecentSessionPicksAcrossGroups,
   refreshMyHouseholdContributions,
@@ -1675,5 +1677,46 @@ describe('removeMemberAsOwner — borttagningen först, spårraderingen efteråt
     await settle();
 
     expect(eraseMyGroupTracesMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('PERF-6: getMyGroupIds', () => {
+  it('two concurrent calls share ONE query', async () => {
+    getDocsMock.mockResolvedValueOnce({ empty: false, docs: [{ id: 'g1' }] });
+    const [a, b] = await Promise.all([getMyGroupIds('perf6-a'), getMyGroupIds('perf6-a')]);
+    expect(a).toEqual(['g1']);
+    expect(b).toEqual(['g1']);
+    expect(getDocsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('a failed read is not cached as an empty list — the next call queries again', async () => {
+    getDocsMock.mockRejectedValueOnce(new Error('unavailable'));
+    await expect(getMyGroupIds('perf6-b')).rejects.toThrow('unavailable');
+    getDocsMock.mockResolvedValueOnce({ empty: false, docs: [{ id: 'g9' }] });
+    await expect(getMyGroupIds('perf6-b')).resolves.toEqual(['g9']);
+    expect(getDocsMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('leaving a group drops the cached ids, so the next call reads fresh', async () => {
+    getDocsMock.mockResolvedValueOnce({ empty: false, docs: [{ id: 'g1' }] });
+    await getMyGroupIds('perf6-c');
+    await leaveGroup('g1', 'perf6-c');
+    getDocsMock.mockResolvedValueOnce({ empty: true, docs: [] });
+    await expect(getMyGroupIds('perf6-c')).resolves.toEqual([]);
+    expect(getDocsMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('PERF-6: invalidation vs a read already in flight', () => {
+  it('a membership change during the read keeps the old answer out of the cache', async () => {
+    let release!: (v: unknown) => void;
+    getDocsMock.mockImplementationOnce(() => new Promise(r => { release = r; }));
+    const stale = getMyGroupIds('perf6-d');
+    await vi.waitFor(() => expect(release).toBeDefined());
+    await removeMember('g1', 'perf6-d'); // invalidates while the read is pending
+    release({ empty: true, docs: [] });
+    await stale;
+    getDocsMock.mockResolvedValueOnce({ empty: false, docs: [{ id: 'g2' }] });
+    await expect(getMyGroupIds('perf6-d')).resolves.toEqual(['g2']);
   });
 });

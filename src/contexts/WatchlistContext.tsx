@@ -16,6 +16,7 @@ import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import { watchlistDocKey } from '@/lib/watchlistDocKey';
 import { isDeletionStarted } from '@/lib/deletionMarker';
 import { DELETION_IN_PROGRESS, isDeletionInProgressError } from '@/lib/deletionInProgressError';
+import { knownDocIds, mayExist } from '@/lib/watchlist/siblingDocs';
 import { buildStatusUpdate, normalizeTags, resolveCurrentWatchedAt, shouldStampVisibility, buildAddWrite, outcomeOfAddWrite, type WriteIntent, type TitleWriteOutcome } from '@/lib/watchlistWrites';
 import type { ItemVisibility, WatchlistItem, WatchStatus, MediaType } from '@/types';
 
@@ -423,6 +424,13 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   // subcollection (moved OFF the public/friends-readable watchlist doc). BIN-560
   // Phase 4: same composite-doc-id keying as tagsByTmdbId.
   const [notesByTmdbId, setNotesByTmdbId] = useState<Record<string, string>>({});
+  // COST-2: which watchlistTags / watchlistNotes docs exist, as of the last snapshot the
+  // SERVER confirmed — every doc id, including ones whose tags/note are empty, which the
+  // maps above leave out. null = unknown (no server-confirmed snapshot yet, a cache-only
+  // snapshot, a listener error, or a uid switch); removeItem then deletes unconditionally,
+  // as it always did. Refs, not state: removeItem is a useCallback([uid]).
+  const tagDocIdsRef = useRef<Set<string> | null>(null);
+  const noteDocIdsRef = useRef<Set<string> | null>(null);
   // Session guard for the eager notes migration so a mid-run re-render can't
   // re-issue the same batch (echo-proof; mirrors refreshTmdbFields' dedup).
   // BIN-560 Phase 4: composite-keyed (mediaTypeDocId) so a movie/TV tmdbId clash
@@ -643,9 +651,16 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   // from the watchlist listener (own collection, own rules) — doc id = tmdbId,
   // shape { tags: string[] }. Empty/absent → no entry (join defaults to []).
   useEffect(() => {
+    tagDocIdsRef.current = null;
     if (!uid) { setTagsByTmdbId({}); return; }
+    let first = true;
     return lazySubscribe(({ db, collection, onSnapshot }) =>
-      onSnapshot(collection(db, 'users', uid, 'watchlistTags'), (snap) => {
+      onSnapshot(collection(db, 'users', uid, 'watchlistTags'), { includeMetadataChanges: true }, (snap) => {
+        tagDocIdsRef.current = knownDocIds(snap);
+        // A metadata-only event (cache -> server, a write acknowledged) changes no
+        // content; skip the state update so the whole watchlist does not re-render.
+        if (!first && typeof snap.docChanges === 'function' && snap.docChanges().length === 0) return;
+        first = false;
         const map: Record<string, string[]> = {};
         snap.docs.forEach(d => {
           const tags = (d.data().tags as string[] | undefined) ?? [];
@@ -655,7 +670,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
           if (tags.length > 0) map[d.id] = tags;
         });
         setTagsByTmdbId(map);
-      }));
+      }, () => { tagDocIdsRef.current = null; }));
   }, [uid]);
 
   // BIN-505: parallel owner-only subscription for per-title notes — mirrors the
@@ -664,9 +679,16 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   // library size. Empty/absent → fall back to any legacy inline note in
   // docToItem until the eager migration below moves it off.
   useEffect(() => {
+    noteDocIdsRef.current = null;
     if (!uid) { setNotesByTmdbId({}); return; }
+    let first = true;
     return lazySubscribe(({ db, collection, onSnapshot }) =>
-      onSnapshot(collection(db, 'users', uid, 'watchlistNotes'), (snap) => {
+      onSnapshot(collection(db, 'users', uid, 'watchlistNotes'), { includeMetadataChanges: true }, (snap) => {
+        noteDocIdsRef.current = knownDocIds(snap);
+        // A metadata-only event (cache -> server, a write acknowledged) changes no
+        // content; skip the state update so the whole watchlist does not re-render.
+        if (!first && typeof snap.docChanges === 'function' && snap.docChanges().length === 0) return;
+        first = false;
         const map: Record<string, string> = {};
         snap.docs.forEach(d => {
           const note = d.data().note as string | undefined;
@@ -674,7 +696,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
           if (note) map[d.id] = note;
         });
         setNotesByTmdbId(map);
-      }));
+      }, () => { noteDocIdsRef.current = null; }));
   }, [uid]);
 
   // Join tags + notes onto items in-memory. Consumers read `item.tags` (default
@@ -1607,12 +1629,18 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     addedByProgressRef.current.delete(docKey);
     // Best-effort: drop the sibling tags + notes docs so they never orphan
     // (their own owner-only collections aren't cascaded by the watchlist delete).
-    try {
-      await deleteDoc(doc(db, 'users', uid, 'watchlistTags', docId));
-    } catch { /* no tags doc for this title — fine */ }
-    try {
-      await deleteDoc(doc(db, 'users', uid, 'watchlistNotes', docId));
-    } catch { /* no notes doc for this title — fine */ }
+    // COST-2: skipped only when the server-confirmed listener state says the doc does not
+    // exist — most titles have neither, so a removal is usually one delete, not three.
+    if (mayExist(tagDocIdsRef.current, docId)) {
+      try {
+        await deleteDoc(doc(db, 'users', uid, 'watchlistTags', docId));
+      } catch { /* no tags doc for this title — fine */ }
+    }
+    if (mayExist(noteDocIdsRef.current, docId)) {
+      try {
+        await deleteDoc(doc(db, 'users', uid, 'watchlistNotes', docId));
+      } catch { /* no notes doc for this title — fine */ }
+    }
   }, [uid]);
 
   // BIN-164: write the owner-only tags doc. normalizeTags enforces the per-tag
