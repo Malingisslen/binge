@@ -153,6 +153,20 @@ function availabilityLead(input: ContentFloorInput): string {
   return `${title} finns ännu inte på någon streamingtjänst i Sverige.`;
 }
 
+/**
+ * The availability answer as visible text for EVERY title page (SEO-2), not only
+ * the thin ones that get the full floor paragraph. When the title streams AND can
+ * be rented or bought, the rent/buy services are named in a second sentence; the
+ * lead alone covers the other cases.
+ */
+export function availabilityLine(input: ContentFloorInput): string {
+  const lead = availabilityLead(input);
+  const { stream, rent, buy } = input.providers;
+  const rentBuy = Array.from(new Set([...rent, ...buy]));
+  if (stream.length === 0 || rentBuy.length === 0) return lead;
+  return `${lead} Den går också att hyra eller köpa via ${providerPhrase(rentBuy)}.`;
+}
+
 function capFirst(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }

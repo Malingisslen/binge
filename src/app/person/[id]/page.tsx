@@ -11,6 +11,7 @@ import { collectPersonIds } from '@/lib/tmdb/seoPersonIds';
 import { resolveSelection, SelectionFloorError } from '@/lib/tmdb/selectionManifest';
 import { SEED_PERSON_IDS } from '@/lib/seo/selectionSeed';
 import { fetchForBuild, buildSignal, startBuildWatchdog, trackBuildCall } from '@/lib/tmdb/buildFetch';
+import { recordBuildFetchOutcome } from '@/lib/tmdb/buildCache';
 import { prunePersonSeed } from '@/lib/tmdb/personSeed';
 import { buildPersonDescription } from '@/lib/seo/contentFloor';
 import { personDescriptionInput } from '@/lib/seo/contentFloorInput';
@@ -28,7 +29,7 @@ export const dynamicParams = false;
  *
  * Personer utanför topp-N hanteras via catch-all + client-side rendering.
  *
- * Urvalet delas med src/app/sitemap.ts via urvalsmanifestet (BIN-823): den här
+ * Urvalet delas med src/lib/seo/sitemap.ts via urvalsmanifestet (BIN-823): den här
  * routen härleder och skriver, sitemapen läser samma fil. Tidigare körde båda
  * varsin kopia av samma härledning.
  */
@@ -80,6 +81,7 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
 
   try {
     const person = await cachedGetPerson(personId);
+    recordBuildFetchOutcome('person', personId, true);
     // BIN-656/686: the same builder the client uses, through the same adapter, so
     // the pre-rendered description and the one usePageMeta writes at hydration
     // cannot disagree — movie and tv already share their builder across both
@@ -110,6 +112,7 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
       },
     };
   } catch {
+    recordBuildFetchOutcome('person', personId, false);
     // Build-time TMDB-hämtning misslyckades för denna förrenderade person. Skicka
     // ALDRIG en indexerbar sida med root-layoutens default-title + canonical:/
     // (Google läser den som en homepage-dubblett). noindex + self-canonical tills
