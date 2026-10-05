@@ -140,7 +140,7 @@ export default async function BilligastePage({ params }: { params: Promise<PageP
         />
         <EmptyState
           title={`${franchise.name} — streamingläget uppdateras`}
-          body={`Vi kartlägger just nu var ${franchise.name} går att streama i Sverige. Titta in snart — sidan fylls på så fort tillgänglighetsdatan är klar.`}
+          body={`Var ${franchise.name} går att streama i Sverige kartläggs just nu. Titta in snart, sidan fylls på så fort tillgänglighetsdatan är klar.`}
           action={<Link href="/guider/" className="btn btn-acc btn-sm">Utforska fler streamingguider</Link>}
         />
         <div className="mt-6">

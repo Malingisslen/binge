@@ -17,6 +17,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { NotFound } from '@/components/ui/NotFound';
 import { markedSeen } from '@/lib/markedSeen';
+import ShareButton from '@/components/share/ShareButton';
 
 export default function UserProfilePageClient({ username }: { username: string }) {
   const { data, isLoading } = usePublicProfile(username);
@@ -106,6 +107,11 @@ export default function UserProfilePageClient({ username }: { username: string }
               targetOwnerUid={uid}
               targetOwnerName={card.displayName}
             />
+            {/* Publik profil: alla kan öppna länken. Egen profil: vännerna kan, även när
+                den bara syns för vänner — det är den länken Vänner-sidan ber om. */}
+            {(card.isPublic || isOwnProfile) && (
+              <ShareButton path={`/user/${username}/`} title={card.displayName} text={`${card.displayName} på Binge`} surface="profile" />
+            )}
             {isOwnProfile && (
               <Link href="/settings" className="text-xs text-acc-deep no-underline">Redigera profil</Link>
             )}

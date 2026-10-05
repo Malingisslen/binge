@@ -97,7 +97,7 @@ export default function HemFocal({ entry }: Props) {
               <span>{dayLabel} {new Date(entry.airDate + 'T00:00:00').getDate()}</span>
             )}
             {entry.provider && <span>{entry.provider}</span>}
-            <span>{entry.kind === 'movie' ? 'digital release' : `avsnitt ${entry.episodeCode}`}</span>
+            <span>{entry.kind === 'movie' ? 'digitalt släpp' : `avsnitt ${entry.episodeCode}`}</span>
           </div>
           <h2>
             <Link href={href} style={{ color: 'inherit', textDecoration: 'none' }}>

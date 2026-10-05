@@ -101,7 +101,7 @@ function LandingPage({ trending }: { trending?: React.ReactNode }) {
               <div className="text-xxs text-white/50 leading-snug max-w-[140px]">Se direkt vilken tjänst som har titeln.</div>
             </div>
             <div className="text-center">
-              <div className="text-xs font-bold text-acc mb-[3px]">Avsnittkalender</div>
+              <div className="text-xs font-bold text-acc mb-[3px]">Avsnittskalender</div>
               <div className="text-xxs text-white/50 leading-snug max-w-[140px]">Missa aldrig ett nytt avsnitt.</div>
             </div>
             <div className="text-center">
@@ -156,7 +156,7 @@ function EmptyLibrary() {
       <p>
         Lägg till några serier eller filmer du tittar på så börjar veckan ovan
         fyllas med dina avsnitt — och tjänster du inte använder dyker upp
-        som möjliga pauser i högerkolumnen.
+        som möjliga pauser i Streamingrådgivaren.
       </p>
       <div className="actions">
         <Link href="/series/" className="btn">Utforska serier</Link>

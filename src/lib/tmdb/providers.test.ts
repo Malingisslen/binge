@@ -147,14 +147,14 @@ describe('SE extraction through this module\'s alias map', () => {
   });
 });
 
-describe('B1 — Max rebrand (id 384)', () => {
-  it('renders the HBO Max provider under the name "Max"', () => { expect(getProvider(384)?.name).toBe('Max'); });
+describe('B1 — HBO Max (id 384), namnet tillbaka efter Max-perioden', () => {
+  it('renders id 384 under the name "HBO Max"', () => { expect(getProvider(384)?.name).toBe('HBO Max'); });
   it('keeps the legacy HBO Max alias 1899 mapped to id 384', () => {
     expect(getProvider(1899)?.id).toBe(384); expect(canonicalProviderId(1899)).toBe(384);
   });
-  it('lists Max exactly once', () => {
+  it('lists HBO Max exactly once', () => {
     const named = SWEDISH_PROVIDERS.filter(p => p.name === 'Max' || p.name === 'HBO Max');
-    expect(named).toHaveLength(1); expect(named[0].name).toBe('Max');
+    expect(named).toHaveLength(1); expect(named[0].name).toBe('HBO Max');
   });
 });
 describe('B1 — C More legacy id maps to TV4 Play (id 489)', () => {
@@ -173,9 +173,9 @@ describe('B1 — C More legacy id maps to TV4 Play (id 489)', () => {
 });
 
 describe('X3 — Amazon Channel-varianter canonicaliseras (live-verifierade SE-ids 2026-06-10)', () => {
-  it('mappar HBO Max Amazon Channel (1825) till Max (384)', () => {
+  it('mappar HBO Max Amazon Channel (1825) till HBO Max (384)', () => {
     expect(canonicalProviderId(1825)).toBe(384);
-    expect(getProvider(1825)?.name).toBe('Max');
+    expect(getProvider(1825)?.name).toBe('HBO Max');
   });
 
   it('mappar Apple TV Amazon Channel (2243) till Apple TV+ (350)', () => {

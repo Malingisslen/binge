@@ -18,21 +18,21 @@ export function entryHref(e: CalendarEntry): string {
   return `/${e.mediaType}/${e.tmdbId}/`;
 }
 
-/** Kort meta-rad: avsnittskod resp. "digital release". */
+/** Kort meta-rad: avsnittskod resp. "digitalt släpp". */
 export function entryMetaLine(e: CalendarEntry): string {
   // Gemener för att matcha entryBadge + HemFocal (BIN-16) — samma term ska se
   // likadan ut på alla ytor.
-  return e.kind === 'movie' ? 'digital release' : e.episodeCode;
+  return e.kind === 'movie' ? 'digitalt släpp' : e.episodeCode;
 }
 
 /**
  * Badge-text för kort. `isToday` ger "ny ikväll" / "släpps i dag". Annars
- * premiär/säsongsfinal för avsnitt, eller "digital release" för film.
+ * premiär/säsongsfinal för avsnitt, eller "digitalt släpp" för film.
  * Null = ingen badge.
  */
 export function entryBadge(e: CalendarEntry, isToday: boolean): string | null {
   if (e.kind === 'movie') {
-    return isToday ? 'släpps i dag' : 'digital release';
+    return isToday ? 'släpps i dag' : 'digitalt släpp';
   }
   if (isToday) return 'ny ikväll';
   if (e.isPremiere) return e.season === 1 ? 'premiär' : 'ny säsong';
