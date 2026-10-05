@@ -166,13 +166,13 @@ function AddMemberSearch({
   };
 
   return (
-    <div className="px-3 py-2 border-b border-rule-2 bg-white/50 space-y-1">
+    <div className="px-3 py-2 border-b border-rule-2 bg-surface space-y-1">
       <input
         type="text"
         value={q}
         onChange={e => { setQ(e.target.value); setErr(null); }}
         placeholder="Sök efter @användarnamn eller namn…"
-        className="w-full px-2 py-1 text-xs border border-rule rounded-sm bg-white outline-none"
+        className="w-full px-2 py-1 text-xs border border-rule rounded-sm bg-surface outline-none"
         autoFocus
       />
       {q.trim().length >= 2 && isLoading && (
@@ -184,7 +184,7 @@ function AddMemberSearch({
         </div>
       )}
       {filtered.length > 0 && (
-        <ul className="bg-white border border-rule rounded-sm divide-y divide-rule-2">
+        <ul className="bg-surface border border-rule rounded-sm divide-y divide-rule-2">
           {filtered.map(u => {
             const already = existingUids.includes(u.uid);
             const isInvited = invited.has(u.uid);

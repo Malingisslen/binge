@@ -83,7 +83,7 @@ function NyGruppContent() {
             onChange={e => setName(e.target.value)}
             placeholder="T.ex. Fredagsgänget, Familjen, Filmklubben"
             maxLength={48}
-            className="w-full max-w-[360px] px-2 py-1 text-base border border-rule rounded-sm bg-white"
+            className="w-full max-w-[360px] px-2 py-1 text-base border border-rule rounded-sm bg-surface"
           />
         </FormSection>
 
@@ -145,7 +145,7 @@ function NyGruppContent() {
           <button
             type="button"
             onClick={() => router.push('/grupper')}
-            className="px-3 py-[5px] border border-rule rounded-sm text-xs bg-white cursor-pointer"
+            className="px-3 py-[5px] border border-rule rounded-sm text-xs bg-surface cursor-pointer"
           >
             Avbryt
           </button>

@@ -160,6 +160,7 @@ export function ProvidersSection() {
                       min="0"
                       step="1"
                       placeholder="kr/mån"
+                      aria-label={`Kostnad per månad för ${provider.name}`}
                       defaultValue={user.providerCosts?.[provider.id] ?? ''}
                       onBlur={e => {
                         const val = parseInt(e.target.value, 10);
