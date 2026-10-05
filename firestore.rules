@@ -55,14 +55,34 @@ service cloud.firestore {
       return isOwnIdentity(d.get('displayName', null), d.get('username', null));
     }
 
+    // SEC-4 (2026-10-05): ett fält som binds på create och bara när det ÄNDRAS på update.
+    // `before` är `{}` på create och det lagrade dokumentet på update. Ett äldre dokument
+    // vars värde redan bryter mot gränsen kan alltså fortfarande redigeras i sina andra
+    // fält; det nekas först när just det fältet skrivs om till något ogiltigt.
+    function unchangedFrom(d, before, k) {
+      return k in before && k in d && d[k] == before[k];
+    }
+    function shortStringOrNull(d, before, k) {
+      return !(k in d) || d[k] == null
+        || (d[k] is string && d[k].size() <= 300)
+        || unchangedFrom(d, before, k);
+    }
+    function timestampField(d, before, k) {
+      return !(k in d) || d[k] is timestamp || unchangedFrom(d, before, k);
+    }
+
     // Reviews content bounds.
-    function isValidReview(d) {
+    function isValidReview(d, before) {
       return d.uid is string
         && d.tmdbId is int && d.tmdbId > 0
         && d.mediaType in ['movie', 'tv']
         && d.text is string && d.text.size() <= 5000
         && (!('rating' in d) || d.rating == null || (d.rating is number && d.rating >= 0 && d.rating <= 10))
         && (!('spoiler' in d) || d.spoiler is bool)
+        && shortStringOrNull(d, before, 'title')
+        && shortStringOrNull(d, before, 'posterPath')
+        && timestampField(d, before, 'createdAt')
+        && timestampField(d, before, 'updatedAt')
         && matchesOwnIdentity(d)
         && d.keys().hasOnly([
           'uid', 'tmdbId', 'mediaType', 'text', 'rating', 'spoiler',
@@ -72,9 +92,14 @@ service cloud.firestore {
     }
 
     // Comment content bounds.
+    // SEC-4 (2026-10-05): nyckelmängden och stämpeln är bundna. Utan `hasOnly` kunde
+    // en kommentar bära ett godtyckligt extra fält upp till dokumenttaket, på ett
+    // dokument alla kan läsa. Bara create anropar hjälparen, så äldre kommentarer rörs inte.
     function isValidComment(d) {
       return d.uid is string
         && d.text is string && d.text.size() >= 1 && d.text.size() <= 1000
+        && d.keys().hasOnly(['uid', 'text', 'displayName', 'username', 'createdAt'])
+        && d.createdAt == request.time
         && matchesOwnIdentity(d);
     }
 
@@ -138,6 +163,24 @@ service cloud.firestore {
       return !('items' in d)
         || (d.items is list
           && (d.items.size() <= maxListItems() || d.items.size() <= beforeCount));
+    }
+
+    // SEC-4 (2026-10-05): fälten en lista får bära. Listan kan vara publik, så ett okänt
+    // fält var godtyckligt innehåll på ett dokument alla kan läsa. Create binder hela
+    // nyckelmängden; ägarens update binder bara de nycklar skrivningen ÄNDRAR, så ett
+    // äldre dokument med ett okänt fält förblir redigerbart.
+    function listKeys() {
+      return ['uid', 'title', 'description', 'isPublic', 'items', 'editors', 'createdAt', 'updatedAt'];
+    }
+
+    function groupProgressKeys() {
+      return ['lastWatchedSeason', 'lastWatchedEpisode', 'status', 'syncedAt'];
+    }
+    function isValidGroupProgress(d) {
+      return (d.get('lastWatchedSeason', null) == null || d.lastWatchedSeason is int)
+        && (d.get('lastWatchedEpisode', null) == null || d.lastWatchedEpisode is int)
+        && (d.get('status', null) == null || (d.status is string && d.status.size() <= 40))
+        && (!('syncedAt' in d) || d.syncedAt is timestamp);
     }
 
     // List content bounds.
@@ -976,8 +1019,11 @@ service cloud.firestore {
     // Path-segment username must be normalized (lowercase, 3-30, [a-z0-9_]).
     match /usernames/{username} {
       allow read: if true;
+      // SEC-4 (2026-10-05): bara `uid` och en serverstämpel. Dokumentet är publikt läsbart.
       allow create: if isSignedIn()
         && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid', 'createdAt'])
+        && request.resource.data.createdAt == request.time
         && isValidUsername(username);
       allow delete: if isSignedIn() && resource.data.uid == request.auth.uid;
     }
@@ -987,11 +1033,11 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isSignedIn()
         && request.resource.data.uid == request.auth.uid
-        && isValidReview(request.resource.data);
+        && isValidReview(request.resource.data, {});
       allow update: if isSignedIn()
         && resource.data.uid == request.auth.uid
         && request.resource.data.uid == resource.data.uid  // can't transfer ownership
-        && isValidReview(request.resource.data);
+        && isValidReview(request.resource.data, resource.data);
       allow delete: if isSignedIn() && resource.data.uid == request.auth.uid;
 
       // Likes — each signed-in user owns their own like doc (doc-id = uid).
@@ -1002,7 +1048,9 @@ service cloud.firestore {
         // it on create + lock the field set so the doc can't be bloated.
         allow create: if isOwner(uid)
           && request.resource.data.uid == uid
-          && request.resource.data.keys().hasOnly(['uid', 'createdAt']);
+          && request.resource.data.keys().hasOnly(['uid', 'createdAt'])
+          // SEC-4 (2026-10-05): stämpeln är serverns tid, inte ett godtyckligt värde.
+          && request.resource.data.get('createdAt', request.time) == request.time;
         // The liker may remove their own like; the review author may also clear
         // likes on their review (symmetric with comments) — needed so account
         // deletion can erase a review's whole subtree (BIN-347).
@@ -1228,6 +1276,7 @@ service cloud.firestore {
       // fortfarande kan krympa och få sina övriga fält redigerade.
       allow create: if isSignedIn()
         && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(listKeys())
         && isValidList(request.resource.data, 0);
       // Owner: full control (metadata, editors[], items).
       // BIN-1228: före-antalet kommer från `beforeItemCount` — se hjälparen för vad den
@@ -1235,6 +1284,7 @@ service cloud.firestore {
       allow update: if isSignedIn()
         && resource.data.uid == request.auth.uid
         && request.resource.data.uid == resource.data.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(listKeys())
         && isValidList(request.resource.data, beforeItemCount(resource.data));
       // BIN-100: co-editor may change ONLY the items array (+ updatedAt). The
       // hasOnly-clause is the safety core — an editor cannot touch isPublic,
@@ -1290,7 +1340,19 @@ service cloud.firestore {
     // Sessioner kräver autentisering för att skapas
     // (tidigare tillät null hostUid — skräp- och abuse-vektor).
     match /sessions/{sessionId} {
-      allow read: if true;
+      // SEC-1 (2026-10-05): `read` var `if true`, och `read` omfattar `list`. Då kunde
+      // vem som helst, utan konto, hämta varje levande session med en enda fråga —
+      // och därifrån varje deltagares namn och streamingtjänster. Länkmodellen (ADR
+      // 0013/0015) gäller ENSKILDA sessioner: den som har länken har id:t och kan
+      // `get`. Att lista kräver att frågan bara kan returnera sessioner man själv är
+      // värd för, alltså ett `hostUid == <eget uid>`-filter. Klientens list-frågor, att följa:
+      //   git grep -n "collection(db, 'sessions')" -- src
+      // Det som INTE stängs: `participants` och `swipes` nedan är fortfarande läsbara för
+      // den som har sessions-id:t, och deltagarraden bär namn och streamingtjänster. Det
+      // är länkmodellen ADR 0015 accepterar. Id:t är bara okänt för utomstående så länge
+      // ingen väg listar sessioner — öppna aldrig en sådan väg igen.
+      allow get: if true;
+      allow list: if isSignedIn() && resource.data.hostUid == request.auth.uid;
 
       // BIN-1165: `hostName`s typ och längd. Före den här klausulen band ingen gren
       // i blocket något om fältets INNEHÅLL — bara om vem som skriver. Fältet visas
@@ -2104,7 +2166,18 @@ service cloud.firestore {
         match /progress/{progressUid} {
           allow read: if isSignedIn()
             && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids;
-          allow create, update, delete: if isOwner(progressUid)
+          // SEC-4 (2026-10-05): fälten och deras typer. Create binder hela nyckelmängden;
+          // update bara de nycklar skrivningen ändrar, så ett äldre dokument med ett okänt
+          // fält förblir skrivbart. Skrivaren är `setGroupMemberProgress` i groups.ts.
+          allow create: if isOwner(progressUid)
+            && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids
+            && request.resource.data.keys().hasOnly(groupProgressKeys())
+            && isValidGroupProgress(request.resource.data);
+          allow update: if isOwner(progressUid)
+            && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(groupProgressKeys())
+            && isValidGroupProgress(request.resource.data);
+          allow delete: if isOwner(progressUid)
             && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids;
         }
       }

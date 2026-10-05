@@ -118,7 +118,9 @@ const REPO = resolve(HERE, '..');
 // BIN-1298, 2026-09-26: raised to what `numTotalTests` reported with the group
 // watchlist field-lock cases in place, in the describe block named `(BIN-1298)`.
 // Measured the same way.
-export const MIN_TESTS = 830;
+// SEC-1/SEC-4, 2026-10-05: raised to what `numTotalTests` reported with the describe
+// blocks named `(SEC-1)` and `(SEC-4)` in place. Measured with `npm run test:rules`.
+export const MIN_TESTS = 884;
 
 const VITEST_ARGS = ['run', '--config', 'vitest.rules.config.ts'];
 
