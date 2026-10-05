@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Working agreement
 
 - **Solo, push-direct-to-main.** No PRs, no feature branches — commit and push to
-  `main` (which deploys hosting via `deploy.yml`). The one exception: a genuinely
+  `main` (which deploys via `deploy.yml`, see Commands). The one exception: a genuinely
   risky migration (Firestore rules/schema/status-model) gets a written plan and an
   explicit go-ahead first.
 - **Explain in product terms.** Malin directs the work but doesn't read code —
@@ -77,6 +77,12 @@ some other way, point it there too.
   session-expiry gate on writes). See ADR 0015
   before touching `firestore.rules`' session block, and never "fix" the first with a token
   stored on a public-read doc.
+- **Never approve a run waiting in the `backend` environment, and never tick
+  `backend_deployed_by_hand` unless Malin says the backend is deployed by hand.** The
+  click is Malin's: it is what puts a rules or functions deploy in her hands (BIN-1426). A
+  session that pushes in her name can technically give it too, and then the click guards
+  nothing. The tick skips the approval altogether, and the run's success makes the next
+  comparison start after changes nobody deployed.
 
 ## Project Overview
 
@@ -89,14 +95,17 @@ version of this section claimed Next 14 while the app ran 16).
 
 ## Commands
 
-`package.json` holds the script list. These are the ones that are NOT in it — `deploy.yml`
-ships hosting only; what else must be deployed by hand is what its guard watches,
-`watchedPaths` in `scripts/check-deploy-drift.mjs`:
+`package.json` holds the script list. `deploy.yml` ships a push to `main`: the site, and
+before it the rules, indexes and functions changed since its last successful run, once Malin
+approves the run in the `backend` environment (BIN-1426; which files count is `watchedPaths`
+in `scripts/check-deploy-drift.mjs`). A push that only touches `docs/` (the workflow map
+aside), `tasks/`, `.claude/` or Markdown starts no run. By hand only when that job fails,
+then Run workflow with `backend_deployed_by_hand` to ship the site (`docs/RUNBOOK.md` §6e):
 
 ```bash
-firebase deploy --only hosting
 firebase deploy --only firestore:rules
-firebase deploy --only hosting,firestore:rules
+firebase deploy --only functions
+firebase deploy --except hosting
 ```
 
 ## Architecture

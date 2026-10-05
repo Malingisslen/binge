@@ -1,63 +1,38 @@
 # External Actions — ops reference
 
-Evergreen reference for the things that **can't be done from the repo**: manual
-`firebase deploy` of functions/rules/indexes, function secrets, Cloudflare cache config,
-and the third-party accounts each Cloud Function needs. `deploy.yml` (push → main) deploys
-**hosting only** — everything below is manual.
+Evergreen reference for the things that **can't be done from the repo**: function secrets,
+Cloudflare cache config, the third-party accounts each Cloud Function needs, and the
+deploys that stay manual. `deploy.yml` (push → main) deploys the site, and before it the
+rules, indexes and functions that changed, once Malin approves the run (BIN-1426).
 
 ---
 
-## Manual deploy: functions + rules + indexes
+## Deploying functions, rules and indexes
 
-`deploy.yml` never touches functions, `firestore.rules`, or `firestore.indexes.json`. After
-changing any of them, deploy manually.
+`deploy.yml`'s `backend` job deploys them once Malin approves the run in the `backend`
+environment (BIN-1426); `docs/RUNBOOK.md` §6e covers approving, rejecting and recovering.
+The job finishes before the hosting job starts, so a new function is live before the site
+that calls it — the order BIN-1118/1120/1259 (2026-09-20) had to get right by hand. The
+reverse case still needs a decision: a rules change the OLD site cannot live with needs the
+new client live first, so the client goes in an earlier push (BIN-540). The run summary
+warns when rules and client code change in the same run.
 
-**ORDNINGEN: funktionerna FÖRE pushen, när ändringen lägger till en ny ingång.** `deploy.yml`
-fyrar på push till `main` och skickar hosting. Går hostingen ut först står den nya knappen
-framför användaren och pekar på en anropbar funktion som ännu inte finns, och en ny
-utlösare fyrar inte på de händelser som passerar under tiden. Inget går sönder permanent
-och allt läker när funktionerna är ute — men fönstret är onödigt, och det är osynligt för
-varje grind, eftersom ingen av dem läser driftsättningsordningen. Härled vilka ingångar en
-bunt lägger till innan du pushar:
+The job deploys functions with `--only functions`. firebase skips a function only when its
+hash is unchanged, and the hash includes the whole packaged source (firebase-tools 15.22.3,
+`lib/deploy/functions/cache/applyHash.js`), so a source change redeploys every function.
+The standing rule to deploy functions by exact name, never a blanket `--only functions`, is
+struck. By hand, deploy what the failed run's summary names. Rules, indexes and every
+function at once is Run workflow with `deploy_all_backend`; the site follows, as in any run.
 
-```bash
-git diff origin/main..HEAD -- functions/src/index.ts
-```
-
-BIN-1118/1120/1259 (2026-09-20) är fallet posten skrevs för, och det visade tre olika sätt
-att missa en funktion. Driftlistan är inte "de nya ingångarna" — den är UNIONEN av tre
-mängder, och den första är den som är lätt att tro räcker:
-
-1. Nya export i `functions/src/index.ts`.
-2. Funktioner vars EGEN modul ändrades, nya eller inte. Den här bunten vidgade
-   `submitReport` med en ny måltyp utan att lägga till någon export — pushas hosting före
-   den driftsättningen avvisar den redan driftsatta funktionen varje gruppanmälan med
-   "Ogiltig måltyp", permanent, medan knappen står live.
-3. Funktioner som kompilerar in en DELAD modul du ändrade. De går sönder inte, men de kör
-   annan kod än sina syskon — vilket är den drift den delade modulen finns för att hindra.
-
-Härled alla tre ur diffen i stället för att lita på en lista här:
-
-```bash
-git diff origin/main..HEAD --name-only -- functions/src
-```
-
-En katalog i utdatan kan bära mer än en export — `groupHandover/` bär två — så läs namnen
-ur `functions/src/index.ts`, inte ur katalognamnet. För en DELAD katalog, ta reda på vem
-som importerar den med `git grep -ln "<katalog>/" -- functions/src`.
-
-Och driftsätt dem **vid namn**. Den stående regeln mot en svepande `--only functions` står
-kvar ovan och gäller även här.
-
-**Deploy the function(s) you changed by exact name** (targeted deploys are the standing rule
-— never a blanket `--only functions`). But do **not** rely on a hand-maintained named-subset
-list for a full rollout: that list drifted from the code before and silently dropped
-`retentionCleanup` + `reclaimOrphanFollows`, so scheduled cleanup never went live. For a full
-rollout deploy everything in one sweep:
-
-```bash
-firebase deploy --only functions,firestore:rules,firestore:indexes
-```
+Still by hand, because the job runs non-interactively and without `--force`: deleting a
+function (firebase stops and prints the `functions:delete` commands), a new secret, a
+trigger that needs a service the deploy account cannot enable, a new retry policy or a
+raised minimum instance count, deleting an index (firebase only lists it), and a cleanup
+policy for the function images when `gcf-artifacts` has none (firebase deploys the
+functions, then fails). That policy is set once:
+`firebase functions:artifacts:setpolicy --location europe-west1 --project binge-nu`. A
+trigger that changes its event type is skipped with a warning rather than stopped; the run
+summary says so, and a deploy by hand asks before migrating it.
 
 **After any functions deploy, verify the scheduled jobs still exist** (`firebase functions:list`
 + Cloud Scheduler Console) — a missing one means a background job silently stopped:
@@ -69,8 +44,8 @@ Index builds are **async** — a scheduled job that reads a not-yet-`Enabled` co
 index logs errors until the build finishes (Firestore Console → Indexes). Several newer
 functions **no-op silently without their secrets** (below) — set those first.
 
-**When a new index is read by code that throws to a waiting caller, the one-sweep command
-above is wrong — split it (BIN-1147).** The warning above is scoped to a scheduled job,
+**When a new index is read by code that throws to a waiting caller, one run is wrong — push
+the index on its own first (BIN-1147).** The warning above is scoped to a scheduled job,
 which self-heals; but that is a proxy. The question that decides it is whether the call
 site sits inside error isolation that defers to a later run, or throws to something
 waiting. `retentionCleanup` has that isolation — one uid's failure defers that uid and
@@ -78,45 +53,25 @@ keeps its watch record. `handOverOwnedGroups` does not: the account-delete butto
 it before its cascade, so an unbuilt index fails **every self-service account deletion**,
 and the user is told nothing was deleted.
 
-```bash
-firebase deploy --only firestore:indexes
-```
-
-Then confirm the index is actually built. The Console shows it, but this is the checkable
-form — a `fieldOverrides` entry is NOT a composite index, so `indexes composite list` will
-not show it:
+Push the `firestore.indexes.json` change alone; its run deploys `--only firestore:indexes`
+after the approval. Then confirm the index is actually built. The Console shows it, but
+this is the checkable form — a `fieldOverrides` entry is NOT a composite index, so
+`indexes composite list` will not show it:
 
 ```bash
 gcloud firestore indexes fields describe <field> --collection-group=<collection> --project=binge-nu --format=json
 ```
 
 Built means an entry with `"queryScope": "COLLECTION_GROUP"` and `"state": "READY"` —
-`CREATING` means keep waiting. Then the targeted deploy:
-
-```bash
-firebase deploy --only functions:<name>,firestore:rules
-```
-
-Derive the function names rather than copying a list out of here — a hand-maintained subset
-is the drift this section warns about. Two steps: find the directories that run the query,
-then read the export from each directory's `index.ts`.
-
-```bash
-git grep -l "collectionGroup('<collection>'" -- functions/src
-git grep -n "export const .* = on" -- functions/src/<dir>/index.ts
-```
-
-**Always include `firestore:rules`, even when the change touched none.** Rules deploys are
-manual and lag commits by design, nothing in this repo reports whether the live rules match
-`main`, and redeploying unchanged rules is idempotent and near-free. Making it conditional
-turns free insurance into a judgment call under time pressure.
+`CREATING` means keep waiting. Then push the code that reads it.
 
 The reverse order is safe when nothing new reads the index yet.
 
-**Rollback.** Both halves are reversible. Revert the function source and redeploy the named
-functions — instant and safe, since the old code never issues the query. The index can be
-removed by dropping its `fieldOverrides` entry and redeploying `firestore:indexes`. Revert
-the functions first or independently; an index left standing after a function revert is not
+**Rollback.** Both halves are reversible. Revert the function source and push; the `backend`
+job redeploys the functions after the approval, which is safe, since the old code never
+issues the query. The index is removed by hand: drop its `fieldOverrides` entry and run
+`firebase deploy --only firestore:indexes`, which asks before it deletes. Revert the
+functions first or independently; an index left standing after a function revert is not
 a correctness risk, but it does cost index maintenance on every write to that collection,
 for everyone, until it is removed.
 
@@ -264,7 +219,7 @@ ger tomma rutor, inte ett fel.
 | `share_clicked` | `surface`, `method` |
 
 Aktiva användare och pushmärkningen ligger i `rollupInsights` och `sendPushToUser`, som
-driftsätts för hand: `firebase deploy --only functions`.
+driftsätts med `deploy.yml`:s `backend`-jobb (BIN-1426).
 
 ## Open infra items (verify status; genuinely maybe-undone)
 

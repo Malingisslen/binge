@@ -278,8 +278,9 @@ assertion to go green").
 
 Owns CI/CD, hosting, observability, and incident response.
 
-- The GitHub Actions workflows; the rules-tests deploy gate; the **drift-guard**
-  blocking silent rules/functions deploys.
+- The GitHub Actions workflows; the rules-tests deploy gate; the **rules/functions
+  deploy** that waits for Malin's approval, and the check that decides what it ships
+  (BIN-1426).
   → `.github/workflows/deploy.yml`, `.github/workflows/pr-checks.yml`, `scripts/check-deploy-drift.mjs`, `scripts/check-deploy-drift.test.mjs`
 - **The gitleaks secret scan** (BIN-922). It was the one workflow with no owning role:
   the blocking gate covers the whole workflows directory by prefix, so a change to it
@@ -596,9 +597,9 @@ Owns the process.
 - The solo push-direct-to-main working agreement + the risky-migration
   written-plan exception; the **"plan before large changes — cast the role-org
   first" governance rule** (route → convene the stakeholder panel → fold conditions
-  into acceptance criteria, for ad-hoc work as well as sprints); the deploy
-  drift-guard (rules/functions never auto-ship); the quality gates that run on the
-  push-to-main path;
+  into acceptance criteria, for ad-hoc work as well as sprints); rules and functions
+  deploying only after Malin approves the run (BIN-1426); the quality gates that run
+  on the push-to-main path;
   `deploy.yml` downgrades `npm audit` to advisory by BIN-344's decision, and the process
   tests to a warning by BIN-1426's decision; BIN-* issue
   taxonomy + sprint cadence; Dependabot grouping + framework upgrades (React 19 /
@@ -820,8 +821,7 @@ findings here too.
 
 **Watch-items (diagnostic):**
 - 🟡 `retentionCleanup` + `reclaimOrphanFollows` are **live** (see
-  `docs/analysis/EXTERNAL_ACTIONS.md`), but absent from `deploy.yml` **by design** —
-  it ships hosting only, so every functions change needs a manual targeted deploy.
+  `docs/analysis/EXTERNAL_ACTIONS.md`).
   `reclaimOrphanFollows` still has **no health metric**: a sweep that silently stops
   running raises no alert.
 - 🔴 **PITR och schemalagda backuper är påslagna** (mätt läge, datum och
@@ -943,7 +943,7 @@ dir. Grounded findings, roughly by severity:
 | Gap | What's missing | Touches |
 |---|---|---|
 | **Backup / DR verification** | PITR och schemalagda backuper är påslagna (se `docs/analysis/EXTERNAL_ACTIONS.md`), och `retentionCleanup` larmar när den senaste kopian är för gammal (BIN-1422). Slutar `retentionCleanup` själv köra larmar ingenting. | DevOps (#8), Security (#4), DPO (#6), DBA (#27) |
-| **No health metric for `reclaimOrphanFollows`** | `retentionCleanup` + `reclaimOrphanFollows` are deployed and running, but absent from `deploy.yml` by design (hosting-only) — so each functions change needs a manual targeted deploy. Nothing alerts if `reclaimOrphanFollows` stops running or starts failing, or if `retentionCleanup`'s schedule stops firing altogether. | DevOps (#8), DPO (#6), Controller (#3), DBA (#27) |
+| **No health metric for `reclaimOrphanFollows`** | `retentionCleanup` + `reclaimOrphanFollows` are deployed and running. Nothing alerts if `reclaimOrphanFollows` stops running or starts failing, or if `retentionCleanup`'s schedule stops firing altogether. | DevOps (#8), DPO (#6), Controller (#3), DBA (#27) |
 | **Schema-version safety** | No `schemaVersion` on Firestore docs — lazy migration can't prove completeness, and a stale legacy value can persist indefinitely undetected. | Architect (#14), QA (#7), DBA (#27) |
 | **Recommendation/taste drift** | Cascade + taste weights are frozen constants; no engagement tracking, A/B test, or drift detector validates them post-launch. | Data Analyst (#22), Architect (#14), Scoring (#28) |
 | **Notification delivery** | At-most-once is enforced, but there's no per-user delivery record, no user-facing "did you get this?", and no admin delivery-rate SLO. | DevOps (#8), Trust & Safety (#12), PM (#9) |
@@ -1033,6 +1033,6 @@ This matters since BIN-803: a pattern only survives into `docs/org/ownership-map
 if git tracks its path, so "the harness is gitignored" would be an instruction to drop
 these files from the map. The durable artifacts (role map, world-watch state, ADRs,
 metrics) are committed too. Governance is shared between the **Engineering Manager (#25)** (working
-agreement, CI gates, deploy drift-guard) and this Agent-Ops layer (the pre-build
+agreement, CI gates) and this Agent-Ops layer (the pre-build
 stakeholder panel + the commit-gate reviewers). If Binge ever formalizes a 27th-style
 "executable role," this is the machinery it would own.

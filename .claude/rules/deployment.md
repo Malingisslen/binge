@@ -49,10 +49,11 @@ Skär **inte** ner pre-render-antalet för att fixa byggtid — catch-all-skalet
 (endast efter JS-hydrering). Mekaniken är fixad; täckningen ska behållas.
 
 Workflows ligger i `.github/workflows/`. Det som inte syns av filnamnen: **`deploy.yml`
-deployar BARA hosting** — rules och functions kräver alltid en manuell `firebase deploy`
-först. `pr-checks.yml` grindar pull requests (dit dependabot-bumpar landar) och
-`secret-scan.yml` läcksöker. Vilka steg pr-checks kör står i filen själv,
-inte här: `grep -n "name:" .github/workflows/pr-checks.yml`. Ingen
+deployar regler, index och funktioner först när Malin godkänt körningen** i miljön
+`backend`, och webbplatsen efter dem (BIN-1426, `docs/RUNBOOK.md` §6e). `pr-checks.yml`
+grindar pull requests (dit dependabot-bumpar landar) och `secret-scan.yml` läcksöker.
+Vilka steg pr-checks kör står i filen själv, inte här:
+`grep -n "name:" .github/workflows/pr-checks.yml`. Ingen
 av dem bygger — bara `deploy.yml` gör det, och därmed är den enda som ser en nyckel.
 Härled listan i stället för att lita på den här meningen: `ls .github/workflows/`.
 
