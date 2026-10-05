@@ -93,9 +93,12 @@ export function posterUrl(path: string | null, size: 'w92' | 'w154' | 'w185' | '
 
 // srcset för poster-grids: låter browsern välja w185 för små celler/DPR1
 // och w342/w500 för stora/DPR2+. Använd med sizes-attribut i konsumenten.
-export function posterSrcSet(path: string | null): string | undefined {
+// `max: 'w342'` (PERF-8): for grids that used to ask for a fixed w342 — the browser can
+// then pick w185 on 1x screens but never goes above what the grid fetched before.
+export function posterSrcSet(path: string | null, max: 'w342' | 'w500' = 'w500'): string | undefined {
   if (!path) return undefined;
-  return `${IMAGE_BASE}/w185${path} 185w, ${IMAGE_BASE}/w342${path} 342w, ${IMAGE_BASE}/w500${path} 500w`;
+  const base = `${IMAGE_BASE}/w185${path} 185w, ${IMAGE_BASE}/w342${path} 342w`;
+  return max === 'w500' ? `${base}, ${IMAGE_BASE}/w500${path} 500w` : base;
 }
 
 export function stillUrl(path: string | null, size: 'w185' | 'w300' | 'w500' = 'w300'): string | null {

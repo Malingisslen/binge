@@ -10,18 +10,24 @@ import AddToGroupButton from './AddToGroupButton';
 const addToGroupWatchlist = vi.hoisted(() => vi.fn());
 const removeFromGroupWatchlist = vi.hoisted(() => vi.fn());
 const hasInGroupWatchlist = vi.hoisted(() => vi.fn());
-vi.mock('@/lib/firebase/groups', () => ({ addToGroupWatchlist, removeFromGroupWatchlist, hasInGroupWatchlist }));
+const getMyGroupIds = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/firebase/groups', () => ({ addToGroupWatchlist, removeFromGroupWatchlist, hasInGroupWatchlist, getMyGroupIds }));
 const captureError = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/sentry', () => ({ captureError }));
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ uid: 'me' }) }));
-vi.mock('@/hooks/useGroups', () => ({ useMyGroups: () => ({ groups: [{ id: 'g1', name: 'Fredagsmys' }] }) }));
+// PERF-6: the live list only exists while the hook is enabled, as in production.
+const useMyGroups = vi.hoisted(() => vi.fn((_uid: string | null, opts?: { enabled?: boolean }) =>
+  opts?.enabled === false
+    ? { groups: [], loading: true }
+    : { groups: [{ id: 'g1', name: 'Fredagsmys' }], loading: false }));
+vi.mock('@/hooks/useGroups', () => ({ useMyGroups }));
 
 function renderButton() {
   render(<AddToGroupButton tmdbId={603} mediaType="movie" title="The Matrix" posterPath="/m.jpg" releaseYear={1999} />);
 }
 
 async function openMenu() {
-  fireEvent.click(screen.getByRole('button', { name: /Grupp/ }));
+  fireEvent.click(await screen.findByRole('button', { name: /Grupp/ }));
   return screen.findByRole('button', { name: /Fredagsmys/ });
 }
 
@@ -30,6 +36,7 @@ describe('AddToGroupButton — a refused write (BIN-1298)', () => {
     vi.clearAllMocks();
     vi.spyOn(console, 'error').mockImplementation(() => {});
     hasInGroupWatchlist.mockResolvedValue(false);
+    getMyGroupIds.mockResolvedValue(['g1']);
   });
 
   it('a refused add shows the failure and reports it', async () => {
@@ -48,5 +55,41 @@ describe('AddToGroupButton — a refused write (BIN-1298)', () => {
     await waitFor(() => expect(addToGroupWatchlist).toHaveBeenCalled());
     expect(screen.queryByRole('alert')).toBeNull();
     expect(captureError).not.toHaveBeenCalled();
+  });
+});
+
+describe('AddToGroupButton — no live group listener until the menu opens (PERF-6)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    hasInGroupWatchlist.mockResolvedValue(false);
+  });
+
+  it('shows the button from the cached id read, with the live listener still closed', async () => {
+    getMyGroupIds.mockResolvedValue(['g1']);
+    renderButton();
+    await screen.findByRole('button', { name: /Grupp/ });
+    expect(getMyGroupIds).toHaveBeenCalledWith('me');
+    expect(useMyGroups.mock.calls.every(([, opts]) => opts?.enabled === false)).toBe(true);
+  });
+
+  it('opening the menu opens the live listener and lists the groups', async () => {
+    getMyGroupIds.mockResolvedValue(['g1']);
+    renderButton();
+    await openMenu();
+    expect(useMyGroups).toHaveBeenLastCalledWith('me', { enabled: true });
+  });
+
+  it('a user with no groups sees no button', async () => {
+    getMyGroupIds.mockResolvedValue([]);
+    renderButton();
+    await waitFor(() => expect(getMyGroupIds).toHaveBeenCalled());
+    await Promise.resolve();
+    expect(screen.queryByRole('button', { name: /Grupp/ })).toBeNull();
+  });
+
+  it('a failed id read still shows the button, and the menu reads live', async () => {
+    getMyGroupIds.mockRejectedValue(new Error('unavailable'));
+    renderButton();
+    expect(await openMenu()).toBeTruthy();
   });
 });
