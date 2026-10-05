@@ -6115,3 +6115,46 @@ describe('public documents — known fields and bounds (SEC-4)', () => {
     await assertSucceeds(setDoc(progressRef(ownerDb()), progress({ lastWatchedEpisode: 4 }), { merge: true }));
   });
 });
+
+// BIN-1438 — eventStats är förseglad: bara recordEvent (Admin SDK) skriver, bara
+// /api/insights (Admin SDK) läser. Emulatortest: utvärderar de riktiga reglerna.
+describe('eventStats is sealed to clients (BIN-1438, emulator)', () => {
+  const DAY = '2026-10-05';
+  const statsRef = (db: ReturnType<typeof ownerDb>) => doc(db, 'eventStats', DAY);
+
+  it('the rules block for eventStats is exactly a deny-all', () => {
+    const rules = readFileSync(resolve(__dirname, '../../../firestore.rules'), 'utf8');
+    const block = rules.match(/match \/eventStats\/\{day\} \{([^}]*)\}/);
+    expect(block, 'match /eventStats/{day} saknas i firestore.rules').not.toBeNull();
+    const statements = block![1].split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('//'));
+    expect(statements).toEqual(['allow read, write: if false;']);
+  });
+
+  beforeEach(async () => {
+    // Seedat dokument, så att ett nekat get beror på regeln och inte på att dokumentet saknas.
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'eventStats', DAY), { counts: { share_clicked: 1 } });
+    });
+  });
+
+  it.each([
+    ['anonymous', () => anonDb()],
+    ['signed-in', () => ownerDb()],
+  ] as const)('%s client cannot get an eventStats day doc', async (_who, db) => {
+    await assertFails(getDoc(statsRef(db())));
+  });
+
+  it.each([
+    ['anonymous', () => anonDb()],
+    ['signed-in', () => ownerDb()],
+  ] as const)('%s client cannot set an eventStats day doc', async (_who, db) => {
+    await assertFails(setDoc(statsRef(db()), { counts: { share_clicked: 999 } }, { merge: true }));
+  });
+
+  it('the seeded doc exists — the denials above are the rule, not a missing doc', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const snap = await getDoc(doc(ctx.firestore(), 'eventStats', DAY));
+      expect(snap.exists()).toBe(true);
+    });
+  });
+});

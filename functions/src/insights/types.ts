@@ -39,29 +39,15 @@ export interface RollupData {
   partial: boolean; // true if one or more sub-queries failed
 }
 
-/** Live behavioural + traffic data pulled from the Plausible Stats API. */
-export interface PlausibleData {
-  visitors: number;
-  pageviews: number;
-  avgVisitDurationSec: number;
-  bounceRatePct: number;
-  visitorsTimeseries: { date: string; visitors: number }[];
-  topPages: { page: string; visitors: number }[];
-  topReferrers: { referrer: string; visitors: number }[];
-  goals: {
-    signed_up: number;
-    title_added_watchlist: number;
-    review_created: number;
-    advisor_pause_taken: number;
-    donate_clicked: number;
-    provider_clicked?: number;
-  };
-  // Optional: absent when the frontend is newer than the deployed function.
-  providerClicksByType?: Record<string, number>;
-  signupLandingPages?: { page: string; signups: number; visitors: number }[];
-  signupsTimeseries: { date: string; count: number }[];
-  onboardingFunnel: { step: number; count: number }[];
-  signinMethodSplit: { google: number; email: number };
+/**
+ * Egen räkning av hur funktioner används (BIN-1438), summerad ur eventStats/{YYYY-MM-DD}
+ * över intervallet. Bara händelser i recordEvents ordförråd finns här.
+ */
+export interface EventsData {
+  counts: Record<string, number>; // händelse → antal i intervallet
+  props: Record<string, Record<string, Record<string, number>>>; // händelse → egenskap → värde → antal
+  daily: { date: string; counts: Record<string, number> }[]; // en rad per dag som HAR ett dokument
+  days: number; // antal dagdokument i intervallet
 }
 
 /** Fråga Binge usage/error counters aggregated over the requested range. */
@@ -90,7 +76,8 @@ export interface InsightsData {
   generatedAt: string; // ISO timestamp of this API response
   range: RangeInfo;
   rollup: RollupData | null; // null if the rollup doc does not exist yet
-  plausible: PlausibleData | null; // null if Plausible is unconfigured/unreachable
+  events: EventsData | null; // null = inga eventStats-dokument i intervallet (inte mätt) eller läsfel
+  eventsSince: string | null; // första dagen som har ett eventStats-dokument över huvud taget
   askBinge: AskBingeData | null; // null if the read failed; zeroed if simply no data yet
   window: WindowDeltas | null; // null until at least one prior snapshot exists
   partial: boolean; // true if any source failed (frontend shows a ribbon)

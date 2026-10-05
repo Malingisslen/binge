@@ -57,3 +57,21 @@ describe('CSP i firebase.json släpper igenom de externa värdar koden använder
     expect(policy).toContain('Wikimedia Foundation');
   });
 });
+
+describe('Plausible är borttaget (BIN-1438)', () => {
+  const csp = cspDirectives();
+
+  it('plausible.io finns varken i script-src eller connect-src', () => {
+    // Pinnar att direktiven lästes, så att en förstörd mätning inte ser ut som frånvaro.
+    expect(allows(csp.get('script-src'), 'www.gstatic.com')).toBe(true);
+    expect(allows(csp.get('connect-src'), 'europe-west1-binge-nu.cloudfunctions.net')).toBe(true);
+    expect(allows(csp.get('script-src'), 'plausible.io')).toBe(false);
+    expect(allows(csp.get('connect-src'), 'plausible.io')).toBe(false);
+  });
+
+  it('layouten laddar inget skript från plausible.io', () => {
+    const layout = readFileSync(join(root, 'src/app/layout.tsx'), 'utf8');
+    expect(layout).toContain('<Providers>');
+    expect(layout).not.toContain('plausible');
+  });
+});

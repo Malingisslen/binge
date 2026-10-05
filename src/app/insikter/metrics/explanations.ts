@@ -8,7 +8,7 @@ export const EXPLANATIONS: Partial<Record<MetricKey, Explanation>> = {
   activeUsers7d: {
     whatIsIt: 'Inloggade konton vars inloggning förnyats de senaste 7 dagarna — ett närmevärde för att ha öppnat Binge, inte ett exakt mått.',
     howCalculated: 'Räknas i rollupen ur Firebase Auths egen tidsstämpel för senaste inloggning eller tokenförnyelse. En flik som står öppen i bakgrunden räknas, en session som bara används offline kan missas. Anonyma Tillsammans-gäster räknas inte. Följer inte datumväljaren.',
-    whyImportant: 'Visar om folk kommer tillbaka, vilket Plausible inte kan svara på eftersom det är cookiefritt.',
+    whyImportant: 'Visar om folk kommer tillbaka.',
     source: 'Firebase Auth (rollup)',
   },
   activeUsers30d: {
@@ -19,21 +19,39 @@ export const EXPLANATIONS: Partial<Record<MetricKey, Explanation>> = {
   },
   signupLandingPages: {
     whatIsIt: 'Vilken sida de som registrerade sig kom in på, och hur många som totalt kom in där.',
-    howCalculated: 'Plausible-målet signed_up uppdelat på besökets första sida (visit:entry_page), bredvid alla besök som började på samma sida.',
+    howCalculated: 'Kräver besöksdata per sida. Binge räknar händelser, inte besök, så måttet har ingen källa.',
     whyImportant: 'Visar vilka sökträffar och delade länkar som faktiskt blir konton.',
-    source: 'Plausible (live)',
+    source: 'Ingen källa',
   },
   providerClicks: {
     whatIsIt: 'Klick från en titelsida ut till en tjänst som Netflix, SF Anytime eller Viaplay.',
-    howCalculated: 'Plausible-händelsen provider_clicked, summerad över valt datumintervall.',
+    howCalculated: 'Händelsen provider_clicked, summerad över de dagar i intervallet som har en räkning.',
     whyImportant: 'Det är steget där Binge har gjort sitt jobb, och det som en framtida affiliate-intäkt skulle hänga på.',
-    source: 'Plausible (live)',
+    source: 'Firestore (recordEvent-räknare)',
   },
   providerClicksByType: {
     whatIsIt: 'Klicken ut till tjänster, uppdelade på abonnemang, hyra, köpa och gratis.',
-    howCalculated: 'Plausible-händelsen provider_clicked grupperad på offerType.',
+    howCalculated: 'Händelsen provider_clicked grupperad på offerType.',
     whyImportant: 'Visar om folk mest letar efter var något ingår eller var det går att hyra.',
-    source: 'Plausible (live)',
+    source: 'Firestore (recordEvent-räknare)',
+  },
+  shareClicks: {
+    whatIsIt: 'Tryck på delningsknappen på en titel, en lista eller en profil.',
+    howCalculated: 'Händelsen share_clicked, summerad över de dagar i intervallet som har en räkning.',
+    whyImportant: 'Delade länkar är hur Binge sprids utan annonser.',
+    source: 'Firestore (recordEvent-räknare)',
+  },
+  priceCheckTotals: {
+    whatIsIt: 'Gånger ett val i streamingkalkylatorn eller startsidans demo gav en summa.',
+    howCalculated: 'Händelsen price_check_total_shown, högst en gång per sidvisning.',
+    whyImportant: 'Visar om priskollen används, och är början på tratten mot ett konto.',
+    source: 'Firestore (recordEvent-räknare)',
+  },
+  pageViews: {
+    whatIsIt: 'Antal sidvisningar.',
+    howCalculated: 'Kräver besöksdata. Binge räknar händelser, inte besök, så måttet har ingen källa.',
+    whyImportant: 'Visar hur mycket sajten används totalt.',
+    source: 'Ingen källa',
   },
   totalUsers: {
     whatIsIt: 'Totalt antal registrerade användarkonton.',
@@ -43,15 +61,15 @@ export const EXPLANATIONS: Partial<Record<MetricKey, Explanation>> = {
   },
   newUsers: {
     whatIsIt: 'Antal nya registreringar under perioden.',
-    howCalculated: 'Plausible-målet signed_up, summerat över valt datumintervall.',
+    howCalculated: 'Nettoökningen av users-dokument mellan baslinjens ögonblicksbild och den senaste rollupen, aldrig under noll.',
     whyImportant: 'Visar tillväxttakten, inte bara totalen.',
-    source: 'Plausible (live)',
+    source: 'Firestore (rollup)',
   },
   onboardingFunnel: {
     whatIsIt: 'Hur långt nya användare tar sig i onboarding-flödet.',
-    howCalculated: 'Plausible-målet onboarding_completed, grupperat på step_reached.',
+    howCalculated: 'Händelsen onboarding_completed, grupperad på step_reached.',
     whyImportant: 'Avslöjar var folk hoppar av — störst tapp = störst möjlighet.',
-    source: 'Plausible (live)',
+    source: 'Firestore (recordEvent-räknare)',
   },
   statusDistribution: {
     whatIsIt: 'Hur watchlist-titlar fördelar sig på status.',
@@ -67,9 +85,9 @@ export const EXPLANATIONS: Partial<Record<MetricKey, Explanation>> = {
   },
   avgSessionDuration: {
     whatIsIt: 'Genomsnittlig sessionslängd på sajten.',
-    howCalculated: 'Plausibles visit_duration-mått för perioden.',
+    howCalculated: 'Kräver besöksdata. Binge räknar händelser, inte besök, så måttet har ingen källa.',
     whyImportant: 'Längre sessioner antyder djupare engagemang.',
-    source: 'Plausible (live)',
+    source: 'Ingen källa',
   },
   askZeroRate: {
     whatIsIt: 'Andel "Fråga Binge"-sökningar som gav noll träffar.',

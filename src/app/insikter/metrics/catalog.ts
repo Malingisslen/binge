@@ -10,7 +10,6 @@ export const METRICS: Record<MetricKey, MetricDef> = {
   // ── Översikt ──────────────────────────────────────────────────────────────
   totalUsers: { key: 'totalUsers', label: 'Användare', category: 'overview', format: { kind: 'number' } },
   newUsers: { key: 'newUsers', label: 'Nya användare', category: 'overview', format: { kind: 'number' } },
-  activeVisitors: { key: 'activeVisitors', label: 'Aktiva besökare', category: 'overview', format: { kind: 'number' } },
   totalTitlesTracked: { key: 'totalTitlesTracked', label: 'Titlar spårade', category: 'overview', format: { kind: 'number' } },
   totalReviews: { key: 'totalReviews', label: 'Recensioner', category: 'overview', format: { kind: 'number' } },
   titlesAdded: { key: 'titlesAdded', label: 'Titlar tillagda', category: 'overview', format: { kind: 'number' } },
@@ -18,13 +17,17 @@ export const METRICS: Record<MetricKey, MetricDef> = {
   activeUsers30d: { key: 'activeUsers30d', label: 'Aktiva senaste 30 dagarna', category: 'overview', format: { kind: 'number' }, isNew: true },
 
   // ── Tillväxt ──────────────────────────────────────────────────────────────
-  signupsTrend: { key: 'signupsTrend', label: 'Registreringar', category: 'growth', format: { kind: 'number' } },
-  onboardingFunnel: { key: 'onboardingFunnel', label: 'Onboarding-tratt', category: 'growth', format: { kind: 'number' } },
-  signinMethodSplit: { key: 'signinMethodSplit', label: 'Inloggningsmetod', category: 'growth', format: { kind: 'number' } },
-  donateClicks: { key: 'donateClicks', label: 'Donate-klick', category: 'growth', format: { kind: 'number' } },
+  signupsTrend: { key: 'signupsTrend', label: 'Registreringar', category: 'growth', format: { kind: 'number' }, source: 'events' },
+  onboardingFunnel: { key: 'onboardingFunnel', label: 'Onboarding-tratt', category: 'growth', format: { kind: 'number' }, source: 'events' },
+  signinMethodSplit: { key: 'signinMethodSplit', label: 'Inloggningsmetod', category: 'growth', format: { kind: 'number' }, source: 'events' },
+  donateClicks: { key: 'donateClicks', label: 'Donate-klick', category: 'growth', format: { kind: 'number' }, source: 'events' },
   signupLandingPages: { key: 'signupLandingPages', label: 'Registreringar per landningssida', category: 'growth', format: { kind: 'number' }, isNew: true },
-  providerClicks: { key: 'providerClicks', label: 'Klick till tjänster', category: 'growth', format: { kind: 'number' }, isNew: true },
-  providerClicksByType: { key: 'providerClicksByType', label: 'Klick till tjänster per typ', category: 'growth', format: { kind: 'number' }, isNew: true },
+  providerClicks: { key: 'providerClicks', label: 'Klick till tjänster', category: 'growth', format: { kind: 'number' }, isNew: true, source: 'events' },
+  providerClicksByType: { key: 'providerClicksByType', label: 'Klick till tjänster per typ', category: 'growth', format: { kind: 'number' }, isNew: true, source: 'events' },
+  shareClicks: { key: 'shareClicks', label: 'Delningar', category: 'growth', format: { kind: 'number' }, isNew: true, source: 'events' },
+  shareClicksBySurface: { key: 'shareClicksBySurface', label: 'Delningar per yta', category: 'growth', format: { kind: 'number' }, isNew: true, source: 'events' },
+  priceCheckTotals: { key: 'priceCheckTotals', label: 'Priskollar med summa', category: 'growth', format: { kind: 'number' }, isNew: true, source: 'events' },
+  priceCheckSaves: { key: 'priceCheckSaves', label: 'Priskoll: logga in och spara', category: 'growth', format: { kind: 'number' }, isNew: true, source: 'events' },
 
   // ── Produktanvändning ───────────────────────────────────────────────────────
   statusDistribution: { key: 'statusDistribution', label: 'Status-fördelning', category: 'product', format: { kind: 'number' } },
@@ -33,7 +36,7 @@ export const METRICS: Record<MetricKey, MetricDef> = {
   topProviders: { key: 'topProviders', label: 'Toppade streamingtjänster', category: 'product', format: { kind: 'number' } },
   topGenres: { key: 'topGenres', label: 'Toppade genrer', category: 'product', format: { kind: 'number' } },
   ratingsHistogram: { key: 'ratingsHistogram', label: 'Betygsfördelning', category: 'product', format: { kind: 'number' } },
-  advisorPauses: { key: 'advisorPauses', label: 'Rådgivar-pauser', category: 'product', format: { kind: 'number' } },
+  advisorPauses: { key: 'advisorPauses', label: 'Rådgivar-pauser', category: 'product', format: { kind: 'number' }, source: 'events' },
   activeSessions: { key: 'activeSessions', label: 'Aktiva sessioner', category: 'product', format: { kind: 'number' } },
   groupsCount: { key: 'groupsCount', label: 'Grupper', category: 'product', format: { kind: 'number' } },
 
@@ -47,7 +50,6 @@ export const METRICS: Record<MetricKey, MetricDef> = {
 
   // ── Trafik ──────────────────────────────────────────────────────────────────
   pageViews: { key: 'pageViews', label: 'Sidvisningar', category: 'traffic', format: { kind: 'number' } },
-  visitors: { key: 'visitors', label: 'Besökare', category: 'traffic', format: { kind: 'number' } },
   avgSessionDuration: { key: 'avgSessionDuration', label: 'Snitt sessionstid', category: 'traffic', format: { kind: 'duration', unit: 's' } },
   topPages: { key: 'topPages', label: 'Toppsidor', category: 'traffic', format: { kind: 'number' } },
   topReferrers: { key: 'topReferrers', label: 'Topp-hänvisare', category: 'traffic', format: { kind: 'number' } },

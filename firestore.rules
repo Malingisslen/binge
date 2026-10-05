@@ -1250,6 +1250,14 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Egen räkning av hur funktioner används (BIN-1438) — dagliga summor utan
+    // personuppgifter, skrivna ENBART av recordEvent-callablen (Admin SDK går förbi
+    // reglerna) och lästa av /api/insights på servern. Förseglad: klienter kan varken
+    // läsa eller förfalska räknarna. Ordförrådet prövas i callablen.
+    match /eventStats/{day} {
+      allow read, write: if false;
+    }
+
     // Recap coverage-gap counters (BIN-544) — per-show counts of "user hit a
     // title with no spoiler-safe recap available," written EXCLUSIVELY by the
     // logRecapMiss callable (Admin SDK bypasses rules). Sealed: clients can

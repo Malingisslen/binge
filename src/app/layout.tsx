@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from 'next';
-import Script from 'next/script';
 import { Albert_Sans } from 'next/font/google';
 import './globals.css';
 import Providers from '@/components/Providers';
@@ -156,15 +155,6 @@ export default function RootLayout({
           }}
         />
 
-        <Script
-          defer
-          strategy="afterInteractive"
-          data-domain="binge.nu"
-          src="https://plausible.io/js/script.js"
-        />
-        <Script id="plausible-shim" strategy="afterInteractive">
-          {`window.plausible=window.plausible||function(){(window.plausible.q=window.plausible.q||[]).push(arguments)};`}
-        </Script>
         <Providers>
           <AppShell>{children}</AppShell>
         </Providers>

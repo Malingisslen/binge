@@ -32,10 +32,10 @@ export function TimeSeriesChart({ metricKey }: { metricKey: MetricKey }) {
     <div className="bg-surface border border-rule rounded-md p-3">
       <div className="flex items-baseline justify-between mb-2">
         <span className="text-[11px] uppercase tracking-wide text-ink-3">{label}</span>
-        <span className="text-sm text-ink-2 tabular-nums">{total.toLocaleString('sv-SE')} totalt</span>
+        {!value.missing && <span className="text-sm text-ink-2 tabular-nums">{total.toLocaleString('sv-SE')} totalt</span>}
       </div>
       {points.length === 0 ? (
-        <div className="text-sm text-ink-3 py-2">Ingen data</div>
+        <div className="text-sm text-ink-3 py-2">{value.missing ?? 'Ingen data'}</div>
       ) : (
         <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden className="text-acc block">
           <path d={path} fill="none" stroke="currentColor" strokeWidth={2} vectorEffect="non-scaling-stroke" />

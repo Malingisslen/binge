@@ -22,7 +22,7 @@ describe('mediaFilterOf', () => {
 });
 
 describe('activeFilterSummary', () => {
-  it('summarizes which filter TYPES are active, sorted, so combos are visible in Plausible', () => {
+  it('summarizes which filter TYPES are active, sorted, so combos are visible as one value', () => {
     // media type is the scope, not a "filter" here — captured by mediaFilterOf instead
     expect(activeFilterSummary({ mediaType: 'movie' })).toBe('none');
     expect(activeFilterSummary({ genreIds: [27], decade: '1980' })).toBe('decade+genre');

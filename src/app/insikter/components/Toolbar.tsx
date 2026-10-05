@@ -26,6 +26,9 @@ function formatStamp(d: Date): string {
 export function Toolbar({ lastFetchedAt }: { lastFetchedAt: Date | null }) {
   const data = useInsightsContext();
   const basis = data.window?.truncated ? data.window.basisDate : null;
+  // Händelseräkningen (eventStats) började ett visst datum; ett intervall som börjar före
+  // det får inte läsas som att ingenting hände dagarna innan.
+  const eventsSince = data.eventsSince && data.eventsSince > data.range.from ? data.eventsSince : null;
 
   const computedAt = data.rollup?.computedAt ? new Date(data.rollup.computedAt) : null;
   const nextUpdate = computedAt ? new Date(computedAt.getTime() + ROLLUP_INTERVAL_MS) : null;
@@ -40,6 +43,8 @@ export function Toolbar({ lastFetchedAt }: { lastFetchedAt: Date | null }) {
       <RangePicker />
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-ink-3">
         {basis && <span>Periodsiffror jämförda mot {basis}</span>}
+        {eventsSince && <span>Händelser mäts sedan {eventsSince}</span>}
+        {!data.eventsSince && !data.partial && <span>Händelser har inte räknats än</span>}
         {computedAt ? (
           <span>Data beräknad {formatStamp(computedAt)} · nästa uppdatering {nextLabel}</span>
         ) : (

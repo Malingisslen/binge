@@ -152,7 +152,7 @@ function SavingsContent() {
   const hasAdvisorProviders = advisor.providers.length > 0;
   // En-skott per sidladd: fyr 'advisor_viewed' bara första gången rådgivaren
   // är klar med providers. Utan guarden skulle providerCount-ändringar (t.ex.
-  // efter en pausning) re-fyra eventet och blåsa upp räkningen i Plausible.
+  // efter en pausning) re-fyra eventet och blåsa upp räkningen.
   const advisorViewedRef = useRef(false);
   useEffect(() => {
     if (!advisor.isLoading && hasAdvisorProviders && !advisorViewedRef.current) {

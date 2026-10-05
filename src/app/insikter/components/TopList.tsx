@@ -18,7 +18,7 @@ export function TopList({ metricKey }: { metricKey: MetricKey }) {
     <div className="bg-surface border border-rule rounded-md p-3">
       <div className="text-[11px] uppercase tracking-wide text-ink-3 mb-2">{label}</div>
       {entries.length === 0 ? (
-        <div className="text-sm text-ink-3 py-2">Ingen data</div>
+        <div className="text-sm text-ink-3 py-2">{value.missing ?? 'Ingen data'}</div>
       ) : (
         <ol className="flex flex-col gap-1.5">
           {entries.map((e, i) => (

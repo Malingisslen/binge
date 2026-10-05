@@ -2,7 +2,7 @@
 //
 // The whole point: today a search that parses fine but returns an empty grid is
 // indistinguishable from a happy one, so we are blind to our most common silent
-// failure. These helpers derive Plausible event props that are pure shapes —
+// failure. These helpers derive event props that are pure shapes —
 // bucketed counts and fixed filter-type names — never the user's raw sentence.
 // See analytics.ts ('ask_binge_results' / 'ask_binge_submitted' /
 // 'ask_binge_chip_removed').
@@ -25,7 +25,7 @@ export function mediaFilterOf(filter: AskFilter): 'all' | 'movie' | 'tv' {
 
 // Filter TYPES (not values) the parse activated. Media type is the scope, not a
 // filter here — it rides on mediaFilterOf instead. Sorted + '+'-joined so a single
-// Plausible property value captures which COMBINATIONS strand users.
+// property value captures which COMBINATIONS strand users.
 const FILTER_TYPES: [keyof AskFilter, string][] = [
   ['genreIds', 'genre'],
   ['mood', 'mood'],
