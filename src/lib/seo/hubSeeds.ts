@@ -15,8 +15,7 @@
  *  - drops person results (trending/all includes them)
  *  - drops titles where EITHER display or original title is non-Latin
  *    (`hasNonLatinTitle` — strictly stricter than the SEO pre-render filter
- *    `latinDisplayIds`, so a seeded grid can never link a de-indexed title;
- *    it also matches what home's client-side trending already does)
+ *    `latinDisplayIds`; it also matches what home's client-side trending already does)
  *  - caps the list (hubs need ~20 links, not a dump)
  *
  * Pure and network-free on purpose: unit-testable without Firebase/Next.

@@ -7,6 +7,8 @@
   inte två kopior) står kvar och är skärpt — pariteten är nu strukturell i stället för
   att bero på att två anropare kör samma kod. Kravet "båda anroparna måste gå genom den"
   har bara en anropare kvar.
+- **Efterföljare 2026-10-05:** ersatt av ADR 0024. Personsidorna har inget urval längre,
+  och den delade person-pipelinen är raderad.
 - **Trigger:** `/sprint-execute` selected BIN-337 (test sitemap URL-shape + DRY the
   duplicated person-ID pipeline between `sitemap.ts` and `person/[id]/page.tsx`). Routed
   `medium`.

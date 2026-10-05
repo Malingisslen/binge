@@ -1,7 +1,6 @@
 import type { MetadataRoute } from 'next';
 import { SEO_PROVIDER_IDS } from '@/lib/tmdb/seoCoverage';
-import { readSelectionManifest, resolvedIds, allowThinSelection } from '@/lib/tmdb/selectionManifest';
-import { SEED_MOVIE_IDS, SEED_TV_IDS, SEED_PERSON_IDS } from '@/lib/seo/selectionSeed';
+import { readSelectionManifest, resolvedIds, allowThinSelection, type SelectionType } from '@/lib/tmdb/selectionManifest';
 import { FRANCHISES } from '@/lib/seo/franchises';
 import { SEO_GENRE_SLUGS } from '@/lib/seo/genreHubs';
 import { buildFetchFailed, readContentChangedAt } from '@/lib/tmdb/buildCache';
@@ -12,7 +11,7 @@ import { buildFetchFailed, readContentChangedAt } from '@/lib/tmdb/buildCache';
  * familj. Route-filerna under `src/app/sitemap*.xml/` serialiserar det här; de
  * räknar ingenting själva.
  *
- * `lastmod` sätts BARA där den är sann: för titlar och personer är det när sidans
+ * `lastmod` sätts BARA där den är sann: för titlar är det när sidans
  * innehåll senast ändrades enligt byggcachen (`readContentChangedAt`), och
  * utelämnas när det är okänt. Hubbar och statiska sidor får ingen — byggtiden
  * som stod där förut flyttades på alla URL:er varje bygge och sa ingenting.
@@ -31,17 +30,15 @@ import { buildFetchFailed, readContentChangedAt } from '@/lib/tmdb/buildCache';
  * layout.tsx. Vi Disallow:ar den dock INTE i robots.txt — en blockerad URL kan
  * aldrig crawlas för att SE noindex-direktivet, så noindex + crawlbar är rätt
  * kombination för att hålla den ur indexet.
- * - Topp-N populära + topp-rankade filmer/serier från TMDB
- * - Topp-N personer (top-billed cast från populära filmer)
+ * - Kärnan av filmer och serier med svensk tjänst (ADR 0024)
  *
- * Mål: ge Google en bred "kanonisk lista" av sidor vi anser viktiga, så att
- * indexerings-prioriteten inte tilldelas slumpvis via on-page crawl-discovery.
+ * Personsidor listas inte: de är noindex (ADR 0024).
  *
  * **Sitemap MÅSTE adressera samma URL-mängd som pre-rendren** i
- * src/app/movie/[id]/page.tsx, src/app/tv/[id]/page.tsx och
- * src/app/person/[id]/page.tsx. Diskrepans → "Genomsökt – inte indexerad"
- * i GSC. Sedan BIN-823 garanteras det STRUKTURELLT: både sitemapen och de tre
- * routerna läser samma urvalsmanifest i .tmdb-cache/. Tidigare importerade de
+ * src/app/movie/[id]/page.tsx och src/app/tv/[id]/page.tsx. Diskrepans →
+ * "Genomsökt – inte indexerad" i GSC. Sedan BIN-823 garanteras det
+ * STRUKTURELLT: både sitemapen och routerna läser samma urvalsmanifest i
+ * .tmdb-cache/. Tidigare importerade de
  * bara samma konstanter och körde samma härledning två gånger — paritet som
  * vilade på att två kodvägar råkade ge samma svar.
  *
@@ -52,7 +49,7 @@ import { buildFetchFailed, readContentChangedAt } from '@/lib/tmdb/buildCache';
  * Körs bara vid build. **Inga TMDB-anrop härifrån längre** — filen läser en
  * lokal artefakt som pre-rendren skrev i en tidigare byggfas. Den KASTAR om
  * manifestet saknas i stället för att falla tillbaka — utom under
- * `SELECTION_ALLOW_THIN`, där den returnerar frö-id:na. Se
+ * `SELECTION_ALLOW_THIN`, där den returnerar en tom lista. Se
  * selectionOrThrow nedan för varför en halv sitemap är värre än inget bygge,
  * och varför undantaget ändå är rätt.
  */
@@ -77,61 +74,51 @@ function staticEntries(): MetadataRoute.Sitemap {
 }
 
 /**
- * Titel- och person-URL:er läses ur SAMMA urvalsmanifest som pre-rendren
+ * Titel-URL:er läses ur SAMMA urvalsmanifest som pre-rendren
  * skrev (BIN-823).
  *
  * Tidigare härledde den här filen om hela urvalet på egen hand — en tredje kopia
- * av `collectIds`, plus en andra anropare av den DELADE `collectPersonIds`
- * (ADR 0005: en pipeline, aldrig två kopior — det beslutet står kvar). ~4 100
- * extra TMDB-anrop per bygge. Paritetsinvarianten vilade då på att två oberoende
+ * av `collectIds`, plus en andra anropare av den DELADE `collectPersonIds`.
+ * ~4 100 extra TMDB-anrop per bygge. Paritetsinvarianten vilade då på att två oberoende
  * kodvägar råkade ge samma svar; nu är den strukturell: en artefakt, två läsare.
  *
  * Manifesten skrivs i fasen `Collecting page data` (alla `generateStaticParams`)
  * som är helt avslutad innan `Generating static pages` börjar — där den här
  * filen körs. Läsordningen är alltså garanterad av Next, inte av tur.
  *
- * KASTAR om ett manifest saknas. En sitemap som tyst faller tillbaka på bara
- * frö-id:n hade publicerat ~116 URL:er som den kanoniska listan över sajten och
- * bett Google glömma resten — värre än ingen sitemap alls. Routernas
+ * KASTAR om ett manifest saknas. En sitemap som tyst tappat kärnan hade bett
+ * Google glömma den — värre än ingen sitemap alls. Routernas
  * täckningsgolv fäller normalt bygget långt innan vi når hit; det här är
  * bältet till det hängslet.
  *
  * …UTOM under `SELECTION_ALLOW_THIN`, samma undantag som golvet. Utan det vore
- * lättnaden bara halv: en strypt personhärledning som slår i ett tidstak skriver
+ * lättnaden bara halv: en strypt härledning som slår i ett tidstak skriver
  * ALDRIG något manifest (`resolveSelection` behåller bara det befintliga, och på en
  * kall cache finns inget), så bygget hade fällt här i stället för på golvet.
  * Undantaget är säkert av samma skäl som golvets: `deploy.yml` sätter aldrig
  * flaggan, och det är enda vägen till binge.nu.
  */
-function selectionOrThrow(
-  type: 'movie' | 'tv' | 'person',
-  seedIds: readonly number[],
-): number[] {
+function selectionOrThrow(type: SelectionType): number[] {
   const manifest = readSelectionManifest(type);
   if (manifest === null) {
-    if (allowThinSelection()) return [...seedIds];
+    if (allowThinSelection()) return [];
     throw new Error(
       `[sitemap] urvalsmanifestet för ${type} saknas — pre-rendren har inte skrivit det ` +
         `detta bygge. Publicerar hellre ingen sitemap än en som listar en bråkdel av sajten (BIN-823).`,
     );
   }
-  return resolvedIds(manifest, seedIds);
+  return resolvedIds(manifest);
 }
 
-function selectedEntries(
-  kind: 'movie' | 'tv' | 'person',
-  seedIds: readonly number[],
-  changeFrequency: 'weekly' | 'monthly',
-  priority: number,
-): MetadataRoute.Sitemap {
+function selectedEntries(kind: SelectionType, priority: number): MetadataRoute.Sitemap {
   const entries: MetadataRoute.Sitemap = [];
-  for (const id of selectionOrThrow(kind, seedIds)) {
+  for (const id of selectionOrThrow(kind)) {
     if (buildFetchFailed(kind, id)) continue;
     const changedAt = readContentChangedAt(kind, id);
     entries.push({
       url: `${SITE_URL}/${kind}/${id}/`,
       ...(changedAt !== null ? { lastModified: new Date(changedAt) } : {}),
-      changeFrequency,
+      changeFrequency: 'weekly',
       priority,
     });
   }
@@ -139,15 +126,11 @@ function selectedEntries(
 }
 
 export function movieSitemapEntries(): MetadataRoute.Sitemap {
-  return selectedEntries('movie', SEED_MOVIE_IDS, 'weekly', 0.7);
+  return selectedEntries('movie', 0.7);
 }
 
 export function tvSitemapEntries(): MetadataRoute.Sitemap {
-  return selectedEntries('tv', SEED_TV_IDS, 'weekly', 0.7);
-}
-
-export function personSitemapEntries(): MetadataRoute.Sitemap {
-  return selectedEntries('person', SEED_PERSON_IDS, 'monthly', 0.5);
+  return selectedEntries('tv', 0.7);
 }
 
 // Provider-landningssidor (BIN-62) — MÅSTE matcha generateStaticParams i
@@ -211,13 +194,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
   // pre-rendren precis skrivit: saknas den har något gått grundligt fel, och en
   // halv sitemap vore ett aktivt felaktigt påstående till Google om vilka sidor
   // sajten har. Låt det kasta — på den enda väg som når binge.nu. Under
-  // `SELECTION_ALLOW_THIN` faller selectionOrThrow
-  // tillbaka på fröna i stället; de byggena publicerar ingenting till Google.
+  // `SELECTION_ALLOW_THIN` ger selectionOrThrow en tom lista i stället; de
+  // byggena publicerar ingenting till Google.
   return [
     ...pageSitemapEntries(),
     ...movieSitemapEntries(),
     ...tvSitemapEntries(),
-    ...personSitemapEntries(),
   ];
 }
 
@@ -226,7 +208,6 @@ export const SITEMAP_PARTS = {
   'sitemap-sidor.xml': pageSitemapEntries,
   'sitemap-filmer.xml': movieSitemapEntries,
   'sitemap-serier.xml': tvSitemapEntries,
-  'sitemap-personer.xml': personSitemapEntries,
 } as const;
 
 function escapeXml(s: string): string {

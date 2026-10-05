@@ -4,19 +4,17 @@ import { notFound } from 'next/navigation';
 import MoviePageClient from '@/components/pages/MoviePageClient';
 import {
   getMovie,
-  getPopularMovies,
-  getTopRatedMovies,
+  discoverMovies,
   posterUrl,
 } from '@/lib/tmdb/client';
 import {
-  SEO_TITLE_PAGES,
-  SEO_TOP_RATED_PAGES,
+  SEO_CORE_DISCOVER_PAGES,
+  SEO_CORE_DISCOVER_PARAMS,
   SEO_FALLBACK_MOVIE_IDS,
-  cappedTitleIds,
+  cappedCoreIds,
   latinDisplayIds,
 } from '@/lib/tmdb/seoCoverage';
 import { resolveSelection, SelectionFloorError } from '@/lib/tmdb/selectionManifest';
-import { SEED_MOVIE_IDS } from '@/lib/seo/selectionSeed';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import { fetchForBuild, buildSignal, startBuildWatchdog, trackBuildCall } from '@/lib/tmdb/buildFetch';
 import { recordBuildFetchOutcome } from '@/lib/tmdb/buildCache';
@@ -27,15 +25,14 @@ export const dynamic = 'force-static';
 export const dynamicParams = false;
 
 /**
- * Pre-render topp-N populära + topp-rankade filmer som riktiga statiska
- * routes. Detta är hörnstenen i SEO-fixen: Googlebot får färdig HTML med
+ * Pre-render kärnan av filmer — de populäraste som går att se på en svensk
+ * tjänst (ADR 0024) — som riktiga statiska routes. Detta är hörnstenen i SEO-fixen: Googlebot får färdig HTML med
  * korrekt <title>, <meta description>, <link rel="canonical"> och första-
  * paint content INNAN JavaScript körs, istället för "Sidan hittades inte"-
  * skalet som catch-all-routen serverade.
  *
- * Filmer utanför topp-N hanteras fortfarande av catch-all-routen via
- * client-side rendering — godtagbart kompromiss eftersom long-tail har
- * minimal söktrafik.
+ * Filmer utanför kärnan hanteras av catch-all-routen via client-side
+ * rendering och är noindex, även efter hydrering.
  *
  * Sitemap och pre-render MÅSTE adressera samma URL-mängd, annars genererar
  * Google "Genomsökt – inte indexerad" för URLs i ena men inte andra. Sedan
@@ -58,8 +55,8 @@ export async function generateStaticParams(): Promise<{ id: string }[]> {
     fetcher: (page: number) => Promise<{ results: { id: number }[] }>,
     pageCount: number,
     kind: string,
-  ): Promise<Set<number>> => {
-    const ids = new Set<number>();
+  ): Promise<number[]> => {
+    const ids: number[] = [];
     const pages = Array.from({ length: pageCount }, (_, i) => i + 1);
     const results = await Promise.allSettled(
       pages.map(p => trackBuildCall(`params:${kind}/p${p}`, () => fetcher(p), { group: 'movie' })),
@@ -69,29 +66,29 @@ export async function generateStaticParams(): Promise<{ id: string }[]> {
         // Curation: skip titles that render in a non-Latin alphabet — same rule
         // browsing surfaces already apply (titleFilter.ts). The sitemap inherits
         // the filtering through the manifest (BIN-823), so this is its only site.
-        for (const id of latinDisplayIds(r.value.results)) ids.add(id);
+        ids.push(...latinDisplayIds(r.value.results));
       }
     }
     return ids;
   };
 
   try {
-    // BIN-823: urvalet persisteras mellan byggen. `derive` — de 1 000 listanropen
-    // — körs BARA i veckobygget eller om manifestet saknas/är för gammalt; en
-    // vanlig kod-deploy läser bara filen. Tidigare kördes det här varje deploy,
+    // BIN-823: urvalet persisteras mellan byggen. `derive` körs BARA i
+    // veckobygget eller om manifestet saknas/är för gammalt; en vanlig
+    // kod-deploy läser bara filen. Tidigare kördes det här varje deploy,
     // och eftersom TMDB:s ranking roterar veckovis roterade urvalet med den:
     // titlar ramlade ur, föll till catch-all-routens noindex och avindexerades.
     const ids = await resolveSelection({
       type: 'movie',
-      seedIds: SEED_MOVIE_IDS,
       fallbackIds: SEO_FALLBACK_MOVIE_IDS,
-      derive: async () => {
-        const [popular, topRated] = await Promise.all([
-          collectIds(p => getPopularMovies(p, { signal: buildSignal() }), SEO_TITLE_PAGES, 'popular-movies'),
-          collectIds(p => getTopRatedMovies(p, { signal: buildSignal() }), SEO_TOP_RATED_PAGES, 'top-movies'),
-        ]);
-        return cappedTitleIds([...popular], [...topRated]);
-      },
+      derive: async () =>
+        cappedCoreIds(
+          await collectIds(
+            p => discoverMovies({ ...SEO_CORE_DISCOVER_PARAMS, page: String(p) }, { signal: buildSignal() }),
+            SEO_CORE_DISCOVER_PAGES,
+            'core-movies',
+          ),
+        ),
     });
     return ids.map(id => ({ id: String(id) }));
   } catch (err) {
