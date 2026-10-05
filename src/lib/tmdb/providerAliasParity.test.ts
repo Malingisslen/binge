@@ -41,7 +41,7 @@ describe('provider alias map parity (BIN-420)', () => {
     //   node -e "const s=require('fs').readFileSync('src/lib/tmdb/providers.ts','utf8');console.log([...s.matchAll(/aliases:\s*\[([^\]]*)\]/g)].flatMap(m=>m[1].split(',')).length)"
     expect(Object.keys(expected).length).toBeGreaterThanOrEqual(14);
     expect(expected[531]).toBe(431); // nedlagda Paramount+ → SkyShowtime
-    expect(expected[1899]).toBe(384); // legacy HBO Max → Max
+    expect(expected[1899]).toBe(384); // legacy HBO Max id → 384
   });
 
   // Strict, symmetric deep-equality — NOT a subset match. This fails on BOTH

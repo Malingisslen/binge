@@ -65,7 +65,7 @@ export default function DiagnosisCard({ advisor, activeProviderCount }: Props) {
     case 'idle':
     default:
       suggestion = (
-        <span className="text-ink-3"> Allt är välbalanserat — vi hör av oss när något ändras.</span>
+        <span className="text-ink-3"> Allt är välbalanserat just nu.</span>
       );
   }
 

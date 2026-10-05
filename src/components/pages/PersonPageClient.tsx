@@ -150,7 +150,7 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
   });
 
   if (isLoading) return <LoadingView variant="detail" label="Laddar person…" />;
-  if (!person) return <NotFound crumb="Person" title="Personen hittades inte." body="Vi kunde inte hitta den här personen i TMDB." />;
+  if (!person) return <NotFound crumb="Person" title="Personen hittades inte." body="Den här personen gick inte att hitta." />;
 
   const photo = profileUrl(person.profile_path, 'w500');
   const birthYear = person.birthday?.substring(0, 4);
@@ -278,7 +278,7 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
       )}
 
       {roles.length === 0 && selfCredits.length === 0 && (
-        <EmptyState title="Ingen filmografi" body="Vi hittade inga titlar för den här personen ännu." />
+        <EmptyState title="Ingen filmografi" body="Inga titlar hittades för den här personen ännu." />
       )}
     </div>
   );

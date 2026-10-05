@@ -87,7 +87,7 @@ function NyGruppContent() {
           />
         </FormSection>
 
-        <FormSection title="Default: vad?">
+        <FormSection title="Standard: vad?">
           <FormRadioGroup
             name="mediaType"
             value={mediaType}
@@ -100,7 +100,7 @@ function NyGruppContent() {
           />
         </FormSection>
 
-        <FormSection title="Default: provider-läge">
+        <FormSection title="Standard: vilka tjänster räknas">
           <FormRadioGroup
             name="providerMode"
             value={providerMode}
@@ -112,7 +112,7 @@ function NyGruppContent() {
           />
         </FormSection>
 
-        <FormSection title="Default: aggregering">
+        <FormSection title="Standard: hur en match väljs">
           <FormRadioGroup
             name="aggregation"
             value={aggregation}
@@ -126,8 +126,8 @@ function NyGruppContent() {
         </FormSection>
 
         <p className="px-3 py-2 text-xxs text-ink-3 border-t border-rule-2">
-          Defaults används när du startar en ny session med gruppen — du kan
-          alltid ändra per session.
+          Standardvalen används när du startar en ny session med gruppen. Du kan
+          alltid ändra dem per session.
         </p>
 
         {error && (

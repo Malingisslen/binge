@@ -60,13 +60,13 @@ function buildCopy(entry: CalendarEntry | null, totalThisWeek: number, isLoading
       return {
         crumb: `Hem · i morgon · ${entry.provider ?? 'digitalt'}`,
         h1: `${entry.title} släpps i morgon.`,
-        stand: `Digital release ${weekday} på ${provider}.`,
+        stand: `Digitalt släpp ${weekday} på ${provider}.`,
       };
     }
     return {
       crumb: `Hem · ${weekday} · ${entry.provider ?? 'digitalt'}`,
       h1: `${entry.title} släpps ${days <= 7 ? 'i veckan' : 'snart'}.`,
-      stand: `Digital release ${weekday} på ${provider}.`,
+      stand: `Digitalt släpp ${weekday} på ${provider}.`,
     };
   }
 

@@ -56,7 +56,7 @@ function PremiererContent() {
             <div style={{ marginTop: 16 }}>
               <EmptyState
                 title="Inga premiärer eller finaler på gång"
-                body="Vi hittade inga säsongspremiärer, finaler eller filmsläpp för dina serier de kommande tre månaderna. Upptäck stora kommande premiärer nedan."
+                body="Inga säsongspremiärer, finaler eller filmsläpp hittades för dina serier de kommande tre månaderna. Upptäck stora kommande premiärer nedan."
               />
             </div>
           ) : (

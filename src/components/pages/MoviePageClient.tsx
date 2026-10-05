@@ -53,6 +53,7 @@ import { TitleCrumb, GenreLinks, ProviderHubLinks } from '@/components/title/Tit
 import { cinemaToStreaming } from '@/lib/calendar/releaseDate';
 import { useToast } from '@/contexts/ToastContext';
 import { trackEvent } from '@/lib/analytics';
+import ShareButton from '@/components/share/ShareButton';
 import type { TMDBMovie } from '@/types';
 import { DELETION_IN_PROGRESS_MESSAGE, isDeletionInProgressError } from '@/lib/deletionInProgressError';
 
@@ -180,7 +181,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   });
 
   if (isLoading) return <LoadingView variant="detail" label="Laddar filmen…" />;
-  if (!movie) return <NotFound crumb="Film" title="Filmen hittades inte." body="Vi kunde inte hitta den här filmen i TMDB." />;
+  if (!movie) return <NotFound crumb="Film" title="Filmen hittades inte." body="Den här filmen gick inte att hitta." />;
 
   // BIN-422: känd franchise → statisk, crawlbar /billigaste-länk (renderas
   // utanför ClientOnly nedan). Härledd ur build-initialData, inte ur den
@@ -471,6 +472,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
                 releaseYear={movie.release_date ? parseInt(movie.release_date.substring(0, 4), 10) : null}
               />
               <NotInterestedButton tmdbId={movie.id} mediaType="movie" title={displayTitle} />
+              <ShareButton path={`/movie/${movie.id}/`} title={displayTitle} text={`Se var ${displayTitle} går att streama.`} surface="title" />
             </div>
             {watchlistItem?.status === 'sedd' && (
               <WatchedDateEditor

@@ -71,7 +71,11 @@ export const handOverOwnedGroups = onCall(
     try {
       invites = await eraseSentInvites(io, uid);
     } catch (err) {
-      throw new HttpsError('internal', err instanceof Error ? err.message : String(err));
+      // Only the refusal is worded for a reader. Anything else is a Firestore
+      // error whose text can carry document paths with uids — log it, never send it.
+      if (err instanceof HandoverRefusal) throw new HttpsError('internal', err.message);
+      logger.error('handOverOwnedGroups: sent-invite erasure threw', { err });
+      throw new HttpsError('internal', refusalAfterHandover(false));
     }
 
     // BIN-1304: the owned-groups query runs outside the loop's per-group catch, so a
@@ -169,7 +173,7 @@ export const handOverGroup = onCall(
         throw new HttpsError('failed-precondition', err.message);
       }
       logger.error('handOverGroup: failed', { groupId, err });
-      throw new HttpsError('internal', err instanceof Error ? err.message : String(err));
+      throw new HttpsError('internal', 'Kunde inte lämna över gruppen. Försök igen.');
     }
     return { ok: true };
   },

@@ -226,14 +226,3 @@ export function reviewSchema(input: ReviewSchemaInput): Record<string, unknown> 
   }
   return schema;
 }
-
-export function organizationSchema(siteUrl = 'https://binge.nu'): Record<string, unknown> {
-  return {
-    '@context': 'https://schema.org',
-    '@type': 'Organization',
-    name: 'Binge.nu',
-    url: siteUrl,
-    logo: `${siteUrl}/og-image.png`,
-    description: 'Svensk mediatracker för film och TV-serier.',
-  };
-}
