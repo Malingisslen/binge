@@ -2,7 +2,14 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { readBuildCacheEntry, writeBuildCache } from './buildCache';
+import {
+  readBuildCacheEntry,
+  writeBuildCache,
+  readContentChangedAt,
+  contentFingerprint,
+  recordBuildFetchOutcome,
+  buildFetchFailed,
+} from './buildCache';
 
 let dir: string;
 
@@ -65,5 +72,61 @@ describe('buildCache', () => {
   it('returnerar null när fetchedAt saknas/ogiltig', () => {
     writeFileSync(join(dir, 'tv-77.json'), JSON.stringify({ data: { x: 1 } }));
     expect(readBuildCacheEntry('tv', 77)).toBeNull();
+  });
+});
+
+describe('buildCache — innehållsstämpeln för sitemapens lastmod (SEO-5)', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const base = { title: 'Testfilm', overview: 'x', popularity: 10, vote_count: 5,
+    'watch/providers': { results: { SE: { flatrate: [{ provider_id: 8 }] } } } };
+
+  it('stämplar första skrivningen', () => {
+    writeBuildCache('movie', 1, base, 1_000_000);
+    expect(readContentChangedAt('movie', 1)).toBe(1_000_000);
+  });
+
+  it('flyttar inte stämpeln när bara rankningstal ändrats', () => {
+    writeBuildCache('movie', 1, base, 1_000_000);
+    writeBuildCache('movie', 1, { ...base, popularity: 99, vote_count: 500 }, 1_000_000 + 7 * DAY);
+    expect(readContentChangedAt('movie', 1)).toBe(1_000_000);
+  });
+
+  it('flyttar stämpeln när tillgängligheten ändrats', () => {
+    writeBuildCache('movie', 1, base, 1_000_000);
+    const later = 1_000_000 + 7 * DAY;
+    writeBuildCache('movie', 1, { ...base, 'watch/providers': { results: { SE: { flatrate: [{ provider_id: 337 }] } } } }, later);
+    expect(readContentChangedAt('movie', 1)).toBe(later);
+  });
+
+  it('ger en post från före stämplarna dess egen hämttid, inte nu', () => {
+    // A cache entry written before this change: data on disk, no sidecar.
+    writeFileSync(join(dir, 'movie-2.json'), JSON.stringify({ fetchedAt: 1_000_000, data: base }));
+    writeBuildCache('movie', 2, base, 1_000_000 + 7 * DAY);
+    expect(readContentChangedAt('movie', 2)).toBe(1_000_000);
+  });
+
+  it('är okänd utan stämpel', () => {
+    expect(readContentChangedAt('movie', 404)).toBeNull();
+  });
+
+  it('fingeravtrycket bortser från de flyktiga fälten och inget annat', () => {
+    expect(contentFingerprint({ ...base, popularity: 1, recommendations: { results: [1] } }))
+      .toBe(contentFingerprint({ ...base, popularity: 2, recommendations: { results: [2] } }));
+    expect(contentFingerprint({ ...base, overview: 'y' })).not.toBe(contentFingerprint(base));
+  });
+});
+
+describe('buildCache — markören för misslyckad bygghämtning (SEO-13)', () => {
+  it('sätts vid misslyckande och tas bort vid nästa lyckade', () => {
+    expect(buildFetchFailed('tv', 7)).toBe(false);
+    recordBuildFetchOutcome('tv', 7, false);
+    expect(buildFetchFailed('tv', 7)).toBe(true);
+    recordBuildFetchOutcome('tv', 7, true);
+    expect(buildFetchFailed('tv', 7)).toBe(false);
+  });
+
+  it('är per kind + id', () => {
+    recordBuildFetchOutcome('tv', 7, false);
+    expect(buildFetchFailed('movie', 7)).toBe(false);
   });
 });

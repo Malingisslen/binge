@@ -69,7 +69,7 @@ export default function ReviewList({ tmdbId, mediaType, title, posterPath }: Rev
         {uid && !myReview && (
           <button
             onClick={() => setShowForm(true)}
-            className="px-[7px] py-[2px] text-xs rounded-sm cursor-pointer bg-acc-deep text-white border-none font-[inherit]"
+            className="px-[7px] py-[2px] text-xs rounded-sm cursor-pointer bg-acc-deep text-on-acc border-none font-[inherit]"
           >
             Skriv
           </button>
@@ -84,14 +84,14 @@ export default function ReviewList({ tmdbId, mediaType, title, posterPath }: Rev
             placeholder="Skriv din recension…"
             maxLength={2000}
             rows={3}
-            className="w-full px-2 py-1 text-xs border border-rule rounded-sm bg-white font-[inherit] resize-none outline-none mb-2"
+            className="w-full px-2 py-1 text-xs border border-rule rounded-sm bg-surface font-[inherit] resize-none outline-none mb-2"
           />
           <div className="flex items-center gap-2">
             <label className="flex items-center gap-1 text-xs text-ink-3 cursor-pointer">
               <input type="checkbox" checked={spoiler} onChange={e => setSpoiler(e.target.checked)} className="accent-acc-deep" />
               Spoiler
             </label>
-            <button onClick={handleSubmit} className="px-3 py-[3px] text-xs border-none rounded-sm cursor-pointer bg-acc-deep text-white font-[inherit]">
+            <button onClick={handleSubmit} className="px-3 py-[3px] text-xs border-none rounded-sm cursor-pointer bg-acc-deep text-on-acc font-[inherit]">
               Publicera
             </button>
             <button onClick={() => setShowForm(false)} className="px-3 py-[3px] text-xs border border-rule rounded-sm cursor-pointer bg-surface text-ink-3 font-[inherit]">
@@ -287,18 +287,19 @@ function ReviewComments({
             onKeyDown={e => { if (e.key === 'Enter') void submit(); }}
             placeholder="Skriv en kommentar…"
             maxLength={500}
-            className="flex-1 px-2 py-1 text-xxs border border-rule rounded-sm bg-white"
+            className="flex-1 px-2 py-1 text-xxs border border-rule rounded-sm bg-surface"
           />
           <button
             onClick={submit}
             disabled={posting || !text.trim()}
-            className="px-2 py-1 bg-acc-deep text-white rounded-sm text-xxs cursor-pointer disabled:opacity-50"
+            aria-label="Skicka"
+            className="inline-flex items-center justify-center min-w-[24px] min-h-[24px] px-2 py-1 bg-acc-deep text-on-acc rounded-sm text-xxs cursor-pointer disabled:opacity-50"
           >
-            <Send size={10} />
+            <Send size={12} aria-hidden />
           </button>
           <button
             onClick={onClose}
-            className="px-2 py-1 border border-rule rounded-sm text-xxs bg-white cursor-pointer text-ink-3"
+            className="px-2 py-1 border border-rule rounded-sm text-xxs bg-surface cursor-pointer text-ink-3"
           >
             Stäng
           </button>

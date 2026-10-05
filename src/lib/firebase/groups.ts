@@ -780,7 +780,9 @@ export async function deleteGroup(groupId: string, currentUid: string): Promise<
     getDocs(collection(db, 'groups', groupId, 'sessionHistory')),
     // G8: top-level sessions/{id} bär groupId och blir annars föräldralösa
     // — kvar som "aktiva" i sessionslistor med den raderade gruppens namn.
-    getDocs(query(collection(db, 'sessions'), where('groupId', '==', groupId))),
+    // SEC-1: `hostUid`-filtret krävs av firestore.rules, som bara låter en inloggad
+    // lista sessioner hen själv är värd för.
+    getDocs(query(collection(db, 'sessions'), where('groupId', '==', groupId), where('hostUid', '==', currentUid))),
   ]);
 
   // Firestore-rules tillåter bara sessionens host (hostUid == auth.uid) att

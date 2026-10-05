@@ -10,8 +10,8 @@ export default function IntegritetPage() {
   return (
     <LegalPageShell
       title="Integritetspolicy"
-      lastUpdated="2026-09-28"
-      version="1.8"
+      lastUpdated="2026-10-05"
+      version="1.9"
     >
       <section>
         <h2>1. Vem är ansvarig?</h2>
@@ -54,8 +54,8 @@ export default function IntegritetPage() {
         <h2>3. Varför vi behandlar uppgifterna (rättslig grund)</h2>
         <ul>
           <li><strong>Avtal (GDPR art. 6.1.b)</strong> — för att leverera tjänsten: spara din bevakningslista, visa rätt streaming-info, köra rådgivaren, och visa de grupper du är medlem i vilka streamingtjänster du har, eftersom det är så gruppen räknar ut vad ni kan se tillsammans, och visa gruppens medlemmar de betyg du sätter på gruppens titlar (se §10).</li>
-          <li><strong>Berättigat intresse (art. 6.1.f)</strong> — för driftlogg, felsökning, felövervakning, bot- och missbruksskydd, samt cookiefri och anonymiserad besöksstatistik (se §4).</li>
-          <li><strong>Samtycke (art. 6.1.a)</strong> — för Hushåll, den frivilliga delningen av prenumerationskostnader i grupper (se §10), samt eventuella framtida inslag som kräver samtycke, t.ex. marknadsföring eller cookie-baserad spårning. Inga marknadsföringsinslag används idag.</li>
+          <li><strong>Berättigat intresse (art. 6.1.f)</strong> — för driftlogg, felsökning, felövervakning, bot- och missbruksskydd, samt cookiefri och anonymiserad besöksstatistik (se §4). Också för att visa en svensk biografi från Wikipedia på personsidor: intresset är att sidan ska vara begriplig på svenska, och Wikimedia får ingenting om ditt konto (se §4).</li>
+          <li><strong>Samtycke (art. 6.1.a)</strong> — för Hushåll, den frivilliga delningen av prenumerationskostnader i grupper (se §10), för att spela en trailer från YouTube, där ditt tryck på spela är samtycket (se §4 och §8), samt eventuella framtida inslag som kräver samtycke, t.ex. marknadsföring eller cookie-baserad spårning. Inga marknadsföringsinslag används idag.</li>
         </ul>
         <p>
           Administratörer kan se namn, användarnamn, profilbild och presentation
@@ -75,10 +75,21 @@ export default function IntegritetPage() {
           <li><strong>Google reCAPTCHA / Firebase App Check</strong> (bot- och missbruksskydd) — laddar ett skript från Google som analyserar webbläsarsignaler för att skilja människor från bottar. Sätter en teknisk token och skickar signaler till Google.</li>
           <li><strong>Plausible Analytics</strong> (besöksstatistik) — cookiefri och IP-anonymiserad statistik över sidvisningar och över hur funktioner används, till exempel att en titel lades till, en recension skrevs eller vilken inloggningsmetod som användes. Händelserna innehåller aldrig vem du är, vad du skrivit eller vad du sökt på, bara typ och antal. Sätter inga cookies och lagrar varken din IP-adress eller andra personuppgifter.</li>
           <li><strong>Cloudflare</strong> (CDN, DNS, brandvägg) — behandlar trafikdata under Cloudflares DPA.</li>
-          <li><strong>The Movie Database (TMDB)</strong> — vi hämtar film- och serieinformation från TMDB. Dina personuppgifter överförs <em>inte</em> till TMDB; endast titel-ID:n och sökfrågor skickas.</li>
+          <li><strong>The Movie Database (TMDB)</strong> — vi hämtar film- och serieinformation och affischer från TMDB. Det sker direkt från din webbläsare, så TMDB får din IP-adress, viss webbläsarinformation och det du skriver när du söker. TMDB får inte din profil, ditt konto eller vad du tittar på.</li>
           <li><strong>Sentry</strong> (felövervakning) — tar emot teknisk information när något går fel i appen, så vi kan hitta och rätta buggar. Personuppgifter som e-post, användarnamn och användar-id rensas bort innan felrapporten skickas. Sentry är amerikanskt och anlitar i sin tur egna underleverantörer (bl.a. Intercom och OpenAI); aktuell lista finns hos <a href="https://sentry.io/legal/subprocessors/" target="_blank" rel="noopener noreferrer">Sentry</a>.</li>
           <li><strong>Google Gemini</strong> (används av &quot;Fråga Binge&quot;) — om vår vanliga sökning inte lyckas tolka din fritextfråga skickas själva frågetexten till Googles Gemini-modell, som tolkar den till en sökning. Ingen profil- eller tittardata skickas med, bara din formulering. Frågetexten skickas i stunden för tolkningen. Som EES-kund omfattas behandlingen av Googles databehandlaravtal (DPA), och frågetexten används inte för att träna eller förbättra Googles modeller. Google Gemini är amerikanskt.</li>
           <li><strong>Anthropic (Claude)</strong> — vi använder Claude i en förproducerad process (inte i realtid) för att skapa spoilerfria avsnittssammanfattningar från <em>offentliga</em> källor (Wikipedia m.fl.). <em>Inga</em> personuppgifter och ingen tittardata skickas till Anthropic — endast offentlig avsnittsinformation. Anthropic är amerikanskt.</li>
+        </ul>
+        <h3>Tjänster som din webbläsare hämtar direkt</h3>
+        <p>
+          Två tjänster hämtas direkt av din webbläsare när du använder en viss
+          funktion. De är inte våra biträden, och vi skickar inga uppgifter om
+          ditt konto till dem. De tar emot det en webbläsare alltid skickar: din
+          IP-adress, vilken webbläsare du använder och vad som efterfrågas.
+        </p>
+        <ul>
+          <li><strong>YouTube</strong> (trailers) — ingenting laddas från YouTube förrän du trycker på en trailer. Då hämtas spelaren från <code>youtube-nocookie.com</code>, och Google får din IP-adress och vilken video du spelar. YouTube kan lagra cookies eller lokal lagring i din webbläsare när videon spelas. Google är amerikanskt.</li>
+          <li><strong>Wikipedia och Wikidata</strong> (svenska biografier på personsidor) — när en personsida saknar svensk biografi från TMDB kan webbläsaren hämta personens svenska Wikipedia-sammanfattning, via Wikidata och svenska Wikipedia, från Wikimedia Foundation. Wikimedia får din IP-adress och vilken person sidan gäller. Wikimedia Foundation är amerikanskt.</li>
         </ul>
         <p>
           Vi använder inga reklamnätverk eller marknadsföringsverktyg, och
@@ -95,7 +106,13 @@ export default function IntegritetPage() {
           För dessa överföringar gäller EU-kommissionens
           standardavtalsklausuler (SCC) och, där det är tillämpligt, EU–US Data
           Privacy Framework, med kompletterande skyddsåtgärder. TMDB är
-          amerikanskt men tar inte emot dina personuppgifter.
+          amerikanskt och tar emot din IP-adress, webbläsarinformation och
+          dina sökord direkt från din webbläsare, men inte din profil eller
+          din tittardata.
+        </p>
+        <p>
+          YouTube (Google) och Wikimedia Foundation (se §4) är amerikanska, så
+          förfrågningarna dit går till USA.
         </p>
       </section>
 
@@ -169,6 +186,7 @@ export default function IntegritetPage() {
           <li><strong>IndexedDB</strong> — Firebase lagrar din inloggningssession här, och appen sparar en kopia av din egen data (till exempel ditt bibliotek och din profil) så att den laddar snabbt och fungerar utan anslutning. Kopien finns bara på din enhet och tas bort när du loggar ut eller raderar kontot, så långt webbläsaren tillåter.</li>
           <li><strong>Funktionella cookies från Cloudflare</strong> (<code>__cf_bm</code>, <code>__cflb</code>) — används för botskydd och lastbalansering och är nödvändiga för att tjänsten ska fungera.</li>
           <li><strong>Google reCAPTCHA</strong> (<code>_GRECAPTCHA</code>) — sätts av Googles reCAPTCHA/App Check för bot- och missbruksskydd. Räknas som nödvändig för tjänstens säkerhet.</li>
+          <li><strong>YouTube</strong> — sätts bara om du trycker på en trailer. Spelaren laddas från <code>youtube-nocookie.com</code>, men YouTube kan ändå lagra cookies eller lokal lagring i din webbläsare medan videon spelas.</li>
           <li>
             <strong>Tre värden i webbläsarens <code>sessionStorage</code></strong> — till
             skillnad från cookies och IndexedDB ovan är de bundna till den enskilda fliken

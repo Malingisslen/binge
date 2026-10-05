@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { ToastProvider, useToast } from './ToastContext';
 
-function Trigger({ action }: { action?: { label: string; onClick: () => void } }) {
+function Trigger({ action }: { action?: { label: string; onClick: () => void } | { label: string; onClick: () => void }[] }) {
   const { show } = useToast();
   return <button onClick={() => show('Testtoast', action)}>visa</button>;
 }
@@ -25,6 +25,25 @@ describe('ToastProvider', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Rensa helt' }));
     expect(onClick).toHaveBeenCalledTimes(1);
     expect(screen.queryByText('Testtoast')).toBeNull();
+  });
+
+  it('två åtgärder sida vid sida; den ena stänger toasten så den andra inte går att trycka (BIN-1430)', () => {
+    const undo = vi.fn();
+    const clear = vi.fn();
+    render(
+      <ToastProvider>
+        <Trigger action={[{ label: 'Ångra', onClick: undo }, { label: 'Rensa helt', onClick: clear }]} />
+      </ToastProvider>,
+    );
+    fireEvent.click(screen.getByText('visa'));
+    expect(screen.getByRole('button', { name: 'Ångra' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Rensa helt' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ångra' }));
+
+    expect(undo).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: 'Rensa helt' })).toBeNull();
+    expect(clear).not.toHaveBeenCalled();
   });
 
   it('toast utan åtgärd renderar ingen knapp', () => {

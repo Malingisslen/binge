@@ -62,7 +62,7 @@ describe('design consistency — dynamic route headers', () => {
 // "avslutad / sett avsnitt" status color. The raw oklch literal must never
 // reappear outside its one :root declaration — every consumer references
 // var(--season-done) (globals.css) or the season-done Tailwind token.
-const SEASON_DONE_LITERAL = 'oklch(0.55 0.13 145)';
+const SEASON_DONE_LITERAL = 'oklch(0.52 0.13 145)';
 const SEASON_DONE_DECL = '--season-done:';
 
 describe('design consistency — season-done token (BIN-324)', () => {
@@ -143,4 +143,84 @@ describe('design consistency — savings cluster tokens (BIN-441)', () => {
   it('scans a non-empty set of savings files (guard is not vacuous)', () => {
     expect(savingsFiles().length).toBeGreaterThan(0);
   });
+});
+
+// UX-2 (mörkt läge): en hårdkodad vit yta förblir vit i mörkt tema medan texten
+// ovanpå blir ljus — inskriven text i inloggningen blev vitt på vitt. Ytor tar
+// bg-surface, som följer temat. bg-white/<opacitet> är undantaget: det är en
+// genomskinlig ljusning ovanpå något som redan är mörkt (startsidans hero).
+const HARDCODED_WHITE_SURFACE = /\bbg-white\b(?!\/)/;
+
+describe('design consistency — no hard-coded white surfaces (UX-2)', () => {
+  it('the pattern flags bg-white and lets bg-white/<opacity> through', () => {
+    expect(HARDCODED_WHITE_SURFACE.test('border bg-white px-2')).toBe(true);
+    expect(HARDCODED_WHITE_SURFACE.test('className="bg-white"')).toBe(true);
+    expect(HARDCODED_WHITE_SURFACE.test('hover:bg-white')).toBe(true);
+    expect(HARDCODED_WHITE_SURFACE.test('bg-white/[0.08] border')).toBe(false);
+    expect(HARDCODED_WHITE_SURFACE.test('bg-white/10')).toBe(false);
+    expect(HARDCODED_WHITE_SURFACE.test('bg-surface')).toBe(false);
+  });
+
+  it('no .tsx under src uses bg-white as a surface (use bg-surface)', () => {
+    const files = tsxFilesRecursive(join(process.cwd(), 'src'));
+    // Floor: an empty sweep would pass silently.
+    expect(files.length).toBeGreaterThan(0);
+    const offenders = files.filter(f => HARDCODED_WHITE_SURFACE.test(readFileSync(f, 'utf8')));
+    expect(offenders.map(f => f.replace(process.cwd(), ''))).toEqual([]);
+  }, TREE_SWEEP_TIMEOUT_MS);
+});
+
+// BIN-1434: text on an acc-deep fill takes on-acc, which is dark in dark mode —
+// white on the dark-mode acc-deep misses AA. Per line, since a className list
+// is one line in this codebase; the black poster overlay that only turns
+// saffron on hover pairs hover:bg-acc-deep with hover:text-on-acc instead.
+const WHITE_ON_ACC = /(?<!hover:)\bbg-acc-deep\b(?!\/).*(?<![\w:-])text-white\b|(?<![\w:-])text-white\b.*(?<!hover:)\bbg-acc-deep\b(?!\/)/;
+
+// A hover-only saffron fill needs its own hover text colour, and an inline style
+// can pair the two outside any className.
+const HOVER_ACC_FILL = /\bhover:bg-acc-deep\b(?!\/)/;
+const INLINE_WHITE_ON_ACC = /var\(--acc-deep\)'\s*,\s*color:\s*'white'/;
+function isWhiteOnAccLine(line: string): boolean {
+  if (WHITE_ON_ACC.test(line) || INLINE_WHITE_ON_ACC.test(line)) return true;
+  return HOVER_ACC_FILL.test(line) && /\btext-white\b/.test(line) && !line.includes('hover:text-on-acc');
+}
+
+describe('design consistency — text on saffron fills (BIN-1434)', () => {
+  it('the pattern flags white text on bg-acc-deep and lets on-acc and hover pairs through', () => {
+    expect(WHITE_ON_ACC.test("'bg-acc-deep text-white'")).toBe(true);
+    expect(WHITE_ON_ACC.test("'text-white bg-acc-deep px-2'")).toBe(true);
+    expect(WHITE_ON_ACC.test("'bg-acc-deep text-on-acc'")).toBe(false);
+    expect(WHITE_ON_ACC.test("'bg-black/60 text-white hover:bg-acc-deep hover:text-on-acc'")).toBe(false);
+    expect(WHITE_ON_ACC.test("'bg-acc-deep/[0.1] text-white'")).toBe(false);
+  });
+
+  it('the hover and inline-style shapes are flagged too', () => {
+    expect(isWhiteOnAccLine("'bg-surface text-acc-deep hover:bg-acc-deep hover:text-white'")).toBe(true);
+    expect(isWhiteOnAccLine("'bg-black/60 text-white hover:bg-acc-deep'")).toBe(true);
+    expect(isWhiteOnAccLine("background: 'var(--acc-deep)', color: 'white',")).toBe(true);
+    expect(isWhiteOnAccLine("'bg-black/60 text-white hover:bg-acc-deep hover:text-on-acc'")).toBe(false);
+    expect(isWhiteOnAccLine("background: 'var(--acc-deep)', color: 'var(--on-acc)',")).toBe(false);
+  });
+
+  it('no globals.css rule fills with acc-deep under white text', () => {
+    const css = readFileSync(join(process.cwd(), 'src', 'app', 'globals.css'), 'utf8');
+    const blocks = css.split('}');
+    // Floor: the sweep must actually see the acc-deep fills it guards.
+    expect(blocks.filter(b => /background:\s*var\(--acc-deep\)/.test(b)).length).toBeGreaterThan(0);
+    const offenders = blocks
+      .filter(b => /background:\s*var\(--acc-deep\)/.test(b) && /(?<![\w-])color:\s*(?:white|#fff\b)/.test(b))
+      .map(b => b.trim().split('\n')[0]);
+    expect(offenders).toEqual([]);
+  });
+
+  it('no .tsx under src puts text-white on a bg-acc-deep fill', () => {
+    const files = tsxFilesRecursive(join(process.cwd(), 'src'));
+    expect(files.length).toBeGreaterThan(0);
+    const offenders = files.flatMap(f =>
+      readFileSync(f, 'utf8').split('\n')
+        .map((line, i) => (isWhiteOnAccLine(line) ? `${f.replace(process.cwd(), '')}:${i + 1}` : null))
+        .filter((x): x is string => x !== null),
+    );
+    expect(offenders).toEqual([]);
+  }, TREE_SWEEP_TIMEOUT_MS);
 });

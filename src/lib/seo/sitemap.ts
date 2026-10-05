@@ -4,14 +4,23 @@ import { readSelectionManifest, resolvedIds, allowThinSelection } from '@/lib/tm
 import { SEED_MOVIE_IDS, SEED_TV_IDS, SEED_PERSON_IDS } from '@/lib/seo/selectionSeed';
 import { FRANCHISES } from '@/lib/seo/franchises';
 import { SEO_GENRE_SLUGS } from '@/lib/seo/genreHubs';
-
-// Next 16 + output:'export' kräver explicit static/revalidate-deklaration
-// för Metadata-routes. Vi vill att sitemap:en genereras en gång vid build
-// och sedan är en statisk fil i out/.
-export const dynamic = 'force-static';
+import { buildFetchFailed, readContentChangedAt } from '@/lib/tmdb/buildCache';
 
 /**
- * Dynamisk sitemap som genereras vid `next build`.
+ * Sitemapens innehåll, uppdelat per familj (SEO-5). `/sitemap.xml` är ett index
+ * över delfilerna i `SITEMAP_PARTS`, så Search Console visar täckningen per
+ * familj. Route-filerna under `src/app/sitemap*.xml/` serialiserar det här; de
+ * räknar ingenting själva.
+ *
+ * `lastmod` sätts BARA där den är sann: för titlar och personer är det när sidans
+ * innehåll senast ändrades enligt byggcachen (`readContentChangedAt`), och
+ * utelämnas när det är okänt. Hubbar och statiska sidor får ingen — byggtiden
+ * som stod där förut flyttades på alla URL:er varje bygge och sa ingenting.
+ *
+ * En titel vars bygghämtning misslyckades renderas `noindex` och lämnas utanför
+ * (SEO-13) — sitemapen ska inte be Google indexera en sida som säger nej. Både
+ * markören och stämpeln kan ligga ett bygge efter; se `recordBuildFetchOutcome`.
+ *
  *
  * Inkluderar:
  * - Statiska offentliga routes (start, discover, films, series,
@@ -51,17 +60,16 @@ export const dynamic = 'force-static';
 const SITE_URL = 'https://binge.nu';
 
 function staticEntries(): MetadataRoute.Sitemap {
-  const lastModified = new Date();
   return [
-    { url: `${SITE_URL}/`, lastModified, changeFrequency: 'daily', priority: 1.0 },
-    { url: `${SITE_URL}/discover/`, lastModified, changeFrequency: 'daily', priority: 0.9 },
+    { url: `${SITE_URL}/`, changeFrequency: 'daily', priority: 1.0 },
+    { url: `${SITE_URL}/discover/`, changeFrequency: 'daily', priority: 0.9 },
     // Hub-of-hubs index (BIN-424) — links every /provider, /billigaste, /forsvinner page.
-    { url: `${SITE_URL}/guider/`, lastModified, changeFrequency: 'weekly', priority: 0.6 },
-    { url: `${SITE_URL}/films/`, lastModified, changeFrequency: 'daily', priority: 0.8 },
-    { url: `${SITE_URL}/series/`, lastModified, changeFrequency: 'daily', priority: 0.8 },
-    { url: `${SITE_URL}/integritet/`, lastModified, changeFrequency: 'yearly', priority: 0.3 },
-    { url: `${SITE_URL}/villkor/`, lastModified, changeFrequency: 'yearly', priority: 0.3 },
-    { url: `${SITE_URL}/community-guidelines/`, lastModified, changeFrequency: 'yearly', priority: 0.3 },
+    { url: `${SITE_URL}/guider/`, changeFrequency: 'weekly', priority: 0.6 },
+    { url: `${SITE_URL}/films/`, changeFrequency: 'daily', priority: 0.8 },
+    { url: `${SITE_URL}/series/`, changeFrequency: 'daily', priority: 0.8 },
+    { url: `${SITE_URL}/integritet/`, changeFrequency: 'yearly', priority: 0.3 },
+    { url: `${SITE_URL}/villkor/`, changeFrequency: 'yearly', priority: 0.3 },
+    { url: `${SITE_URL}/community-guidelines/`, changeFrequency: 'yearly', priority: 0.3 },
   ];
 }
 
@@ -107,48 +115,44 @@ function selectionOrThrow(
   return resolvedIds(manifest, seedIds);
 }
 
-function titleEntries(): MetadataRoute.Sitemap {
-  const lastModified = new Date();
+function selectedEntries(
+  kind: 'movie' | 'tv' | 'person',
+  seedIds: readonly number[],
+  changeFrequency: 'weekly' | 'monthly',
+  priority: number,
+): MetadataRoute.Sitemap {
   const entries: MetadataRoute.Sitemap = [];
-
-  for (const id of selectionOrThrow('movie', SEED_MOVIE_IDS)) {
+  for (const id of selectionOrThrow(kind, seedIds)) {
+    if (buildFetchFailed(kind, id)) continue;
+    const changedAt = readContentChangedAt(kind, id);
     entries.push({
-      url: `${SITE_URL}/movie/${id}/`,
-      lastModified,
-      changeFrequency: 'weekly',
-      priority: 0.7,
+      url: `${SITE_URL}/${kind}/${id}/`,
+      ...(changedAt !== null ? { lastModified: new Date(changedAt) } : {}),
+      changeFrequency,
+      priority,
     });
   }
-  for (const id of selectionOrThrow('tv', SEED_TV_IDS)) {
-    entries.push({
-      url: `${SITE_URL}/tv/${id}/`,
-      lastModified,
-      changeFrequency: 'weekly',
-      priority: 0.7,
-    });
-  }
-
   return entries;
 }
 
-function personEntries(): MetadataRoute.Sitemap {
-  const lastModified = new Date();
-  return selectionOrThrow('person', SEED_PERSON_IDS).map(id => ({
-    url: `${SITE_URL}/person/${id}/`,
-    lastModified,
-    changeFrequency: 'monthly' as const,
-    priority: 0.5,
-  }));
+export function movieSitemapEntries(): MetadataRoute.Sitemap {
+  return selectedEntries('movie', SEED_MOVIE_IDS, 'weekly', 0.7);
+}
+
+export function tvSitemapEntries(): MetadataRoute.Sitemap {
+  return selectedEntries('tv', SEED_TV_IDS, 'weekly', 0.7);
+}
+
+export function personSitemapEntries(): MetadataRoute.Sitemap {
+  return selectedEntries('person', SEED_PERSON_IDS, 'monthly', 0.5);
 }
 
 // Provider-landningssidor (BIN-62) — MÅSTE matcha generateStaticParams i
 // src/app/provider/[id]/page.tsx (samma SEO_PROVIDER_IDS) så sitemap och
 // pre-render adresserar exakt samma URL-mängd. Inga TMDB-calls (statisk lista).
 function providerEntries(): MetadataRoute.Sitemap {
-  const lastModified = new Date();
   return SEO_PROVIDER_IDS.map(id => ({
     url: `${SITE_URL}/provider/${id}/`,
-    lastModified,
     changeFrequency: 'weekly' as const,
     priority: 0.8,
   }));
@@ -157,10 +161,8 @@ function providerEntries(): MetadataRoute.Sitemap {
 // "Billigaste sättet att se hela [franchise]" (BIN-178) — MÅSTE matcha
 // generateStaticParams i src/app/billigaste/[slug]/page.tsx (samma FRANCHISES).
 function franchiseEntries(): MetadataRoute.Sitemap {
-  const lastModified = new Date();
   return FRANCHISES.map(f => ({
     url: `${SITE_URL}/billigaste/${f.slug}/`,
-    lastModified,
     changeFrequency: 'weekly' as const,
     priority: 0.7,
   }));
@@ -170,10 +172,8 @@ function franchiseEntries(): MetadataRoute.Sitemap {
 // i src/app/forsvinner/[id]/page.tsx (samma SEO_PROVIDER_IDS). Innehållet
 // uppdateras dagligen (klient-läst rollup) → daily changeFrequency.
 function forsvinnerEntries(): MetadataRoute.Sitemap {
-  const lastModified = new Date();
   return SEO_PROVIDER_IDS.map(id => ({
     url: `${SITE_URL}/forsvinner/${id}/`,
-    lastModified,
     changeFrequency: 'daily' as const,
     priority: 0.7,
   }));
@@ -182,15 +182,25 @@ function forsvinnerEntries(): MetadataRoute.Sitemap {
 // Genre-landningssidor (BIN-461) — MÅSTE matcha generateStaticParams i
 // src/app/genre/[slug]/page.tsx (samma SEO_GENRE_SLUGS). Inga TMDB-calls.
 function genreEntries(): MetadataRoute.Sitemap {
-  const lastModified = new Date();
   return SEO_GENRE_SLUGS.map(slug => ({
     url: `${SITE_URL}/genre/${slug}/`,
-    lastModified,
     changeFrequency: 'weekly' as const,
     priority: 0.7,
   }));
 }
 
+/** Statiska sidor och hubbar — delfilen `sitemap-sidor.xml`. */
+export function pageSitemapEntries(): MetadataRoute.Sitemap {
+  return [
+    ...staticEntries(),
+    ...providerEntries(),
+    ...franchiseEntries(),
+    ...forsvinnerEntries(),
+    ...genreEntries(),
+  ];
+}
+
+/** Hela URL-mängden över alla delfiler. */
 export default function sitemap(): MetadataRoute.Sitemap {
   // Inga try/catch längre, med flit. Tidigare gjorde den här funktionen
   // TMDB-anrop, och då var det rätt att låta en nätverkshick ge en mindre
@@ -201,12 +211,41 @@ export default function sitemap(): MetadataRoute.Sitemap {
   // `SELECTION_ALLOW_THIN` faller selectionOrThrow
   // tillbaka på fröna i stället; de byggena publicerar ingenting till Google.
   return [
-    ...staticEntries(),
-    ...providerEntries(),
-    ...franchiseEntries(),
-    ...forsvinnerEntries(),
-    ...genreEntries(),
-    ...titleEntries(),
-    ...personEntries(),
+    ...pageSitemapEntries(),
+    ...movieSitemapEntries(),
+    ...tvSitemapEntries(),
+    ...personSitemapEntries(),
   ];
+}
+
+/** Delfilerna, i den ordning indexet listar dem. Nyckeln är filnamnet. */
+export const SITEMAP_PARTS = {
+  'sitemap-sidor.xml': pageSitemapEntries,
+  'sitemap-filmer.xml': movieSitemapEntries,
+  'sitemap-serier.xml': tvSitemapEntries,
+  'sitemap-personer.xml': personSitemapEntries,
+} as const;
+
+function escapeXml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+export function renderUrlset(entries: MetadataRoute.Sitemap): string {
+  const urls = entries.map(e => {
+    const parts = [`<loc>${escapeXml(e.url)}</loc>`];
+    if (e.lastModified) parts.push(`<lastmod>${new Date(e.lastModified).toISOString()}</lastmod>`);
+    if (e.changeFrequency) parts.push(`<changefreq>${e.changeFrequency}</changefreq>`);
+    if (e.priority !== undefined) parts.push(`<priority>${e.priority}</priority>`);
+    return `<url>${parts.join('')}</url>`;
+  });
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join('\n')}\n</urlset>\n`;
+}
+
+export function renderSitemapIndex(): string {
+  const items = Object.keys(SITEMAP_PARTS).map(name => `<sitemap><loc>${SITE_URL}/${name}</loc></sitemap>`);
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${items.join('\n')}\n</sitemapindex>\n`;
+}
+
+export function xmlResponse(body: string): Response {
+  return new Response(body, { headers: { 'Content-Type': 'application/xml; charset=utf-8' } });
 }

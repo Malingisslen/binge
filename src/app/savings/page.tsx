@@ -240,7 +240,7 @@ function SavingsContent() {
           </header>
           <EmptyState
             title="Kunde inte räkna på dina tjänster just nu"
-            body="Vi når inte streamingdatan för tillfället. Det är oftast tillfälligt — försök igen om en stund."
+            body="Streamingdatan går inte att nå just nu. Det är oftast tillfälligt, försök igen om en stund."
             action={
               <button
                 type="button"

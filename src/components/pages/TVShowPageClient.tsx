@@ -3,7 +3,7 @@
 import { useMemo, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { ChevronDown, ChevronUp, Tv } from 'lucide-react';
+import { ChevronDown, Tv } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTVShow } from '@/hooks/useTMDB';
 import { currentSeasonToPrefetch, seasonPrefetchSpec } from '@/lib/tmdb/prefetch';
@@ -44,7 +44,7 @@ import FriendsWhoSaw from '@/components/title/FriendsWhoSaw';
 import { useEpisodeProgressWithSync } from '@/hooks/useEpisodeProgressWithSync';
 import { tvShowStatusLabel } from '@/lib/watchStatus';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
-import { buildContentFloor, hasSubstantialText } from '@/lib/seo/contentFloor';
+import { availabilityLine, buildContentFloor, hasSubstantialText } from '@/lib/seo/contentFloor';
 import { tvContentFloorInput } from '@/lib/seo/contentFloorInput';
 import { formatNextEpisodeLabel } from '@/lib/episodeLabel';
 import { canonicalProviderId, dedupeProvidersByCanonicalId, affiliateWrap } from '@/lib/tmdb/providers';
@@ -53,8 +53,11 @@ import ClientOnly from '@/components/utils/ClientOnly';
 import { useStreamingOffers } from '@/hooks/useStreamingOffers';
 import { CheapestPathVerdict } from '@/components/title/CheapestPathVerdict';
 import PriceHistoryChart from '@/components/title/PriceHistoryChart';
+import { TitleCrumb, GenreLinks, ProviderHubLinks } from '@/components/title/TitleHubLinks';
 import { offerForProvider, isLeavingSoon, formatLeaving } from '@/lib/streaming/offers';
 import type { TMDBTVShow } from '@/types';
+import { trackEvent } from '@/lib/analytics';
+import ShareButton from '@/components/share/ShareButton';
 
 export default function TVShowPageClient({ id, initialData }: { id: string; initialData?: TMDBTVShow }) {
   const showId = parseInt(id, 10);
@@ -172,6 +175,11 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
     () => (show ? buildContentFloor(tvContentFloorInput(show)) : undefined),
     [show],
   );
+  // SEO-2: same as the movie page — availability as text on every page.
+  const availability = useMemo(
+    () => (show ? availabilityLine(tvContentFloorInput(show)) : undefined),
+    [show],
+  );
   usePageMeta({
     title: displayTitle
       ? `${displayTitle}${firstYear ? ` (${firstYear})` : ''} — var streamar jag?`
@@ -196,7 +204,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   }, [itemExists, showIdForEffect, showStatus, cachedTmdbStatus, updateTmdbStatus]);
 
   if (isLoading) return <LoadingView variant="detail" label="Laddar serien…" />;
-  if (!show) return <NotFound crumb="Serie" title="Serien hittades inte." body="Vi kunde inte hitta den här serien i TMDB." />;
+  if (!show) return <NotFound crumb="Serie" title="Serien hittades inte." body="Den här serien gick inte att hitta." />;
 
   const poster = posterUrl(show.poster_path, 'w500');
   const tone = toneForGenreIds(show.genres.map(g => g.id));
@@ -257,14 +265,14 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   return (
     <>
       {/* Schema.org structured data — rich snippets + knowledge panel i Google */}
-      <JsonLd data={tvSchema(show)} />
+      <JsonLd data={tvSchema(show, { name: displayTitle, description: contentFloor?.description })} />
       <JsonLd data={breadcrumbSchema([
         { name: 'Binge.nu', url: 'https://binge.nu/' },
         { name: 'Serier', url: 'https://binge.nu/series/' },
         { name: displayTitle, url: `https://binge.nu/tv/${show.id}/` },
       ])} />
 
-      <div className="crumb">Bibliotek · serier · {displayTitle}</div>
+      <TitleCrumb kind="tv" title={displayTitle} />
 
       <div className="detail-hero">
         <div className="poster-wrap">
@@ -294,7 +302,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
             <span className="kind">
               SERIE · {yearStart}{yearEnd ? `–${yearEnd}` : '–'}
             </span>
-            {genres && <span className="kind">{genres}</span>}
+            <GenreLinks kind="tv" genres={show.genres} />
           </div>
           <h1>{displayTitle}</h1>
           {creators.length > 0 && (
@@ -316,6 +324,9 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
               reasoning. The meta description keeps the 60-char rule unchanged. */}
           {overviewText && <p className="syn">{overviewText}</p>}
           {needsContentFloorParagraph && <p className="syn">{contentFloor?.paragraph}</p>}
+          {!needsContentFloorParagraph && availability && (
+            <p style={{ marginTop: 10, fontSize: 13.5, color: 'var(--ink-2)' }}>{availability}</p>
+          )}
           <div className="stats">
             <span><span className="k">säsonger</span><strong>{show.number_of_seasons}</strong></span>
             {show.number_of_episodes && (
@@ -354,6 +365,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
                 releaseYear={show.first_air_date ? parseInt(show.first_air_date.substring(0, 4), 10) : null}
               />
               <NotInterestedButton tmdbId={show.id} mediaType="tv" title={displayTitle} />
+              <ShareButton path={`/tv/${show.id}/`} title={displayTitle} text={`Se var ${displayTitle} går att streama.`} surface="title" />
             </div>
           </ClientOnly>
 
@@ -366,9 +378,9 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
             />
           )}
 
-          {(onSubscription.length > 0 || hasRentBuy) && (
+          {onSubscription.length > 0 && (
             <div className="providers-row">
-              {onSubscription.length > 0 && <span className="lab">finns på</span>}
+              <span className="lab">finns på</span>
               {onSubscription.map(p => {
                 const logo = logoUrl(p.logo_path);
                 const offer = offerForProvider(offers, canonicalProviderId(p.provider_id));
@@ -384,7 +396,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
                   return (
                     <span key={p.provider_id} className="inline-flex items-center gap-1">
                       {offer?.link ? (
-                        <a href={affiliateWrap(p.provider_id, offer.link)} target="_blank" rel="noopener noreferrer">{imgEl}</a>
+                        <a href={affiliateWrap(p.provider_id, offer.link)} target="_blank" rel="noopener noreferrer" onClick={() => trackEvent('provider_clicked', { providerId: canonicalProviderId(p.provider_id), offerType: offer.type, mediaType: 'tv' })}>{imgEl}</a>
                       ) : imgEl}
                       {leavingLabel && (
                         <span className="rounded-sm bg-acc-soft text-acc-deep px-1 text-[11px]">{leavingLabel}</span>
@@ -392,40 +404,38 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
                     </span>
                   );
                 }
-                return <ProviderTag key={p.provider_id} provider={p} size="md" offer={offer} nowMs={now} />;
+                return <ProviderTag key={p.provider_id} provider={p} size="md" offer={offer} nowMs={now} mediaType="tv" />;
               })}
-              {hasRentBuy && (
-                <button
-                  onClick={() => setShowRentBuy(!showRentBuy)}
-                  className="btn btn-ghost btn-sm"
-                  style={{ marginLeft: 4 }}
-                >
-                  Hyr & köp {showRentBuy ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                </button>
-              )}
             </div>
           )}
+          <ProviderHubLinks providerIds={onSubscription.map(p => p.provider_id)} />
 
           <FreeWatchBadge free={free} ads={ads} />
 
-          {showRentBuy && hasRentBuy && (
+          {/* SEO-2: <details> keeps rent/buy in the static HTML; see the movie page. */}
+          {hasRentBuy && (
+            <details className="group" style={{ marginTop: 10 }} onToggle={e => setShowRentBuy(e.currentTarget.open)}>
+              <summary className="btn btn-ghost btn-sm list-none [&::-webkit-details-marker]:hidden" style={{ cursor: 'pointer' }}>
+                Hyr & köp <ChevronDown size={12} className="transition-transform group-open:rotate-180" />
+              </summary>
             <div style={{ marginTop: 10, fontSize: 11, color: 'var(--ink-3)' }}>
               {rent.length > 0 && (
                 <div>
                   <span style={{ letterSpacing: 0.12, textTransform: 'uppercase', marginRight: 6 }}>Hyr:</span>
-                  {rent.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" offer={offerForProvider(offers, canonicalProviderId(p.provider_id))} nowMs={now} />)}
+                  {rent.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" offer={offerForProvider(offers, canonicalProviderId(p.provider_id))} nowMs={now} mediaType="tv" />)}
                 </div>
               )}
               {buy.length > 0 && (
                 <div>
                   <span style={{ letterSpacing: 0.12, textTransform: 'uppercase', marginRight: 6 }}>Köp:</span>
-                  {buy.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" offer={offerForProvider(offers, canonicalProviderId(p.provider_id))} nowMs={now} />)}
+                  {buy.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" offer={offerForProvider(offers, canonicalProviderId(p.provider_id))} nowMs={now} mediaType="tv" />)}
                 </div>
               )}
               {/* BIN-354: rent price-history stat row, same as the film page —
                   lazy (only when this disclosure is open). */}
-              <PriceHistoryChart tmdbId={show.id} mediaType="tv" nowMs={now} />
+              {showRentBuy && <PriceHistoryChart tmdbId={show.id} mediaType="tv" nowMs={now} />}
             </div>
+            </details>
           )}
 
           {(subscription.length > 0 || hasRentBuy) && (

@@ -113,7 +113,7 @@ function KalibreraContent() {
           <button
             onClick={submit}
             disabled={saving}
-            className="px-3 py-[5px] bg-acc-deep text-white rounded-sm text-xs font-semibold cursor-pointer border-none disabled:opacity-50"
+            className="px-3 py-[5px] bg-acc-deep text-on-acc rounded-sm text-xs font-semibold cursor-pointer border-none disabled:opacity-50"
           >
             {saving ? 'Sparar…' : 'Spara och gå till startsidan'}
           </button>
@@ -168,20 +168,20 @@ function CalibrationCard({
       <div className="flex gap-1 px-3 py-2 border-t border-rule-2">
         <button
           onClick={() => onVote('down')}
-          className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-[6px] border border-rule rounded-sm text-xs font-semibold bg-white cursor-pointer hover:bg-danger-soft hover:border-danger/30"
+          className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-[6px] border border-rule rounded-sm text-xs font-semibold bg-surface cursor-pointer hover:bg-danger-soft hover:border-danger/30"
         >
           <ThumbsDown size={12} /> Inte min grej
         </button>
         <button
           onClick={onSkip}
-          className="px-3 py-[6px] border border-rule rounded-sm text-xs bg-white cursor-pointer text-ink-3"
+          className="px-3 py-[6px] border border-rule rounded-sm text-xs bg-surface cursor-pointer text-ink-3"
           title="Hoppa över"
         >
           Hoppa
         </button>
         <button
           onClick={() => onVote('up')}
-          className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-[6px] border border-acc-deep rounded-sm text-xs font-semibold bg-acc-deep text-white cursor-pointer hover:bg-acc-deep/90"
+          className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-[6px] border border-acc-deep rounded-sm text-xs font-semibold bg-acc-deep text-on-acc cursor-pointer hover:bg-acc-deep-hover"
         >
           <ThumbsUp size={12} /> Gillar
         </button>

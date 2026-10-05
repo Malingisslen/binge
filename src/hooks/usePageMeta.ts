@@ -10,7 +10,7 @@ import { useEffect } from 'react';
  * Sätter:
  * - document.title (browser-flik)
  * - meta[name=description]
- * - og:title / og:description (social-share — Slack/Twitter/LinkedIn renderar JS)
+ * - og:title / og:description
  * - link[rel=canonical]
  * - meta[name=robots] om `indexable` anges (annars rörs den inte)
  *
@@ -19,7 +19,7 @@ import { useEffect } from 'react';
  * ska vara indexerbart (MoviePageClient/TVShowPageClient/PersonPageClient med
  * giltig TMDB-data) sätter `indexable: true` så vi tar bort noindex efter
  * hydration. När data är undefined (loading/error) lämnar vi noindex orörd —
- * defensiv default.
+ * defensiv default. Vad flippen betyder för indexeringen: .claude/rules/deployment.md.
  *
  * Använd i klient-komponenten direkt efter att data är hämtad:
  *

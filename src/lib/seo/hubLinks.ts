@@ -11,7 +11,7 @@
 
 import { FRANCHISES } from '@/lib/seo/franchises';
 import { GENRE_HUBS } from '@/lib/seo/genreHubs';
-import { getProvider } from '@/lib/tmdb/providers';
+import { canonicalProviderId, getProvider } from '@/lib/tmdb/providers';
 import { SEO_PROVIDER_IDS } from '@/lib/tmdb/seoCoverage';
 
 export interface HubLink {
@@ -84,4 +84,31 @@ export function hubSections(): HubSection[] {
       links: genreLinks(),
     },
   ];
+}
+
+// SEO-4 — links FROM title pages and provider hubs INTO the curated hubs. Each
+// returns null for anything outside the pre-rendered set, so a page never links
+// to a catch-all URL that serves the noindex shell.
+
+function curatedProviderId(providerId: number): number | null {
+  const pid = canonicalProviderId(providerId);
+  return SEO_PROVIDER_IDS.includes(pid) ? pid : null;
+}
+
+/** `/provider/{id}/` for a curated provider (alias ids resolve), else null. */
+export function providerHubHref(providerId: number): string | null {
+  const pid = curatedProviderId(providerId);
+  return pid === null ? null : `/provider/${pid}/`;
+}
+
+/** `/forsvinner/{id}/` for a curated provider (alias ids resolve), else null. */
+export function leavingHubHref(providerId: number): string | null {
+  const pid = curatedProviderId(providerId);
+  return pid === null ? null : `/forsvinner/${pid}/`;
+}
+
+/** `/genre/{slug}/` for a TMDB genre id that has a curated hub on this side, else null. */
+export function genreHubHref(kind: 'movie' | 'tv', genreId: number): string | null {
+  const hub = GENRE_HUBS.find((g) => (kind === 'movie' ? g.movieGenreId : g.tvGenreId) === genreId);
+  return hub ? `/genre/${hub.slug}/` : null;
 }

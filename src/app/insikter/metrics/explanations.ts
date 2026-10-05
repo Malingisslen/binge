@@ -5,6 +5,36 @@ import type { MetricKey, Explanation } from './types';
  * the drawer falls back to the label when a key is absent here.
  */
 export const EXPLANATIONS: Partial<Record<MetricKey, Explanation>> = {
+  activeUsers7d: {
+    whatIsIt: 'Inloggade konton vars inloggning förnyats de senaste 7 dagarna — ett närmevärde för att ha öppnat Binge, inte ett exakt mått.',
+    howCalculated: 'Räknas i rollupen ur Firebase Auths egen tidsstämpel för senaste inloggning eller tokenförnyelse. En flik som står öppen i bakgrunden räknas, en session som bara används offline kan missas. Anonyma Tillsammans-gäster räknas inte. Följer inte datumväljaren.',
+    whyImportant: 'Visar om folk kommer tillbaka, vilket Plausible inte kan svara på eftersom det är cookiefritt.',
+    source: 'Firebase Auth (rollup)',
+  },
+  activeUsers30d: {
+    whatIsIt: 'Inloggade konton vars inloggning förnyats de senaste 30 dagarna — samma närmevärde som 7-dagarssiffran.',
+    howCalculated: 'Samma klocka som 7-dagarssiffran, med ett 30-dagarsfönster. Följer inte datumväljaren.',
+    whyImportant: 'Kvoten mellan 7- och 30-dagarssiffran visar hur stor del av månadens användare som är veckovana.',
+    source: 'Firebase Auth (rollup)',
+  },
+  signupLandingPages: {
+    whatIsIt: 'Vilken sida de som registrerade sig kom in på, och hur många som totalt kom in där.',
+    howCalculated: 'Plausible-målet signed_up uppdelat på besökets första sida (visit:entry_page), bredvid alla besök som började på samma sida.',
+    whyImportant: 'Visar vilka sökträffar och delade länkar som faktiskt blir konton.',
+    source: 'Plausible (live)',
+  },
+  providerClicks: {
+    whatIsIt: 'Klick från en titelsida ut till en tjänst som Netflix, SF Anytime eller Viaplay.',
+    howCalculated: 'Plausible-händelsen provider_clicked, summerad över valt datumintervall.',
+    whyImportant: 'Det är steget där Binge har gjort sitt jobb, och det som en framtida affiliate-intäkt skulle hänga på.',
+    source: 'Plausible (live)',
+  },
+  providerClicksByType: {
+    whatIsIt: 'Klicken ut till tjänster, uppdelade på abonnemang, hyra, köpa och gratis.',
+    howCalculated: 'Plausible-händelsen provider_clicked grupperad på offerType.',
+    whyImportant: 'Visar om folk mest letar efter var något ingår eller var det går att hyra.',
+    source: 'Plausible (live)',
+  },
   totalUsers: {
     whatIsIt: 'Totalt antal registrerade användarkonton.',
     howCalculated: 'Antalet dokument i users-collectionen vid senaste rollup-körningen.',

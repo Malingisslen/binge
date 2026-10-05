@@ -156,14 +156,15 @@ function JoinSessionForm({
 
       <form onSubmit={submit} className="bg-surface border border-rule rounded-sm">
         <div className="px-3 py-[10px] border-b border-rule-2">
-          <label className="block text-xs text-ink-3 mb-1">Ditt namn</label>
+          <label htmlFor="tillsammans-namn" className="block text-xs text-ink-3 mb-1">Ditt namn</label>
           <input
+            id="tillsammans-namn"
             type="text"
             value={name}
             onChange={e => setName(e.target.value)}
             placeholder="T.ex. Erik"
             maxLength={MAX_SESSION_DISPLAY_NAME}
-            className="w-full max-w-[260px] px-2 py-1 text-base border border-rule rounded-sm bg-white"
+            className="w-full max-w-[260px] px-2 py-1 text-base border border-rule rounded-sm bg-surface"
           />
         </div>
         <div className="px-3 py-[10px]">
@@ -175,7 +176,7 @@ function JoinSessionForm({
                 <label
                   key={p.id}
                   className={`flex items-center gap-[6px] px-2 py-[3px] border rounded-sm cursor-pointer text-xs ${
-                    selected ? 'border-acc-deep bg-acc-deep/[0.08]' : 'border-rule bg-white'
+                    selected ? 'border-acc-deep bg-acc-deep/[0.08]' : 'border-rule bg-surface'
                   }`}
                 >
                   <input
@@ -198,7 +199,7 @@ function JoinSessionForm({
           <button
             type="submit"
             disabled={submitting}
-            className="px-3 py-[5px] bg-acc-deep text-white border-none rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
+            className="px-3 py-[5px] bg-acc-deep text-on-acc border-none rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
           >
             {submitting ? 'Går med…' : 'Gå med'}
           </button>
@@ -350,7 +351,7 @@ function SessionMain({
           <button
             type="button"
             onClick={copyShare}
-            className="px-2 py-[2px] border border-rule rounded-sm text-xxs bg-white cursor-pointer flex items-center gap-1"
+            className="px-2 py-[2px] border border-rule rounded-sm text-xxs bg-surface cursor-pointer flex items-center gap-1"
           >
             <Copy size={10} />
             {shareCopied ? 'Kopierad!' : 'Kopiera'}
@@ -385,13 +386,13 @@ function SessionMain({
           <div className="flex gap-[2px]">
             <button
               onClick={() => setView('card')}
-              className={`px-2 py-[2px] rounded-sm border text-xxs flex items-center gap-1 ${view === 'card' ? 'bg-acc-deep/[0.1] border-acc-deep text-acc-deep' : 'bg-white border-rule text-ink-2'}`}
+              className={`px-2 py-[2px] rounded-sm border text-xxs flex items-center gap-1 ${view === 'card' ? 'bg-acc-deep/[0.1] border-acc-deep text-acc-deep' : 'bg-surface border-rule text-ink-2'}`}
             >
               <LayoutGrid size={10} /> Kort
             </button>
             <button
               onClick={() => setView('table')}
-              className={`px-2 py-[2px] rounded-sm border text-xxs flex items-center gap-1 ${view === 'table' ? 'bg-acc-deep/[0.1] border-acc-deep text-acc-deep' : 'bg-white border-rule text-ink-2'}`}
+              className={`px-2 py-[2px] rounded-sm border text-xxs flex items-center gap-1 ${view === 'table' ? 'bg-acc-deep/[0.1] border-acc-deep text-acc-deep' : 'bg-surface border-rule text-ink-2'}`}
             >
               <Table2 size={10} /> Tabell
             </button>
@@ -490,7 +491,7 @@ function SwipeCard({
             </button>
             <button
               onClick={onCancelVeto}
-              className="px-3 py-1 border border-rule bg-white rounded-sm text-xs cursor-pointer"
+              className="px-3 py-1 border border-rule bg-surface rounded-sm text-xs cursor-pointer"
             >
               Avbryt
             </button>
@@ -500,20 +501,20 @@ function SwipeCard({
         <div className="px-3 py-2 border-t border-rule-2 flex gap-2">
           <button
             onClick={() => onVote(cand, 'no')}
-            className="flex-1 px-3 py-2 border border-rule bg-white rounded-sm text-xs font-semibold cursor-pointer flex items-center justify-center gap-1"
+            className="flex-1 px-3 py-2 border border-rule bg-surface rounded-sm text-xs font-semibold cursor-pointer flex items-center justify-center gap-1"
           >
             <X size={14} /> Nej
           </button>
           <button
             onClick={() => onVote(cand, 'yes')}
-            className="flex-1 px-3 py-2 bg-acc-deep text-white rounded-sm text-xs font-semibold cursor-pointer flex items-center justify-center gap-1"
+            className="flex-1 px-3 py-2 bg-acc-deep text-on-acc rounded-sm text-xs font-semibold cursor-pointer flex items-center justify-center gap-1"
           >
             <Check size={14} /> Ja
           </button>
           {me.vetoRemaining > 0 && (
             <button
               onClick={() => onVote(cand, 'veto')}
-              className="px-3 py-2 border border-danger bg-white text-danger-ink rounded-sm text-xs font-semibold cursor-pointer flex items-center justify-center gap-1"
+              className="px-3 py-2 border border-danger bg-surface text-danger-ink rounded-sm text-xs font-semibold cursor-pointer flex items-center justify-center gap-1"
               title="Dödar denna titel definitivt"
             >
               <Ban size={14} /> Veto
@@ -560,20 +561,20 @@ function CandidateTable({
                   <div className="inline-flex gap-[2px]">
                     <button
                       onClick={() => onVote(r.candidate, 'no')}
-                      className={`px-[6px] py-[1px] rounded-sm border text-xxs cursor-pointer ${myVote === 'no' ? 'border-acc-deep bg-acc-deep/[0.1] text-acc-deep' : 'border-rule bg-white text-ink-2'}`}
+                      className={`px-[6px] py-[1px] rounded-sm border text-xxs cursor-pointer ${myVote === 'no' ? 'border-acc-deep bg-acc-deep/[0.1] text-acc-deep' : 'border-rule bg-surface text-ink-2'}`}
                     >
                       Nej
                     </button>
                     <button
                       onClick={() => onVote(r.candidate, 'yes')}
-                      className={`px-[6px] py-[1px] rounded-sm border text-xxs cursor-pointer ${myVote === 'yes' ? 'border-acc-deep bg-acc-deep text-white' : 'border-rule bg-white text-ink-2'}`}
+                      className={`px-[6px] py-[1px] rounded-sm border text-xxs cursor-pointer ${myVote === 'yes' ? 'border-acc-deep bg-acc-deep text-on-acc' : 'border-rule bg-surface text-ink-2'}`}
                     >
                       Ja
                     </button>
                     {(me.vetoRemaining > 0 || myVote === 'veto') && (
                       <button
                         onClick={() => onVote(r.candidate, 'veto')}
-                        className={`px-[6px] py-[1px] rounded-sm border text-xxs cursor-pointer ${myVote === 'veto' ? 'border-danger bg-danger-soft text-danger-ink' : 'border-rule bg-white text-ink-3'}`}
+                        className={`px-[6px] py-[1px] rounded-sm border text-xxs cursor-pointer ${myVote === 'veto' ? 'border-danger bg-danger-soft text-danger-ink' : 'border-rule bg-surface text-ink-3'}`}
                       >
                         Veto
                       </button>
@@ -673,7 +674,7 @@ function MatchList({
                   <button
                     onClick={() => recordPick(m)}
                     disabled={pickingKey === key}
-                    className="px-2 py-[2px] text-xxs border border-acc-deep bg-acc-deep text-white rounded-sm cursor-pointer font-[inherit] disabled:opacity-50"
+                    className="px-2 py-[2px] text-xxs border border-acc-deep bg-acc-deep text-on-acc rounded-sm cursor-pointer font-[inherit] disabled:opacity-50"
                     title="Logga till gruppens filmkvällshistorik"
                   >
                     {pickingKey === key ? 'Sparar…' : 'Den här tar vi'}

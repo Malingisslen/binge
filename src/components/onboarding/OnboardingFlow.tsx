@@ -8,6 +8,9 @@ import { useWatchlist } from '@/hooks/useWatchlist';
 import { useSearch } from '@/hooks/useTMDB';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
+import { resolveEffectiveMonthlyCost } from '@/lib/advisor/effectiveCost';
+import { isEstimatedMonthlyCost, summarizeMonthlySpend } from '@/lib/advisor/costEstimate';
+import { formatKr } from '@/lib/formatKr';
 import { mergeUserDoc } from '@/lib/firebase/userDocWrite';
 import { trackEvent } from '@/lib/analytics';
 import { posterUrl, getDisplayTitle, getReleaseYear, isAddableMediaType } from '@/lib/tmdb/client';
@@ -28,9 +31,9 @@ import type { TMDBSearchResult, WatchStatus } from '@/types';
  * Onboarding-flöde för nya användare. 4 steg:
  *
  * 1. Välkommen + value prop
- * 2. Välj streamingtjänster (defaultar till de största svenska)
+ * 2. Välj streamingtjänster och nivå (inget förvalt — paket I, 2026-10-05)
  * 3. Lägg till första titeln (med förslag + sök)
- * 4. Valfri /kalibrera + klar-skärm
+ * 4. Besked i kr för de valda tjänsterna + valfri /kalibrera
  *
  * State hålls i ett enkelt step-index. Vi persisterar inte mid-flow — om
  * användaren laddar om får de börja från början. Enkelt och OK för v1.
@@ -39,8 +42,6 @@ import type { TMDBSearchResult, WatchStatus } from '@/types';
  * bakom onboarding-completion, bara routar nya användare hit vid första
  * inloggning.
  */
-
-const DEFAULT_PROVIDERS = [8, 119, 337, 384, 76, 520]; // Netflix, Prime, Disney+, HBO Max, Viaplay, SVT Play
 
 /**
  * BIN-659: one SHAPE for every failed write in the flow — the situation is
@@ -144,7 +145,7 @@ export function OnboardingFlow() {
       <div className="mt-6 bg-surface border border-rule rounded-sm p-6">
         {step === 1 && <StepWelcome onNext={() => goToStep(2)} />}
         {step === 2 && <StepProviders onBack={() => goToStep(1)} onNext={() => goToStep(3)} />}
-        {step === 3 && <StepFirstTitle onBack={() => goToStep(2)} onNext={() => goToStep(4)} />}
+        {step === 3 && <StepFirstTitle onBack={() => goToStep(2)} onNext={() => goToStep(4)} onFinish={finish} saving={saving} />}
         {step === 4 && <StepDone onBack={() => goToStep(3)} onFinish={finish} saving={saving} />}
       </div>
       {/* Below the card: `finish` is reachable from both the card's buttons and
@@ -192,7 +193,7 @@ function StepWelcome({ onNext }: { onNext: () => void }) {
       </h1>
       <p className="text-sm text-ink-2 mb-4">
         Håll koll på vad du tittar på och se var filmer och serier streamas i
-        Sverige. Tre steg.
+        Sverige.
       </p>
       <ul className="space-y-2 mb-6 text-sm text-ink-2">
         <li className="flex items-start gap-2">
@@ -210,7 +211,7 @@ function StepWelcome({ onNext }: { onNext: () => void }) {
       </ul>
       <button
         onClick={onNext}
-        className="inline-flex items-center gap-2 px-4 py-2 bg-acc-deep text-white rounded-sm text-sm font-semibold cursor-pointer"
+        className="inline-flex items-center gap-2 px-4 py-2 bg-acc-deep text-on-acc rounded-sm text-sm font-semibold cursor-pointer"
       >
         Börja <ArrowRight size={14} />
       </button>
@@ -221,13 +222,13 @@ function StepWelcome({ onNext }: { onNext: () => void }) {
 // ---- Step 2: Providers ----
 
 function StepProviders({ onBack, onNext }: { onBack: () => void; onNext: () => void }) {
-  const { user, updateProviders } = useAuth();
+  const { user, updateProviders, updateProviderTiers } = useAuth();
   const { show: toast } = useToast();
-  const [selected, setSelected] = useState<number[]>(
-    user?.myProviders && user.myProviders.length > 0
-      ? user.myProviders
-      : DEFAULT_PROVIDERS,
-  );
+  // Paket I: ingenting förvalt. Sex förkryssade tjänster gav nya konton ett
+  // "Du betalar 665 kr/mån" på priser de aldrig angett.
+  const [selected, setSelected] = useState<number[]>(user?.myProviders ?? []);
+  const [tiers, setTiers] = useState<Record<number, string>>(user?.providerTiers ?? {});
+  const [now] = useState(() => new Date());
   const [saving, setSaving] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
 
@@ -235,12 +236,33 @@ function StepProviders({ onBack, onNext }: { onBack: () => void; onNext: () => v
     setSelected(s => (s.includes(id) ? s.filter(x => x !== id) : [...s, id]));
 
   const flatrateProviders = SWEDISH_PROVIDERS.filter(p => p.type === 'flatrate');
+  const costSettings = {
+    providerTiers: tiers,
+    providerCosts: user?.providerCosts,
+    providerCampaigns: user?.providerCampaigns,
+  };
+  const pricedSelection = flatrateProviders.filter(p => selected.includes(p.id));
+
+  const chooseTier = (id: number, tierId: string) =>
+    setTiers(t => {
+      const next = { ...t };
+      if (tierId) next[id] = tierId;
+      else delete next[id];
+      return next;
+    });
 
   const save = async () => {
     setSaving(true);
     setSaveFailed(false);
     try {
       await updateProviders(selected);
+      // Bara ändrade nivåer skrivs, i en skrivning; "Vet inte" på en tidigare vald nivå rensar den.
+      const changed: Record<number, string | null> = {};
+      for (const id of selected) {
+        const chosen = tiers[id] ?? null;
+        if (chosen !== (user?.providerTiers?.[id] ?? null)) changed[id] = chosen;
+      }
+      if (Object.keys(changed).length > 0) await updateProviderTiers(changed);
       onNext();
     } catch (err) {
       // BIN-1047: same refusal, same reason as `finish` above — `updateProviders` reaches
@@ -264,11 +286,11 @@ function StepProviders({ onBack, onNext }: { onBack: () => void; onNext: () => v
   return (
     <div>
       <h1 className="page-h1" style={{ marginBottom: 12 }}>
-        Vilka tjänster har du?
+        Vilka tjänster betalar du för?
       </h1>
       <p className="text-sm text-ink-2 mb-4">
         Används för att visa var dina titlar kan streamas — och för att räkna
-        ut om du kan pausa någon tjänst. Kryssa alla du prenumererar på.
+        ut om du kan pausa någon tjänst. Kryssa i dem du har och välj nivå om du vet den.
       </p>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-6">
         {flatrateProviders.map(p => {
@@ -281,7 +303,7 @@ function StepProviders({ onBack, onNext }: { onBack: () => void; onNext: () => v
               className={`flex items-center gap-2 px-3 py-2 border rounded-sm cursor-pointer text-left ${
                 isSelected
                   ? 'border-acc-deep bg-acc-deep/[0.05] text-ink'
-                  : 'border-rule bg-white text-ink-2'
+                  : 'border-rule bg-surface text-ink-2'
               }`}
             >
               <span
@@ -294,20 +316,50 @@ function StepProviders({ onBack, onNext }: { onBack: () => void; onNext: () => v
           );
         })}
       </div>
+      {pricedSelection.length > 0 && (
+        <ul className="mb-6 divide-y divide-rule-2 border-y border-rule-2">
+          {pricedSelection.map(p => {
+            const cost = resolveEffectiveMonthlyCost(p.id, costSettings, now);
+            const estimated = isEstimatedMonthlyCost(p.id, costSettings, now);
+            return (
+              <li key={p.id} className="flex items-center gap-2 py-[6px] text-sm">
+                <span className="flex-1 min-w-0 truncate">{p.name}</span>
+                {p.tiers && p.tiers.length > 0 && (
+                  <select
+                    aria-label={`Nivå för ${p.name}`}
+                    value={tiers[p.id] ?? ''}
+                    onChange={e => chooseTier(p.id, e.target.value)}
+                    className="text-xs border border-rule rounded-sm bg-surface text-ink px-1 py-[3px] max-w-[11rem]"
+                  >
+                    <option value="">Vet inte</option>
+                    {p.tiers.map(t => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                )}
+                <span className="tabular-nums font-semibold w-[4.5rem] text-right">
+                  {cost == null ? '–' : cost === 0 ? 'Gratis' : `${formatKr(cost)} kr`}
+                </span>
+                <span className="w-[5.5rem] text-xxs text-ink-3">{estimated ? 'uppskattat' : ''}</span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
       {saveFailed && (
         <SaveError message="Kunde inte spara dina tjänster. Kontrollera anslutningen och försök igen." />
       )}
       <div className="flex items-center gap-2">
         <button
           onClick={onBack}
-          className="inline-flex items-center gap-1 px-3 py-2 border border-rule rounded-sm text-sm bg-white cursor-pointer"
+          className="inline-flex items-center gap-1 px-3 py-2 border border-rule rounded-sm text-sm bg-surface cursor-pointer"
         >
           <ArrowLeft size={14} /> Tillbaka
         </button>
         <button
           onClick={save}
           disabled={saving}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-acc-deep text-white rounded-sm text-sm font-semibold cursor-pointer disabled:opacity-50"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-acc-deep text-on-acc rounded-sm text-sm font-semibold cursor-pointer disabled:opacity-50"
         >
           {saving ? 'Sparar…' : 'Nästa'} <ArrowRight size={14} />
         </button>
@@ -318,7 +370,17 @@ function StepProviders({ onBack, onNext }: { onBack: () => void; onNext: () => v
 
 // ---- Step 3: Första titeln ----
 
-function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => void }) {
+function StepFirstTitle({
+  onBack,
+  onNext,
+  onFinish,
+  saving,
+}: {
+  onBack: () => void;
+  onNext: () => void;
+  onFinish: (destination?: string) => Promise<void>;
+  saving: boolean;
+}) {
   const [query, setQuery] = useState('');
   const debouncedQuery = useDebouncedValue(query, 250);
   const { data: searchData, isLoading } = useSearch(debouncedQuery);
@@ -399,7 +461,7 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
         Sök efter en film eller serie. Serier följer du; filmer markerar du
         som vill se eller sedda.
       </p>
-      <div className="flex items-center gap-2 mb-3 border border-rule rounded-sm bg-white px-2">
+      <div className="flex items-center gap-2 mb-3 border border-rule rounded-sm bg-surface px-2">
         <Search size={13} className="text-ink-3" />
         <input
           type="search"
@@ -435,7 +497,7 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
               return (
                 <li
                   key={r.id}
-                  className="flex items-center gap-2 px-2 py-[5px] bg-white border border-rule rounded-sm"
+                  className="flex items-center gap-2 px-2 py-[5px] bg-surface border border-rule rounded-sm"
                 >
                   {poster && (
                     <div className={`poster duo-${r.genre_ids?.length ? toneForGenreIds(r.genre_ids) : toneForId(r.id)} w-[28px] h-[42px] shrink-0`}>
@@ -466,7 +528,7 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
                     <button
                       onClick={() => handleAdd(r, 'engage')}
                       disabled={!libraryKnown}
-                      className="text-xxs px-2 py-[3px] bg-acc-deep text-white rounded-sm cursor-pointer disabled:opacity-50"
+                      className="text-xxs px-2 py-[3px] bg-acc-deep text-on-acc rounded-sm cursor-pointer disabled:opacity-50"
                     >
                       Följ
                     </button>
@@ -475,14 +537,14 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
                       <button
                         onClick={() => handleAdd(r, 'plan')}
                         disabled={!libraryKnown}
-                        className="text-xxs px-2 py-[3px] border border-rule rounded-sm bg-white cursor-pointer disabled:opacity-50"
+                        className="text-xxs px-2 py-[3px] border border-rule rounded-sm bg-surface cursor-pointer disabled:opacity-50"
                       >
                         Vill se
                       </button>
                       <button
                         onClick={() => handleAdd(r, 'engage')}
                         disabled={!libraryKnown}
-                        className="text-xxs px-2 py-[3px] bg-acc-deep text-white rounded-sm cursor-pointer disabled:opacity-50"
+                        className="text-xxs px-2 py-[3px] bg-acc-deep text-on-acc rounded-sm cursor-pointer disabled:opacity-50"
                       >
                         Sedd
                       </button>
@@ -515,6 +577,19 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
         )
       )}
 
+      <p className="text-xs text-ink-3 mb-3">
+        Har du en lista någon annanstans?{' '}
+        {/* Avslutar introduktionen först — annars skickas kontot tillbaka hit vid nästa inloggning. */}
+        <button
+          type="button"
+          onClick={() => onFinish('/settings/import/')}
+          disabled={saving}
+          className="text-acc-deep underline bg-transparent border-none p-0 cursor-pointer font-[inherit] disabled:opacity-50"
+        >
+          Importera den
+        </button>
+      </p>
+
       {items.length > 0 && (
         <div className="text-xs text-acc-deep mb-3">
           <Check size={11} className="inline mb-[2px] mr-1" />
@@ -525,14 +600,14 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
       <div className="flex items-center gap-2">
         <button
           onClick={onBack}
-          className="inline-flex items-center gap-1 px-3 py-2 border border-rule rounded-sm text-sm bg-white cursor-pointer"
+          className="inline-flex items-center gap-1 px-3 py-2 border border-rule rounded-sm text-sm bg-surface cursor-pointer"
         >
           <ArrowLeft size={14} /> Tillbaka
         </button>
         <button
           onClick={onNext}
           disabled={!canContinue}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-acc-deep text-white rounded-sm text-sm font-semibold cursor-pointer disabled:opacity-50"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-acc-deep text-on-acc rounded-sm text-sm font-semibold cursor-pointer disabled:opacity-50"
         >
           Nästa <ArrowRight size={14} />
         </button>
@@ -560,11 +635,40 @@ function StepDone({
   onFinish: (destination?: string) => Promise<void>;
   saving: boolean;
 }) {
+  const { user } = useAuth();
+  const [now] = useState(() => new Date());
+  const spend = summarizeMonthlySpend(user?.myProviders ?? [], user ?? {}, now);
   return (
     <div>
       <h1 className="page-h1" style={{ marginBottom: 12 }}>
         Klar.
       </h1>
+      {spend.paidCount > 0 && (
+        <div className="border border-rule rounded-sm p-3 mb-4">
+          <p className="text-sm text-ink">
+            Du betalar{spend.estimated ? ' ungefär' : ''}{' '}
+            <strong>{formatKr(spend.totalKr)} kr i månaden</strong> för{' '}
+            {spend.paidCount} {spend.paidCount === 1 ? 'tjänst' : 'tjänster'}, alltså{' '}
+            {formatKr(spend.totalKr * 12)} kr om året.
+          </p>
+          {spend.estimated && (
+            <p className="text-xxs text-ink-3 mt-1">
+              Där du inte valt nivå räknar vi med tjänstens listpris. Du kan ändra det i inställningarna.
+            </p>
+          )}
+          <p className="text-xxs text-ink-3 mt-1">
+            Lägg till det du följer, så kan Streamingrådgivaren säga vad du kan pausa.
+          </p>
+          <button
+            type="button"
+            onClick={() => onFinish('/savings/')}
+            disabled={saving}
+            className="mt-2 text-xs text-acc-deep underline bg-transparent border-none p-0 cursor-pointer font-[inherit] disabled:opacity-50"
+          >
+            Öppna Streamingrådgivaren
+          </button>
+        </div>
+      )}
       <p className="text-sm text-ink-2 mb-4">
         Lägg till fler titlar, utforska rekommendationer eller se var dina
         serier streamas.
@@ -587,14 +691,14 @@ function StepDone({
           <button
             onClick={() => onFinish('/kalibrera/')}
             disabled={saving}
-            className="inline-flex items-center gap-1 px-3 py-[5px] bg-acc-deep text-white rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
+            className="inline-flex items-center gap-1 px-3 py-[5px] bg-acc-deep text-on-acc rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
           >
             <Target size={11} /> Kalibrera smak
           </button>
           <button
             onClick={() => onFinish()}
             disabled={saving}
-            className="px-3 py-[5px] border border-rule rounded-sm text-xs bg-white cursor-pointer disabled:opacity-50"
+            className="px-3 py-[5px] border border-rule rounded-sm text-xs bg-surface cursor-pointer disabled:opacity-50"
           >
             Senare
           </button>
@@ -605,14 +709,14 @@ function StepDone({
         <button
           onClick={onBack}
           disabled={saving}
-          className="inline-flex items-center gap-1 px-3 py-2 border border-rule rounded-sm text-sm bg-white cursor-pointer disabled:opacity-50"
+          className="inline-flex items-center gap-1 px-3 py-2 border border-rule rounded-sm text-sm bg-surface cursor-pointer disabled:opacity-50"
         >
           <ArrowLeft size={14} /> Tillbaka
         </button>
         <button
           onClick={() => onFinish()}
           disabled={saving}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-acc-deep text-white rounded-sm text-sm font-semibold cursor-pointer disabled:opacity-50"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-acc-deep text-on-acc rounded-sm text-sm font-semibold cursor-pointer disabled:opacity-50"
         >
           {saving ? 'Sparar…' : 'Klar'} <ArrowRight size={14} />
         </button>

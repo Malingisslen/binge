@@ -79,6 +79,10 @@ interface AuthState {
   // funktionella-merge-härdning som setProviderCost (BIN-46, jfr BIN-40).
   setProviderRenewalDay: (providerId: number, day: number | null) => Promise<void>;
   updateProviderTier: (providerId: number, tierId: string | null) => Promise<void>;
+  // Paket I: flera nivåer i EN skrivning (null = ta bort). Introduktionen sparar
+  // alla valda nivåer på en gång; en loop över updateProviderTier läste samma
+  // inaktuella `user` i varje anrop, så bara den sista nivån fanns kvar lokalt.
+  updateProviderTiers: (changes: Record<number, string | null>) => Promise<void>;
   // BIN-417: sätt/ta bort EN providers tidsbegränsade kampanj (null = ta bort).
   // Lagrar RÅTT { monthlyCost, endDate } (aldrig ett resolvat pris), keyat på
   // kanoniskt id. Samma funktionella-merge-härdning som setProviderCost.
@@ -149,6 +153,7 @@ const AuthContext = createContext<AuthState>({
   setProviderCost: async () => {},
   setProviderRenewalDay: async () => {},
   updateProviderTier: async () => {},
+  updateProviderTiers: async () => {},
   setProviderCampaign: async () => {},
   pauseProvider: async () => {},
   resumeProvider: async () => {},
@@ -1212,30 +1217,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [updateUserField],
   );
   const setProviderRenewalDay = useOptimisticMirrorField(uid, user?.providerRenewalDays, commitProviderRenewalDays);
-  const updateProviderTier = useCallback(async (providerId: number, tierId: string | null) => {
+  const updateProviderTiers = useCallback(async (changes: Record<number, string | null>) => {
     if (!uid || !user) return;
     const { getProvider } = await import('@/lib/tmdb/providers');
-    const provider = getProvider(providerId);
-    const tier = tierId ? provider?.tiers?.find(t => t.id === tierId) : null;
+    // Keyed by the CANONICAL id, which is what resolveProviderMonthlyCost reads; an
+    // id the catalog does not know is dropped. A tier id the catalog does not know
+    // clears the tier, as before.
+    const resolved = Object.entries(changes).flatMap(([key, tierId]) => {
+      const provider = getProvider(Number(key));
+      if (!provider) return [];
+      const known = tierId != null && provider.tiers?.some(t => t.id === tierId);
+      return [{ providerId: provider.id, tierId: known ? tierId : null }];
+    });
+    if (resolved.length === 0) return;
 
-    const nextTiers = { ...(user.providerTiers ?? {}) };
-    const nextCosts = { ...(user.providerCosts ?? {}) };
-
-    if (tierId && tier) {
-      nextTiers[providerId] = tierId;
-      // Live tier pricing: the cost derives from the chosen tier at read time
-      // (resolveProviderMonthlyCost), so we no longer freeze tier.cost into
-      // providerCosts. Deleting any stale frozen snapshot here IS the lazy
-      // migration — providerCosts now means "egen inskriven kostnad" only, so a
-      // tier user + a providerCosts entry is a leftover we clean on next touch.
-      delete nextCosts[providerId];
-    } else {
-      delete nextTiers[providerId];
-    }
-
-    await mergeUserDoc(uid, { providerTiers: nextTiers, providerCosts: nextCosts });
-    setUser(prev => prev ? { ...prev, providerTiers: nextTiers, providerCosts: nextCosts } : null);
+    // Per-key writes, not whole maps: a merge write leaves an OMITTED nested key
+    // in place on the server, so removing a key from a full map never removed it.
+    // deleteField() does. Live tier pricing: the cost derives from the chosen tier
+    // at read time (resolveProviderMonthlyCost), so a chosen tier deletes any
+    // frozen providerCosts entry — providerCosts means "egen inskriven kostnad" only.
+    await mergeUserDoc(uid, kit => {
+      const tiers: Record<number, unknown> = {};
+      const costs: Record<number, unknown> = {};
+      for (const { providerId, tierId } of resolved) {
+        tiers[providerId] = tierId ?? kit.deleteField();
+        if (tierId) costs[providerId] = kit.deleteField();
+      }
+      return Object.keys(costs).length > 0
+        ? { providerTiers: tiers, providerCosts: costs }
+        : { providerTiers: tiers };
+    });
+    // Functional update, so two writers in flight cannot overwrite each other locally.
+    setUser(prev => {
+      if (!prev) return null;
+      const nextTiers = { ...(prev.providerTiers ?? {}) };
+      const nextCosts = { ...(prev.providerCosts ?? {}) };
+      for (const { providerId, tierId } of resolved) {
+        if (tierId) {
+          nextTiers[providerId] = tierId;
+          delete nextCosts[providerId];
+        } else {
+          delete nextTiers[providerId];
+        }
+      }
+      return { ...prev, providerTiers: nextTiers, providerCosts: nextCosts };
+    });
   }, [uid, user]);
+  const updateProviderTier = useCallback(
+    (providerId: number, tierId: string | null) => updateProviderTiers({ [providerId]: tierId }),
+    [updateProviderTiers],
+  );
   const pauseProvider = useCallback((providerId: number, resumeAt: string | null = null) => {
     const current = user?.providerPauses ?? {};
     const existing = current[providerId];
@@ -1676,7 +1707,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       user, uid, loading, profileLoading, profileLoadError, retryProfileLoad, emailVerified,
       signIn, signInEmail, register, resendEmailVerification, signOut,
-      updateProviders, updateDefaultView, updateProviderCosts, updateHomeMunicipality, updateRotationSchedule, setProviderCost, setProviderRenewalDay, updateProviderTier, setProviderCampaign,
+      updateProviders, updateDefaultView, updateProviderCosts, updateHomeMunicipality, updateRotationSchedule, setProviderCost, setProviderRenewalDay, updateProviderTier, updateProviderTiers, setProviderCampaign,
       pauseProvider, resumeProvider,
       updateUsername, updateDisplayName, updateBio, updateDefaultVisibility, visibilitySyncPending, deletionInProgress, pendingReconsent, completeReconsent, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
       setCalibrationGenres, deleteAccount,
@@ -1684,7 +1715,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [
       user, uid, loading, profileLoading, profileLoadError, retryProfileLoad, emailVerified,
       signIn, signInEmail, register, resendEmailVerification, signOut,
-      updateProviders, updateDefaultView, updateProviderCosts, updateHomeMunicipality, updateRotationSchedule, setProviderCost, setProviderRenewalDay, updateProviderTier, setProviderCampaign,
+      updateProviders, updateDefaultView, updateProviderCosts, updateHomeMunicipality, updateRotationSchedule, setProviderCost, setProviderRenewalDay, updateProviderTier, updateProviderTiers, setProviderCampaign,
       pauseProvider, resumeProvider,
       updateUsername, updateDisplayName, updateBio, updateDefaultVisibility, visibilitySyncPending, deletionInProgress, pendingReconsent, completeReconsent, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
       setCalibrationGenres, deleteAccount,

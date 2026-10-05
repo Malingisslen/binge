@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { topTitles, expiredInsightDocIds, canonicalProviderId, tallyProviderIds } from './rollup.helpers';
+import { topTitles, expiredInsightDocIds, canonicalProviderId, tallyProviderIds, activeUserCounts } from './rollup.helpers';
 
 // topTitles takes the WatchlistLite shape; only tmdbId/mediaType/title matter here.
 const wl = (tmdbId: number, title: string, mediaType = 'movie') =>
@@ -94,5 +94,42 @@ describe('tallyProviderIds (BIN-845)', () => {
   it('keeps [] and null apart — they are different claims', () => {
     expect(tallyProviderIds({ providers: [8], subscriptionProviders: [] })).toEqual([]);
     expect(tallyProviderIds({ providers: [8], subscriptionProviders: null })).toEqual([8]);
+  });
+});
+
+describe('activeUserCounts', () => {
+  const now = Date.parse('2026-10-05T12:00:00Z');
+  const daysAgo = (n: number) => new Date(now - n * 86_400_000).toUTCString();
+
+  it('counts an account in both windows when it was seen this week', () => {
+    expect(activeUserCounts([{ anonymous: false, lastRefreshTime: daysAgo(2) }], now)).toEqual({ d7: 1, d30: 1 });
+  });
+
+  it('counts an account seen 20 days ago only in the monthly window', () => {
+    expect(activeUserCounts([{ anonymous: false, lastRefreshTime: daysAgo(20) }], now)).toEqual({ d7: 0, d30: 1 });
+  });
+
+  it('counts an account seen 31 days ago in neither window', () => {
+    expect(activeUserCounts([{ anonymous: false, lastRefreshTime: daysAgo(31) }], now)).toEqual({ d7: 0, d30: 0 });
+  });
+
+  it('uses the later of sign-in and refresh, whichever one is set', () => {
+    expect(
+      activeUserCounts(
+        [
+          { anonymous: false, lastSignInTime: daysAgo(40), lastRefreshTime: daysAgo(3) },
+          { anonymous: false, lastSignInTime: daysAgo(3), lastRefreshTime: null },
+        ],
+        now,
+      ),
+    ).toEqual({ d7: 2, d30: 2 });
+  });
+
+  it('never counts an anonymous Tillsammans guest', () => {
+    expect(activeUserCounts([{ anonymous: true, lastRefreshTime: daysAgo(0) }], now)).toEqual({ d7: 0, d30: 0 });
+  });
+
+  it('skips an account with no readable clock', () => {
+    expect(activeUserCounts([{ anonymous: false, lastSignInTime: 'garbage' }], now)).toEqual({ d7: 0, d30: 0 });
   });
 });

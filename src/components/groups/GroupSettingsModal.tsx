@@ -122,7 +122,7 @@ export function GroupSettingsModal({
               value={editName}
               onChange={e => setEditName(e.target.value)}
               maxLength={48}
-              className="w-full px-2 py-1 text-base border border-rule rounded-sm bg-white"
+              className="w-full px-2 py-1 text-base border border-rule rounded-sm bg-surface"
             />
           </div>
 
@@ -175,13 +175,13 @@ export function GroupSettingsModal({
           <button
             onClick={save}
             disabled={saving}
-            className="px-3 py-[5px] bg-acc-deep text-white rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
+            className="px-3 py-[5px] bg-acc-deep text-on-acc rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
           >
             {saving ? 'Sparar…' : 'Spara'}
           </button>
           <button
             onClick={onClose}
-            className="px-3 py-[5px] border border-rule rounded-sm text-xs bg-white cursor-pointer"
+            className="px-3 py-[5px] border border-rule rounded-sm text-xs bg-surface cursor-pointer"
           >
             Avbryt
           </button>
@@ -197,13 +197,13 @@ export function GroupSettingsModal({
                 ? 'Du är ensam i gruppen — det finns ingen att lämna över till.'
                 : undefined
             }
-            className="ml-auto inline-flex items-center gap-1 px-3 py-[5px] border border-rule rounded-sm text-xs bg-white cursor-pointer hover:bg-bg-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="ml-auto inline-flex items-center gap-1 px-3 py-[5px] border border-rule rounded-sm text-xs bg-surface cursor-pointer hover:bg-bg-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <UserCheck size={11} /> Lämna över
           </button>
           <button
             onClick={() => setConfirmingDelete(true)}
-            className="inline-flex items-center gap-1 px-3 py-[5px] border border-danger/40 text-danger-ink rounded-sm text-xs bg-white cursor-pointer hover:bg-danger-soft"
+            className="inline-flex items-center gap-1 px-3 py-[5px] border border-danger/40 text-danger-ink rounded-sm text-xs bg-surface cursor-pointer hover:bg-danger-soft"
           >
             <Trash2 size={11} /> Radera grupp
           </button>

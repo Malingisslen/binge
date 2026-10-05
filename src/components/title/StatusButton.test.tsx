@@ -152,6 +152,44 @@ describe('StatusButton — "Sedd igen" (BIN-641)', () => {
 // Every case here asserts the TOAST as well as the write. A gate that blocks the
 // write but still says "The Matrix — Vill se" is worse than no gate: the user
 // walks away believing it was saved.
+describe('StatusButton — the menu answers a keyboard (A11Y-2)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    watchlist.getItem.mockReturnValue(null);
+    watchlist.snapshotSettled = true;
+    watchlist.listenerFailed = false;
+    auth.uid = 'u1';
+    auth.user = { uid: 'u1' };
+    auth.loading = false;
+  });
+
+  it('says it is open, closes on Escape and hands focus back to the button', () => {
+    render(film());
+    const trigger = screen.getByRole('button', { name: '+ Lägg till' });
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('button', { name: 'Vill se' })).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('button', { name: 'Vill se' })).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
+  it('ignores other keys', () => {
+    render(film());
+    const trigger = screen.getByRole('button', { name: '+ Lägg till' });
+    fireEvent.click(trigger);
+
+    fireEvent.keyDown(document, { key: 'Enter' });
+
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  });
+});
+
 describe('StatusButton — the write waits for auth AND the watchlist snapshot (BIN-596)', () => {
   beforeEach(() => {
     vi.clearAllMocks();

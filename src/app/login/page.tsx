@@ -147,9 +147,9 @@ export default function LoginPage() {
     <div className="flex items-center justify-center min-h-[60vh]">
       <div className="bg-surface border border-rule rounded-sm px-8 py-6 max-w-[340px] w-full">
         <div className="text-center mb-4">
-          <div className="text-[20px] font-extrabold text-acc-deep">
+          <h1 className="text-[20px] font-extrabold text-acc-deep">
             binge<span className="font-normal text-ink-3 text-sm">.nu</span>
-          </div>
+          </h1>
           <p className="text-sm text-ink-3 mt-1">
             Håll koll på vad du tittar på och var det finns att streama i Sverige.
           </p>
@@ -158,7 +158,7 @@ export default function LoginPage() {
         <button
           onClick={handleGoogle}
           disabled={loading}
-          className="w-full px-4 py-2 bg-acc-deep text-white border-none rounded-sm cursor-pointer font-[inherit] text-base font-semibold hover:opacity-90 disabled:opacity-50 mb-2"
+          className="w-full px-4 py-2 bg-acc-deep text-on-acc border-none rounded-sm cursor-pointer font-[inherit] text-base font-semibold hover:bg-acc-deep-hover disabled:opacity-50 mb-2"
         >
           Logga in med Google
         </button>
@@ -192,7 +192,7 @@ export default function LoginPage() {
               maxLength={MAX_DISPLAY_NAME}
               value={name}
               onChange={e => setName(e.target.value)}
-              className="w-full px-2 py-[6px] mb-2 text-base border border-rule rounded-sm bg-white font-[inherit] outline-none focus:border-acc-deep"
+              className="w-full px-2 py-[6px] mb-2 text-base border border-rule rounded-sm bg-surface font-[inherit] outline-none focus:border-acc-deep"
             />
           )}
           <input
@@ -202,7 +202,7 @@ export default function LoginPage() {
             value={email}
             onChange={e => setEmail(e.target.value)}
             required
-            className="w-full px-2 py-[6px] mb-2 text-base border border-rule rounded-sm bg-white font-[inherit] outline-none focus:border-acc-deep"
+            className="w-full px-2 py-[6px] mb-2 text-base border border-rule rounded-sm bg-surface font-[inherit] outline-none focus:border-acc-deep"
           />
           <input
             type="password"
@@ -212,7 +212,7 @@ export default function LoginPage() {
             onChange={e => setPassword(e.target.value)}
             required
             minLength={mode === 'register' ? 8 : 6}
-            className="w-full px-2 py-[6px] mb-2 text-base border border-rule rounded-sm bg-white font-[inherit] outline-none focus:border-acc-deep"
+            className="w-full px-2 py-[6px] mb-2 text-base border border-rule rounded-sm bg-surface font-[inherit] outline-none focus:border-acc-deep"
           />
           {mode === 'register' && passwordStrength && (
             <PasswordStrengthMeter strength={passwordStrength} />
@@ -244,11 +244,11 @@ export default function LoginPage() {
               </label>
             </div>
           )}
-          {error && <div className="text-xs text-danger-ink mb-2">{error}</div>}
+          {error && <div role="alert" className="text-xs text-danger-ink mb-2">{error}</div>}
           <button
             type="submit"
             disabled={registerDisabled}
-            className="w-full px-4 py-[6px] bg-ink text-white border-none rounded-sm cursor-pointer font-[inherit] text-base font-semibold hover:opacity-90 disabled:opacity-50"
+            className="w-full px-4 py-[6px] bg-ink text-bg border-none rounded-sm cursor-pointer font-[inherit] text-base font-semibold hover:opacity-90 disabled:opacity-50"
           >
             {submitting ? (mode === 'register' ? 'Skapar…' : 'Loggar in…') : mode === 'register' ? 'Skapa konto' : 'Logga in'}
           </button>

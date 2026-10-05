@@ -15,12 +15,14 @@ interface ToastAction {
 interface Toast {
   id: number;
   message: string;
-  action?: ToastAction;
+  actions: ToastAction[];
   onRate?: (rating: number) => void;
 }
 
 interface ToastState {
-  show: (message: string, action?: ToastAction) => void;
+  // Several actions sit side by side ("Ångra" · "Rensa helt"). Pressing any one of them
+  // closes the toast, so the others can no longer be pressed after it (BIN-1430).
+  show: (message: string, action?: ToastAction | ToastAction[]) => void;
   showRating: (message: string, onRate: (rating: number) => void) => void;
 }
 
@@ -40,13 +42,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const show = useCallback((message: string, action?: ToastAction) => {
+  const show = useCallback((message: string, action?: ToastAction | ToastAction[]) => {
     const id = nextId.current++;
-    setToasts(prev => [...prev, { id, message, action }]);
+    const actions = action == null ? [] : Array.isArray(action) ? action : [action];
+    setToasts(prev => [...prev, { id, message, actions }]);
     const timer = setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
       timers.current.delete(id);
-    }, action ? 6000 : 2500);
+    }, actions.length > 0 ? 6000 : 2500);
     timers.current.set(id, timer);
   }, []);
 
@@ -55,7 +58,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   // självdör den utan att sätta något betyg (titeln förblir sedd).
   const showRating = useCallback((message: string, onRate: (rating: number) => void) => {
     const id = nextId.current++;
-    setToasts(prev => [...prev, { id, message, onRate }]);
+    setToasts(prev => [...prev, { id, message, actions: [], onRate }]);
     const timer = setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
       timers.current.delete(id);
@@ -87,7 +90,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {toasts.map(t => (
           <div
             key={t.id}
-            className="bg-ink text-white text-xs px-3 py-2 rounded-sm animate-[fadeIn_0.2s_ease-out] flex items-center gap-3"
+            className="bg-ink text-bg text-xs px-3 py-2 rounded-sm animate-[fadeIn_0.2s_ease-out] flex items-center gap-3"
           >
             <span>{t.message}</span>
             {t.onRate && (
@@ -97,21 +100,22 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 onChange={(n) => { t.onRate!(n); dismiss(t.id); }}
               />
             )}
-            {t.action && (
+            {t.actions.map(a => (
               <button
+                key={a.label}
                 type="button"
-                onClick={() => { t.action!.onClick(); dismiss(t.id); }}
-                className="text-xs font-semibold underline text-white bg-transparent border-none cursor-pointer p-0 shrink-0"
+                onClick={() => { a.onClick(); dismiss(t.id); }}
+                className="text-xs font-semibold underline text-bg bg-transparent border-none cursor-pointer p-0 shrink-0 min-h-[24px]"
               >
-                {t.action.label}
+                {a.label}
               </button>
-            )}
+            ))}
             {t.onRate && (
               <button
                 type="button"
                 onClick={() => dismiss(t.id)}
                 aria-label="Stäng"
-                className="text-white/60 bg-transparent border-none cursor-pointer p-0 shrink-0"
+                className="text-bg opacity-60 bg-transparent border-none cursor-pointer p-0 shrink-0"
               >
                 <X size={14} />
               </button>

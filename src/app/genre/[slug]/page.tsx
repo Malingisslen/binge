@@ -193,7 +193,7 @@ export default async function GenrePage({ params }: { params: Promise<PageParams
         <PageHeader crumb="Genreguide" title={hub.h1} standfirst={hub.blurb} />
         <EmptyState
           title={`${hub.label} — listan uppdateras`}
-          body="Vi hämtar just nu in vad som streamar i Sverige inom genren. Titta in snart — sidan fylls på så fort datan är klar."
+          body="Vad som streamar i Sverige inom genren hämtas just nu. Titta in snart, sidan fylls på så fort datan är klar."
           action={<Link href="/guider/" className="btn btn-acc btn-sm">Utforska fler streamingguider</Link>}
         />
         <div className="mt-6">

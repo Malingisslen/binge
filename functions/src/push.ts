@@ -13,6 +13,7 @@
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { getMessaging, type Message } from 'firebase-admin/messaging';
 import { logger } from 'firebase-functions/v2';
+import { withPushUtm } from './util/pushUtm';
 
 interface FcmTokenDoc {
   token: string;
@@ -85,7 +86,7 @@ export async function sendPushToUser(
         fcmOptions: {
           // Klick på notif öppnar denna URL. Service-worker har en fallback
           // som hanterar relativa URLs mot origin.
-          link: payload.actionUrl,
+          link: withPushUtm(payload.actionUrl, payload.tag),
         },
         notification: {
           icon: '/og-image.svg',

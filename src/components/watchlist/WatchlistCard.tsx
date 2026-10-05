@@ -127,7 +127,7 @@ export function WatchlistCard({
       {selectMode && (
         <span className="shrink-0 self-center" aria-hidden="true">
           <span className={`inline-flex items-center justify-center w-[16px] h-[16px] rounded-sm border ${
-            selected ? 'bg-acc-deep border-acc-deep text-white' : 'border-rule bg-surface'
+            selected ? 'bg-acc-deep border-acc-deep text-on-acc' : 'border-rule bg-surface'
           }`}>
             {selected && <Check size={11} />}
           </span>

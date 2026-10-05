@@ -8,8 +8,10 @@
 export type MetricKey =
   // Översikt
   | 'totalUsers' | 'newUsers' | 'activeVisitors' | 'totalTitlesTracked' | 'totalReviews' | 'titlesAdded'
+  | 'activeUsers7d' | 'activeUsers30d'
   // Tillväxt
   | 'signupsTrend' | 'onboardingFunnel' | 'signinMethodSplit' | 'donateClicks'
+  | 'signupLandingPages' | 'providerClicks' | 'providerClicksByType'
   // Produktanvändning
   | 'statusDistribution' | 'mediaTypeSplit' | 'topTitles' | 'topProviders' | 'topGenres'
   | 'ratingsHistogram' | 'advisorPauses' | 'activeSessions' | 'groupsCount'

@@ -40,7 +40,7 @@ function ListsContent() {
         actions={
           <button
             onClick={() => setShowForm(true)}
-            className="px-3 py-[3px] border-none rounded-sm text-xs font-[inherit] cursor-pointer bg-acc-deep text-white"
+            className="px-3 py-[3px] border-none rounded-sm text-xs font-[inherit] cursor-pointer bg-acc-deep text-on-acc"
           >
             Skapa ny lista
           </button>
@@ -54,7 +54,7 @@ function ListsContent() {
             onChange={e => setTitle(e.target.value)}
             placeholder="Listans namn"
             maxLength={100}
-            className="w-full px-2 py-[3px] text-xs border border-rule rounded-sm bg-white font-[inherit] outline-none mb-2"
+            className="w-full px-2 py-[3px] text-xs border border-rule rounded-sm bg-surface font-[inherit] outline-none mb-2"
           />
           <textarea
             value={description}
@@ -62,14 +62,14 @@ function ListsContent() {
             placeholder="Beskrivning (valfritt)"
             maxLength={300}
             rows={2}
-            className="w-full px-2 py-1 text-xs border border-rule rounded-sm bg-white font-[inherit] resize-none outline-none mb-2"
+            className="w-full px-2 py-1 text-xs border border-rule rounded-sm bg-surface font-[inherit] resize-none outline-none mb-2"
           />
           <div className="flex items-center gap-2">
             <label className="flex items-center gap-1 text-xs text-ink-3 cursor-pointer">
               <input type="checkbox" checked={isPublic} onChange={e => setIsPublic(e.target.checked)} className="accent-acc-deep" />
               Publik
             </label>
-            <button onClick={handleCreate} className="px-3 py-[3px] text-xs border-none rounded-sm cursor-pointer bg-acc-deep text-white font-[inherit]">
+            <button onClick={handleCreate} className="px-3 py-[3px] text-xs border-none rounded-sm cursor-pointer bg-acc-deep text-on-acc font-[inherit]">
               Skapa
             </button>
             <button onClick={() => setShowForm(false)} className="px-3 py-[3px] text-xs border border-rule rounded-sm cursor-pointer bg-surface text-ink-3 font-[inherit]">

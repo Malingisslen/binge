@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { usePerson, usePersonCredits } from '@/hooks/useTMDB';
 import { usePageMeta } from '@/hooks/usePageMeta';
-import { JsonLd, breadcrumbSchema } from '@/components/title/JsonLd';
+import { JsonLd, breadcrumbSchema, personSchema } from '@/components/title/JsonLd';
 import { useSwedishWikiBio } from '@/hooks/useSwedishWikiBio';
 import { profileUrl, getPersonEn, isAddableMediaType } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
@@ -150,13 +150,17 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
   });
 
   if (isLoading) return <LoadingView variant="detail" label="Laddar person…" />;
-  if (!person) return <NotFound crumb="Person" title="Personen hittades inte." body="Vi kunde inte hitta den här personen i TMDB." />;
+  if (!person) return <NotFound crumb="Person" title="Personen hittades inte." body="Den här personen gick inte att hitta." />;
 
   const photo = profileUrl(person.profile_path, 'w500');
   const birthYear = person.birthday?.substring(0, 4);
 
   return (
     <div>
+      <JsonLd data={personSchema(person, {
+        description: metaDescription,
+        jobTitle: person.known_for_department ? translateDepartment(person.known_for_department) : null,
+      })} />
       {/* BIN-423 WP4: breadcrumb structured data (speglar movie/tv-sidorna) */}
       <JsonLd data={breadcrumbSchema([
         { name: 'Binge.nu', url: 'https://binge.nu/' },
@@ -274,7 +278,7 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
       )}
 
       {roles.length === 0 && selfCredits.length === 0 && (
-        <EmptyState title="Ingen filmografi" body="Vi hittade inga titlar för den här personen ännu." />
+        <EmptyState title="Ingen filmografi" body="Inga titlar hittades för den här personen ännu." />
       )}
     </div>
   );

@@ -35,8 +35,8 @@ interface BuildStepsContext {
 
 const CARD_BASE = 'bg-surface border border-rule rounded-sm grid grid-cols-[36px_1fr_auto] gap-3 px-4 py-[12px] items-center mb-[6px]';
 const NUM_BASE = 'text-[22px] leading-none text-center font-light';
-const CTA_PRIMARY = 'bg-acc-deep text-white border-none rounded-sm px-3 py-[6px] text-xs font-semibold no-underline whitespace-nowrap hover:bg-acc-deep';
-const CTA_GHOST = 'bg-transparent text-acc-deep border border-acc-deep rounded-sm px-3 py-[5px] text-xs font-semibold no-underline whitespace-nowrap hover:bg-acc-deep hover:text-white';
+const CTA_PRIMARY = 'bg-acc-deep text-on-acc border-none rounded-sm px-3 py-[6px] text-xs font-semibold no-underline whitespace-nowrap hover:bg-acc-deep';
+const CTA_GHOST = 'bg-transparent text-acc-deep border border-acc-deep rounded-sm px-3 py-[5px] text-xs font-semibold no-underline whitespace-nowrap hover:bg-acc-deep hover:text-on-acc';
 const BADGE_GREEN = 'inline-block px-[7px] py-[2px] text-[10px] uppercase tracking-[0.4px] font-bold rounded-sm border border-season-done text-season-done whitespace-nowrap';
 
 function buildSteps(advisor: AdvisorResult, ctx: BuildStepsContext): Step[] {
@@ -127,7 +127,7 @@ function stepFromPrimary(action: PrimaryAction, ctx: BuildStepsContext): Step {
       return {
         number: 1,
         title: 'Inget att göra just nu',
-        desc: 'Allt är välbalanserat — vi hör av oss när något ändras.',
+        desc: 'Allt är välbalanserat just nu.',
         active: true,
       };
   }

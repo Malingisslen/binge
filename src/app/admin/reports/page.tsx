@@ -101,7 +101,7 @@ function ReportsDashboard() {
             key={s}
             onClick={() => setActiveTab(s)}
             className={`px-3 py-[4px] text-xs rounded-sm cursor-pointer ${
-              activeTab === s ? 'bg-acc-deep text-white' : 'bg-surface text-ink-2 hover:bg-bg-2'
+              activeTab === s ? 'bg-acc-deep text-on-acc' : 'bg-surface text-ink-2 hover:bg-bg-2'
             }`}
           >
             {REPORT_STATUS_LABELS[s]}
@@ -246,23 +246,23 @@ function ReportRow({
                 onChange={e => setNote(e.target.value)}
                 maxLength={MAX_DECISION_NOTE}
                 rows={2}
-                className="w-56 px-2 py-1 text-xs border border-rule rounded-sm bg-white"
+                className="w-56 px-2 py-1 text-xs border border-rule rounded-sm bg-surface"
               />
               <button
                 onClick={() => onAction(report.id, 'reviewed', note)}
-                className="px-3 py-[3px] text-xs border border-rule rounded-sm bg-white cursor-pointer hover:bg-bg-2"
+                className="px-3 py-[3px] text-xs border border-rule rounded-sm bg-surface cursor-pointer hover:bg-bg-2"
               >
                 Granskad
               </button>
               <button
                 onClick={() => onAction(report.id, 'actioned', note)}
-                className="px-3 py-[3px] text-xs bg-acc-deep text-white border-none rounded-sm cursor-pointer"
+                className="px-3 py-[3px] text-xs bg-acc-deep text-on-acc border-none rounded-sm cursor-pointer"
               >
                 Åtgärda
               </button>
               <button
                 onClick={() => onAction(report.id, 'dismissed', note)}
-                className="px-3 py-[3px] text-xs border border-rule rounded-sm bg-white text-ink-3 cursor-pointer hover:bg-bg-2"
+                className="px-3 py-[3px] text-xs border border-rule rounded-sm bg-surface text-ink-3 cursor-pointer hover:bg-bg-2"
               >
                 Avfärda
               </button>
@@ -275,7 +275,7 @@ function ReportRow({
               </span>
               <button
                 onClick={() => onAction(report.id, 'open')}
-                className="px-3 py-[3px] text-xs border border-rule rounded-sm bg-white cursor-pointer hover:bg-bg-2"
+                className="px-3 py-[3px] text-xs border border-rule rounded-sm bg-surface cursor-pointer hover:bg-bg-2"
               >
                 Öppna igen
               </button>

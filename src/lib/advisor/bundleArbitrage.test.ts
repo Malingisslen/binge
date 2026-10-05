@@ -263,8 +263,8 @@ describe('tier-aware comparison (BIN-433)', () => {
     expect(out).toHaveLength(1); // gate passes on replaced.length === 2 alone
     expect(out[0].replacedProviderIds.sort((a, b) => a - b)).toEqual([8, 337]);
     expect(out[0].downgradeProviderIds).toEqual([384]);
-    expect(out[0].downgradeNames).toEqual(['Max']);
-    expect(out[0].currentKr).toBe(238); // 169 + 69 — Max's 149 NOT included
+    expect(out[0].downgradeNames).toEqual(['HBO Max']);
+    expect(out[0].currentKr).toBe(238); // 169 + 69 — HBO Max's 149 NOT included
     expect(out[0].savingKr).toBe(38); // 238 − 200, downgrade never folded in
   });
 

@@ -14,11 +14,14 @@
   --bg:        oklch(0.985 0.003 90);   /* warm off-white page */
   --bg-2:      oklch(0.968 0.004 90);   /* alternating rows, headers */
   --surface:   oklch(1 0 0);            /* cards, panels */
+  /* hero-bg — startsidans mörka band. Mörkt i båda temana så att den vita
+     texten ovanpå alltid går att läsa (--ink blir ljus i mörkt läge). */
+  --hero-bg:   oklch(0.18 0.006 80);
 
   /* ink */
   --ink:       oklch(0.18 0.006 80);
   --ink-2:     oklch(0.42 0.008 80);
-  --ink-3:     oklch(0.60 0.010 80);
+  --ink-3:     oklch(0.53 0.010 80);
 
   /* rules */
   --rule:      oklch(0.88 0.006 80);
@@ -27,8 +30,13 @@
 
   /* saffran — live / now / decisive */
   --acc:       oklch(0.72 0.14 75);
-  --acc-deep:  oklch(0.55 0.13 70);
+  --acc-deep:  oklch(0.53 0.13 70);
   --acc-soft:  oklch(0.955 0.04 75);
+  /* on-acc — text ovanpå en acc-deep-fyllning (CTA, valda flikar, "nu"-märken).
+     Vit i ljust läge, mörk i mörkt läge. acc-deep-hover är fyllningens
+     hover-läge och flyttar sig bort från on-acc i varje tema. */
+  --on-acc:    oklch(1 0 0);
+  --acc-deep-hover: oklch(0.48 0.13 70);
 
   /* plum — today / picker / time-position */
   --cal-deep:  oklch(0.48 0.11 300);
@@ -57,7 +65,7 @@
      avsnitts-bock). Enda definitionskällan (BIN-324): var tidigare en rå
      oklch-literal hårdkodad på flera ställen + i tailwind.config.ts. Speglas
      som Tailwind-token `season-done`. */
-  --season-done: oklch(0.55 0.13 145);
+  --season-done: oklch(0.52 0.13 145);
 
   /* duotone palette — one per genre/category */
   --duo-terra:   oklch(0.62 0.08 30);
@@ -88,6 +96,7 @@
   --bg:        oklch(0.17 0.006 80);
   --bg-2:      oklch(0.215 0.006 80);
   --surface:   oklch(0.235 0.006 80);
+  --hero-bg:   oklch(0.13 0.006 80);
 
   --ink:       oklch(0.95 0.004 90);
   --ink-2:     oklch(0.78 0.006 85);
@@ -97,10 +106,12 @@
   --rule-2:    oklch(0.28 0.005 80);
   --placeholder-fill: oklch(0.30 0.015 80);
 
-  /* saffran — fyllningen kontrasterar mot mörk bg; vit text på acc-deep håller */
+  /* saffran */
   --acc:       oklch(0.74 0.14 75);
-  --acc-deep:  oklch(0.60 0.14 72);
-  --acc-soft:  oklch(0.32 0.06 72);
+  --acc-deep:  oklch(0.64 0.14 72);
+  --acc-soft:  oklch(0.24 0.05 72);
+  --on-acc:    oklch(0.17 0.006 80);
+  --acc-deep-hover: oklch(0.70 0.14 72);
 
   /* plum */
   --cal-deep:  oklch(0.62 0.12 300);
@@ -397,6 +408,9 @@ button { font: inherit; cursor: pointer; }
   gap: 8px;
 }
 .topbar-rhs .search:focus-within { border-color: var(--ink); }
+/* A keyboard shortcut hint means nothing on a touch screen, and on a phone it
+   takes width from the placeholder. */
+@media (hover: none) { .topbar-rhs .search .k { display: none; } }
 .topbar-rhs .search input {
   flex: 1;
   background: transparent;
@@ -451,7 +465,7 @@ button { font: inherit; cursor: pointer; }
   top: -2px; right: -3px;
   min-width: 14px; height: 14px;
   background: var(--acc-deep);
-  color: white;
+  color: var(--on-acc);
   border-radius: 999px;
   font-family: var(--mono);
   font-size: 9px;
@@ -646,7 +660,7 @@ button { font: inherit; cursor: pointer; }
   gap: 6px;
   cursor: pointer;
 }
-.btn:hover { background: oklch(0.10 0.006 80); border-color: oklch(0.10 0.006 80); }
+.btn:hover { background: color-mix(in oklch, var(--ink) 85%, black); border-color: color-mix(in oklch, var(--ink) 85%, black); }
 .btn.btn-ghost,
 .btn-ghost {
   background: transparent;
@@ -658,9 +672,9 @@ button { font: inherit; cursor: pointer; }
 .btn-acc {
   background: var(--acc-deep);
   border-color: var(--acc-deep);
-  color: white;
+  color: var(--on-acc);
 }
-.btn-acc:hover { background: oklch(0.50 0.13 70); border-color: oklch(0.50 0.13 70); }
+.btn-acc:hover { background: var(--acc-deep-hover); border-color: var(--acc-deep-hover); }
 .btn.btn-sm,
 .btn-sm { padding: 5px 10px; font-size: 12.5px; }
 .btn.btn-danger,
@@ -794,29 +808,38 @@ button { font: inherit; cursor: pointer; }
   padding-bottom: env(safe-area-inset-bottom, 0);
   z-index: 40;
 }
-.m-tabs a {
+.m-tabs a,
+.m-tabs button {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   text-decoration: none;
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-family: var(--sans);
   font-weight: 500;
-  font-size: 10.5px;
+  font-size: 11px;
   gap: 3px;
   position: relative;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  min-width: 0;
 }
-.m-tabs a .icn {
+.m-tabs a .icn,
+.m-tabs button .icn {
   width: 22px; height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--ink-3);
+  color: var(--ink-2);
 }
-.m-tabs a.is-on { color: var(--ink); }
-.m-tabs a.is-on .icn { color: var(--ink); }
-.m-tabs a.is-on::before {
+.m-tabs a:focus-visible,
+.m-tabs button:focus-visible { outline: 2px solid var(--ink); outline-offset: -4px; }
+.m-tabs .is-on { color: var(--ink); }
+.m-tabs .is-on .icn { color: var(--ink); }
+.m-tabs .is-on::before {
   content: "";
   position: absolute;
   top: 4px; left: 50%;
@@ -825,19 +848,47 @@ button { font: inherit; cursor: pointer; }
   background: var(--acc);
   border-radius: 1px;
 }
-.m-tabs a.center {
+.m-tabs .center {
   color: var(--bg);
   background: var(--ink);
   margin: 8px 8px;
   border-radius: 14px;
 }
-.m-tabs a.center .icn { color: var(--bg); }
-.m-tabs a.center::before { display: none; }
+.m-tabs .center .icn { color: var(--bg); }
+.m-tabs .center::before { display: none; }
+/* Mer: the button fills its grid cell; the panel hangs from the whole bar. */
+.m-more { display: grid; min-width: 0; }
+.m-more-panel {
+  position: absolute;
+  left: 8px; right: 8px;
+  bottom: calc(100% + 6px);
+  margin: 0;
+  padding: 6px 0;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px oklch(0 0 0 / 0.04);
+}
+.m-more-panel a {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 44px;
+  padding: 0 16px;
+  font-size: 15px;
+  color: var(--ink);
+}
+.m-more-panel a.is-on { font-weight: 600; }
+.m-more-panel a.is-on::before { display: none; }
 
 /* ─── Responsive ─── */
 @media (max-width: 980px) {
+  /* minmax(0, …): a plain 1fr track cannot shrink below its content, so on a
+     320px phone the seven day cells pushed the whole page 26-30px too wide. */
   .app-topbar {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .app-topbar .brand {
     border-right: 0;
@@ -845,16 +896,32 @@ button { font: inherit; cursor: pointer; }
     padding: 10px 18px;
   }
   .topbar-week {
-    grid-template-columns: 44px repeat(7, 1fr);
+    grid-template-columns: 44px repeat(7, minmax(0, 1fr));
     border-left: 0;
   }
   .topbar-rhs {
     border-left: 0;
     border-top: 1px solid var(--rule);
     padding: 8px 14px;
+    position: relative;
+  }
+  /* The bell and sessions popovers are wider than the space left of their
+     button, so on a narrow phone they ran off the left edge. Here they hang
+     from the whole search row instead, with an 8px gutter on both sides. */
+  .topbar-actions > .relative { position: static; }
+  .topbar-popover,
+  .topbar-popover.wide {
+    left: 8px;
+    right: 8px;
+    width: auto;
+    top: calc(100% - 2px);
   }
   .canvas {
     padding: 22px 16px 96px;
+  }
+  /* Phones navigate with the bottom tab bar only (Malin's decision 5, 2026-10-05). */
+  .subnav {
+    display: none;
   }
   .canvas .page-h1 {
     font-size: 32px;
@@ -945,7 +1012,7 @@ button { font: inherit; cursor: pointer; }
 }
 .focal .badge-stack .b.live {
   background: var(--acc-deep);
-  color: white;
+  color: var(--on-acc);
 }
 .focal .body {
   padding: 20px 24px 22px;
@@ -1348,7 +1415,7 @@ button { font: inherit; cursor: pointer; }
   width: 28px; height: 28px;
   border-radius: 999px;
   background: var(--ink);
-  color: white;
+  color: var(--bg);
   font-family: var(--sans);
   font-weight: 600;
   font-size: 11.5px;
@@ -1522,6 +1589,10 @@ button { font: inherit; cursor: pointer; }
 /* K4: passerade dagar visar sina avsnitt men dämpade — schemat ljuger inte
    om vad som redan sänts, det tonar bara ner det. */
 .week-board .col.past .col-body { opacity: 0.55; }
+/* UX-8: the day picked in the topbar's week strip. Plum, because it marks a
+   position in time (tvåaccentregeln). The scroll margin keeps it clear of the
+   sticky topbar when it is scrolled to. */
+.week-board .col.focus { box-shadow: inset 0 0 0 2px var(--cal-deep); scroll-margin-top: 180px; }
 .week-board .col.past .col-h .date { color: var(--ink-3); }
 .week-board .col.today .col-h .lab,
 .week-board .col.today .col-h .date { color: var(--cal-deep); }
@@ -2070,7 +2141,7 @@ button { font: inherit; cursor: pointer; }
 .rec-card:hover .quick-actions { opacity: 1; pointer-events: auto; }
 .rec-card .quick-actions button,
 .rec-card .quick-actions a {
-  background: oklch(1 0 0 / 0.95);
+  background: var(--surface);
   border: 1px solid oklch(0 0 0 / 0.06);
   color: var(--ink);
   border-radius: 999px;
@@ -2091,7 +2162,7 @@ button { font: inherit; cursor: pointer; }
 .rec-card .quick-actions button:hover,
 .rec-card .quick-actions a:hover {
   background: var(--ink);
-  color: white;
+  color: var(--bg);
 }
 .rec-card .quick-actions .ic { width: 26px; padding: 0; }
 .rec-card .quick-actions svg { width: 11px; height: 11px; }
@@ -2112,7 +2183,7 @@ button { font: inherit; cursor: pointer; }
   backdrop-filter: blur(2px);
 }
 .rec-card .corner-badge.in-lib {
-  background: oklch(1 0 0 / 0.95);
+  background: var(--surface);
   color: var(--ink);
   border: 1px solid var(--rule);
 }
@@ -2320,6 +2391,20 @@ button { font: inherit; cursor: pointer; }
   user-select: none;
 }
 .ep .check input { position: absolute; opacity: 0; pointer-events: none; }
+/* The visible box (A11Y-2/A11Y-4): before, an unticked episode showed nothing at
+   all, so the tap target was invisible and keyboard focus had nowhere to show. */
+.ep .check .box {
+  width: 20px; height: 20px;
+  border: 1.5px solid var(--ink-3);
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+}
+.ep .check:hover .box { border-color: var(--ink-2); }
+.ep .check input:checked + .box { border-color: var(--season-done); }
+.ep .check:has(input:focus-visible) .box { outline: 2px solid var(--acc-deep); outline-offset: 2px; }
 .ep.tonight { background: var(--cal-soft); }
 .ep.tonight .code,
 .ep.tonight .ttl { color: var(--cal-deep); }
@@ -2339,8 +2424,24 @@ button { font: inherit; cursor: pointer; }
   border: 0;
   padding: 0;
 }
-.ep:hover .mark-up-to { display: inline-block; }
+.ep:hover .mark-up-to,
+.ep:focus-within .mark-up-to { display: inline-block; }
+/* No hover on touch screens, so "Markera hit" would never appear there. */
+@media (hover: none) { .ep .mark-up-to { display: inline-block; padding: 4px 0; } }
 .ep .mark-up-to:hover { text-decoration: underline; }
+button.ep {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--rule-2);
+  cursor: pointer;
+}
+button.ep:focus-visible { outline: 2px solid var(--acc-deep); outline-offset: -2px; }
+button.ep .ttl,
+button.ep .syn { display: block; }
 .ep.masked .ttl,
 .ep.masked .syn { color: var(--ink-3); font-style: italic; }
 .ep.masked .still {
@@ -2349,6 +2450,37 @@ button { font: inherit; cursor: pointer; }
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* UX-1: on a phone the five fixed tracks need ~330px before the title gets any
+   room, so the tick box was pushed out of the row. Below 720px the row is a small
+   still on the left, code / title / runtime stacked in the middle, and the tick
+   box on the right where the thumb is. */
+@media (max-width: 720px) {
+  .ep {
+    grid-template-columns: 64px minmax(0, 1fr) 40px;
+    grid-template-areas:
+      "still code end"
+      "still main end"
+      "still runt end";
+    column-gap: 12px;
+    row-gap: 2px;
+    padding: 10px 12px;
+    align-items: start;
+  }
+  .ep > .still { grid-area: still; }
+  .ep > .code { grid-area: code; }
+  .ep > .main { grid-area: main; min-width: 0; }
+  .ep > .runt { grid-area: runt; }
+  .ep > .end { grid-area: end; align-self: center; }
+  .ep .check { min-height: 40px; }
+  .ep .check .box { width: 24px; height: 24px; }
+  .ep .syn {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
 }
 
 /* Similar-titles grid (returns to duotone — navigation surface) */

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ChevronDown, ChevronUp, Film } from 'lucide-react';
+import { ChevronDown, Film } from 'lucide-react';
 import { useMovie } from '@/hooks/useTMDB';
 import { usePageMeta } from '@/hooks/usePageMeta';
 import { JsonLd, movieSchema, breadcrumbSchema } from '@/components/title/JsonLd';
@@ -36,7 +36,7 @@ import { useSignedOutRedirect } from '@/hooks/useSignedOutRedirect';
 import { useTitleRatings } from '@/hooks/useTitleRatings';
 import { RatingsRow } from '@/components/title/RatingsRow';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
-import { buildContentFloor, hasSubstantialText } from '@/lib/seo/contentFloor';
+import { availabilityLine, buildContentFloor, hasSubstantialText } from '@/lib/seo/contentFloor';
 import { movieContentFloorInput } from '@/lib/seo/contentFloorInput';
 import { franchiseByCollectionId } from '@/lib/seo/franchises';
 import { canonicalProviderId, dedupeProvidersByCanonicalId, affiliateWrap } from '@/lib/tmdb/providers';
@@ -49,8 +49,11 @@ import { useCineasternaCatalog } from '@/hooks/useCineasternaCatalog';
 import { CheapestPathVerdict } from '@/components/title/CheapestPathVerdict';
 import CinemaCountdownStrip from '@/components/title/CinemaCountdownStrip';
 import PriceHistoryChart from '@/components/title/PriceHistoryChart';
+import { TitleCrumb, GenreLinks, ProviderHubLinks } from '@/components/title/TitleHubLinks';
 import { cinemaToStreaming } from '@/lib/calendar/releaseDate';
 import { useToast } from '@/contexts/ToastContext';
+import { trackEvent } from '@/lib/analytics';
+import ShareButton from '@/components/share/ShareButton';
 import type { TMDBMovie } from '@/types';
 import { DELETION_IN_PROGRESS_MESSAGE, isDeletionInProgressError } from '@/lib/deletionInProgressError';
 
@@ -159,6 +162,12 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
     () => (movie ? buildContentFloor(movieContentFloorInput(movie)) : undefined),
     [movie],
   );
+  // SEO-2: the availability answer as text on every page — the floor paragraph
+  // already carries it on the thin pages, so it is rendered only on the others.
+  const availability = useMemo(
+    () => (movie ? availabilityLine(movieContentFloorInput(movie)) : undefined),
+    [movie],
+  );
   usePageMeta({
     title: displayTitle
       ? `${displayTitle}${releaseYear ? ` (${releaseYear})` : ''} — var streamar jag?`
@@ -172,7 +181,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   });
 
   if (isLoading) return <LoadingView variant="detail" label="Laddar filmen…" />;
-  if (!movie) return <NotFound crumb="Film" title="Filmen hittades inte." body="Vi kunde inte hitta den här filmen i TMDB." />;
+  if (!movie) return <NotFound crumb="Film" title="Filmen hittades inte." body="Den här filmen gick inte att hitta." />;
 
   // BIN-422: känd franchise → statisk, crawlbar /billigaste-länk (renderas
   // utanför ClientOnly nedan). Härledd ur build-initialData, inte ur den
@@ -288,14 +297,14 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   return (
     <>
       {/* Schema.org structured data — rich snippets + knowledge panel i Google */}
-      <JsonLd data={movieSchema(movie)} />
+      <JsonLd data={movieSchema(movie, { name: displayTitle, description: contentFloor?.description })} />
       <JsonLd data={breadcrumbSchema([
         { name: 'Binge.nu', url: 'https://binge.nu/' },
         { name: 'Filmer', url: 'https://binge.nu/films/' },
         { name: displayTitle, url: `https://binge.nu/movie/${movie.id}/` },
       ])} />
 
-      <div className="crumb">Bibliotek · filmer · {displayTitle}</div>
+      <TitleCrumb kind="movie" title={displayTitle} />
 
       <div className="detail-hero">
         <div className="poster-wrap">
@@ -325,7 +334,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
             <span className="kind">
               FILM · {year} · {movie.runtime} min
             </span>
-            {genres && <span className="kind">{genres}</span>}
+            <GenreLinks kind="movie" genres={movie.genres} />
           </div>
           <h1>{displayTitle}</h1>
           {(directors.length > 0 || writers.length > 0) && (
@@ -371,6 +380,9 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
               body still contains every word the snippet uses. */}
           {overviewText && <p className="syn">{overviewText}</p>}
           {needsContentFloorParagraph && <p className="syn">{contentFloor?.paragraph}</p>}
+          {!needsContentFloorParagraph && availability && (
+            <p style={{ marginTop: 10, fontSize: 13.5, color: 'var(--ink-2)' }}>{availability}</p>
+          )}
 
           {/* BIN-193: cinema→streaming countdown. ClientOnly — depends on
               library state (inLibrary) and isn't core SEO content. */}
@@ -460,6 +472,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
                 releaseYear={movie.release_date ? parseInt(movie.release_date.substring(0, 4), 10) : null}
               />
               <NotInterestedButton tmdbId={movie.id} mediaType="movie" title={displayTitle} />
+              <ShareButton path={`/movie/${movie.id}/`} title={displayTitle} text={`Se var ${displayTitle} går att streama.`} surface="title" />
             </div>
             {watchlistItem?.status === 'sedd' && (
               <WatchedDateEditor
@@ -478,9 +491,9 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
             />
           )}
 
-          {(onSubscription.length > 0 || hasRentBuy) && (
+          {onSubscription.length > 0 && (
             <div className="providers-row">
-              {onSubscription.length > 0 && <span className="lab">finns på</span>}
+              <span className="lab">finns på</span>
               {onSubscription.map(p => {
                 const logo = logoUrl(p.logo_path);
                 const offer = offerForProvider(offers, canonicalProviderId(p.provider_id));
@@ -496,7 +509,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
                   return (
                     <span key={p.provider_id} className="inline-flex items-center gap-1">
                       {offer?.link ? (
-                        <a href={affiliateWrap(p.provider_id, offer.link)} target="_blank" rel="noopener noreferrer">{imgEl}</a>
+                        <a href={affiliateWrap(p.provider_id, offer.link)} target="_blank" rel="noopener noreferrer" onClick={() => trackEvent('provider_clicked', { providerId: canonicalProviderId(p.provider_id), offerType: offer.type, mediaType: 'movie' })}>{imgEl}</a>
                       ) : imgEl}
                       {leavingLabel && (
                         <span className="rounded-sm bg-acc-soft text-acc-deep px-1 text-[11px]">{leavingLabel}</span>
@@ -504,19 +517,11 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
                     </span>
                   );
                 }
-                return <ProviderTag key={p.provider_id} provider={p} size="md" offer={offer} nowMs={now} />;
+                return <ProviderTag key={p.provider_id} provider={p} size="md" offer={offer} nowMs={now} mediaType="movie" />;
               })}
-              {hasRentBuy && (
-                <button
-                  onClick={() => setShowRentBuy(!showRentBuy)}
-                  className="btn btn-ghost btn-sm"
-                  style={{ marginLeft: 4 }}
-                >
-                  Hyr & köp {showRentBuy ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                </button>
-              )}
             </div>
           )}
+          <ProviderHubLinks providerIds={onSubscription.map(p => p.provider_id)} />
 
           <FreeWatchBadge free={free} ads={ads} />
 
@@ -534,7 +539,14 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
             </div>
           )}
 
-          {showRentBuy && hasRentBuy && (
+          {/* SEO-2: a native <details> keeps the rent/buy services in the static
+              HTML (a crawler reads them as text) while staying collapsed for a
+              visitor. The price chart still mounts only once it is opened. */}
+          {hasRentBuy && (
+            <details className="group" style={{ marginTop: 10 }} onToggle={e => setShowRentBuy(e.currentTarget.open)}>
+              <summary className="btn btn-ghost btn-sm list-none [&::-webkit-details-marker]:hidden" style={{ cursor: 'pointer' }}>
+                Hyr & köp <ChevronDown size={12} className="transition-transform group-open:rotate-180" />
+              </summary>
             <div style={{ marginTop: 10, fontSize: 11, color: 'var(--ink-3)' }}>
               {onSubscription.length > 0 && (
                 <div className="rounded-sm bg-acc-soft text-acc-deep px-2 py-1 text-[12px]" style={{ marginBottom: 8 }}>
@@ -546,19 +558,20 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
               {rent.length > 0 && (
                 <div>
                   <span style={{ letterSpacing: 0.12, textTransform: 'uppercase', marginRight: 6 }}>Hyr:</span>
-                  {rent.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" offer={offerForProvider(offers, canonicalProviderId(p.provider_id))} nowMs={now} />)}
+                  {rent.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" offer={offerForProvider(offers, canonicalProviderId(p.provider_id))} nowMs={now} mediaType="movie" />)}
                 </div>
               )}
               {/* BIN-354: rent price-history stat row (option C). Lazy — only
                   fetches priceHistory/{id} when this disclosure is expanded. */}
-              <PriceHistoryChart tmdbId={movie.id} mediaType="movie" nowMs={now} />
+              {showRentBuy && <PriceHistoryChart tmdbId={movie.id} mediaType="movie" nowMs={now} />}
               {buy.length > 0 && (
                 <div>
                   <span style={{ letterSpacing: 0.12, textTransform: 'uppercase', marginRight: 6 }}>Köp:</span>
-                  {buy.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" offer={offerForProvider(offers, canonicalProviderId(p.provider_id))} nowMs={now} />)}
+                  {buy.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" offer={offerForProvider(offers, canonicalProviderId(p.provider_id))} nowMs={now} mediaType="movie" />)}
                 </div>
               )}
             </div>
+            </details>
           )}
 
           {(subscription.length > 0 || hasRentBuy) && (

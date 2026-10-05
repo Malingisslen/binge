@@ -154,13 +154,13 @@ describe('topProviders folds alias ids and drops unmodelled services (BIN-407)',
     });
 
   it('merges a service stored under several TMDB ids into one row with summed count', () => {
-    // Max = 384 (base) + 1899 (legacy HBO Max) + 1825 (Amazon channel).
+    // HBO Max = 384 (base) + 1899 (legacy id) + 1825 (Amazon channel).
     const v = DATA_RESOLVERS.topProviders(rollupWith([
       { providerId: 384, count: 45 },
       { providerId: 1899, count: 41 },
       { providerId: 1825, count: 26 },
     ]));
-    expect(v).toEqual({ kind: 'breakdown', entries: [{ label: 'Max', value: 112 }] });
+    expect(v).toEqual({ kind: 'breakdown', entries: [{ label: 'HBO Max', value: 112 }] });
   });
 
   it('drops ids not in the Swedish catalog (no more "Tjänst 10" placeholder)', () => {
@@ -173,13 +173,13 @@ describe('topProviders folds alias ids and drops unmodelled services (BIN-407)',
 
   it('re-sorts by merged count so the fold cannot leave rows out of order', () => {
     // Netflix inserted FIRST so map insertion order is wrong until the sort runs —
-    // Max only overtakes after its two alias parts merge (30 + 40 = 70 > 50).
+    // HBO Max only overtakes after its two alias parts merge (30 + 40 = 70 > 50).
     const v = DATA_RESOLVERS.topProviders(rollupWith([
       { providerId: 8, count: 50 },    // Netflix
-      { providerId: 384, count: 30 },  // Max part 1
-      { providerId: 1899, count: 40 }, // Max part 2 → Max total 70 > Netflix 50
+      { providerId: 384, count: 30 },  // HBO Max part 1
+      { providerId: 1899, count: 40 }, // HBO Max part 2 → total 70 > Netflix 50
     ]));
-    expect(v).toEqual({ kind: 'breakdown', entries: [{ label: 'Max', value: 70 }, { label: 'Netflix', value: 50 }] });
+    expect(v).toEqual({ kind: 'breakdown', entries: [{ label: 'HBO Max', value: 70 }, { label: 'Netflix', value: 50 }] });
   });
 });
 
@@ -198,5 +198,54 @@ describe('period metrics read window deltas and floor at 0', () => {
   it('floors a negative net delta to 0 (never a minus under an "added" label)', () => {
     const d = emptyData({ window: { basisDate: '2026-06-11', truncated: false, deltas: { users: 0, titlesTracked: -2 } } });
     expect(DATA_RESOLVERS.titlesAdded(d)).toEqual({ kind: 'scalar', value: 0 });
+  });
+});
+
+describe('Delning och mätning resolvers', () => {
+  const rollupWith = (activeUsers?: { d7: number; d30: number }): InsightsData['rollup'] => ({
+    computedAt: '', readsUsed: 0, partial: false,
+    totals: { users: 3, titlesTracked: 0, reviews: 0, activeSessions: 0, groups: 0 },
+    ...(activeUsers ? { activeUsers } : {}),
+    statusDistribution: { vill_se: 0, mina: 0, sedd: 0, avbruten: 0 },
+    mediaTypeSplit: { movie: 0, tv: 0 },
+    ratingsHistogram: [], topTitles: [], topProviders: [], topGenres: [],
+  });
+  const plausibleWith = (over: Partial<NonNullable<InsightsData['plausible']>>): InsightsData['plausible'] => ({
+    visitors: 0, pageviews: 0, avgVisitDurationSec: 0, bounceRatePct: 0,
+    visitorsTimeseries: [], topPages: [], topReferrers: [],
+    goals: { signed_up: 0, title_added_watchlist: 0, review_created: 0, advisor_pause_taken: 0, donate_clicked: 0 },
+    signupsTimeseries: [], onboardingFunnel: [], signinMethodSplit: { google: 0, email: 0 },
+    ...over,
+  });
+
+  it('active users read the rollup snapshot, and are NaN on a rollup written before the field', () => {
+    const d = emptyData({ rollup: rollupWith({ d7: 2, d30: 3 }) });
+    expect(DATA_RESOLVERS.activeUsers7d(d)).toEqual({ kind: 'scalar', value: 2 });
+    expect(DATA_RESOLVERS.activeUsers30d(d)).toEqual({ kind: 'scalar', value: 3 });
+    expect(DATA_RESOLVERS.activeUsers7d(emptyData({ rollup: rollupWith() }))).toEqual({ kind: 'scalar', value: NaN });
+  });
+
+  it('providerClicks is NaN when the deployed function predates the event', () => {
+    expect(DATA_RESOLVERS.providerClicks(emptyData({ plausible: plausibleWith({}) }))).toEqual({ kind: 'scalar', value: NaN });
+    const d = emptyData({ plausible: plausibleWith({ goals: { signed_up: 0, title_added_watchlist: 0, review_created: 0, advisor_pause_taken: 0, donate_clicked: 0, provider_clicked: 7 } }) });
+    expect(DATA_RESOLVERS.providerClicks(d)).toEqual({ kind: 'scalar', value: 7 });
+  });
+
+  it('providerClicksByType labels offer types in Swedish, largest first', () => {
+    const d = emptyData({ plausible: plausibleWith({ providerClicksByType: { rent: 2, subscription: 9 } }) });
+    expect(DATA_RESOLVERS.providerClicksByType(d)).toEqual({
+      kind: 'breakdown',
+      entries: [{ label: 'Abonnemang', value: 9 }, { label: 'Hyra', value: 2 }],
+    });
+  });
+
+  it('signupLandingPages shows sign-ups per entry page next to that page’s visits', () => {
+    const d = emptyData({
+      plausible: plausibleWith({ signupLandingPages: [{ page: '/movie/27205/', signups: 2, visitors: 40 }, { page: '/', signups: 1, visitors: 0 }] }),
+    });
+    expect(DATA_RESOLVERS.signupLandingPages(d)).toEqual({
+      kind: 'breakdown',
+      entries: [{ label: '/movie/27205/ · av 40 besök', value: 2 }, { label: '/', value: 1 }],
+    });
   });
 });

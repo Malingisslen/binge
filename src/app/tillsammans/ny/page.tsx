@@ -98,14 +98,15 @@ function NyContent() {
 
       <form onSubmit={onSubmit} className="bg-surface border border-rule rounded-sm">
         <FormSection title="Du">
-          <label className="block text-xs text-ink-3 mb-1">Ditt namn</label>
+          <label htmlFor="tillsammans-vardnamn" className="block text-xs text-ink-3 mb-1">Ditt namn</label>
           <input
+            id="tillsammans-vardnamn"
             type="text"
             value={hostName}
             onChange={e => setHostName(e.target.value)}
             placeholder="T.ex. Lisa"
             maxLength={MAX_SESSION_DISPLAY_NAME}
-            className="w-full max-w-[260px] px-2 py-1 text-base border border-rule rounded-sm bg-white"
+            className="w-full max-w-[260px] px-2 py-1 text-base border border-rule rounded-sm bg-surface"
           />
         </FormSection>
 
@@ -118,7 +119,7 @@ function NyContent() {
                 <label
                   key={p.id}
                   className={`flex items-center gap-[6px] px-2 py-[3px] border rounded-sm cursor-pointer text-xs ${
-                    selected ? 'border-acc-deep bg-acc-deep/[0.08]' : 'border-rule bg-white'
+                    selected ? 'border-acc-deep bg-acc-deep/[0.08]' : 'border-rule bg-surface'
                   }`}
                 >
                   <input
@@ -160,7 +161,7 @@ function NyContent() {
           />
         </FormSection>
 
-        <FormSection title="Aggregering vid match">
+        <FormSection title="Hur en match väljs">
           <FormRadioGroup
             name="aggregation"
             value={aggregation}
@@ -181,13 +182,13 @@ function NyContent() {
             placeholder="T.ex. 120 (lämna tomt för ingen gräns)"
             min="30"
             max="400"
-            className="w-full max-w-[220px] px-2 py-1 text-base border border-rule rounded-sm bg-white"
+            className="w-full max-w-[220px] px-2 py-1 text-base border border-rule rounded-sm bg-surface"
           />
           <p className="text-xxs text-ink-3 mt-1">Gäller bara filmer.</p>
         </FormSection>
 
         {mediaType !== 'movie' && (
-          <FormSection title="Serier — asymmetri">
+          <FormSection title="Serier i olika takt">
             <label className="flex items-center gap-2 text-xs cursor-pointer">
               <input
                 type="checkbox"
@@ -195,7 +196,7 @@ function NyContent() {
                 onChange={e => setAllowAsymmetry(e.target.checked)}
                 className="accent-acc-deep w-[12px] h-[12px]"
               />
-              Tillåt serier med olika avsnittslägen (varning visas)
+              Tillåt serier där ni ligger på olika avsnitt (varning visas)
             </label>
           </FormSection>
         )}
@@ -208,7 +209,7 @@ function NyContent() {
           <button
             type="submit"
             disabled={submitting}
-            className="px-3 py-[5px] bg-acc-deep text-white border-none rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
+            className="px-3 py-[5px] bg-acc-deep text-on-acc border-none rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
           >
             <Share2 size={11} className="inline mr-1" />
             {submitting ? 'Skapar…' : 'Skapa session och få länk'}
@@ -216,7 +217,7 @@ function NyContent() {
           <button
             type="button"
             onClick={() => router.push('/')}
-            className="px-3 py-[5px] border border-rule rounded-sm text-xs bg-white cursor-pointer"
+            className="px-3 py-[5px] border border-rule rounded-sm text-xs bg-surface cursor-pointer"
           >
             Avbryt
           </button>

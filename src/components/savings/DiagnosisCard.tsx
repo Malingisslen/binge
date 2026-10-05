@@ -20,7 +20,12 @@ export default function DiagnosisCard({ advisor, activeProviderCount }: Props) {
   const action = advisor.primaryAction;
 
   const lead = cost > 0
-    ? <>Du betalar <strong className="text-ink">{formatKr(cost)} kr/mån</strong> för {activeProviderCount} {activeProviderCount === 1 ? 'tjänst' : 'tjänster'}.</>
+    ? <>
+        Du betalar <strong className="text-ink">{formatKr(cost)} kr/mån</strong>
+        {/* Paket I: listpriset är katalogens, inte användarens — säg det där siffran står. */}
+        {advisor.totalMonthlyCostEstimated && <span className="text-ink-3"> (uppskattat)</span>}
+        {' '}för {activeProviderCount} {activeProviderCount === 1 ? 'tjänst' : 'tjänster'}.
+      </>
     : <>Du har {activeProviderCount} {activeProviderCount === 1 ? 'tjänst' : 'tjänster'}.</>;
 
   let suggestion: React.ReactNode;
@@ -65,7 +70,7 @@ export default function DiagnosisCard({ advisor, activeProviderCount }: Props) {
     case 'idle':
     default:
       suggestion = (
-        <span className="text-ink-3"> Allt är välbalanserat — vi hör av oss när något ändras.</span>
+        <span className="text-ink-3"> Allt är välbalanserat just nu.</span>
       );
   }
 

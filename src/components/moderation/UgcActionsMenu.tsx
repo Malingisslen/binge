@@ -285,7 +285,7 @@ function ReportDialog({
               maxLength={500}
               rows={3}
               placeholder="Extra kontext för moderationen…"
-              className="w-full px-2 py-1 text-xs border border-rule rounded-sm bg-white font-[inherit] resize-none"
+              className="w-full px-2 py-1 text-xs border border-rule rounded-sm bg-surface font-[inherit] resize-none"
             />
             <div className="text-xxs text-ink-3 mt-[2px] text-right">
               {note.length}/500
@@ -297,14 +297,14 @@ function ReportDialog({
           <button
             type="submit"
             disabled={submitting}
-            className="px-3 py-[5px] bg-acc-deep text-white rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
+            className="px-3 py-[5px] bg-acc-deep text-on-acc rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
           >
             {submitting ? 'Skickar…' : 'Skicka rapport'}
           </button>
           <button
             type="button"
             onClick={onClose}
-            className="px-3 py-[5px] border border-rule rounded-sm text-xs bg-white cursor-pointer"
+            className="px-3 py-[5px] border border-rule rounded-sm text-xs bg-surface cursor-pointer"
           >
             Avbryt
           </button>

@@ -30,9 +30,13 @@ export default function SeasonRow({
   return (
     <div className="border-b border-rule-2 last:border-b-0">
       <div className="flex items-center justify-between py-[5px] text-sm">
-        <div
-          className="flex items-center gap-1 cursor-pointer flex-1 min-w-0"
+        {/* A11Y-2: a real button, so keyboard and screen-reader users can open the
+            season and hear whether it is open. */}
+        <button
+          type="button"
+          className="flex items-center gap-1 cursor-pointer flex-1 min-w-0 min-h-[32px] text-left bg-transparent border-0 p-0 font-[inherit] focus-visible:outline focus-visible:outline-2 focus-visible:outline-acc-deep"
           onClick={onToggle}
+          aria-expanded={expanded}
         >
           <ChevronRight
             size={12}
@@ -41,7 +45,7 @@ export default function SeasonRow({
           <span className="font-semibold text-ink-2">
             {name} <span className="font-normal text-ink-3 text-xs">({episodeCount} avs)</span>
           </span>
-        </div>
+        </button>
         {episodeCount > 0 ? (
           <div className="flex items-center gap-[5px] flex-1 max-w-[180px] mx-4">
             <div className="flex-1 h-[3px] bg-rule rounded-full overflow-hidden">
