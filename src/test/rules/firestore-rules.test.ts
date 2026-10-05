@@ -9,7 +9,7 @@ import {
   assertFails, assertSucceeds, initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, deleteField, serverTimestamp, writeBatch, query, where, limit, Timestamp, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, deleteField, serverTimestamp, writeBatch, query, where, limit, Timestamp, arrayUnion, arrayRemove } from 'firebase/firestore';
 
 const PROJECT_ID = 'binge-rules-test';
 const OWNER = 'owner_uid';
@@ -5861,5 +5861,257 @@ describe('blocking ends the friendship (BIN-1349)', () => {
     await assertSucceeds(acceptBatch());
     await assertSucceeds(blockBatch());
     expect(await remaining()).toEqual([]);
+  });
+});
+
+// SEC-1 (2026-10-05): sessions may be fetched by id by anyone (the link model), but a
+// LIST query must be constrained to the caller's own hosted sessions. The two client
+// queries are `userData.ts` (hostUid == me, GDPR export/erasure) and `deleteGroup` in
+// groups.ts (groupId == X AND hostUid == me).
+describe('sessions/{id} — list only your own hosted sessions (SEC-1)', () => {
+  async function seedSessions() {
+    await seedGroup({ memberUids: [OWNER, 'member_uid'] });
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, 'sessions', 's_mine'), validSession());
+      await setDoc(doc(db, 'sessions', 's_mine_group'), validSession({ groupId: GROUP }));
+      await setDoc(doc(db, 'sessions', 's_member_group'), validSession({ hostUid: 'member_uid', groupId: GROUP }));
+      await setDoc(doc(db, 'sessions', 's_other'), validSession({ hostUid: 'stranger_host' }));
+    });
+  }
+
+  it('an anonymous client cannot list sessions', async () => {
+    await seedSessions();
+    await assertFails(getDocs(collection(anonDb(), 'sessions')));
+  });
+
+  it('an anonymous client can still get one session by id', async () => {
+    await seedSessions();
+    await assertSucceeds(getDoc(doc(anonDb(), 'sessions', 's_other')));
+  });
+
+  it('a signed-in user cannot list all sessions', async () => {
+    await seedSessions();
+    await assertFails(getDocs(collection(otherDb(), 'sessions')));
+  });
+
+  it("a signed-in user cannot list someone else's hosted sessions", async () => {
+    await seedSessions();
+    await assertFails(getDocs(query(collection(otherDb(), 'sessions'), where('hostUid', '==', OWNER))));
+  });
+
+  it('even a group member cannot list a group\'s sessions by groupId alone', async () => {
+    await seedSessions();
+    await assertFails(getDocs(query(collection(ownerDb(), 'sessions'), where('groupId', '==', GROUP))));
+  });
+
+  // The GDPR export / erasure query in userData.ts.
+  it('the host can list their own sessions', async () => {
+    await seedSessions();
+    const snap = await assertSucceeds(getDocs(query(collection(ownerDb(), 'sessions'), where('hostUid', '==', OWNER))));
+    expect(snap.docs.map(d => d.id).sort()).toEqual(['s_mine', 's_mine_group']);
+  });
+
+  // deleteGroup's query, as the owner runs it.
+  it("the owner can list their own sessions in the group they are deleting", async () => {
+    await seedSessions();
+    const snap = await assertSucceeds(getDocs(query(collection(ownerDb(), 'sessions'),
+      where('groupId', '==', GROUP), where('hostUid', '==', OWNER))));
+    expect(snap.docs.map(d => d.id)).toEqual(['s_mine_group']);
+  });
+});
+
+// SEC-4 (2026-10-05): public documents take only known fields, with bounds. Create binds
+// the whole shape; update binds only what the write CHANGES, so an older document with a
+// stray key or an over-long value stays editable.
+describe('public documents — known fields and bounds (SEC-4)', () => {
+  async function seedReview(over: Record<string, unknown> = {}) {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'reviews', 'r_sec4'), { ...validReview(OWNER), ...over });
+    });
+  }
+  function comment(over: Record<string, unknown> = {}) {
+    return { uid: 'other_uid', text: 'Håller med.', displayName: null, username: null, createdAt: serverTimestamp(), ...over };
+  }
+
+  // Comments — the client shape in useReviewSocial.ts addComment.
+  it('a comment in the client shape is accepted', async () => {
+    await seedReview();
+    await assertSucceeds(addDoc(collection(otherDb(), 'reviews', 'r_sec4', 'comments'), comment()));
+  });
+  it('a comment with an extra field is denied', async () => {
+    await seedReview();
+    await assertFails(addDoc(collection(otherDb(), 'reviews', 'r_sec4', 'comments'), comment({ blob: 'x' })));
+  });
+  it('a comment with a client-chosen createdAt is denied', async () => {
+    await seedReview();
+    await assertFails(addDoc(collection(otherDb(), 'reviews', 'r_sec4', 'comments'),
+      comment({ createdAt: Timestamp.fromDate(new Date('2020-01-01')) })));
+  });
+
+  // Likes — the client shape in useReviewSocial.ts toggleLike.
+  it('a like in the client shape is accepted', async () => {
+    await seedReview();
+    await assertSucceeds(setDoc(doc(otherDb(), 'reviews', 'r_sec4', 'likes', 'other_uid'),
+      { uid: 'other_uid', createdAt: serverTimestamp() }));
+  });
+  // A like without createdAt was accepted before SEC-4 and still is; only a client-chosen
+  // value is new to refuse.
+  it('a like without createdAt is still accepted', async () => {
+    await seedReview();
+    await assertSucceeds(setDoc(doc(otherDb(), 'reviews', 'r_sec4', 'likes', 'other_uid'), { uid: 'other_uid' }));
+  });
+  it('a like with a client-chosen createdAt is denied', async () => {
+    await seedReview();
+    await assertFails(setDoc(doc(otherDb(), 'reviews', 'r_sec4', 'likes', 'other_uid'),
+      { uid: 'other_uid', createdAt: Timestamp.fromDate(new Date('2020-01-01')) }));
+  });
+
+  // Usernames — the client shape in username.ts claimUsername.
+  it('a username reservation in the client shape is accepted', async () => {
+    await assertSucceeds(setDoc(doc(ownerDb(), 'usernames', 'sec4name'), { uid: OWNER, createdAt: serverTimestamp() }));
+  });
+  it('a username reservation with an extra field is denied', async () => {
+    await assertFails(setDoc(doc(ownerDb(), 'usernames', 'sec4name'), { uid: OWNER, createdAt: serverTimestamp(), blob: 'x' }));
+  });
+  it('a username reservation with a client-chosen createdAt is denied', async () => {
+    await assertFails(setDoc(doc(ownerDb(), 'usernames', 'sec4name'),
+      { uid: OWNER, createdAt: Timestamp.fromDate(new Date('2020-01-01')) }));
+  });
+
+  // Reviews — title/posterPath bounded, stamps typed.
+  it('a review with a normal title and posterPath is accepted', async () => {
+    await assertSucceeds(setDoc(doc(ownerDb(), 'reviews', 'r_new'),
+      { ...validReview(OWNER), title: 'The Matrix', posterPath: '/abc.jpg' }));
+  });
+  // useReviews.ts sends `posterPath: null` for a title without a poster.
+  it('a review with a null posterPath is accepted on create', async () => {
+    await assertSucceeds(setDoc(doc(ownerDb(), 'reviews', 'r_new'),
+      { ...validReview(OWNER), title: 'Okänd', posterPath: null }));
+  });
+  it('an update sending the full payload with a null posterPath is accepted', async () => {
+    await seedReview({ title: 'Okänd', posterPath: null });
+    await assertSucceeds(updateDoc(doc(ownerDb(), 'reviews', 'r_sec4'),
+      { text: 'Ändrad.', title: 'Okänd', posterPath: null, updatedAt: serverTimestamp() }));
+  });
+  it('a review whose updatedAt is not a timestamp is denied', async () => {
+    await assertFails(setDoc(doc(ownerDb(), 'reviews', 'r_new'), { ...validReview(OWNER), updatedAt: 'x'.repeat(1000) }));
+  });
+  it('an update writing a non-timestamp updatedAt is denied', async () => {
+    await seedReview();
+    await assertFails(updateDoc(doc(ownerDb(), 'reviews', 'r_sec4'), { text: 'Ändrad.', updatedAt: 'x' }));
+  });
+  it('an older review with a bad createdAt stays editable when createdAt is untouched', async () => {
+    await seedReview({ createdAt: 'legacy' });
+    await assertSucceeds(updateDoc(doc(ownerDb(), 'reviews', 'r_sec4'), { text: 'Ändrad.', updatedAt: serverTimestamp() }));
+  });
+  it('an older over-long title cannot be rewritten to another over-long title', async () => {
+    await seedReview({ title: 'x'.repeat(400) });
+    await assertFails(updateDoc(doc(ownerDb(), 'reviews', 'r_sec4'), { title: 'y'.repeat(400) }));
+  });
+  it('a review with an over-long title is denied on create', async () => {
+    await assertFails(setDoc(doc(ownerDb(), 'reviews', 'r_new'), { ...validReview(OWNER), title: 'x'.repeat(301) }));
+  });
+  it('a review with an over-long posterPath is denied on create', async () => {
+    await assertFails(setDoc(doc(ownerDb(), 'reviews', 'r_new'), { ...validReview(OWNER), posterPath: 'x'.repeat(301) }));
+  });
+  it('a review whose createdAt is not a timestamp is denied', async () => {
+    await assertFails(setDoc(doc(ownerDb(), 'reviews', 'r_new'), { ...validReview(OWNER), createdAt: 'x'.repeat(1000) }));
+  });
+  it('an update that writes an over-long title is denied', async () => {
+    await seedReview({ title: 'The Matrix' });
+    await assertFails(updateDoc(doc(ownerDb(), 'reviews', 'r_sec4'), { title: 'x'.repeat(301) }));
+  });
+  it('an older review with an over-long title stays editable when the title is untouched', async () => {
+    await seedReview({ title: 'x'.repeat(400) });
+    await assertSucceeds(updateDoc(doc(ownerDb(), 'reviews', 'r_sec4'), { text: 'Ändrad.', updatedAt: serverTimestamp() }));
+  });
+
+  // Lists.
+  it('a list in the client shape is accepted', async () => {
+    await assertSucceeds(addDoc(collection(ownerDb(), 'lists'), listCreatePayload({ items: [] })));
+  });
+  it('a list with an extra field is denied on create', async () => {
+    await assertFails(addDoc(collection(ownerDb(), 'lists'), listCreatePayload({ items: [], blob: 'x' })));
+  });
+  it('the owner cannot add an unknown field on update', async () => {
+    await seedCollabList('l_sec4', { isPublic: true, editors: [] });
+    await assertFails(updateDoc(doc(ownerDb(), 'lists', 'l_sec4'), { blob: 'x' }));
+  });
+  it('the owner can still add an editor with arrayUnion (useListEditors)', async () => {
+    await seedCollabList('l_sec4', { isPublic: true, editors: [] });
+    await assertSucceeds(updateDoc(doc(ownerDb(), 'lists', 'l_sec4'),
+      { editors: arrayUnion('other_uid'), updatedAt: serverTimestamp() }));
+  });
+  it('an older list with a stray key stays editable', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'lists', 'l_legacy'), {
+        uid: OWNER, title: 'Gammal', description: '', isPublic: true, items: [],
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(), legacyKey: 1,
+      });
+    });
+    await assertSucceeds(updateDoc(doc(ownerDb(), 'lists', 'l_legacy'), { title: 'Ny titel', updatedAt: serverTimestamp() }));
+  });
+
+  // Group progress — the client shape in groups.ts setGroupMemberProgress.
+  function progressRef(db: ReturnType<typeof ownerDb>) {
+    return doc(db, 'groups', GROUP, 'watchlist', 'tv_1399', 'progress', OWNER);
+  }
+  function progress(over: Record<string, unknown> = {}) {
+    return { lastWatchedSeason: 2, lastWatchedEpisode: 3, status: 'mina', syncedAt: serverTimestamp(), ...over };
+  }
+  it('group progress in the client shape is accepted (merge write)', async () => {
+    await seedGroup();
+    await assertSucceeds(setDoc(progressRef(ownerDb()), progress(), { merge: true }));
+  });
+  it('group progress with nulls is accepted', async () => {
+    await seedGroup();
+    await assertSucceeds(setDoc(progressRef(ownerDb()),
+      progress({ lastWatchedSeason: null, lastWatchedEpisode: null, status: null }), { merge: true }));
+  });
+  it('group progress with an extra field is denied', async () => {
+    await seedGroup();
+    await assertFails(setDoc(progressRef(ownerDb()), progress({ blob: 'x' }), { merge: true }));
+  });
+  it.each([
+    ['lastWatchedSeason', { lastWatchedSeason: 'x'.repeat(1000) }],
+    ['lastWatchedEpisode', { lastWatchedEpisode: 'x' }],
+    ['status as a number', { status: 42 }],
+    ['status over 40 characters', { status: 'x'.repeat(41) }],
+    ['syncedAt', { syncedAt: 'x' }],
+  ])('group progress with a wrong %s is denied on create', async (_name, bad) => {
+    await seedGroup();
+    await assertFails(setDoc(progressRef(ownerDb()), progress(bad), { merge: true }));
+  });
+  it('group progress with status at 40 characters is accepted', async () => {
+    await seedGroup();
+    await assertSucceeds(setDoc(progressRef(ownerDb()), progress({ status: 'x'.repeat(40) }), { merge: true }));
+  });
+  it('an update writing a wrong type into group progress is denied', async () => {
+    await seedGroup();
+    await assertSucceeds(setDoc(progressRef(ownerDb()), progress(), { merge: true }));
+    await assertFails(setDoc(progressRef(ownerDb()), { lastWatchedSeason: 'x'.repeat(1000) }, { merge: true }));
+  });
+  it('an update adding an unknown field to group progress is denied', async () => {
+    await seedGroup();
+    await assertSucceeds(setDoc(progressRef(ownerDb()), progress(), { merge: true }));
+    await assertFails(setDoc(progressRef(ownerDb()), { blob: 'x' }, { merge: true }));
+  });
+  it('a non-member cannot delete group progress', async () => {
+    await seedGroup();
+    await assertSucceeds(setDoc(progressRef(ownerDb()), progress(), { merge: true }));
+    await assertFails(deleteDoc(progressRef(otherDb())));
+  });
+  it('the owner of a progress row can delete it', async () => {
+    await seedGroup();
+    await assertSucceeds(setDoc(progressRef(ownerDb()), progress(), { merge: true }));
+    await assertSucceeds(deleteDoc(progressRef(ownerDb())));
+  });
+  it('older group progress with a stray key stays writable', async () => {
+    await seedGroup();
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(progressRef(ctx.firestore()), { ...progress(), legacyKey: 1 });
+    });
+    await assertSucceeds(setDoc(progressRef(ownerDb()), progress({ lastWatchedEpisode: 4 }), { merge: true }));
   });
 });
