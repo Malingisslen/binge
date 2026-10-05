@@ -67,6 +67,9 @@ export const DATA_RESOLVERS: Record<MetricKey, (data: InsightsData) => MetricVal
   newUsers: (d) => scalar(Math.max(0, d.window?.deltas.users ?? NaN)),
   activeVisitors: (d) => scalar(d.plausible?.visitors ?? NaN), // pure web traffic — stays Plausible
   titlesAdded: (d) => scalar(Math.max(0, d.window?.deltas.titlesTracked ?? NaN)),
+  // Snapshot from the latest rollup, not the picked range: Auth keeps one clock per account.
+  activeUsers7d: (d) => scalar(d.rollup?.activeUsers?.d7 ?? NaN),
+  activeUsers30d: (d) => scalar(d.rollup?.activeUsers?.d30 ?? NaN),
 
   // ── Tillväxt ──────────────────────────────────────────────────────────────
   signupsTrend: (d) => ({
@@ -101,6 +104,28 @@ export const DATA_RESOLVERS: Record<MetricKey, (data: InsightsData) => MetricVal
   },
 
   donateClicks: (d) => scalar(d.plausible?.goals.donate_clicked ?? NaN),
+
+  signupLandingPages: (d) => ({
+    kind: 'breakdown',
+    entries: (d.plausible?.signupLandingPages ?? []).map((p) => ({
+      label: p.visitors > 0 ? `${p.page} · av ${p.visitors} besök` : p.page,
+      value: p.signups,
+    })),
+  }),
+
+  providerClicks: (d) => scalar(d.plausible?.goals.provider_clicked ?? NaN),
+
+  providerClicksByType: (d) => {
+    const m = d.plausible?.providerClicksByType;
+    if (!m) return emptyBreakdown;
+    const OFFER_LABEL: Record<string, string> = { subscription: 'Abonnemang', rent: 'Hyra', buy: 'Köpa', free: 'Gratis' };
+    return {
+      kind: 'breakdown',
+      entries: Object.entries(m)
+        .map(([type, value]) => ({ label: OFFER_LABEL[type] ?? type, value }))
+        .sort((a, b) => b.value - a.value),
+    };
+  },
 
   // ── Produktanvändning ───────────────────────────────────────────────────────
   statusDistribution: (d) => {

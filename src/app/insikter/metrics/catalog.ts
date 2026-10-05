@@ -14,12 +14,17 @@ export const METRICS: Record<MetricKey, MetricDef> = {
   totalTitlesTracked: { key: 'totalTitlesTracked', label: 'Titlar spårade', category: 'overview', format: { kind: 'number' } },
   totalReviews: { key: 'totalReviews', label: 'Recensioner', category: 'overview', format: { kind: 'number' } },
   titlesAdded: { key: 'titlesAdded', label: 'Titlar tillagda', category: 'overview', format: { kind: 'number' } },
+  activeUsers7d: { key: 'activeUsers7d', label: 'Aktiva senaste 7 dagarna', category: 'overview', format: { kind: 'number' }, isNew: true },
+  activeUsers30d: { key: 'activeUsers30d', label: 'Aktiva senaste 30 dagarna', category: 'overview', format: { kind: 'number' }, isNew: true },
 
   // ── Tillväxt ──────────────────────────────────────────────────────────────
   signupsTrend: { key: 'signupsTrend', label: 'Registreringar', category: 'growth', format: { kind: 'number' } },
   onboardingFunnel: { key: 'onboardingFunnel', label: 'Onboarding-tratt', category: 'growth', format: { kind: 'number' } },
   signinMethodSplit: { key: 'signinMethodSplit', label: 'Inloggningsmetod', category: 'growth', format: { kind: 'number' } },
   donateClicks: { key: 'donateClicks', label: 'Donate-klick', category: 'growth', format: { kind: 'number' } },
+  signupLandingPages: { key: 'signupLandingPages', label: 'Registreringar per landningssida', category: 'growth', format: { kind: 'number' }, isNew: true },
+  providerClicks: { key: 'providerClicks', label: 'Klick till tjänster', category: 'growth', format: { kind: 'number' }, isNew: true },
+  providerClicksByType: { key: 'providerClicksByType', label: 'Klick till tjänster per typ', category: 'growth', format: { kind: 'number' }, isNew: true },
 
   // ── Produktanvändning ───────────────────────────────────────────────────────
   statusDistribution: { key: 'statusDistribution', label: 'Status-fördelning', category: 'product', format: { kind: 'number' } },
