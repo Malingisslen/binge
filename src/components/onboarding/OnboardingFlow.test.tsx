@@ -565,3 +565,59 @@ describe('Paket I — tjänster och pengar i introduktionen', () => {
     });
   });
 });
+
+// #26:s villkor 6 (pengakollen publikt): the calculator's guest selection prefills
+// step 2 ONLY when the account has no providers, never overwrites one that does, and
+// the guest copy is cleared once the step has saved.
+describe('guest calculator prefill on step 2', () => {
+  const GUEST_KEY = 'binge:guestProviders';
+  const toStep2 = async () => {
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Börja/ })); });
+  };
+
+  it('prefills providers and tiers from the calculator when the account has none, saves them, then clears the key', async () => {
+    window.sessionStorage.setItem(GUEST_KEY, JSON.stringify({ 8: 'basic', 76: null }));
+    render(<OnboardingFlow />);
+    await toStep2();
+
+    expect(screen.getByText('Ifyllt med det du valde i kalkylatorn.')).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Nivå för Netflix' })).toHaveValue('basic');
+    expect(screen.getByRole('combobox', { name: 'Nivå för Viaplay' })).toHaveValue('');
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Nästa/ })); });
+    expect(auth.updateProviders).toHaveBeenCalledWith([8, 76]);
+    // Only changed tiers are written; Viaplay's "Vet inte" equals the account's (none).
+    expect(auth.updateProviderTiers).toHaveBeenCalledWith({ 8: 'basic' });
+    expect(window.sessionStorage.getItem(GUEST_KEY)).toBeNull();
+  });
+
+  it('never overwrites an account that already has providers', async () => {
+    auth.user = { uid: 'u1', myProviders: [337], providerTiers: { 337: 'ads' } };
+    window.sessionStorage.setItem(GUEST_KEY, JSON.stringify({ 8: 'basic' }));
+    render(<OnboardingFlow />);
+    await toStep2();
+
+    expect(screen.queryByText('Ifyllt med det du valde i kalkylatorn.')).toBeNull();
+    expect(screen.queryByRole('combobox', { name: 'Nivå för Netflix' })).toBeNull();
+    expect(screen.getByRole('combobox', { name: 'Nivå för Disney+' })).toHaveValue('ads');
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Nästa/ })); });
+    expect(auth.updateProviders).toHaveBeenCalledWith([337]);
+    expect(auth.updateProviderTiers).not.toHaveBeenCalled();
+  });
+
+  it('keeps the guest key when the save fails, so the retry still has it', async () => {
+    window.sessionStorage.setItem(GUEST_KEY, JSON.stringify({ 8: null }));
+    auth.updateProviders.mockRejectedValueOnce(new Error('offline'));
+    render(<OnboardingFlow />);
+    await toStep2();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Nästa/ })); });
+    expect(window.sessionStorage.getItem(GUEST_KEY)).not.toBeNull();
+  });
+
+  it('shows nothing extra without a guest selection', async () => {
+    render(<OnboardingFlow />);
+    await toStep2();
+    expect(screen.queryByText('Ifyllt med det du valde i kalkylatorn.')).toBeNull();
+  });
+});

@@ -574,6 +574,12 @@
         "src/lib/formatKr.guard.test.ts",
         "src/lib/formatKr.test.ts",
         "src/lib/formatKr.ts",
+        "src/lib/guestProviders.test.ts",
+        "src/lib/guestProviders.ts",
+        "src/lib/priceFreshness.test.ts",
+        "src/lib/priceFreshness.ts",
+        "src/lib/priceTableRows.test.ts",
+        "src/lib/priceTableRows.ts",
         "src/lib/renewal.test.ts",
         "src/lib/renewal.ts",
         "src/lib/spendSnapshot.test.ts",
@@ -586,6 +592,7 @@
         "src/lib/streaming/priceStats.ts",
         "src/lib/tmdb/providers.affiliate.test.ts",
         "src/lib/tmdb/providers.identityGuard.test.ts",
+        "src/lib/tmdb/providers.priceData.test.ts",
         "src/lib/tmdb/providers.test.ts",
         "src/lib/tmdb/providers.ts"
       ]

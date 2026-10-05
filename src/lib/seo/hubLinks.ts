@@ -57,6 +57,15 @@ export function genreLinks(): HubLink[] {
   return GENRE_HUBS.map((g) => ({ href: `/genre/${g.slug}/`, label: g.label }));
 }
 
+/**
+ * Kalkylatorn (/streamingkostnad/). Prissidan /streamingpriser/ står medvetet
+ * INTE här: den är noindex tills Malin bekräftat att prisagenten är schemalagd
+ * (#26:s villkor 4), och hubLinks.test.ts fäller den om den läggs till.
+ */
+export function costLinks(): HubLink[] {
+  return [{ href: '/streamingkostnad/', label: 'Räkna ut din streamingkostnad' }];
+}
+
 export function hubSections(): HubSection[] {
   return [
     {
@@ -82,6 +91,12 @@ export function hubSections(): HubSection[] {
       heading: 'Bästa per genre',
       blurb: 'Populära filmer och serier genre för genre — och var de streamar i Sverige.',
       links: genreLinks(),
+    },
+    {
+      id: 'kostnad',
+      heading: 'Vad kostar streaming?',
+      blurb: 'Kryssa i tjänsterna du betalar för och se månads- och årskostnaden med ordinarie listpriser.',
+      links: costLinks(),
     },
   ];
 }

@@ -17,6 +17,7 @@ import { posterUrl, getDisplayTitle, getReleaseYear, isAddableMediaType } from '
 import { toneForGenreIds, toneForId } from '@/lib/duotone';
 import { buildWatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
 import { takeNextPath } from '@/lib/nextPath';
+import { clearGuestSelection, loadGuestSelection, type GuestSelection } from '@/lib/guestProviders';
 import { useToast } from '@/contexts/ToastContext';
 import { DELETION_IN_PROGRESS_MESSAGE, isDeletionInProgressError } from '@/lib/deletionInProgressError';
 import {
@@ -226,8 +227,26 @@ function StepProviders({ onBack, onNext }: { onBack: () => void; onNext: () => v
   const { show: toast } = useToast();
   // Paket I: ingenting förvalt. Sex förkryssade tjänster gav nya konton ett
   // "Du betalar 665 kr/mån" på priser de aldrig angett.
-  const [selected, setSelected] = useState<number[]>(user?.myProviders ?? []);
-  const [tiers, setTiers] = useState<Record<number, string>>(user?.providerTiers ?? {});
+  //
+  // Gästens val i kalkylatorn (/streamingkostnad/) förifyller steget, men BARA när
+  // kontot inte har några tjänster sparade — det skriver aldrig över ett konto som
+  // redan har ett svar (#26:s villkor 6).
+  const [guestPrefill] = useState<GuestSelection | null>(() => {
+    if ((user?.myProviders ?? []).length > 0) return null;
+    const guest = loadGuestSelection();
+    return Object.keys(guest).length > 0 ? guest : null;
+  });
+  const [selected, setSelected] = useState<number[]>(() =>
+    guestPrefill ? Object.keys(guestPrefill).map(Number) : (user?.myProviders ?? []),
+  );
+  const [tiers, setTiers] = useState<Record<number, string>>(() => {
+    const own = { ...(user?.providerTiers ?? {}) };
+    if (!guestPrefill) return own;
+    for (const [id, tier] of Object.entries(guestPrefill)) {
+      if (tier && own[Number(id)] === undefined) own[Number(id)] = tier;
+    }
+    return own;
+  });
   const [now] = useState(() => new Date());
   const [saving, setSaving] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
@@ -263,6 +282,8 @@ function StepProviders({ onBack, onNext }: { onBack: () => void; onNext: () => v
         if (chosen !== (user?.providerTiers?.[id] ?? null)) changed[id] = chosen;
       }
       if (Object.keys(changed).length > 0) await updateProviderTiers(changed);
+      // Valet är sparat på kontot; gästkopian har gjort sitt.
+      clearGuestSelection();
       onNext();
     } catch (err) {
       // BIN-1047: same refusal, same reason as `finish` above — `updateProviders` reaches
@@ -292,6 +313,9 @@ function StepProviders({ onBack, onNext }: { onBack: () => void; onNext: () => v
         Används för att visa var dina titlar kan streamas — och för att räkna
         ut om du kan pausa någon tjänst. Kryssa i dem du har och välj nivå om du vet den.
       </p>
+      {guestPrefill && (
+        <p className="text-xs text-ink-3 -mt-2 mb-4">Ifyllt med det du valde i kalkylatorn.</p>
+      )}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-6">
         {flatrateProviders.map(p => {
           const isSelected = selected.includes(p.id);

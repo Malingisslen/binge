@@ -68,7 +68,12 @@ export type AnalyticsEvent =
   // Klick ut till en tjänst (Netflix, SF Anytime …) från titelsidan — tratten
   // slutar här, så det är det mest värdefulla steget att räkna. providerId är
   // det kanoniska id:t, offerType är erbjudandets typ ur streamingOffers.
-  | { name: 'provider_clicked'; props: { providerId: number; offerType: 'subscription' | 'rent' | 'buy' | 'free'; mediaType: 'movie' | 'tv' } };
+  | { name: 'provider_clicked'; props: { providerId: number; offerType: 'subscription' | 'rent' | 'buy' | 'free'; mediaType: 'movie' | 'tv' } }
+  // Kalkylatorn (/streamingkostnad/) och startsidans gästdemo: första gången ett
+  // val ger en summa under en sidvisning, och klicket på "Logga in och spara".
+  // Bara antalet betalda tjänster — vilka tjänster det är skickas inte.
+  | { name: 'price_check_total_shown'; props: { surface: 'calculator' | 'home'; paidCount: number } }
+  | { name: 'price_check_save_clicked'; props: { paidCount: number } };
 
 export function trackEvent<T extends AnalyticsEvent['name']>(
   name: T,

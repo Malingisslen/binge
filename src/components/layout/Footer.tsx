@@ -42,6 +42,9 @@ export default function Footer() {
                 pages, so the shortlists below stay curated while every SEO page
                 is one click from here. */}
             <li><Link href="/guider/" className="hover:text-ink font-medium text-ink-2">Alla streamingguider</Link></li>
+            {/* Kalkylatorn (#26:s villkor 1). Prissidan /streamingpriser/ står inte
+                här så länge den är noindex (villkor 4). */}
+            <li><Link href="/streamingkostnad/" className="hover:text-ink font-medium text-ink-2">Vad kostar din streaming?</Link></li>
             <li className="text-ink-3">Billigaste sättet att se:</li>
             {FOOTER_FRANCHISES.map((f) => (
               <li key={f.slug}><Link href={`/billigaste/${f.slug}/`} className="hover:text-ink">{f.name}</Link></li>

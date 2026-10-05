@@ -65,6 +65,9 @@ function staticEntries(): MetadataRoute.Sitemap {
     { url: `${SITE_URL}/discover/`, changeFrequency: 'daily', priority: 0.9 },
     // Hub-of-hubs index (BIN-424) — links every /provider, /billigaste, /forsvinner page.
     { url: `${SITE_URL}/guider/`, changeFrequency: 'weekly', priority: 0.6 },
+    // Kalkylatorn (pengakollen publikt). /streamingpriser/ står medvetet utanför:
+    // den är noindex via sin layout.tsx tills prisagenten är schemalagd.
+    { url: `${SITE_URL}/streamingkostnad/`, changeFrequency: 'weekly', priority: 0.6 },
     { url: `${SITE_URL}/films/`, changeFrequency: 'daily', priority: 0.8 },
     { url: `${SITE_URL}/series/`, changeFrequency: 'daily', priority: 0.8 },
     { url: `${SITE_URL}/integritet/`, changeFrequency: 'yearly', priority: 0.3 },

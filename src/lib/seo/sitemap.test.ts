@@ -66,6 +66,7 @@ const EXPECTED_STATIC = [
   'https://binge.nu/',
   'https://binge.nu/discover/',
   'https://binge.nu/guider/', // BIN-424 hub-of-hubs index
+  'https://binge.nu/streamingkostnad/', // kalkylatorn, pengakollen publikt
   'https://binge.nu/films/',
   'https://binge.nu/series/',
   'https://binge.nu/integritet/',
@@ -105,18 +106,19 @@ describe('sitemap — BIN-337 URL shape + family coverage', () => {
     );
   });
 
-  it('lists exactly the 8 public static routes — no auth-walled/noindex pages leak in', () => {
+  it('lists exactly the public static routes in EXPECTED_STATIC — no auth-walled/noindex pages leak in', () => {
     const all = sitemap().map(e => e.url);
     const urls = new Set(all);
     for (const u of EXPECTED_STATIC) expect(urls.has(u), `missing static: ${u}`).toBe(true);
-    // Two-sided: the static (non-dynamic) route set must be EXACTLY these 8, so a
+    // Two-sided: the static (non-dynamic) route set must be EXACTLY EXPECTED_STATIC, so a
     // newly-added top-level page (esp. an auth-walled one) can't silently leak in.
     const DYNAMIC_PREFIXES = ['/movie/', '/tv/', '/person/', '/provider/', '/billigaste/', '/forsvinner/', '/genre/'];
     const staticUrls = all.filter(u => !DYNAMIC_PREFIXES.some(p => u.includes(p)));
     expect(staticUrls.sort()).toEqual([...EXPECTED_STATIC].sort());
     // Auth-walled / noindex routes must never appear (GSC "submitted URL marked noindex").
     // BIN-305: /savings/ is now auth-walled + robots:noindex, so it must NOT leak in.
-    for (const leak of ['/my', '/login', '/settings', '/feed', '/kalibrera', '/stats', '/savings']) {
+    // /streamingpriser/ is noindex via its layout.tsx until the price agent is scheduled.
+    for (const leak of ['/my', '/login', '/settings', '/feed', '/kalibrera', '/stats', '/savings', '/streamingpriser']) {
       expect([...urls].some(u => u.includes(`binge.nu${leak}`)), `leaked: ${leak}`).toBe(false);
     }
   });
