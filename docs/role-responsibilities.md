@@ -415,7 +415,7 @@ Owns acquisition and the top of the funnel.
 - ~25k-title SEO pre-render + matching sitemap (parity prevents "crawled but not
   indexed"); `robots.txt` crawl-budget rules; JSON-LD (FAQPage, Organization,
   provider ItemLists); OpenGraph/Twitter share cards.
-  → `src/app/sitemap.ts`, `src/lib/tmdb/seoCoverage.ts`, `public/robots.txt`
+  → `src/lib/seo/sitemap.ts`, `src/lib/seo/providerHubCopy.ts`, `src/lib/seo/providerHubCopy.test.ts`, `src/app/sitemapFailedFetch.test.ts`, `src/lib/tmdb/seoCoverage.ts`, `public/robots.txt`
 - **The pre-render selection ratchet** — which titles get a pre-rendered, indexable
   page at all: the persisted selection manifest (ceiling, floor, oldest-first
   eviction) and the committed seed of ids Google already had indexed. A change that
@@ -441,7 +441,7 @@ Owns acquisition and the top of the funnel.
   `src/lib/seo/shareShells.test.ts`, `src/components/share/ShareButton.tsx`,
   `src/components/share/ShareButton.test.tsx`
 - **Filer som saknade en ägande roll** (BIN-871). SEO-ytan, sidmetadata, sök och mätningen.
-  → `src/app/sitemap.test.ts`, `src/hooks/usePageMeta.test.ts`, `src/hooks/usePageMeta.ts`, `src/hooks/useSearchBox.ts`, `src/hooks/useTitleLinkPrefetch.ts`, `src/lib/analytics.test.ts`, `src/lib/seo/contentFloor.test.ts`, `src/lib/seo/contentFloor.ts`, `src/lib/seo/contentFloorInput.test.ts`, `src/lib/seo/contentFloorInput.ts`, `src/lib/seo/franchiseCheapest.test.ts`, `src/lib/seo/franchiseCheapest.ts`, `src/lib/seo/genreHubs.test.ts`, `src/lib/seo/hubLinks.test.ts`, `src/lib/seo/hubLinks.ts`, `src/lib/seo/hubSeeds.test.ts`, `src/lib/seo/hubSeeds.ts`, `src/lib/seo/jsonLd.test.ts`, `src/lib/seo/selectionSeed.test.ts`, `src/lib/seo/withRetry.test.ts`, `src/lib/seo/withRetry.ts`, `src/lib/tmdb/selectionManifest.io.test.ts`, `src/lib/tmdb/selectionManifest.test.ts`, `src/lib/tmdb/seoCoverage.latinFilter.test.ts`, `src/lib/tmdb/seoCoverage.test.ts`, `src/lib/tmdb/selectionResolve.test.ts`
+  → `src/lib/seo/sitemap.test.ts`, `src/hooks/usePageMeta.test.ts`, `src/hooks/usePageMeta.ts`, `src/hooks/useSearchBox.ts`, `src/hooks/useTitleLinkPrefetch.ts`, `src/lib/analytics.test.ts`, `src/lib/seo/contentFloor.test.ts`, `src/lib/seo/contentFloor.ts`, `src/lib/seo/contentFloorInput.test.ts`, `src/lib/seo/contentFloorInput.ts`, `src/lib/seo/franchiseCheapest.test.ts`, `src/lib/seo/franchiseCheapest.ts`, `src/lib/seo/genreHubs.test.ts`, `src/lib/seo/hubLinks.test.ts`, `src/lib/seo/hubLinks.ts`, `src/lib/seo/hubSeeds.test.ts`, `src/lib/seo/hubSeeds.ts`, `src/lib/seo/jsonLd.test.ts`, `src/lib/seo/selectionSeed.test.ts`, `src/lib/seo/withRetry.test.ts`, `src/lib/seo/withRetry.ts`, `src/lib/tmdb/selectionManifest.io.test.ts`, `src/lib/tmdb/selectionManifest.test.ts`, `src/lib/tmdb/seoCoverage.latinFilter.test.ts`, `src/lib/tmdb/seoCoverage.test.ts`, `src/lib/tmdb/selectionResolve.test.ts`
 
 
 ## 16. Creative Director / Brand

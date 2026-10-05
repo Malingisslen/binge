@@ -20,6 +20,7 @@ import { resolveSelection, SelectionFloorError } from '@/lib/tmdb/selectionManif
 import { SEED_TV_IDS } from '@/lib/seo/selectionSeed';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import { fetchForBuild, buildSignal, startBuildWatchdog, trackBuildCall } from '@/lib/tmdb/buildFetch';
+import { recordBuildFetchOutcome } from '@/lib/tmdb/buildCache';
 import { buildContentFloor } from '@/lib/seo/contentFloor';
 import { tvContentFloorInput } from '@/lib/seo/contentFloorInput';
 
@@ -36,7 +37,7 @@ export const dynamicParams = false;
  * Suspense-wrap krävs eftersom TVShowPageClient använder useSearchParams
  * (för `?fromGroup=`-parametern). Utan boundary failar Next-builden.
  *
- * Pariteten mot src/app/sitemap.ts går sedan BIN-823 via urvalsmanifestet den
+ * Pariteten mot src/lib/seo/sitemap.ts går sedan BIN-823 via urvalsmanifestet den
  * här härledningen skriver — inte via delade konstanter.
  */
 
@@ -105,6 +106,7 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
 
   try {
     const show = await cachedGetTVShow(showId);
+    recordBuildFetchOutcome('tv', showId, true);
     const displayTitle = preferOriginalTitle(show.name, show.original_name);
     const firstYear = show.first_air_date ? show.first_air_date.slice(0, 4) : '';
     const yearSuffix = firstYear ? ` (${firstYear})` : '';
@@ -135,6 +137,7 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
       },
     };
   } catch {
+    recordBuildFetchOutcome('tv', showId, false);
     // Build-time TMDB-hämtning misslyckades för denna förrenderade titel. Skicka
     // ALDRIG en indexerbar sida med root-layoutens default-title + canonical:/
     // (Google läser den som en homepage-dubblett). noindex + self-canonical tills

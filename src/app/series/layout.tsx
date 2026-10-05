@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
   title: 'Serier',
-  description: 'Alla TV-serier du följer — pågående, avslutade, kommande. Se var varje serie går att streama i Sverige.',
+  description: 'Populära TV-serier just nu och var de går att streama i Sverige — Netflix, Max, Viaplay med flera. Följ dina serier med Binge.',
   alternates: { canonical: '/series/' },
 };
 

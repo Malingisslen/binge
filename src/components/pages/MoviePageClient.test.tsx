@@ -75,11 +75,13 @@ const SHORT_OVERVIEW = 'En dokumentär om Greta Thunberg.';
 const LONG_OVERVIEW =
   'En hacker upptäcker att verkligheten är en simulering och dras in i ett krig om mänsklighetens framtid.';
 
-// The generated content-floor sentence for this fixture ends with its
-// availability lead; that clause is unique to the floor, so its presence or
-// absence answers "was the floor rendered?" without duplicating the whole
-// template here (contentFloor.test.ts owns the wording).
+// The availability lead for this fixture. Since SEO-2 it is on EVERY page: inside
+// the floor paragraph (`p.syn`) on a thin page, as its own line otherwise. So
+// "was the floor rendered?" is asked of the `p.syn` paragraphs, and the lead
+// must appear exactly once either way (contentFloor.test.ts owns the wording).
 const FLOOR_TAIL = /The Matrix streamas just nu på Netflix i Sverige\./;
+const floorParagraphs = () =>
+  [...document.querySelectorAll('p.syn')].filter(p => FLOOR_TAIL.test(p.textContent ?? ''));
 
 const movie = {
   id: 603,
@@ -404,8 +406,10 @@ describe('MoviePageClient — the content floor adds text, it never replaces it 
     // The film's own words survive — this is the whole of BIN-735. A revert to
     // the either/or render drops this line.
     expect(screen.getByText(SHORT_OVERVIEW)).toBeTruthy();
-    // …and the thin page still gains the extra prose it was written for.
-    expect(screen.getByText(FLOOR_TAIL)).toBeTruthy();
+    // …and the thin page still gains the extra prose it was written for, with
+    // the availability lead once — not repeated by the SEO-2 line.
+    expect(floorParagraphs()).toHaveLength(1);
+    expect(screen.getAllByText(FLOOR_TAIL)).toHaveLength(1);
   });
 
   it('does not add the generated sentence when the overview already carries the page', () => {
@@ -417,7 +421,9 @@ describe('MoviePageClient — the content floor adds text, it never replaces it 
     // hasSubstantialText for a bare truthiness check and the floor stops
     // appearing for the short overview above; drop the check entirely and it
     // appears here, duplicating a synopsis that needed no help.
-    expect(screen.queryByText(FLOOR_TAIL)).toBeNull();
+    expect(floorParagraphs()).toHaveLength(0);
+    // SEO-2: the availability answer is still on the page, as its own line.
+    expect(screen.getAllByText(FLOOR_TAIL)).toHaveLength(1);
   });
 
   it('falls back to the generated sentence alone when TMDB has no Swedish overview', () => {
@@ -460,5 +466,49 @@ describe('MoviePageClient — the add control gets both provider answers (BIN-81
     expect(props.subscriptionProviders).toEqual([8]);
     // The decisive assertion: Viaplay is reachable, but not on a subscription.
     expect(props.subscriptionProviders).not.toContain(76);
+  });
+});
+
+describe('MoviePageClient — what a crawler reads without clicking (SEO-2/SEO-4)', () => {
+  it('renders rent/buy inside a collapsed <details>, not behind a click', () => {
+    signedInWithSettledLibrary();
+    tmdb.movie = {
+      ...movie,
+      'watch/providers': { results: { SE: {
+        flatrate: [{ provider_id: 8, provider_name: 'Netflix' }],
+        rent: [{ provider_id: 2, provider_name: 'Apple TV' }],
+      } } },
+    };
+    render(<MoviePageClient id="603" />);
+
+    const details = document.querySelector('details');
+    expect(details).not.toBeNull();
+    expect(details!.open).toBe(false);
+    // The list is in the DOM while collapsed — the old button rendered nothing here.
+    expect(details!.textContent).toContain('Hyr:');
+    // …and the availability line names the rent option in words.
+    expect(screen.getByText(/Den går också att hyra eller köpa via Apple TV\./)).toBeTruthy();
+  });
+
+  it('links the crumb, a curated genre and a curated provider to their hubs', () => {
+    signedInWithSettledLibrary();
+    tmdb.movie = movie;
+    render(<MoviePageClient id="603" />);
+
+    // next/link drops the trailing slash outside the build (no trailingSlash config
+    // here); the export's `trailingSlash: true` puts it back.
+    expect(screen.getByRole('link', { name: 'Filmer' }).getAttribute('href')).toMatch(/^\/films\/?$/);
+    expect(screen.getByRole('link', { name: 'Science Fiction' }).getAttribute('href')).toMatch(/^\/genre\/sci-fi\/?$/);
+    expect(screen.getByRole('link', { name: 'Netflix' }).getAttribute('href')).toMatch(/^\/provider\/8\/?$/);
+  });
+
+  it('leaves a genre without a hub as plain text', () => {
+    signedInWithSettledLibrary();
+    // 36 Historia has no curated hub.
+    tmdb.movie = { ...movie, genres: [{ id: 36, name: 'Historia' }] };
+    render(<MoviePageClient id="603" />);
+
+    expect(screen.getByText('Historia')).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Historia' })).toBeNull();
   });
 });

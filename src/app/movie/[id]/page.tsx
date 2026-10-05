@@ -19,6 +19,7 @@ import { resolveSelection, SelectionFloorError } from '@/lib/tmdb/selectionManif
 import { SEED_MOVIE_IDS } from '@/lib/seo/selectionSeed';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import { fetchForBuild, buildSignal, startBuildWatchdog, trackBuildCall } from '@/lib/tmdb/buildFetch';
+import { recordBuildFetchOutcome } from '@/lib/tmdb/buildCache';
 import { buildContentFloor } from '@/lib/seo/contentFloor';
 import { movieContentFloorInput } from '@/lib/seo/contentFloorInput';
 
@@ -113,6 +114,7 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
 
   try {
     const movie = await cachedGetMovie(movieId);
+    recordBuildFetchOutcome('movie', movieId, true);
     const displayTitle = preferOriginalTitle(movie.title, movie.original_title);
     const releaseYear = movie.release_date ? movie.release_date.slice(0, 4) : '';
     const yearSuffix = releaseYear ? ` (${releaseYear})` : '';
@@ -144,6 +146,7 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
       },
     };
   } catch {
+    recordBuildFetchOutcome('movie', movieId, false);
     // Build-time TMDB-hämtning misslyckades för denna förrenderade titel. Skicka
     // ALDRIG en indexerbar sida med root-layoutens default-title + canonical:/
     // (Google läser den som en homepage-dubblett). noindex + self-canonical tills

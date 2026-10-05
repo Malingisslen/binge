@@ -8,10 +8,6 @@
  * rendera i static export) är det här enda sättet att få rich-snippet-data
  * in i search results.
  *
- * Använd från title-page-klienter:
- *   <JsonLd data={movieSchema(movie)} />
- *   <JsonLd data={tvSchema(show)} />
- *
  * schema-byggarna returnerar unknown-typade record-objekt eftersom
  * Schema.org-schemana är stora och vi håller en minimal subset för vad
  * Google faktiskt använder i SERP.
@@ -50,21 +46,31 @@ interface MinimalMovie {
   };
 }
 
-export function movieSchema(movie: MinimalMovie, siteUrl = 'https://binge.nu'): Record<string, unknown> {
+/**
+ * `page` carries what the visible page says: the H1 title (preferOriginalTitle)
+ * and the content-floor description the meta tag uses. TMDB's sv-SE overview is
+ * an empty string for many titles, so the raw overview left `description` blank
+ * exactly where the page needed it most (SEO-9).
+ */
+export interface SchemaPageText {
+  name: string;
+  description: string | undefined;
+}
+
+export function movieSchema(movie: MinimalMovie, page: SchemaPageText, siteUrl = 'https://binge.nu'): Record<string, unknown> {
   const director = movie.credits?.crew.find(c => c.job === 'Director')?.name;
   const actors = movie.credits?.cast.slice(0, 5).map(c => c.name) ?? [];
 
   const schema: Record<string, unknown> = {
     '@context': 'https://schema.org',
     '@type': 'Movie',
-    name: movie.title,
-    description: movie.overview,
+    name: page.name,
     url: `${siteUrl}/movie/${movie.id}/`,
   };
+  if (page.description) schema.description = page.description;
 
-  if (movie.original_title && movie.original_title !== movie.title) {
-    schema.alternateName = movie.original_title;
-  }
+  const otherName = [movie.title, movie.original_title].find(n => n && n !== page.name);
+  if (otherName) schema.alternateName = otherName;
   if (movie.poster_path) {
     schema.image = `https://image.tmdb.org/t/p/w500${movie.poster_path}`;
   }
@@ -108,21 +114,20 @@ interface MinimalTVShow {
   };
 }
 
-export function tvSchema(show: MinimalTVShow, siteUrl = 'https://binge.nu'): Record<string, unknown> {
+export function tvSchema(show: MinimalTVShow, page: SchemaPageText, siteUrl = 'https://binge.nu'): Record<string, unknown> {
   const creator = show.credits?.crew.find(c => c.job === 'Creator' || c.job === 'Executive Producer')?.name;
   const actors = show.credits?.cast.slice(0, 5).map(c => c.name) ?? [];
 
   const schema: Record<string, unknown> = {
     '@context': 'https://schema.org',
     '@type': 'TVSeries',
-    name: show.name,
-    description: show.overview,
+    name: page.name,
     url: `${siteUrl}/tv/${show.id}/`,
   };
+  if (page.description) schema.description = page.description;
 
-  if (show.original_name && show.original_name !== show.name) {
-    schema.alternateName = show.original_name;
-  }
+  const otherName = [show.name, show.original_name].find(n => n && n !== page.name);
+  if (otherName) schema.alternateName = otherName;
   if (show.poster_path) {
     schema.image = `https://image.tmdb.org/t/p/w500${show.poster_path}`;
   }
@@ -145,6 +150,36 @@ export function tvSchema(show: MinimalTVShow, siteUrl = 'https://binge.nu'): Rec
     };
   }
 
+  return schema;
+}
+
+interface MinimalPerson {
+  id: number;
+  name: string;
+  profile_path: string | null;
+  birthday?: string | null;
+  deathday?: string | null;
+  place_of_birth?: string | null;
+}
+
+/** Minimal Person schema; `jobTitle` is the Swedish department label the page header shows. */
+export function personSchema(
+  person: MinimalPerson,
+  page: { description: string | undefined; jobTitle: string | null },
+  siteUrl = 'https://binge.nu',
+): Record<string, unknown> {
+  const schema: Record<string, unknown> = {
+    '@context': 'https://schema.org',
+    '@type': 'Person',
+    name: person.name,
+    url: `${siteUrl}/person/${person.id}/`,
+  };
+  if (page.description) schema.description = page.description;
+  if (person.profile_path) schema.image = `https://image.tmdb.org/t/p/w500${person.profile_path}`;
+  if (person.birthday) schema.birthDate = person.birthday;
+  if (person.deathday) schema.deathDate = person.deathday;
+  if (person.place_of_birth) schema.birthPlace = person.place_of_birth;
+  if (page.jobTitle) schema.jobTitle = page.jobTitle;
   return schema;
 }
 

@@ -22,9 +22,8 @@ export function generateStaticParams() {
  *
  * För long-tail movie/tv/person *som har giltig data* tar
  * MoviePageClient/TVShowPageClient/PersonPageClient bort noindex via
- * usePageMeta({ indexable: true }) efter att TMDB-fetchen lyckats. Det ger
- * Googlebot's andra crawl-fas (JS-rendering) signalen att den specifika
- * URL:en faktiskt får indexeras.
+ * usePageMeta({ indexable: true }) efter att TMDB-fetchen lyckats.
+ * Se .claude/rules/deployment.md för vad det betyder för indexeringen.
  *
  * Sociala/personliga routes (/user, /grupper, /tillsammans, /list) sätter
  * INTE indexable: true → de förblir noindex, vilket är önskat för privacy.
