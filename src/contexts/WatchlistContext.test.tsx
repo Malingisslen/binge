@@ -97,6 +97,9 @@ const setDoc = vi.fn(async (..._args: unknown[]) => {});
 // BIN-640: the batch commit, as its own spy so a test can make it reject.
 const batchCommit = vi.fn(async () => {});
 const deleteDoc = vi.fn(async (..._args: unknown[]) => {});
+// BIN-1430: what the local cache holds, by document path. A path that is absent throws,
+// as the real getDocFromCache does for a document it has never seen.
+const cacheDocs = new Map<string, Record<string, unknown>>();
 
 vi.mock('@/lib/firebase/db', () => ({
   lazySubscribe: (attach: (kit: unknown) => () => void) => {
@@ -136,6 +139,11 @@ vi.mock('@/lib/firebase/db', () => ({
     doc: (_db: unknown, ...path: string[]) => ({ _path: path.join('/') }),
     setDoc,
     deleteDoc,
+    getDocFromCache: async (ref: { _path: string }) => {
+      const data = cacheDocs.get(ref._path);
+      if (!data) throw new Error('Failed to get document from cache.');
+      return { exists: () => true, data: () => data };
+    },
     // BIN-505: updateNotes + the eager notes migration use an atomic batch +
     // deleteField. Record ops on the shared spies so a note-write can be asserted.
     writeBatch: () => ({
@@ -159,6 +167,7 @@ import { WatchlistProvider, useWatchlist } from './WatchlistContext';
 import type { WatchlistItem, MediaType, WatchStatus, ItemVisibility } from '@/types';
 import type { ItemWriteOutcome } from './WatchlistContext';
 import type { TitleWriteOutcome } from '@/lib/watchlistWrites';
+import type { RemovedTitle } from '@/lib/watchlist/restoreRemoved';
 
 // Hjälpare: en watchlist-doc med minimala fält som docToItem läser.
 function doc(tmdbId: number, mediaType: MediaType = 'tv') {
@@ -201,7 +210,8 @@ let logViewingRef: ((item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watche
 let updateStatusRef: ((mediaType: MediaType, tmdbId: number, status: WatchStatus, watchedAt?: Date) => Promise<ItemWriteOutcome>) | null = null;
 let updateProgressRef: ((mediaType: MediaType, tmdbId: number, season: number, episode: number, opts?: { addIfMissing?: boolean }) => Promise<ItemWriteOutcome>) | null = null;
 let setRuntimeRef: ((mediaType: MediaType, tmdbId: number, runtime: number | null) => Promise<void>) | null = null;
-let removeItemRef: ((mediaType: MediaType, tmdbId: number) => Promise<void>) | null = null;
+let removeItemRef: ((mediaType: MediaType, tmdbId: number) => Promise<RemovedTitle | null>) | null = null;
+let restoreItemRef: ((removed: RemovedTitle) => Promise<{ siblingsRestored: boolean }>) | null = null;
 let updateTagsRef: ((mediaType: MediaType, tmdbId: number, tags: string[]) => Promise<void>) | null = null;
 let updateRatingRef: ((mediaType: MediaType, tmdbId: number, rating: number | null) => Promise<ItemWriteOutcome>) | null = null;
 let updateNotesRef: ((mediaType: MediaType, tmdbId: number, notes: string | null) => Promise<void>) | null = null;
@@ -232,6 +242,7 @@ function Harness() {
     updateProgressRef = wl.updateProgress;
     setRuntimeRef = wl.setRuntime;
     removeItemRef = wl.removeItem;
+    restoreItemRef = wl.restoreItem;
     updateTagsRef = wl.updateTags;
     updateRatingRef = wl.updateRating;
     updateNotesRef = wl.updateNotes;
@@ -278,6 +289,7 @@ beforeEach(() => {
   // undefined-returning stub. Vitest 4 semantics — check this line if that ever changes.
   setDoc.mockReset();
   deleteDoc.mockClear();
+  cacheDocs.clear();
   buildStatusUpdate.mockClear();
   syncProgressToGroups.mockClear();
   getTVShowLite.mockReset();
@@ -3470,5 +3482,152 @@ describe('WatchlistContext — the add door refuses during an account deletion (
     await act(async () => { await updateProgressRef!('tv', 1399, 2, 3); });
 
     await vi.waitFor(() => expect(syncProgressToGroups).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe('WatchlistContext — "Ångra" after "Ta bort" (BIN-1430)', () => {
+  async function mountSeeded(docs: { data: () => Record<string, unknown> }[]) {
+    render(
+      <WatchlistProvider>
+        <Harness />
+      </WatchlistProvider>,
+    );
+    await act(async () => {
+      snapshotCallback!(snap(docs));
+    });
+  }
+
+  const ROW = { tmdbId: 1399, mediaType: 'tv', status: 'mina', title: 'Title 1399', rating: 4.5, lastWatchedSeason: 2, lastWatchedEpisode: 5 };
+  function cacheAll() {
+    cacheDocs.set('users/u1/watchlist/tv_1399', ROW);
+    cacheDocs.set('users/u1/watchlistTags/tv_1399', { tags: ['favorit'], mediaType: 'tv' });
+    cacheDocs.set('users/u1/watchlistNotes/tv_1399', { note: 'Se om', mediaType: 'tv' });
+  }
+  function writesTo(path: string) {
+    return setDoc.mock.calls.filter(c => (c[0] as { _path: string })._path === path);
+  }
+
+  afterEach(() => {
+    window.localStorage.removeItem('binge:deletionStarted:u1');
+  });
+
+  it('removes as before and hands back all three documents as the cache held them', async () => {
+    await mountSeeded([seedDoc(ROW)]);
+    cacheAll();
+
+    let removed: RemovedTitle | null = null;
+    await act(async () => { removed = await removeItemRef!('tv', 1399); });
+
+    expect(deleteDoc).toHaveBeenCalledWith({ _path: 'users/u1/watchlist/tv_1399' });
+    expect(removed).toMatchObject({
+      mediaType: 'tv', tmdbId: 1399, docId: 'tv_1399', removalGen: 1,
+      item: ROW, tags: { tags: ['favorit'], mediaType: 'tv' }, notes: { note: 'Se om', mediaType: 'tv' },
+    });
+  });
+
+  it('still deletes when the cache does not hold the row, and offers nothing to restore', async () => {
+    await mountSeeded([seedDoc(ROW)]);
+
+    let removed: RemovedTitle | null | undefined;
+    await act(async () => { removed = await removeItemRef!('tv', 1399); });
+
+    expect(deleteDoc).toHaveBeenCalledWith({ _path: 'users/u1/watchlist/tv_1399' });
+    expect(removed).toBeNull();
+  });
+
+  it('puts the row back first and exactly as read, then its tags and notes', async () => {
+    await mountSeeded([seedDoc(ROW)]);
+    cacheAll();
+    let removed!: RemovedTitle | null;
+    await act(async () => { removed = await removeItemRef!('tv', 1399); });
+    setDoc.mockClear();
+
+    let result: { siblingsRestored: boolean } | undefined;
+    await act(async () => { result = await restoreItemRef!(removed!); });
+
+    expect(result).toEqual({ siblingsRestored: true });
+    expect((setDoc.mock.calls[0][0] as { _path: string })._path).toBe('users/u1/watchlist/tv_1399');
+    expect(setDoc.mock.calls[0][1]).toEqual(ROW);
+    expect(setDoc.mock.calls[0]).toHaveLength(2); // no merge option: a full overwrite
+    expect(writesTo('users/u1/watchlistTags/tv_1399')[0][1]).toEqual({ tags: ['favorit'], mediaType: 'tv' });
+    expect(writesTo('users/u1/watchlistNotes/tv_1399')[0][1]).toEqual({ note: 'Se om', mediaType: 'tv' });
+  });
+
+  it('reports a failed sibling separately and never as a failed restore', async () => {
+    await mountSeeded([seedDoc(ROW)]);
+    cacheAll();
+    let removed!: RemovedTitle | null;
+    await act(async () => { removed = await removeItemRef!('tv', 1399); });
+    setDoc.mockReset();
+    setDoc.mockImplementation(async (ref: unknown) => {
+      if ((ref as { _path: string })._path.includes('watchlistTags')) throw new Error('permission-denied');
+    });
+
+    let result: { siblingsRestored: boolean } | undefined;
+    await act(async () => { result = await restoreItemRef!(removed!); });
+
+    expect(result).toEqual({ siblingsRestored: false });
+    expect(writesTo('users/u1/watchlist/tv_1399')).toHaveLength(1);
+    expect(writesTo('users/u1/watchlistNotes/tv_1399')).toHaveLength(1);
+    expect(captureError).toHaveBeenCalledWith(expect.any(Error), { scope: 'watchlist', kind: 'restoreItem-sibling' });
+  });
+
+  it('refuses, and writes nothing, when the title was re-added since', async () => {
+    await mountSeeded([seedDoc(ROW)]);
+    cacheAll();
+    let removed!: RemovedTitle | null;
+    await act(async () => { removed = await removeItemRef!('tv', 1399); });
+    // The user added it again as something else before pressing Ångra; the snapshot has it.
+    await act(async () => { snapshotCallback!(snap([seedDoc({ ...ROW, status: 'vill_se' })])); });
+    setDoc.mockClear();
+
+    await act(async () => {
+      await expect(restoreItemRef!(removed!)).rejects.toThrow(/ändrats/);
+    });
+    expect(setDoc).not.toHaveBeenCalled();
+  });
+
+  it('refuses a stale snapshot after a second removal of the same title', async () => {
+    await mountSeeded([seedDoc(ROW)]);
+    cacheAll();
+    let first!: RemovedTitle | null;
+    await act(async () => { first = await removeItemRef!('tv', 1399); });
+    await act(async () => { await removeItemRef!('tv', 1399); });
+    setDoc.mockClear();
+
+    await act(async () => {
+      await expect(restoreItemRef!(first!)).rejects.toThrow(/ändrats/);
+    });
+    expect(setDoc).not.toHaveBeenCalled();
+  });
+
+  it('refuses while the account is being deleted, read when Ångra is pressed', async () => {
+    await mountSeeded([seedDoc(ROW)]);
+    cacheAll();
+    let removed!: RemovedTitle | null;
+    await act(async () => { removed = await removeItemRef!('tv', 1399); });
+    window.localStorage.setItem('binge:deletionStarted:u1', JSON.stringify({ startedAt: 1 }));
+    setDoc.mockClear();
+
+    await act(async () => {
+      await expect(restoreItemRef!(removed!)).rejects.toThrow('binge/deletion-in-progress');
+    });
+    expect(setDoc).not.toHaveBeenCalled();
+  });
+
+  it('a tick right after Ångra, before any snapshot, still reaches the restored row', async () => {
+    await mountSeeded([seedDoc(ROW)]);
+    cacheAll();
+    let removed!: RemovedTitle | null;
+    await act(async () => { removed = await removeItemRef!('tv', 1399); });
+    await act(async () => { await restoreItemRef!(removed!); });
+    setDoc.mockClear();
+
+    // No snapshot has landed, so `items` does not have the row yet. Without the
+    // "exists" mark this un-flagged tick reads the series as absent and writes nothing.
+    await act(async () => { await updateProgressRef!('tv', 1399, 2, 6); });
+
+    expect(writesTo('users/u1/watchlist/tv_1399')).toHaveLength(1);
+    expect(getTVShowLite).not.toHaveBeenCalled();
   });
 });
