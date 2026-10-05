@@ -215,7 +215,7 @@ describe('EventCard — toggle is outside the link (BIN-660)', () => {
     expect(screen.queryByRole('button')).toBeNull();
     expect(cardLink()).toContainElement(screen.getByText('vill se'));
     expect(cardLink().getAttribute('href')).toMatch(/^\/movie\/603\/?$/);
-    expect(cardLink()).toHaveAttribute('aria-label', 'The Matrix · digital release');
+    expect(cardLink()).toHaveAttribute('aria-label', 'The Matrix · digitalt släpp');
   });
 
   it('keeps the card link pointing at the title page', () => {

@@ -44,7 +44,7 @@ const BASELINE: Record<number, ProviderIdentity> = {
   337: { name: 'Disney+', shortName: 'Disney+', aliases: [], isFree: false, isAds: false, tiers: {
     ads: { name: 'Standard med reklam', kind: null }, standard: { name: 'Standard', kind: null }, premium: { name: 'Premium', kind: null },
   } },
-  384: { name: 'Max', shortName: 'HBO', aliases: [1899, 1825], isFree: false, isAds: false, tiers: {
+  384: { name: 'HBO Max', shortName: 'HBO', aliases: [1899, 1825], isFree: false, isAds: false, tiers: {
     ads: { name: 'Basic med reklam', kind: null }, standard: { name: 'Standard', kind: null }, premium: { name: 'Premium', kind: null },
   } },
   76: { name: 'Viaplay', shortName: 'Viaplay', aliases: [], isFree: false, isAds: false, tiers: {

@@ -127,7 +127,7 @@ function stepFromPrimary(action: PrimaryAction, ctx: BuildStepsContext): Step {
       return {
         number: 1,
         title: 'Inget att göra just nu',
-        desc: 'Allt är välbalanserat — vi hör av oss när något ändras.',
+        desc: 'Allt är välbalanserat just nu.',
         active: true,
       };
   }

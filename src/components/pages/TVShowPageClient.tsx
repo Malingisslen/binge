@@ -196,7 +196,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   }, [itemExists, showIdForEffect, showStatus, cachedTmdbStatus, updateTmdbStatus]);
 
   if (isLoading) return <LoadingView variant="detail" label="Laddar serien…" />;
-  if (!show) return <NotFound crumb="Serie" title="Serien hittades inte." body="Vi kunde inte hitta den här serien i TMDB." />;
+  if (!show) return <NotFound crumb="Serie" title="Serien hittades inte." body="Den här serien gick inte att hitta." />;
 
   const poster = posterUrl(show.poster_path, 'w500');
   const tone = toneForGenreIds(show.genres.map(g => g.id));

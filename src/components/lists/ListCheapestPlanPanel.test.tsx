@@ -37,7 +37,7 @@ const basePlan: ListPlan = {
     unavailableCount: 0,
   },
   fullPlan: {
-    serviceIds: [8, 384], // Netflix + Max
+    serviceIds: [8, 384], // Netflix + HBO Max
     monthlyKr: 318,
     streamableCovered: 3,
     rentCount: 1,
@@ -70,7 +70,7 @@ describe('ListCheapestPlanPanel (BIN-416)', () => {
     expect(screen.getByText('Billigaste sättet att se listan')).toBeInTheDocument();
     // Netflix legitimately appears twice: best-single headline + the full bundle.
     expect(screen.getAllByText('Netflix').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('Max')).toBeInTheDocument();
+    expect(screen.getByText('HBO Max')).toBeInTheDocument();
     expect(screen.getByText(/täcker 2 av 3/)).toBeInTheDocument();
     expect(screen.getByText('169 kr/mån')).toBeInTheDocument();
     // Cheapest full bundle + the consolidation saving.

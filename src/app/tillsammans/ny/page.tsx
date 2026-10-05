@@ -160,7 +160,7 @@ function NyContent() {
           />
         </FormSection>
 
-        <FormSection title="Aggregering vid match">
+        <FormSection title="Hur en match väljs">
           <FormRadioGroup
             name="aggregation"
             value={aggregation}
@@ -187,7 +187,7 @@ function NyContent() {
         </FormSection>
 
         {mediaType !== 'movie' && (
-          <FormSection title="Serier — asymmetri">
+          <FormSection title="Serier i olika takt">
             <label className="flex items-center gap-2 text-xs cursor-pointer">
               <input
                 type="checkbox"
@@ -195,7 +195,7 @@ function NyContent() {
                 onChange={e => setAllowAsymmetry(e.target.checked)}
                 className="accent-acc-deep w-[12px] h-[12px]"
               />
-              Tillåt serier med olika avsnittslägen (varning visas)
+              Tillåt serier där ni ligger på olika avsnitt (varning visas)
             </label>
           </FormSection>
         )}
