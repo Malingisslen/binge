@@ -194,7 +194,7 @@ export default function StatusButton({
         className={`px-[10px] py-[3px] border rounded-sm text-xs font-[inherit] cursor-pointer font-semibold disabled:opacity-50 disabled:cursor-default ${
           current
             ? 'bg-acc-deep text-on-acc border-acc-deep'
-            : 'bg-acc-deep text-on-acc border-acc-deep hover:bg-acc-deep/90'
+            : 'bg-acc-deep text-on-acc border-acc-deep hover:bg-acc-deep-hover'
         }`}
       >
         {current ? labelFor(current.status) : '+ Lägg till'}

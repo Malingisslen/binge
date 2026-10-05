@@ -181,7 +181,7 @@ function CalibrationCard({
         </button>
         <button
           onClick={() => onVote('up')}
-          className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-[6px] border border-acc-deep rounded-sm text-xs font-semibold bg-acc-deep text-on-acc cursor-pointer hover:bg-acc-deep/90"
+          className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-[6px] border border-acc-deep rounded-sm text-xs font-semibold bg-acc-deep text-on-acc cursor-pointer hover:bg-acc-deep-hover"
         >
           <ThumbsUp size={12} /> Gillar
         </button>

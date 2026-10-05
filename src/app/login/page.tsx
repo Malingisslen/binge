@@ -158,7 +158,7 @@ export default function LoginPage() {
         <button
           onClick={handleGoogle}
           disabled={loading}
-          className="w-full px-4 py-2 bg-acc-deep text-on-acc border-none rounded-sm cursor-pointer font-[inherit] text-base font-semibold hover:opacity-90 disabled:opacity-50 mb-2"
+          className="w-full px-4 py-2 bg-acc-deep text-on-acc border-none rounded-sm cursor-pointer font-[inherit] text-base font-semibold hover:bg-acc-deep-hover disabled:opacity-50 mb-2"
         >
           Logga in med Google
         </button>
