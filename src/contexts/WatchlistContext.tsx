@@ -14,6 +14,7 @@ import { trackEvent } from '@/lib/analytics';
 import { migrateStatus } from '@/lib/watchStatus.migration';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import { watchlistDocKey } from '@/lib/watchlistDocKey';
+import { buildRestoreWrites, type RemovedTitle } from '@/lib/watchlist/restoreRemoved';
 import { isDeletionStarted } from '@/lib/deletionMarker';
 import { DELETION_IN_PROGRESS, isDeletionInProgressError } from '@/lib/deletionInProgressError';
 import { buildStatusUpdate, normalizeTags, resolveCurrentWatchedAt, shouldStampVisibility, buildAddWrite, outcomeOfAddWrite, type WriteIntent, type TitleWriteOutcome } from '@/lib/watchlistWrites';
@@ -357,7 +358,19 @@ interface WatchlistState {
   // stamp (repopulates a swept-clean doc; keeps a viewed title from being swept).
   refreshTmdbFields: (mediaType: MediaType, tmdbId: number, fields: TmdbDenormFields) => Promise<void>;
   updateTags: (mediaType: MediaType, tmdbId: number, tags: string[]) => Promise<void>;
-  removeItem: (mediaType: MediaType, tmdbId: number) => Promise<void>;
+  /**
+   * Resolves with what was removed, read from the local cache just before the delete, so
+   * the caller can offer "Ångra" (BIN-1430). Null when the row was not in the cache;
+   * the delete happens either way.
+   */
+  removeItem: (mediaType: MediaType, tmdbId: number) => Promise<RemovedTitle | null>;
+  /**
+   * BIN-1430 — puts a removed title back exactly as it was. Rejects, and writes nothing,
+   * when the title was re-added or removed again since, or when the account is being
+   * deleted; resolves `{ siblingsRestored: false }` when the row came back but its tags
+   * or notes did not.
+   */
+  restoreItem: (removed: RemovedTitle) => Promise<{ siblingsRestored: boolean }>;
   getByStatus: (status: WatchStatus, mediaType?: MediaType) => WatchlistItem[];
   getItem: (mediaType: MediaType, tmdbId: number) => WatchlistItem | null;
 }
@@ -388,7 +401,8 @@ const WatchlistContext = createContext<WatchlistState>({
   refreshTmdbFields: async () => {},
   updateTags: async () => {},
   updateVisibility: async () => 'refused',
-  removeItem: async () => {},
+  removeItem: async () => null,
+  restoreItem: async () => ({ siblingsRestored: true }),
   getByStatus: () => [],
   getItem: () => null,
 });
@@ -1564,8 +1578,8 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     }
   }, [uid, items]);
 
-  const removeItem = useCallback(async (mediaType: MediaType, tmdbId: number) => {
-    if (!uid) return;
+  const removeItem = useCallback(async (mediaType: MediaType, tmdbId: number): Promise<RemovedTitle | null> => {
+    if (!uid) return null;
     // BIN-1012 — derived ONCE, for the whole function. Both caches this function
     // invalidates key on `uid:docId`, and until now each rebuilt the formula for itself.
     // That is precisely how a guard goes missing: the two stop being the same key and
@@ -1581,8 +1595,25 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     removalTickRef.current += 1;
     // BIN-965 — bumped in the same synchronous breath, never after an await: the add path
     // reads it to decide whether its write may still go out at all.
-    removalGenRef.current.set(docKey, (removalGenRef.current.get(docKey) ?? 0) + 1);
-    const { db, doc, deleteDoc } = await fsdb();
+    const removalGen = (removalGenRef.current.get(docKey) ?? 0) + 1;
+    removalGenRef.current.set(docKey, removalGen);
+    const { db, doc, deleteDoc, getDocFromCache } = await fsdb();
+    // BIN-1430 — what "Ångra" puts back. Cache only, never the server: all three
+    // collections have live listeners, so the cache holds them, and a server read could
+    // stall the delete behind a slow or absent network. A miss on a sibling means it did
+    // not exist; a miss on the row itself means no undo, never a held or failed delete.
+    const cached = async (path: string): Promise<Record<string, unknown> | null> => {
+      try {
+        const snap = await getDocFromCache(doc(db, 'users', uid, path, docId));
+        return snap.exists() ? snap.data() : null;
+      } catch { return null; }
+    };
+    const [cachedItem, cachedTags, cachedNotes] = await Promise.all([
+      cached('watchlist'), cached('watchlistTags'), cached('watchlistNotes'),
+    ]);
+    const removed: RemovedTitle | null = cachedItem
+      ? { mediaType, tmdbId, docId, removalGen, item: cachedItem, tags: cachedTags, notes: cachedNotes }
+      : null;
     await deleteDoc(doc(db, 'users', uid, 'watchlist', docId));
     // BIN-593: drop it from the live ref immediately — REQUIRED, not defensive.
     // The snapshot echo can take a moment (and this function awaits two more
@@ -1613,6 +1644,60 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     try {
       await deleteDoc(doc(db, 'users', uid, 'watchlistNotes', docId));
     } catch { /* no notes doc for this title — fine */ }
+    return removed;
+  }, [uid]);
+
+  const restoreItem = useCallback(async (removed: RemovedTitle) => {
+    if (!uid) throw new Error('restoreItem: inte inloggad');
+    // The same door writeTitle has (BIN-1025), checked when the write happens rather
+    // than when the toast was shown: a deletion can start in the six seconds between.
+    if (isDeletionStarted(uid)) {
+      throw new Error(`${DELETION_IN_PROGRESS}: kontot håller på att raderas — titeln får inte läggas tillbaka`);
+    }
+    const { mediaType, tmdbId, docId } = removed;
+    const docKey = watchlistDocKey(uid, mediaType, tmdbId);
+    // A plain setDoc overwrites, so it may only go out while nothing newer exists: not a
+    // later removal (the generation moved), and not a re-add since, whether it already
+    // reached the snapshot, was made by a progress tick, or is still in flight.
+    const superseded =
+      (removalGenRef.current.get(docKey) ?? 0) !== removed.removalGen
+      || itemsRef.current.some(i => i.tmdbId === tmdbId && i.mediaType === mediaType)
+      || addedByProgressRef.current.has(docKey)
+      || inFlightAddsRef.current.has(docKey);
+    if (superseded) throw new Error('restoreItem: titeln har ändrats sedan den togs bort');
+
+    const writes = buildRestoreWrites(removed);
+    const { db, doc, setDoc } = await fsdb();
+    const removalTickAtStart = removalTickRef.current;
+    // Registered as an in-flight add for the same reason updateProgress registers one
+    // (BIN-955): a tick on this series while the write is out must wait for it rather
+    // than run a second, full add of its own.
+    const write = setDoc(doc(db, 'users', uid, 'watchlist', docId), writes.item).then(() => true);
+    inFlightAddsRef.current.set(docKey, write);
+    try {
+      await write;
+    } finally {
+      if (inFlightAddsRef.current.get(docKey) === write) inFlightAddsRef.current.delete(docKey);
+    }
+    // The row exists again, which the snapshot may not have said yet. Same mark, same
+    // condition, as the add branch in updateProgress (BIN-954). itemsRef is left to the
+    // snapshot: Firestore reports a local write to its own listener before the server
+    // answers, so that window is far shorter than the one this mark covers.
+    if (removalTickRef.current === removalTickAtStart) addedByProgressRef.current.add(docKey);
+
+    // Best effort, after the write that matters (BIN-1166): a failed sibling is reported
+    // as its own outcome and never turns the restored row into a reported failure.
+    let siblingsRestored = true;
+    for (const [path, data] of [['watchlistTags', writes.tags], ['watchlistNotes', writes.notes]] as const) {
+      if (!data) continue;
+      try {
+        await setDoc(doc(db, 'users', uid, path, docId), data);
+      } catch (err) {
+        siblingsRestored = false;
+        captureError(err, { scope: 'watchlist', kind: 'restoreItem-sibling' });
+      }
+    }
+    return { siblingsRestored };
   }, [uid]);
 
   // BIN-164: write the owner-only tags doc. normalizeTags enforces the per-tag
@@ -1642,8 +1727,8 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   const libraryKnown = isLibraryKnown(snapshotSettled, listenerFailed);
 
   const value = useMemo(() => ({
-    items: itemsWithTags, loading, snapshotSettled, listenerFailed, libraryKnown, retryListener, upsertTitle, logViewing, updateStatus, updateWatchedAt, updateRating, updateNotes, updateProgress, updateTmdbStatus, setRuntime, refreshTmdbFields, updateTags, updateVisibility, removeItem, getByStatus, getItem,
-  }), [itemsWithTags, loading, snapshotSettled, listenerFailed, libraryKnown, retryListener, upsertTitle, logViewing, updateStatus, updateWatchedAt, updateRating, updateNotes, updateProgress, updateTmdbStatus, setRuntime, refreshTmdbFields, updateTags, updateVisibility, removeItem, getByStatus, getItem]);
+    items: itemsWithTags, loading, snapshotSettled, listenerFailed, libraryKnown, retryListener, upsertTitle, logViewing, updateStatus, updateWatchedAt, updateRating, updateNotes, updateProgress, updateTmdbStatus, setRuntime, refreshTmdbFields, updateTags, updateVisibility, removeItem, restoreItem, getByStatus, getItem,
+  }), [itemsWithTags, loading, snapshotSettled, listenerFailed, libraryKnown, retryListener, upsertTitle, logViewing, updateStatus, updateWatchedAt, updateRating, updateNotes, updateProgress, updateTmdbStatus, setRuntime, refreshTmdbFields, updateTags, updateVisibility, removeItem, restoreItem, getByStatus, getItem]);
 
   return (
     <WatchlistContext.Provider value={value}>

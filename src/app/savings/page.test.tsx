@@ -57,6 +57,7 @@ function baseAdvisor(over: Partial<AdvisorResult> = {}): AdvisorResult {
     willSeeByProvider: [],
     monthlySavings: 0,
     totalMonthlyCost: 0,
+    totalMonthlyCostEstimated: false,
     isLoading: false,
     hasError: false,
     hasConfiguredProviders: false,

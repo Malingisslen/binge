@@ -87,7 +87,7 @@ export default function FriendButton({ targetUid }: { targetUid: string }) {
       <span className="inline-flex items-center gap-2">
         <button
           onClick={run('accept', () => acceptFriendRequest(targetUid))}
-          className={`${baseClass} bg-acc-deep text-white border-acc-deep`}
+          className={`${baseClass} bg-acc-deep text-on-acc border-acc-deep`}
           title="De skickade en vänskapsförfrågan"
         >
           Acceptera vän
@@ -107,7 +107,7 @@ export default function FriendButton({ targetUid }: { targetUid: string }) {
     <span className="inline-flex items-center gap-2">
       <button
         onClick={run('send', () => sendFriendRequest(targetUid))}
-        className={`${baseClass} bg-surface text-acc-deep border-acc-deep hover:bg-acc-deep hover:text-white`}
+        className={`${baseClass} bg-surface text-acc-deep border-acc-deep hover:bg-acc-deep hover:text-on-acc`}
       >
         Lägg till vän
       </button>

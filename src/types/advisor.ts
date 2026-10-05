@@ -96,6 +96,8 @@ export interface AdvisorResult {
   willSeeByProvider: WillSeePerProviderRow[];
   monthlySavings: number;
   totalMonthlyCost: number;
+  /** Minst ett belopp i totalMonthlyCost är katalogens listpris, inte användarens eget. */
+  totalMonthlyCostEstimated: boolean;
   isLoading: boolean;
   // true om en eller flera TMDB-queries misslyckades. Widget ska rendera en
   // specifik empty-state istället för att bara visa en blank panel.

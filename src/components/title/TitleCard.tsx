@@ -110,7 +110,7 @@ export default function TitleCard({ item, providers, showNotInterested }: TitleC
                       letterSpacing: 0.04,
                       ...(isFree ? {} : {
                         background: isMine ? 'var(--acc-deep)' : 'oklch(0 0 0 / 0.65)',
-                        color: isMine ? 'white' : 'oklch(0.85 0 0)',
+                        color: isMine ? 'var(--on-acc)' : 'oklch(0.85 0 0)',
                       }),
                     }}
                   >

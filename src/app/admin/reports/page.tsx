@@ -101,7 +101,7 @@ function ReportsDashboard() {
             key={s}
             onClick={() => setActiveTab(s)}
             className={`px-3 py-[4px] text-xs rounded-sm cursor-pointer ${
-              activeTab === s ? 'bg-acc-deep text-white' : 'bg-surface text-ink-2 hover:bg-bg-2'
+              activeTab === s ? 'bg-acc-deep text-on-acc' : 'bg-surface text-ink-2 hover:bg-bg-2'
             }`}
           >
             {REPORT_STATUS_LABELS[s]}
@@ -256,7 +256,7 @@ function ReportRow({
               </button>
               <button
                 onClick={() => onAction(report.id, 'actioned', note)}
-                className="px-3 py-[3px] text-xs bg-acc-deep text-white border-none rounded-sm cursor-pointer"
+                className="px-3 py-[3px] text-xs bg-acc-deep text-on-acc border-none rounded-sm cursor-pointer"
               >
                 Åtgärda
               </button>

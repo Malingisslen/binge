@@ -581,7 +581,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                 await Promise.all(displayItems.filter(i => selected.has(keyOf(i))).map(i => updateStatus(i.mediaType, i.tmdbId, 'vill_se')));
                 setSelected(new Set());
               }}
-              className="px-2 py-[2px] text-xs border-none rounded-sm cursor-pointer bg-acc-deep text-white font-[inherit]"
+              className="px-2 py-[2px] text-xs border-none rounded-sm cursor-pointer bg-acc-deep text-on-acc font-[inherit]"
             >
               Flytta till Vill se
             </button>
@@ -848,7 +848,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                     <PosterProviderDots providers={item.providers} myProviders={user?.myProviders ?? []} />
                     {selectMode && (
                       <span className={`absolute top-1 left-1 z-[1] inline-flex items-center justify-center w-[16px] h-[16px] rounded-sm border ${
-                        isSel ? 'bg-acc-deep border-acc-deep text-white' : 'border-rule bg-surface'
+                        isSel ? 'bg-acc-deep border-acc-deep text-on-acc' : 'border-rule bg-surface'
                       }`}>
                         {isSel && <Check size={11} />}
                       </span>

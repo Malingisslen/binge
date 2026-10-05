@@ -69,7 +69,7 @@ export default function ReviewList({ tmdbId, mediaType, title, posterPath }: Rev
         {uid && !myReview && (
           <button
             onClick={() => setShowForm(true)}
-            className="px-[7px] py-[2px] text-xs rounded-sm cursor-pointer bg-acc-deep text-white border-none font-[inherit]"
+            className="px-[7px] py-[2px] text-xs rounded-sm cursor-pointer bg-acc-deep text-on-acc border-none font-[inherit]"
           >
             Skriv
           </button>
@@ -91,7 +91,7 @@ export default function ReviewList({ tmdbId, mediaType, title, posterPath }: Rev
               <input type="checkbox" checked={spoiler} onChange={e => setSpoiler(e.target.checked)} className="accent-acc-deep" />
               Spoiler
             </label>
-            <button onClick={handleSubmit} className="px-3 py-[3px] text-xs border-none rounded-sm cursor-pointer bg-acc-deep text-white font-[inherit]">
+            <button onClick={handleSubmit} className="px-3 py-[3px] text-xs border-none rounded-sm cursor-pointer bg-acc-deep text-on-acc font-[inherit]">
               Publicera
             </button>
             <button onClick={() => setShowForm(false)} className="px-3 py-[3px] text-xs border border-rule rounded-sm cursor-pointer bg-surface text-ink-3 font-[inherit]">
@@ -293,7 +293,7 @@ function ReviewComments({
             onClick={submit}
             disabled={posting || !text.trim()}
             aria-label="Skicka"
-            className="inline-flex items-center justify-center min-w-[24px] min-h-[24px] px-2 py-1 bg-acc-deep text-white rounded-sm text-xxs cursor-pointer disabled:opacity-50"
+            className="inline-flex items-center justify-center min-w-[24px] min-h-[24px] px-2 py-1 bg-acc-deep text-on-acc rounded-sm text-xxs cursor-pointer disabled:opacity-50"
           >
             <Send size={12} aria-hidden />
           </button>

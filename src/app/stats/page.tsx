@@ -127,7 +127,7 @@ function StatsContent() {
             <div className="flex h-[24px] rounded-sm overflow-hidden mb-2">
               {stats.movies.length > 0 && (
                 <div
-                  className="bg-acc-deep flex items-center justify-center text-white text-xxs font-semibold"
+                  className="bg-acc-deep flex items-center justify-center text-on-acc text-xxs font-semibold"
                   style={{ width: `${stats.moviePct}%` }}
                 >
                   {stats.moviePct > 15 && `${stats.moviePct}%`}
@@ -135,7 +135,7 @@ function StatsContent() {
               )}
               {stats.tvShows.length > 0 && (
                 <div
-                  className="bg-ink-2 flex items-center justify-center text-white text-xxs font-semibold"
+                  className="bg-ink-2 flex items-center justify-center text-bg text-xxs font-semibold"
                   style={{ width: `${100 - stats.moviePct}%` }}
                 >
                   {(100 - stats.moviePct) > 15 && `${100 - stats.moviePct}%`}

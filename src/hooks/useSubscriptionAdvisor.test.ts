@@ -13,6 +13,7 @@ import {
   deriveProviderStatus,
   selectBundleSuggestions,
   CATCHUP_THRESHOLD,
+  isTotalCostEstimated,
 } from './useSubscriptionAdvisor.helpers';
 import {
   detectBundleArbitrage,
@@ -879,5 +880,25 @@ describe('selectBundleSuggestions — advisor bundle-arbitrage wiring (BIN-439)'
     );
     // Empty owned set is deterministic (no ≥2 replacements possible → no suggestion).
     expect(selectBundleSuggestions(true, [], {}, SWEDISH_BUNDLES, NOW)).toEqual([]);
+  });
+});
+
+describe('isTotalCostEstimated — rådgivarens "(uppskattat)" (paket I)', () => {
+  const NOW = new Date(2026, 9, 5);
+  const counted = [
+    makeProvider({ providerId: 8, monthlyCost: 169 }),
+    makeProvider({ providerId: 520, monthlyCost: 0 }),
+  ];
+
+  it('listpriset på en räknad tjänst gör totalen uppskattad', () => {
+    expect(isTotalCostEstimated(counted, {}, NOW)).toBe(true);
+  });
+
+  it('att välja nivå på samma tjänst vänder märket', () => {
+    expect(isTotalCostEstimated(counted, { providerTiers: { 8: 'standard' } }, NOW)).toBe(false);
+  });
+
+  it('en tjänst utanför urvalet (t.ex. pausad) påverkar inte märket', () => {
+    expect(isTotalCostEstimated([makeProvider({ providerId: 520, monthlyCost: 0 })], {}, NOW)).toBe(false);
   });
 });
