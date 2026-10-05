@@ -200,3 +200,52 @@ describe('period metrics read window deltas and floor at 0', () => {
     expect(DATA_RESOLVERS.titlesAdded(d)).toEqual({ kind: 'scalar', value: 0 });
   });
 });
+
+describe('Delning och mätning resolvers', () => {
+  const rollupWith = (activeUsers?: { d7: number; d30: number }): InsightsData['rollup'] => ({
+    computedAt: '', readsUsed: 0, partial: false,
+    totals: { users: 3, titlesTracked: 0, reviews: 0, activeSessions: 0, groups: 0 },
+    ...(activeUsers ? { activeUsers } : {}),
+    statusDistribution: { vill_se: 0, mina: 0, sedd: 0, avbruten: 0 },
+    mediaTypeSplit: { movie: 0, tv: 0 },
+    ratingsHistogram: [], topTitles: [], topProviders: [], topGenres: [],
+  });
+  const plausibleWith = (over: Partial<NonNullable<InsightsData['plausible']>>): InsightsData['plausible'] => ({
+    visitors: 0, pageviews: 0, avgVisitDurationSec: 0, bounceRatePct: 0,
+    visitorsTimeseries: [], topPages: [], topReferrers: [],
+    goals: { signed_up: 0, title_added_watchlist: 0, review_created: 0, advisor_pause_taken: 0, donate_clicked: 0 },
+    signupsTimeseries: [], onboardingFunnel: [], signinMethodSplit: { google: 0, email: 0 },
+    ...over,
+  });
+
+  it('active users read the rollup snapshot, and are NaN on a rollup written before the field', () => {
+    const d = emptyData({ rollup: rollupWith({ d7: 2, d30: 3 }) });
+    expect(DATA_RESOLVERS.activeUsers7d(d)).toEqual({ kind: 'scalar', value: 2 });
+    expect(DATA_RESOLVERS.activeUsers30d(d)).toEqual({ kind: 'scalar', value: 3 });
+    expect(DATA_RESOLVERS.activeUsers7d(emptyData({ rollup: rollupWith() }))).toEqual({ kind: 'scalar', value: NaN });
+  });
+
+  it('providerClicks is NaN when the deployed function predates the event', () => {
+    expect(DATA_RESOLVERS.providerClicks(emptyData({ plausible: plausibleWith({}) }))).toEqual({ kind: 'scalar', value: NaN });
+    const d = emptyData({ plausible: plausibleWith({ goals: { signed_up: 0, title_added_watchlist: 0, review_created: 0, advisor_pause_taken: 0, donate_clicked: 0, provider_clicked: 7 } }) });
+    expect(DATA_RESOLVERS.providerClicks(d)).toEqual({ kind: 'scalar', value: 7 });
+  });
+
+  it('providerClicksByType labels offer types in Swedish, largest first', () => {
+    const d = emptyData({ plausible: plausibleWith({ providerClicksByType: { rent: 2, subscription: 9 } }) });
+    expect(DATA_RESOLVERS.providerClicksByType(d)).toEqual({
+      kind: 'breakdown',
+      entries: [{ label: 'Abonnemang', value: 9 }, { label: 'Hyra', value: 2 }],
+    });
+  });
+
+  it('signupLandingPages shows sign-ups per entry page next to that page’s visits', () => {
+    const d = emptyData({
+      plausible: plausibleWith({ signupLandingPages: [{ page: '/movie/27205/', signups: 2, visitors: 40 }, { page: '/', signups: 1, visitors: 0 }] }),
+    });
+    expect(DATA_RESOLVERS.signupLandingPages(d)).toEqual({
+      kind: 'breakdown',
+      entries: [{ label: '/movie/27205/ · av 40 besök', value: 2 }, { label: '/', value: 1 }],
+    });
+  });
+});
