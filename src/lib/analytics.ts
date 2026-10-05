@@ -61,7 +61,14 @@ export type AnalyticsEvent =
   // Betyg satt via stjärn-toasten som dyker upp när en titel markeras sedd —
   // mäter om "betygsätt direkt"-nudgen faktiskt höjer betygsfrekvensen.
   | { name: 'rate_on_sedd'; props: { mediaType: 'movie' | 'tv' } }
-  | { name: 'error_boundary_triggered'; props: { scope: string } };
+  | { name: 'error_boundary_triggered'; props: { scope: string } }
+  // Delningsknappen på titel, lista och profil. method skiljer telefonens
+  // delningsark från kopiering, så vi ser om Web Share faktiskt används.
+  | { name: 'share_clicked'; props: { surface: 'title' | 'list' | 'profile'; method: 'native' | 'copy' } }
+  // Klick ut till en tjänst (Netflix, SF Anytime …) från titelsidan — tratten
+  // slutar här, så det är det mest värdefulla steget att räkna. providerId är
+  // det kanoniska id:t, offerType är erbjudandets typ ur streamingOffers.
+  | { name: 'provider_clicked'; props: { providerId: number; offerType: 'subscription' | 'rent' | 'buy' | 'free'; mediaType: 'movie' | 'tv' } };
 
 export function trackEvent<T extends AnalyticsEvent['name']>(
   name: T,
