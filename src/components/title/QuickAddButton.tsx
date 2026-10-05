@@ -9,7 +9,7 @@ import { useClickOutside } from '@/hooks/useClickOutside';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useToast } from '@/contexts/ToastContext';
 import { statusLabel, statusMenuLabel, statusOptionsFor } from '@/lib/watchStatus';
-import { clearEpisodeProgress } from '@/lib/firebase/episodeProgress';
+import { useRemoveWithUndo } from '@/hooks/useRemoveWithUndo';
 import { buildWatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
 import { useSignedOutRedirect } from '@/hooks/useSignedOutRedirect';
 import { LIBRARY_UNAVAILABLE } from './libraryHold';
@@ -38,7 +38,8 @@ export default function QuickAddButton({
   // would read as "signed out" forever for that user — handing them a login
   // round trip on every tap.
   const signedOut = !authLoading && uid == null;
-  const { getItem, upsertTitle, removeItem, listenerFailed, libraryKnown } = useWatchlist();
+  const { getItem, upsertTitle, listenerFailed, libraryKnown } = useWatchlist();
+  const removeWithUndo = useRemoveWithUndo();
   // BIN-596: the OTHER half of the gate. `loading` from useWatchlist() cannot be
   // used here — it goes false both when the first snapshot lands and when the
   // listener dies, and a dead listener is not an empty library: writing then
@@ -99,25 +100,10 @@ export default function QuickAddButton({
     setOpen(false);
     // Same gate, same reason: no delete, and therefore no "borttagen" toast.
     if (signedOut || authLoading || !libraryKnown) return;
-    // Serie med påbörjad historik: per-avsnitt-historiken sparas medvetet
-    // (återtillägg återupptar där man var) — säg det och erbjud full
-    // rensning. Se clearEpisodeProgress + docs/data-retention-policy.md.
     const ownerUid = uid;
     const hadProgress =
       mediaType === 'tv' && ownerUid != null && current?.lastWatchedSeason != null;
-    void removeItem(mediaType, tmdbId);
-    if (hadProgress && ownerUid) {
-      toast(`${title} borttagen. Avsnittshistoriken sparas.`, {
-        label: 'Rensa helt',
-        onClick: () => {
-          void clearEpisodeProgress(ownerUid, tmdbId)
-            .then(() => toast('Historiken rensad.'))
-            .catch(() => toast('Kunde inte rensa historiken. Försök igen om en stund.'));
-        },
-      });
-    } else {
-      toast(`${title} borttagen`);
-    }
+    removeWithUndo({ mediaType, tmdbId, title, progressOwnerUid: hadProgress ? ownerUid : null });
   }
 
   // Also the aria-label: title= never renders on touch (BIN-596 above).
@@ -168,8 +154,8 @@ export default function QuickAddButton({
         disabled={authLoading || (!signedOut && !libraryKnown && !listenerFailed)}
         className={`w-[28px] h-[28px] md:w-[24px] md:h-[24px] rounded-sm flex items-center justify-center border-none cursor-pointer disabled:opacity-50 disabled:cursor-default ${
           current
-            ? 'bg-acc-deep text-white'
-            : 'bg-black/60 text-white hover:bg-acc-deep'
+            ? 'bg-acc-deep text-on-acc'
+            : 'bg-black/60 text-white hover:bg-acc-deep hover:text-on-acc'
         }`}
         title={buttonLabel}
         aria-label={buttonLabel}

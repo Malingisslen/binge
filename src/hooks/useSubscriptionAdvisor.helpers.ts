@@ -7,6 +7,7 @@ import { isEndedStatus } from '@/lib/airingState';
 import { detectBundleArbitrage } from '@/lib/advisor/bundleArbitrage';
 import type { SwedishBundle, BundleSuggestion } from '@/lib/advisor/bundleArbitrage';
 import type { CampaignCostSettings } from '@/lib/advisor/effectiveCost';
+import { isEstimatedMonthlyCost } from '@/lib/advisor/costEstimate';
 
 // Hoistad till lib/calendar/nextAir (instant week 2026-07) — re-exporteras
 // här så befintliga imports + tester fortsätter fungera oförändrat.
@@ -324,4 +325,14 @@ export function selectBundleSuggestions(
   detect: typeof detectBundleArbitrage = detectBundleArbitrage,
 ): BundleSuggestion[] {
   return enabled ? detect(ownedProviderIds, costSettings, bundles, now) : [];
+}
+
+// Paket I (2026-10-05): "(uppskattat)" på rådgivarens total. Anroparen skickar
+// exakt de rader som summeras, så märket och summan kan inte avse olika urval.
+export function isTotalCostEstimated(
+  countedInTotal: Pick<ProviderAdvisory, 'providerId' | 'monthlyCost'>[],
+  settings: CampaignCostSettings,
+  now: Date,
+): boolean {
+  return countedInTotal.some(p => (p.monthlyCost ?? 0) > 0 && isEstimatedMonthlyCost(p.providerId, settings, now));
 }

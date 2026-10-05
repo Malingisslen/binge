@@ -56,7 +56,7 @@ function GrupperList() {
           <p className="text-sm text-ink-2 mb-3">Du är inte med i några grupper än.</p>
           <Link
             href="/grupper/ny"
-            className="inline-flex items-center gap-1 px-3 py-[5px] bg-acc-deep text-white rounded-sm text-xs font-semibold no-underline"
+            className="inline-flex items-center gap-1 px-3 py-[5px] bg-acc-deep text-on-acc rounded-sm text-xs font-semibold no-underline"
           >
             <Plus size={11} />
             Skapa din första grupp
@@ -246,7 +246,7 @@ function InviteRow({
         <button
           onClick={onAccept}
           disabled={busy || blocked !== null}
-          className="px-2 py-[2px] text-xxs border border-acc-deep bg-acc-deep text-white rounded-sm cursor-pointer font-[inherit] disabled:opacity-60"
+          className="px-2 py-[2px] text-xxs border border-acc-deep bg-acc-deep text-on-acc rounded-sm cursor-pointer font-[inherit] disabled:opacity-60"
         >
           Acceptera
         </button>

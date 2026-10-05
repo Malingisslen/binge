@@ -26,6 +26,7 @@ import {
   advisorTmdbIds,
   deriveProviderStatus,
   selectBundleSuggestions,
+  isTotalCostEstimated,
 } from './useSubscriptionAdvisor.helpers';
 import type {
   TMDBTVShow, AdvisedShow, ProviderAdvisory, SubscribeAdvisory, AdvisorResult,
@@ -128,6 +129,7 @@ export function useSubscriptionAdvisor(
         willSeeByProvider: [] as WillSeePerProviderRow[],
         monthlySavings: 0,
         totalMonthlyCost: 0,
+        totalMonthlyCostEstimated: false,
         primaryAction: { kind: 'idle', nextCheckDate: null } satisfies PrimaryAction,
         secondaryAction: null as Extract<PrimaryAction, { kind: 'catchup' }> | null,
         activePauses: [] as ActivePause[],
@@ -145,6 +147,7 @@ export function useSubscriptionAdvisor(
         willSeeByProvider: [] as WillSeePerProviderRow[],
         monthlySavings: 0,
         totalMonthlyCost: 0,
+        totalMonthlyCostEstimated: false,
         primaryAction: { kind: 'idle', nextCheckDate: null } satisfies PrimaryAction,
         secondaryAction: null as Extract<PrimaryAction, { kind: 'catchup' }> | null,
         activePauses: [] as ActivePause[],
@@ -382,9 +385,10 @@ export function useSubscriptionAdvisor(
       .filter(p => p.status === 'pause' && !userPausedSet.has(p.providerId))
       .reduce((sum, p) => sum + (p.monthlyCost ?? 0), 0);
 
-    const totalMonthlyCost = providerAdvisories
-      .filter(p => !userPausedSet.has(p.providerId))
-      .reduce((sum, p) => sum + (p.monthlyCost ?? 0), 0);
+    const countedInTotal = providerAdvisories.filter(p => !userPausedSet.has(p.providerId));
+    const totalMonthlyCost = countedInTotal.reduce((sum, p) => sum + (p.monthlyCost ?? 0), 0);
+    const totalMonthlyCostEstimated = isTotalCostEstimated(
+      countedInTotal, { providerTiers, providerCosts, providerCampaigns }, now);
 
     // tmdbIds där användaren har osedda aireade avsnitt (= "behind").
     // Använder den råa TMDB-datan via showsByTmdbId — det här är vår enda
@@ -492,6 +496,7 @@ export function useSubscriptionAdvisor(
       willSeeByProvider,
       monthlySavings,
       totalMonthlyCost,
+      totalMonthlyCostEstimated,
       primaryAction,
       secondaryAction,
       activePauses,
