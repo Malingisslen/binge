@@ -104,7 +104,7 @@ export default function SeasonEpisodePanel({
         {!allWatched && airedCount > 0 && (
           <button
             onClick={() => markSeasonWatched(seasonNumber, episodes.length)}
-            className="min-h-[28px] px-[10px] py-[3px] rounded-sm text-xxs font-semibold border-none cursor-pointer bg-acc-deep text-white"
+            className="min-h-[28px] px-[10px] py-[3px] rounded-sm text-xxs font-semibold border-none cursor-pointer bg-acc-deep text-on-acc"
           >
             Markera alla sedda
           </button>

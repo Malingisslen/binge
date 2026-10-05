@@ -40,7 +40,7 @@ function ListsContent() {
         actions={
           <button
             onClick={() => setShowForm(true)}
-            className="px-3 py-[3px] border-none rounded-sm text-xs font-[inherit] cursor-pointer bg-acc-deep text-white"
+            className="px-3 py-[3px] border-none rounded-sm text-xs font-[inherit] cursor-pointer bg-acc-deep text-on-acc"
           >
             Skapa ny lista
           </button>
@@ -69,7 +69,7 @@ function ListsContent() {
               <input type="checkbox" checked={isPublic} onChange={e => setIsPublic(e.target.checked)} className="accent-acc-deep" />
               Publik
             </label>
-            <button onClick={handleCreate} className="px-3 py-[3px] text-xs border-none rounded-sm cursor-pointer bg-acc-deep text-white font-[inherit]">
+            <button onClick={handleCreate} className="px-3 py-[3px] text-xs border-none rounded-sm cursor-pointer bg-acc-deep text-on-acc font-[inherit]">
               Skapa
             </button>
             <button onClick={() => setShowForm(false)} className="px-3 py-[3px] text-xs border border-rule rounded-sm cursor-pointer bg-surface text-ink-3 font-[inherit]">

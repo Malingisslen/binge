@@ -111,7 +111,7 @@ export default function ListPageClient({ listId }: { listId: string }) {
         actions={canEdit && !showPicker ? (
           <button
             onClick={() => setShowPicker(true)}
-            className="inline-flex items-center gap-1 px-3 py-[3px] border-none rounded-sm text-xs font-[inherit] cursor-pointer bg-acc-deep text-white shrink-0"
+            className="inline-flex items-center gap-1 px-3 py-[3px] border-none rounded-sm text-xs font-[inherit] cursor-pointer bg-acc-deep text-on-acc shrink-0"
           >
             <Plus size={12} /> Lägg till titel
           </button>

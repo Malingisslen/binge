@@ -154,8 +154,8 @@ export default function QuickAddButton({
         disabled={authLoading || (!signedOut && !libraryKnown && !listenerFailed)}
         className={`w-[28px] h-[28px] md:w-[24px] md:h-[24px] rounded-sm flex items-center justify-center border-none cursor-pointer disabled:opacity-50 disabled:cursor-default ${
           current
-            ? 'bg-acc-deep text-white'
-            : 'bg-black/60 text-white hover:bg-acc-deep'
+            ? 'bg-acc-deep text-on-acc'
+            : 'bg-black/60 text-white hover:bg-acc-deep hover:text-on-acc'
         }`}
         title={buttonLabel}
         aria-label={buttonLabel}

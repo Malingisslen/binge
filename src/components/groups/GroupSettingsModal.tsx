@@ -175,7 +175,7 @@ export function GroupSettingsModal({
           <button
             onClick={save}
             disabled={saving}
-            className="px-3 py-[5px] bg-acc-deep text-white rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
+            className="px-3 py-[5px] bg-acc-deep text-on-acc rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
           >
             {saving ? 'Sparar…' : 'Spara'}
           </button>

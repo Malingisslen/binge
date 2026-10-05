@@ -199,7 +199,7 @@ function RequestRow({ request }: { request: FriendRequest }) {
         <div className="flex gap-1">
           <button
             onClick={run('accept', () => acceptFriendRequest(request.fromUid))}
-            className="px-2 py-[2px] text-xxs border border-acc-deep bg-acc-deep text-white rounded-sm cursor-pointer font-[inherit]"
+            className="px-2 py-[2px] text-xxs border border-acc-deep bg-acc-deep text-on-acc rounded-sm cursor-pointer font-[inherit]"
           >
             Acceptera
           </button>
@@ -245,7 +245,7 @@ function Row({ user, tab }: { user: FollowListUser; tab: Tab }) {
           className={`px-2 py-[2px] text-xxs border rounded-sm cursor-pointer font-[inherit] ${
             iAmFollowing
               ? 'bg-surface text-ink-2 border-rule hover:bg-bg-2'
-              : 'bg-acc-deep text-white border-acc-deep'
+              : 'bg-acc-deep text-on-acc border-acc-deep'
           }`}
         >
           {iAmFollowing
