@@ -117,7 +117,7 @@ export default function RecommendationsExpanded({ rowKeyParam }: Props) {
             onClick={() => setFilters(f => ({ ...f, mediaType: t.value }))}
             aria-pressed={filters.mediaType === t.value}
             className={`appearance-none border-none px-[7px] py-[2px] text-xs rounded-sm cursor-pointer ${
-              filters.mediaType === t.value ? 'bg-acc-deep text-white' : 'bg-transparent text-ink-3'
+              filters.mediaType === t.value ? 'bg-acc-deep text-on-acc' : 'bg-transparent text-ink-3'
             }`}
           >
             {t.label}

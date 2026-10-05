@@ -21,7 +21,7 @@
   /* ink */
   --ink:       oklch(0.18 0.006 80);
   --ink-2:     oklch(0.42 0.008 80);
-  --ink-3:     oklch(0.60 0.010 80);
+  --ink-3:     oklch(0.53 0.010 80);
 
   /* rules */
   --rule:      oklch(0.88 0.006 80);
@@ -30,8 +30,12 @@
 
   /* saffran — live / now / decisive */
   --acc:       oklch(0.72 0.14 75);
-  --acc-deep:  oklch(0.55 0.13 70);
+  --acc-deep:  oklch(0.53 0.13 70);
   --acc-soft:  oklch(0.955 0.04 75);
+  /* on-acc — text ovanpå en acc-deep-fyllning (CTA, valda flikar, "nu"-märken).
+     Vit i ljust läge; i mörkt läge mörk, eftersom samma acc-deep också bär
+     länktext mot den mörka sidan och inte kan vara mörk nog för vit text. */
+  --on-acc:    oklch(1 0 0);
 
   /* plum — today / picker / time-position */
   --cal-deep:  oklch(0.48 0.11 300);
@@ -60,7 +64,7 @@
      avsnitts-bock). Enda definitionskällan (BIN-324): var tidigare en rå
      oklch-literal hårdkodad på flera ställen + i tailwind.config.ts. Speglas
      som Tailwind-token `season-done`. */
-  --season-done: oklch(0.55 0.13 145);
+  --season-done: oklch(0.52 0.13 145);
 
   /* duotone palette — one per genre/category */
   --duo-terra:   oklch(0.62 0.08 30);
@@ -101,10 +105,11 @@
   --rule-2:    oklch(0.28 0.005 80);
   --placeholder-fill: oklch(0.30 0.015 80);
 
-  /* saffran — fyllningen kontrasterar mot mörk bg; vit text på acc-deep håller */
+  /* saffran */
   --acc:       oklch(0.74 0.14 75);
-  --acc-deep:  oklch(0.60 0.14 72);
-  --acc-soft:  oklch(0.32 0.06 72);
+  --acc-deep:  oklch(0.64 0.14 72);
+  --acc-soft:  oklch(0.24 0.05 72);
+  --on-acc:    oklch(0.17 0.006 80);
 
   /* plum */
   --cal-deep:  oklch(0.62 0.12 300);
@@ -455,7 +460,7 @@ button { font: inherit; cursor: pointer; }
   top: -2px; right: -3px;
   min-width: 14px; height: 14px;
   background: var(--acc-deep);
-  color: white;
+  color: var(--on-acc);
   border-radius: 999px;
   font-family: var(--mono);
   font-size: 9px;
@@ -662,9 +667,9 @@ button { font: inherit; cursor: pointer; }
 .btn-acc {
   background: var(--acc-deep);
   border-color: var(--acc-deep);
-  color: white;
+  color: var(--on-acc);
 }
-.btn-acc:hover { background: oklch(0.50 0.13 70); border-color: oklch(0.50 0.13 70); }
+.btn-acc:hover { background: color-mix(in oklch, var(--acc-deep) 90%, black); border-color: color-mix(in oklch, var(--acc-deep) 90%, black); }
 .btn.btn-sm,
 .btn-sm { padding: 5px 10px; font-size: 12.5px; }
 .btn.btn-danger,
@@ -949,7 +954,7 @@ button { font: inherit; cursor: pointer; }
 }
 .focal .badge-stack .b.live {
   background: var(--acc-deep);
-  color: white;
+  color: var(--on-acc);
 }
 .focal .body {
   padding: 20px 24px 22px;

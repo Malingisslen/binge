@@ -55,7 +55,7 @@ export default function SeenPosterCard({
             style={{
               position: 'absolute', top: 6, right: 6,
               width: 22, height: 22, borderRadius: 999,
-              background: 'var(--acc-deep)', color: 'white',
+              background: 'var(--acc-deep)', color: 'var(--on-acc)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}
           >

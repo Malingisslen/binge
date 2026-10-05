@@ -210,7 +210,7 @@ function StepWelcome({ onNext }: { onNext: () => void }) {
       </ul>
       <button
         onClick={onNext}
-        className="inline-flex items-center gap-2 px-4 py-2 bg-acc-deep text-white rounded-sm text-sm font-semibold cursor-pointer"
+        className="inline-flex items-center gap-2 px-4 py-2 bg-acc-deep text-on-acc rounded-sm text-sm font-semibold cursor-pointer"
       >
         Börja <ArrowRight size={14} />
       </button>
@@ -307,7 +307,7 @@ function StepProviders({ onBack, onNext }: { onBack: () => void; onNext: () => v
         <button
           onClick={save}
           disabled={saving}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-acc-deep text-white rounded-sm text-sm font-semibold cursor-pointer disabled:opacity-50"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-acc-deep text-on-acc rounded-sm text-sm font-semibold cursor-pointer disabled:opacity-50"
         >
           {saving ? 'Sparar…' : 'Nästa'} <ArrowRight size={14} />
         </button>
@@ -466,7 +466,7 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
                     <button
                       onClick={() => handleAdd(r, 'engage')}
                       disabled={!libraryKnown}
-                      className="text-xxs px-2 py-[3px] bg-acc-deep text-white rounded-sm cursor-pointer disabled:opacity-50"
+                      className="text-xxs px-2 py-[3px] bg-acc-deep text-on-acc rounded-sm cursor-pointer disabled:opacity-50"
                     >
                       Följ
                     </button>
@@ -482,7 +482,7 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
                       <button
                         onClick={() => handleAdd(r, 'engage')}
                         disabled={!libraryKnown}
-                        className="text-xxs px-2 py-[3px] bg-acc-deep text-white rounded-sm cursor-pointer disabled:opacity-50"
+                        className="text-xxs px-2 py-[3px] bg-acc-deep text-on-acc rounded-sm cursor-pointer disabled:opacity-50"
                       >
                         Sedd
                       </button>
@@ -532,7 +532,7 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
         <button
           onClick={onNext}
           disabled={!canContinue}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-acc-deep text-white rounded-sm text-sm font-semibold cursor-pointer disabled:opacity-50"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-acc-deep text-on-acc rounded-sm text-sm font-semibold cursor-pointer disabled:opacity-50"
         >
           Nästa <ArrowRight size={14} />
         </button>
@@ -587,7 +587,7 @@ function StepDone({
           <button
             onClick={() => onFinish('/kalibrera/')}
             disabled={saving}
-            className="inline-flex items-center gap-1 px-3 py-[5px] bg-acc-deep text-white rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
+            className="inline-flex items-center gap-1 px-3 py-[5px] bg-acc-deep text-on-acc rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
           >
             <Target size={11} /> Kalibrera smak
           </button>
@@ -612,7 +612,7 @@ function StepDone({
         <button
           onClick={() => onFinish()}
           disabled={saving}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-acc-deep text-white rounded-sm text-sm font-semibold cursor-pointer disabled:opacity-50"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-acc-deep text-on-acc rounded-sm text-sm font-semibold cursor-pointer disabled:opacity-50"
         >
           {saving ? 'Sparar…' : 'Klar'} <ArrowRight size={14} />
         </button>

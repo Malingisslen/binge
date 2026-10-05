@@ -127,7 +127,7 @@ function StatsContent() {
             <div className="flex h-[24px] rounded-sm overflow-hidden mb-2">
               {stats.movies.length > 0 && (
                 <div
-                  className="bg-acc-deep flex items-center justify-center text-white text-xxs font-semibold"
+                  className="bg-acc-deep flex items-center justify-center text-on-acc text-xxs font-semibold"
                   style={{ width: `${stats.moviePct}%` }}
                 >
                   {stats.moviePct > 15 && `${stats.moviePct}%`}

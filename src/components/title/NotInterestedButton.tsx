@@ -38,7 +38,7 @@ export default function NotInterestedButton({ tmdbId, mediaType, title, variant 
         aria-label={marked ? 'Visa i rekommendationer igen' : 'Inte intresserad'}
         className={`flex items-center justify-center w-5 h-5 rounded-sm border cursor-pointer ${
           marked
-            ? 'bg-acc-deep text-white border-acc-deep'
+            ? 'bg-acc-deep text-on-acc border-acc-deep'
             : 'bg-black/65 text-white border-black/30 hover:bg-black/80'
         }`}
       >

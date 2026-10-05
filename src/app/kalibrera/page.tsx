@@ -113,7 +113,7 @@ function KalibreraContent() {
           <button
             onClick={submit}
             disabled={saving}
-            className="px-3 py-[5px] bg-acc-deep text-white rounded-sm text-xs font-semibold cursor-pointer border-none disabled:opacity-50"
+            className="px-3 py-[5px] bg-acc-deep text-on-acc rounded-sm text-xs font-semibold cursor-pointer border-none disabled:opacity-50"
           >
             {saving ? 'Sparar…' : 'Spara och gå till startsidan'}
           </button>
@@ -181,7 +181,7 @@ function CalibrationCard({
         </button>
         <button
           onClick={() => onVote('up')}
-          className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-[6px] border border-acc-deep rounded-sm text-xs font-semibold bg-acc-deep text-white cursor-pointer hover:bg-acc-deep/90"
+          className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-[6px] border border-acc-deep rounded-sm text-xs font-semibold bg-acc-deep text-on-acc cursor-pointer hover:bg-acc-deep/90"
         >
           <ThumbsUp size={12} /> Gillar
         </button>

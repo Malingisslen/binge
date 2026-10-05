@@ -91,12 +91,12 @@ const PILL_BASE = 'text-xxs font-semibold px-[7px] py-[2px] rounded-sm whitespac
 
 function pillClass(pill: DatePill): string {
   if (pill.isToday) {
-    return `${PILL_BASE} bg-acc-deep text-white border border-acc-deep hover:bg-acc-deep`;
+    return `${PILL_BASE} bg-acc-deep text-on-acc border border-acc-deep hover:bg-acc-deep`;
   }
   if (pill.isFinale) {
     // Finale-pill: utlinad i accent så slutavsnitt sticker ut utan att
     // konkurrera med "Idag" som är den enda fyllda orange pillen.
-    return `${PILL_BASE} bg-surface text-acc-deep border border-acc-deep hover:bg-acc-deep hover:text-white`;
+    return `${PILL_BASE} bg-surface text-acc-deep border border-acc-deep hover:bg-acc-deep hover:text-on-acc`;
   }
   return `${PILL_BASE} bg-bg-2 text-ink-2 border border-rule hover:border-acc-deep hover:text-acc-deep`;
 }

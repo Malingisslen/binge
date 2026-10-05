@@ -189,7 +189,7 @@ export default function QuickRateModal({ open, onClose }: Props) {
           </div>
         )}
         <footer className="p-3 border-t border-rule flex justify-end sticky bottom-0 bg-surface">
-          <button onClick={onClose} disabled={rated.size < MIN_QUICK_RATES} className="bg-acc-deep text-white text-xs px-4 py-2 rounded-sm disabled:opacity-50">
+          <button onClick={onClose} disabled={rated.size < MIN_QUICK_RATES} className="bg-acc-deep text-on-acc text-xs px-4 py-2 rounded-sm disabled:opacity-50">
             Klar ({rated.size}/{MIN_QUICK_RATES})
           </button>
         </footer>

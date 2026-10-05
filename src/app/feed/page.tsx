@@ -182,7 +182,7 @@ function FeedContent() {
             </div>
           </div>
           <div className="text-center">
-            <Link href="/search" className="inline-block px-3 py-[5px] bg-acc-deep text-white border-none rounded-sm text-xs font-semibold no-underline">
+            <Link href="/search" className="inline-block px-3 py-[5px] bg-acc-deep text-on-acc border-none rounded-sm text-xs font-semibold no-underline">
               Sök användare att följa
             </Link>
             {user?.username && (

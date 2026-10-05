@@ -91,7 +91,7 @@ function LandingPage({ trending }: { trending?: React.ReactNode }) {
               // back out by LoginPage's own uid effect.
               goToLogin();
             }}
-            className="px-5 py-[7px] bg-acc-deep text-white border-none rounded-sm cursor-pointer font-[inherit] text-sm font-semibold mb-8"
+            className="px-5 py-[7px] bg-acc-deep text-on-acc border-none rounded-sm cursor-pointer font-[inherit] text-sm font-semibold mb-8"
           >
             Logga in med Google
           </button>
