@@ -7,6 +7,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { getTVShowLite, getTVSeason, getMovieLite } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import { buildCalendarEntries, buildMovieEntries } from '@/lib/calendar/buildEntries';
+import { needsSeasonFetch } from '@/lib/calendar/seasonFetch';
 import { collectNextAirUpdates, flushNextAirWrites } from '@/lib/watchlist/nextAirReadRepair';
 import type { TMDBTVShow, TMDBMovie } from '@/types';
 
@@ -76,13 +77,18 @@ export function useCalendarEntries(opts: { enabled?: boolean } = {}): UseCalenda
   const showsPending = tmdbIds.length > 0 && showQueries.some(q => q.isPending);
   const showsNotStartedYet = tmdbIds.length > 0 && showQueries.length === 0;
 
-  const seasonSpecs = useMemo(() => {
+  // PERF-1: alla visade serier bidrar med show-nivåns seeds, men bara de som kan ha
+  // avsnitt i fönstret (needsSeasonFetch) får en säsongsfråga.
+  const showSpecs = useMemo(() => {
+    const now = new Date();
     return shows.map(show => ({
       showId: show.id,
       seasonNum: show.next_episode_to_air?.season_number ?? show.number_of_seasons,
       show,
+      fetchSeason: needsSeasonFetch(show, now),
     }));
   }, [shows]);
+  const seasonSpecs = useMemo(() => showSpecs.filter(s => s.fetchSeason), [showSpecs]);
 
   // KRITISKT: individuella useQueries per (show, season) istället för en
   // batchad query med joined queryKey. Den gamla varianten hade en queryKey
@@ -105,13 +111,12 @@ export function useCalendarEntries(opts: { enabled?: boolean } = {}): UseCalenda
   // Slå ihop spec + season-data per index. Filtrera bort failade fetches
   // genom att behålla undefined-season men hoppa över i entries-byggare.
   const seasonData = useMemo(
-    () =>
-      seasonSpecs.map((spec, i) => ({
-        ...spec,
-        season: seasonQueries[i]?.data ?? null,
-      })),
+    () => {
+      const byShow = new Map(seasonSpecs.map((spec, i) => [spec.showId, seasonQueries[i]?.data ?? null]));
+      return showSpecs.map(spec => ({ ...spec, season: byShow.get(spec.showId) ?? null }));
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [seasonSpecs, seasonQueries.map(q => q.dataUpdatedAt).join(',')]
+    [showSpecs, seasonSpecs, seasonQueries.map(q => q.dataUpdatedAt).join(',')]
   );
 
   const seasonsPending =

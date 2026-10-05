@@ -78,12 +78,15 @@ vi.mock('@/lib/sentry', () => ({
 // TVÅ subscriptions (watchlist + watchlistTags) — routa på collection-path så
 // `snapshotCallback` fortsatt driver watchlist-items (tags-callbacken separat).
 let snapshotCallback: ((snap: { size: number; docs: { data: () => Record<string, unknown> }[] }) => void) | null = null;
-let tagsSnapshotCallback: ((snap: { size: number; docs: { id: string; data: () => Record<string, unknown> }[] }) => void) | null = null;
+let tagsSnapshotCallback: ((snap: { size: number; docs: { id: string; data: () => Record<string, unknown> }[]; metadata?: { fromCache: boolean } }) => void) | null = null;
 // BIN-505: third subscription — per-title notes (watchlistNotes). Routed separately
 // so it doesn't clobber the watchlist items callback.
-let notesSnapshotCallback: ((snap: { size: number; docs: { id: string; data: () => Record<string, unknown> }[] }) => void) | null = null;
+let notesSnapshotCallback: ((snap: { size: number; docs: { id: string; data: () => Record<string, unknown> }[]; metadata?: { fromCache: boolean } }) => void) | null = null;
 // BIN-601: the watchlist listener's terminal-error callback.
 let snapshotErrorCallback: (() => void) | null = null;
+// COST-2: the tags/notes listeners' error callbacks.
+let tagsErrorCallback: (() => void) | null = null;
+let notesErrorCallback: (() => void) | null = null;
 // BIN-755: how many watchlist listens have been opened, and how many torn down.
 // "Försök igen" (retryListener) claims to open a FRESH subscription for the same
 // uid; re-assigning `snapshotCallback` proves nothing on its own, because the
@@ -108,17 +111,22 @@ vi.mock('@/lib/firebase/db', () => ({
       collection: (_db: unknown, ...path: string[]) => ({ _path: path.join('/') }),
       onSnapshot: (
         ref: { _path?: string },
-        cb: (snap: { size: number; docs: { data: () => Record<string, unknown> }[] }) => void,
+        ...rest: unknown[]
+      ) => {
+        // COST-2: the tags/notes listens pass an options object before the callback.
+        const args = typeof rest[0] === 'function' ? rest : rest.slice(1);
+        const cb = args[0] as (snap: { size: number; docs: { data: () => Record<string, unknown> }[] }) => void;
         // BIN-601: the watchlist listen now takes an ERROR callback too. Captured
         // so tests can drive a terminal listen failure for real, instead of poking
         // the ref the production code reads — a mocked ref would pass even if the
         // callback were never wired up, which is the whole bug.
-        onError?: () => void,
-      ) => {
+        const onError = args[1] as (() => void) | undefined;
         if ((ref?._path ?? '').endsWith('watchlistTags')) {
           tagsSnapshotCallback = cb as typeof tagsSnapshotCallback;
+          tagsErrorCallback = onError ?? null;
         } else if ((ref?._path ?? '').endsWith('watchlistNotes')) {
           notesSnapshotCallback = cb as typeof notesSnapshotCallback;
+          notesErrorCallback = onError ?? null;
         } else {
           snapshotCallback = cb;
           snapshotErrorCallback = onError ?? null;
@@ -1367,6 +1375,97 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
 
     expect(await tick).toBe('refused');
     expect(setDoc).not.toHaveBeenCalled();
+  });
+
+  // COST-2: a server-confirmed tags/notes snapshot says which sibling docs exist.
+  const serverSnap = (ids: string[], data: Record<string, unknown> = {}) => ({
+    size: ids.length,
+    docs: ids.map(id => ({ id, data: () => data })),
+    metadata: { fromCache: false },
+  });
+  const deletedPaths = () => deleteDoc.mock.calls.map(c => (c[0] as { _path: string })._path);
+
+  it('COST-2: removeItem is ONE delete when the server says the title has no tags or notes doc', async () => {
+    await mountSeeded([seedDoc({ tmdbId: 9 })]);
+    await act(async () => {
+      tagsSnapshotCallback!(serverSnap([]));
+      notesSnapshotCallback!(serverSnap([]));
+    });
+    await act(async () => { await removeItemRef!('tv', 9); });
+    expect(deletedPaths()).toEqual(['users/u1/watchlist/tv_9']);
+  });
+
+  it('COST-2: an existing sibling doc is still deleted, even one whose tags / note are empty', async () => {
+    await mountSeeded([seedDoc({ tmdbId: 9 })]);
+    await act(async () => {
+      tagsSnapshotCallback!(serverSnap(['tv_9'], { tags: [] }));
+      notesSnapshotCallback!(serverSnap(['tv_9'], { note: '' }));
+    });
+    await act(async () => { await removeItemRef!('tv', 9); });
+    expect(deletedPaths()).toEqual([
+      'users/u1/watchlist/tv_9', 'users/u1/watchlistTags/tv_9', 'users/u1/watchlistNotes/tv_9',
+    ]);
+  });
+
+  it('COST-2: a cache-only snapshot counts as unknown, so both sibling deletes still fire', async () => {
+    await mountSeeded([seedDoc({ tmdbId: 9 })]);
+    await act(async () => {
+      tagsSnapshotCallback!({ ...serverSnap([]), metadata: { fromCache: true } });
+      notesSnapshotCallback!({ ...serverSnap([]), metadata: { fromCache: true } });
+    });
+    await act(async () => { await removeItemRef!('tv', 9); });
+    expect(deleteDoc).toHaveBeenCalledTimes(3);
+  });
+
+  it('COST-2: a listener error resets to unknown, so both sibling deletes fire again', async () => {
+    await mountSeeded([seedDoc({ tmdbId: 9 })]);
+    await act(async () => {
+      tagsSnapshotCallback!(serverSnap([]));
+      notesSnapshotCallback!(serverSnap([]));
+      tagsErrorCallback!();
+      notesErrorCallback!();
+    });
+    await act(async () => { await removeItemRef!('tv', 9); });
+    expect(deleteDoc).toHaveBeenCalledTimes(3);
+  });
+
+  it('COST-2: a note written just before the remove is in the snapshot the write fires, so it is deleted', async () => {
+    await mountSeeded([seedDoc({ tmdbId: 9 })]);
+    await act(async () => {
+      tagsSnapshotCallback!(serverSnap([]));
+      notesSnapshotCallback!(serverSnap([]));
+    });
+    // Firestore fires the local write's snapshot synchronously with the write (pending,
+    // fromCache stays false on a server-synced listen) — before removeItem can run.
+    await act(async () => { notesSnapshotCallback!(serverSnap(['tv_9'], { note: 'privat' })); });
+    await act(async () => { await removeItemRef!('tv', 9); });
+    expect(deletedPaths()).toContain('users/u1/watchlistNotes/tv_9');
+  });
+
+  it('COST-2: a uid switch forgets the old account\'s known docs, so the first remove deletes both siblings', async () => {
+    const view = render(
+      <WatchlistProvider>
+        <Harness />
+      </WatchlistProvider>,
+    );
+    await act(async () => {
+      snapshotCallback!(snap([seedDoc({ tmdbId: 9 })]));
+      tagsSnapshotCallback!(serverSnap([]));
+      notesSnapshotCallback!(serverSnap([]));
+    });
+    await act(async () => {
+      authState.uid = 'u2';
+      view.rerender(
+        <WatchlistProvider>
+          <Harness />
+        </WatchlistProvider>,
+      );
+    });
+    await act(async () => { snapshotCallback!(snap([seedDoc({ tmdbId: 9 })])); });
+    await act(async () => { await removeItemRef!('tv', 9); });
+    expect(deletedPaths()).toEqual([
+      'users/u2/watchlist/tv_9', 'users/u2/watchlistTags/tv_9', 'users/u2/watchlistNotes/tv_9',
+    ]);
   });
 
   it('removeItem deletes the watchlist doc AND its sibling tags doc (BIN-164)', async () => {

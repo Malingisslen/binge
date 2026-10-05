@@ -9,7 +9,7 @@ import { useTVShow } from '@/hooks/useTMDB';
 import { currentSeasonToPrefetch, seasonPrefetchSpec } from '@/lib/tmdb/prefetch';
 import { usePageMeta } from '@/hooks/usePageMeta';
 import { JsonLd, tvSchema, breadcrumbSchema } from '@/components/title/JsonLd';
-import { posterUrl, profileUrl, logoUrl } from '@/lib/tmdb/client';
+import { posterUrl, posterSrcSet, profileUrl, logoUrl } from '@/lib/tmdb/client';
 import StatusButton from '@/components/title/StatusButton';
 import NotInterestedButton from '@/components/title/NotInterestedButton';
 import AddToListButton from '@/components/title/AddToListButton';
@@ -279,7 +279,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
           <div className={`poster duo-${tone}`}>
             {poster ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={poster} alt={displayTitle} loading="eager" fetchPriority="high" decoding="async" width={342} height={513} />
+              <img src={poster} srcSet={posterSrcSet(show.poster_path)} sizes="(max-width: 760px) 140px, 240px" alt={displayTitle} loading="eager" fetchPriority="high" decoding="async" width={342} height={513} />
             ) : (
               <div style={{
                 width: '100%', height: '100%',

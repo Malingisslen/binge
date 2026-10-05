@@ -27,8 +27,11 @@ export const TMDB_STALE = {
   LITE_DETAIL: 6 * 60 * 60 * 1000,
   /** Film-detail — inga next-air-date att oroa sig för. */
   MOVIE_DETAIL: 30 * 60 * 1000,
-  /** Säsongsdata — episodernas air_date kan ändras men sällan. */
-  SEASON: 30 * 60 * 1000,
+  /** Säsongsdata — episodernas air_date är dag-granulär, samma nivå som
+   *  LITE_DETAIL (PERF-1): kalendern hämtade annars om säsongerna var 30:e minut
+   *  medan serierna själva låg kvar i 6 h. Delas av kalendern, titelsidans
+   *  useTVSeason och seasonPrefetchSpec. */
+  SEASON: 6 * 60 * 60 * 1000,
   /** Trending/popular/discover — tål att vara lite stale. */
   CATALOG: 30 * 60 * 1000,
   /** Sök — skrivs om direkt när användaren skriver. */

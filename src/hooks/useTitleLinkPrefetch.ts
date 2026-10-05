@@ -2,7 +2,8 @@
 
 import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { parseTitleHref, titlePrefetchSpec } from '@/lib/tmdb/prefetch';
+import { parseTitleHref } from '@/lib/tmdb/prefetch';
+import { createTitlePrefetcher } from '@/lib/tmdb/hoverPrefetch';
 
 // ~150 ms hover innan vi tror på "intent" — sveps-förbi-länkar filtreras bort.
 const HOVER_INTENT_MS = 150;
@@ -27,7 +28,8 @@ function saveDataOn(): boolean {
  * - focusin: prefetcha direkt (tangentbordsnavigation = intent).
  *
  * Prefetchen träffar SAMMA queryKey som detaljsidan (titlePrefetchSpec), dedupas
- * av staleTime och stryps av TMDB-klientens 8-concurrent-semafor. Bara TMDB,
+ * av staleTime och stryps av TMDB-klientens 8-concurrent-semafor. Hover har
+ * dessutom ett eget tak (createTitlePrefetcher, PERF-7). Bara TMDB,
  * ingen Firestore. Hoppas helt i data-sparläge.
  */
 export function useTitleLinkPrefetch(): void {
@@ -44,11 +46,7 @@ export function useTitleLinkPrefetch(): void {
       pendingPath = null;
     };
 
-    const prefetchPath = (path: string) => {
-      const parsed = parseTitleHref(path);
-      if (!parsed) return;
-      void queryClient.prefetchQuery(titlePrefetchSpec(parsed.mediaType, parsed.id));
-    };
+    const prefetcher = createTitlePrefetcher(queryClient);
 
     // Returnerar länkens pathname om target ligger i ett <a> till en titel.
     const titlePathOf = (target: EventTarget | null): string | null => {
@@ -68,14 +66,14 @@ export function useTitleLinkPrefetch(): void {
       timer = setTimeout(() => {
         const p = pendingPath;
         clearTimer();
-        if (p) prefetchPath(p);
+        if (p) prefetcher.hover(p);
       }, HOVER_INTENT_MS);
     };
 
     const onIntentNow = (e: Event) => {
       if (saveDataOn()) return;
       const path = titlePathOf(e.target);
-      if (path) prefetchPath(path);
+      if (path) prefetcher.now(path);
     };
 
     document.addEventListener('pointerover', onPointerOver, { passive: true });

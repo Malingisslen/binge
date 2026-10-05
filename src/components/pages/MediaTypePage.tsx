@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { posterUrl } from '@/lib/tmdb/client';
+import { posterUrl, posterSrcSet } from '@/lib/tmdb/client';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
 import { usePopularTV, usePopularMovies } from '@/hooks/useTMDB';
@@ -103,7 +103,7 @@ export default function MediaTypePage({
               return (
                 <Link key={item.tmdbId} href={`${cfg.hrefPrefix}${item.tmdbId}/`} className="no-underline text-ink">
                   <div className={`poster duo-${toneForId(item.tmdbId)} mb-[3px]`}>
-                    {poster && <img src={poster} alt={item.title} loading="lazy" decoding="async" width={342} height={513} />}
+                    {poster && <img src={poster} srcSet={posterSrcSet(item.posterPath, 'w342')} sizes="(max-width: 767px) 45vw, 120px" alt={item.title} loading="lazy" decoding="async" width={342} height={513} />}
                   </div>
                   <div className="text-xs font-semibold overflow-hidden text-ellipsis whitespace-nowrap">{item.title}</div>
                 </Link>
