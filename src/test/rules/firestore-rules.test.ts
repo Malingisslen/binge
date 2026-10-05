@@ -807,6 +807,21 @@ describe('users/{uid} update value bounds + isAdmin escalation (BIN-1145, BIN-11
     await assertFails(updateDoc(doc(ownerDb(), 'users', OWNER), { displayName: 'x'.repeat(81) }));
   });
 
+  // Paket I (2026-10-05): updateProviderTiers skriver per nyckel med deleteField()
+  // i en merge. Emulatorn visar att regeln släpper igenom formen OCH att nyckeln
+  // faktiskt försvinner — en hel karta i en merge lämnade den kvar.
+  it('the owner can clear one provider tier per key with deleteField in a merge', async () => {
+    await seedOwnProfile({ providerTiers: { 8: 'premium', 337: 'ads' }, providerCosts: { 8: 150, 119: 59 } });
+    const ref = doc(ownerDb(), 'users', OWNER);
+    await assertSucceeds(setDoc(ref, {
+      providerTiers: { 8: deleteField(), 76: 'reklam' },
+      providerCosts: { 8: deleteField() },
+    }, { merge: true }));
+    const stored = (await getDoc(ref)).data()!;
+    expect(stored.providerTiers).toEqual({ 337: 'ads', 76: 'reklam' });
+    expect(stored.providerCosts).toEqual({ 119: 59 });
+  });
+
   // The escalation guard. A client may never grant itself isAdmin, and may never
   // change one it was granted through the Console.
   it('the owner cannot grant themselves isAdmin on update', async () => {
