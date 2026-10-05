@@ -10,8 +10,8 @@ export default function IntegritetPage() {
   return (
     <LegalPageShell
       title="Integritetspolicy"
-      lastUpdated="2026-09-28"
-      version="1.8"
+      lastUpdated="2026-10-05"
+      version="1.9"
     >
       <section>
         <h2>1. Vem är ansvarig?</h2>
@@ -75,7 +75,7 @@ export default function IntegritetPage() {
           <li><strong>Google reCAPTCHA / Firebase App Check</strong> (bot- och missbruksskydd) — laddar ett skript från Google som analyserar webbläsarsignaler för att skilja människor från bottar. Sätter en teknisk token och skickar signaler till Google.</li>
           <li><strong>Plausible Analytics</strong> (besöksstatistik) — cookiefri och IP-anonymiserad statistik över sidvisningar och över hur funktioner används, till exempel att en titel lades till, en recension skrevs eller vilken inloggningsmetod som användes. Händelserna innehåller aldrig vem du är, vad du skrivit eller vad du sökt på, bara typ och antal. Sätter inga cookies och lagrar varken din IP-adress eller andra personuppgifter.</li>
           <li><strong>Cloudflare</strong> (CDN, DNS, brandvägg) — behandlar trafikdata under Cloudflares DPA.</li>
-          <li><strong>The Movie Database (TMDB)</strong> — vi hämtar film- och serieinformation från TMDB. Dina personuppgifter överförs <em>inte</em> till TMDB; endast titel-ID:n och sökfrågor skickas.</li>
+          <li><strong>The Movie Database (TMDB)</strong> — vi hämtar film- och serieinformation och affischer från TMDB. Det sker direkt från din webbläsare, så TMDB får din IP-adress, viss webbläsarinformation och det du skriver när du söker. TMDB får inte din profil, ditt konto eller vad du tittar på.</li>
           <li><strong>Sentry</strong> (felövervakning) — tar emot teknisk information när något går fel i appen, så vi kan hitta och rätta buggar. Personuppgifter som e-post, användarnamn och användar-id rensas bort innan felrapporten skickas. Sentry är amerikanskt och anlitar i sin tur egna underleverantörer (bl.a. Intercom och OpenAI); aktuell lista finns hos <a href="https://sentry.io/legal/subprocessors/" target="_blank" rel="noopener noreferrer">Sentry</a>.</li>
           <li><strong>Google Gemini</strong> (används av &quot;Fråga Binge&quot;) — om vår vanliga sökning inte lyckas tolka din fritextfråga skickas själva frågetexten till Googles Gemini-modell, som tolkar den till en sökning. Ingen profil- eller tittardata skickas med, bara din formulering. Frågetexten skickas i stunden för tolkningen. Som EES-kund omfattas behandlingen av Googles databehandlaravtal (DPA), och frågetexten används inte för att träna eller förbättra Googles modeller. Google Gemini är amerikanskt.</li>
           <li><strong>Anthropic (Claude)</strong> — vi använder Claude i en förproducerad process (inte i realtid) för att skapa spoilerfria avsnittssammanfattningar från <em>offentliga</em> källor (Wikipedia m.fl.). <em>Inga</em> personuppgifter och ingen tittardata skickas till Anthropic — endast offentlig avsnittsinformation. Anthropic är amerikanskt.</li>
@@ -95,7 +95,9 @@ export default function IntegritetPage() {
           För dessa överföringar gäller EU-kommissionens
           standardavtalsklausuler (SCC) och, där det är tillämpligt, EU–US Data
           Privacy Framework, med kompletterande skyddsåtgärder. TMDB är
-          amerikanskt men tar inte emot dina personuppgifter.
+          amerikanskt och tar emot din IP-adress, webbläsarinformation och
+          dina sökord direkt från din webbläsare, men inte din profil eller
+          din tittardata.
         </p>
       </section>
 
