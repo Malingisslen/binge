@@ -46,7 +46,7 @@ export const VALID_PROVIDER_IDS = new Set([8, 119, 337, 384, 76, 520, 489, 350, 
 export const VALID_LANGS = new Set(['sv', 'da', 'no', 'fi', 'ko', 'ja', 'fr', 'es', 'de', 'it', 'ru', 'hi']);
 
 const GENRE_HINT = '28=Action(film), 10759=Action&Äventyr(serie), 35=Komedi, 18=Drama, 53=Thriller, 80=Kriminal, 9648=Mysterium, 27=Skräck, 10749=Romantik, 99=Dokumentär, 16=Animerat, 10751=Familj, 14=Fantasy, 878=Sci-Fi(film), 10765=Sci-Fi&Fantasy(serie), 36=Historia, 10752=Krig, 37=Western, 12=Äventyr, 10402=Musik';
-const PROVIDER_HINT = '8=Netflix, 119=Prime Video, 337=Disney+, 384=Max, 76=Viaplay, 520=SVT Play, 489=TV4 Play, 350=Apple TV+, 531=Paramount+, 510=Discovery+, 431=SkyShowtime, 323=Crunchyroll';
+const PROVIDER_HINT = '8=Netflix, 119=Prime Video, 337=Disney+, 384=HBO Max, 76=Viaplay, 520=SVT Play, 489=TV4 Play, 350=Apple TV+, 531=Paramount+, 510=Discovery+, 431=SkyShowtime, 323=Crunchyroll';
 
 /** System prompt — kept terse; the model only handles queries rules couldn't. */
 export const SYSTEM_PROMPT = `Du är en sököversättare för Binge, en svensk streaming-tracker. Översätt användarens mening till ett STRUKTURERAT filter (JSON). Fyll BARA i fält som meningen uttryckligen styr — utelämna allt annat, gissa aldrig betyg/sortering. Föreslå aldrig titlar.

@@ -31,7 +31,7 @@ export const RUNTIME_BUDGETS = [30, 60, 90, 120];
 
 /** Canonical Swedish provider ids (src/lib/tmdb/providers.ts). */
 export const PROVIDERS = {
-  8: 'Netflix', 119: 'Prime Video', 337: 'Disney+', 384: 'Max', 76: 'Viaplay',
+  8: 'Netflix', 119: 'Prime Video', 337: 'Disney+', 384: 'HBO Max', 76: 'Viaplay',
   520: 'SVT Play', 489: 'TV4 Play', 350: 'Apple TV+', 531: 'Paramount+',
   510: 'Discovery+', 431: 'SkyShowtime', 323: 'Crunchyroll',
 };

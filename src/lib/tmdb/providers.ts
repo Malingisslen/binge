@@ -60,7 +60,7 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
     ],
   },
   {
-    id: 384, name: 'Max', shortName: 'HBO', color: '#7B2FBE', type: 'flatrate', defaultMonthlyCost: 149,
+    id: 384, name: 'HBO Max', shortName: 'HBO', color: '#7B2FBE', type: 'flatrate', defaultMonthlyCost: 149,
     // 1899 = legacy HBO Max-id. 1825 = "HBO Max Amazon Channel"
     // (live-verifierat SE-id 2026-06-10) — samma tjänst via Prime Video.
     aliases: [1899, 1825],
