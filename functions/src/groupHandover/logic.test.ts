@@ -925,8 +925,30 @@ describe('the callable erases sent invites BEFORE it hands over (BIN-1147)', () 
   // either half alone survives the deletion of the other.
   it('awaits the erasure and wraps its refusal as an HttpsError', () => {
     expect(ENTRY).toMatch(
-      /try \{\s*invites = await eraseSentInvites\(io, uid\);\s*\} catch \(err\) \{\s*throw new HttpsError\('internal',/,
+      /try \{\s*invites = await eraseSentInvites\(io, uid\);\s*\} catch \(err\) \{[^}]*?if \(err instanceof HandoverRefusal\) throw new HttpsError\('internal', err\.message\);/,
     );
+  });
+});
+
+// SEC-8: a Firestore error string can carry document paths with uids and group
+// ids. The callables send a reader's refusal or a fixed sentence, never err.message
+// from an arbitrary error.
+describe('the callables never forward a raw error message (SEC-8)', () => {
+  it('has no catch that sends err.message of an unknown error', () => {
+    expect(ENTRY).not.toMatch(/err instanceof Error \? err\.message/);
+    // Other spellings of the same leak. A bare `err.message` stays allowed: the
+    // HandoverRefusal branch sends it after an instanceof check.
+    expect(ENTRY).not.toMatch(/new HttpsError\('internal',\s*(?:\(err as|String\(err|err instanceof)/);
+  });
+
+  it('the sent-invite ceiling throws a HandoverRefusal, so its wording may pass through', async () => {
+    const many = Array.from({ length: SENT_INVITE_BATCH_LIMIT + 1 }, (_, i) => `users/u${i}/groupInvites/g`);
+    const io = {
+      sentInvitePaths: async () => many,
+      deleteSentInvites: async () => {},
+      log: { info: () => {}, error: () => {} },
+    };
+    await expect(eraseSentInvites(io, 'me')).rejects.toBeInstanceOf(HandoverRefusal);
   });
 });
 

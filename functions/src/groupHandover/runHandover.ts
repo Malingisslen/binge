@@ -405,7 +405,7 @@ export async function runOwnerPickedHandover(
  * Derive the callers rather than trusting a sentence:
  * git grep -n "eraseSentInvites(" -- functions/src
  *
- * Returns how many were found and erased. Throws the refusal string when the
+ * Returns how many were found and erased. Throws a HandoverRefusal when the
  * count exceeds what one atomic batch can carry.
  */
 export async function eraseSentInvites(
@@ -419,7 +419,7 @@ export async function eraseSentInvites(
   const refusal = refusalForSentInvites(paths.length);
   if (refusal) {
     io.log.error('groupHandover: sent-invite erasure refused', { uid, found: paths.length });
-    throw new Error(refusal);
+    throw new HandoverRefusal(refusal);
   }
   if (paths.length > 0) await io.deleteSentInvites(paths);
   io.log.info('groupHandover: sent invites erased', { uid, found: paths.length });
