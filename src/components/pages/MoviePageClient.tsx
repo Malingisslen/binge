@@ -50,6 +50,8 @@ import { CheapestPathVerdict } from '@/components/title/CheapestPathVerdict';
 import CinemaCountdownStrip from '@/components/title/CinemaCountdownStrip';
 import PriceHistoryChart from '@/components/title/PriceHistoryChart';
 import { TitleCrumb, GenreLinks, ProviderHubLinks } from '@/components/title/TitleHubLinks';
+import { AvailabilityTable } from '@/components/seo/AvailabilityTable';
+import { titleAvailability } from '@/lib/seo/titleAvailability';
 import { cinemaToStreaming } from '@/lib/calendar/releaseDate';
 import { useToast } from '@/contexts/ToastContext';
 import { trackEvent } from '@/lib/analytics';
@@ -580,6 +582,8 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
           )}
         </div>
       </div>
+
+      <AvailabilityTable title={displayTitle} availability={titleAvailability(movie['watch/providers']?.results?.SE)} />
 
       {/* Trailer — raw 16:9 (preview surface). Döljs helt när embed saknas/failar (M1). */}
       <TrailerSection video={trailer} />
