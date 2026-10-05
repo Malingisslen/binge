@@ -703,6 +703,8 @@
         "src/components/pages/UserProfilePageClient.tsx",
         "src/components/pages/resolveRoute.test.ts",
         "src/components/pages/resolveRoute.ts",
+        "src/components/seo/AvailabilityTable.test.tsx",
+        "src/components/seo/AvailabilityTable.tsx",
         "src/components/tv/RelatedSeriesStrip.tsx",
         "src/hooks/useAllEpisodeProgress.ts",
         "src/hooks/useEpisodeProgress.ts",
@@ -729,7 +731,9 @@
         "src/lib/markedSeen.test.ts",
         "src/lib/markedSeen.ts",
         "src/lib/seenDate.test.ts",
-        "src/lib/seenDate.ts"
+        "src/lib/seenDate.ts",
+        "src/lib/seo/titleAvailability.test.ts",
+        "src/lib/seo/titleAvailability.ts"
       ]
     },
     "27": {

@@ -1,6 +1,7 @@
 // src/components/pages/TVShowPageClient.test.tsx
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { renderToStaticMarkup } from 'react-dom/server';
 
 // The TV sibling of MoviePageClient.test.tsx, and it needs to exist separately.
 // The provider derivation the two effects used to duplicate is now one shared
@@ -349,5 +350,54 @@ describe('TVShowPageClient — what a crawler reads without clicking (SEO-2/SEO-
 
     expect(screen.getByRole('link', { name: 'Serier' }).getAttribute('href')).toMatch(/^\/series\/?$/);
     expect(screen.getByRole('link', { name: 'Sci-Fi & Fantasy' }).getAttribute('href')).toMatch(/^\/genre\/sci-fi\/?$/);
+  });
+});
+
+// BIN-1439 steg 2. renderToStaticMarkup kör inga effekter, så `mounted` är falsk
+// och ClientOnly renderar ingenting — samma läge som den förrenderade HTML:en
+// Google läser.
+function staticAvailabilitySection(html: string): Element | null {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const h2 = [...doc.querySelectorAll('h2')].find(h => h.textContent?.startsWith('Så ser du'));
+  return h2?.closest('section') ?? null;
+}
+
+describe('TVShowPageClient — tabellen "Så ser du X i Sverige" finns i den statiska HTML:en (BIN-1439)', () => {
+  beforeEach(() => {
+    watchlist.loading = false;
+    watchlist.snapshotSettled = true;
+    tmdb.isLoading = false;
+  });
+
+  it('renderas i första renderingen, före mounted, med tjänst och hubblänk', () => {
+    tmdb.show = show;
+    const section = staticAvailabilitySection(renderToStaticMarkup(<TVShowPageClient id="1399" />));
+
+    expect(section?.querySelector('h2')?.textContent).toBe('Så ser du Game of Thrones i Sverige');
+    expect(section?.querySelector('th[scope="row"]')?.textContent).toBe('Netflix');
+    const hub = [...(section?.querySelectorAll('a') ?? [])].find(a => a.textContent === 'Mer på Netflix');
+    expect(hub?.getAttribute('href')).toMatch(/^\/provider\/8\/?$/);
+  });
+
+  it('visar ingen tabell för en serie utan svenska tjänster', () => {
+    tmdb.show = { ...show, 'watch/providers': { results: { SE: {} } } };
+    const html = renderToStaticMarkup(<TVShowPageClient id="1399" />);
+
+    expect(html).toContain('Game of Thrones');
+    expect(staticAvailabilitySection(html)).toBeNull();
+  });
+
+  it('visar TV4 Plays två id som en rad', () => {
+    tmdb.show = {
+      ...show,
+      'watch/providers': { results: { SE: {
+        flatrate: [{ provider_id: 1944, provider_name: 'TV4 Play' }],
+        buy: [{ provider_id: 489, provider_name: 'TV4 Play' }],
+      } } },
+    };
+    const section = staticAvailabilitySection(renderToStaticMarkup(<TVShowPageClient id="1399" />));
+
+    const names = [...(section?.querySelectorAll('th[scope="row"]') ?? [])].map(th => th.textContent);
+    expect(names).toEqual(['TV4 Play']);
   });
 });
