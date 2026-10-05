@@ -19,6 +19,7 @@ import { LoadingView } from '@/components/ui/LoadingView';
 import { NotFound } from '@/components/ui/NotFound';
 import { EmptyState } from '@/components/ui/EmptyState';
 import ListCheapestPlanPanel from '@/components/lists/ListCheapestPlanPanel';
+import ShareButton from '@/components/share/ShareButton';
 import type { ListPlanItem } from '@/hooks/useListCheapestPlan';
 
 export default function ListPageClient({ listId }: { listId: string }) {
@@ -131,6 +132,13 @@ export default function ListPageClient({ listId }: { listId: string }) {
         <p className="text-xs text-ink-3 mb-2">{list.description}</p>
       )}
       <span className="text-xxs text-ink-3">{list.items.length} {list.items.length === 1 ? 'titel' : 'titlar'}</span>
+      {/* En privat lista visar "hittades inte" för den som får länken, så knappen
+          finns bara när listan är publik. */}
+      {list.isPublic && (
+        <span className="ml-2 align-middle">
+          <ShareButton path={`/list/${listId}/`} title={list.title} text={`Listan ${list.title} på Binge`} surface="list" />
+        </span>
+      )}
       {!isOwner && canEdit && (
         <span className="text-xxs text-acc-deep ml-2">· du är medredigerare</span>
       )}

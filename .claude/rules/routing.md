@@ -15,7 +15,10 @@ Dynamiska routes (`/movie/:id`, `/tv/:id`, `/person/:id`, `/user/:username`,
   client-komponent via URL-segment
 - `src/components/pages/DynamicRouter.tsx` är dispatch-punkten — `src/components/pages/`
   som helhet håller de client-komponenter routern dispatchar till
-- Firebase Hosting rewrite: `**` → `/index.html` så alla URLs landar i SPA:n
+- Firebase Hosting rewrite: `**` → `/_/index.html` så alla URLs landar i SPA:n. De
+  delningsbara prefixen i `src/lib/seo/shareShells.ts` får ett eget skal med egen
+  länkförhandsvisning och en egen omskrivning före `**`; listan och `firebase.json` hålls
+  ihop av `shareShells.test.ts`
 - Metadata för dynamiska routes sätts klient-sidigt via `usePageMeta`-hook
   (uppdaterar `document.title` + `<meta>`-taggar i DOM)
 
