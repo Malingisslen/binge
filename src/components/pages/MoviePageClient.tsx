@@ -51,6 +51,8 @@ import CinemaCountdownStrip from '@/components/title/CinemaCountdownStrip';
 import PriceHistoryChart from '@/components/title/PriceHistoryChart';
 import { cinemaToStreaming } from '@/lib/calendar/releaseDate';
 import { useToast } from '@/contexts/ToastContext';
+import { trackEvent } from '@/lib/analytics';
+import ShareButton from '@/components/share/ShareButton';
 import type { TMDBMovie } from '@/types';
 import { DELETION_IN_PROGRESS_MESSAGE, isDeletionInProgressError } from '@/lib/deletionInProgressError';
 
@@ -460,6 +462,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
                 releaseYear={movie.release_date ? parseInt(movie.release_date.substring(0, 4), 10) : null}
               />
               <NotInterestedButton tmdbId={movie.id} mediaType="movie" title={displayTitle} />
+              <ShareButton path={`/movie/${movie.id}/`} title={displayTitle} text={`Se var ${displayTitle} går att streama.`} surface="title" />
             </div>
             {watchlistItem?.status === 'sedd' && (
               <WatchedDateEditor
@@ -496,7 +499,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
                   return (
                     <span key={p.provider_id} className="inline-flex items-center gap-1">
                       {offer?.link ? (
-                        <a href={affiliateWrap(p.provider_id, offer.link)} target="_blank" rel="noopener noreferrer">{imgEl}</a>
+                        <a href={affiliateWrap(p.provider_id, offer.link)} target="_blank" rel="noopener noreferrer" onClick={() => trackEvent('provider_clicked', { providerId: canonicalProviderId(p.provider_id), offerType: offer.type, mediaType: 'movie' })}>{imgEl}</a>
                       ) : imgEl}
                       {leavingLabel && (
                         <span className="rounded-sm bg-acc-soft text-acc-deep px-1 text-[11px]">{leavingLabel}</span>
@@ -504,7 +507,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
                     </span>
                   );
                 }
-                return <ProviderTag key={p.provider_id} provider={p} size="md" offer={offer} nowMs={now} />;
+                return <ProviderTag key={p.provider_id} provider={p} size="md" offer={offer} nowMs={now} mediaType="movie" />;
               })}
               {hasRentBuy && (
                 <button
@@ -546,7 +549,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
               {rent.length > 0 && (
                 <div>
                   <span style={{ letterSpacing: 0.12, textTransform: 'uppercase', marginRight: 6 }}>Hyr:</span>
-                  {rent.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" offer={offerForProvider(offers, canonicalProviderId(p.provider_id))} nowMs={now} />)}
+                  {rent.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" offer={offerForProvider(offers, canonicalProviderId(p.provider_id))} nowMs={now} mediaType="movie" />)}
                 </div>
               )}
               {/* BIN-354: rent price-history stat row (option C). Lazy — only
@@ -555,7 +558,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
               {buy.length > 0 && (
                 <div>
                   <span style={{ letterSpacing: 0.12, textTransform: 'uppercase', marginRight: 6 }}>Köp:</span>
-                  {buy.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" offer={offerForProvider(offers, canonicalProviderId(p.provider_id))} nowMs={now} />)}
+                  {buy.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" offer={offerForProvider(offers, canonicalProviderId(p.provider_id))} nowMs={now} mediaType="movie" />)}
                 </div>
               )}
             </div>

@@ -993,7 +993,7 @@
         {
           "from": "cf-sendPush",
           "to": "fcm-sw",
-          "payload": "push message (tab closed)",
+          "payload": "push message (tab closed); fcmOptions.link = withPushUtm(actionUrl, tag) — same-origin links gain utm_source=push, utm_medium=notis, utm_campaign=<tag prefix> so Plausible attributes the visit",
           "transport": "FCM / Web Push",
           "verified": true
         },
@@ -1330,6 +1330,13 @@
         },
         {
           "from": "list-page-client",
+          "to": "analytics-lib",
+          "payload": "public list only: ShareButton → trackEvent('share_clicked', {surface:'list', method}) then navigator.share or clipboard with /list/{id}/?utm_source=share&utm_medium=list. The link opens the prerendered list shell, which carries its own link preview",
+          "transport": "function call + Web Share / Clipboard API",
+          "verified": true
+        },
+        {
+          "from": "list-page-client",
           "to": "uselists-hook",
           "payload": "usePublicList(listId) → single getDoc lists/{listId} (react-query cached, staleTime 60s)",
           "transport": "Firestore read",
@@ -1366,6 +1373,13 @@
           "to": "user-profile-page",
           "payload": "resolveRoute(pathname) matches kind:'user' → renders UserProfilePageClient(username)",
           "transport": "client-side route dispatch",
+          "verified": true
+        },
+        {
+          "from": "user-profile-page",
+          "to": "analytics-lib",
+          "payload": "public or own profile: ShareButton → trackEvent('share_clicked', {surface:'profile', method}) then navigator.share or clipboard with /user/{username}/?utm_source=share&utm_medium=profile; served from the out/user/_/index.html shell with its own link preview",
+          "transport": "function call + Web Share / Clipboard API",
           "verified": true
         },
         {
@@ -2437,6 +2451,13 @@
         },
         {
           "from": "movie-tv-page",
+          "to": "analytics-lib",
+          "payload": "outbound service link click → trackEvent('provider_clicked', {providerId, offerType, mediaType}); ShareButton → trackEvent('share_clicked', {surface:'title', method}) then navigator.share or clipboard with the title URL + utm_source=share&utm_medium=title",
+          "transport": "function call",
+          "verified": true
+        },
+        {
+          "from": "movie-tv-page",
           "to": "firestore",
           "payload": "useStreamingOffers(tmdbId, mediaType) reads streamingOffers/{mediaType}_{tmdbId}, falling back once to the legacy bare id when that misses (10s-timeout race) — populated by the separate cf-offers daily job",
           "transport": "Firestore read",
@@ -2618,7 +2639,7 @@
     {
       "id": "flow-insights",
       "label": "Insights dashboard",
-      "description": "rollupInsights runs on a 24h Cloud Scheduler trigger, paginated-scans the watchlist collectionGroup plus aggregate counts (users/reviews/groups/active sessions), and writes one current-state snapshot to insights/daily (read by the API) and a dated insights/{YYYY-MM-DD} history doc, then prunes history past a 90-day retention window. The apiInsights HTTP function sits behind the /api/insights Hosting rewrite; it authenticates either a Firebase ID token (must resolve to users/{uid}.isAdmin===true) or a static INSIGHTS_TOKEN secret, reads insights/daily (1 read) plus a baseline dated snapshot for window deltas, fetches live Plausible analytics and askBinge usage stats, merges them into one InsightsData JSON payload, and returns it with a 5-minute private cache header. The /insikter dashboard (InsikterClient + useInsightsData hook) calls fetchInsights with a bearer token and range, and renders the merged data.",
+      "description": "rollupInsights runs on a 24h Cloud Scheduler trigger, paginated-scans the watchlist collectionGroup plus aggregate counts (users/reviews/groups/active sessions), pages through Firebase Auth for weekly/monthly active-user counts (non-anonymous accounts by the later of lastSignInTime/lastRefreshTime; only the two counts are stored), and writes one current-state snapshot to insights/daily (read by the API) and a dated insights/{YYYY-MM-DD} history doc, then prunes history past a 90-day retention window. The apiInsights HTTP function sits behind the /api/insights Hosting rewrite; it authenticates either a Firebase ID token (must resolve to users/{uid}.isAdmin===true) or a static INSIGHTS_TOKEN secret, reads insights/daily (1 read) plus a baseline dated snapshot for window deltas, fetches live Plausible analytics and askBinge usage stats, merges them into one InsightsData JSON payload, and returns it with a 5-minute private cache header. The /insikter dashboard (InsikterClient + useInsightsData hook) calls fetchInsights with a bearer token and range, and renders the merged data.",
       "covers": [
         "rollupInsights",
         "apiInsights",
@@ -2630,6 +2651,13 @@
           "to": "firestore",
           "payload": "collectionGroup('watchlist').select(...) paginated scan + count() aggregations (users/reviews/groups/activeSessions)",
           "transport": "firestore-query",
+          "verified": true
+        },
+        {
+          "from": "cf-rollupInsights",
+          "to": "firebase-auth",
+          "payload": "listUsers(1000, pageToken) paged → activeUserCounts() → rollup.activeUsers {d7, d30}; a failed scan omits the field and marks the rollup partial",
+          "transport": "firebase-admin auth",
           "verified": true
         },
         {

@@ -55,6 +55,8 @@ import { CheapestPathVerdict } from '@/components/title/CheapestPathVerdict';
 import PriceHistoryChart from '@/components/title/PriceHistoryChart';
 import { offerForProvider, isLeavingSoon, formatLeaving } from '@/lib/streaming/offers';
 import type { TMDBTVShow } from '@/types';
+import { trackEvent } from '@/lib/analytics';
+import ShareButton from '@/components/share/ShareButton';
 
 export default function TVShowPageClient({ id, initialData }: { id: string; initialData?: TMDBTVShow }) {
   const showId = parseInt(id, 10);
@@ -354,6 +356,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
                 releaseYear={show.first_air_date ? parseInt(show.first_air_date.substring(0, 4), 10) : null}
               />
               <NotInterestedButton tmdbId={show.id} mediaType="tv" title={displayTitle} />
+              <ShareButton path={`/tv/${show.id}/`} title={displayTitle} text={`Se var ${displayTitle} går att streama.`} surface="title" />
             </div>
           </ClientOnly>
 
@@ -384,7 +387,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
                   return (
                     <span key={p.provider_id} className="inline-flex items-center gap-1">
                       {offer?.link ? (
-                        <a href={affiliateWrap(p.provider_id, offer.link)} target="_blank" rel="noopener noreferrer">{imgEl}</a>
+                        <a href={affiliateWrap(p.provider_id, offer.link)} target="_blank" rel="noopener noreferrer" onClick={() => trackEvent('provider_clicked', { providerId: canonicalProviderId(p.provider_id), offerType: offer.type, mediaType: 'tv' })}>{imgEl}</a>
                       ) : imgEl}
                       {leavingLabel && (
                         <span className="rounded-sm bg-acc-soft text-acc-deep px-1 text-[11px]">{leavingLabel}</span>
@@ -392,7 +395,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
                     </span>
                   );
                 }
-                return <ProviderTag key={p.provider_id} provider={p} size="md" offer={offer} nowMs={now} />;
+                return <ProviderTag key={p.provider_id} provider={p} size="md" offer={offer} nowMs={now} mediaType="tv" />;
               })}
               {hasRentBuy && (
                 <button
@@ -413,13 +416,13 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
               {rent.length > 0 && (
                 <div>
                   <span style={{ letterSpacing: 0.12, textTransform: 'uppercase', marginRight: 6 }}>Hyr:</span>
-                  {rent.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" offer={offerForProvider(offers, canonicalProviderId(p.provider_id))} nowMs={now} />)}
+                  {rent.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" offer={offerForProvider(offers, canonicalProviderId(p.provider_id))} nowMs={now} mediaType="tv" />)}
                 </div>
               )}
               {buy.length > 0 && (
                 <div>
                   <span style={{ letterSpacing: 0.12, textTransform: 'uppercase', marginRight: 6 }}>Köp:</span>
-                  {buy.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" offer={offerForProvider(offers, canonicalProviderId(p.provider_id))} nowMs={now} />)}
+                  {buy.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" offer={offerForProvider(offers, canonicalProviderId(p.provider_id))} nowMs={now} mediaType="tv" />)}
                 </div>
               )}
               {/* BIN-354: rent price-history stat row, same as the film page —

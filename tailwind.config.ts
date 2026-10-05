@@ -75,8 +75,9 @@ const config: Config = {
         'border-table': 'var(--rule-2)',
         'cal-header': 'var(--bg-2)',
         'season-done': 'var(--season-done)',
-        // sidebar-bg kept — still used in src/app/page.tsx (landing hero section).
-        'sidebar-bg': 'var(--ink)',
+        // sidebar-bg — the landing hero band (HomePageClient). Its own token so it
+        // stays dark under white text in both themes.
+        'sidebar-bg': 'var(--hero-bg)',
       },
       fontFamily: {
         sans: ['Albert Sans', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],

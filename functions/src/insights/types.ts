@@ -26,6 +26,9 @@ export interface RollupData {
     activeSessions: number; // Tillsammans-sessioner not yet expired
     groups: number;
   };
+  // Non-anonymous Auth accounts seen within 7 / 30 days (decision 8). Optional:
+  // rollup docs written before this field existed lack it.
+  activeUsers?: { d7: number; d30: number };
   statusDistribution: { vill_se: number; mina: number; sedd: number; avbruten: number };
   mediaTypeSplit: { movie: number; tv: number };
   ratingsHistogram: number[]; // length 10, index i => rating (i+1)
@@ -51,7 +54,11 @@ export interface PlausibleData {
     review_created: number;
     advisor_pause_taken: number;
     donate_clicked: number;
+    provider_clicked?: number;
   };
+  // Optional: absent when the frontend is newer than the deployed function.
+  providerClicksByType?: Record<string, number>;
+  signupLandingPages?: { page: string; signups: number; visitors: number }[];
   signupsTimeseries: { date: string; count: number }[];
   onboardingFunnel: { step: number; count: number }[];
   signinMethodSplit: { google: number; email: number };

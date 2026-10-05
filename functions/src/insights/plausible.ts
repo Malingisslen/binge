@@ -107,6 +107,38 @@ async function eventPropBreakdown(
 }
 
 /**
+ * Which landing pages the period's sign-ups entered on, next to how many visitors
+ * entered there at all — the organic-landing → sign-up step of the funnel.
+ */
+async function signupLandingPages(
+  env: PlausibleEnv,
+  base: { period: string; date?: string },
+): Promise<{ page: string; signups: number; visitors: number }[]> {
+  try {
+    const [signupJson, entryJson] = await Promise.all([
+      get(env, 'breakdown', {
+        ...base,
+        property: 'visit:entry_page',
+        metrics: 'visitors',
+        filters: 'event:name==signed_up',
+        limit: '10',
+      }),
+      get(env, 'breakdown', { ...base, property: 'visit:entry_page', metrics: 'visitors', limit: '100' }),
+    ]);
+    const entryVisitors = new Map<string, number>();
+    for (const r of (entryJson as { results?: Array<Record<string, unknown>> }).results ?? []) {
+      entryVisitors.set(String(r.entry_page), num(r.visitors));
+    }
+    return ((signupJson as { results?: Array<Record<string, unknown>> }).results ?? []).map((r) => {
+      const page = String(r.entry_page);
+      return { page, signups: num(r.visitors), visitors: entryVisitors.get(page) ?? 0 };
+    });
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Fetch the full PlausibleData bundle for a range. Returns null when Plausible
  * is unconfigured; individual sub-calls that fail degrade to empty/zero so a
  * single flaky endpoint never sinks the whole dashboard.
@@ -146,13 +178,17 @@ export async function fetchPlausible(range: RangeInfo): Promise<PlausibleData | 
 
     const agg = (aggregate as { results?: Record<string, { value?: number }> }).results ?? {};
 
-    const [signedUp, titleAdded, reviewCreated, advisorPause, donateClicked] = await Promise.all([
-      eventCount(env, base, 'signed_up'),
-      eventCount(env, base, 'title_added_watchlist'),
-      eventCount(env, base, 'review_created'),
-      eventCount(env, base, 'advisor_pause_taken'),
-      eventCount(env, base, 'donate_clicked'),
-    ]);
+    const [signedUp, titleAdded, reviewCreated, advisorPause, donateClicked, providerClicked, providerClicksByType, landing] =
+      await Promise.all([
+        eventCount(env, base, 'signed_up'),
+        eventCount(env, base, 'title_added_watchlist'),
+        eventCount(env, base, 'review_created'),
+        eventCount(env, base, 'advisor_pause_taken'),
+        eventCount(env, base, 'donate_clicked'),
+        eventCount(env, base, 'provider_clicked'),
+        eventPropBreakdown(env, base, 'provider_clicked', 'offerType'),
+        signupLandingPages(env, base),
+      ]);
 
     const seriesRows = (visitorsSeries as { results?: Array<Record<string, unknown>> }).results ?? [];
     const signupRows = (signupsSeries as { results?: Array<Record<string, unknown>> }).results ?? [];
@@ -178,7 +214,10 @@ export async function fetchPlausible(range: RangeInfo): Promise<PlausibleData | 
         review_created: reviewCreated,
         advisor_pause_taken: advisorPause,
         donate_clicked: donateClicked,
+        provider_clicked: providerClicked,
       },
+      providerClicksByType,
+      signupLandingPages: landing,
       signupsTimeseries: signupRows.map((r) => ({ date: String(r.date), count: num(r.events) })),
       onboardingFunnel,
       signinMethodSplit: {

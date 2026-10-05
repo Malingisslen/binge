@@ -185,12 +185,12 @@ export function InvitePanel({
               <input
                 readOnly
                 value={inviteUrl}
-                className="flex-1 px-2 py-1 text-xxs border border-rule rounded-sm bg-white truncate"
+                className="flex-1 px-2 py-1 text-xxs border border-rule rounded-sm bg-surface truncate"
                 onFocus={e => e.currentTarget.select()}
               />
               <button
                 onClick={copy}
-                className="px-2 py-1 border border-rule rounded-sm text-xxs bg-white cursor-pointer"
+                className="px-2 py-1 border border-rule rounded-sm text-xxs bg-surface cursor-pointer"
                 title="Kopiera"
               >
                 <Copy size={11} />
@@ -206,14 +206,14 @@ export function InvitePanel({
               <button
                 onClick={handleRotate}
                 disabled={working}
-                className="inline-flex items-center gap-1 px-2 py-1 border border-rule rounded-sm text-xxs bg-white cursor-pointer disabled:opacity-50"
+                className="inline-flex items-center gap-1 px-2 py-1 border border-rule rounded-sm text-xxs bg-surface cursor-pointer disabled:opacity-50"
               >
                 <RefreshCw size={10} /> Generera ny
               </button>
               <button
                 onClick={() => setConfirmingDisable(true)}
                 disabled={working}
-                className="px-2 py-1 border border-rule rounded-sm text-xxs bg-white cursor-pointer disabled:opacity-50"
+                className="px-2 py-1 border border-rule rounded-sm text-xxs bg-surface cursor-pointer disabled:opacity-50"
               >
                 Inaktivera
               </button>
@@ -230,14 +230,14 @@ export function InvitePanel({
               <button
                 onClick={handleRotate}
                 disabled={working}
-                className="inline-flex items-center gap-1 px-2 py-1 border border-rule rounded-sm text-xxs bg-white cursor-pointer disabled:opacity-50"
+                className="inline-flex items-center gap-1 px-2 py-1 border border-rule rounded-sm text-xxs bg-surface cursor-pointer disabled:opacity-50"
               >
                 <RefreshCw size={10} /> Generera ny
               </button>
               <button
                 onClick={() => setConfirmingDisable(true)}
                 disabled={working}
-                className="px-2 py-1 border border-rule rounded-sm text-xxs bg-white cursor-pointer disabled:opacity-50"
+                className="px-2 py-1 border border-rule rounded-sm text-xxs bg-surface cursor-pointer disabled:opacity-50"
               >
                 Inaktivera
               </button>
@@ -249,7 +249,7 @@ export function InvitePanel({
             <button
               onClick={handleRotate}
               disabled={working}
-              className="inline-flex items-center gap-1 px-2 py-1 border border-rule rounded-sm text-xxs bg-white cursor-pointer disabled:opacity-50"
+              className="inline-flex items-center gap-1 px-2 py-1 border border-rule rounded-sm text-xxs bg-surface cursor-pointer disabled:opacity-50"
             >
               <RefreshCw size={10} /> Skapa länk
             </button>

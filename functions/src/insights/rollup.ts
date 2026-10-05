@@ -14,6 +14,7 @@
  */
 
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
+import { getAuth } from 'firebase-admin/auth';
 import { resolveTmdbId } from '../shared/mediaTypeDocId';
 import { onlyUserWatchlistDocs } from '../shared/watchlistPath';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
@@ -27,7 +28,7 @@ import {
 import type { RollupData } from './types';
 // BIN-326: pure helpers live in rollup.helpers.ts (no firebase-admin import) so
 // they unit-test under the root vitest toolchain — see that file's header.
-import { topTitles, expiredInsightDocIds, canonicalProviderId, type WatchlistLite, tallyProviderIds } from './rollup.helpers';
+import { topTitles, expiredInsightDocIds, canonicalProviderId, type WatchlistLite, tallyProviderIds, activeUserCounts, type AuthActivityLite } from './rollup.helpers';
 // BIN-350: dated history doc-id keys on the Stockholm wall-clock day so it agrees
 // with the /insikter reader range BIN-343 already switched to Stockholm (otherwise
 // the near-midnight baseline read can land a day off the UTC-keyed rollup doc).
@@ -103,6 +104,29 @@ async function countActiveSessions(): Promise<number> {
   return agg.data().count;
 }
 
+/**
+ * Page through Firebase Auth and keep only each account's activity clocks. Listing
+ * Auth users is not a Firestore read, so this adds nothing to `readsUsed`.
+ */
+async function readAuthActivity(): Promise<AuthActivityLite[]> {
+  const out: AuthActivityLite[] = [];
+  let pageToken: string | undefined;
+  do {
+    const page = await getAuth().listUsers(1000, pageToken);
+    for (const u of page.users) {
+      out.push({
+        // Holds while the app has no custom-token or other provider-less sign-in; a
+        // future one would make its real users read as anonymous and drop out here.
+        anonymous: u.providerData.length === 0,
+        lastSignInTime: u.metadata.lastSignInTime,
+        lastRefreshTime: u.metadata.lastRefreshTime,
+      });
+    }
+    pageToken = page.pageToken;
+  } while (pageToken);
+  return out;
+}
+
 export async function computeRollup(): Promise<RollupData> {
   let partial = false;
 
@@ -132,6 +156,14 @@ export async function computeRollup(): Promise<RollupData> {
     safeCount(() => countActiveSessions()),
   ]);
 
+  let activeUsers: RollupData['activeUsers'];
+  try {
+    activeUsers = activeUserCounts(await readAuthActivity(), Date.now());
+  } catch (err) {
+    logger.error('rollup: auth activity scan failed', err);
+    partial = true;
+  }
+
   // Fold TMDB's alias ids onto the canonical service before tallying, so a
   // service stored under several ids (e.g. Max = 384/1899/1825 across docs of
   // different vintages) counts as ONE row instead of splitting the panel.
@@ -152,6 +184,7 @@ export async function computeRollup(): Promise<RollupData> {
       activeSessions,
       groups,
     },
+    ...(activeUsers ? { activeUsers } : {}),
     statusDistribution: statusDistribution(watchlist),
     mediaTypeSplit: mediaTypeSplit(watchlist),
     ratingsHistogram: ratingsHistogram(watchlist),
