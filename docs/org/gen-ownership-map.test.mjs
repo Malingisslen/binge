@@ -1,6 +1,6 @@
 // Tests for the ownership-map generator (docs/org/gen-ownership-map.mjs).
 //
-// Run: npm test (this file is in vitest.config.ts's `include` via
+// Run: npm run test:process (this file is in vitest.config.ts's `include` via
 // 'docs/org/**/*.{test,spec}.mjs' — the same glob route.test.mjs relies on).
 //
 // Why this file exists: the generator produces docs/org/ownership-map.json, which
@@ -37,10 +37,9 @@ describe('the committed map is exactly what the generator produces (BIN-803)', (
     expect(buildMap(tracked).map).toEqual(readJson('docs/org/ownership-map.json'));
   });
 
-  it('declares a pattern count that matches the patterns it actually holds', () => {
-    // HEAD before BIN-803 declared 151 while holding 153: a count nobody recomputed.
+  it('holds no pattern total for two branches to conflict on (BIN-1426)', () => {
     const { map } = buildMap(tracked);
-    expect(map.patternCount).toBe(allPatterns(map).length);
+    expect(map).not.toHaveProperty('patternCount');
     expect(map.roleCount).toBe(Object.keys(map.roles).length);
   });
 });
@@ -54,7 +53,6 @@ describe('existence is resolved from git, not from the working directory (BIN-80
     const { map } = buildMap({ files: new Set(), dirs: new Set() });
 
     expect(allPatterns(map)).toEqual(['.tmdb-cache/']);
-    expect(map.patternCount).toBe(1);
   });
 
   it('keeps an owned path that git deliberately does not track', () => {
@@ -113,8 +111,8 @@ describe('an owned folder that gains an unowned sibling is detected (BIN-788/803
     // baseline entry that stopped being a gap as informational (logs, returns 0), so
     // someone following the generator's own remedy — name the file under its role in
     // docs/role-responsibilities.md — would get a green generator, commit, and then
-    // fail `npm test`, which deploy.yml runs as the gate on the ONLY production path.
-    // Fixing a gap must never break the deploy. Only NEW gaps are a regression.
+    // fail `npm run test:process`. Fixing a gap must never turn the check red. Only NEW
+    // gaps are a regression.
     const accepted = new Set(readJson('docs/org/ownership-gaps.json').accepted);
     const newGaps = findGaps(tracked).filter((g) => !accepted.has(g));
 

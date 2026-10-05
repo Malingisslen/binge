@@ -1,6 +1,6 @@
 // Tests for the freshness PostToolUse hook (BIN-1009).
 //
-// Run: npm test — this file is matched by vitest.config.ts's `.claude/hooks/**` include,
+// Run: npm run test:process — this file is matched by vitest.config.ts's `.claude/hooks/**` include,
 // added in the same commit. A test file outside the runner's globs is silently never run
 // while passing when invoked by hand (BIN-802), so if you move this file, move that glob.
 //

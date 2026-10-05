@@ -39,11 +39,11 @@ const SELF = 'scripts-self-tests-present.test.mjs';
 const REQUIRED = [
   'check-public-env.test.mjs',
   'check-workflow-map.test.mjs',
-  // BIN-997. Not a release-path guard like the two above — it is where the knowledge-file
-  // COUNT floor gets teeth. The script exits non-zero on a floor failure, but its weekly
-  // deploy step is `continue-on-error` by design (the cap is a warning, Malin 2026-08-25),
-  // so that exit code is discarded on the one path that runs unattended. Lose this file
-  // and the check can measure an empty set forever.
+  // BIN-997. Not a release-path guard like the two above. The script exits non-zero on a
+  // knowledge-file COUNT floor failure, but its weekly deploy step is `continue-on-error`
+  // by design (the cap is a warning, Malin 2026-08-25), so that exit code is discarded on
+  // the one path that runs unattended. Lose this file and the check can measure an empty
+  // set forever.
   'check-knowledge-caps.test.mjs',
   // BIN-790. The pre-commit pruner's test. It pins the pruner's never-blocks contract, its
   // keep-on-throw branch and its zero-subprocess cheap path — and the pruner DELETES work

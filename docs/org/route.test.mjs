@@ -1,14 +1,14 @@
 // Tests for the blast-radius router (docs/org/route.mjs).
 //
-// Run: npm test (this file is in vitest.config.ts's `include`, deliberately — a test
-// file outside the runner's globs is silently never run by `npm test` while passing
-// when invoked by hand, so being in the globs is the whole point. BIN-802.)
+// Run: npm run test:process (this file is in vitest.config.ts's `include`, deliberately —
+// a test file outside the runner's globs is silently never run while passing when invoked
+// by hand, so being in the globs is the whole point. BIN-802.)
 //
 // The clause that used to stand here — that route.mjs's `--selftest` flag "is wired to
 // nothing" — was struck 2026-08-25 (BIN-833). It stopped being true in 851696d, which
 // added `docs/org/gate-symmetry.test.mjs`'s "the router's own golden cases are wired to
 // something that runs (BIN-880)" case; that case spawns `node docs/org/route.mjs
-// --selftest` and requires exit 0, under this same `npm test`.
+// --selftest` and requires exit 0, under this same `npm run test:process`.
 //
 // Why this file exists: the router decides BOTH whether a stakeholder panel is
 // convened before a change is built AND — since BIN-776 — whether a sprint may
@@ -331,8 +331,8 @@ describe('the router and the gate scripts cannot clear themselves (BIN-805)', ()
     // Pinning either specific answer HERE would defeat the point: the router's own
     // failure text tells you to fix an unowned path by naming it in
     // docs/role-responsibilities.md, and a `[14]` pin would make following that advice
-    // fail `npm test`, which gates deploy.yml. Improving ownership must never break the
-    // deploy; the same trap is refused for the gap baseline in gen-ownership-map.test.mjs.
+    // fail `npm run test:process`. Improving ownership must never turn the check red; the
+    // same trap is refused for the gap baseline in gen-ownership-map.test.mjs.
     // Both specific answers ARE pinned, each in its own named test below, so flipping one
     // reddens exactly one assertion, by name.
     //
@@ -631,8 +631,9 @@ describe("the reviewers' own instructions and the hooks reach a gate (BIN-869)",
 // TOOLING_CODE_FILES and already matched by the blocking gate — so weakening the check
 // itself cannot slip past a reviewer, the hole BIN-869 closed one file over.
 // `fs.globSync` needs Node >= 22 (still flagged experimental there, hence the one-line
-// warning in the run output); every workflow that runs `npm test` pins node-version 22 —
-// derive them rather than trusting this: grep -l "npm test" .github/workflows/*.yml
+// warning in the run output); every workflow that runs `npm run test:process` pins
+// node-version 22 — derive them rather than trusting this:
+// grep -l "test:process" .github/workflows/*.yml
 const TOOLING_MJS = globSync(['docs/**/*.mjs', 'scripts/**/*.mjs'], { cwd: REPO_ROOT }).map(posix);
 
 // Files that a `.test.mjs` sibling nominates as candidates but that are deliberately NOT
@@ -652,11 +653,13 @@ const NOT_REVIEW_MACHINERY = {
 };
 
 // The candidate set, derived — test file plus the sibling it tests, when that exists.
-const MJS_TEST_FILES = globSync(vitestConfig.test.include, {
-  cwd: REPO_ROOT,
-  exclude: vitestConfig.test.exclude,
-})
-  .map(posix)
+// vitest.config.ts keeps its globs per project (BIN-1426), so the set is every project's.
+const VITEST_PROJECTS = vitestConfig.test.projects.map(({ test }) => test);
+const MJS_TEST_FILES = [
+  ...new Set(
+    VITEST_PROJECTS.flatMap(({ include, exclude }) => globSync(include, { cwd: REPO_ROOT, exclude }).map(posix)),
+  ),
+]
   .filter((p) => /\.(test|spec)\.mjs$/.test(p))
   .sort();
 const REVIEW_CANDIDATES = [
@@ -729,7 +732,7 @@ describe('the advising list and the blocking gate cannot drift apart for tooling
     // resolving to something else — would delete both blocks above in total silence.
     // Anti-vacuity floors: they exist to make a list that stopped matching fail loudly,
     // not to pin today's length.
-    expect(vitestConfig.test.include.length).toBeGreaterThanOrEqual(5);
+    expect(VITEST_PROJECTS.flatMap(({ include }) => include).length).toBeGreaterThanOrEqual(5);
     expect(MJS_TEST_FILES.length).toBeGreaterThanOrEqual(6);
     expect(REVIEW_CANDIDATES.length).toBeGreaterThanOrEqual(11);
     // TOOLING_MJS is the exception: its floor is NOT the measured value. The glob is

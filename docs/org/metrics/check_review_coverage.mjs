@@ -12,7 +12,7 @@
 //
 // WHICH RUNNER CALLS WHICH is derived, not asserted — a sentence here was the belief that
 // produced BIN-1040's first, inert fix (the exemption wired into `main()`, which nothing
-// runs, while the assertion that reds the deploy went on charging dependabot):
+// runs, while the live-repo assertion went on charging dependabot):
 //
 //     grep -rn check_review_coverage .github lefthook.yml package.json
 //     git grep -n "findCoverageGaps(" -- docs
@@ -195,11 +195,11 @@ const OWES_REVIEW = /^(feat|fix|refactor|perf|test|build|ci)(\([^)]*\))?!?:/;
  *
  * The rule they are exempted from exists to catch MY unreviewed code (BIN-917). A robot's
  * version bump is not that risk: there is no author to critique, and the content is graded
- * by the suite `pr-checks.yml` runs on the pull request. Left un-exempted the rule is worse
- * than useless — merging such a PR turns the deploy red and then blocks UNRELATED code until
- * somebody hand-writes a row for a commit nobody wrote (BIN-1040). Which of the bot's open
- * PRs can actually do that moves with every dependabot run, and only the ones whose subject
- * `OWES_REVIEW` matches at all can: derive it rather than reading a number here.
+ * by the suite `pr-checks.yml` runs on the pull request. Without the exemption, merging such a
+ * PR turns `npm run test:process` red until somebody hand-writes a row for a commit nobody
+ * wrote (BIN-1040). Which of the bot's open PRs can actually do that moves with every
+ * dependabot run, and only the ones whose subject `OWES_REVIEW` matches at all can: derive it
+ * rather than reading a number here.
  *
  * THE EXEMPTION IS TWO SIGNALS AND-ED, NEVER ONE.
  *
@@ -323,8 +323,8 @@ export function filesOfCommit(sha) {
 
 /**
  * Pushed commits whose subject lost its BIN-id, mapped by FULL sha to the ticket they built.
- * History on main cannot be rewritten, so without this one such commit reds `npm test` —
- * and with it every production deploy — permanently.
+ * History on main cannot be rewritten, so without this one such commit reds
+ * `npm run test:process` permanently.
  *
  * This ATTRIBUTES, it does not exempt: the named ticket must still carry a `review` row.
  *
@@ -517,10 +517,10 @@ export function findCoverageGaps(commits, reviewed, {
  * repo and they must not drift apart (BIN-1040, found by the integration review).
  *
  * `main()` is one. The other is the live-repo assertion in this module's test file, and
- * THAT is the one that reds the deploy: nothing automated calls `main()` — `lefthook.yml`
- * invokes the `--message` mode — while `deploy.yml` runs `npm test`, which reaches the
- * test. Wiring the exemption into `main()` alone left the defect exactly where it was
- * reported from, under a docblock saying it was fixed. "Check WHERE the rule runs, not only
+ * THAT is the one deploy.yml runs: nothing automated calls `main()` — `lefthook.yml`
+ * invokes the `--message` mode — while `deploy.yml` runs `npm run test:process`, which
+ * reaches the test. Wiring the exemption into `main()` alone left the defect exactly where
+ * it was reported from, under a docblock saying it was fixed. "Check WHERE the rule runs, not only
  * where it was written" is BIN-744/776/917's lesson; this is the same shape.
  *
  * Derive the callers rather than trusting this paragraph:
@@ -661,8 +661,9 @@ if (join(REPO_ROOT, DEFAULT_EVENTS_REL) !== EVENTS_PATH) {
  * engine's own prompt says "Do not commit and do not stage" for the rows it writes. So the
  * concrete, already-documented path is: engine writes a row unstaged → a worktree-reading
  * hook sees it and passes the commit → the row never lands → `deploy.yml` walks the committed
- * history and reds the deploy for a commit the gate just cleared. A false pass at commit time
- * is worse than the false red README already warns about, because nobody looks again.
+ * history and reds `npm run test:process` for a commit the gate just cleared. A false pass at
+ * commit time is worse than the false red README already warns about, because nobody looks
+ * again.
  *
  * Falls back to the working tree when the path is not in the index at all (a fresh clone
  * mid-rebase, or the file genuinely untracked), and SAYS which it used — an unannounced
@@ -734,7 +735,7 @@ export function mainMessage(messagePath, staged = stagedFiles()) {
   console.error(`  read from: ${log.source}\n`);
   console.error('If you just logged the row, STAGE it — events.jsonl is in cleanTreeIgnore and the');
   console.error('sprint engine writes these rows unstaged, so an unstaged row is invisible here and');
-  console.error('would red the deploy later instead.\n');
+  console.error('would red `npm run test:process` later instead.\n');
   console.error('A code-changing commit must name its BIN-id in the SUBJECT, and that ticket must');
   console.error('carry a `review` row: `ran:true` for a critique that ran, or `ran:false` with the');
   console.error('pull-out reason written on the ticket. Log one with:');

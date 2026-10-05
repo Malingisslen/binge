@@ -1,6 +1,6 @@
 // Ownership-map ↔ commit-gate symmetry (BIN-880).
 //
-// Run: npm test (this file is in vitest.config.ts's `include` via
+// Run: npm run test:process (this file is in vitest.config.ts's `include` via
 // 'docs/org/**/*.{test,spec}.mjs' — the same glob route.test.mjs relies on).
 //
 // Why this file exists: TWO lists decide who reviews a change, and widening one has
@@ -461,9 +461,9 @@ describe("the router's own golden cases are wired to something that runs (BIN-88
     // `--selftest` is advertised in route.mjs's usage block ("exit non-zero on fail") and
     // was invoked by NOTHING — not package.json, not deploy.yml, not a hook.
     // A documented command nobody runs teaches the next reader to ignore it, and
-    // route.mjs pointed at this ticket to fix that. `npm test` gates deploy.yml, so running
-    // it here is the wiring: a red golden case now fails the deploy instead of a terminal
-    // nobody opens.
+    // route.mjs pointed at this ticket to fix that. Running it here is the wiring: a red
+    // golden case now shows in `npm run test:process`, which deploy.yml runs as a warning,
+    // instead of a terminal nobody opens.
     expect(() =>
       execFileSync('node', [join('docs', 'org', 'route.mjs'), '--selftest'], {
         cwd: REPO_ROOT,

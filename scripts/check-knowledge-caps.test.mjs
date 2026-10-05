@@ -1,18 +1,17 @@
 // Self-test for check-knowledge-caps.mjs (BIN-997), and the place the file-count FLOOR is
-// actually enforced.
+// asserted.
 //
-// Run: npm test
+// Run: npm run test:process
 //
 // The script warns and exits 0 on a cap overrun — Malin's call 2026-08-25: the cap is a
 // recommendation a warning reminds you of, not a mechanism that reddens a build. Nothing
-// here may assert that the live files are UNDER the cap; that would turn `npm test` into
-// the gate she declined.
+// here may assert that the live files are UNDER the cap.
 //
-// What does have teeth is the floor, and a floor only has teeth where something acts on a
-// failure. The script does exit non-zero on one — and `npm run check:knowledge-caps` shows
+// The script does exit non-zero below the floor — and `npm run check:knowledge-caps` shows
 // it — but the weekly deploy step is `continue-on-error`, so on the one path that runs
 // unattended that exit code is discarded. The floor is therefore asserted here as well: if
-// `*.knowledge.md` stops matching, `npm test` goes red. Without this file the whole check
+// `*.knowledge.md` stops matching, `npm run test:process` goes red, which deploy.yml shows as
+// a warning (BIN-1426). Without this file the whole check
 // could quietly measure an empty set and report a clean run forever — the shape
 // BIN-838/850/852 exist to stop.
 

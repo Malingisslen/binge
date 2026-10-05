@@ -128,34 +128,31 @@ real sha cited for the wrong ticket, or a docs-only commit cited for a code clai
 invisible to it. That is deliberate: the first attempt at this check tried to close that gap
 by matching commit SUBJECT LINES and certified a docs commit for a code claim, so this
 version refuses the inference and discloses where verification stops instead of guessing.
-**It blocks no commit — but it does gate the deploy, and that is worth knowing before the
-first one fires.** `check_events.test.mjs` asserts the LIVE `events.jsonl`, and `npm test` is
-a blocking step in `deploy.yml`. Nothing here stops the sprint engine writing another past-tense
-`declined-unattended-shipped` row tomorrow, so the next one turns CI red and holds the
-production hosting deploy of unrelated code until someone appends a `correction`. That is a
-deliberate trade — the row means unreviewed code reached main, which is worth stopping for —
-but the remedy must be obvious to whoever meets it at 2am: **append a `correction` row keyed
-on `{ts, ticket}`, or add the `commit_sha` the claim is missing.** If this proves too blunt,
-the fix is to move the live-file assertion into a CLI-only check rather than to weaken the
-rule.
+**It blocks no commit, and since 2026-10-05 no deploy either (Malin's decision, BIN-1426).**
+`check_events.test.mjs` asserts the LIVE `events.jsonl` under `npm run test:process`, which
+`deploy.yml` runs as a warning. Nothing here stops the sprint engine writing another past-tense
+`declined-unattended-shipped` row tomorrow, so the next one shows as a warning on the next
+deploy. The remedy: **append a `correction` row keyed on `{ts, ticket}`, or add the
+`commit_sha` the claim is missing.**
 
-**And that escape hatch has a TRIGGER, so it does not need re-arguing.** Binding condition
+**The escape hatch this paragraph used to name — moving the live-file assertion into a
+CLI-only check — had a TRIGGER, so it did not need re-arguing.** Binding condition
 C2 from #25 Engineering Manager / Release Manager's blind critique, 2026-08-17: *the first
 time this assertion reddens `deploy.yml` or `preview.yml` for a commit unrelated to the
 flagged ticket, it converts to a CLI-only check on the next commit that touches it — not
 re-litigated as a fresh decision.* **Successor 2026-08-27 (BIN-1028):** `preview.yml` is
 deleted, and `pr-checks.yml` now runs `npm test` on pull requests. The condition's words are
 left as #25 wrote them; read the trigger as any workflow run. Whoever meets it at 2am inherits a made decision, not an
-open question. Until that happens the live-file assertion stays: a false row means unreviewed
-code reached main, which is worth stopping for.
+open question. **Successor 2026-10-05 (BIN-1426):** the live-file assertion no longer gates any
+workflow, so this trigger cannot fire.
 
 **Where you will actually meet it first, which is NOT in CI.** The engine's own prompt says
 "Do not commit and do not stage" for these rows, and `.claude/shared-plugin.json` lists
 `docs/org/metrics/events\.jsonl$` in `delivery.cleanTreeIgnore`, so the sprint's clean-tree
-check waves the new row through. The first symptom is therefore a red **local** `npm test`
+check waves the new row through. The first symptom is therefore a red **local** `npm run test:process`
 on an UNSTAGED row — which a sprint that just wrote it will read as its own batch failing.
-Check `git status` for `events.jsonl` before suspecting the code under test. CI and the
-deploy only redden once the row is committed. Claims written before
+Check `git status` for `events.jsonl` before suspecting the code under test. The deploy only
+warns once the row is committed. Claims written before
 `2026-08-16T00:00:00.000Z` predate the rule and are grandfathered; the run prints how many.
 In a SHALLOW checkout (any workflow that omits `fetch-depth`; `deploy.yml`
 sets `fetch-depth: 0`) no historical sha resolves, so the existence and freshness lookups are

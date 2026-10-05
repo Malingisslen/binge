@@ -78,8 +78,8 @@ jobs:
       # `if: schedule` is what makes this "the weekly sweep" rather than every push — this
       # workflow's own `cron: '0 4 * * 1'`. The FLOOR (the glob stopped matching, so the
       # check measured nothing) is asserted in scripts/check-knowledge-caps.test.mjs under
-      # `npm test`, which is where it gets teeth: `continue-on-error` here discards this
-      # step's exit code, floor failure included.
+      # `npm run test:process`, the warning step below. `continue-on-error` here discards
+      # this step's exit code, floor failure included.
       - name: Reviewer knowledge-file caps (warning only)
         if: github.event_name == 'schedule'
         continue-on-error: true
@@ -104,6 +104,20 @@ jobs:
 
       - name: Test
         run: npm test
+
+      # The process tests read the review log, the git history and the process config, so
+      # they can go red without any change to the product. Malin's decision 2026-10-05
+      # (BIN-1426): they warn. The time cap is there because `continue-on-error` does not
+      # cover a hang.
+      - name: Process tests (warning only)
+        id: process-tests
+        continue-on-error: true
+        timeout-minutes: 5
+        run: npm run test:process
+
+      - name: Warn when the process tests failed
+        if: steps.process-tests.outcome == 'failure'
+        run: echo "::warning::npm run test:process failed. It does not stop the deploy (BIN-1426); the step above says which test."
 
       # Audit (high+) — körs på deploy-vägen (push→main), som är enda vägen till
       # produktion; utan detta steg saknade den vägen audit helt (BIN-344).
