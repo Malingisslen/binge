@@ -246,11 +246,11 @@ function ReportRow({
                 onChange={e => setNote(e.target.value)}
                 maxLength={MAX_DECISION_NOTE}
                 rows={2}
-                className="w-56 px-2 py-1 text-xs border border-rule rounded-sm bg-white"
+                className="w-56 px-2 py-1 text-xs border border-rule rounded-sm bg-surface"
               />
               <button
                 onClick={() => onAction(report.id, 'reviewed', note)}
-                className="px-3 py-[3px] text-xs border border-rule rounded-sm bg-white cursor-pointer hover:bg-bg-2"
+                className="px-3 py-[3px] text-xs border border-rule rounded-sm bg-surface cursor-pointer hover:bg-bg-2"
               >
                 Granskad
               </button>
@@ -262,7 +262,7 @@ function ReportRow({
               </button>
               <button
                 onClick={() => onAction(report.id, 'dismissed', note)}
-                className="px-3 py-[3px] text-xs border border-rule rounded-sm bg-white text-ink-3 cursor-pointer hover:bg-bg-2"
+                className="px-3 py-[3px] text-xs border border-rule rounded-sm bg-surface text-ink-3 cursor-pointer hover:bg-bg-2"
               >
                 Avfärda
               </button>
@@ -275,7 +275,7 @@ function ReportRow({
               </span>
               <button
                 onClick={() => onAction(report.id, 'open')}
-                className="px-3 py-[3px] text-xs border border-rule rounded-sm bg-white cursor-pointer hover:bg-bg-2"
+                className="px-3 py-[3px] text-xs border border-rule rounded-sm bg-surface cursor-pointer hover:bg-bg-2"
               >
                 Öppna igen
               </button>

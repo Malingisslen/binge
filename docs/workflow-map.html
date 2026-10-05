@@ -993,7 +993,7 @@
         {
           "from": "cf-sendPush",
           "to": "fcm-sw",
-          "payload": "push message (tab closed)",
+          "payload": "push message (tab closed); fcmOptions.link = withPushUtm(actionUrl, tag) — same-origin links gain utm_source=push, utm_medium=notis, utm_campaign=<tag prefix> so Plausible attributes the visit",
           "transport": "FCM / Web Push",
           "verified": true
         },
@@ -2618,7 +2618,7 @@
     {
       "id": "flow-insights",
       "label": "Insights dashboard",
-      "description": "rollupInsights runs on a 24h Cloud Scheduler trigger, paginated-scans the watchlist collectionGroup plus aggregate counts (users/reviews/groups/active sessions), and writes one current-state snapshot to insights/daily (read by the API) and a dated insights/{YYYY-MM-DD} history doc, then prunes history past a 90-day retention window. The apiInsights HTTP function sits behind the /api/insights Hosting rewrite; it authenticates either a Firebase ID token (must resolve to users/{uid}.isAdmin===true) or a static INSIGHTS_TOKEN secret, reads insights/daily (1 read) plus a baseline dated snapshot for window deltas, fetches live Plausible analytics and askBinge usage stats, merges them into one InsightsData JSON payload, and returns it with a 5-minute private cache header. The /insikter dashboard (InsikterClient + useInsightsData hook) calls fetchInsights with a bearer token and range, and renders the merged data.",
+      "description": "rollupInsights runs on a 24h Cloud Scheduler trigger, paginated-scans the watchlist collectionGroup plus aggregate counts (users/reviews/groups/active sessions), pages through Firebase Auth for weekly/monthly active-user counts (non-anonymous accounts by the later of lastSignInTime/lastRefreshTime; only the two counts are stored), and writes one current-state snapshot to insights/daily (read by the API) and a dated insights/{YYYY-MM-DD} history doc, then prunes history past a 90-day retention window. The apiInsights HTTP function sits behind the /api/insights Hosting rewrite; it authenticates either a Firebase ID token (must resolve to users/{uid}.isAdmin===true) or a static INSIGHTS_TOKEN secret, reads insights/daily (1 read) plus a baseline dated snapshot for window deltas, fetches live Plausible analytics and askBinge usage stats, merges them into one InsightsData JSON payload, and returns it with a 5-minute private cache header. The /insikter dashboard (InsikterClient + useInsightsData hook) calls fetchInsights with a bearer token and range, and renders the merged data.",
       "covers": [
         "rollupInsights",
         "apiInsights",
@@ -2630,6 +2630,13 @@
           "to": "firestore",
           "payload": "collectionGroup('watchlist').select(...) paginated scan + count() aggregations (users/reviews/groups/activeSessions)",
           "transport": "firestore-query",
+          "verified": true
+        },
+        {
+          "from": "cf-rollupInsights",
+          "to": "firebase-auth",
+          "payload": "listUsers(1000, pageToken) paged → activeUserCounts() → rollup.activeUsers {d7, d30}; a failed scan omits the field and marks the rollup partial",
+          "transport": "firebase-admin auth",
           "verified": true
         },
         {

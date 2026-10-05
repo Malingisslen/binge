@@ -2,6 +2,7 @@ import type { TMDBProvider } from '@/types';
 import { getProvider, canonicalProviderId, affiliateWrap } from '@/lib/tmdb/providers';
 import { useAuth } from '@/hooks/useAuth';
 import { type Offer, isLeavingSoon, formatLeaving } from '@/lib/streaming/offers';
+import { trackEvent } from '@/lib/analytics';
 
 interface ProviderTagProps {
   provider: TMDBProvider;
@@ -10,9 +11,10 @@ interface ProviderTagProps {
   // BIN-145: obligatorisk — en default på epoch-0 (1970) dolde tyst "lämnar
   // snart"-badgen om en anropare glömde proppen. Krävs nu, ingen tyst fallback.
   nowMs: number;
+  mediaType: 'movie' | 'tv';
 }
 
-export default function ProviderTag({ provider, size = 'sm', offer, nowMs }: ProviderTagProps) {
+export default function ProviderTag({ provider, size = 'sm', offer, nowMs, mediaType }: ProviderTagProps) {
   const { user } = useAuth();
   const mapped = getProvider(provider.provider_id);
   const isMine = user?.myProviders.includes(canonicalProviderId(provider.provider_id)) ?? false;
@@ -58,7 +60,12 @@ export default function ProviderTag({ provider, size = 'sm', offer, nowMs }: Pro
   return offer?.link ? (
     // BIN-173: route the outbound deeplink through affiliateWrap — a no-op
     // passthrough until an AFFILIATE_PROGRAMS entry exists for this provider.
-    <a href={affiliateWrap(provider.provider_id, offer.link)} target="_blank" rel="noopener noreferrer">
+    <a
+      href={affiliateWrap(provider.provider_id, offer.link)}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={() => trackEvent('provider_clicked', { providerId: canonicalProviderId(provider.provider_id), offerType: offer.type, mediaType })}
+    >
       {body}
     </a>
   ) : (

@@ -252,6 +252,20 @@ Firestore Console — rules forbid client writes to the field.
   provider uses it**, so the alias `1759 → 489` (`canonicalProviderId`) is zero-collision — it
   only catches old stored `watch/providers` payloads.
 
+## Plausible-mål för Insikter (BIN-1425)
+
+Insikter läser händelserna nedan ur Plausible. En händelse som inte är registrerad som mål
+(Site settings → Goals → Custom event) och vars egenskap inte är tillagd (Custom properties)
+ger tomma rutor, inte ett fel.
+
+| Mål | Egenskap som bryts ned |
+|---|---|
+| `provider_clicked` | `offerType` |
+| `share_clicked` | `surface`, `method` |
+
+Aktiva användare och pushmärkningen ligger i `rollupInsights` och `sendPushToUser`, som
+driftsätts för hand: `firebase deploy --only functions`.
+
 ## Open infra items (verify status; genuinely maybe-undone)
 
 | Item | Status | Blocker |

@@ -120,6 +120,7 @@ export default function QuickAddButton({
     }
   }
 
+  // Also the aria-label: title= never renders on touch (BIN-596 above).
   const buttonLabel =
     authLoading ? 'Laddar…'
     : signedOut ? (current ? labelFor(current.status) : 'Lägg till')
@@ -171,7 +172,6 @@ export default function QuickAddButton({
             : 'bg-black/60 text-white hover:bg-acc-deep'
         }`}
         title={buttonLabel}
-        // A11Y-3: the button is an icon only, and `title=` is not read on touch.
         aria-label={buttonLabel}
       >
         {current ? <Check size={13} /> : <Plus size={13} />}
