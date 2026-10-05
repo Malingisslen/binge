@@ -55,25 +55,30 @@ function EpisodeRow({
       : '';
 
   if (masked) {
+    // A real button (A11Y-2): the reveal used to be a click-only <div>, so keyboard
+    // and switch users could never open a masked episode. The spans keep the
+    // button's content phrasing-only; `.ep` lays them out exactly like the
+    // unmasked row's divs.
     return (
-      <div
+      <button
+        type="button"
         className="ep masked"
         onClick={() => setRevealed(true)}
-        title="Klicka för att avslöja — gruppen har inte sett detta avsnitt än"
+        aria-label={`${code}, dolt avsnitt. Visa ändå`}
       >
-        <div className="still">
+        <span className="still">
           <Lock size={14} className="text-ink-3 opacity-40" />
-        </div>
-        <div className="code">{code}</div>
-        <div>
-          <div className="ttl">Avsnitt {episode.episode_number}</div>
-          <div className="syn">
-            Dolt — gruppen har inte sett detta avsnitt än. <span className="text-acc-deep">Visa ändå</span>
-          </div>
-        </div>
-        <div className="runt"></div>
-        <div></div>
-      </div>
+        </span>
+        <span className="code">{code}</span>
+        <span className="main">
+          <span className="ttl">Avsnitt {episode.episode_number}</span>
+          <span className="syn">
+            Dolt, gruppen har inte sett det här avsnittet än. <span className="text-acc-deep">Visa ändå</span>
+          </span>
+        </span>
+        <span className="runt"></span>
+        <span className="end"></span>
+      </button>
     );
   }
 
@@ -87,7 +92,7 @@ function EpisodeRow({
         ) : null}
       </div>
       <div className="code">{code}</div>
-      <div>
+      <div className="main">
         <div className="ttl">{episode.name}</div>
         {episode.overview && <div className="syn">{episode.overview}</div>}
         {onMarkUpTo && !watched && !isUnaired && (
@@ -112,18 +117,18 @@ function EpisodeRow({
       </div>
       <div className="runt">{runt}</div>
       {isToday ? (
-        <div>
+        <div className="end">
           <span className="chip acc">nu</span>
         </div>
       ) : (
-        <label className="check">
+        <label className="check end">
           <input
             type="checkbox"
             checked={watched}
             onChange={e => onToggle(e.target.checked)}
             aria-label={watched ? 'Markera som osedd' : 'Markera som sedd'}
           />
-          {watched ? <Check size={11} /> : null}
+          <span className="box" aria-hidden="true">{watched ? <Check size={12} strokeWidth={2.5} /> : null}</span>
         </label>
       )}
     </div>

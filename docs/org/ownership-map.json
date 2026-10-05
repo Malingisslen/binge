@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 667,
+  "patternCount": 670,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -243,6 +243,8 @@
         "src/lib/airingState.ts",
         "src/lib/calendar/buildEntries.test.ts",
         "src/lib/calendar/buildEntries.ts",
+        "src/lib/calendar/dayParam.test.ts",
+        "src/lib/calendar/dayParam.ts",
         "src/lib/calendar/entry.test.ts",
         "src/lib/calendar/entry.ts",
         "src/lib/calendar/nextAir.ts",
@@ -304,6 +306,7 @@
         "src/hooks/useDebouncedCommit.test.ts",
         "src/hooks/useDebouncedCommit.ts",
         "src/hooks/useDebouncedValue.ts",
+        "src/hooks/useEscapeKey.ts",
         "src/hooks/useInView.test.ts",
         "src/hooks/useInView.ts",
         "src/hooks/useIncrementalList.test.ts",
