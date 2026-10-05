@@ -90,6 +90,22 @@ describe('SeasonList — curated season-0 specials (BIN-580)', () => {
     groupState.progress = new Map();
   });
 
+  it('opens seasons from real buttons that say whether they are open (A11Y-2)', () => {
+    // The season and specials headers were click-only <div>s: no tab stop, and nothing
+    // for a screen reader to announce. aria-expanded has to FOLLOW the click, so both
+    // states are read, from the same element.
+    renderList(DW_REVIVAL);
+    const specials = screen.getByRole('button', { name: /Specialavsnitt/ });
+    const season1 = screen.getByRole('button', { name: /Säsong 1/ });
+    expect(specials).toHaveAttribute('aria-expanded', 'false');
+    expect(season1).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(specials);
+
+    expect(specials).toHaveAttribute('aria-expanded', 'true');
+    expect(season1).toHaveAttribute('aria-expanded', 'false');
+  });
+
   it('shows the specials section for a curated show and lists ONLY the allow-listed episodes', () => {
     renderList(DW_REVIVAL);
     // Collapsed first: the section header is there, the episodes are not.
