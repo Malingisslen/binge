@@ -54,7 +54,7 @@ function ListsContent() {
             onChange={e => setTitle(e.target.value)}
             placeholder="Listans namn"
             maxLength={100}
-            className="w-full px-2 py-[3px] text-xs border border-rule rounded-sm bg-white font-[inherit] outline-none mb-2"
+            className="w-full px-2 py-[3px] text-xs border border-rule rounded-sm bg-surface font-[inherit] outline-none mb-2"
           />
           <textarea
             value={description}
@@ -62,7 +62,7 @@ function ListsContent() {
             placeholder="Beskrivning (valfritt)"
             maxLength={300}
             rows={2}
-            className="w-full px-2 py-1 text-xs border border-rule rounded-sm bg-white font-[inherit] resize-none outline-none mb-2"
+            className="w-full px-2 py-1 text-xs border border-rule rounded-sm bg-surface font-[inherit] resize-none outline-none mb-2"
           />
           <div className="flex items-center gap-2">
             <label className="flex items-center gap-1 text-xs text-ink-3 cursor-pointer">

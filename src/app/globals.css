@@ -14,6 +14,9 @@
   --bg:        oklch(0.985 0.003 90);   /* warm off-white page */
   --bg-2:      oklch(0.968 0.004 90);   /* alternating rows, headers */
   --surface:   oklch(1 0 0);            /* cards, panels */
+  /* hero-bg — startsidans mörka band. Mörkt i båda temana så att den vita
+     texten ovanpå alltid går att läsa (--ink blir ljus i mörkt läge). */
+  --hero-bg:   oklch(0.18 0.006 80);
 
   /* ink */
   --ink:       oklch(0.18 0.006 80);
@@ -88,6 +91,7 @@
   --bg:        oklch(0.17 0.006 80);
   --bg-2:      oklch(0.215 0.006 80);
   --surface:   oklch(0.235 0.006 80);
+  --hero-bg:   oklch(0.13 0.006 80);
 
   --ink:       oklch(0.95 0.004 90);
   --ink-2:     oklch(0.78 0.006 85);
@@ -646,7 +650,7 @@ button { font: inherit; cursor: pointer; }
   gap: 6px;
   cursor: pointer;
 }
-.btn:hover { background: oklch(0.10 0.006 80); border-color: oklch(0.10 0.006 80); }
+.btn:hover { background: color-mix(in oklch, var(--ink) 85%, black); border-color: color-mix(in oklch, var(--ink) 85%, black); }
 .btn.btn-ghost,
 .btn-ghost {
   background: transparent;
@@ -1348,7 +1352,7 @@ button { font: inherit; cursor: pointer; }
   width: 28px; height: 28px;
   border-radius: 999px;
   background: var(--ink);
-  color: white;
+  color: var(--bg);
   font-family: var(--sans);
   font-weight: 600;
   font-size: 11.5px;
@@ -2070,7 +2074,7 @@ button { font: inherit; cursor: pointer; }
 .rec-card:hover .quick-actions { opacity: 1; pointer-events: auto; }
 .rec-card .quick-actions button,
 .rec-card .quick-actions a {
-  background: oklch(1 0 0 / 0.95);
+  background: var(--surface);
   border: 1px solid oklch(0 0 0 / 0.06);
   color: var(--ink);
   border-radius: 999px;
@@ -2091,7 +2095,7 @@ button { font: inherit; cursor: pointer; }
 .rec-card .quick-actions button:hover,
 .rec-card .quick-actions a:hover {
   background: var(--ink);
-  color: white;
+  color: var(--bg);
 }
 .rec-card .quick-actions .ic { width: 26px; padding: 0; }
 .rec-card .quick-actions svg { width: 11px; height: 11px; }
@@ -2112,7 +2116,7 @@ button { font: inherit; cursor: pointer; }
   backdrop-filter: blur(2px);
 }
 .rec-card .corner-badge.in-lib {
-  background: oklch(1 0 0 / 0.95);
+  background: var(--surface);
   color: var(--ink);
   border: 1px solid var(--rule);
 }

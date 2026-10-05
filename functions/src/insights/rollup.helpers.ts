@@ -109,3 +109,43 @@ export function expiredInsightDocIds(ids: string[], todayIso: string, retentionD
   const cutoff = new Date(cutoffMs).toISOString().slice(0, 10);
   return ids.filter((id) => /^\d{4}-\d{2}-\d{2}$/.test(id) && id < cutoff);
 }
+
+/** What the rollup keeps of one Auth account — no uid, no e-mail, only clocks. */
+export interface AuthActivityLite {
+  /** Anonymous accounts (Tillsammans guests) are not users and are not counted. */
+  anonymous: boolean;
+  /** Firebase Auth's own metadata strings; either may be absent. */
+  lastSignInTime?: string | null;
+  lastRefreshTime?: string | null;
+}
+
+/**
+ * Weekly and monthly active users, derived from data Firebase Auth already keeps
+ * (decision 8: no new personal-data field). `lastRefreshTime` moves whenever the
+ * app refreshes the account's ID token, which an open session does on its own, so
+ * it is the closest existing clock to "opened Binge". The later of the two clocks
+ * wins, because an account that has signed in but never refreshed has only one.
+ */
+export function activeUserCounts(
+  accounts: readonly AuthActivityLite[],
+  nowMs: number,
+): { d7: number; d30: number } {
+  const DAY = 86_400_000;
+  let d7 = 0;
+  let d30 = 0;
+  for (const a of accounts) {
+    if (a.anonymous) continue;
+    const seen = Math.max(parseAuthTime(a.lastSignInTime), parseAuthTime(a.lastRefreshTime));
+    if (!Number.isFinite(seen)) continue;
+    const age = nowMs - seen;
+    if (age <= 30 * DAY) d30++;
+    if (age <= 7 * DAY) d7++;
+  }
+  return { d7, d30 };
+}
+
+function parseAuthTime(s: string | null | undefined): number {
+  if (!s) return -Infinity;
+  const t = Date.parse(s);
+  return Number.isNaN(t) ? -Infinity : t;
+}

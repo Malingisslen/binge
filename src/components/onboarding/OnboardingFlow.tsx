@@ -303,7 +303,7 @@ function StepProviders({ onBack, onNext }: { onBack: () => void; onNext: () => v
               className={`flex items-center gap-2 px-3 py-2 border rounded-sm cursor-pointer text-left ${
                 isSelected
                   ? 'border-acc-deep bg-acc-deep/[0.05] text-ink'
-                  : 'border-rule bg-white text-ink-2'
+                  : 'border-rule bg-surface text-ink-2'
               }`}
             >
               <span
@@ -352,7 +352,7 @@ function StepProviders({ onBack, onNext }: { onBack: () => void; onNext: () => v
       <div className="flex items-center gap-2">
         <button
           onClick={onBack}
-          className="inline-flex items-center gap-1 px-3 py-2 border border-rule rounded-sm text-sm bg-white cursor-pointer"
+          className="inline-flex items-center gap-1 px-3 py-2 border border-rule rounded-sm text-sm bg-surface cursor-pointer"
         >
           <ArrowLeft size={14} /> Tillbaka
         </button>
@@ -461,7 +461,7 @@ function StepFirstTitle({
         Sök efter en film eller serie. Serier följer du; filmer markerar du
         som vill se eller sedda.
       </p>
-      <div className="flex items-center gap-2 mb-3 border border-rule rounded-sm bg-white px-2">
+      <div className="flex items-center gap-2 mb-3 border border-rule rounded-sm bg-surface px-2">
         <Search size={13} className="text-ink-3" />
         <input
           type="search"
@@ -497,7 +497,7 @@ function StepFirstTitle({
               return (
                 <li
                   key={r.id}
-                  className="flex items-center gap-2 px-2 py-[5px] bg-white border border-rule rounded-sm"
+                  className="flex items-center gap-2 px-2 py-[5px] bg-surface border border-rule rounded-sm"
                 >
                   {poster && (
                     <div className={`poster duo-${r.genre_ids?.length ? toneForGenreIds(r.genre_ids) : toneForId(r.id)} w-[28px] h-[42px] shrink-0`}>
@@ -537,7 +537,7 @@ function StepFirstTitle({
                       <button
                         onClick={() => handleAdd(r, 'plan')}
                         disabled={!libraryKnown}
-                        className="text-xxs px-2 py-[3px] border border-rule rounded-sm bg-white cursor-pointer disabled:opacity-50"
+                        className="text-xxs px-2 py-[3px] border border-rule rounded-sm bg-surface cursor-pointer disabled:opacity-50"
                       >
                         Vill se
                       </button>
@@ -600,7 +600,7 @@ function StepFirstTitle({
       <div className="flex items-center gap-2">
         <button
           onClick={onBack}
-          className="inline-flex items-center gap-1 px-3 py-2 border border-rule rounded-sm text-sm bg-white cursor-pointer"
+          className="inline-flex items-center gap-1 px-3 py-2 border border-rule rounded-sm text-sm bg-surface cursor-pointer"
         >
           <ArrowLeft size={14} /> Tillbaka
         </button>
@@ -698,7 +698,7 @@ function StepDone({
           <button
             onClick={() => onFinish()}
             disabled={saving}
-            className="px-3 py-[5px] border border-rule rounded-sm text-xs bg-white cursor-pointer disabled:opacity-50"
+            className="px-3 py-[5px] border border-rule rounded-sm text-xs bg-surface cursor-pointer disabled:opacity-50"
           >
             Senare
           </button>
@@ -709,7 +709,7 @@ function StepDone({
         <button
           onClick={onBack}
           disabled={saving}
-          className="inline-flex items-center gap-1 px-3 py-2 border border-rule rounded-sm text-sm bg-white cursor-pointer disabled:opacity-50"
+          className="inline-flex items-center gap-1 px-3 py-2 border border-rule rounded-sm text-sm bg-surface cursor-pointer disabled:opacity-50"
         >
           <ArrowLeft size={14} /> Tillbaka
         </button>

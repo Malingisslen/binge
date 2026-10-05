@@ -129,6 +129,8 @@ export default function InsikterClient() {
             <MetricTile metricKey="totalTitlesTracked" />
             <MetricTile metricKey="totalReviews" />
             <MetricTile metricKey="titlesAdded" />
+            <MetricTile metricKey="activeUsers7d" />
+            <MetricTile metricKey="activeUsers30d" />
           </MetricGrid>
         </Section>
 
@@ -140,8 +142,11 @@ export default function InsikterClient() {
             <div className="self-start">
               <MetricGrid>
                 <MetricTile metricKey="donateClicks" />
+                <MetricTile metricKey="providerClicks" />
               </MetricGrid>
             </div>
+            <TopList metricKey="signupLandingPages" />
+            <Donut metricKey="providerClicksByType" />
           </div>
         </Section>
 

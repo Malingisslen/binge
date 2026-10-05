@@ -168,13 +168,13 @@ function CalibrationCard({
       <div className="flex gap-1 px-3 py-2 border-t border-rule-2">
         <button
           onClick={() => onVote('down')}
-          className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-[6px] border border-rule rounded-sm text-xs font-semibold bg-white cursor-pointer hover:bg-danger-soft hover:border-danger/30"
+          className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-[6px] border border-rule rounded-sm text-xs font-semibold bg-surface cursor-pointer hover:bg-danger-soft hover:border-danger/30"
         >
           <ThumbsDown size={12} /> Inte min grej
         </button>
         <button
           onClick={onSkip}
-          className="px-3 py-[6px] border border-rule rounded-sm text-xs bg-white cursor-pointer text-ink-3"
+          className="px-3 py-[6px] border border-rule rounded-sm text-xs bg-surface cursor-pointer text-ink-3"
           title="Hoppa över"
         >
           Hoppa
