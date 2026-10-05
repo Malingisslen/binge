@@ -59,6 +59,7 @@ export default function GroupPageClient({ id }: { id: string }) {
 }
 
 function GroupContent({ id }: { id: string }) {
+  const router = useRouter();
   const { user, uid } = useAuth();
   const { group, members, watchlist, loading, notFound, denied, publicName, resubscribe } = useGroup(id);
   // X5: gruppnamnet i dokumenttiteln när det laddats (rör inte indexability —
@@ -77,6 +78,18 @@ function GroupContent({ id }: { id: string }) {
   const [joinFailed, setJoinFailed] = useState(false);
   const [joining, setJoining] = useState(false);
   const joinAttemptsRef = useRef(0);
+  // SEC-2 (2026-10-05): en inbjudningslänk går inte längre med på egen hand. Joinet
+  // skriver namn, användarnamn, profilbild och streamingtjänster in i gruppen, och en
+  // länk kan komma från vem som helst — så besökaren tackar ja först.
+  //
+  // Jat och utfallet sparas per TOKEN, inte som flaggor som nollas i en effekt: en
+  // nollning i en effekt landar först i nästa rendering, och join-effekten i samma
+  // commit hade då sett det gamla jat och gått med på en ny länk utan fråga.
+  // `settledToken` sätts bara vid ett avslutat misslyckande, så kortet står kvar
+  // genom omförsöken och efter ett lyckat join tills medlemskapet syns.
+  const [confirmedToken, setConfirmedToken] = useState<string | null>(null);
+  const [settledToken, setSettledToken] = useState<string | null>(null);
+  const joinConfirmed = !!inviteParam && confirmedToken === inviteParam;
   // En NY inbjudningslänk förtjänar en ny budget. Utan det här ignorerades en
   // färsk, giltig länk tyst om en tidigare (roterad) länk redan bränt försöken
   // — klick på den nya länken är bara en SPA-navigering, komponenten monteras
@@ -88,10 +101,12 @@ function GroupContent({ id }: { id: string }) {
   // alltså hade auto-joinet aldrig fyrat för någon som faktiskt behöver det.
   useEffect(() => {
     if (!inviteParam || !uid || !user || joining) return;
+    if (!joinConfirmed) return;
     if (!group && !denied) return;
     if (isMember) return;
     if (joinAttemptsRef.current >= MAX_JOIN_ATTEMPTS) return;
     const attempt = joinAttemptsRef.current;
+    const token = inviteParam;
     joinAttemptsRef.current = attempt + 1;
     setJoining(true);
     joinGroupViaToken({
@@ -117,13 +132,14 @@ function GroupContent({ id }: { id: string }) {
       // inbjudningslank" kvar ovanfor en ruta som sager at en att ladda om.
       setJoinFailed(joinAttemptFailed(res));
       if (!res.ok && res.reason === 'transient') {
-        if (exhausted) { setJoining(false); return; }
+        if (exhausted) { setSettledToken(token); setJoining(false); return; }
         setTimeout(() => setJoining(false), joinBackoffMs(attempt));
         return;
       }
       // Övriga resolved-utfall är terminala: en trasig token förblir trasig och en
       // saknad grupp förblir saknad. Bränn budgeten så effekten inte återfyrar.
       joinAttemptsRef.current = MAX_JOIN_ATTEMPTS;
+      if (!res.ok && res.reason !== 'already_member') setSettledToken(token);
       setJoining(false);
 
       // BIN-1152: ett lyckat join måste STARTA OM grupp-prenumerationen. Den här
@@ -148,10 +164,10 @@ function GroupContent({ id }: { id: string }) {
       setJoinError(exhausted
         ? 'Kunde inte gå med i gruppen. Ladda om sidan och försök igen.'
         : 'Kunde inte gå med i gruppen. Försöker igen…');
-      if (exhausted) { setJoining(false); return; }
+      if (exhausted) { setSettledToken(token); setJoining(false); return; }
       setTimeout(() => setJoining(false), joinBackoffMs(attempt));
     });
-  }, [inviteParam, uid, user, group, denied, isMember, joining, id, resubscribe]);
+  }, [inviteParam, uid, user, group, denied, isMember, joining, joinConfirmed, id, resubscribe]);
 
   if (loading) {
     return <LoadingView variant="detail" label="Laddar grupp…" />;
@@ -168,6 +184,24 @@ function GroupContent({ id }: { id: string }) {
   // "du är inte medlem" för varje gissat id hade bekräftat att id:t existerar,
   // vilket är precis den uppräkning biljetten stänger.
   const nonMemberName = denied ? publicName : (group && !isMember ? group.name : null);
+
+  // SEC-2: kortet står FÖRE båda skärmarna nedan, så att också en grupp utan publikt
+  // namn får frågan. Det står kvar medan joinet pågår och under BIN-557:s omförsök;
+  // ett avslutat misslyckande faller igenom till skärmarna nedan, som visar felet.
+  if (inviteParam && uid && user && !isMember && (group || denied) && settledToken !== inviteParam) {
+    return (
+      <JoinInviteCard
+        groupName={nonMemberName}
+        joining={joinConfirmed}
+        status={joinConfirmed ? joinError : null}
+        onJoin={() => { setJoinError(null); setConfirmedToken(inviteParam); }}
+        // replace, inte push: token ska inte ligga kvar i historiken och erbjuda
+        // kortet igen via bakåtknappen.
+        onDecline={() => router.replace('/grupper')}
+      />
+    );
+  }
+
   if (nonMemberName !== null) {
     return (
       <div>
@@ -213,6 +247,41 @@ function GroupContent({ id }: { id: string }) {
       myUid={uid!}
       isOwner={isOwner}
     />
+  );
+}
+
+function JoinInviteCard({
+  groupName, joining, status, onJoin, onDecline,
+}: {
+  groupName: string | null;
+  joining: boolean;
+  status: string | null;
+  onJoin: () => void;
+  onDecline: () => void;
+}) {
+  return (
+    <div>
+      <PageHeader
+        crumb="Grupp"
+        title={groupName ?? 'Inbjudan till en grupp'}
+        standfirst="Du har bjudits in till den här gruppen. Om du går med ser medlemmarna ditt namn, ditt användarnamn, din profilbild och vilka streamingtjänster du har, och hur långt du kommit i gruppens titlar. Du kan lämna gruppen när du vill."
+        actions={
+          <div className="flex gap-2">
+            <button type="button" className="btn btn-acc btn-sm" onClick={onJoin} disabled={joining}>
+              {joining ? 'Går med…' : 'Gå med'}
+            </button>
+            <button type="button" className="btn btn-sm" onClick={onDecline} disabled={joining}>
+              Nej tack
+            </button>
+          </div>
+        }
+      />
+      {status && (
+        <div className="px-3 py-2 text-xs text-ink-2 rounded-sm mt-3" role="status">
+          {status}
+        </div>
+      )}
+    </div>
   );
 }
 

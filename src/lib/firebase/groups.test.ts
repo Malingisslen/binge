@@ -1280,6 +1280,19 @@ describe('BIN-1152: projektionen foljer gruppen', () => {
     expect(proj).toBeLessThan(group);
   });
 
+  // SEC-1 (BIN-1436): firestore.rules låter en inloggad lista bara sessioner hen själv är
+  // värd för. Utan hostUid-filtret nekas frågan, Promise.all faller och ingenting raderas.
+  it('deleteGroup frågar efter sessioner med både groupId och eget hostUid', async () => {
+    getDocsMock.mockImplementation(async () => ({ docs: [] }));
+    mocks.whereMock.mockClear();
+
+    await deleteGroup('g-del', 'owner-1');
+
+    const filters = mocks.whereMock.mock.calls.map(c => c.join(' '));
+    expect(filters).toContain('groupId == g-del');
+    expect(filters).toContain('hostUid == owner-1');
+  });
+
   it('updateGroup skriver om projektionen nar NAMNET byts', async () => {
     await updateGroup('g-name', { name: 'Nytt namn' });
 
