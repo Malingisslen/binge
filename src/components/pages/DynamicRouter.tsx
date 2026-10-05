@@ -20,7 +20,7 @@ import { resolveRoute } from './resolveRoute';
 const LOADING = <LoadingView label="Laddar…" />;
 
 // MoviePageClient används som client-side fallback för movie-ids utanför
-// topp-N — pre-renderade ids serveras av src/app/movie/[id]/page.tsx,
+// urvalet — pre-renderade ids serveras av src/app/movie/[id]/page.tsx,
 // resten faller hit via firebase rewrite ** → /_/index.html.
 const MoviePageClient = dynamic(() => import(/* webpackPrefetch: true */ './MoviePageClient'), { ssr: false, loading: () => LOADING });
 const TVShowPageClient = dynamic(() => import(/* webpackPrefetch: true */ './TVShowPageClient'), { ssr: false, loading: () => LOADING });

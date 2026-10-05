@@ -1,7 +1,7 @@
 // Byggtids-wrapper runt TMDB-detalj-fetchar (server-only, importeras bara från
 // route-filernas generateStaticParams/generateMetadata/page).
 //
-// Varför: build:en pre-renderar ~25k titelsidor, var och en med ett TMDB-anrop.
+// Varför: build:en pre-renderar titelsidor, var och en med ett TMDB-anrop.
 // Under last stryper TMDB och anropen köar bakom klientens 8-slot-semafor; en
 // sida som väntar förbi Next 60s-tak fäller HELA exporten. En AbortSignal.timeout
 // gör att ett anrop ger upp i god tid → fetchern kastar → sidans
@@ -39,7 +39,7 @@ export const REFRESH_AFTER_MS = 6 * 24 * 60 * 60 * 1000; // 6 dagar
 // Default-tak för nätverkshämtningar per bygge (per worker). Schemalagd deploy
 // höjer det via TMDB_BUILD_REFRESH_BUDGET för en full refresh.
 // Tajt nog att ett KALLT kod-bygge (alla entries stale → budget förbrukas helt)
-// + 25k-sidors render ryms väl under push-byggets timeout även en trög TMDB-dag.
+// + render ryms väl under push-byggets timeout även en trög TMDB-dag.
 // (3000 tippade över 30 min på en kall cache 2026-06-15.) Cachen värms ändå upp
 // av den veckovisa schemalagda full-refreshen; per-bygge-freshness är sekundärt.
 const DEFAULT_REFRESH_BUDGET = 1500;
@@ -68,10 +68,9 @@ let networkFetches = 0;
 // registrerade bara `fetchForBuild` — som inte anropas EN ENDA GÅNG under
 // `Collecting page data`. Andra versionen registrerade sitemap:en, som körs i en
 // senare fas. Det som faktiskt körs i den hängande fasen är
-// `generateStaticParams` i movie/[id] (1000 list-anrop), tv/[id] (1000) och
-// person/[id] (~2100 via collectPersonIds). Alla tre anropar `trackBuildCall`.
-// Övriga generateStaticParams (provider, genre, billigaste, forsvinner och
-// catch-all [...path]) är statiska listor utan nätverk.
+// `generateStaticParams` i movie/[id] och tv/[id] (deras /discover-sidor, ADR
+// 0024). Härled vilka som registrerar: `git grep -ln "trackBuildCall" -- src/app`.
+// Övriga generateStaticParams är statiska listor utan nätverk.
 //
 // INTE instrumenterad: allt som hämtar i den SENARE fasen `Generating static
 // pages` — app/page.tsx, discover, films, series, provider/[id] och
@@ -92,8 +91,8 @@ const STUCK_AFTER_MS = BUILD_FETCH_TIMEOUT_MS + 10_000;
 // Rapportera de äldsta, inte alla. Se kommentaren i tick-loopen.
 const STUCK_REPORT_LIMIT = 5;
 // En AGGREGAT-post (en etikett som täcker en hel pipeline av anrop) har inget
-// eget 20 s-tak — `collectPersonIds` kör två sekventiella allSettled-faser, så
-// ~40 s är normalt och friskt. Med samma tröskel som ett enskilt anrop skulle
+// eget 20 s-tak — en pipeline av sekventiella faser tar längre än ett anrop.
+// Med samma tröskel som ett enskilt anrop skulle
 // varje grönt bygge skriva STUCK, och en rad som alltid syns slutar betyda
 // något. Egen, generös tröskel i stället.
 const AGGREGATE_STUCK_AFTER_MS = 4 * 60_000;
@@ -141,7 +140,7 @@ function startWatchdog(): void {
       logLine(`[build-fetch]   … och ${stuck.length - STUCK_REPORT_LIMIT} till`);
     }
     // Ingen avstängning. Första versionen tystnade när budgeten var slut och
-    // inget var i flykt — vilket är exakt läget på svansen av ett 25k-sidorsbygge,
+    // inget var i flykt — vilket är exakt läget på svansen av ett bygge,
     // alltså där en hängning är billigast att missa. En tyst vakthund går inte
     // att skilja från en som aldrig startade. Kostnaden för att låta den gå är
     // en rad var 30:e sekund per worker: ~350 rader på det längsta byggfönstret.
@@ -209,7 +208,7 @@ export async function trackBuildCall<T>(
 // Utbytesraden i selectionManifest.ts läser räknarna före och efter sin
 // härledning och skriver "Övergivna anrop N av M".
 
-/** Urvalstypen ett byggtidsanrop hör till. Samma värden som SelectionType. */
+/** Urvalstypen ett byggtidsanrop hör till. */
 export type BuildCallGroup = 'movie' | 'tv' | 'person';
 
 /** Startade och övergivna enskilda anrop i en grupp, med de övergivnas etiketter i ordning. */

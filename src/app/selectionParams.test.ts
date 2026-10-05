@@ -1,38 +1,25 @@
-// BIN-823 — kopplingen mellan de tre routerna och urvalet.
+// BIN-823 — kopplingen mellan titelroutrarna och urvalet.
 //
 // `selectionManifest`s egna tester pinnar spärrhaken, golvet och regimen. Det
 // här filen pinnar det INGEN av dem kan se: att varje route faktiskt använder
 // dem, och rätt.
 //
 // Skälet den finns: raden `if (err instanceof SelectionFloorError) throw err;`
-// gick att radera ur alla tre routerna med hela sviten (2 747 tester) grön.
-// Utan den sväljer routens befintliga catch golvet och returnerar
-// `SEO_FALLBACK_*` — tio id:n, GRÖNT bygge, och `firebase deploy` ersätter
-// ~31 000 sidor med ~150. Det är exakt den tysta katastrof golvet infördes för.
+// gick att radera ur routerna med hela sviten grön. Utan den sväljer routens
+// befintliga catch golvet och returnerar `SEO_FALLBACK_*` — tio id:n, GRÖNT
+// bygge, och `firebase deploy` ersätter kärnan med en handfull sidor.
 //
-// Sitemapens kast räddar inte den vägen: `mergeManifest(null, type, [], now)`
-// skriver ett giltigt men tomt manifest INNAN golvet kastar, så sitemapen
-// hittar en läsbar fil, kastar inte, och publicerar frö-URL:erna som sajtens
-// kanoniska lista.
-//
-// Samma fil pinnar också per-route-literalerna `type` och `seedIds` — byt
-// `'person'` mot `'movie'` i person-routen och hela trädet förblev grönt.
-//
-// `fallbackIds` pinnas däremot INTE, och kan inte pinnas här: sedan
-// `resolveSelection` sväljer alla icke-golv-fel internt är routens `catch` död
-// kod och fallbacken oåtkomlig så länge frölistorna är icketomma (det är de i
-// produktion). Mutationstestet 2026-08-08 bekräftade båda: en ändrad
-// `fallbackIds` överlevde 9/9, och att radera hela `try/catch` likaså.
+// Samma fil pinnar per-route-literalen `type`, att härledningen frågar efter
+// titlar med svensk tjänst (ADR 0024), och att personroutens förrendering är
+// fallback-listan och ingenting annat.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const getPopularMovies = vi.fn();
-const getTopRatedMovies = vi.fn();
-const getPopularTV = vi.fn();
-const getTopRatedTV = vi.fn();
-const getMovie = vi.fn();
+const discoverMovies = vi.fn();
+const discoverTV = vi.fn();
+const getPerson = vi.fn();
 
 // Sidkomponenterna drar in Firebase; bara generateStaticParams testas här.
 vi.mock('@/components/pages/MoviePageClient', () => ({ default: () => null }));
@@ -43,11 +30,9 @@ vi.mock('@/lib/tmdb/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/tmdb/client')>();
   return {
     ...actual,
-    getPopularMovies: (...a: unknown[]) => getPopularMovies(...a),
-    getTopRatedMovies: (...a: unknown[]) => getTopRatedMovies(...a),
-    getPopularTV: (...a: unknown[]) => getPopularTV(...a),
-    getTopRatedTV: (...a: unknown[]) => getTopRatedTV(...a),
-    getMovie: (...a: unknown[]) => getMovie(...a),
+    discoverMovies: (...a: unknown[]) => discoverMovies(...a),
+    discoverTV: (...a: unknown[]) => discoverTV(...a),
+    getPerson: (...a: unknown[]) => getPerson(...a),
   };
 });
 
@@ -56,41 +41,40 @@ import {
   SEO_FALLBACK_MOVIE_IDS,
   SEO_FALLBACK_TV_IDS,
   SEO_FALLBACK_PERSON_IDS,
+  SEO_CORE_DISCOVER_PAGES,
+  SEO_TITLE_TARGET_IDS,
 } from '@/lib/tmdb/seoCoverage';
-import { SEED_MOVIE_IDS, SEED_TV_IDS, SEED_PERSON_IDS } from '@/lib/seo/selectionSeed';
 import { generateStaticParams as movieParams } from './movie/[id]/page';
 import { generateStaticParams as tvParams } from './tv/[id]/page';
-import { generateStaticParams as personParams } from './person/[id]/page';
+import { generateStaticParams as personParams, generateMetadata as personMetadata } from './person/[id]/page';
+import { __resetBuildFetchState } from '@/lib/tmdb/buildFetch';
 
 const ROUTES = [
   {
     name: 'movie/[id]',
     run: movieParams,
     type: 'movie' as const,
-    others: ['tv', 'person'] as const,
+    other: 'tv' as const,
     fallback: SEO_FALLBACK_MOVIE_IDS,
-    seeds: SEED_MOVIE_IDS,
-    mocks: [getPopularMovies, getTopRatedMovies],
+    discover: discoverMovies,
   },
   {
     name: 'tv/[id]',
     run: tvParams,
     type: 'tv' as const,
-    others: ['movie', 'person'] as const,
+    other: 'movie' as const,
     fallback: SEO_FALLBACK_TV_IDS,
-    seeds: SEED_TV_IDS,
-    mocks: [getPopularTV, getTopRatedTV],
-  },
-  {
-    name: 'person/[id]',
-    run: personParams,
-    type: 'person' as const,
-    others: ['movie', 'tv'] as const,
-    fallback: SEO_FALLBACK_PERSON_IDS,
-    seeds: SEED_PERSON_IDS,
-    mocks: [getPopularMovies, getMovie],
+    discover: discoverTV,
   },
 ];
+
+/** En /discover-sida med 20 titlar och latinska titlar, unika per sida. */
+function discoverPage(params: Record<string, string>) {
+  const page = Number(params.page);
+  return Promise.resolve({
+    results: Array.from({ length: 20 }, (_, i) => ({ id: page * 100 + i, title: `Titel ${page}-${i}` })),
+  });
+}
 
 let dir: string;
 let stderr: ReturnType<typeof vi.spyOn>;
@@ -103,9 +87,8 @@ beforeEach(() => {
   // resolveSelection skriver ::warning::-rader; utan spy blir de riktiga
   // GitHub Actions-annoteringar på varje grön testkörning.
   stderr = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
-  for (const m of [getPopularMovies, getTopRatedMovies, getPopularTV, getTopRatedTV, getMovie]) {
-    m.mockReset();
-  }
+  for (const m of [discoverMovies, discoverTV, getPerson]) m.mockReset();
+  __resetBuildFetchState();
 });
 
 afterEach(() => {
@@ -119,40 +102,85 @@ afterEach(() => {
 describe.each(ROUTES)('$name — urvalskopplingen (BIN-823)', (route) => {
   it('låter täckningsgolvet FÄLLA bygget i stället för att falla tillbaka', async () => {
     // Kall cache + varje list-hämtning failar ⇒ tomt urval ⇒ golvet ska kasta.
-    for (const m of route.mocks) m.mockRejectedValue(new Error('TMDB nere'));
+    route.discover.mockRejectedValue(new Error('TMDB nere'));
 
     await expect(route.run()).rejects.toThrow(SelectionFloorError);
   });
 
   // Den positiva tvillingen: när bygget medvetet får ha ett tunt urval ska en
-  // kraschad hämtning INTE fälla något.
-  //
-  // Den ger ett svar värt mer än fallbacken: det som byggs är FRÖNA — de
-  // sidor Google faktiskt har indexerat. Även ett bygge där varenda TMDB-anrop
-  // failar producerar alltså dem. `fallbackIds` nås bara om frölistan också
-  // vore tom, vilket den aldrig är i produktion.
-  it('bygger frö-sidorna även när varje TMDB-anrop failar', async () => {
+  // kraschad hämtning INTE fälla något, och då är det fallback-listan som byggs.
+  it('bygger fallback-sidorna när varje TMDB-anrop failar under SELECTION_ALLOW_THIN', async () => {
     process.env.SELECTION_ALLOW_THIN = '1';
-    for (const m of route.mocks) m.mockRejectedValue(new Error('TMDB nere'));
+    route.discover.mockRejectedValue(new Error('TMDB nere'));
 
     const params = await route.run();
-    const ids = params.map(p => Number(p.id));
 
-    expect(ids).toEqual([...route.seeds]);
-    expect(ids).not.toEqual([...route.fallback]);
+    expect(params.map(p => Number(p.id))).toEqual([...route.fallback]);
   });
 
   // Per-route-literalerna. `type` avgör VILKEN fil som läses och skrivs; en
   // förväxling gav grönt träd men fel manifest.
-  it('skriver sitt eget manifest och rör inte de andra typernas', async () => {
-    process.env.SELECTION_ALLOW_THIN = '1';
-    for (const m of route.mocks) m.mockRejectedValue(new Error('TMDB nere'));
+  it('skriver sitt eget manifest och rör inte den andra typens', async () => {
+    route.discover.mockImplementation(discoverPage);
 
     await route.run();
 
     expect(readSelectionManifest(route.type)).not.toBeNull();
-    for (const other of route.others) {
-      expect(readSelectionManifest(other)).toBeNull();
+    expect(readSelectionManifest(route.other)).toBeNull();
+  });
+
+  // ADR 0024: kärnan är titlar som går att se på en svensk tjänst, i
+  // popularitetsordning, kapad vid målet.
+  it('härleder kärnan ur /discover med krav på svensk tjänst', async () => {
+    route.discover.mockImplementation(discoverPage);
+
+    const params = await route.run();
+
+    expect(route.discover).toHaveBeenCalledTimes(SEO_CORE_DISCOVER_PAGES);
+    for (const [args] of route.discover.mock.calls) {
+      expect(args).toMatchObject({
+        sort_by: 'popularity.desc',
+        with_watch_monetization_types: 'flatrate|free|ads|rent|buy',
+      });
     }
+    const ids = params.map(p => Number(p.id));
+    expect(ids).toHaveLength(SEO_TITLE_TARGET_IDS);
+    // Sida 1 först: popularitetsordningen överlever hela vägen till params.
+    expect(ids[0]).toBe(100);
+    expect(readSelectionManifest(route.type)?.ids).toHaveLength(SEO_TITLE_TARGET_IDS);
+  });
+});
+
+describe('person/[id] — ingen förrendering för Google (ADR 0024)', () => {
+  it('bygger bara fallback-listan, utan TMDB-anrop och utan manifest', async () => {
+    const params = await personParams();
+
+    expect(params.map(p => Number(p.id))).toEqual([...SEO_FALLBACK_PERSON_IDS]);
+    expect(discoverMovies).not.toHaveBeenCalled();
+    expect(discoverTV).not.toHaveBeenCalled();
+  });
+
+  // Den statiska HTML:en är det Google läser först; utan noindex där hade de
+  // förrenderade fallback-personerna varit indexerbara tills JavaScript kört.
+  const params = (id: number) => ({ params: Promise.resolve({ id: String(id) }) });
+
+  it('säger noindex,follow när hämtningen lyckas', async () => {
+    getPerson.mockResolvedValue({
+      id: SEO_FALLBACK_PERSON_IDS[0], name: 'Testperson', biography: '', profile_path: null,
+      known_for_department: 'Acting', combined_credits: { cast: [], crew: [] },
+    });
+
+    const meta = await personMetadata(params(SEO_FALLBACK_PERSON_IDS[0]));
+
+    expect(meta.title).toContain('Testperson');
+    expect(meta.robots).toEqual({ index: false, follow: true });
+  });
+
+  it('säger noindex,follow när hämtningen misslyckas', async () => {
+    getPerson.mockRejectedValue(new Error('TMDB nere'));
+
+    const meta = await personMetadata(params(SEO_FALLBACK_PERSON_IDS[1]));
+
+    expect(meta.robots).toEqual({ index: false, follow: true });
   });
 });

@@ -363,3 +363,9 @@ andra är veckobygget 2026-09-07, där filmhärledningen nådde taket (`nådde s
 
 Vad mätningen INTE täcker: ett bygge med kall `.tmdb-cache`. Varför filmhärledningen
 hängde 2026-09-07 är inte utrett här; det har en egen biljett.
+
+### Efterföljare 2026-10-05 (ADR 0024): taken och fröna gäller inte längre
+
+Taken, frölistan och personurvalet som det här protokollet beskriver ersattes av ADR 0024,
+efter att Search Console visat att Google valt bort de tunna sidorna. Spärrhaken står kvar.
+Läs dagens tak i `SELECTION_CEILING`.

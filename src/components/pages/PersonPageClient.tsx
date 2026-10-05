@@ -144,9 +144,7 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
     title: person ? person.name : 'Person',
     description: metaDescription,
     ogImage: person?.profile_path ? profileUrl(person.profile_path, 'w500') ?? undefined : undefined,
-    // Tar bort catch-all-shellets noindex när TMDB bekräftat att personen finns.
-    // Pre-renderade /person/[id] (topp-N) påverkas inte — egen statisk HTML.
-    indexable: !!person,
+    // Ingen `indexable` (ADR 0024): personsidor är noindex för Google.
   });
 
   if (isLoading) return <LoadingView variant="detail" label="Laddar person…" />;

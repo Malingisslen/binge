@@ -27,6 +27,30 @@ describe('usePageMeta', () => {
       .forEach(el => el.remove());
   });
 
+  it('med indexable vänds noindex till index, och tillbaka vid unmount', () => {
+    const robots = document.createElement('meta');
+    robots.setAttribute('name', 'robots');
+    robots.setAttribute('content', 'noindex, follow');
+    document.head.appendChild(robots);
+
+    const { unmount } = renderHook(() => usePageMeta({ title: 'Netflix', indexable: true }));
+    expect(document.head.querySelector('meta[name="robots"]')?.getAttribute('content')).toMatch(/^index,follow/);
+    unmount();
+    expect(document.head.querySelector('meta[name="robots"]')?.getAttribute('content')).toBe('noindex,follow');
+  });
+
+  it('utan indexable står catch-all-skalets noindex kvar, även efter unmount (ADR 0024)', () => {
+    const robots = document.createElement('meta');
+    robots.setAttribute('name', 'robots');
+    robots.setAttribute('content', 'noindex, follow');
+    document.head.appendChild(robots);
+
+    const { unmount } = renderHook(() => usePageMeta({ title: 'Film', description: 'En film.' }));
+    expect(document.head.querySelector('meta[name="robots"]')?.getAttribute('content')).toBe('noindex, follow');
+    unmount();
+    expect(document.head.querySelector('meta[name="robots"]')?.getAttribute('content')).toBe('noindex, follow');
+  });
+
   it('lämnar en framework-ägd canonical kvar i DOM:en efter unmount', () => {
     const frameworkCanonical = document.createElement('link');
     frameworkCanonical.setAttribute('rel', 'canonical');

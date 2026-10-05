@@ -144,7 +144,7 @@ a missing entry under-informs, a stale path list actively misdirects.
   provider-id normalization.
 - `data-model.md` — full Firestore collection tree, the GDPR export/delete helper contract,
   the WatchStatus + TV sub-state schema (incl. migration), Auth setup.
-- `deployment.md` — build pipeline, byggtids-TMDB SEO pre-rendering (25k titles, cache +
+- `deployment.md` — build pipeline, byggtids-TMDB SEO pre-rendering (cache +
   timeout protections), CI workflow roles.
 - `routing.md` — static-export catch-all dispatch for dynamic routes; what breaks if you
   add a route without updating both the dispatcher and the Firebase rewrite.

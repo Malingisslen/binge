@@ -186,9 +186,8 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
       : 'Serie',
     description: contentFloor?.description,
     ogImage: show?.poster_path ? posterUrl(show.poster_path, 'w500') ?? undefined : undefined,
-    // Tar bort catch-all-shellets noindex när TMDB bekräftat att serien finns.
-    // Pre-renderade /tv/[id] (topp-N) påverkas inte — egen statisk HTML.
-    indexable: !!show,
+    // Ingen `indexable` (ADR 0024): en serie utanför urvalet ska förbli noindex
+    // även efter hydrering. Förrenderade /tv/[id] har egen statisk HTML.
   });
 
   const watchlistItem = mounted && show ? getItem('tv', show.id) : null;

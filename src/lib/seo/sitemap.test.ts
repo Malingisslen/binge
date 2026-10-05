@@ -9,7 +9,6 @@ import sitemap, {
   pageSitemapEntries,
   movieSitemapEntries,
   tvSitemapEntries,
-  personSitemapEntries,
   renderUrlset,
   renderSitemapIndex,
 } from './sitemap';
@@ -22,7 +21,6 @@ import {
   type SelectionType,
   writeSelectionManifest,
 } from '@/lib/tmdb/selectionManifest';
-import { SEED_MOVIE_IDS, SEED_TV_IDS, SEED_PERSON_IDS } from '@/lib/seo/selectionSeed';
 
 // BIN-823: sitemapen gör inga TMDB-anrop längre — den LÄSER urvalsmanifesten
 // som pre-rendren skrev i en tidigare byggfas. Därför mockas inte klienten här;
@@ -47,7 +45,6 @@ beforeEach(() => {
   process.env.TMDB_CACHE_DIR = dir;
   writeManifest('movie', [1, 2]);
   writeManifest('tv', [3, 4]);
-  writeManifest('person', [100]);
   // I BÅDA krokarna, med flit. Den verkliga risken är inte att den här filens
   // egna kast-tester no-oppar varandra — de ligger före settern i filordning och
   // kan inte det — utan att en ANNAN fil i samma worker lämnat flaggan satt.
@@ -88,7 +85,6 @@ describe('sitemap — BIN-337 URL shape + family coverage', () => {
     const urls = new Set(sitemap().map(e => e.url));
     expect(urls.has('https://binge.nu/movie/1/')).toBe(true);
     expect(urls.has('https://binge.nu/tv/3/')).toBe(true);
-    expect(urls.has('https://binge.nu/person/100/')).toBe(true);
     expect(urls.has(`https://binge.nu/provider/${SEO_PROVIDER_IDS[0]}/`)).toBe(true);
     expect(urls.has(`https://binge.nu/forsvinner/${SEO_PROVIDER_IDS[0]}/`)).toBe(true);
     expect([...urls].some(u => /^https:\/\/binge\.nu\/billigaste\/[^/]+\/$/.test(u))).toBe(true);
@@ -143,48 +139,43 @@ describe('sitemap — urvalsmanifestet (BIN-823)', () => {
     expect(() => sitemap()).toThrow(/urvalsmanifestet för movie saknas/);
   });
 
-  it('kastar även när bara person-manifestet saknas', () => {
-    rmSync(join(dir, 'selection-person.json'));
+  it('kastar även när bara tv-manifestet saknas', () => {
+    rmSync(join(dir, 'selection-tv.json'));
 
-    expect(() => sitemap()).toThrow(/urvalsmanifestet för person saknas/);
+    expect(() => sitemap()).toThrow(/urvalsmanifestet för tv saknas/);
   });
 
-  // Undantaget. Utan det är lättnaden bara halv: en strypt personhärledning som
-  // slår i ett tidstak skriver aldrig något manifest, så bygget hade gått röd HÄR
-  // i stället för på golvet, trots SELECTION_ALLOW_THIN.
-  it('faller tillbaka på frö-id:n i stället för att kasta när tunt urval är tillåtet', () => {
+  // Undantaget. Utan det är lättnaden bara halv: en strypt härledning som slår
+  // i ett tidstak skriver aldrig något manifest, så bygget hade gått röd HÄR i
+  // stället för på golvet, trots SELECTION_ALLOW_THIN.
+  it('utelämnar typen i stället för att kasta när tunt urval är tillåtet', () => {
     process.env.SELECTION_ALLOW_THIN = '1';
-    rmSync(join(dir, 'selection-person.json'));
     rmSync(join(dir, 'selection-movie.json'));
 
-    const urls = new Set(sitemap().map(e => e.url));
+    const urls = [...new Set(sitemap().map(e => e.url))];
 
-    expect(urls.has(`https://binge.nu/person/${SEED_PERSON_IDS[0]}/`)).toBe(true);
-    expect(urls.has(`https://binge.nu/movie/${SEED_MOVIE_IDS[0]}/`)).toBe(true);
+    expect(urls.some(u => u.includes('/movie/'))).toBe(false);
     // Manifestet finns kvar för tv — den typen ska inte tappa sina id:n.
-    expect(urls.has('https://binge.nu/tv/3/')).toBe(true);
-    // …men de raderade manifestens egna id:n är borta, alltså är det verkligen
-    // frö-fallbacken som svarar och inte en läsning av en kvarglömd fil.
-    expect(urls.has('https://binge.nu/movie/1/')).toBe(false);
+    expect(urls).toContain('https://binge.nu/tv/3/');
   });
 
-  // Frö-id:na unioneras in vid läsning i BÅDE sitemap och pre-render, så de kan
-  // inte hamna i den ena men inte den andra.
-  it('tar med frö-id:n som inte finns i manifestet', () => {
-    const urls = new Set(sitemap().map(e => e.url));
-
-    expect(urls.has(`https://binge.nu/movie/${SEED_MOVIE_IDS[0]}/`)).toBe(true);
-    expect(urls.has(`https://binge.nu/tv/${SEED_TV_IDS[0]}/`)).toBe(true);
-    expect(urls.has(`https://binge.nu/person/${SEED_PERSON_IDS[0]}/`)).toBe(true);
-  });
-
-  it('adresserar exakt manifestets id-mängd ∪ fröna, inget mer', () => {
+  // Villkor 1 i #26:s kritik (ADR 0024): sitemapen listar exakt det förrenderade
+  // urvalet. Båda läser samma manifest; det här pinnar att sitemapen inte lägger
+  // till något på vägen.
+  it('adresserar exakt manifestets id-mängd, inget mer', () => {
     const movieUrls = sitemap()
       .map(e => e.url)
       .filter(u => u.startsWith('https://binge.nu/movie/'));
-    const expected = new Set([1, 2, ...SEED_MOVIE_IDS].map(id => `https://binge.nu/movie/${id}/`));
+    const expected = new Set([1, 2].map(id => `https://binge.nu/movie/${id}/`));
 
     expect(new Set(movieUrls)).toEqual(expected);
+  });
+
+  // ADR 0024: personsidorna är noindex och får aldrig stå i en sitemap.
+  it('listar inga personsidor, och personfilen finns inte i indexet', () => {
+    expect(sitemap().some(e => e.url.includes('/person/'))).toBe(false);
+    expect(Object.keys(SITEMAP_PARTS)).not.toContain('sitemap-personer.xml');
+    expect(renderSitemapIndex()).not.toContain('personer');
   });
 });
 
@@ -197,12 +188,11 @@ describe('sitemap — delfiler per familj (SEO-5)', () => {
   });
 
   it('varje familj hamnar i sin egen fil', () => {
-    for (const fn of [movieSitemapEntries, tvSitemapEntries, personSitemapEntries]) {
+    for (const fn of [movieSitemapEntries, tvSitemapEntries]) {
       expect(fn().length).toBeGreaterThan(0);
     }
     expect(movieSitemapEntries().every(e => e.url.includes('/movie/'))).toBe(true);
     expect(tvSitemapEntries().every(e => e.url.includes('/tv/'))).toBe(true);
-    expect(personSitemapEntries().every(e => e.url.includes('/person/'))).toBe(true);
     expect(pageSitemapEntries().some(e => /\/(movie|tv|person)\//.test(e.url))).toBe(false);
   });
 
@@ -246,5 +236,27 @@ describe('sitemap — misslyckade bygghämtningar lämnas utanför (SEO-13)', ()
     expect(urls.has('https://binge.nu/tv/4/')).toBe(true);
     expect(urls.has('https://binge.nu/movie/3/')).toBe(false); // never selected
     expect(urls.has('https://binge.nu/movie/1/')).toBe(true);
+  });
+});
+
+// ADR 0024, #26:s villkor 8: titlar och personer utanför kärnan säger noindex.
+// Google kan bara läsa det beskedet på en sida den får hämta, så robots.txt får
+// aldrig spärra dem.
+describe('robots.txt — noindex-sidorna går att hämta', () => {
+  it('spärrar inga titel- eller personsökvägar', async () => {
+    const { readFileSync } = await import('node:fs');
+    const robots = readFileSync(join(process.cwd(), 'public', 'robots.txt'), 'utf8');
+    const disallowed = robots
+      .split('\n')
+      .filter(l => /^\s*Disallow:/i.test(l))
+      .map(l => l.replace(/^\s*Disallow:\s*/i, '').trim());
+    expect(disallowed.length).toBeGreaterThan(0);
+    for (const path of ['/movie/1/', '/tv/1/', '/person/1/']) {
+      // Googles mönster: `*` matchar vad som helst, `$` förankrar slutet.
+      const blocks = (rule: string) =>
+        rule !== '' &&
+        new RegExp('^' + rule.replace(/[.+?^{}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')).test(path);
+      expect(disallowed.filter(blocks), path).toEqual([]);
+    }
   });
 });

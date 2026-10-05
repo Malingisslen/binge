@@ -15,18 +15,16 @@ import { useEffect } from 'react';
  * - meta[name=robots] om `indexable` anges (annars rörs den inte)
  *
  * **Indexable-flaggan**: catch-all-routens statiska HTML har noindex som default
- * (se src/app/[...path]/page.tsx). Page-clients som *vet* att deras content
- * ska vara indexerbart (MoviePageClient/TVShowPageClient/PersonPageClient med
- * giltig TMDB-data) sätter `indexable: true` så vi tar bort noindex efter
- * hydration. När data är undefined (loading/error) lämnar vi noindex orörd —
- * defensiv default. Vad flippen betyder för indexeringen: .claude/rules/deployment.md.
+ * (se src/app/[...path]/page.tsx). En page-client som *vet* att sidan ska vara
+ * indexerbar sätter `indexable: true` så vi tar bort noindex efter hydration.
+ * Härled vilka som gör det: `git grep -n "indexable" -- src/components/pages`.
+ * Titel- och personsidorna gör det inte längre (ADR 0024).
  *
  * Använd i klient-komponenten direkt efter att data är hämtad:
  *
  *   usePageMeta({
- *     title: `${movie.title} (${year}) — var streamar jag?`,
- *     description: `Se var du kan streama ${movie.title} i Sverige...`,
- *     indexable: !!movie,
+ *     title: `Streama på ${provider.name} i Sverige`,
+ *     indexable,
  *   });
  *
  * Vid unmount återställs defaulten från layout.tsx så nästa sida startar rent.

@@ -39,14 +39,23 @@ describe('selectionManifest IO', () => {
     expect(read?.derivedAt).toBe(1_000_000);
   });
 
-  it('håller de tre typerna isär i egna filer', () => {
+  it('håller typerna isär i egna filer', () => {
     writeSelectionManifest(manifest('movie', [1]));
     writeSelectionManifest(manifest('tv', [2]));
-    writeSelectionManifest(manifest('person', [3]));
 
     expect(readSelectionManifest('movie')?.ids.map(e => e.id)).toEqual([1]);
     expect(readSelectionManifest('tv')?.ids.map(e => e.id)).toEqual([2]);
-    expect(readSelectionManifest('person')?.ids.map(e => e.id)).toEqual([3]);
+  });
+
+  // ADR 0024: produktionens cache bär ett version 1-manifest med topplisteurvalet.
+  // Det ska läsas som saknat, så att första bygget härleder kärnan från grunden.
+  it('läser ett version 1-manifest ur den gamla cachen som saknat', () => {
+    writeFileSync(
+      join(dir, 'selection-movie.json'),
+      JSON.stringify({ version: 1, type: 'movie', derivedAt: 1_000_000, ids: [{ id: 1, lastDerived: 1_000_000 }] }),
+    );
+
+    expect(readSelectionManifest('movie')).toBeNull();
   });
 
   it('ger null när filen inte finns', () => {

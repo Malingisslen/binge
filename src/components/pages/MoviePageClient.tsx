@@ -174,10 +174,9 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
       : 'Film',
     description: contentFloor?.description,
     ogImage: movie?.poster_path ? posterUrl(movie.poster_path, 'w500') ?? undefined : undefined,
-    // Tar bort catch-all-shellets noindex när TMDB bekräftat att filmen finns.
-    // Pre-renderade /movie/[id] (topp-N) påverkas inte — de har egen statisk
-    // HTML med generateMetadata och passerar aldrig catch-all-shellet.
-    indexable: !!movie,
+    // Ingen `indexable` (ADR 0024): en film utanför urvalet ska förbli noindex
+    // även efter hydrering. Förrenderade /movie/[id] har sitt robots-besked i
+    // sin egen statiska HTML.
   });
 
   if (isLoading) return <LoadingView variant="detail" label="Laddar filmen…" />;

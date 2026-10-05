@@ -5,19 +5,17 @@ import TVShowPageClient from '@/components/pages/TVShowPageClient';
 import { LoadingView } from '@/components/ui/LoadingView';
 import {
   getTVShow,
-  getPopularTV,
-  getTopRatedTV,
+  discoverTV,
   posterUrl,
 } from '@/lib/tmdb/client';
 import {
-  SEO_TITLE_PAGES,
-  SEO_TOP_RATED_PAGES,
+  SEO_CORE_DISCOVER_PAGES,
+  SEO_CORE_DISCOVER_PARAMS,
   SEO_FALLBACK_TV_IDS,
-  cappedTitleIds,
+  cappedCoreIds,
   latinDisplayIds,
 } from '@/lib/tmdb/seoCoverage';
 import { resolveSelection, SelectionFloorError } from '@/lib/tmdb/selectionManifest';
-import { SEED_TV_IDS } from '@/lib/seo/selectionSeed';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import { fetchForBuild, buildSignal, startBuildWatchdog, trackBuildCall } from '@/lib/tmdb/buildFetch';
 import { recordBuildFetchOutcome } from '@/lib/tmdb/buildCache';
@@ -28,11 +26,12 @@ export const dynamic = 'force-static';
 export const dynamicParams = false;
 
 /**
- * Pre-render topp-N populära + topp-rankade TV-serier som riktiga statiska
- * routes. Samma rationale som /movie/[id]/page.tsx — Googlebot får färdig
+ * Pre-render kärnan av TV-serier — de populäraste som går att se på en svensk
+ * tjänst (ADR 0024) — som riktiga statiska routes. Samma rationale som /movie/[id]/page.tsx — Googlebot får färdig
  * HTML med korrekt <title>, <meta>, <link rel="canonical"> och innehåll.
  *
- * Serier utanför topp-N hanteras via catch-all-routen + client-side rendering.
+ * Serier utanför kärnan hanteras via catch-all-routen + client-side rendering
+ * och är noindex, även efter hydrering.
  *
  * Suspense-wrap krävs eftersom TVShowPageClient använder useSearchParams
  * (för `?fromGroup=`-parametern). Utan boundary failar Next-builden.
@@ -53,8 +52,8 @@ export async function generateStaticParams(): Promise<{ id: string }[]> {
     fetcher: (page: number) => Promise<{ results: { id: number }[] }>,
     pageCount: number,
     kind: string,
-  ): Promise<Set<number>> => {
-    const ids = new Set<number>();
+  ): Promise<number[]> => {
+    const ids: number[] = [];
     const pages = Array.from({ length: pageCount }, (_, i) => i + 1);
     const results = await Promise.allSettled(
       pages.map(p => trackBuildCall(`params:${kind}/p${p}`, () => fetcher(p), { group: 'tv' })),
@@ -64,7 +63,7 @@ export async function generateStaticParams(): Promise<{ id: string }[]> {
         // Curation: skip non-Latin-titled series — same rule as browsing
         // (titleFilter.ts). Sitemap parity is inherited through the manifest
         // this derivation writes, so the filter only has to be right here.
-        for (const id of latinDisplayIds(r.value.results)) ids.add(id);
+        ids.push(...latinDisplayIds(r.value.results));
       }
     }
     return ids;
@@ -72,19 +71,19 @@ export async function generateStaticParams(): Promise<{ id: string }[]> {
 
   try {
     // BIN-823 — se movie/[id]/page.tsx för hela resonemanget. Kort: urvalet
-    // persisteras mellan byggen, så `derive` (1 000 listanrop) körs bara i
-    // veckobygget eller om manifestet saknas/är för gammalt.
+    // persisteras mellan byggen, så `derive` körs bara i veckobygget eller om
+    // manifestet saknas/är för gammalt.
     const ids = await resolveSelection({
       type: 'tv',
-      seedIds: SEED_TV_IDS,
       fallbackIds: SEO_FALLBACK_TV_IDS,
-      derive: async () => {
-        const [popular, topRated] = await Promise.all([
-          collectIds(p => getPopularTV(p, { signal: buildSignal() }), SEO_TITLE_PAGES, 'popular-tv'),
-          collectIds(p => getTopRatedTV(p, { signal: buildSignal() }), SEO_TOP_RATED_PAGES, 'top-tv'),
-        ]);
-        return cappedTitleIds([...popular], [...topRated]);
-      },
+      derive: async () =>
+        cappedCoreIds(
+          await collectIds(
+            p => discoverTV({ ...SEO_CORE_DISCOVER_PARAMS, page: String(p) }, { signal: buildSignal() }),
+            SEO_CORE_DISCOVER_PAGES,
+            'core-tv',
+          ),
+        ),
     });
     return ids.map(id => ({ id: String(id) }));
   } catch (err) {

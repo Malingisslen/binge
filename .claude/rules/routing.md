@@ -25,6 +25,6 @@ Dynamiska routes (`/movie/:id`, `/tv/:id`, `/person/:id`, `/user/:username`,
 Lägg **inte** till en ny dynamisk route utan att uppdatera både
 DynamicRouter.tsx + firebase.json rewrite.
 
-Titelsidorna (`/movie/[id]`, `/tv/[id]`, `/person/[id]`) har egna `generateStaticParams`
+Titelsidorna (`/movie/[id]`, `/tv/[id]`) och `/person/[id]` har egna `generateStaticParams`
 för SEO-pre-rendering vid byggtid — se `.claude/rules/deployment.md` innan du ändrar
 antalet pre-renderade titlar eller byggtids-TMDB-anrop.

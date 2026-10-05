@@ -8,16 +8,23 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const getMovie = vi.fn();
+const getTVShow = vi.fn();
 
 vi.mock('@/components/pages/MoviePageClient', () => ({ default: () => null }));
+vi.mock('@/components/pages/TVShowPageClient', () => ({ default: () => null }));
 vi.mock('@/lib/tmdb/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/tmdb/client')>();
-  return { ...actual, getMovie: (...a: unknown[]) => getMovie(...a) };
+  return {
+    ...actual,
+    getMovie: (...a: unknown[]) => getMovie(...a),
+    getTVShow: (...a: unknown[]) => getTVShow(...a),
+  };
 });
 
 import { __resetBuildFetchState } from '@/lib/tmdb/buildFetch';
 import { generateMetadata } from './movie/[id]/page';
-import { movieSitemapEntries } from '@/lib/seo/sitemap';
+import { generateMetadata as tvMetadata } from './tv/[id]/page';
+import { movieSitemapEntries, tvSitemapEntries } from '@/lib/seo/sitemap';
 import { MANIFEST_VERSION, writeSelectionManifest } from '@/lib/tmdb/selectionManifest';
 
 let dir: string;
@@ -67,5 +74,29 @@ describe('sitemap ↔ noindex for a failed build fetch (SEO-13)', () => {
 
     expect(meta.robots).toBeUndefined();
     expect(movieUrls()).toContain('https://binge.nu/movie/501/');
+    // #26:s villkor 3 (ADR 0024): en kärnsidas canonical i den statiska HTML:en
+    // är exakt den URL sitemapen listar, med avslutande snedstreck.
+    expect(meta.alternates?.canonical).toBe(movieUrls()[0]);
+  });
+});
+
+// #26:s villkor 3 (ADR 0024), serie-routens halva.
+describe('core tv page canonical', () => {
+  it('equals the URL the sitemap lists', async () => {
+    writeSelectionManifest({
+      version: MANIFEST_VERSION,
+      type: 'tv',
+      derivedAt: 1_000_000,
+      ids: [{ id: 601, lastDerived: 1_000_000 }],
+    });
+    getTVShow.mockResolvedValue({
+      id: 601, name: 'Testserie', original_name: 'Testserie', overview: '', genres: [],
+      first_air_date: '2020-01-01', credits: { cast: [], crew: [] },
+    });
+
+    const meta = await tvMetadata(params(601));
+
+    expect(meta.robots).toBeUndefined();
+    expect(meta.alternates?.canonical).toBe(tvSitemapEntries().map(e => e.url)[0]);
   });
 });
