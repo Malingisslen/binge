@@ -213,7 +213,7 @@ function TitlePicker({ existingIds, onAdd, onClose }: TitlePickerProps) {
 
   return (
     <div className="bg-surface border border-rule rounded-sm p-2 mt-3">
-      <div className="flex items-center gap-2 mb-2 border border-rule rounded-sm bg-white px-2">
+      <div className="flex items-center gap-2 mb-2 border border-rule rounded-sm bg-surface px-2">
         <Search size={12} className="text-ink-3" />
         <input
           type="search"

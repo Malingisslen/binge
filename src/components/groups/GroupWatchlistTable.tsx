@@ -338,17 +338,17 @@ function RatingPicker({
     <div className="relative inline-block">
       <button
         onClick={() => setOpen(v => !v)}
-        className="px-[5px] py-[1px] border border-rule rounded-sm text-xxs bg-white cursor-pointer"
+        className="px-[5px] py-[1px] border border-rule rounded-sm text-xxs bg-surface cursor-pointer"
       >
         {value != null ? value : '+'}
       </button>
       {open && (
-        <div className="absolute z-10 right-0 mt-[2px] bg-white border border-rule rounded-sm shadow-none flex flex-wrap gap-[2px] p-1 w-[120px]">
+        <div className="absolute z-10 right-0 mt-[2px] bg-surface border border-rule rounded-sm shadow-none flex flex-wrap gap-[2px] p-1 w-[120px]">
           {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
             <button
               key={n}
               onClick={() => { onChange(n); setOpen(false); }}
-              className="w-[20px] h-[20px] text-xxs border border-rule-2 rounded-sm hover:border-acc-deep hover:text-acc-deep cursor-pointer bg-white"
+              className="w-[20px] h-[20px] text-xxs border border-rule-2 rounded-sm hover:border-acc-deep hover:text-acc-deep cursor-pointer bg-surface"
             >
               {n}
             </button>
