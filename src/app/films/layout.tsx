@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
   title: 'Filmer',
-  description: 'Alla filmer du följer — trending, nya, kommande. Se var varje film går att streama i Sverige.',
+  description: 'Populära filmer just nu och var de går att streama i Sverige — Netflix, Max, Viaplay med flera. Spara det du vill se med Binge.',
   alternates: { canonical: '/films/' },
 };
 

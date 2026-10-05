@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { usePerson, usePersonCredits } from '@/hooks/useTMDB';
 import { usePageMeta } from '@/hooks/usePageMeta';
-import { JsonLd, breadcrumbSchema } from '@/components/title/JsonLd';
+import { JsonLd, breadcrumbSchema, personSchema } from '@/components/title/JsonLd';
 import { useSwedishWikiBio } from '@/hooks/useSwedishWikiBio';
 import { profileUrl, getPersonEn, isAddableMediaType } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
@@ -157,6 +157,10 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
 
   return (
     <div>
+      <JsonLd data={personSchema(person, {
+        description: metaDescription,
+        jobTitle: person.known_for_department ? translateDepartment(person.known_for_department) : null,
+      })} />
       {/* BIN-423 WP4: breadcrumb structured data (speglar movie/tv-sidorna) */}
       <JsonLd data={breadcrumbSchema([
         { name: 'Binge.nu', url: 'https://binge.nu/' },

@@ -3,7 +3,17 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import sitemap from './sitemap';
+import { existsSync } from 'node:fs';
+import sitemap, {
+  SITEMAP_PARTS,
+  pageSitemapEntries,
+  movieSitemapEntries,
+  tvSitemapEntries,
+  personSitemapEntries,
+  renderUrlset,
+  renderSitemapIndex,
+} from './sitemap';
+import { recordBuildFetchOutcome, writeBuildCache } from '@/lib/tmdb/buildCache';
 import { SEO_PROVIDER_IDS } from '@/lib/tmdb/seoCoverage';
 import { SEO_GENRE_SLUGS } from '@/lib/seo/genreHubs';
 import {
@@ -173,5 +183,66 @@ describe('sitemap — urvalsmanifestet (BIN-823)', () => {
     const expected = new Set([1, 2, ...SEED_MOVIE_IDS].map(id => `https://binge.nu/movie/${id}/`));
 
     expect(new Set(movieUrls)).toEqual(expected);
+  });
+});
+
+describe('sitemap — delfiler per familj (SEO-5)', () => {
+  it('delfilerna tillsammans är exakt hela URL-mängden, utan överlapp', () => {
+    const parts = Object.values(SITEMAP_PARTS).map(fn => fn().map(e => e.url));
+    const union = parts.flat();
+    expect(new Set(union).size).toBe(union.length);
+    expect(new Set(union)).toEqual(new Set(sitemap().map(e => e.url)));
+  });
+
+  it('varje familj hamnar i sin egen fil', () => {
+    for (const fn of [movieSitemapEntries, tvSitemapEntries, personSitemapEntries]) {
+      expect(fn().length).toBeGreaterThan(0);
+    }
+    expect(movieSitemapEntries().every(e => e.url.includes('/movie/'))).toBe(true);
+    expect(tvSitemapEntries().every(e => e.url.includes('/tv/'))).toBe(true);
+    expect(personSitemapEntries().every(e => e.url.includes('/person/'))).toBe(true);
+    expect(pageSitemapEntries().some(e => /\/(movie|tv|person)\//.test(e.url))).toBe(false);
+  });
+
+  it('indexet listar varje delfil, och varje delfil har en route', () => {
+    const index = renderSitemapIndex();
+    for (const name of Object.keys(SITEMAP_PARTS)) {
+      expect(index).toContain(`<loc>https://binge.nu/${name}</loc>`);
+      expect(existsSync(join(process.cwd(), 'src/app', name, 'route.ts')), `route saknas: ${name}`).toBe(true);
+    }
+    expect(existsSync(join(process.cwd(), 'src/app/sitemap.xml/route.ts'))).toBe(true);
+  });
+});
+
+describe('sitemap — lastmod bara där den är sann (SEO-5)', () => {
+  it('statiska sidor och hubbar har ingen lastmod', () => {
+    expect(pageSitemapEntries().every(e => e.lastModified === undefined)).toBe(true);
+  });
+
+  it('en titel får sin innehållsstämpel, en ostämplad får ingen', () => {
+    writeBuildCache('movie', 1, { title: 'A' }, Date.UTC(2026, 8, 1));
+    const byUrl = new Map(movieSitemapEntries().map(e => [e.url, e]));
+    expect(byUrl.get('https://binge.nu/movie/1/')!.lastModified).toEqual(new Date(Date.UTC(2026, 8, 1)));
+    expect(byUrl.get('https://binge.nu/movie/2/')!.lastModified).toBeUndefined();
+  });
+
+  it('serialiserar lastmod som ISO-datum och escapar URL:en', () => {
+    const xml = renderUrlset([
+      { url: 'https://binge.nu/a/?x=1&y=2', lastModified: new Date(Date.UTC(2026, 8, 1)) },
+      { url: 'https://binge.nu/b/' },
+    ]);
+    expect(xml).toContain('<loc>https://binge.nu/a/?x=1&amp;y=2</loc><lastmod>2026-09-01T00:00:00.000Z</lastmod>');
+    expect(xml).toContain('<url><loc>https://binge.nu/b/</loc></url>');
+  });
+});
+
+describe('sitemap — misslyckade bygghämtningar lämnas utanför (SEO-13)', () => {
+  it('utesluter bara det id vars hämtning misslyckades, i rätt familj', () => {
+    recordBuildFetchOutcome('tv', 3, false);
+    const urls = new Set(sitemap().map(e => e.url));
+    expect(urls.has('https://binge.nu/tv/3/')).toBe(false);
+    expect(urls.has('https://binge.nu/tv/4/')).toBe(true);
+    expect(urls.has('https://binge.nu/movie/3/')).toBe(false); // never selected
+    expect(urls.has('https://binge.nu/movie/1/')).toBe(true);
   });
 });

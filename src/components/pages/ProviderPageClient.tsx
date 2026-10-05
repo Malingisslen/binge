@@ -11,6 +11,8 @@ import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import Link from 'next/link';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { localIsoDate } from '@/lib/utils';
+import { providerHubCopy } from '@/lib/seo/providerHubCopy';
+import { leavingHubHref } from '@/lib/seo/hubLinks';
 import type { TMDBSearchResult } from '@/types';
 
 type Tab = 'new' | 'movies' | 'tv';
@@ -111,11 +113,15 @@ export default function ProviderPageClient({
     indexable,
   });
 
+  const copy = provider ? providerHubCopy(provider) : null;
+  const leavingHref = leavingHubHref(providerId);
+
   return (
     <div>
       <PageHeader
         crumb="Streamingtjänst"
-        title={providerName}
+        title={copy?.h1 ?? providerName}
+        standfirst={copy?.standfirst}
         icon={provider?.color ? <ProviderDot color={provider.color} size={10} /> : undefined}
       />
       <div className="flex items-center gap-2 mt-3 mb-3">
@@ -134,9 +140,9 @@ export default function ProviderPageClient({
         </div>
       </div>
 
-      {indexable && (
+      {leavingHref && (
         <div className="mb-3">
-          <Link href={`/forsvinner/${canonicalProviderId(providerId)}/`} className="text-sm text-acc-deep hover:underline">
+          <Link href={leavingHref} className="text-sm text-acc-deep hover:underline">
             Vad försvinner från {providerName} snart? →
           </Link>
         </div>

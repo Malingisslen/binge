@@ -3,7 +3,7 @@
 import { useMemo, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { ChevronDown, ChevronUp, Tv } from 'lucide-react';
+import { ChevronDown, Tv } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTVShow } from '@/hooks/useTMDB';
 import { currentSeasonToPrefetch, seasonPrefetchSpec } from '@/lib/tmdb/prefetch';
@@ -44,7 +44,7 @@ import FriendsWhoSaw from '@/components/title/FriendsWhoSaw';
 import { useEpisodeProgressWithSync } from '@/hooks/useEpisodeProgressWithSync';
 import { tvShowStatusLabel } from '@/lib/watchStatus';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
-import { buildContentFloor, hasSubstantialText } from '@/lib/seo/contentFloor';
+import { availabilityLine, buildContentFloor, hasSubstantialText } from '@/lib/seo/contentFloor';
 import { tvContentFloorInput } from '@/lib/seo/contentFloorInput';
 import { formatNextEpisodeLabel } from '@/lib/episodeLabel';
 import { canonicalProviderId, dedupeProvidersByCanonicalId, affiliateWrap } from '@/lib/tmdb/providers';
@@ -53,6 +53,7 @@ import ClientOnly from '@/components/utils/ClientOnly';
 import { useStreamingOffers } from '@/hooks/useStreamingOffers';
 import { CheapestPathVerdict } from '@/components/title/CheapestPathVerdict';
 import PriceHistoryChart from '@/components/title/PriceHistoryChart';
+import { TitleCrumb, GenreLinks, ProviderHubLinks } from '@/components/title/TitleHubLinks';
 import { offerForProvider, isLeavingSoon, formatLeaving } from '@/lib/streaming/offers';
 import type { TMDBTVShow } from '@/types';
 import { trackEvent } from '@/lib/analytics';
@@ -174,6 +175,11 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
     () => (show ? buildContentFloor(tvContentFloorInput(show)) : undefined),
     [show],
   );
+  // SEO-2: same as the movie page — availability as text on every page.
+  const availability = useMemo(
+    () => (show ? availabilityLine(tvContentFloorInput(show)) : undefined),
+    [show],
+  );
   usePageMeta({
     title: displayTitle
       ? `${displayTitle}${firstYear ? ` (${firstYear})` : ''} — var streamar jag?`
@@ -259,14 +265,14 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   return (
     <>
       {/* Schema.org structured data — rich snippets + knowledge panel i Google */}
-      <JsonLd data={tvSchema(show)} />
+      <JsonLd data={tvSchema(show, { name: displayTitle, description: contentFloor?.description })} />
       <JsonLd data={breadcrumbSchema([
         { name: 'Binge.nu', url: 'https://binge.nu/' },
         { name: 'Serier', url: 'https://binge.nu/series/' },
         { name: displayTitle, url: `https://binge.nu/tv/${show.id}/` },
       ])} />
 
-      <div className="crumb">Bibliotek · serier · {displayTitle}</div>
+      <TitleCrumb kind="tv" title={displayTitle} />
 
       <div className="detail-hero">
         <div className="poster-wrap">
@@ -296,7 +302,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
             <span className="kind">
               SERIE · {yearStart}{yearEnd ? `–${yearEnd}` : '–'}
             </span>
-            {genres && <span className="kind">{genres}</span>}
+            <GenreLinks kind="tv" genres={show.genres} />
           </div>
           <h1>{displayTitle}</h1>
           {creators.length > 0 && (
@@ -318,6 +324,9 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
               reasoning. The meta description keeps the 60-char rule unchanged. */}
           {overviewText && <p className="syn">{overviewText}</p>}
           {needsContentFloorParagraph && <p className="syn">{contentFloor?.paragraph}</p>}
+          {!needsContentFloorParagraph && availability && (
+            <p style={{ marginTop: 10, fontSize: 13.5, color: 'var(--ink-2)' }}>{availability}</p>
+          )}
           <div className="stats">
             <span><span className="k">säsonger</span><strong>{show.number_of_seasons}</strong></span>
             {show.number_of_episodes && (
@@ -369,9 +378,9 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
             />
           )}
 
-          {(onSubscription.length > 0 || hasRentBuy) && (
+          {onSubscription.length > 0 && (
             <div className="providers-row">
-              {onSubscription.length > 0 && <span className="lab">finns på</span>}
+              <span className="lab">finns på</span>
               {onSubscription.map(p => {
                 const logo = logoUrl(p.logo_path);
                 const offer = offerForProvider(offers, canonicalProviderId(p.provider_id));
@@ -397,21 +406,18 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
                 }
                 return <ProviderTag key={p.provider_id} provider={p} size="md" offer={offer} nowMs={now} mediaType="tv" />;
               })}
-              {hasRentBuy && (
-                <button
-                  onClick={() => setShowRentBuy(!showRentBuy)}
-                  className="btn btn-ghost btn-sm"
-                  style={{ marginLeft: 4 }}
-                >
-                  Hyr & köp {showRentBuy ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                </button>
-              )}
             </div>
           )}
+          <ProviderHubLinks providerIds={onSubscription.map(p => p.provider_id)} />
 
           <FreeWatchBadge free={free} ads={ads} />
 
-          {showRentBuy && hasRentBuy && (
+          {/* SEO-2: <details> keeps rent/buy in the static HTML; see the movie page. */}
+          {hasRentBuy && (
+            <details className="group" style={{ marginTop: 10 }} onToggle={e => setShowRentBuy(e.currentTarget.open)}>
+              <summary className="btn btn-ghost btn-sm list-none [&::-webkit-details-marker]:hidden" style={{ cursor: 'pointer' }}>
+                Hyr & köp <ChevronDown size={12} className="transition-transform group-open:rotate-180" />
+              </summary>
             <div style={{ marginTop: 10, fontSize: 11, color: 'var(--ink-3)' }}>
               {rent.length > 0 && (
                 <div>
@@ -427,8 +433,9 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
               )}
               {/* BIN-354: rent price-history stat row, same as the film page —
                   lazy (only when this disclosure is open). */}
-              <PriceHistoryChart tmdbId={show.id} mediaType="tv" nowMs={now} />
+              {showRentBuy && <PriceHistoryChart tmdbId={show.id} mediaType="tv" nowMs={now} />}
             </div>
+            </details>
           )}
 
           {(subscription.length > 0 || hasRentBuy) && (

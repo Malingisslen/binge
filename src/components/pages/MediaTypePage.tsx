@@ -16,7 +16,7 @@ import { JsonLd, breadcrumbSchema, collectionPageSchema } from '@/components/tit
 const CONFIG = {
   tv: {
     title: 'Serier',
-    standfirst: 'Alla TV-serier du följer — pågående, avslutade och kommande. Se var varje serie går att streama i Sverige.',
+    standfirst: 'Populära TV-serier just nu och var de går att streama i Sverige. Följ det du tittar på, så håller Binge koll på nya avsnitt och var serien finns.',
     popularLabel: 'Populära serier',
     emptyText: 'Du tittar inte på några serier ännu. Lägg till nedan!',
     hrefPrefix: '/tv/',
@@ -24,7 +24,7 @@ const CONFIG = {
   },
   movie: {
     title: 'Filmer',
-    standfirst: 'Alla filmer du följer — sedda, sparade och kommande. Se var varje film går att streama i Sverige.',
+    standfirst: 'Populära filmer just nu och var de går att streama i Sverige. Spara det du vill se, så håller Binge koll på när det dyker upp på dina tjänster.',
     popularLabel: 'Populära filmer',
     emptyText: 'Du tittar inte på några filmer ännu. Lägg till nedan!',
     hrefPrefix: '/movie/',
