@@ -650,7 +650,7 @@ button { font: inherit; cursor: pointer; }
   gap: 6px;
   cursor: pointer;
 }
-.btn:hover { background: oklch(0.10 0.006 80); border-color: oklch(0.10 0.006 80); }
+.btn:hover { background: color-mix(in oklch, var(--ink) 85%, black); border-color: color-mix(in oklch, var(--ink) 85%, black); }
 .btn.btn-ghost,
 .btn-ghost {
   background: transparent;
@@ -2074,7 +2074,7 @@ button { font: inherit; cursor: pointer; }
 .rec-card:hover .quick-actions { opacity: 1; pointer-events: auto; }
 .rec-card .quick-actions button,
 .rec-card .quick-actions a {
-  background: oklch(1 0 0 / 0.95);
+  background: var(--surface);
   border: 1px solid oklch(0 0 0 / 0.06);
   color: var(--ink);
   border-radius: 999px;
@@ -2116,7 +2116,7 @@ button { font: inherit; cursor: pointer; }
   backdrop-filter: blur(2px);
 }
 .rec-card .corner-badge.in-lib {
-  background: oklch(1 0 0 / 0.95);
+  background: var(--surface);
   color: var(--ink);
   border: 1px solid var(--rule);
 }

@@ -101,7 +101,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               <button
                 type="button"
                 onClick={() => { t.action!.onClick(); dismiss(t.id); }}
-                className="text-xs font-semibold underline text-white bg-transparent border-none cursor-pointer p-0 shrink-0"
+                className="text-xs font-semibold underline text-bg bg-transparent border-none cursor-pointer p-0 shrink-0"
               >
                 {t.action.label}
               </button>
@@ -111,7 +111,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 type="button"
                 onClick={() => dismiss(t.id)}
                 aria-label="Stäng"
-                className="text-white/60 bg-transparent border-none cursor-pointer p-0 shrink-0"
+                className="text-bg opacity-60 bg-transparent border-none cursor-pointer p-0 shrink-0"
               >
                 <X size={14} />
               </button>

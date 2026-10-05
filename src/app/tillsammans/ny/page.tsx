@@ -98,8 +98,9 @@ function NyContent() {
 
       <form onSubmit={onSubmit} className="bg-surface border border-rule rounded-sm">
         <FormSection title="Du">
-          <label className="block text-xs text-ink-3 mb-1">Ditt namn</label>
+          <label htmlFor="tillsammans-vardnamn" className="block text-xs text-ink-3 mb-1">Ditt namn</label>
           <input
+            id="tillsammans-vardnamn"
             type="text"
             value={hostName}
             onChange={e => setHostName(e.target.value)}
