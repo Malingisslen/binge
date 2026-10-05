@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { CalendarEntry } from '@/hooks/useCalendar';
 import { entryKey } from '@/lib/calendar/entry';
 import { summarizeCounts } from '@/lib/calendar/summary';
@@ -21,6 +21,8 @@ const DAY_LABELS = ['mån', 'tis', 'ons', 'tor', 'fre', 'lör', 'sön'] as const
 interface Props {
   weekStart: Date;
   entries: readonly CalendarEntry[];
+  /** UX-8: the day picked in the topbar's week strip, marked and scrolled to. */
+  focusKey?: string | null;
 }
 
 function isoKey(d: Date): string {
@@ -35,7 +37,13 @@ function sameDay(a: Date, b: Date): boolean {
     && a.getDate() === b.getDate();
 }
 
-export default function WeekBoard({ weekStart, entries }: Props) {
+export default function WeekBoard({ weekStart, entries, focusKey = null }: Props) {
+  // On a phone the board is one column, so the picked day can be far down the page.
+  const focusRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (focusKey) focusRef.current?.scrollIntoView({ block: 'start' });
+  }, [focusKey]);
+
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => {
     const d = new Date(weekStart);
     d.setDate(weekStart.getDate() + i);
@@ -70,7 +78,12 @@ export default function WeekBoard({ weekStart, entries }: Props) {
         const dayEntries = entriesByDay.get(key) ?? [];
         const lab = DAY_LABELS[i];
         return (
-          <div key={key} className={`col${isToday ? ' today' : ''}${isPast ? ' past' : ''}`}>
+          <div
+            key={key}
+            ref={key === focusKey ? focusRef : undefined}
+            className={`col${isToday ? ' today' : ''}${isPast ? ' past' : ''}${key === focusKey ? ' focus' : ''}`}
+            aria-current={key === focusKey ? 'date' : undefined}
+          >
             <div className="col-h">
               <div className="lab">{lab}{isToday ? ' · idag' : ''}{isPast ? ' · passerad' : ''}</div>
               <div className="date">{d.getDate()}</div>

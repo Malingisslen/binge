@@ -6,6 +6,7 @@ import { useWatchlist } from '@/hooks/useWatchlist';
 import { useMarkSeen } from '@/hooks/useMarkSeen';
 import { useAuth } from '@/hooks/useAuth';
 import { useClickOutside } from '@/hooks/useClickOutside';
+import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useToast } from '@/contexts/ToastContext';
 import { statusLabel, statusMenuLabel, statusOptionsFor } from '@/lib/watchStatus';
 import { clearEpisodeProgress } from '@/lib/firebase/episodeProgress';
@@ -61,6 +62,10 @@ export default function QuickAddButton({
   const labelFor = (s: WatchStatus) => statusLabel(s, mediaType);
   const close = useCallback(() => setOpen(false), []);
   useClickOutside(ref, close);
+  // A11Y-2: Escape closes the menu and puts focus back on the button that opened it.
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const closeAndRefocus = useCallback(() => { setOpen(false); triggerRef.current?.focus(); }, []);
+  useEscapeKey(open, closeAndRefocus);
 
   async function handleSelect(status: WatchStatus) {
     setOpen(false);
@@ -115,6 +120,15 @@ export default function QuickAddButton({
     }
   }
 
+  const buttonLabel =
+    authLoading ? 'Laddar…'
+    : signedOut ? (current ? labelFor(current.status) : 'Lägg till')
+    : listenerFailed ? LIBRARY_UNAVAILABLE
+    // Ordered after listenerFailed, so this branch is "settled has not
+    // happened yet" — the transient half of !libraryKnown.
+    : !libraryKnown ? 'Laddar…'
+    : current ? labelFor(current.status) : 'Lägg till';
+
   return (
     <div
       ref={ref}
@@ -122,6 +136,8 @@ export default function QuickAddButton({
       onClick={e => { e.preventDefault(); e.stopPropagation(); }}
     >
       <button
+        ref={triggerRef}
+        aria-expanded={open}
         onClick={async () => {
           // BIN-645, now shared with StatusButton as BIN-714 — the whole rule
           // and every reason behind it live in useSignedOutRedirect. Called
@@ -149,20 +165,14 @@ export default function QuickAddButton({
         // destination (/login), and they have no library to wait for. Neither is
         // a FAILED listener — that tap's outcome is the explanation itself.
         disabled={authLoading || (!signedOut && !libraryKnown && !listenerFailed)}
-        className={`w-[28px] h-[28px] md:w-[22px] md:h-[22px] rounded-sm flex items-center justify-center border-none cursor-pointer disabled:opacity-50 disabled:cursor-default ${
+        className={`w-[28px] h-[28px] md:w-[24px] md:h-[24px] rounded-sm flex items-center justify-center border-none cursor-pointer disabled:opacity-50 disabled:cursor-default ${
           current
             ? 'bg-acc-deep text-white'
             : 'bg-black/60 text-white hover:bg-acc-deep'
         }`}
-        title={
-          authLoading ? 'Laddar…'
-          : signedOut ? (current ? labelFor(current.status) : 'Lägg till')
-          : listenerFailed ? LIBRARY_UNAVAILABLE
-          // Ordered after listenerFailed, so this branch is "settled has not
-          // happened yet" — the transient half of !libraryKnown.
-          : !libraryKnown ? 'Laddar…'
-          : current ? labelFor(current.status) : 'Lägg till'
-        }
+        title={buttonLabel}
+        // A11Y-3: the button is an icon only, and `title=` is not read on touch.
+        aria-label={buttonLabel}
       >
         {current ? <Check size={13} /> : <Plus size={13} />}
       </button>

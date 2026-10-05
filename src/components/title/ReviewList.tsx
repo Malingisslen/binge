@@ -292,9 +292,10 @@ function ReviewComments({
           <button
             onClick={submit}
             disabled={posting || !text.trim()}
-            className="px-2 py-1 bg-acc-deep text-white rounded-sm text-xxs cursor-pointer disabled:opacity-50"
+            aria-label="Skicka"
+            className="inline-flex items-center justify-center min-w-[24px] min-h-[24px] px-2 py-1 bg-acc-deep text-white rounded-sm text-xxs cursor-pointer disabled:opacity-50"
           >
-            <Send size={10} />
+            <Send size={12} />
           </button>
           <button
             onClick={onClose}
