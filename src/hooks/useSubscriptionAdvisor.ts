@@ -14,6 +14,8 @@ import { isEndedStatus } from '@/lib/airingState';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import {
   findTopPausable,
+  hasEnoughTitlesForPauseAdvice,
+  selectPrimaryAction,
   findCatchupCandidate,
   findIdleNextCheckDate,
   getNextAirInfo,
@@ -132,6 +134,7 @@ export function useSubscriptionAdvisor(
         totalMonthlyCostEstimated: false,
         primaryAction: { kind: 'idle', nextCheckDate: null } satisfies PrimaryAction,
         secondaryAction: null as Extract<PrimaryAction, { kind: 'catchup' }> | null,
+        pauseAdviceReady: false,
         activePauses: [] as ActivePause[],
         mostUsedProvider: null as MostUsedProvider | null,
         unfinishedTmdbIds: new Set<number>(),
@@ -150,6 +153,7 @@ export function useSubscriptionAdvisor(
         totalMonthlyCostEstimated: false,
         primaryAction: { kind: 'idle', nextCheckDate: null } satisfies PrimaryAction,
         secondaryAction: null as Extract<PrimaryAction, { kind: 'catchup' }> | null,
+        pauseAdviceReady: false,
         activePauses: [] as ActivePause[],
         mostUsedProvider: null as MostUsedProvider | null,
         unfinishedTmdbIds: new Set<number>(),
@@ -381,9 +385,15 @@ export function useSubscriptionAdvisor(
 
     // Monthly savings = sum of costs for providers we've paused OR advisor suggests pause (not yet paused)
     const userPausedSet = new Set(activePauses.map(p => p.providerId));
-    const monthlySavings = providerAdvisories
-      .filter(p => p.status === 'pause' && !userPausedSet.has(p.providerId))
-      .reduce((sum, p) => sum + (p.monthlyCost ?? 0), 0);
+    // Räknas på de råa listorna, inte de TMDB-hämtade: golvet ska inte vackla
+    // medan detaljerna laddar eller om en hämtning faller.
+    const anchorTitleCount = followingTV.length + willSeeItems.length;
+    const pauseAdviceReady = hasEnoughTitlesForPauseAdvice(anchorTitleCount);
+    const monthlySavings = pauseAdviceReady
+      ? providerAdvisories
+        .filter(p => p.status === 'pause' && !userPausedSet.has(p.providerId))
+        .reduce((sum, p) => sum + (p.monthlyCost ?? 0), 0)
+      : 0;
 
     const countedInTotal = providerAdvisories.filter(p => !userPausedSet.has(p.providerId));
     const totalMonthlyCost = countedInTotal.reduce((sum, p) => sum + (p.monthlyCost ?? 0), 0);
@@ -450,11 +460,13 @@ export function useSubscriptionAdvisor(
       monthlyCost: resolveEffectiveMonthlyCost(topSubscribe.providerId, { providerTiers, providerCosts, providerCampaigns }, now) ?? 0,
     } : null;
 
-    const primaryAction: PrimaryAction =
-      pauseAction
-      ?? catchupAction
-      ?? subscribeAction
-      ?? { kind: 'idle', nextCheckDate: findIdleNextCheckDate(providerAdvisories, activePauses) };
+    const primaryAction = selectPrimaryAction({
+      anchorTitleCount,
+      pauseAction,
+      catchupAction,
+      subscribeAction,
+      idleNextCheckDate: findIdleNextCheckDate(providerAdvisories, activePauses),
+    });
 
     // När primary är pause, men det också finns en catchup-kandidat, visa
     // catchup som sekundär — annars skuggas catchup-rådet av besparingen.
@@ -499,6 +511,7 @@ export function useSubscriptionAdvisor(
       totalMonthlyCostEstimated,
       primaryAction,
       secondaryAction,
+      pauseAdviceReady,
       activePauses,
       mostUsedProvider,
       unfinishedTmdbIds,

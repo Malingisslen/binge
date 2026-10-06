@@ -297,6 +297,8 @@ describe('StatusButton — the write waits for auth AND the watchlist snapshot (
     // sessionStorage, NEVER a ?next= param — that would ride along to Firebase's
     // Google-hosted auth handler. `?from=` is not on the return allowlist.
     expect(window.sessionStorage.getItem('binge:nextAfterLogin')).toBe('/movie/603/');
+    // BIN-1442: the film itself rides along and is added after sign-in.
+    expect(JSON.parse(window.sessionStorage.getItem('binge:pendingAdd') ?? 'null')).toMatchObject({ tmdbId: 603, mediaType: 'movie' });
     // And still no write, no menu, no success toast.
     expect(watchlist.upsertTitle).not.toHaveBeenCalled();
     expect(markSeen).not.toHaveBeenCalled();

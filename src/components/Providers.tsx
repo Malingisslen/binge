@@ -7,6 +7,7 @@ import { AuthProvider } from '@/contexts/AuthContext';
 import { WatchlistProvider } from '@/contexts/WatchlistContext';
 import { NotInterestedProvider } from '@/contexts/NotInterestedContext';
 import { ToastProvider } from '@/contexts/ToastContext';
+import PendingAddRunner from '@/components/auth/PendingAddRunner';
 import { createQueryClient, shouldPersistQuery, PERSIST_MAX_AGE } from '@/lib/queryClient';
 import { initSentry } from '@/lib/sentry';
 import { initAppCheck } from '@/lib/firebase/appCheck';
@@ -66,6 +67,7 @@ export default function Providers({ children }: { children: ReactNode }) {
           <WatchlistProvider>
             <NotInterestedProvider>
               <ToastProvider>
+                <PendingAddRunner />
                 {children}
               </ToastProvider>
             </NotInterestedProvider>

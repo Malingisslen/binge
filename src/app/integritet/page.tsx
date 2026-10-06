@@ -188,7 +188,7 @@ export default function IntegritetPage() {
           <li><strong>Google reCAPTCHA</strong> (<code>_GRECAPTCHA</code>) — sätts av Googles reCAPTCHA/App Check för bot- och missbruksskydd. Räknas som nödvändig för tjänstens säkerhet.</li>
           <li><strong>YouTube</strong> — sätts bara om du trycker på en trailer. Spelaren laddas från <code>youtube-nocookie.com</code>, men YouTube kan ändå lagra cookies eller lokal lagring i din webbläsare medan videon spelas.</li>
           <li>
-            <strong>Fyra värden i webbläsarens <code>sessionStorage</code></strong> — till
+            <strong>Värden i webbläsarens <code>sessionStorage</code></strong> — till
             skillnad från cookies och IndexedDB ovan är de bundna till den enskilda fliken
             och försvinner när du stänger fliken eller webbläsaren. Ingen tredje part har
             åtkomst till dem, och de lämnar aldrig din enhet.
@@ -217,6 +217,14 @@ export default function IntegritetPage() {
                 <code>binge:guestProviders</code> — vilka betaltjänster du kryssat i på
                 kalkylatorn eller startsidan, så att valet följer med om du skapar ett konto.
                 Raderas när du sparat dina tjänster.
+              </li>
+              <li>
+                <code>binge:pendingAdd</code> — titeln du tryckte <em>Lägg till</em> på
+                innan du loggat in, så att den läggs till i ditt bibliotek automatiskt när
+                du loggat in eller skapat konto. Innehåller bara titelns namn och offentliga
+                uppgifter om den. Raderas så fort den lästs. Den tas också bort om den är
+                äldre än 30 minuter, eller om inloggningssidan öppnas mer än en minut efter
+                att du tryckte.
               </li>
             </ul>
           </li>
