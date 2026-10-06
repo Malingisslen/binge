@@ -228,7 +228,7 @@ button { font: inherit; cursor: pointer; }
   background: var(--surface);
   border-bottom: 1px solid var(--ink);
   display: grid;
-  grid-template-columns: 200px 1fr 280px;
+  grid-template-columns: 200px 1fr 320px;
   align-items: stretch;
   position: sticky;
   top: 0;
@@ -437,8 +437,10 @@ button { font: inherit; cursor: pointer; }
 .search-dropdown-wrap {
   position: absolute;
   top: 100%;
-  left: 0;
   right: 0;
+  /* Sökfältet är smalt i toppraden; förslagen behöver plats för titel och år.
+     Högerkantad så att listan växer in mot sidan, aldrig ut över fönsterkanten. */
+  width: max(100%, min(380px, calc(100vw - 32px)));
   margin-top: 4px;
   z-index: 40;
 }
@@ -910,6 +912,8 @@ button { font: inherit; cursor: pointer; }
      button, so on a narrow phone they ran off the left edge. Here they hang
      from the whole search row instead, with an 8px gutter on both sides. */
   .topbar-actions > .relative { position: static; }
+  /* Här står sökfältet längst till vänster, så förslagen hänger från dess vänsterkant. */
+  .search-dropdown-wrap { left: 0; right: auto; }
   .topbar-popover,
   .topbar-popover.wide {
     left: 8px;

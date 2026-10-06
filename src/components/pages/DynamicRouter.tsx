@@ -21,7 +21,7 @@ const LOADING = <LoadingView label="Laddar…" />;
 
 // MoviePageClient används som client-side fallback för movie-ids utanför
 // urvalet — pre-renderade ids serveras av src/app/movie/[id]/page.tsx,
-// resten faller hit via firebase rewrite ** → /_/index.html.
+// resten faller hit via firebase-omskrivningen /movie/** → /_/index.html.
 const MoviePageClient = dynamic(() => import(/* webpackPrefetch: true */ './MoviePageClient'), { ssr: false, loading: () => LOADING });
 const TVShowPageClient = dynamic(() => import(/* webpackPrefetch: true */ './TVShowPageClient'), { ssr: false, loading: () => LOADING });
 const SeasonPageClient = dynamic(() => import('./SeasonPageClient'), { ssr: false, loading: () => LOADING });

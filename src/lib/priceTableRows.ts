@@ -8,7 +8,7 @@ export interface PriceRow {
   key: string;
   providerId: number;
   providerName: string;
-  /** null för en tjänst utan nivåer. */
+  /** Abonnemangets namn (`planName`) för en tjänst utan nivåer, annars null där också. */
   tierName: string | null;
   kr: number;
   sport: boolean;
@@ -34,7 +34,7 @@ export function buildPriceRows(): PriceRow[] {
       key: `${p.id}`,
       providerId: p.id,
       providerName: p.name,
-      tierName: null,
+      tierName: p.planName ?? null,
       kr: p.defaultMonthlyCost ?? 0,
       sport: false,
       verifiedDate: p.priceVerifiedDate,

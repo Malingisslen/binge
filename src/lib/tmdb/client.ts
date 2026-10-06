@@ -140,10 +140,15 @@ export function findByImdbId(imdbId: string, opts?: TmdbFetchOpts): Promise<TMDB
   });
 }
 
+// language=sv-SE filtrerar `videos` till svenska klipp, och de flesta titlar har inga.
+// include_video_language tar med engelska och språklösa trailers; pickTrailer väljer.
+const VIDEO_LANGUAGES = 'sv,en,null';
+
 // Movie
 export function getMovie(id: number, opts?: TmdbFetchOpts): Promise<TMDBMovie> {
   return tmdbFetch(`/movie/${id}`, {
     append_to_response: 'watch/providers,recommendations,credits,videos,release_dates',
+    include_video_language: VIDEO_LANGUAGES,
   }, opts);
 }
 
@@ -151,7 +156,15 @@ export function getMovie(id: number, opts?: TmdbFetchOpts): Promise<TMDBMovie> {
 export function getTVShow(id: number, opts?: TmdbFetchOpts): Promise<TMDBTVShow> {
   return tmdbFetch(`/tv/${id}`, {
     append_to_response: 'watch/providers,recommendations,credits,videos,external_ids',
+    include_video_language: VIDEO_LANGUAGES,
   }, opts);
+}
+
+/** Bara titelns namn på engelska, för en lista där den svenska titeln saknas. */
+export function getEnglishTitle(
+  mediaType: 'movie' | 'tv', id: number, opts?: TmdbFetchOpts,
+): Promise<{ title?: string; name?: string }> {
+  return tmdbFetch(`/${mediaType}/${id}`, { language: 'en-US' }, opts);
 }
 
 // Lite-varianter för fan-out-ytor (kalender, rådgivare): behåller

@@ -18,10 +18,16 @@ describe('buildPriceRows', () => {
     expect(rows.find(r => r.key === '76:standard')?.sport).toBe(false);
   });
 
-  it('an untiered provider shows its list price with no tier name', () => {
+  it('an untiered provider shows its list price under its plan name', () => {
     const prime = rows.find(r => r.providerId === 119);
-    expect(prime?.tierName).toBeNull();
+    expect(prime?.tierName).toBe('Prime-medlemskap');
     expect(prime?.kr).toBe(GUEST_PRICED_PROVIDERS.find(p => p.id === 119)?.defaultMonthlyCost);
+  });
+
+  it('every untiered row has a plan name, so the tier column never shows a bare dash', () => {
+    const untiered = rows.filter(r => !r.key.includes(':'));
+    expect(untiered.length).toBeGreaterThan(0);
+    expect(untiered.filter(r => !r.tierName).map(r => r.providerName)).toEqual([]);
   });
 
   it('carries no free or ad-funded provider', () => {

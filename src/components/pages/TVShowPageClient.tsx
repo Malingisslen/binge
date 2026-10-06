@@ -22,6 +22,7 @@ import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import RecapPanel from '@/components/title/RecapPanel';
 import { contiguousWatchedBoundary, inventoryFromSeasons } from '@/lib/recaps/progress';
 import TrailerSection from '@/components/ui/TrailerSection';
+import { pickTrailer } from '@/lib/trailer';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { NotFound } from '@/components/ui/NotFound';
 import { AvatarInitials } from '@/components/ui/AvatarInitials';
@@ -46,7 +47,8 @@ import { tvShowStatusLabel } from '@/lib/watchStatus';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import { availabilityLine, buildContentFloor, hasSubstantialText } from '@/lib/seo/contentFloor';
 import { tvContentFloorInput } from '@/lib/seo/contentFloorInput';
-import { formatNextEpisodeLabel } from '@/lib/episodeLabel';
+import { formatNextEpisodeLabel, seriesYearSpan, upcomingEpisode } from '@/lib/episodeLabel';
+import { todayIso } from '@/lib/utils';
 import { canonicalProviderId, dedupeProvidersByCanonicalId, affiliateWrap } from '@/lib/tmdb/providers';
 import { seProviderIdsForRefresh, seSubscriptionProviderIdsForRefresh } from '@/lib/tmdb/seProviderIds';
 import ClientOnly from '@/components/utils/ClientOnly';
@@ -226,7 +228,6 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   const buy = providers?.buy ?? [];
   const hasRentBuy = rent.length > 0 || buy.length > 0;
   const yearStart = show.first_air_date?.substring(0, 4) ?? '—';
-  const yearEnd = show.status === 'Ended' ? show.last_air_date?.substring(0, 4) : '';
   // BIN-735 — see the paragraph render below (the movie sibling is identical).
   const overviewText = show.overview?.trim() ? show.overview : null;
   const needsContentFloorParagraph = !hasSubstantialText(show.overview);
@@ -236,13 +237,14 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   // user has fully completed. Cheap O(seasons) derive, so computed inline (not
   // memoised) to always reflect the latest episode progress.
   const seasonMeter = seasonCompletion(show.seasons, (s, ec) => getSeasonProgress(s, ec).watched);
-  const nextEp = show.next_episode_to_air;
+  // Jämförs mot dagens datum, så bara efter montering (ClientOnly nedan): den
+  // statiska HTML:en vet inte vilken dag den läses.
+  const nextEp = upcomingEpisode(show.next_episode_to_air, todayIso());
   // "Samma serie" — other TMDB entries for the same fictional show (split franchises
   // like Doctor Who). Static/curated; empty for the vast majority of shows.
   const relatedSeries = relatedSeriesFor(show.id);
   const creators = show.credits?.crew?.filter(c => c.job === 'Creator' || c.department === 'Creator') ?? [];
-  const trailer = show.videos?.results?.find(v => v.site === 'YouTube' && v.type === 'Trailer')
-    ?? show.videos?.results?.find(v => v.site === 'YouTube' && v.type === 'Teaser');
+  const trailer = pickTrailer(show.videos?.results);
   const imdbId = show.external_ids?.imdb_id;
   const statusButtonProps = {
     tmdbId: show.id,
@@ -301,7 +303,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
               </span>
             )}
             <span className="kind">
-              SERIE · {yearStart}{yearEnd ? `–${yearEnd}` : '–'}
+              SERIE · {seriesYearSpan(show.first_air_date, show.last_air_date, show.status === 'Ended')}
             </span>
             <GenreLinks kind="tv" genres={show.genres} />
           </div>
@@ -448,12 +450,12 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
       </div>
 
       <div style={{ marginTop: 18 }}>
-        {nextEp && (
-          <div className="chip acc" style={{ padding: '6px 12px' }}>
-            Nästa avsnitt: {formatNextEpisodeLabel(nextEp)}
-          </div>
-        )}
         <ClientOnly>
+          {nextEp && (
+            <div className="chip acc" style={{ padding: '6px 12px' }}>
+              Nästa avsnitt: {formatNextEpisodeLabel(nextEp)}
+            </div>
+          )}
           {watchlistItem?.status === 'sedd' && nextEp && (
             <div style={{
               marginTop: 8,
@@ -522,7 +524,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
       <AvailabilityTable title={displayTitle} availability={titleAvailability(show['watch/providers']?.results?.SE)} />
 
       {/* Trailer — raw 16:9 video (preview surface). Döljs helt när embed saknas/failar (M1). */}
-      <TrailerSection video={trailer} />
+      <TrailerSection video={trailer} backdropPath={show.backdrop_path} />
 
       {/* Cast — raw 1:1 circular portraits (preview surface) */}
       {cast.length > 0 && (

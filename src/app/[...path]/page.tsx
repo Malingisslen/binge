@@ -12,13 +12,12 @@ export function generateStaticParams() {
 
 /**
  * Catch-all-routens metadata sätter noindex som *defensiv default* i den
- * statiska HTML:en. Anledningen: Firebase rewrite `** → /_/index.html`
- * skickar ALLA okända URLs hit och returnerar HTTP 200, vilket gör att
- * Google tidigare indexerade tusentals soft-404:s som dubletter.
+ * statiska HTML:en. Anledningen: prefix-omskrivningarna i firebase.json
+ * skickar long-tail-URL:er hit med HTTP 200, även id:n som inte finns.
  *
  * Genom att sätta noindex här ärver alla long-tail routes (movie/tv/person,
- * /user/:u, /provider/:id, /list/:id, /grupper, /tillsammans,
- * helt okända paths) noindex i den initiala HTML:en — innan JavaScript körs.
+ * /user/:u, /provider/:id, /list/:id, /grupper, /tillsammans) noindex i den
+ * initiala HTML:en — innan JavaScript körs.
  *
  * Titlar och personer utanför det förrenderade urvalet förblir noindex även
  * efter hydrering (ADR 0024): klientsidorna sätter inte längre `indexable`.

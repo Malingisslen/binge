@@ -9,7 +9,8 @@ const p = (provider_id: number, provider_name = `P${provider_id}`): TMDBProvider
 const se = (d: Omit<TMDBProviderData, 'link'>): TMDBProviderData => ({ link: '', ...d });
 
 const NETFLIX = 8;
-const HBO_MAX = 384;
+// En tjänst vars pris ingen kontrollerat; testet nedan prövar den förutsättningen först.
+const UNVERIFIED = 119; // Amazon Prime Video
 const SVT = 520;
 const PLUTO = 300;
 const TV4 = 489;
@@ -40,10 +41,10 @@ describe('titleAvailability', () => {
   });
 
   it('visar inget pris för en tjänst utan kontrolldatum, trots att ett standardpris finns', () => {
-    const hbo = getProvider(HBO_MAX)!;
-    expect(hbo.priceVerifiedDate).toBeUndefined();
-    expect(hbo.defaultMonthlyCost).toBeGreaterThan(0);
-    const { rows, pricesVerifiedOn } = titleAvailability(se({ flatrate: [p(HBO_MAX)] }));
+    const unverified = getProvider(UNVERIFIED)!;
+    expect(unverified.priceVerifiedDate).toBeUndefined();
+    expect(unverified.defaultMonthlyCost).toBeGreaterThan(0);
+    const { rows, pricesVerifiedOn } = titleAvailability(se({ flatrate: [p(UNVERIFIED)] }));
     expect(rows[0]).toMatchObject({ how: 'abonnemang', monthlyFrom: null, tierName: null, verifiedOn: null });
     expect(pricesVerifiedOn).toBeNull();
   });
@@ -71,19 +72,19 @@ describe('titleAvailability', () => {
   it('ordnar gratis, reklam, abonnemang efter pris med okänt pris sist, sedan hyr och köp', () => {
     const { rows } = titleAvailability(se({
       rent: [p(SF_ANYTIME)],
-      flatrate: [p(HBO_MAX), p(NETFLIX), p(TV4)],
+      flatrate: [p(UNVERIFIED), p(NETFLIX), p(TV4)],
       ads: [p(PLUTO)],
       free: [p(SVT)],
     }));
     const order = rows.map(r => r.name);
     const subs = [NETFLIX, TV4].map(id => ({ name: getProvider(id)!.name, cost: expectedFrom(id).cost }))
       .sort((a, b) => a.cost - b.cost).map(x => x.name);
-    expect(order).toEqual(['SVT Play', 'Pluto TV', ...subs, 'HBO Max', 'SF Anytime']);
+    expect(order).toEqual(['SVT Play', 'Pluto TV', ...subs, 'Amazon Prime Video', 'SF Anytime']);
     expect(rows.at(-1)).toMatchObject({ how: 'hyr-kop', monthlyFrom: null });
   });
 
   it('märker billigast bara när minst två rader har ett pris, och gratis räknas som noll', () => {
-    expect(titleAvailability(se({ flatrate: [p(NETFLIX), p(HBO_MAX)] })).cheapestName).toBeNull();
+    expect(titleAvailability(se({ flatrate: [p(NETFLIX), p(UNVERIFIED)] })).cheapestName).toBeNull();
     const two = titleAvailability(se({ flatrate: [p(NETFLIX), p(TV4)] }));
     const cheaper = expectedFrom(NETFLIX).cost <= expectedFrom(TV4).cost ? 'Netflix' : 'TV4 Play';
     expect(two.cheapestName).toBe(cheaper);
@@ -92,13 +93,13 @@ describe('titleAvailability', () => {
 
   it('märker ingen rad när ett abonnemang saknar kontrollerat pris', () => {
     expect(titleAvailability(se({ flatrate: [p(NETFLIX), p(TV4)] })).cheapestName).not.toBeNull();
-    expect(titleAvailability(se({ flatrate: [p(NETFLIX), p(TV4), p(HBO_MAX)] })).cheapestName).toBeNull();
+    expect(titleAvailability(se({ flatrate: [p(NETFLIX), p(TV4), p(UNVERIFIED)] })).cheapestName).toBeNull();
   });
 
   it('daterar priserna med det äldsta kontrolldatumet bland raderna som visar ett pris', () => {
     const dates = [NETFLIX, TV4].map(id => getProvider(id)!.priceVerifiedDate!).sort();
     expect(dates[0]).not.toBe(dates[1]);
-    const { pricesVerifiedOn } = titleAvailability(se({ flatrate: [p(TV4), p(NETFLIX), p(HBO_MAX)] }));
+    const { pricesVerifiedOn } = titleAvailability(se({ flatrate: [p(TV4), p(NETFLIX), p(UNVERIFIED)] }));
     expect(pricesVerifiedOn).toBe(dates[0]);
   });
 
