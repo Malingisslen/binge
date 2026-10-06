@@ -72,9 +72,9 @@ Each gate prints its own remedy, so follow the block message rather than recitin
 procedure from here.
 
 The gates also name `.claude/rules/accepted-deviations.md`: deliberate deviations are
-decided, and a review must not re-flag them. That file is trigger-loaded (it carries
-`paths:` frontmatter) and each reviewer agent reads it — so when you dispatch a reviewer
-some other way, point it there too.
+decided, and a review must not re-flag them. That file is a trigger-loaded index of headings;
+each entry is in full in `.claude/accepted-deviations.md`, the ledger. When you dispatch a
+reviewer some other way, point it at both.
 
 ## Standing "do not do this" calls
 
@@ -126,25 +126,14 @@ before trusting your own judgment on that surface.
 
 Not loaded every session — only when Claude reads a file matching a rule's `paths:`.
 
-**Which paths trigger a rule is answered by that file's own `paths:` frontmatter, and only
-there.** This section names what each rule is FOR; it deliberately does not restate what
-each loads on. The enumeration that used to sit here was a second list nobody widened when
-the first one changed (BIN-1020): it had gone stale on `accepted-deviations.md`, and wrote
-`watchStatus*.ts` where the frontmatter names `src/lib/watchStatus.ts` and
-`src/lib/watchStatus.migration.ts`, with no glob reaching a third — so a reader trusting the
-star believed a new `watchStatus` file would trigger the rule. It would not.
-Open the rule file's first lines rather than trusting any paraphrase of them, here or
-elsewhere.
-
-The list of rule files below is still hand-maintained, and nothing checks it — `ls
-.claude/rules/` if you doubt it is complete. That is a smaller failure than the one above:
-a missing entry under-informs, a stale path list actively misdirects.
+Which paths trigger a rule is answered only by that file's own `paths:` frontmatter (BIN-1020), and
+this hand-kept list says only what each rule is for: `ls .claude/rules/` if you doubt it is complete.
 
 - `design-system.md` — Direction H layout/tokens/tvåaccentregeln/poster-duotone/new-view
   recipe.
 - `calendar.md` — calendar entry model + sources.
-- `accepted-deviations.md` — decided deviations; review agents must read before filing a
-  finding.
+- `accepted-deviations.md` — the index of decided deviations; review agents read the
+  matching entry in the ledger, `.claude/accepted-deviations.md`, before filing a finding.
 - `html-previews.md` — Malin reads pictures, not code: a new or rebuilt screen starts with
   an ASCII sketch in the plan and variants she can react to, before any code is written.
 - `tmdb.md` — shared `TMDB_STALE` cache keys, rate-limit/AbortSignal, API conventions,
