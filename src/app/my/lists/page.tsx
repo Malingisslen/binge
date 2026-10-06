@@ -10,6 +10,8 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Eyebrow } from '@/components/ui/Eyebrow';
 import { Button } from '@/components/ui/Button';
+import { fieldClass } from '@/components/ui/Field';
+import { cardClass } from '@/components/ui/Card';
 
 export default function ListsPage() {
   usePageMeta({ title: 'Mina listor' });
@@ -40,23 +42,23 @@ function ListsContent() {
         crumb="Bibliotek · Listor"
         title="Mina listor"
         actions={
-          <button
+          <Button
             onClick={() => setShowForm(true)}
-            className="px-3 py-[3px] border-none rounded-sm text-xs font-[inherit] cursor-pointer bg-acc-deep text-on-acc"
+            variant="acc" size="sm"
           >
             Skapa ny lista
-          </button>
+          </Button>
         }
       />
 
       {showForm && (
-        <div className="bg-surface border border-rule rounded-sm p-3 mb-3">
+        <div className={cardClass('p-3 mb-3')}>
           <input
             value={title}
             onChange={e => setTitle(e.target.value)}
             placeholder="Listans namn"
             maxLength={100}
-            className="w-full px-2 py-[3px] text-xs border border-rule rounded-sm bg-surface font-[inherit] outline-none mb-2"
+            className={fieldClass({ size: 'sm', className: 'w-full mb-2' })}
           />
           <textarea
             value={description}
@@ -64,19 +66,19 @@ function ListsContent() {
             placeholder="Beskrivning (valfritt)"
             maxLength={300}
             rows={2}
-            className="w-full px-2 py-1 text-xs border border-rule rounded-sm bg-surface font-[inherit] resize-none outline-none mb-2"
+            className={fieldClass({ size: 'sm', className: 'w-full resize-none mb-2' })}
           />
           <div className="flex items-center gap-2">
             <label className="flex items-center gap-1 text-xs text-ink-3 cursor-pointer">
               <input type="checkbox" checked={isPublic} onChange={e => setIsPublic(e.target.checked)} className="accent-acc-deep" />
               Publik
             </label>
-            <button onClick={handleCreate} className="px-3 py-[3px] text-xs border-none rounded-sm cursor-pointer bg-acc-deep text-on-acc font-[inherit]">
+            <Button onClick={handleCreate} variant="acc" size="sm">
               Skapa
-            </button>
-            <button onClick={() => setShowForm(false)} className="px-3 py-[3px] text-xs border border-rule rounded-sm cursor-pointer bg-surface text-ink-3 font-[inherit]">
+            </Button>
+            <Button onClick={() => setShowForm(false)} variant="ghost" size="sm">
               Avbryt
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -95,7 +97,7 @@ function ListsContent() {
 
       <div className="space-y-[6px]">
         {lists.map(list => (
-          <div key={list.id} className="bg-surface border border-rule rounded-sm px-3 py-2 flex items-center justify-between">
+          <div key={list.id} className={cardClass('px-3 py-2 flex items-center justify-between')}>
             <div>
               <Link href={`/list/${list.id}/`} className="text-base font-semibold text-ink no-underline hover:text-acc-deep">
                 {list.title}
@@ -104,12 +106,12 @@ function ListsContent() {
                 {list.items.length} {list.items.length === 1 ? 'titel' : 'titlar'} · {list.isPublic ? 'Publik' : 'Privat'}
               </div>
             </div>
-            <button
+            <Button
               onClick={() => { deleteList(list.id); toast('Lista borttagen'); }}
-              className="px-2 py-[2px] text-xxs text-danger-ink border border-rule bg-surface rounded-sm cursor-pointer font-[inherit] hover:bg-bg-2"
+              variant="danger-ghost" size="xs"
             >
               Ta bort
-            </button>
+            </Button>
           </div>
         ))}
       </div>
@@ -124,7 +126,7 @@ function ListsContent() {
               <Link
                 key={list.id}
                 href={`/list/${list.id}/`}
-                className="block bg-surface border border-rule rounded-sm px-3 py-2 no-underline hover:border-rule-2 transition-colors"
+                className={cardClass('block px-3 py-2 no-underline hover:border-rule-2 transition-colors')}
               >
                 <div className="text-base font-semibold text-ink">{list.title}</div>
                 <div className="text-xs text-ink-3">

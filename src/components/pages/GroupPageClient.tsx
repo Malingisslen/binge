@@ -41,7 +41,7 @@ import type {
   SessionConfig,
 } from '@/types';
 import type { GroupWatchlistRow } from '@/lib/firebase/groups';
-import { Button } from '@/components/ui/Button';
+import { Button, buttonClass } from '@/components/ui/Button';
 
 const GroupSettingsModal = dynamic(
   () => import('@/components/groups/GroupSettingsModal').then(m => m.GroupSettingsModal),
@@ -217,7 +217,7 @@ function GroupContent({ id }: { id: string }) {
           body={joinFailed
             ? 'Du är inte medlem i den här gruppen, och försöket att gå med gick inte igenom.'
             : 'Du är inte medlem i den här gruppen. Be ägaren om en inbjudningslänk.'}
-          action={<Link href="/grupper" className="btn btn-acc btn-sm no-underline">Mina grupper</Link>}
+          action={<Link href="/grupper" className={buttonClass({ variant: 'acc', size: 'sm', className: 'no-underline' })}>Mina grupper</Link>}
         />
         {joinError && (
           <div className="px-3 py-2 text-xs text-danger-ink bg-danger-soft border border-danger/30 rounded-sm mt-3">
@@ -234,7 +234,7 @@ function GroupContent({ id }: { id: string }) {
         crumb="Grupp"
         title="Gruppen hittades inte"
         body="Länken kan vara felaktig eller så har gruppen tagits bort."
-        action={<Link href="/grupper" className="btn btn-acc btn-sm no-underline">Mina grupper</Link>}
+        action={<Link href="/grupper" className={buttonClass({ variant: 'acc', size: 'sm', className: 'no-underline' })}>Mina grupper</Link>}
       />
     );
   }

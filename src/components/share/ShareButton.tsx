@@ -4,6 +4,7 @@ import { Share2 } from 'lucide-react';
 import { useToast } from '@/contexts/ToastContext';
 import { trackEvent } from '@/lib/analytics';
 import { shareLink, type ShareSurface } from '@/lib/shareLink';
+import { Button } from '@/components/ui/Button';
 
 interface ShareButtonProps {
   /** Sidans sökväg, t.ex. `/movie/27205/`. Originet läses från fönstret vid klick. */
@@ -43,12 +44,12 @@ export default function ShareButton({ path, title, text, surface }: ShareButtonP
   }
 
   return (
-    <button
+    <Button
       type="button"
       onClick={handleClick}
-      className="inline-flex items-center gap-[5px] px-[10px] py-[3px] border rounded-sm text-xs font-[inherit] cursor-pointer font-semibold bg-surface border-rule text-ink-2 hover:bg-bg-2"
+      variant="ghost" size="sm" className="inline-flex items-center gap-[5px]"
     >
       <Share2 size={11} aria-hidden="true" /> Dela
-    </button>
+    </Button>
   );
 }

@@ -7,6 +7,7 @@ import { useGenreMap } from '@/hooks/useGenreMap';
 import { getProvider } from '@/lib/tmdb/providers';
 import type { WatchlistItem } from '@/types';
 import { Eyebrow } from '@/components/ui/Eyebrow';
+import { cardClass } from '@/components/ui/Card';
 
 export default function ProfileStatsPanel({ items }: { items: WatchlistItem[] }) {
   const genreMap = useGenreMap();
@@ -17,7 +18,7 @@ export default function ProfileStatsPanel({ items }: { items: WatchlistItem[] })
   const maxWeight = stats.topGenres[0]?.weight ?? 1;
 
   return (
-    <div className="bg-surface border border-rule rounded-sm mb-[14px]">
+    <div className={cardClass('mb-[14px]')}>
       <div className="px-3 py-[6px] border-b border-rule-2">
         <span className="text-sm font-bold text-ink-2">Profil</span>
       </div>

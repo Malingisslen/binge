@@ -7,7 +7,8 @@ import { formatKr } from '@/lib/formatKr';
 import { pluralSv } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useListCheapestPlan, type ListPlanItem } from '@/hooks/useListCheapestPlan';
-import { Eyebrow } from '@/components/ui/Eyebrow';
+import { Eyebrow, eyebrowClass } from '@/components/ui/Eyebrow';
+import { cardClass } from '@/components/ui/Card';
 
 // BIN-416 — "Billigaste sättet att se listan": renders the pure cheapestListPlan
 // optimizer over a curated list's titles. Every kr shown is a subscription cost
@@ -47,7 +48,7 @@ export default function ListCheapestPlanPanel({ items }: { items: ListPlanItem[]
     return (
       <div className="mt-3 mb-[14px]">
         <SectionHeader />
-        <div className="bg-surface border border-rule rounded-sm px-3 py-[10px] text-xs text-ink-3">
+        <div className={cardClass('px-3 py-[10px] text-xs text-ink-3')}>
           Räknar ut billigaste vägen…
         </div>
       </div>
@@ -70,7 +71,7 @@ export default function ListCheapestPlanPanel({ items }: { items: ListPlanItem[]
   return (
     <div className="mt-3 mb-[14px]">
       <SectionHeader />
-      <div className="bg-surface border border-rule rounded-sm overflow-hidden">
+      <div className={cardClass('overflow-hidden')}>
         {/* Best single — the headline, accent-striped. */}
         <div className="px-3 py-[9px] border-l-[3px] border-l-acc-deep border-b border-rule-2">
           {nothingStreams || bestSingle.providerId == null ? (
@@ -100,7 +101,7 @@ export default function ListCheapestPlanPanel({ items }: { items: ListPlanItem[]
           <div className="px-3 py-[9px] border-b border-rule-2 last:border-b-0">
             <div className="flex items-baseline justify-between gap-3">
               <span className="inline-flex items-center gap-[6px] flex-wrap min-w-0">
-                <span className="text-xxs uppercase tracking-[0.5px] text-ink-3 shrink-0">Hela listan</span>
+                <span className={eyebrowClass({ className: 'shrink-0' })}>Hela listan</span>
                 {fullPlan.serviceIds.map((id) => (
                   <span key={id} className="inline-flex items-center gap-[4px]">
                     <ProviderDot color={getProvider(id)?.color ?? '#888'} size={6} />

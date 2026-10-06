@@ -6,6 +6,7 @@ import { getGroupSessionHistory } from '@/lib/firebase/groups';
 import { posterUrl, titleHref } from '@/lib/tmdb/client';
 import type { GroupMember } from '@/types';
 import { Eyebrow } from '@/components/ui/Eyebrow';
+import { cardClass } from '@/components/ui/Card';
 
 // "Senaste filmkvällar" — listar avtryck av Tillsammans-sessioner som
 // gruppen valt en titel ifrån. Skrivs av host (eller annan medlem) via
@@ -30,7 +31,7 @@ export function GroupSessionHistoryPanel({
   const memberByUid = new Map(members.map(m => [m.uid, m] as const));
 
   return (
-    <div className="bg-surface border border-rule rounded-sm">
+    <div className={cardClass()}>
       <Eyebrow className="px-3 py-[6px] border-b border-rule-2">
         Senaste filmkvällar
       </Eyebrow>

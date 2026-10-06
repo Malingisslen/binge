@@ -5,6 +5,10 @@ import { Trash2, X, UserCheck } from 'lucide-react';
 import { updateGroup } from '@/lib/firebase/groups';
 import { HandOverGroupDialog } from '@/components/groups/HandOverGroupDialog';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { eyebrowClass } from '@/components/ui/Eyebrow';
+import { Button } from '@/components/ui/Button';
+import { fieldClass } from '@/components/ui/Field';
+import { cardClass } from '@/components/ui/Card';
 import type {
   AggregationStrategy,
   GroupDefaults,
@@ -90,13 +94,13 @@ export function GroupSettingsModal({
 
   return (
     <div
-      className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 bg-scrim z-50 flex items-center justify-center p-4"
       onClick={onClose}
       onKeyDown={e => { if (e.key === 'Escape' && !confirmingDelete && !handingOver) onClose(); }}
       role="presentation"
     >
       <div
-        className="bg-surface border border-rule rounded-sm max-w-[480px] w-full"
+        className={cardClass('max-w-[480px] w-full')}
         onClick={e => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -116,18 +120,18 @@ export function GroupSettingsModal({
 
         <div className="px-3 py-3 space-y-3">
           <div>
-            <label className="block text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold mb-1">Namn</label>
+            <label className={eyebrowClass({ className: 'block mb-1' })}>Namn</label>
             <input
               type="text"
               value={editName}
               onChange={e => setEditName(e.target.value)}
               maxLength={48}
-              className="w-full px-2 py-1 text-base border border-rule rounded-sm bg-surface"
+              className={fieldClass({ className: 'w-full' })}
             />
           </div>
 
           <div>
-            <label className="block text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold mb-1">Standardinnehåll</label>
+            <label className={eyebrowClass({ className: 'block mb-1' })}>Standardinnehåll</label>
             <select
               value={mediaType}
               onChange={e => setMediaType(e.target.value as SessionMediaType)}
@@ -140,7 +144,7 @@ export function GroupSettingsModal({
           </div>
 
           <div>
-            <label className="block text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold mb-1">Standardläge för tjänster</label>
+            <label className={eyebrowClass({ className: 'block mb-1' })}>Standardläge för tjänster</label>
             <select
               value={providerMode}
               onChange={e => setProviderMode(e.target.value as ProviderMode)}
@@ -152,7 +156,7 @@ export function GroupSettingsModal({
           </div>
 
           <div>
-            <label className="block text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold mb-1">Standardurval</label>
+            <label className={eyebrowClass({ className: 'block mb-1' })}>Standardurval</label>
             <select
               value={aggregation}
               onChange={e => setAggregation(e.target.value as AggregationStrategy)}
@@ -172,24 +176,24 @@ export function GroupSettingsModal({
         )}
 
         <div className="px-3 py-2 border-t border-rule-2 flex items-center gap-2">
-          <button
+          <Button
             onClick={save}
             disabled={saving}
-            className="px-3 py-[5px] bg-acc-deep text-on-acc rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
+            variant="acc" size="sm" className="disabled:opacity-50"
           >
             {saving ? 'Sparar…' : 'Spara'}
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={onClose}
-            className="px-3 py-[5px] border border-rule rounded-sm text-xs bg-surface cursor-pointer"
+            variant="ghost" size="sm"
           >
             Avbryt
-          </button>
+          </Button>
           {/* BIN-1118: överlämningen står FÖRE raderingen, och det är avsiktligt.
               En ägare som vill sluta sköta gruppen hade tidigare bara två vägar,
               båda oproportionerliga: radera gruppen för alla, eller radera hela
               sitt konto. Den mildare vägen ska läsas först. */}
-          <button
+          <Button
             onClick={() => setHandingOver(true)}
             disabled={handoverCandidates.length === 0}
             title={
@@ -197,10 +201,10 @@ export function GroupSettingsModal({
                 ? 'Du är ensam i gruppen — det finns ingen att lämna över till.'
                 : undefined
             }
-            className="ml-auto inline-flex items-center gap-1 px-3 py-[5px] border border-rule rounded-sm text-xs bg-surface cursor-pointer hover:bg-bg-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            variant="ghost" size="sm" className="ml-auto inline-flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <UserCheck size={11} /> Lämna över
-          </button>
+          </Button>
           <button
             onClick={() => setConfirmingDelete(true)}
             className="inline-flex items-center gap-1 px-3 py-[5px] border border-danger/40 text-danger-ink rounded-sm text-xs bg-surface cursor-pointer hover:bg-danger-soft"
