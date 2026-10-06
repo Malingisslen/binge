@@ -112,3 +112,16 @@ export function buildFilmDiary(items: WatchlistItem[]): DiaryMonth[] {
 export function diaryEntryCount(months: DiaryMonth[]): number {
   return months.reduce((sum, m) => sum + m.entries.length, 0);
 }
+
+/** De första `limit` inläggen, med månadsindelningen kvar och tomma månader borttagna. */
+export function firstEntries(months: DiaryMonth[], limit: number): DiaryMonth[] {
+  const out: DiaryMonth[] = [];
+  let left = limit;
+  for (const m of months) {
+    if (left <= 0) break;
+    const entries = m.entries.slice(0, left);
+    out.push(entries.length === m.entries.length ? m : { ...m, entries });
+    left -= entries.length;
+  }
+  return out;
+}

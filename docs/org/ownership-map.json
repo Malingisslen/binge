@@ -19,6 +19,8 @@
         "src/lib/design/consistency.test.ts",
         "src/lib/design/tokens.test.ts",
         "src/lib/duotone.ts",
+        "src/lib/trailer.test.ts",
+        "src/lib/trailer.ts",
         "tailwind.config.ts"
       ]
     },
@@ -714,6 +716,7 @@
         "src/components/pages/UserProfilePageClient.tsx",
         "src/components/pages/resolveRoute.test.ts",
         "src/components/pages/resolveRoute.ts",
+        "src/components/pages/routeRewrites.test.ts",
         "src/components/seo/AvailabilityTable.test.tsx",
         "src/components/seo/AvailabilityTable.tsx",
         "src/components/tv/RelatedSeriesStrip.tsx",

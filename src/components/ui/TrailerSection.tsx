@@ -3,11 +3,14 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Play } from 'lucide-react';
+import { backdropUrl } from '@/lib/tmdb/client';
 
 // Ingenting hämtas från YouTube förrän besökaren trycker på spela: ingen
-// miniatyr, bara en egen platshållare. Först vid klick laddas spelaren från
-// youtube-nocookie.com. Det är så integritetspolicyn beskriver flödet
-// (avsnitt 4 och 8 i src/app/integritet/page.tsx) — ändra båda tillsammans.
+// YouTube-miniatyr. Platshållaren visar titelns bakgrundsbild från TMDB, som
+// sidan redan hämtar bilder från (integritetspolicyns avsnitt 4). Först vid
+// klick laddas spelaren från youtube-nocookie.com. Det är så integritetspolicyn
+// beskriver flödet (avsnitt 4 och 8 i src/app/integritet/page.tsx) — ändra
+// båda tillsammans.
 
 interface TrailerVideo {
   key: string;
@@ -15,10 +18,17 @@ interface TrailerVideo {
   type: string;
 }
 
-export default function TrailerSection({ video }: { video: TrailerVideo | undefined }) {
+export default function TrailerSection({
+  video,
+  backdropPath = null,
+}: {
+  video: TrailerVideo | undefined;
+  backdropPath?: string | null;
+}) {
   const [playing, setPlaying] = useState(false);
 
   if (!video) return null;
+  const still = backdropUrl(backdropPath, 'w780');
 
   return (
     <section className="detail-section">
@@ -49,8 +59,20 @@ export default function TrailerSection({ video }: { video: TrailerVideo | undefi
               border: 0,
               cursor: 'pointer',
               background: 'var(--placeholder-fill)',
+              overflow: 'hidden',
             }}
           >
+            {still && (
+              <img
+                src={still}
+                alt=""
+                width={780}
+                height={439}
+                loading="lazy"
+                decoding="async"
+                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+              />
+            )}
             <span
               aria-hidden="true"
               style={{

@@ -87,7 +87,7 @@ experience.
 - **Canonical page recipe** — `PageHeader` (crumb → 44px h1 → standfirst),
   `LoadingView`, `EmptyState`/`NotFound`, segment error boundaries, `danger`
   token for destructive UI.
-  → `src/components/layout/PageHeader.tsx`, `src/components/ui/`, `src/components/layout/SegmentError.tsx`
+  → `src/components/layout/PageHeader.tsx`, `src/components/ui/`, `src/components/layout/SegmentError.tsx`, `src/lib/trailer.ts`, `src/lib/trailer.test.ts`
 - **Information density & typography** — 15px base, Albert Sans, compact margins,
   tabular numbers; the deliberate "tool not marketing page" feel.
 - **Posters & duotone** — 8 genre-mapped SVG duotone filters, hover-to-reveal,
@@ -522,7 +522,7 @@ Owns the human interface to the system.
   username conflict help; onboarding hand-holding.
   → `src/app/login/page.tsx`, `src/components/layout/EmailVerificationBanner.tsx`, `src/app/settings/import/page.tsx`, `src/components/settings/`, `src/components/layout/Footer.tsx`
 - **Filer som saknade en ägande roll** (BIN-871).
-  → `src/app/login/page.test.tsx`, `src/app/settings/import/page.test.tsx`, `src/lib/nextPath.test.ts`, `src/lib/nextPath.ts`, `src/lib/pendingAdd.ts`, `src/lib/pendingAdd.test.ts`, `src/lib/pendingAdd.helpers.ts`, `src/lib/firebase/pendingAddServerCheck.ts`, `src/lib/notificationSections.test.ts`, `src/lib/notificationSections.ts`, `src/lib/onboarding.test.ts`, `src/lib/onboarding.ts`, `src/hooks/useFollowConfirmation.ts`, `src/hooks/useFollowConfirmation.test.tsx`, `src/hooks/useFollowConfirmation.helpers.ts`, `src/hooks/useFollowConfirmation.helpers.test.ts`
+  → `src/app/login/page.test.tsx`, `src/app/settings/import/page.test.tsx`, `src/lib/nextPath.test.ts`, `src/lib/nextPath.ts`, `src/lib/notificationSections.test.ts`, `src/lib/notificationSections.ts`, `src/lib/onboarding.test.ts`, `src/lib/onboarding.ts`, `src/lib/pendingAdd.ts`, `src/lib/pendingAdd.helpers.ts`, `src/lib/pendingAdd.test.ts`, `src/lib/firebase/pendingAddServerCheck.ts`, `src/hooks/useFollowConfirmation.ts`, `src/hooks/useFollowConfirmation.test.tsx`, `src/hooks/useFollowConfirmation.helpers.ts`, `src/hooks/useFollowConfirmation.helpers.test.ts`
 
 
 ## 20. Manual / Release QA Tester
@@ -716,7 +716,7 @@ Owns wayfinding.
   section taxonomy mapping watch-status → routes; breadcrumb/`PageHeader` patterns;
   search/discovery filter hierarchy; genre cross-media mapping; noindex-by-default
   on private pages.
-  → `src/components/layout/{Subnav,MobileTabBar}.tsx`, `src/components/pages/DynamicRouter.tsx`, `firebase.json` (redirects), `src/lib/libraryView.ts`
+  → `src/components/layout/{Subnav,MobileTabBar}.tsx`, `src/components/pages/DynamicRouter.tsx`, `firebase.json` (redirects), `src/lib/libraryView.ts`, `src/components/pages/routeRewrites.test.ts`
 - Where a visitor ends up, and how she gets back. `AuthGuard` gates on `uid` rather
   than `user` (the profile loads in parallel with the auth verdict) and carries the
   return path; `WatchlistPage` is the screen the library taxonomy above renders into,

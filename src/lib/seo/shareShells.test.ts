@@ -18,14 +18,11 @@ describe('SHARE_SHELLS', () => {
   });
 
   it.each(SHARE_SHELLS.map((s) => [s.prefix] as const))(
-    '%s skrivs om till sitt eget skal före catch-all-regeln',
+    '%s skrivs om till sitt eget skal',
     (prefix) => {
       expect(rewrites.filter((r) => r.source === `/${prefix}/**`)).toHaveLength(1);
-      const own = rewrites.findIndex((r) => r.source === `/${prefix}/**`);
-      const catchAll = rewrites.findIndex((r) => r.source === '**');
-      expect(own).toBeGreaterThanOrEqual(0);
-      expect(rewrites[own].destination).toBe(`/${prefix}/_/index.html`);
-      expect(own).toBeLessThan(catchAll);
+      const own = rewrites.find((r) => r.source === `/${prefix}/**`);
+      expect(own?.destination).toBe(`/${prefix}/_/index.html`);
     },
   );
 
@@ -37,7 +34,7 @@ describe('SHARE_SHELLS', () => {
   );
 
   it('varje skal-omskrivning i firebase.json har ett skal', () => {
-    const shellRewrites = rewrites.filter((r) => r.destination?.endsWith('/_/index.html') && r.source !== '**');
+    const shellRewrites = rewrites.filter((r) => r.destination?.endsWith('/_/index.html') && r.destination !== '/_/index.html');
     expect(shellRewrites.map((r) => r.source).sort()).toEqual(SHARE_SHELLS.map((s) => `/${s.prefix}/**`).sort());
   });
 

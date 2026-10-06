@@ -180,7 +180,8 @@ export default function TitleCard({ item, providers, showNotInterested }: TitleC
           marginTop: 2,
           letterSpacing: 0.02,
         }}>
-          {year ?? '—'} · {item.vote_average.toFixed(1)}
+          {/* 0 betyder att ingen har röstat än (ofta osläppt), inte betyget noll. */}
+          {year ?? '—'} · {item.vote_average > 0 ? item.vote_average.toFixed(1) : '—'}
         </div>
       </Link>
     </div>

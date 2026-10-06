@@ -24,7 +24,10 @@
       { "source": "/grupper/**", "destination": "/grupper/_/index.html" },
       { "source": "/list/**", "destination": "/list/_/index.html" },
       { "source": "/user/**", "destination": "/user/_/index.html" },
-      { "source": "**", "destination": "/_/index.html" }
+      { "source": "/movie/**", "destination": "/_/index.html" },
+      { "source": "/tv/**", "destination": "/_/index.html" },
+      { "source": "/person/**", "destination": "/_/index.html" },
+      { "source": "/provider/**", "destination": "/_/index.html" }
     ],
     "headers": [
       {

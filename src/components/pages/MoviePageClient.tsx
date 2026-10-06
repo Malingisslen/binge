@@ -18,6 +18,7 @@ import ProviderTag from '@/components/title/ProviderTag';
 import FreeWatchBadge from '@/components/title/FreeWatchBadge';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import TrailerSection from '@/components/ui/TrailerSection';
+import { pickTrailer } from '@/lib/trailer';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { NotFound } from '@/components/ui/NotFound';
 import { AvatarInitials } from '@/components/ui/AvatarInitials';
@@ -229,8 +230,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   const cast = movie.credits?.cast?.slice(0, 10) ?? [];
   const directors = movie.credits?.crew?.filter(c => c.job === 'Director') ?? [];
   const writers = movie.credits?.crew?.filter(c => c.job === 'Screenplay' || c.job === 'Writer') ?? [];
-  const trailer = movie.videos?.results?.find(v => v.site === 'YouTube' && v.type === 'Trailer')
-    ?? movie.videos?.results?.find(v => v.site === 'YouTube' && v.type === 'Teaser');
+  const trailer = pickTrailer(movie.videos?.results);
   // Hoisted here (not inside JSX) so the linter disable is minimal in scope.
   // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
@@ -586,7 +586,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
       <AvailabilityTable title={displayTitle} availability={titleAvailability(movie['watch/providers']?.results?.SE)} />
 
       {/* Trailer — raw 16:9 (preview surface). Döljs helt när embed saknas/failar (M1). */}
-      <TrailerSection video={trailer} />
+      <TrailerSection video={trailer} backdropPath={movie.backdrop_path} />
 
       {/* Cast — raw 1:1 circular portraits (preview surface) */}
       {cast.length > 0 && (

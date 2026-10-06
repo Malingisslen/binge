@@ -81,7 +81,7 @@ export default function GuiderPage() {
         standfirst="Var du ser filmer och serier på varje tjänst, bästa titlarna per genre, billigaste vägen att se hela filmserier, och vad som snart försvinner."
       />
 
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-6 mt-6">
         {sections.map((section) => (
           <section key={section.id} aria-labelledby={`hub-${section.id}`}>
             <h2 id={`hub-${section.id}`} className="text-xl font-semibold text-ink mb-1">

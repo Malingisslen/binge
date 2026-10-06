@@ -12,8 +12,22 @@ export default function IntegritetPage() {
       title="Integritetspolicy"
       lastUpdated="2026-10-05"
       version="1.9"
+      toc={[
+        { id: 'ansvarig', label: '1. Vem är ansvarig?' },
+        { id: 'uppgifter', label: '2. Vilka uppgifter vi samlar in' },
+        { id: 'rattslig-grund', label: '3. Varför vi behandlar uppgifterna (rättslig grund)' },
+        { id: 'personuppgiftsbitraden', label: '4. Vilka som behandlar dina uppgifter åt oss' },
+        { id: 'overforingar', label: '5. Överföringar utanför EU/EES' },
+        { id: 'lagringstid', label: '6. Hur länge vi sparar uppgifterna' },
+        { id: 'rattigheter', label: '7. Dina rättigheter' },
+        { id: 'cookies', label: '8. Cookies och lokal lagring' },
+        { id: 'alder', label: '9. Ålder' },
+        { id: 'grupper', label: '10. Delning i grupper' },
+        { id: 'andringar', label: '11. Ändringar' },
+        { id: 'kontakt', label: '12. Kontakt' },
+      ]}
     >
-      <section>
+      <section id="ansvarig">
         <h2>1. Vem är ansvarig?</h2>
         <p>
           Binge.nu drivs av Malin Gisslén som privatperson. För frågor
@@ -23,7 +37,7 @@ export default function IntegritetPage() {
         </p>
       </section>
 
-      <section>
+      <section id="uppgifter">
         <h2>2. Vilka uppgifter vi samlar in</h2>
         <p>
           När du skapar ett konto på Binge.nu sparar vi följande:
@@ -50,7 +64,7 @@ export default function IntegritetPage() {
         </p>
       </section>
 
-      <section>
+      <section id="rattslig-grund">
         <h2>3. Varför vi behandlar uppgifterna (rättslig grund)</h2>
         <ul>
           <li><strong>Avtal (GDPR art. 6.1.b)</strong> — för att leverera tjänsten: spara din bevakningslista, visa rätt streaming-info, köra rådgivaren, och visa de grupper du är medlem i vilka streamingtjänster du har, eftersom det är så gruppen räknar ut vad ni kan se tillsammans, och visa gruppens medlemmar de betyg du sätter på gruppens titlar (se §10).</li>
@@ -65,7 +79,7 @@ export default function IntegritetPage() {
         </p>
       </section>
 
-      <section>
+      <section id="personuppgiftsbitraden">
         <h2>4. Vilka som behandlar dina uppgifter åt oss</h2>
         <p>
           Vi använder följande personuppgiftsbiträden:
@@ -97,7 +111,7 @@ export default function IntegritetPage() {
         </p>
       </section>
 
-      <section>
+      <section id="overforingar">
         <h2>5. Överföringar utanför EU/EES</h2>
         <p>
           Vissa leverantörer är amerikanska eller kan vid enskilda operationer
@@ -116,7 +130,7 @@ export default function IntegritetPage() {
         </p>
       </section>
 
-      <section>
+      <section id="lagringstid">
         <h2>6. Hur länge vi sparar uppgifterna</h2>
         <ul>
           <li>Din profil och bevakningslista sparas så länge ditt konto är aktivt.</li>
@@ -162,7 +176,7 @@ export default function IntegritetPage() {
         </ul>
       </section>
 
-      <section>
+      <section id="rattigheter">
         <h2>7. Dina rättigheter</h2>
         <p>
           Du har rätt att:
@@ -177,7 +191,7 @@ export default function IntegritetPage() {
         </ul>
       </section>
 
-      <section>
+      <section id="cookies">
         <h2>8. Cookies och lokal lagring</h2>
         <p>
           Binge sätter inga egna spårningscookies. Vi använder:
@@ -288,7 +302,7 @@ export default function IntegritetPage() {
         </p>
       </section>
 
-      <section>
+      <section id="alder">
         <h2>9. Ålder</h2>
         <p>
           För att skapa konto på Binge måste du vara minst 13 år gammal,
@@ -296,7 +310,7 @@ export default function IntegritetPage() {
         </p>
       </section>
 
-      <section>
+      <section id="grupper">
         <h2>10. Delning i grupper</h2>
         <p>
           <strong>Din tjänstelista delas med gruppen.</strong> När du är medlem
@@ -341,7 +355,7 @@ export default function IntegritetPage() {
         </p>
       </section>
 
-      <section>
+      <section id="andringar">
         <h2>11. Ändringar</h2>
         <p>
           Om vi gör materiella ändringar i denna policy uppdaterar vi
@@ -349,7 +363,7 @@ export default function IntegritetPage() {
         </p>
       </section>
 
-      <section>
+      <section id="kontakt">
         <h2>12. Kontakt</h2>
         <p>
           Har du frågor? Skriv till{' '}
