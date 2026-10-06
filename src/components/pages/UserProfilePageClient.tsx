@@ -19,6 +19,7 @@ import { NotFound } from '@/components/ui/NotFound';
 import { markedSeen } from '@/lib/markedSeen';
 import ShareButton from '@/components/share/ShareButton';
 import { Eyebrow } from '@/components/ui/Eyebrow';
+import { cardClass } from '@/components/ui/Card';
 
 export default function UserProfilePageClient({ username }: { username: string }) {
   const { data, isLoading } = usePublicProfile(username);
@@ -131,7 +132,7 @@ export default function UserProfilePageClient({ username }: { username: string }
       <ProfileStatsPanel items={watchlist ?? []} />
 
       {!isOwnProfile && (
-        <div className="bg-surface border border-rule rounded-sm px-3 py-2 mb-4">
+        <div className={cardClass('px-3 py-2 mb-4')}>
           <Eyebrow className="mb-[2px]">
             Smak-match med dig
           </Eyebrow>
@@ -153,7 +154,7 @@ export default function UserProfilePageClient({ username }: { username: string }
       )}
 
       {following.length > 0 && (
-        <div className="bg-surface border border-rule rounded-sm mb-[14px]">
+        <div className={cardClass('mb-[14px]')}>
           <div className="px-3 py-[6px] border-b border-rule-2">
             <span className="text-sm font-bold text-ink-2">Följer just nu</span>
           </div>
@@ -173,7 +174,7 @@ export default function UserProfilePageClient({ username }: { username: string }
       )}
 
       {recentlyWatched.length > 0 && (
-        <div className="bg-surface border border-rule rounded-sm mb-[14px]">
+        <div className={cardClass('mb-[14px]')}>
           <div className="px-3 py-[6px] border-b border-rule-2">
             <span className="text-sm font-bold text-ink-2">Senast sedd</span>
           </div>

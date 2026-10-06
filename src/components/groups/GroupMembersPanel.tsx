@@ -10,6 +10,9 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import type { ResolvedUser } from '@/lib/firebase/username';
 import type { GroupMember } from '@/types';
 import { Eyebrow } from '@/components/ui/Eyebrow';
+import { fieldClass } from '@/components/ui/Field';
+import { cardClass } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
 
 /**
  * Medlemslistan i en grupp med per-rad delete och "+ Lägg till"-expansion.
@@ -28,7 +31,7 @@ export function GroupMembersPanel({
   const [adding, setAdding] = useState(false);
   const [memberToRemove, setMemberToRemove] = useState<GroupMember | null>(null);
   return (
-    <div className="bg-surface border border-rule rounded-sm">
+    <div className={cardClass()}>
       <div className="px-3 py-[6px] border-b border-rule-2 flex items-center justify-between">
         <Eyebrow>
           Medlemmar ({members.length})
@@ -173,7 +176,7 @@ function AddMemberSearch({
         value={q}
         onChange={e => { setQ(e.target.value); setErr(null); }}
         placeholder="Sök efter @användarnamn eller namn…"
-        className="w-full px-2 py-1 text-xs border border-rule rounded-sm bg-surface outline-none"
+        className={fieldClass({ size: 'sm', className: 'w-full' })}
         autoFocus
       />
       {q.trim().length >= 2 && isLoading && (
@@ -185,7 +188,7 @@ function AddMemberSearch({
         </div>
       )}
       {filtered.length > 0 && (
-        <ul className="bg-surface border border-rule rounded-sm divide-y divide-rule-2">
+        <ul className={cardClass('divide-y divide-rule-2')}>
           {filtered.map(u => {
             const already = existingUids.includes(u.uid);
             const isInvited = invited.has(u.uid);
@@ -197,13 +200,13 @@ function AddMemberSearch({
                   <div className="text-xs text-ink truncate">{u.displayName}</div>
                   <div className="text-xxs text-ink-3 truncate">@{u.username}</div>
                 </div>
-                <button
+                <Button
                   onClick={() => handleInvite(u)}
                   disabled={already || busy || isInvited || !user}
-                  className="px-2 py-[2px] text-xxs border-none rounded-sm cursor-pointer font-[inherit] bg-acc-deep text-on-acc disabled:bg-rule disabled:text-ink-3 disabled:cursor-default"
+                  variant="acc" size="xs" className="disabled:bg-rule disabled:text-ink-3 disabled:cursor-default"
                 >
                   {already ? 'Medlem' : isInvited ? 'Inbjuden' : busy ? 'Bjuder in…' : 'Bjud in'}
-                </button>
+                </Button>
               </li>
             );
           })}

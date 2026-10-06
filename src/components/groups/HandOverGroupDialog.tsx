@@ -6,6 +6,8 @@ import { DialogShell } from '@/components/ui/DialogShell';
 import { handOverGroup } from '@/lib/firebase/groupHandover';
 import { captureError } from '@/lib/sentry';
 import type { GroupMember } from '@/types';
+import { Button } from '@/components/ui/Button';
+import { cardClass } from '@/components/ui/Card';
 
 /**
  * BIN-1118 — välj vem som tar över gruppen.
@@ -91,7 +93,7 @@ export function HandOverGroupDialog({
       labelledBy="handover-title"
       dismissable={!working}
       onDismiss={onCancel}
-      className="bg-surface border border-rule rounded-md w-full max-w-[420px] overflow-hidden"
+      className={cardClass('w-full max-w-[420px] overflow-hidden')}
     >
         <div className="px-3 py-2 border-b border-rule flex items-center justify-between">
           <h2 id="handover-title" className="text-sm font-bold">Välj vem som tar över gruppen</h2>
@@ -148,13 +150,13 @@ export function HandOverGroupDialog({
         </div>
 
         <div className="px-3 py-2 border-t border-rule-2 flex items-center gap-2">
-          <button
+          <Button
             onClick={onCancel}
             disabled={working}
-            className="px-3 py-[5px] border border-rule rounded-sm text-xs bg-surface cursor-pointer disabled:opacity-50"
+            variant="ghost" size="sm" className="disabled:opacity-50"
           >
             Avbryt
-          </button>
+          </Button>
           <button
             onClick={submit}
             disabled={working || done || !picked}

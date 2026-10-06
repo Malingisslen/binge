@@ -19,7 +19,11 @@ import { LoadingView } from '@/components/ui/LoadingView';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import type { SessionCandidate, SessionParticipant, TogetherSession, VoteKind } from '@/types';
 import { MAX_SESSION_DISPLAY_NAME } from '@/lib/clampText';
-import { Eyebrow } from '@/components/ui/Eyebrow';
+import { Eyebrow, eyebrowClass } from '@/components/ui/Eyebrow';
+import { buttonClass, Button } from '@/components/ui/Button';
+import { thClass } from '@/components/ui/tableHead';
+import { fieldClass } from '@/components/ui/Field';
+import { cardClass } from '@/components/ui/Card';
 
 export default function TillsammansSessionPageClient({ id }: { id: string }) {
   const { session, participants, swipes, loading, notFound, expired } = useSession(id);
@@ -53,7 +57,7 @@ export default function TillsammansSessionPageClient({ id }: { id: string }) {
           <h1 className="page-h1">Den här länken funkar inte.</h1>
           <p className="stand">Sessionen kan ha gått ut eller vara felstavad. Tillsammans-sessioner lever i 7 dagar.</p>
           <div className="actions">
-            <Link href="/tillsammans/ny" className="btn">Skapa en ny session</Link>
+            <Link href="/tillsammans/ny" className={buttonClass()}>Skapa en ny session</Link>
           </div>
         </header>
       </>
@@ -68,7 +72,7 @@ export default function TillsammansSessionPageClient({ id }: { id: string }) {
           <h1 className="page-h1">Den här sessionen har gått ut.</h1>
           <p className="stand">Tillsammans-sessioner är aktiva i 7 dagar. Starta en ny för att fortsätta röstning.</p>
           <div className="actions">
-            <Link href="/tillsammans/ny" className="btn">Skapa en ny session</Link>
+            <Link href="/tillsammans/ny" className={buttonClass()}>Skapa en ny session</Link>
           </div>
         </header>
       </>
@@ -155,7 +159,7 @@ function JoinSessionForm({
         Någon har bjudit in dig att välja film tillsammans. Skriv ditt namn och kryssa för vilka streamingtjänster du har — bara titlar ni delar visas.
       </p>
 
-      <form onSubmit={submit} className="bg-surface border border-rule rounded-sm">
+      <form onSubmit={submit} className={cardClass()}>
         <div className="px-3 py-[10px] border-b border-rule-2">
           <label htmlFor="tillsammans-namn" className="block text-xs text-ink-3 mb-1">Ditt namn</label>
           <input
@@ -165,7 +169,7 @@ function JoinSessionForm({
             onChange={e => setName(e.target.value)}
             placeholder="T.ex. Erik"
             maxLength={MAX_SESSION_DISPLAY_NAME}
-            className="w-full max-w-[260px] px-2 py-1 text-base border border-rule rounded-sm bg-surface"
+            className={fieldClass({ className: 'w-full max-w-[260px]' })}
           />
         </div>
         <div className="px-3 py-[10px]">
@@ -197,13 +201,13 @@ function JoinSessionForm({
           <div className="px-3 py-2 text-xs text-danger-ink bg-danger-soft border-t border-danger">{error}</div>
         )}
         <div className="px-3 py-2 border-t border-rule-2">
-          <button
+          <Button
             type="submit"
             disabled={submitting}
-            className="px-3 py-[5px] bg-acc-deep text-on-acc border-none rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
+            variant="acc" size="sm" className="disabled:opacity-50"
           >
             {submitting ? 'Går med…' : 'Gå med'}
-          </button>
+          </Button>
         </div>
       </form>
     </div>
@@ -327,7 +331,7 @@ function SessionMain({
             : `${participants.length} i rummet. ${session.config.providerMode === 'intersect' ? 'Alla' : 'Någon'} har — gemensamma tjänster: ${effectiveProviders.length}.`}
         </p>
         <div className="actions">
-          <Link href="/tillsammans/ny" className="btn btn-ghost btn-sm">
+          <Link href="/tillsammans/ny" className={buttonClass({ variant: 'ghost', size: 'sm' })}>
             <ChevronLeft size={12} /> Ny session
           </Link>
           {isFullyLive && (
@@ -335,28 +339,24 @@ function SessionMain({
               <span className="live-dot" aria-hidden="true" /> alla aktiva nu
             </span>
           )}
-          <span style={{
-            fontSize: 11, color: 'var(--ink-3)',
-            letterSpacing: 0.12, textTransform: 'uppercase',
-            marginLeft: 'auto',
-          }}>
+          <span className={eyebrowClass({ size: 'xs', className: 'ml-auto' })}>
             veto kvar: {me.vetoRemaining}
           </span>
         </div>
       </header>
 
-      <div className="bg-surface border border-rule rounded-sm mb-[8px]">
+      <div className={cardClass('mb-[8px]')}>
         <div className="flex items-center gap-2 px-3 py-[6px] border-b border-rule-2 text-xs">
           <Share2 size={12} className="text-ink-3" />
           <code className="text-xxs flex-1 truncate text-ink-2">{shareUrl || 'Hämtar länk…'}</code>
-          <button
+          <Button
             type="button"
             onClick={copyShare}
-            className="px-2 py-[2px] border border-rule rounded-sm text-xxs bg-surface cursor-pointer flex items-center gap-1"
+            variant="ghost" size="xs" className="flex items-center gap-1"
           >
             <Copy size={10} />
             {shareCopied ? 'Kopierad!' : 'Kopiera'}
-          </button>
+          </Button>
         </div>
         <div className="px-3 py-[6px] flex items-center gap-2 flex-wrap text-xs">
           <Eyebrow as="span">Deltagare:</Eyebrow>
@@ -410,7 +410,7 @@ function SessionMain({
       )}
 
       {filteredCandidates.length === 0 ? (
-        <div className="bg-surface border border-rule rounded-sm px-3 py-4 text-xs text-ink-3">
+        <div className={cardClass('px-3 py-4 text-xs text-ink-3')}>
           Inga titlar matchar era gemensamma tjänster just nu.
           {session.config.providerMode === 'intersect' && effectiveProviders.length === 0 && (
             <div className="mt-2">Prova att byta till &quot;Någon har&quot;-läge i en ny session.</div>
@@ -427,7 +427,7 @@ function SessionMain({
             onCancelVeto={() => setVetoConfirm(null)}
           />
         ) : (
-          <div className="bg-surface border border-rule rounded-sm px-3 py-4 text-center">
+          <div className={cardClass('px-3 py-4 text-center')}>
             <div className="text-sm font-semibold mb-1">Du har röstat på alla.</div>
             <div className="text-xxs text-ink-3">Vänta på övriga så sammanställs matcherna automatiskt.</div>
           </div>
@@ -455,7 +455,7 @@ function SwipeCard({
 }) {
   const poster = posterUrl(cand.posterPath, 'w342');
   return (
-    <div className="bg-surface border border-rule rounded-sm overflow-hidden">
+    <div className={cardClass('overflow-hidden')}>
       <div className="flex gap-3 p-3">
         {poster ? (
           <div className={`poster duo-${toneForId(cand.tmdbId)} w-[140px] h-[210px] shrink-0`}>
@@ -484,34 +484,34 @@ function SwipeCard({
           <div className="font-semibold text-danger-ink mb-1">Lägg ett veto?</div>
           <div className="text-ink-2 mb-2">Veto dödar den här titeln definitivt. Du kan använda det bara en gång per session.</div>
           <div className="flex gap-2">
-            <button
+            <Button
               onClick={() => onVote(cand, 'veto')}
-              className="px-3 py-1 bg-danger text-white rounded-sm text-xs font-semibold cursor-pointer"
+              variant="danger" size="sm"
             >
               Ja, veto
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={onCancelVeto}
-              className="px-3 py-1 border border-rule bg-surface rounded-sm text-xs cursor-pointer"
+              variant="ghost" size="sm"
             >
               Avbryt
-            </button>
+            </Button>
           </div>
         </div>
       ) : (
         <div className="px-3 py-2 border-t border-rule-2 flex gap-2">
-          <button
+          <Button
             onClick={() => onVote(cand, 'no')}
-            className="flex-1 px-3 py-2 border border-rule bg-surface rounded-sm text-xs font-semibold cursor-pointer flex items-center justify-center gap-1"
+            variant="ghost" size="sm" className="flex-1 flex items-center justify-center gap-1"
           >
             <X size={14} /> Nej
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => onVote(cand, 'yes')}
-            className="flex-1 px-3 py-2 bg-acc-deep text-on-acc rounded-sm text-xs font-semibold cursor-pointer flex items-center justify-center gap-1"
+            variant="acc" size="sm" className="flex-1 flex items-center justify-center gap-1"
           >
             <Check size={14} /> Ja
-          </button>
+          </Button>
           {me.vetoRemaining > 0 && (
             <button
               onClick={() => onVote(cand, 'veto')}
@@ -535,16 +535,16 @@ function CandidateTable({
   onVote: (c: SessionCandidate, v: VoteKind) => void;
 }) {
   return (
-    <div className="bg-surface border border-rule rounded-sm overflow-x-auto">
+    <div className={cardClass('overflow-x-auto')}>
       <table className="w-full text-xs">
         <thead>
-          <tr className="text-xxs uppercase tracking-[0.5px] text-ink-3 border-b border-rule-2">
-            <th className="text-left px-2 py-[5px] font-semibold">Titel</th>
-            <th className="text-left px-2 py-[5px] font-semibold">År</th>
-            <th className="text-left px-2 py-[5px] font-semibold">Typ</th>
-            <th className="text-left px-2 py-[5px] font-semibold">★</th>
-            <th className="text-left px-2 py-[5px] font-semibold">Gruppen</th>
-            <th className="text-right px-2 py-[5px] font-semibold">Din röst</th>
+          <tr>
+            <th className={thClass('text-left px-2')}>Titel</th>
+            <th className={thClass('text-left px-2')}>År</th>
+            <th className={thClass('text-left px-2')}>Typ</th>
+            <th className={thClass('text-left px-2')}>★</th>
+            <th className={thClass('text-left px-2')}>Gruppen</th>
+            <th className={thClass('text-right px-2')}>Din röst</th>
           </tr>
         </thead>
         <tbody>
@@ -634,7 +634,7 @@ function MatchList({
 
   return (
     <div className="bg-surface border border-acc-deep rounded-sm mb-[8px]">
-      <div className="px-3 py-[5px] border-b border-acc-deep/30 bg-acc-deep/[0.06] text-xxs uppercase tracking-[0.5px] text-acc-deep font-semibold">
+      <div className={eyebrowClass({ tone: 'acc', className: 'px-3 py-[5px] border-b border-acc-deep/30 bg-acc-deep/[0.06]' })}>
         Matcher ({matches.length})
       </div>
       <div className="divide-y divide-rule-2">
@@ -672,14 +672,14 @@ function MatchList({
                 isPicked ? (
                   <span className="text-xxs text-acc-deep font-semibold inline-flex items-center gap-1"><Check size={11} /> Vald</span>
                 ) : (
-                  <button
+                  <Button
                     onClick={() => recordPick(m)}
                     disabled={pickingKey === key}
-                    className="px-2 py-[2px] text-xxs border border-acc-deep bg-acc-deep text-on-acc rounded-sm cursor-pointer font-[inherit] disabled:opacity-50"
+                    variant="acc" size="xs" className="disabled:opacity-50"
                     title="Logga till gruppens filmkvällshistorik"
                   >
                     {pickingKey === key ? 'Sparar…' : 'Den här tar vi'}
-                  </button>
+                  </Button>
                 )
               )}
             </div>

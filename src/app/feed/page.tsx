@@ -16,7 +16,9 @@ import { getPublicProfileCard } from '@/lib/firebase/publicProfile';
 import { posterUrl, titleHref } from '@/lib/tmdb/client';
 import { computeFollowTrending, type TrendingTitle } from '@/lib/feedTrending';
 import type { MediaType } from '@/types';
-import { Eyebrow } from '@/components/ui/Eyebrow';
+import { Eyebrow, eyebrowClass } from '@/components/ui/Eyebrow';
+import { cardClass } from '@/components/ui/Card';
+import { buttonClass } from '@/components/ui/Button';
 
 interface FeedWatchlistItem {
   kind: 'watchlist';
@@ -161,12 +163,12 @@ function FeedContent() {
       {!isLoading && trending.length > 0 && <TrendingRow titles={trending} />}
 
       {!isLoading && followingUids.length === 0 && (
-        <div className="bg-surface border border-rule rounded-sm px-4 py-4">
+        <div className={cardClass('px-4 py-4')}>
           <p className="text-xs text-ink-2 mb-3 leading-relaxed">
             Se vad dina vänner tittar på, betygsätter och lägger till. Följ andra användare för att se deras aktivitet här.
           </p>
           <div className="border border-dashed border-rule rounded-sm p-[10px] mb-3">
-            <div className="text-xxs uppercase tracking-[0.5px] text-ink-3 mb-[6px]">Så här ser det ut</div>
+            <div className={eyebrowClass({ className: 'mb-[6px]' })}>Så här ser det ut</div>
             <div className="flex gap-2 items-center py-[3px] opacity-50">
               <div className="w-[20px] h-[20px] rounded-full bg-acc-deep shrink-0" />
               <div>
@@ -183,7 +185,7 @@ function FeedContent() {
             </div>
           </div>
           <div className="text-center">
-            <Link href="/search" className="inline-block px-3 py-[5px] bg-acc-deep text-on-acc border-none rounded-sm text-xs font-semibold no-underline">
+            <Link href="/search" className={buttonClass({ variant: 'acc', size: 'sm', className: 'inline-block no-underline' })}>
               Sök användare att följa
             </Link>
             {user?.username && (
@@ -196,7 +198,7 @@ function FeedContent() {
       )}
 
       {feedItems && feedItems.length === 0 && followingUids.length > 0 && (
-        <div className="bg-surface border border-rule rounded-sm px-4 py-6 text-center">
+        <div className={cardClass('px-4 py-6 text-center')}>
           <p className="text-sm text-ink-3">Ingen aktivitet de senaste 2 veckorna.</p>
         </div>
       )}
@@ -229,7 +231,7 @@ function TrendingRow({ titles }: { titles: TrendingTitle[] }) {
             <Link
               key={t.tmdbId}
               href={titleHref(t.mediaType === 'movie' ? 'movie' : 'tv', t.tmdbId)}
-              className="shrink-0 w-[120px] bg-surface border border-rule rounded-md p-[8px] no-underline hover:border-rule-2 transition-colors"
+              className={cardClass('shrink-0 w-[120px] p-[8px] no-underline hover:border-rule-2 transition-colors')}
             >
               <div className="flex gap-[8px]">
                 {poster && (
@@ -259,7 +261,7 @@ function FeedWatchlistCard({ item }: { item: FeedWatchlistItem }) {
     : item.status === 'vill_se' ? 'vill se'
     : 'uppdaterade';
   return (
-    <div className="bg-surface border border-rule rounded-sm px-3 py-2 flex gap-2 items-center">
+    <div className={cardClass('px-3 py-2 flex gap-2 items-center')}>
       {poster && <img src={poster} alt="" className="w-[30px] h-[45px] rounded-sm object-cover shrink-0" loading="lazy" decoding="async" width={30} height={45} />}
       <div className="flex-1 min-w-0">
         <div className="text-xs">
@@ -292,7 +294,7 @@ function FeedReviewCard({ item }: { item: FeedReviewItem }) {
   const href = `/${item.mediaType === 'movie' ? 'movie' : 'tv'}/${item.tmdbId}/#review-${item.reviewId}`;
   const preview = item.text.length > 160 ? item.text.slice(0, 160) + '…' : item.text;
   return (
-    <div className="bg-surface border border-rule rounded-sm px-3 py-2">
+    <div className={cardClass('px-3 py-2')}>
       <div className="text-xs mb-1">
         {item.username ? (
           <Link href={`/user/${item.username}/`} className="font-semibold text-ink no-underline hover:text-acc-deep">{item.displayName}</Link>
