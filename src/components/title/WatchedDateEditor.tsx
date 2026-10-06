@@ -1,6 +1,7 @@
 'use client';
 
 import { useId } from 'react';
+import { fieldClass } from '@/components/ui/Field';
 
 // BIN-91 — låter användaren backdatera när en film sågs ("jag såg den förra
 // veckan"). Default = sparat datum (eller idag). max = idag: "sedd" kan inte
@@ -41,7 +42,7 @@ export default function WatchedDateEditor({
           const [yy, mm, dd] = v.split('-').map(Number);
           onChange(new Date(yy, mm - 1, dd, 12, 0, 0));
         }}
-        className="px-1 py-[1px] text-xs border border-rule rounded-sm bg-surface text-ink font-[inherit] outline-none"
+        className={fieldClass({ size: 'sm' })}
       />
     </label>
   );

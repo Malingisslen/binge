@@ -62,6 +62,8 @@ import { offerForProvider, isLeavingSoon, formatLeaving } from '@/lib/streaming/
 import type { TMDBTVShow } from '@/types';
 import { trackEvent } from '@/lib/analytics';
 import ShareButton from '@/components/share/ShareButton';
+import { buttonClass } from '@/components/ui/Button';
+import { eyebrowClass } from '@/components/ui/Eyebrow';
 
 export default function TVShowPageClient({ id, initialData }: { id: string; initialData?: TMDBTVShow }) {
   const showId = parseInt(id, 10);
@@ -309,7 +311,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
           </div>
           <h1>{displayTitle}</h1>
           {creators.length > 0 && (
-            <div style={{ marginTop: 10, fontSize: 12, color: 'var(--ink-3)', letterSpacing: 0.04 }}>
+            <div style={{ marginTop: 10, fontSize: 'var(--fs-sm)', color: 'var(--ink-3)', letterSpacing: 0.04 }}>
               {creators.length === 1 ? 'skapare' : 'skapare'}:{' '}
               {creators.map((c, i) => (
                 <span key={c.id}>
@@ -328,7 +330,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
           {overviewText && <p className="syn">{overviewText}</p>}
           {needsContentFloorParagraph && <p className="syn">{contentFloor?.paragraph}</p>}
           {!needsContentFloorParagraph && availability && (
-            <p style={{ marginTop: 10, fontSize: 13.5, color: 'var(--ink-2)' }}>{availability}</p>
+            <p style={{ marginTop: 10, fontSize: 'var(--fs-base)', color: 'var(--ink-2)' }}>{availability}</p>
           )}
           <div className="stats">
             <span><span className="k">säsonger</span><strong>{show.number_of_seasons}</strong></span>
@@ -348,7 +350,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
               <StatusButton {...statusButtonProps} />
               <div>
                 {watchlistItem && (
-                  <div style={{ fontSize: 10.5, color: 'var(--ink-3)', letterSpacing: 0.12, textTransform: 'uppercase', marginBottom: 3 }}>
+                  <div className={eyebrowClass({ size: 'xs', className: 'mb-[3px]' })}>
                     Ditt betyg
                   </div>
                 )}
@@ -418,19 +420,19 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
           {/* SEO-2: <details> keeps rent/buy in the static HTML; see the movie page. */}
           {hasRentBuy && (
             <details className="group" style={{ marginTop: 10 }} onToggle={e => setShowRentBuy(e.currentTarget.open)}>
-              <summary className="btn btn-ghost btn-sm list-none [&::-webkit-details-marker]:hidden" style={{ cursor: 'pointer' }}>
+              <summary className={buttonClass({ variant: 'ghost', size: 'sm', className: 'list-none [&::-webkit-details-marker]:hidden' })} style={{ cursor: 'pointer' }}>
                 Hyr & köp <ChevronDown size={12} className="transition-transform group-open:rotate-180" />
               </summary>
-            <div style={{ marginTop: 10, fontSize: 11, color: 'var(--ink-3)' }}>
+            <div style={{ marginTop: 10, fontSize: 'var(--fs-xs)', color: 'var(--ink-3)' }}>
               {rent.length > 0 && (
                 <div>
-                  <span style={{ letterSpacing: 0.12, textTransform: 'uppercase', marginRight: 6 }}>Hyr:</span>
+                  <span className={eyebrowClass({ size: 'xs', className: 'mr-1.5' })}>Hyr:</span>
                   {rent.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" offer={offerForProvider(offers, canonicalProviderId(p.provider_id))} nowMs={now} mediaType="tv" />)}
                 </div>
               )}
               {buy.length > 0 && (
                 <div>
-                  <span style={{ letterSpacing: 0.12, textTransform: 'uppercase', marginRight: 6 }}>Köp:</span>
+                  <span className={eyebrowClass({ size: 'xs', className: 'mr-1.5' })}>Köp:</span>
                   {buy.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" offer={offerForProvider(offers, canonicalProviderId(p.provider_id))} nowMs={now} mediaType="tv" />)}
                 </div>
               )}
@@ -464,7 +466,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
               border: '1px solid var(--rule)',
               borderRadius: 6,
               display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-              fontSize: 13.5, color: 'var(--ink-2)',
+              fontSize: 'var(--fs-base)', color: 'var(--ink-2)',
             }}>
               <span>Du har markerat serien som sedd, men nya avsnitt är på väg.</span>
               <StatusButton {...statusButtonProps} />
@@ -555,8 +557,8 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
                     <AvatarInitials name={person.name} size={72} />
                   )}
                 </div>
-                <div style={{ fontSize: 13, fontWeight: 500, lineHeight: 1.25 }}>{person.name}</div>
-                <div style={{ fontSize: 10.5, color: 'var(--ink-3)', marginTop: 2, lineHeight: 1.2 }}>
+                <div style={{ fontSize: 'var(--fs-base)', fontWeight: 500, lineHeight: 1.25 }}>{person.name}</div>
+                <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--ink-3)', marginTop: 2, lineHeight: 1.2 }}>
                   {person.character}
                 </div>
               </Link>

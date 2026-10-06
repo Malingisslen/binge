@@ -207,7 +207,7 @@ function CompanionEnriched({ companions }: { companions: CompanionTitle[] }) {
             {showStreaming ? 'Dölj tillgänglighet' : 'Var streamar den?'}
           </Button>
           {showStreaming && (
-            <div style={{ marginTop: 8, fontSize: 13, color: 'var(--ink-2)' }}>
+            <div style={{ marginTop: 8, fontSize: 'var(--fs-base)', color: 'var(--ink-2)' }}>
               {streamingLoading ? (
                 <span className="text-ink-3">Hämtar tillgänglighet…</span>
               ) : streamSummary.considered === 0 ? (

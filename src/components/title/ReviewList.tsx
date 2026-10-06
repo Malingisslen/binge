@@ -11,6 +11,8 @@ import { UgcActionsMenu } from '@/components/moderation/UgcActionsMenu';
 import { JsonLd, reviewSchema } from './JsonLd';
 import type { MediaType, Review } from '@/types';
 import { Button } from '@/components/ui/Button';
+import { fieldClass } from '@/components/ui/Field';
+import { cardClass } from '@/components/ui/Card';
 
 interface ReviewListProps {
   tmdbId: number;
@@ -68,36 +70,36 @@ export default function ReviewList({ tmdbId, mediaType, title, posterPath }: Rev
       <div className="flex items-center gap-2 mb-2">
         <h2 className="text-sm font-bold text-ink-2">Recensioner ({reviews.length})</h2>
         {uid && !myReview && (
-          <button
+          <Button
             onClick={() => setShowForm(true)}
-            className="px-[7px] py-[2px] text-xs rounded-sm cursor-pointer bg-acc-deep text-on-acc border-none font-[inherit]"
+            variant="acc" size="sm"
           >
             Skriv
-          </button>
+          </Button>
         )}
       </div>
 
       {showForm && (
-        <div className="bg-surface border border-rule rounded-sm p-3 mb-2">
+        <div className={cardClass('p-3 mb-2')}>
           <textarea
             value={text}
             onChange={e => setText(e.target.value)}
             placeholder="Skriv din recension…"
             maxLength={2000}
             rows={3}
-            className="w-full px-2 py-1 text-xs border border-rule rounded-sm bg-surface font-[inherit] resize-none outline-none mb-2"
+            className={fieldClass({ size: 'sm', className: 'w-full resize-none mb-2' })}
           />
           <div className="flex items-center gap-2">
             <label className="flex items-center gap-1 text-xs text-ink-3 cursor-pointer">
               <input type="checkbox" checked={spoiler} onChange={e => setSpoiler(e.target.checked)} className="accent-acc-deep" />
               Spoiler
             </label>
-            <button onClick={handleSubmit} className="px-3 py-[3px] text-xs border-none rounded-sm cursor-pointer bg-acc-deep text-on-acc font-[inherit]">
+            <Button onClick={handleSubmit} variant="acc" size="sm">
               Publicera
-            </button>
-            <button onClick={() => setShowForm(false)} className="px-3 py-[3px] text-xs border border-rule rounded-sm cursor-pointer bg-surface text-ink-3 font-[inherit]">
+            </Button>
+            <Button onClick={() => setShowForm(false)} variant="ghost" size="sm">
               Avbryt
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -135,7 +137,7 @@ function ReviewCard({ review, isOwn, onDelete }: { review: Review; isOwn?: boole
   const { comments } = useReviewComments(showComments ? review.id : null);
 
   return (
-    <div className="bg-surface border border-rule rounded-sm px-3 py-2 mb-[6px]">
+    <div className={cardClass('px-3 py-2 mb-[6px]')}>
       <div className="flex items-center justify-between mb-1">
         <div className="text-xs">
           {review.username ? (
@@ -288,22 +290,22 @@ function ReviewComments({
             onKeyDown={e => { if (e.key === 'Enter') void submit(); }}
             placeholder="Skriv en kommentar…"
             maxLength={500}
-            className="flex-1 px-2 py-1 text-xxs border border-rule rounded-sm bg-surface"
+            className={fieldClass({ size: 'sm', className: 'flex-1' })}
           />
-          <button
+          <Button
             onClick={submit}
             disabled={posting || !text.trim()}
             aria-label="Skicka"
-            className="inline-flex items-center justify-center min-w-[24px] min-h-[24px] px-2 py-1 bg-acc-deep text-on-acc rounded-sm text-xxs cursor-pointer disabled:opacity-50"
+            variant="acc" size="xs" className="inline-flex items-center justify-center min-w-[24px] min-h-[24px] disabled:opacity-50"
           >
             <Send size={12} aria-hidden />
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={onClose}
-            className="px-2 py-1 border border-rule rounded-sm text-xxs bg-surface cursor-pointer text-ink-3"
+            variant="ghost" size="xs"
           >
             Stäng
-          </button>
+          </Button>
         </div>
       ) : (
         <div className="text-xxs text-ink-3">Logga in för att kommentera.</div>

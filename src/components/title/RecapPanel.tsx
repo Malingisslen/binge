@@ -7,6 +7,8 @@ import { validateRecapText } from '@/lib/recaps/sanitize';
 import { missingEpisodeCount } from '@/lib/recaps/coverage';
 import { priorSeasonNumbers, type EpisodeRef, type SeasonEpisodes } from '@/lib/recaps/boundary';
 import type { RecapSource } from '@/lib/recaps/types';
+import { cardClass } from '@/components/ui/Card';
+import { badgeClass } from '@/components/ui/Badge';
 
 // BIN-185 — "Påminn mig var jag slutade". Shows ONLY when a cached recap exists for the user's
 // spoiler-safe boundary (the contiguous frontier, computed by the parent from episodeProgress +
@@ -181,7 +183,7 @@ export default function RecapPanel({
         <span className="text-base font-semibold text-ink">
           Säsong {boundary!.season}, avsnitt {boundary!.episode}
         </span>
-        <span className="rounded bg-acc-soft px-1.5 py-0.5 text-xxs font-bold uppercase tracking-wide text-acc-deep">
+        <span className={badgeClass('acc')}>
           Du är här
         </span>
       </div>
@@ -219,7 +221,7 @@ export default function RecapPanel({
   ) : null;
 
   return (
-    <div className="mt-3 rounded-md border border-rule bg-surface overflow-hidden">
+    <div className={cardClass('mt-3 overflow-hidden')}>
       <button
         type="button"
         className="flex w-full items-center gap-2 px-3 py-2.5 text-base font-medium text-ink hover:bg-bg-2"

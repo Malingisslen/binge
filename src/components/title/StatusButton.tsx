@@ -17,6 +17,7 @@ import { rewatchFields } from '@/lib/watchlistWrites';
 import { LIBRARY_UNAVAILABLE } from './libraryHold';
 import { useSignedOutRedirect } from '@/hooks/useSignedOutRedirect';
 import { DELETION_IN_PROGRESS_MESSAGE, isDeletionInProgressError } from '@/lib/deletionInProgressError';
+import { cardClass } from '@/components/ui/Card';
 
 interface StatusButtonProps {
   tmdbId: number;
@@ -205,7 +206,7 @@ export default function StatusButton({
         {current ? labelFor(current.status) : '+ Lägg till'}
       </button>
       {open && (
-        <div className="absolute top-full left-0 mt-1 bg-surface border border-rule rounded-sm z-40 min-w-[130px]">
+        <div className={cardClass('absolute top-full left-0 mt-1 z-40 min-w-[130px]')}>
           {options.map(status => (
             <button
               key={status}
