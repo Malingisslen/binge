@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computePriceChangeNudges, priceChangeText, PRICE_CHANGE_SHOW_DAYS } from './priceChangeNudges';
+import { buildPriceChangeFeed, computePriceChangeNudges, priceChangeText, PRICE_CHANGE_SHOW_DAYS } from './priceChangeNudges';
 import type { PriceChange } from '@/lib/tmdb/providers';
 
 const NOW = new Date(2026, 9, 6); // 2026-10-06
@@ -80,5 +80,42 @@ describe('priceChangeText', () => {
     expect(priceChangeText(row).lead).toBe(
       'Priset för Amazon Prime Video sänktes från 89 till 69 kr/mån den 14 sep 2026. Det blir 240 kr mindre om året.',
     );
+  });
+});
+
+describe('buildPriceChangeFeed', () => {
+  it('bär banderollens text, kanoniskt id först och alias efter', () => {
+    const [row] = buildPriceChangeFeed([skyAds]);
+    expect(row.key).toBe('431-ads-2026-09-03');
+    expect(row.providerIds[0]).toBe(431);
+    expect(row.providerIds).toContain(1773);
+    expect(row.tierId).toBe('ads');
+    expect(row.title).toBe('SkyShowtime höjer priset');
+    expect(row.body).toBe('SkyShowtime Standard med annonser har höjt priset från 59 till 69 kr/mån. Det blir 120 kr mer om året.');
+  });
+
+  it('släpper en rad med okänd nivå', () => {
+    expect(buildPriceChangeFeed([{ ...skyAds, tierId: 'finns-inte' }])).toEqual([]);
+  });
+});
+
+// functions/ kan inte importera klientkoden, så pushfunktionen validerar filen med
+// sin egen parser. Att importera båda här är det som ser dem glida isär.
+import { parseFeed } from '../../../functions/src/priceChangeNotify/logic';
+
+describe('/prisandringar.json ↔ priceChangeNotify', () => {
+  it('hela den riktiga katalogens fil går igenom serverns validering', () => {
+    const rows = buildPriceChangeFeed();
+    expect(rows.length).toBeGreaterThan(0);
+    expect(parseFeed(JSON.parse(JSON.stringify({ version: 1, rows })))).toEqual(rows);
+  });
+});
+
+import { GET as prisandringarGet } from '@/app/prisandringar.json/route';
+
+describe('/prisandringar.json route', () => {
+  it('filen som byggs går igenom serverns validering', async () => {
+    const parsed = parseFeed(await prisandringarGet().json());
+    expect(parsed).toEqual(buildPriceChangeFeed());
   });
 });
