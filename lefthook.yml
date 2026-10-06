@@ -104,11 +104,8 @@ pre-commit:
 #
 commit-msg:
   commands:
-    # NOT glob-gated, and deliberately: this check reads the
-    # SUBJECT, not the staged files, and a code-changing commit that touches no `.ts` is
-    # exactly the case that escaped on 2026-08-16 (049f21b is a test-file commit). It costs
-    # one node process and one file read — no toolchain, no compile. Measured well under a
-    # second.
+    # NOT glob-gated, and deliberately: a code-changing commit that touches no `.ts` is
+    # exactly the case that escaped on 2026-08-16 (049f21b is a test-file commit).
     review-coverage:
       run: node docs/org/metrics/check_review_coverage.mjs --message {1}
       fail_text: "This commit names a ticket with no stakeholder-review row (BIN-917). Log the review, or fix the subject."

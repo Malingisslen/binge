@@ -3,3 +3,7 @@
 # the sprint's rebase before the push would conflict on two appends at the end of the
 # file. `union` keeps both sides' lines, which is the correct merge for this file.
 docs/org/metrics/events.jsonl merge=union
+
+# Append-only too, and every branch that records a decision appends its entry at the end,
+# so two such branches always met on the last line.
+.claude/rules/accepted-deviations.md merge=union

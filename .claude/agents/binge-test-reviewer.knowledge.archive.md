@@ -29687,3 +29687,84 @@ entries before and after, and the reviewed files' worktree blobs still equal the
 **Knowledge fold:** the tooling chapter's Extract-then-test bullet gained the injected-runner
 blind spot (measure the real answer; one execution through the exported options with a bigger
 fixture, asserted as a string).
+
+## 2026-10-06 — BIN-1426 part 3 (PR A): decision 1 narrows reviewGates; route.mjs default/feature/fail-closed policies
+
+**Diff reviewed (staged):** `.claude/shared-plugin.json` (reviewGates and productionGlobs narrowed to the decision-1 src list), `docs/org/route.mjs` (POLICIES: default reads sensitivity from the gates via `gateCovers`; `--feature`/`{feature:true}` keeps legacy routing; unreadable/empty gates -> `fail-closed`; output gains `policy`, `sensitive`; flags in any order), `docs/org/route.test.mjs`, `docs/org/gate-symmetry.test.mjs`, `docs/org/metrics/check_review_coverage(.test).mjs` (`reviewOwedFor`/`owesReview`, `TYPE_FREE`, `REVIEW_SCOPE_EFFECTIVE_FROM`, per-commit gates, name-status parsing), `docs/org/metrics/check_staged_routing(.test).mjs`, CLAUDE.md, code-style.md, DESIGN.md §1.3, lefthook.yml.
+
+**Reading list:** the reading-list command failed (`ENOENT` on `/root/.claude/plugins/cache/malin-plugins/workflow-guards`); review-core.md was read from `/home/claude/claude-plugins/plugins/workflow-guards/shared/review-core.md`, plus the core card and the tooling chapter (the only chapter whose paths the staged diff touches).
+
+**Clean control:** `npx vitest run --project process` over the four staged test files: 4 files, 389/389 passed, vite cache cleared first.
+
+**Floors measured live** (scratchpad script modelling the file's own procedure): tracked 1226; default non-skip 320 (floor 280); gated 320 (280); feature non-skip 1123 (1000); #25-owned 73 (60, raised from 15); default unmapped-code 41 (30); feature unmapped-code 275 (230); high-stakes 9 (7); src security-gated files 41 (35), not 521 (450); src tests test-gated 31 (25), not 266 (230). Every lowered floor carries a dated reason and sits within ~13-27% of its live value.
+
+**Mutations** (in place, each snapshotted to scratchpad, mutant asserted present before and after the run, restored, `git hash-object` == `git rev-parse :<f>`):
+- route.mjs drop `|| sensitiveSet.has(path)` from unownedCode: 2 failed (gate-symmetry "decision 1 only narrows", `--selftest`).
+- route.mjs seat from `resolveOwners(map, clean)` instead of `sensitive`: 2 failed (route.test "seats the owner of the gated file", selftest).
+- route.mjs empty gates array counted readable: 2 failed ("gates = an empty list", selftest).
+- route.mjs `--feature` read only from argv[0]/[1]: 1 failed ("reads its flags in any order").
+- route.mjs stdin path ignores `--feature`: 1 failed ("applies --feature to paths read from stdin").
+- route.mjs `gateCovers` without the `exclude` subtraction: SURVIVED 389/389. Every consumer asks `gates.some(gateCovers)`, and every path the code gate excludes is matched by another gate, so no consumer can see the arm today.
+- route.mjs `gateCovers` without the `keyed` arm: 3 failed (`.claude/settings.json still owes a critique`, gate-symmetry B, agreement case).
+- check_staged_routing.mjs owesReview early return -> `if (false)`: 2 failed (decision-1 block).
+- check_staged_routing.mjs `routed.length === 0` branch -> `ok: false`: SURVIVED 389/389.
+- check_staged_routing.mjs `paths.length === 0` branch -> `ok: false`: SURVIVED 389/389.
+- check_staged_routing.mjs no-ticket branch -> `ok: false`: 1 failed.
+- check_staged_routing.mjs route without `feature`: 2 failed.
+- check_review_coverage.mjs history walk passes `added: []`: 1 failed ("agrees with the history rule").
+- check_review_coverage.mjs TYPE_FREE `<` -> `<=`: 2 failed (both epoch boundary cases).
+- check_review_coverage.mjs scope epoch `<` -> `<=`: 1 failed.
+
+**Hand-traced, not run:** at HEAD `gradeStagedRouting` had no `owesReview` early return, so "a doc-only stage routes to no role and is not blocked" (`docs:` + README.md) reached the `routed.length === 0` branch and "the reviewer notebook alone cannot make a commit owe a panel" (`docs:` + a knowledge file) reached the `paths.length === 0` branch; both inversions above would have failed there. The diff's new early return answers both fixtures first.
+
+**Verdict:** fail, 1 blocking: the two pre-existing staged-routing tests now pass through the new gate and no longer reach the branches they name. Non-blocking: `gateCovers`' exclude arm unpinned; check_review_coverage.test.mjs "mainMessage refuses by the STAGED files" reads live `stagedAddedFiles()`/`stagedReviewGates()` defaults, so a staged new page in the checkout running the suite flips its second assertion.
+
+**Knowledge fold:** core card, the sequential-exclusion-guards bullet: a new early return ahead of old branches strands old fixtures; re-mutate each downstream branch.
+
+## 2026-10-06 — BIN-1426 part 3 (PR A), re-review: stranded staged-routing branches fixed; findGaps narrowed to gated files
+
+**Diff reviewed (staged):** same batch as the entry above, plus: `check_staged_routing.test.mjs` (the doc-only and notebook cases now use a `feat:` subject and assert `v.reason`), `route.test.mjs` (new describe "gateCovers matches the way the commit gate does (BIN-1426)"), `check_review_coverage.test.mjs` ("mainMessage refuses by the STAGED files" passes `{ added: [], gatesRead }`), `gate-symmetry.test.mjs` header strike, and `docs/org/gen-ownership-map.mjs` `findGaps(tracked, { gates })` reporting only gate-covered files (unreadable or empty gates count every file) with its tests.
+
+**Reading list:** the reading-list command failed again (`ENOENT` on `/root/.claude/plugins/cache/malin-plugins/workflow-guards`); review-core.md read from `/home/claude/claude-plugins/plugins/workflow-guards/shared/review-core.md`, plus the core card and the tooling chapter.
+
+**Clean control:** `npx vitest run --project process` over the five staged test files, vite cache cleared: 405 tests, 2 failed, both in gen-ownership-map.test.mjs ("holds the baseline in the shrinking direction only", "--check ... passes on an in-sync tree"), both on `src/lib/firebase/pendingAddServerCheck.ts` — the caller's declared out-of-scope gap from another PR on main.
+
+**Mutations** (harness in scratchpad: anchor count 1, mutant asserted before and after the run, restored from a scratchpad snapshot, `git hash-object` == `git rev-parse :<f>` every time):
+- check_staged_routing.mjs `routed.length === 0` branch -> `ok: false`: 1 failed ("a doc-only stage routes to no role and is not blocked"). Previously SURVIVED.
+- same branch -> `if (false)`: 1 failed (same test).
+- `paths.length === 0` branch -> `ok: false`: 1 failed ("the reviewer notebook alone cannot make a commit owe a panel"). Previously SURVIVED.
+- same branch -> `if (false)`: 1 failed (same test).
+- route.mjs `gateCovers` without `exclude`: 2 failed beyond control (both new gateCovers cases). Previously SURVIVED.
+- route.mjs `gateCovers` without the `exact` arm: 1 failed ("an exact name, minus an exclude").
+- route.mjs `gateCovers` with `exact` returning before `exclude`: 1 failed (same).
+- gen-ownership-map.mjs drop `&& sensitive(f)`: 2 failed beyond control ("does not ask an ordinary file", "counts every file as sensitive when the gates cannot be read").
+- `sensitive` fail-open (`!!gates?.some(...)`): 1 failed beyond control (fail-closed case).
+- `!gates?.length` -> `!gates`: 1 failed beyond control (fail-closed case, the `[]` assertion).
+- default `gates = readReviewGates()` -> `null`: 1 failed beyond control ("does not ask an ordinary file").
+- `main()` calling `findGaps(tracked, { gates: null })`: only the 2 control failures — undetectable today because both pins that read `main()` are already red on the unrelated gap.
+
+**Verdict:** pass, 0 blocking. Info: `main()`'s call into `findGaps` is unpinned while the control is red; it re-arms once the other PR's owner lands.
+
+**Knowledge fold:** tooling chapter, Extract-then-test bullet: a pin red in the clean control kills nothing; credit only control-green tests.
+
+## 2026-10-06 — BIN-1426 part 3 (PR A), third pass: the sprint-routing fallback and the _note33 gate widening
+
+**Diff reviewed (staged):** since the previous pass: `check_staged_routing.mjs` `gradeStagedRouting` gains a fallback that routes the same union `--feature` when the default panel has a missing role and passes when every role of that routing is logged; `check_staged_routing.test.mjs` new describe "a fix logged the way a sprint routes it (as a feature) is not refused"; `.claude/shared-plugin.json` adds `src/lib/(authErrors|blockRelationship|sentry)`, `src/hooks/(useAuth|useFcmToken)`, `src/components/AuthGuard` to all four gates and productionGlobs (`_note33`); struck sentences and an accepted-deviations successor entry.
+
+**Reading list:** the command failed (`ENOENT` on `/root/.claude/plugins/cache/malin-plugins/workflow-guards`); review-core.md read from `/home/claude/claude-plugins/plugins/workflow-guards/shared/review-core.md`, plus the core card and the tooling chapter.
+
+**Clean control:** check_staged_routing.test.mjs 36/36; gate-symmetry.test.mjs 15/15; `vitest run docs/org` 451/452, the one failure the live "every feat/fix commit since the epoch carries a review row" (1f3d002, ab8326d from another thread; red without this batch).
+
+**Mutations** (anchor count 1, mutant asserted before and after, restored from scratchpad snapshot, `git hash-object` == `git rev-parse :<f>` each time):
+- fallback `.every` -> `.some`: 1 failed ("a declined row that leaves out one routed role is still REFUSED (BIN-1368)").
+- fallback `if (false)`: 1 failed ("passes with the default panel and with the feature panel").
+- fallback `feature: true` -> `feature`: 1 failed (same).
+- drop `asFeature.length > 0 &&`: SURVIVED — equivalent: a default routing with a seat implies a non-empty feature routing (high-stakes is identical in both; a gated path is either code-owned or in `unownedCode`, both medium in the feature policy).
+- fallback `route(paths, …)` -> `route(stagedPaths, …)`: SURVIVED, observable. With a reviewer knowledge file staged beside the pair, the feature routing becomes [25] instead of [1]; probe: current code `ok: true`, mutant `ok: false, missing [18]`.
+- shared-plugin.json, one gate's src entry dropped (code: useAuth|useFcmToken; test: sentry; test: AuthGuard; integration: blockRelationship): each 1 failed in gate-symmetry's "the gates agree with each other over src/".
+- shared-plugin.json, the whole _note33 widening reverted from all five lists: `vitest run docs/org` 451/452, only the control failure — SURVIVED.
+- route.mjs `resolveOwners(map, sensitive)` -> `clean`; `gatesReadable` without the length check; default branch `&& false`; check_review_coverage.mjs `<` -> `<=` on REVIEW_SCOPE_EFFECTIVE_FROM; `if (!codeType) return null` deleted; `gates.some` -> `gates.every`: all killed by control-green tests.
+
+**Verdict:** fail, 2 blocking — the fallback's union input is unpinned (the knowledge-file case), and the _note33 widening is revertible green (DECISION_1_AREAS names none of the six added files).
+
+**Knowledge fold:** tooling chapter — union-floor bullet extended to lists held in step (all copies retreating together is green); two-call-site bullet extended to a second call on the same filtered input.

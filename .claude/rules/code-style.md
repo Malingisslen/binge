@@ -26,6 +26,12 @@ runbooks), **machine-consumed data** (read by CI, hooks, scripts), or a **for-Ma
   work that is still open — are listed with the rule in the four reviewer agent files and in
   `lessons-digest.md`.
 
+## Comments explain why
+
+New comments say why the code is the way it is (Malin's decision 1, 2026-10-05, BIN-1426).
+How it got there (which ticket, which review round, what an earlier draft said) goes in the
+commit message, the ticket or an ADR. Existing comments are not swept for this.
+
 ## Test-extraction pattern
 
 Pure-logic helpers get extracted out of hooks/components into their own file so they're
