@@ -29768,3 +29768,15 @@ fixture, asserted as a string).
 **Verdict:** fail, 2 blocking — the fallback's union input is unpinned (the knowledge-file case), and the _note33 widening is revertible green (DECISION_1_AREAS names none of the six added files).
 
 **Knowledge fold:** tooling chapter — union-floor bullet extended to lists held in step (all copies retreating together is green); two-call-site bullet extended to a second call on the same filtered input.
+
+## 2026-10-06 — BIN-1426 part 3 (PR B): the deviations index check
+
+Scope: `ea90e495..HEAD` — scripts/check-deviations-index.mjs (new), its test, lefthook.yml, vitest.config.ts, scripts-self-tests-present, route.test.mjs, gen-ownership-map.test.mjs.
+
+Mutants killed: fence handling dropped or not toggled, floor disabled, lengths-only compare, `main()` 0 on mismatch, read error 0, ledger-only loop, set compare, entry pattern widened, CR strip dropped, ledger compared with itself. Survived: `FLOOR = 5`; `readStaged` reading `HEAD:`; the lefthook block deleted; `process.exit(0)` at the entry point (no test spawned the script).
+
+A CRLF-converted index turned "keeps the trigger on the index and none on the ledger" red (`^---\n`), and the `not.toMatch(/^---\n/)` twin cannot fail on CRLF.
+
+**Verdict:** fail, 2 blocking — the CRLF-blind live assertion, and no pin on the lefthook wiring or on reading the staged copies. Fixed by the author: `\r?\n` in both regexes, a lefthook block pin, and a throwaway-repo spawn test (staged mismatch exits 1, working-tree-only mismatch exits 0) that kills the `HEAD:` and `process.exit(0)` mutants; a literal floor pin; the route test now covers index and ledger.
+
+**Knowledge fold:** tooling chapter, vacuous oracles — the CRLF live-tree assertion bullet.

@@ -513,13 +513,15 @@ describe('the file that decides who reviews everything else (BIN-851)', () => {
     expect(r.panel).toEqual([25]);
   });
 
-  it('seats the same owner for the decided-deviations ledger', () => {
-    // The mirror image: this file decides what a reviewer is FORBIDDEN to flag, so
-    // appending to it silently retires a finding class.
-    const r = route(['.claude/rules/accepted-deviations.md']);
+  it('seats the same owner for the decided-deviations index and ledger', () => {
+    // The mirror image: these files decide what a reviewer is FORBIDDEN to flag, so
+    // appending to them silently retires a finding class.
+    for (const path of ['.claude/rules/accepted-deviations.md', '.claude/accepted-deviations.md']) {
+      const r = route([path]);
 
-    expect(r.tier).toBe('medium');
-    expect(r.panel).toEqual([25]);
+      expect(r.tier).toBe('medium');
+      expect(r.panel).toEqual([25]);
+    }
   });
 
   it('names both files in the BLOCKING gate list too, not just here', () => {
