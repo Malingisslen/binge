@@ -21,6 +21,7 @@ import { readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildMap, findGaps, main, trackedPaths } from './gen-ownership-map.mjs';
+import { readReviewGates } from './route.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const readJson = (rel) => JSON.parse(readFileSync(join(repoRoot, rel), 'utf8'));
@@ -84,14 +85,36 @@ describe('the gate roster has a named owner (BIN-851)', () => {
 
 describe('an owned folder that gains an unowned sibling is detected (BIN-788/803)', () => {
   it('reports a tracked code file that only inherits its reviewer', () => {
-    // Kills the `findGaps() => []` mutant: a brand-new file in a directory the map
-    // enumerates file-by-file must surface, because the reviewer it would otherwise
+    // Kills the `findGaps() => []` mutant: a brand-new sensitive file in a directory the
+    // map enumerates file-by-file must surface, because the reviewer it would otherwise
     // get is "whoever owns a sibling" — a guess, not an owner.
-    const sibling = 'src/lib/tmdb/zzzSyntheticSibling.ts';
+    const sibling = 'src/lib/firebase/zzzSyntheticSibling.ts';
     const files = new Set(tracked.files);
     files.add(sibling);
 
     expect(findGaps({ files, dirs: tracked.dirs })).toContain(sibling);
+  });
+
+  it('does not ask an ordinary file for an owner (decision 1, BIN-1426)', () => {
+    // The same directory inheritance as above, on a file no review gate covers. The positive
+    // twin in the same tree keeps this from passing on a gap list that is empty for any reason.
+    const ordinary = 'src/lib/tmdb/zzzSyntheticSibling.ts';
+    const sensitive = 'src/lib/firebase/zzzSyntheticSibling.ts';
+    const files = new Set([...tracked.files, ordinary, sensitive]);
+
+    const gaps = findGaps({ files, dirs: tracked.dirs });
+
+    expect(gaps).toContain(sensitive);
+    expect(gaps).not.toContain(ordinary);
+  });
+
+  it('counts every file as sensitive when the gates cannot be read', () => {
+    const ordinary = 'src/lib/tmdb/zzzSyntheticSibling.ts';
+    const files = new Set([...tracked.files, ordinary]);
+
+    expect(findGaps({ files, dirs: tracked.dirs }, { gates: null })).toContain(ordinary);
+    expect(findGaps({ files, dirs: tracked.dirs }, { gates: [] })).toContain(ordinary);
+    expect(findGaps({ files, dirs: tracked.dirs }, { gates: readReviewGates() })).not.toContain(ordinary);
   });
 
   it('does not report a file a role names outright', () => {
@@ -130,8 +153,8 @@ describe('an owned folder that gains an unowned sibling is detected (BIN-788/803
     // a case that needs the repo to have a gap fails on the day someone fixes them all.
     // Two siblings, out of alphabetical order, so the sort is measured rather than
     // accidentally satisfied by one element.
-    const zeta = 'src/lib/tmdb/__zeta-sibling.ts';
-    const alpha = 'src/lib/tmdb/__alpha-sibling.ts';
+    const zeta = 'src/lib/firebase/__zeta-sibling.ts';
+    const alpha = 'src/lib/firebase/__alpha-sibling.ts';
     const withGaps = {
       files: new Set([...tracked.files, zeta, alpha]),
       dirs: new Set(tracked.dirs),

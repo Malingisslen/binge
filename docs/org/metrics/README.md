@@ -30,8 +30,7 @@ system on its own terms.
 - **`check_events.mjs`** + its test — fails when a row claims the work reached main without
   naming evidence for it. See the BIN-918 section below for what a clean run does and does
   not prove.
-- **`check_review_coverage.mjs`** + its test *(BIN-917, 2026-08-18)* — the inverse question:
-  fails when a code-changing commit has no `review` row at all. **Two modes**, and they gate
+- **`check_review_coverage.mjs`** + its test *(BIN-917, 2026-08-18)*. **Two modes**, and they gate
   different things: `--message <file>` is run by `lefthook.yml`'s `commit-msg` hook and
   REFUSES THE COMMIT, reading the log from the **index** (an unstaged row is invisible to it,
   deliberately — see the function's own comment); with no flag it walks history as the

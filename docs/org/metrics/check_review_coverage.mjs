@@ -29,8 +29,6 @@
 // the fix for it. "I could not find X" and "X does not exist" are different sentences.
 //
 // WHAT THE COMMIT-TIME GATE STILL DOES NOT COVER, stated rather than implied:
-//   * It reads the SUBJECT. A commit whose subject names no ticket and is not a code-changing
-//     type passes untouched, by design.
 //   * `LEFTHOOK=0` skips every hook. That is a deliberate escape hatch in the tool, not a
 //     hole this file can close.
 //   * The hook only fires where lefthook has installed `.git/hooks/commit-msg`. This repo has
@@ -68,8 +66,22 @@
 // `634d62e` (BIN-565) and `2e5993a` (BIN-911) had shipped with no row of any kind, though
 // both critiques had demonstrably run — the sprint plan at 6d157c5 records their verdicts.
 //
-// THE RULE. A commit whose subject line is one of the CODE-CHANGING conventional-commit
-// types must be traceable to a stakeholder-review row: its subject names at least one
+// THE RULE SINCE `REVIEW_SCOPE_EFFECTIVE_FROM` (BIN-1426; Malin's decision 1, 2026-10-05:
+// role critiques and reviewer agents only for database rules, sign-in, personal data, server
+// functions and new features, while ordinary fixes ship on typecheck and tests). `owesReview`
+// is the one predicate this file's two modes and `check_staged_routing.mjs` all ask. A commit
+// owes a row when
+//   * it touches a `TYPE_FREE` path, whatever its type: the router's high-stakes paths and the
+//     machinery that decides who reviews, so a `docs:` subject is never a way around either;
+//   * it is a new feature: a `feat` subject, or a page it adds under `src/app/`;
+//   * or its type changes code and it touches a file a review gate in
+//     `.claude/shared-plugin.json` covers. Each commit is judged by the gates in its own tree,
+//     so widening a gate never re-grades an older commit.
+// Anything else is an ordinary change and owes no row. The paragraphs below describe the rule
+// before that epoch, which history mode still applies to the commits made under it.
+//
+// THE RULE BEFORE THAT EPOCH. A commit whose subject line is one of the CODE-CHANGING
+// conventional-commit types must be traceable to a stakeholder-review row: its subject names at least one
 // BIN-id, and every id it names has at least one `review` row in events.jsonl. Such a commit
 // with no id in its subject is a violation in its own right — an untraceable change is
 // precisely the silence this exists to remove.
@@ -157,6 +169,7 @@ import { execFileSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { EVENTS_PATH, parseEvents, historyIsAvailable, ticketOf } from './check_events.mjs';
+import { gateCovers, parseReviewGates } from '../route.mjs';
 
 /**
  * The epoch. Deliberately NOT check_events.mjs's `RULE_EFFECTIVE_FROM` (2026-08-16).
@@ -180,8 +193,7 @@ import { EVENTS_PATH, parseEvents, historyIsAvailable, ticketOf } from './check_
 export const COVERAGE_EFFECTIVE_FROM = '2026-08-18T00:00:00.000Z';
 
 /**
- * Conventional-commit types that owe a review row: everything that changes executable code
- * or the release path. Anchored, so `docs: describe the feat(x): syntax` does not match, and
+ * Conventional-commit types that change executable code or the release path. Anchored, so `docs: describe the feat(x): syntax` does not match, and
  * tolerant of both the optional `(scope)` and the `!` breaking marker — a rule that required
  * `:` straight after the scope would exempt precisely the riskiest commits.
  *
@@ -220,7 +232,7 @@ const OWES_REVIEW = /^(feat|fix|refactor|perf|test|build|ci)(\([^)]*\))?!?:/;
  *
  * WHERE THIS DELIBERATELY DOES NOT APPLY: `gradeSubject` (the commit-msg hook) grades a
  * commit that does not exist yet and therefore has no author. It exempts nothing, which is
- * the behaviour you want — a human at a keyboard typing `ci(deps): …` still owes their row.
+ * the behaviour you want.
  */
 const BOT_AUTHOR = 'dependabot\\[bot\\]';
 
@@ -286,7 +298,7 @@ export function isBotDependencyBump(commit, botShas, prefixes) {
 /** Every BIN-id in a commit SUBJECT. Global — one commit may legitimately close several. */
 const TICKET_IN_SUBJECT = /\bBIN-\d+\b/g;
 
-/** True when this commit's type is one that owes a stakeholder-review row. */
+/** True when this commit's type is one of `OWES_REVIEW`'s code-changing types. */
 export function owesReviewRow(subject) {
   return OWES_REVIEW.test(subject.trim());
 }
@@ -314,7 +326,85 @@ export function changesReviewerInstructions(files) {
   return files.some((f) => REVIEWER_INSTRUCTIONS.test(f));
 }
 
-/** The files one existing commit touched. Only called for commits the type rule did not catch. */
+/**
+ * When decision 1 replaced the type rule: commits from this instant on are graded by
+ * `owesReview`'s new clauses, older ones by the rule of their day. It may not be later than
+ * the merge that shipped them. A commit the new hook lets through as ordinary, dated before
+ * the epoch, would be graded by the type rule and red the history for good.
+ */
+export const REVIEW_SCOPE_EFFECTIVE_FROM = '2026-10-06T00:00:00.000Z';
+
+/**
+ * Paths that owe a review row whatever the commit type, each from its own instant so that an
+ * entry added later never re-grades older commits. The decision-1 entries are route.mjs's
+ * `HIGH_STAKES` (a test holds the two lists together) and the machinery that decides who
+ * reviews: the gate config, the router, these checks and the hook config.
+ */
+export const TYPE_FREE = Object.freeze([
+  { pattern: REVIEWER_INSTRUCTIONS, from: INSTRUCTIONS_EFFECTIVE_FROM },
+  ...[
+    /^firestore\.rules$/,
+    /^firestore\.indexes\.json$/,
+    /^src\/lib\/firebase\/(groups|userData|dataExport)\.ts$/,
+    /^functions\/src\/submitReport\//,
+    /^src\/contexts\/AuthContext\.tsx$/,
+    /^\.claude\/shared-plugin\.json$/,
+    /^docs\/org\/route\.mjs$/,
+    /^docs\/org\/metrics\/check_[^/]*\.mjs$/,
+    /^lefthook\.yml$/,
+  ].map((pattern) => ({ pattern, from: REVIEW_SCOPE_EFFECTIVE_FROM })),
+]);
+
+const FEATURE_TYPE = /^feat(\([^)]*\))?!?:/;
+// A page file is a screen of its own in the App Router, so adding one is a new feature
+// whatever the subject calls it.
+const PAGE_FILE = /^src\/app\/(.+\/)?page\.tsx$/;
+
+/** What makes this commit a new feature, or null. */
+function featureSignal(subject, added) {
+  if (FEATURE_TYPE.test(subject.trim())) return 'it is a new feature (a `feat` subject)';
+  const page = added.find((f) => PAGE_FILE.test(f));
+  return page ? `it adds ${page}, a new screen` : null;
+}
+
+/** A `feat` subject, or a commit that adds a page. */
+export function isFeature(subject, added = []) {
+  return featureSignal(subject, added) !== null;
+}
+
+/**
+ * Why a commit owes a review row, or null when it owes none.
+ *
+ * `date` is the commit's own time; null is the commit being written, graded by the rule in
+ * force. `gates` are the `reviewGates` of the commit's own tree, null when they could not be
+ * read, and then a code type owes a row: a check that cannot see the gates cannot call
+ * anything ordinary.
+ */
+export function reviewOwedFor({ subject, files = [], added = [], gates = null, date = null }) {
+  const at = date == null ? Infinity : Date.parse(date);
+  for (const { pattern, from } of TYPE_FREE) {
+    if (at < Date.parse(from)) continue;
+    const hit = files.find((f) => pattern.test(f));
+    if (hit) return `it changes ${hit}, which owes a review row whatever the commit type`;
+  }
+  const codeType = owesReviewRow(subject);
+  if (at < Date.parse(REVIEW_SCOPE_EFFECTIVE_FROM)) return codeType ? 'its type changes code' : null;
+  const feature = featureSignal(subject, added);
+  if (feature) return feature;
+  if (!codeType) return null;
+  if (!Array.isArray(gates) || gates.length === 0) {
+    return 'its type changes code and the review gates could not be read';
+  }
+  const gated = files.find((f) => gates.some((gate) => gateCovers(gate, f)));
+  return gated ? `its type changes code and a review gate covers ${gated}` : null;
+}
+
+/** True when `reviewOwedFor` names a reason. */
+export function owesReview(commit) {
+  return reviewOwedFor(commit) !== null;
+}
+
+/** The files one existing commit touched, for a commit handed to `findCoverageGaps` without them. */
 export function filesOfCommit(sha) {
   return execFileSync('git', ['diff-tree', '--no-commit-id', '--name-only', '-r', sha], {
     cwd: dirname(EVENTS_PATH), encoding: 'utf8', maxBuffer: 8 * 1024 * 1024,
@@ -385,7 +475,8 @@ export function ticketsWithAReviewRow(rows) {
 }
 
 /**
- * One commit as this check needs it: `{sha, date, subject}`.
+ * One commit as this check needs it: `{sha, date, subject}`, plus `files` and `added` when the
+ * record carries a `--name-status` section after its subject.
  *
  * NUL-delimited on both axes so a subject containing a newline, a tab or a pipe cannot
  * split one commit into two — a subject is free text and this repo's are long.
@@ -396,19 +487,64 @@ export function parseGitLog(raw) {
     .map(entry => entry.trim())
     .filter(Boolean)
     .map(entry => {
-      const [sha, date, ...rest] = entry.split('\u0000');
-      return { sha, date, subject: rest.join('\u0000') };
+      const cut = entry.indexOf('\u0002');
+      const [sha, date, ...rest] = (cut === -1 ? entry : entry.slice(0, cut)).split('\u0000');
+      const commit = { sha, date, subject: rest.join('\u0000') };
+      return cut === -1 ? commit : { ...commit, ...parseNameStatus(entry.slice(cut + 1)) };
     })
     .filter(c => c.sha && c.date);
 }
 
+/** `git log -z --name-status` records: a status, then its path, or two paths for a rename or copy. */
+function parseNameStatus(section) {
+  const fields = section.split('\u0000').map((f) => f.replace(/^\n/, '')).filter(Boolean);
+  const files = [];
+  const added = [];
+  for (let i = 0; i < fields.length;) {
+    const status = fields[i];
+    const width = /^[RC]/.test(status) ? 2 : 1;
+    const paths = fields.slice(i + 1, i + 1 + width);
+    i += 1 + width;
+    files.push(...paths);
+    if (status === 'A') added.push(...paths);
+  }
+  return { files, added };
+}
+
+/**
+ * The whole history with each commit's files. `--no-renames` lists a moved file under its old
+ * path as well, so moving a file out of a gated directory cannot make it read as ordinary.
+ */
 export function readGitLog() {
   const raw = execFileSync(
     'git',
-    ['log', '--no-merges', '--format=%H%x00%cI%x00%s%x01'],
-    { cwd: dirname(EVENTS_PATH), encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 },
+    ['log', '--no-merges', '--no-renames', '-z', '--name-status', '--format=%x01%H%x00%cI%x00%s%x02'],
+    { cwd: dirname(EVENTS_PATH), encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
   );
   return parseGitLog(raw);
+}
+
+export const GATES_CONFIG_REL = '.claude/shared-plugin.json';
+
+/**
+ * Each commit's review gates as its own tree had them, so a gate widened later never re-grades
+ * an older commit. A sha whose tree holds no readable gates maps to null.
+ */
+export function reviewGatesAtCommits(shas, repoDir = REPO_ROOT) {
+  const out = new Map();
+  if (shas.length === 0) return out;
+  const opts = { cwd: repoDir, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 };
+  const lines = execFileSync('git', ['cat-file', '--batch-check'], {
+    ...opts, input: shas.map((sha) => `${sha}:${GATES_CONFIG_REL}\n`).join(''),
+  }).split('\n');
+  const byBlob = new Map();
+  shas.forEach((sha, i) => {
+    const [oid, type] = (lines[i] ?? '').split(' ');
+    if (type !== 'blob') { out.set(sha, null); return; }
+    if (!byBlob.has(oid)) byBlob.set(oid, parseReviewGates(execFileSync('git', ['cat-file', 'blob', oid], opts)));
+    out.set(sha, byBlob.get(oid));
+  });
+  return out;
 }
 
 /**
@@ -432,12 +568,16 @@ export function findCoverageGaps(commits, reviewed, {
   botShas = new Set(),
   dependabotPrefixes = [],
   // BIN-959 del 3. Defaults to "touched nothing", so a caller that does not pass it grades
-  // exactly as this file did before the path rule existed.
+  // exactly as this file did before the path rule existed. Asked only for a commit that
+  // arrives without its own `files`.
   filesOf = () => [],
-  instructionsFrom = INSTRUCTIONS_EFFECTIVE_FROM,
   // Defaults to "nothing attributed", so a caller that does not pass it grades exactly as
   // this file did before TICKET_BY_SHA existed.
   ticketBySha = new Map(),
+  // Each commit's own review gates, by sha. Defaults to "none read", and a code type whose
+  // gates were not read owes a row, so a caller that does not pass it grades code types the
+  // way this file did before decision 1.
+  gatesAt = () => new Map(),
 } = {}) {
   // A depth-1 checkout can see exactly one commit, so it does not get to answer a question
   // about history at all. Reported, never assumed either way.
@@ -451,13 +591,21 @@ export function findCoverageGaps(commits, reviewed, {
   let eligible = 0;
   let covered = 0;
 
-  const instructionsEpoch = Date.parse(instructionsFrom);
+  // Only a commit graded by `owesReview`'s new clauses can need its gates.
+  const scopeEpoch = Date.parse(REVIEW_SCOPE_EFFECTIVE_FROM);
+  const gatesBySha = gatesAt(commits.filter((c) => Date.parse(c.date) >= scopeEpoch).map((c) => c.sha));
 
   for (const commit of commits) {
-    if (!owesReviewRow(commit.subject)
-      && (Date.parse(commit.date) < instructionsEpoch || !changesReviewerInstructions(filesOf(commit.sha)))) continue;
-    // BIN-1040, and it sits HERE rather than inside `owesReviewRow` on purpose: the
-    // exemption needs the commit's AUTHOR, and the predicate only ever sees a subject. That
+    const owed = reviewOwedFor({
+      subject: commit.subject,
+      files: commit.files ?? filesOf(commit.sha),
+      added: commit.added ?? [],
+      gates: gatesBySha.get(commit.sha) ?? null,
+      date: commit.date,
+    });
+    if (owed === null) continue;
+    // BIN-1040, and it sits HERE rather than inside `reviewOwedFor` on purpose: the
+    // exemption needs the commit's AUTHOR, which the predicate never sees. That
     // is also why `gradeSubject` — which grades an unwritten commit — cannot reach it.
     if (isBotDependencyBump(commit, botShas, dependabotPrefixes)) continue;
     if (Date.parse(commit.date) < epoch) { grandfathered++; continue; }
@@ -472,7 +620,7 @@ export function findCoverageGaps(commits, reviewed, {
     if (tickets.length === 0) {
       violations.push({
         sha: commit.sha.slice(0, 7),
-        reason: 'owes a review row (its type changes code, or it changes the instructions of a gate reviewer) but its subject names no BIN-id, so no review row can '
+        reason: `owes a review row (${owed}) but its subject names no BIN-id, so no review row can `
           + 'ever be keyed to it — an untraceable change is the silence this check exists to remove',
       });
       continue;
@@ -482,8 +630,8 @@ export function findCoverageGaps(commits, reviewed, {
     if (missing.length > 0) {
       violations.push({
         sha: commit.sha.slice(0, 7),
-        reason: `names ${missing.join(', ')}, which has no \`review\` row in events.jsonl at all `
-          + '— neither a critique that ran nor a recorded decision not to run one',
+        reason: `owes a review row (${owed}) and names ${missing.join(', ')}, which has no \`review\` row `
+          + 'in events.jsonl at all — neither a critique that ran nor a recorded decision not to run one',
       });
       continue;
     }
@@ -537,6 +685,7 @@ export function exemptionInputs(historyAvailable) {
     // the same reason the exemption does — both callers must grade identically.
     filesOf: historyAvailable ? filesOfCommit : () => [],
     ticketBySha: TICKET_BY_SHA,
+    gatesAt: historyAvailable ? reviewGatesAtCommits : () => new Map(),
   };
 }
 
@@ -557,10 +706,7 @@ export function main() {
     return 0;
   }
 
-  // "code-changing" rather than "feat/fix": the denominator covers seven types, and a scope
-  // line naming two of them would understate what the number counts — in a file whose whole
-  // subject is output that says less than it appears to.
-  const scope = `${result.commitsWalked} commit(s) walked — ${result.eligible} code-changing `
+  const scope = `${result.commitsWalked} commit(s) walked — ${result.eligible} `
     + `commit(s) owed a review row since ${COVERAGE_EFFECTIVE_FROM}, ${result.covered} have one, `
     + `${result.grandfathered} skipped as older than that epoch`;
 
@@ -575,9 +721,9 @@ export function main() {
   for (const v of result.violations) {
     console.error(`  ${v.sha ?? '(whole walk)'} — ${v.reason}`);
   }
-  console.error('\nEvery feat/fix commit must name its BIN-id in the SUBJECT, and that ticket must');
-  console.error('carry a `review` row: `ran:true` for a critique that ran, or `ran:false` with the');
-  console.error('pull-out reason written on the ticket. Log one with:');
+  console.error('\nA commit that owes a review row (each line above says why) must name its BIN-id in');
+  console.error('the SUBJECT, and that ticket must carry a `review` row: `ran:true` for a critique that');
+  console.error('ran, or `ran:false` with the pull-out reason written on the ticket. Log one with:');
   console.error("  node docs/org/metrics/log_event.mjs review '{\"ticket\":\"BIN-000\", …}'");
   return 1;
 }
@@ -586,20 +732,25 @@ export function main() {
  * Grade a commit message that has not been made yet — the COMMIT-TIME half.
  *
  * The history walk above can only judge commits that already exist, which is a check on the
- * PREVIOUS commit. This judges the one being written, from the subject line, before it
- * lands. That is BIN-917's criterion 4 as literally stated, and it is what lefthook's
- * `commit-msg` hook calls.
+ * PREVIOUS commit. This judges the one being written, from its subject line and staged files,
+ * before it lands. That is BIN-917's criterion 4 as literally stated, and it is what
+ * lefthook's `commit-msg` hook calls.
  *
- * @returns {{ok: true, tickets: string[]} | {ok: false, reason: string}}
+ * `added` and `gates` are what `reviewOwedFor` reads; `gates` defaults to null, which makes
+ * every code type owe a row.
+ *
+ * @returns {{ok: true, tickets: string[], owed: string | null} | {ok: false, reason: string, owed: string}}
  */
-export function gradeSubject(subject, reviewed, stagedFiles = []) {
-  if (!owesReviewRow(subject) && !changesReviewerInstructions(stagedFiles)) return { ok: true, tickets: [] };
+export function gradeSubject(subject, reviewed, stagedFiles = [], { added = [], gates = null } = {}) {
+  const owed = reviewOwedFor({ subject, files: stagedFiles, added, gates });
+  if (owed === null) return { ok: true, tickets: [], owed };
 
   const tickets = ticketsInSubject(subject);
   if (tickets.length === 0) {
     return {
       ok: false,
-      reason: 'this commit owes a review row (its type changes code, or it changes the instructions of a gate reviewer) but its subject names no BIN-id, so no review row '
+      owed,
+      reason: `this commit owes a review row (${owed}) but its subject names no BIN-id, so no review row `
         + 'can ever be keyed to it',
     };
   }
@@ -608,11 +759,12 @@ export function gradeSubject(subject, reviewed, stagedFiles = []) {
   if (missing.length > 0) {
     return {
       ok: false,
-      reason: `${missing.join(', ')} has no \`review\` row in events.jsonl at all — neither a `
-        + 'critique that ran nor a recorded decision not to run one',
+      owed,
+      reason: `this commit owes a review row (${owed}), and ${missing.join(', ')} has no \`review\` row in `
+        + 'events.jsonl at all — neither a critique that ran nor a recorded decision not to run one',
     };
   }
-  return { ok: true, tickets };
+  return { ok: true, tickets, owed };
 }
 
 /** The repo root, and the path the defaults must compose to. Exported so a test can assert
@@ -709,19 +861,55 @@ export function stagedEventsLog(repoDir = REPO_ROOT, relPath = DEFAULT_EVENTS_RE
  * The paths staged for the commit being written. Parameterised on the repo root only so a
  * test can drive it against a scratch repo. A failed read THROWS: the hook then refuses the
  * commit, which is the safe direction for a gate that cannot see what it is judging.
+ * `--no-renames` for the reason `readGitLog` gives.
  */
 export function stagedFiles(repoDir = REPO_ROOT) {
-  return execFileSync('git', ['diff', '--cached', '--name-only'], {
+  return execFileSync('git', ['diff', '--cached', '--name-only', '--no-renames'], {
     cwd: repoDir, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'],
   }).split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
 }
 
+/** The paths the commit being written adds, which `isFeature` reads. Throws like `stagedFiles`. */
+export function stagedAddedFiles(repoDir = REPO_ROOT) {
+  return execFileSync('git', ['diff', '--cached', '--name-only', '--no-renames', '--diff-filter=A'], {
+    cwd: repoDir, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'],
+  }).split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+}
+
+/**
+ * The review gates AS THEY WILL BE COMMITTED: the index first, because history grades a
+ * commit by the gates in its own tree, and a commit-time answer read anywhere else could
+ * differ from that one. Falls back to the working tree and SAYS so, like `stagedEventsLog`;
+ * `gates` is null when neither can be read.
+ */
+export function stagedReviewGates(repoDir = REPO_ROOT) {
+  try {
+    const text = execFileSync('git', ['show', `:${GATES_CONFIG_REL}`], {
+      cwd: repoDir, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    return { gates: parseReviewGates(text), source: 'the index (what this commit will contain)' };
+  } catch {
+    try {
+      return {
+        gates: parseReviewGates(readFileSync(join(repoDir, GATES_CONFIG_REL), 'utf8')),
+        source: 'the WORKING TREE — the index could not be read',
+      };
+    } catch {
+      return { gates: null, source: 'nowhere — neither the index nor the working tree could be read' };
+    }
+  }
+}
+
 /** The `--message <file>` entry point. Reads the pending subject and refuses the commit. */
-export function mainMessage(messagePath, staged = stagedFiles()) {
+export function mainMessage(
+  messagePath,
+  staged = stagedFiles(),
+  { added = stagedAddedFiles(), gatesRead = stagedReviewGates() } = {},
+) {
   const subject = (readFileSync(messagePath, 'utf8').split(/\r?\n/)[0] ?? '').trim();
   const log = stagedEventsLog();
   const reviewed = ticketsWithAReviewRow(parseEvents(log.text));
-  const verdict = gradeSubject(subject, reviewed, staged);
+  const verdict = gradeSubject(subject, reviewed, staged, { added, gates: gatesRead.gates });
 
   if (verdict.ok) {
     if (verdict.tickets.length > 0) {
@@ -732,12 +920,13 @@ export function mainMessage(messagePath, staged = stagedFiles()) {
 
   console.error(`review coverage: refusing this commit — ${verdict.reason}.\n`);
   console.error(`  subject: ${subject}`);
-  console.error(`  read from: ${log.source}\n`);
+  console.error(`  read from: ${log.source}`);
+  console.error(`  review gates read from: ${gatesRead.source}\n`);
   console.error('If you just logged the row, STAGE it — events.jsonl is in cleanTreeIgnore and the');
   console.error('sprint engine writes these rows unstaged, so an unstaged row is invisible here and');
   console.error('would red `npm run test:process` later instead.\n');
-  console.error('A code-changing commit must name its BIN-id in the SUBJECT, and that ticket must');
-  console.error('carry a `review` row: `ran:true` for a critique that ran, or `ran:false` with the');
+  console.error('A commit that owes a review row must name its BIN-id in the SUBJECT, and that ticket');
+  console.error('must carry a `review` row: `ran:true` for a critique that ran, or `ran:false` with the');
   console.error('pull-out reason written on the ticket. Log one with:');
   console.error("  node docs/org/metrics/log_event.mjs review '{\"ticket\":\"BIN-000\", …}'");
   console.error('\nThis gate is the one BIN-917 asked for. If it is wrong about your commit, fix the');

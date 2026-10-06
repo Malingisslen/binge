@@ -31,7 +31,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { route } from './route.mjs';
+import { route, readReviewGates, gateCovers } from './route.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const docPath = join(repoRoot, 'docs', 'role-responsibilities.md');
@@ -201,7 +201,15 @@ export function buildMap(tracked) {
 // warning. The test asserts the ratchet's DIRECTION, never equality with the baseline:
 // shrinking the gap list is the desired outcome and must never turn the check red, even
 // though `main()` below only logs it and returns 0.
-export function findGaps(tracked) {
+//
+// Only a file a review gate covers can be a gap (Malin's decision 1, BIN-1426). An ordinary
+// file owes no critique under the default policy, and a feature routes it to the sibling's
+// owner, which is good enough there. Asking every new file for an owner made almost every
+// PR edit the same lines of docs/role-responsibilities.md and this map, and those PRs
+// conflicted with each other. Gates that cannot be read count every file, so a broken
+// config shows more gaps rather than none.
+export function findGaps(tracked, { gates = readReviewGates() } = {}) {
+  const sensitive = (f) => !gates?.length || gates.some((g) => gateCovers(g, f));
   const codeFiles = [...tracked.files].filter((f) => f.includes('/'));
   const r = route(codeFiles);
   const ownedByPattern = new Set();
@@ -213,7 +221,7 @@ export function findGaps(tracked) {
       else ownedByPattern.add(f);
     }
   }
-  return [...inheritedOnly].filter((f) => !ownedByPattern.has(f)).sort();
+  return [...inheritedOnly].filter((f) => !ownedByPattern.has(f) && sensitive(f)).sort();
 }
 
 function readAcceptedGaps() {

@@ -18,7 +18,7 @@ place only by changing what a review DOES.
 - **Count CALL SITES, never files** for a freshly-introduced shared helper (`grep -rn '<newHelperName>' src/**`), requiring a fixture per site where it DISAGREES with the old field plus a null-fallback case.
 - **Testing the HUB and the SUPPLIER does not test the MIDDLE LINK**: a component receiving a prop and handing it to a mocked bare-`vi.fn()` hook without asserting the call's ARGUMENTS is the gap — and the same topology recurs at a whole SHARED MODULE every consumer `vi.mock`s wholesale.
 - Dual-guard fail-safes (`condA==null || condB==null`): mutate EACH independently — co-occurrence can make one provably dead (BIN-433); a COMPOSITE guard needs one fixture per term, including char-class terms (`code < 0x20 || code === 0x7f` needs a DEL fixture beside the `\n` one, BIN-645) [arkiv 88].
-- For ≥2 sequential exclusion guards the fixture must pass every guard EXCEPT the one under test — and when the SAME condition is copied into two sibling effects, the fixture reaching it in one can be stopped by an EARLIER return in the other, so mutate per effect (BIN-816).
+- For ≥2 sequential exclusion guards the fixture must pass every guard EXCEPT the one under test — and when the SAME condition is copied into two sibling effects, the fixture reaching it in one can be stopped by an EARLIER return in the other, so mutate per effect (BIN-816). A NEW early return inserted ahead of old branches strands old fixtures that now fail it: re-mutate each downstream branch (BIN-1426's `owesReview` gate orphaned two `gradeStagedRouting` branches).
 - **A "two shapes, one per AND-term" test needs each fixture to isolate its OWN term by satisfying every OTHER term** (BIN-808)
 
 ## Boundary & threshold completeness

@@ -14,20 +14,35 @@
 // It is deterministic string-matching — NO model call, NO network — so it runs free and
 // fits the $0/interactive cost model (DESIGN §0).
 //
-// Usage:
+// Usage (flags in any order):
 //   node docs/org/route.mjs <path> [<path> ...]      # paths as args
 //   git diff --name-only | node docs/org/route.mjs   # paths on stdin (newline-separated)
 //   node docs/org/route.mjs --md <path> ...          # print a ready "## Stakeholders" block
+//   node docs/org/route.mjs --feature <path> ...     # route a new feature (see POLICIES)
 //   node docs/org/route.mjs --selftest               # run golden assertions, exit non-zero on fail
 //
+// POLICIES (BIN-1426 del 3; Malin's decision 1, 2026-10-05: critiques only for database rules,
+// sign-in, personal data, server functions and new features; ordinary fixes ship on
+// typecheck and tests).
+//   default   — a change owes a critique only when it touches a high-stakes path or a path a
+//               review gate in `.claude/shared-plugin.json` covers. Sensitivity is read from
+//               those gates rather than listed here, so the files that are reviewed before a
+//               commit and the files that are critiqued before a build are one set. Anything
+//               else routes `skip` with reasonCode `ordinary`.
+//   feature   — `--feature`, or route(paths, { feature: true }): every owned or code path
+//               owes a critique, which is how every change was routed before decision 1.
+//   fail-closed — the gates cannot be read, so the default cannot tell sensitive from
+//               ordinary and every change is routed as a feature.
+//
 // Output (default): one JSON object on stdout —
-//   { tier, reason, reasonCode, highStakes: [...], panel: [roleNum...],
-//     roles: [{num,title,slug,matched:[...],inherited:[...]}], dropped: [...],
-//     unmapped: [...], unmappedCode: [...], unownedCode: [...] }
-//   `unmappedCode` = code no pattern matched; `unownedCode` = code no *code* role reviews
-//   (that plus code owned only by the Technical Writer). The tier reads `unownedCode`.
-//   tier "skip" → panel []. Exit code is always 0 for a successful route (skip is a valid
-//   outcome, not an error); 1 only on a usage/IO error or a failed --selftest.
+//   { tier, reason, reasonCode, policy, sensitive: [...] | null, highStakes: [...],
+//     panel: [roleNum...], roles: [{num,title,slug,matched:[...],inherited:[...]}],
+//     dropped: [...], unmapped: [...], unmappedCode: [...], unownedCode: [...] }
+//   `unmappedCode` = code no pattern matched; `unownedCode` = code, and any path a review
+//   gate covers, that no *code* role owns (owned only by the Technical Writer counts as
+//   unowned). `sensitive` = the paths a review gate covers, null when the gates are
+//   unreadable. tier "skip" → panel []. Exit code is always 0 for a successful route (skip
+//   is a valid outcome, not an error); 1 only on a usage/IO error or a failed --selftest.
 //
 // BIN-788 — two things this router used to get wrong, both of which made a risky change
 // look cleared:
@@ -36,15 +51,14 @@
 //      DIRECTORY-based for code paths: a role that owns a file in a directory owns that
 //      directory's other code files too (reported per role in `inherited`).
 //   2. "No owning role" and "deliberately trivial" returned the SAME answer (`skip`), so
-//      an unmapped path read as a cleared one. An unmapped CODE path is now `medium`
-//      (reasonCode `unmapped-code`, fallback seat #14 Software Architect) and is listed
-//      in `unownedCode` — a code path with no owning role — while `unmappedCode` carries
-//      code paths that matched no role at all. (BIN-834: this comment named the wrong
-//      field. Run against the shipped router for `docs/org/route.mjs` before it got an
-//      owner, `unmappedCode` was `[]` and the path sat in `unownedCode`.) Only genuinely
-//      non-code paths (docs, plans, scratch) still route `skip` (reasonCode `doc-only` /
-//      `no-code-paths`). Read `reasonCode`, not the prose in `reason`, when a tool needs
-//      to tell those apart.
+//      an unmapped path read as a cleared one. An unmapped CODE path routed as a feature
+//      is `medium` (reasonCode `unmapped-code`, fallback seat #14 Software Architect) and
+//      is listed in `unownedCode` — a code path with no owning role — while
+//      `unmappedCode` carries code paths that matched no role at all. (BIN-834: this
+//      comment named the wrong field. Run against the shipped router for
+//      `docs/org/route.mjs` before it got an owner, `unmappedCode` was `[]` and the path
+//      sat in `unownedCode`.) Read `reasonCode`, not the prose in `reason`, when a tool
+//      needs to tell those apart.
 
 import { readFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -52,6 +66,7 @@ import { fileURLToPath } from 'node:url';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const mapPath = join(repoRoot, 'docs', 'org', 'ownership-map.json');
+const gatesConfigPath = join(repoRoot, '.claude', 'shared-plugin.json');
 
 // ── Constitution constants (DESIGN.md §1.3) — keep in sync with that doc ──────────────
 
@@ -59,7 +74,9 @@ const mapPath = join(repoRoot, 'docs', 'org', 'ownership-map.json');
 // DESIGN §1.3 / the /stakeholder-review skill — security rules, GDPR data, moderation,
 // auth. Path-based proxies only; a *semantic* high-stakes change (deletes/migrates user
 // data) that touches none of these is a manual --force-top override by the caller.
-const HIGH_STAKES = [
+// Exported so the commit-msg check can test that each of these owes a review row whatever
+// the commit type.
+export const HIGH_STAKES = Object.freeze([
   'firestore.rules',
   'firestore.indexes.json',
   'src/lib/firebase/groups.ts',
@@ -67,7 +84,7 @@ const HIGH_STAKES = [
   'src/lib/firebase/dataExport.ts',
   'functions/src/submitReport/',
   'src/contexts/AuthContext.tsx',
-];
+]);
 
 // Roles that own a high-stakes concern — seated first when capping a TOP panel.
 const HIGH_STAKES_ROLES = new Set([4, 5, 6, 27]); // Security, Legal, DPO, DBA
@@ -83,11 +100,9 @@ const PANEL_CAP = 5;
 // the unknown; nobody reviewing it is what this ticket was filed about.
 const UNMAPPED_FALLBACK_ROLE = 14;
 
-// What counts as CODE for the unmapped/trivial split. Deliberately the same surface the
-// repo's own commit gates call production code (.claude/shared-plugin.json →
-// productionGlobs + reviewGates.patterns): the app client and the Cloud Functions. Repo
-// tooling (scripts/, docs/) and prose are NOT code here — a linter tweak or a doc edit
-// must keep routing `skip`, or every ownership gap turns into a review nobody needs.
+// What counts as CODE for the unmapped/trivial split. Repo tooling (scripts/, docs/) and
+// prose are NOT code here — a linter tweak or a doc edit must keep routing `skip`, or every
+// ownership gap turns into a review nobody needs.
 const CODE_ROOTS = ['src/', 'functions/', 'extension/', 'shared/'];
 
 // …with ONE deliberate exception (BIN-805, Malin's call 2026-08-08, alternative (a)):
@@ -328,10 +343,10 @@ export const TOOLING_CODE_FILES = new Set([
 ]);
 // Root-level files that ARE code even though they sit outside CODE_ROOTS. BIN-880 added
 // the two remaining root test-runner configs: the blocking gate already stops a commit
-// touching either (`\.(ts|tsx)$`, plus `vitest.*\.config\.ts$` for the rules runner) while
-// this router answered `skip` — a commit held for a review the router called unnecessary,
-// the same drift as BIN-830 seen from the other side. Widening the ROUTER, not the gate,
-// is the conservative half of that pair: it adds no new blocking obligation.
+// touching either while this router answered `skip` — a commit held for a review the
+// router called unnecessary, the same drift as BIN-830 seen from the other side. Widening
+// the ROUTER, not the gate, is the conservative half of that pair: it adds no new blocking
+// obligation.
 //
 // LOCKFILES ARE CODE. Decided 2026-08-22, BIN-934; the question was left explicitly open
 // by BIN-919 ("whether that is right is an open question") and is settled here rather
@@ -452,12 +467,44 @@ function ownedDirs(patterns) {
   return dirs;
 }
 
+// ── Review gates ─────────────────────────────────────────────────────────────────────
+
+// The `reviewGates` array of a shared-plugin.json text, or null when there is none to read:
+// unparseable, no such key, or an empty array. route() treats null as "fail closed".
+export function parseReviewGates(text) {
+  try {
+    const gates = JSON.parse(text)?.reviewGates;
+    return Array.isArray(gates) && gates.length > 0 ? gates : null;
+  } catch {
+    return null;
+  }
+}
+
+export function readReviewGates(path = gatesConfigPath) {
+  try {
+    return parseReviewGates(readFileSync(path, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+// Can this gate ever stop a commit touching `path`? The commit gate's own matching: a `keyed`
+// rule owns its path, otherwise an exact name or a pattern, minus `exclude`. A keyed path
+// counts as covered even though the real gate fires only when its key changes, because the
+// question asked here is whether the path is reviewed at all.
+export function gateCovers(gate, path) {
+  const p = normalize(path);
+  if ((gate.keyed || []).some((k) => k && k.path === p)) return true;
+  const hit = (gate.exact || []).includes(p) || (gate.patterns || []).some((re) => new RegExp(re).test(p));
+  return hit && !(gate.exclude || []).some((re) => new RegExp(re).test(p));
+}
+
 // ── Routing ──────────────────────────────────────────────────────────────────────────
 
-export function route(paths) {
-  const map = JSON.parse(readFileSync(mapPath, 'utf8'));
-  const clean = paths.map((p) => p.trim()).filter(Boolean);
-
+// Which roles own which of `paths`. Each path is resolved on its own, so the owners of a
+// subset are exactly what this returns for that subset; route() seats the owner of the
+// sensitive paths that way.
+function resolveOwners(map, paths) {
   // role num -> { num, title, slug, matched:Set, inherited:Set, specificity, weight }
   const owners = new Map();
   const matchedPaths = new Set();
@@ -479,7 +526,7 @@ export function route(paths) {
 
   for (const [num, role] of Object.entries(map.roles)) {
     const dirs = ownedDirs(role.patterns);
-    for (const path of clean) {
+    for (const path of paths) {
       // The LONGEST matching pattern, not the first: a role owning both
       // `src/components/ui/` and `src/components/ui/DuotonePoster.tsx` is the specific
       // owner of that file, and the map is stored alphabetically (dir first).
@@ -505,15 +552,42 @@ export function route(paths) {
     }
   }
 
-  const highStakes = clean.filter((path) => HIGH_STAKES.some((hs) => matches(path, hs)));
   const ownerList = [...owners.values()].map((o) => ({ ...o, matched: [...o.matched], inherited: [...o.inherited] }));
+  return { ownerList, matchedPaths };
+}
+
+// The single most-specific owner: the one seat a medium tier gets.
+function mostSpecific(owners) {
+  return [...owners].sort(
+    (a, b) =>
+      b.specificity - a.specificity ||
+      b.weight - a.weight ||
+      b.matched.length - a.matched.length ||
+      a.num - b.num,
+  )[0];
+}
+
+export function route(paths, { feature = false, gates = readReviewGates() } = {}) {
+  const map = JSON.parse(readFileSync(mapPath, 'utf8'));
+  const clean = paths.map((p) => p.trim()).filter(Boolean);
+  const { ownerList, matchedPaths } = resolveOwners(map, clean);
+
+  const highStakes = clean.filter((path) => HIGH_STAKES.some((hs) => matches(path, hs)));
   const unmapped = clean.filter((path) => !matchedPaths.has(path));
   const unmappedCode = unmapped.filter(isCodePath);
+
+  // Without readable gates nothing can be shown to be ordinary, so the change is routed as a
+  // feature: the policy that asks for the most critique.
+  const gatesReadable = Array.isArray(gates) && gates.length > 0;
+  const policy = feature ? 'feature' : gatesReadable ? 'default' : 'fail-closed';
+  const sensitive = gatesReadable ? clean.filter((path) => gates.some((gate) => gateCovers(gate, path))) : null;
+  const sensitiveSet = new Set(sensitive ?? []);
 
   // Tier decision (DESIGN §1.3, + the unmapped/trivial split from BIN-788)
   let tier;
   let reason;
   let reasonCode;
+  let seat = null;
   const codeOwners = ownerList.filter((o) => o.num !== TECH_WRITER);
   const ownedOnlyByWriter = ownerList.length === 1 && ownerList[0].num === TECH_WRITER;
 
@@ -523,23 +597,56 @@ export function route(paths) {
   // all of `docs/` (BIN-805); BIN-834 gave it #25, so the live example of the
   // writer-only branch is now any NEW code file under `docs/` that #25's patterns and
   // directory inheritance do not reach. Both cases get the same answer: seat the
-  // architect and name the path so the map gets fixed.
+  // architect and name the path so the map gets fixed. A path a review gate covers is
+  // treated like code here, so a gated file nobody owns is never a `skip` in either policy.
   const pathsOwnedByCodeRole = new Set(codeOwners.flatMap((o) => o.matched));
-  const unownedCode = clean.filter((path) => isCodePath(path) && !pathsOwnedByCodeRole.has(path));
+  const unownedCode = clean.filter(
+    (path) => (isCodePath(path) || sensitiveSet.has(path)) && !pathsOwnedByCodeRole.has(path),
+  );
+  const seatArchitect = (list) =>
+    `${list.join(', ')} — nothing in docs/org/ownership-map.json reviews them (Technical Writer #${TECH_WRITER} does not count for code); seating #${UNMAPPED_FALLBACK_ROLE} Software Architect. Add the path to docs/role-responsibilities.md and regenerate the map.`;
   if (highStakes.length > 0) {
     tier = 'top';
     reasonCode = 'high-stakes';
     reason = `high-stakes path(s) ${highStakes.join(', ')} → full panel`;
+  } else if (policy === 'default') {
+    if (sensitive.length > 0) {
+      // Seated from the sensitive paths alone: the critique is owed for those, so an owner of
+      // an ordinary file in the same change must not take the seat.
+      tier = 'medium';
+      const sensitiveOwners = resolveOwners(map, sensitive).ownerList.filter((o) => o.num !== TECH_WRITER);
+      if (sensitiveOwners.length > 0) {
+        reasonCode = 'owned';
+        seat = mostSpecific(sensitiveOwners).num;
+        reason = `review-gated path(s) ${sensitive.join(', ')} → one owning role`;
+      } else {
+        reasonCode = 'unmapped-code';
+        reason = `review-gated path(s) with no owning role: ${seatArchitect(sensitive)}`;
+      }
+    } else if (ownedOnlyByWriter) {
+      tier = 'skip';
+      reasonCode = 'doc-only';
+      reason = 'doc-only (Technical Writer #21 only)';
+    } else if (codeOwners.length > 0 || unownedCode.length > 0) {
+      tier = 'skip';
+      reasonCode = 'ordinary';
+      reason = 'ordinary change: no high-stakes path and no path a review gate covers, so typecheck, lint and tests decide';
+    } else {
+      tier = 'skip';
+      reasonCode = 'no-code-paths';
+      reason = 'no code paths (docs / plans / scratch) — deliberately trivial, not unmapped';
+    }
   } else if (codeOwners.length > 0) {
     tier = 'medium';
     reasonCode = 'owned';
+    seat = mostSpecific(codeOwners).num;
     reason = 'single medium-impact area → one owning role';
   } else if (unownedCode.length > 0) {
     // NOT a skip: nobody reviews this code, which is an unknown blast radius, not a
     // cleared one. Seat the architect and say the map needs the path added.
     tier = 'medium';
     reasonCode = 'unmapped-code';
-    reason = `code path(s) with no owning role: ${unownedCode.join(', ')} — nothing in docs/org/ownership-map.json reviews them (Technical Writer #${TECH_WRITER} does not count for code); seating #${UNMAPPED_FALLBACK_ROLE} Software Architect. Add the path to docs/role-responsibilities.md and regenerate the map.`;
+    reason = `code path(s) with no owning role: ${seatArchitect(unownedCode)}`;
   } else if (ownedOnlyByWriter) {
     tier = 'skip';
     reasonCode = 'doc-only';
@@ -551,6 +658,9 @@ export function route(paths) {
   }
   if (tier !== 'skip' && reasonCode !== 'unmapped-code' && unownedCode.length > 0) {
     reason += `; also ${unownedCode.length} code path(s) with no owning role: ${unownedCode.join(', ')}`;
+  }
+  if (policy === 'fail-closed') {
+    reason += '; the review gates in .claude/shared-plugin.json could not be read, so this was routed as a feature';
   }
 
   // Panel selection
@@ -572,15 +682,7 @@ export function route(paths) {
   } else if (reasonCode === 'unmapped-code') {
     panel = [UNMAPPED_FALLBACK_ROLE];
   } else if (tier === 'medium') {
-    // the single most-specific owner, preferring a code role over Technical Writer
-    const pick = (codeOwners.length ? codeOwners : ownerList).sort(
-      (a, b) =>
-        b.specificity - a.specificity ||
-        b.weight - a.weight ||
-        b.matched.length - a.matched.length ||
-        a.num - b.num,
-    )[0];
-    panel = pick ? [pick.num] : [];
+    panel = [seat];
   }
 
   const seated = new Set(panel);
@@ -590,6 +692,8 @@ export function route(paths) {
     tier,
     reason,
     reasonCode,
+    policy,
+    sensitive,
     highStakes,
     panel,
     roles: ownerList.sort((a, b) => a.num - b.num).map(({ specificity, weight, ...r }) => r),
@@ -617,10 +721,13 @@ function readStdin() {
 export const ROLE_TITLES = { [UNMAPPED_FALLBACK_ROLE]: 'Software Architect' };
 
 // The `--md` form is what the tooling actually consumes: `.claude/shared-plugin.json` sets
-// `delivery.router.command` to `node docs/org/route.mjs --md`, and CLAUDE.md's casting step
+// `delivery.router.command` to a `--md` run of this script, and CLAUDE.md's casting step
 // reads the same block. Exported so route.test.mjs can pin it directly instead of scraping
 // stdout — the surface every gate reads was the one surface no test touched (BIN-832).
 export function mdBlock(r) {
+  if (r.tier === 'skip' && r.reasonCode === 'ordinary') {
+    return '## Stakeholders\n\n_None — ordinary change outside the review gates; typecheck, lint and tests decide (no review tier)._';
+  }
   if (r.tier === 'skip') return '## Stakeholders\n\n_None — trivial / doc-only change (no review tier)._';
   const names = r.panel.map((n) => {
     const role = r.roles.find((x) => x.num === n);
@@ -633,28 +740,29 @@ export function mdBlock(r) {
 }
 
 function selftest() {
+  // `feature: true` cases pin how owners are found and seated. The default policy turns most of
+  // those paths into an ordinary skip, so only the feature policy still shows the seat.
   const cases = [
     { paths: ['firestore.rules'], tier: 'top', mustSeat: 4 },
     { paths: ['src/lib/firebase/userData.ts'], tier: 'top', mustSeat: 6 },
-    { paths: ['src/components/ui/DuotonePoster.tsx'], tier: 'medium', mustSeat: 1 },
+    { paths: ['src/components/ui/DuotonePoster.tsx'], feature: true, tier: 'medium', mustSeat: 1 },
     { paths: ['public/llms.txt'], tier: 'skip', reasonCode: 'doc-only' }, // owned only by #21
     { paths: ['README-does-not-exist.xyz'], tier: 'skip', reasonCode: 'no-code-paths' },
-    // a real runbook change DOES have an owner (#20 Manual/Release QA) — not a skip:
-    { paths: ['docs/RUNBOOK.md'], tier: 'medium', mustSeat: 20 },
+    // a real runbook change DOES have an owner (#20 Manual/Release QA):
+    { paths: ['docs/RUNBOOK.md'], feature: true, tier: 'medium', mustSeat: 20 },
 
     // ── BIN-788 ──────────────────────────────────────────────────────────────────────
     // The doc-id contract behind BIN-569/608/624/766 is explicitly #27's now.
-    { paths: ['src/lib/mediaTypeDocId.ts'], tier: 'medium', mustSeat: 27, reasonCode: 'owned' },
-    { paths: ['src/lib/watchlist/addedAt.ts'], tier: 'medium', mustSeat: 27, reasonCode: 'owned' },
+    { paths: ['src/lib/mediaTypeDocId.ts'], feature: true, tier: 'medium', mustSeat: 27, reasonCode: 'owned' },
+    { paths: ['src/lib/watchlist/addedAt.ts'], feature: true, tier: 'medium', mustSeat: 27, reasonCode: 'owned' },
     // A file NOT in the map, in a directory whose siblings are owned → inherited, not skip.
     // The path is deliberately one that does not exist: BIN-871 gave an owner to the real
     // file this case used to name, which took the inheritance branch away while the case
     // stayed green — it asserts tier and reasonCode, which a directly-owned file also
     // satisfies. route() matches on the string and never asks the filesystem.
-    { paths: ['src/lib/tmdb/__unlisted-sibling.ts'], tier: 'medium', reasonCode: 'owned' },
-    { paths: ['src/components/pages/MoviePageClient.tsx'], tier: 'medium', mustSeat: 26, reasonCode: 'owned' },
-    // Code nobody owns at all is an UNKNOWN blast radius, not a cleared one.
-    { paths: ['src/lib/no-such-dir/brandNew.ts'], tier: 'medium', mustSeat: 14, reasonCode: 'unmapped-code' },
+    { paths: ['src/lib/tmdb/__unlisted-sibling.ts'], feature: true, tier: 'medium', reasonCode: 'owned' },
+    { paths: ['src/components/pages/MoviePageClient.tsx'], feature: true, tier: 'medium', mustSeat: 26, reasonCode: 'owned' },
+    { paths: ['src/lib/no-such-dir/brandNew.ts'], feature: true, tier: 'medium', mustSeat: 14, reasonCode: 'unmapped-code' },
     // …but ordinary repo tooling and prose still route skip — inheritance never fires
     // off code.
     { paths: ['scripts/gen-app-icons.mjs'], tier: 'skip', reasonCode: 'no-code-paths' },
@@ -698,18 +806,41 @@ function selftest() {
     { paths: ['scripts/check-public-env.mjs'], tier: 'medium', mustSeat: 4, reasonCode: 'owned' },
     // A high-stakes path outranks everything, even when nothing else in the set is owned.
     { paths: ['firestore.rules', 'src/lib/no-such-dir/brandNew.ts'], tier: 'top', mustSeat: 4 },
+
+    // ── Decision 1 (BIN-1426): the default policy ───────────────────────────────────────
+    // An ordinary file owes no critique, whether or not a role owns it.
+    { paths: ['src/components/ui/DuotonePoster.tsx'], tier: 'skip', reasonCode: 'ordinary', policy: 'default' },
+    { paths: ['src/lib/no-such-dir/brandNew.ts'], tier: 'skip', reasonCode: 'ordinary' },
+    { paths: ['docs/RUNBOOK.md'], tier: 'skip', reasonCode: 'ordinary' },
+    // Personal data, sign-in and server functions sit under a review gate, so they still owe one.
+    { paths: ['src/lib/firebase/friends.ts'], tier: 'medium', mustSeat: 18, reasonCode: 'owned' },
+    { paths: ['src/app/login/page.tsx'], tier: 'medium', mustSeat: 19, reasonCode: 'owned' },
+    { paths: ['functions/src/index.ts'], tier: 'medium', mustSeat: 13, reasonCode: 'owned' },
+    // A gated path nobody owns gets the fallback seat, in either policy, rather than a skip.
+    { paths: ['functions/.gitignore'], tier: 'medium', mustSeat: 14, reasonCode: 'unmapped-code' },
+    { paths: ['functions/.gitignore'], feature: true, tier: 'medium', mustSeat: 14, reasonCode: 'unmapped-code' },
+    // The critique is owed for the gated file, so its owner takes the seat; routed as a
+    // feature, the seat is chosen over both files.
+    { paths: ['src/components/ui/DuotonePoster.tsx', 'src/lib/firebase/friends.ts'], tier: 'medium', mustSeat: 18 },
+    { paths: ['src/components/ui/DuotonePoster.tsx', 'src/lib/firebase/friends.ts'], feature: true, tier: 'medium', mustSeat: 1 },
+    // Gates that cannot be read cannot show anything to be ordinary.
+    { paths: ['src/components/ui/DuotonePoster.tsx'], gates: null, tier: 'medium', mustSeat: 1, policy: 'fail-closed' },
+    { paths: ['src/components/ui/DuotonePoster.tsx'], gates: [], tier: 'medium', mustSeat: 1, policy: 'fail-closed' },
   ];
   let failed = 0;
   for (const c of cases) {
-    const r = route(c.paths);
+    // An absent `gates` key leaves route() to read the real ones.
+    const r = route(c.paths, { feature: c.feature, gates: c.gates });
     const okTier = r.tier === c.tier;
     const okSeat = c.mustSeat == null || r.panel.includes(c.mustSeat);
     const okReason = c.reasonCode == null || r.reasonCode === c.reasonCode;
-    if (!okTier || !okSeat || !okReason) {
+    const okPolicy = c.policy == null || r.policy === c.policy;
+    const label = `${JSON.stringify(c.paths)}${c.feature ? ' --feature' : ''}${'gates' in c ? ` gates=${JSON.stringify(c.gates)}` : ''}`;
+    if (!okTier || !okSeat || !okReason || !okPolicy) {
       failed++;
-      console.error(`FAIL ${JSON.stringify(c.paths)} → tier=${r.tier} reasonCode=${r.reasonCode} panel=${JSON.stringify(r.panel)} (wanted tier=${c.tier}${c.mustSeat != null ? `, seat ${c.mustSeat}` : ''}${c.reasonCode != null ? `, reasonCode ${c.reasonCode}` : ''})`);
+      console.error(`FAIL ${label} → tier=${r.tier} reasonCode=${r.reasonCode} policy=${r.policy} panel=${JSON.stringify(r.panel)} (wanted tier=${c.tier}${c.mustSeat != null ? `, seat ${c.mustSeat}` : ''}${c.reasonCode != null ? `, reasonCode ${c.reasonCode}` : ''}${c.policy != null ? `, policy ${c.policy}` : ''})`);
     } else {
-      console.log(`ok   ${JSON.stringify(c.paths)} → ${r.tier} ${r.reasonCode} ${JSON.stringify(r.panel)}`);
+      console.log(`ok   ${label} → ${r.tier} ${r.reasonCode} ${r.policy} ${JSON.stringify(r.panel)}`);
     }
   }
   if (failed) {
@@ -719,22 +850,25 @@ function selftest() {
   console.log('\nall selftest cases passed.');
 }
 
+// Flags are recognised wherever they stand, so `--md --feature` and `--feature --md` are the
+// same command; anything else is a path.
+const FLAGS = new Set(['--md', '--feature', '--selftest']);
+
 function main(argv) {
-  if (argv[0] === '--selftest') {
+  const flags = new Set(argv.filter((a) => FLAGS.has(a)));
+  if (flags.has('--selftest')) {
     selftest();
     return;
   }
-  const wantMd = argv[0] === '--md';
-  const args = wantMd ? argv.slice(1) : argv;
-  let paths = args;
+  let paths = argv.filter((a) => !FLAGS.has(a));
   if (paths.length === 0) paths = readStdin().split(/\r?\n/);
   paths = paths.map((p) => p.trim()).filter(Boolean);
   if (paths.length === 0) {
-    console.error('usage: node docs/org/route.mjs <path> [<path> ...]   (or pipe `git diff --name-only`)');
+    console.error('usage: node docs/org/route.mjs [--md] [--feature] <path> [<path> ...]   (or pipe `git diff --name-only`)');
     process.exit(1);
   }
-  const r = route(paths);
-  console.log(wantMd ? mdBlock(r) : JSON.stringify(r, null, 2));
+  const r = route(paths, { feature: flags.has('--feature') });
+  console.log(flags.has('--md') ? mdBlock(r) : JSON.stringify(r, null, 2));
 }
 
 // Run the CLI only when this file IS the entry point. Without the guard, merely

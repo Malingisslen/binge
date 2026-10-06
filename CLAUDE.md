@@ -27,25 +27,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Plan before large changes — and cast the role-org first
 
-Applies to ad-hoc chat, not just `/sprint-execute`.
+Applies to ad-hoc chat, not just `/sprint-execute`. Malin's decision 1 (2026-10-05,
+BIN-1426): role critiques and reviewer agents only for database rules, sign-in, personal
+data, server functions and new features.
 
-**A change is "large"** if it hits ANY of: 3+ files; a new core module / service / hook /
-lib; an architectural change; a "refactor" / "migrate" request; a multi-file codemod; or a
-**sensitive domain** — Firestore rules / indexes / schema or the watch-status model; auth;
-user data / GDPR / privacy; Cloud Functions / FCM / moderation; deploy / hosting /
-Cloudflare config; anything legal; or anything that adds a paid service or moves Firebase
-cost. Large changes get a written plan + approval before any Edit/Write. Small, obvious,
-single-file fixes ship without ceremony.
+**A written plan + Malin's approval before any Edit/Write, cast as below**, for:
+- a **new feature**: new behaviour a user notices (a `feat` commit) or a new screen (an added
+  `src/app/**/page.tsx`). A new or rebuilt screen starts with sketches (`html-previews.md`).
+- a **sensitive path**: anything a review gate in `.claude/shared-plugin.json` covers. That
+  is Firestore rules and indexes, sign-in, personal data, Cloud Functions, and the review and
+  deploy machinery itself. The router lists such paths under `sensitive`.
+- anything that adds a paid service or moves Firebase cost.
 
-**Cast the stakeholders BEFORE writing the plan**, for any large change or sensitive domain:
-1. `node docs/org/route.mjs <paths>` → `{ tier, reasonCode, panel, roles, highStakes,
-   reason, unmappedCode, unownedCode }`, `tier` ∈ `skip` / `medium` / `top`.
-   Deterministic, no agents. Don't hand-roll a second risk judgment — this is the same
-   router `/linear` and `/stakeholder-review` use.
+**Everything else ships on typecheck, lint and tests**, with no plan, critique or ticket
+(the risky-migration exception in the working agreement still holds). A feature also gets
+one `binge-code-reviewer` run over its diff before commit; a sensitive path gets the
+reviewers its commit gate names.
+
+**Cast the stakeholders BEFORE writing the plan**:
+1. `node docs/org/route.mjs <paths>` → `{ tier, reasonCode, policy, sensitive, panel, roles,
+   highStakes, reason, unmappedCode, unownedCode }`, `tier` ∈ `skip` / `medium` / `top`.
+   Route a new feature or a cost move with `--feature`: the router cannot see either from
+   the paths. Deterministic, no agents. Don't hand-roll a second risk judgment — this is the
+   same router `/linear` and `/stakeholder-review` use.
    **Branch on `reasonCode`, not on the prose in `reason`**. `skip` is always
-   harmless (`doc-only` / `no-code-paths`). Code nobody owns routes **`medium`** with
-   `reasonCode: 'unmapped-code'`, seated on the #14 fallback and listed in `unownedCode` —
-   do not write a consumer that tests for `skip` + `unmapped-code`
+   harmless (`ordinary` / `doc-only` / `no-code-paths`). Do not write a consumer that tests
+   for `skip` + `unmapped-code`
    (no such state exists, and the branch would read as satisfied forever). And
    `unownedCode` can be non-empty even when `reasonCode` is `'owned'`, when only SOME of
    the paths have an owner: read the array, not only the code.
@@ -57,7 +64,7 @@ single-file fixes ship without ceremony.
    high-stakes conflict — a block from Security #4 / DPO #6 / Legal #5, or anything legal /
    privacy / interpretive — is surfaced to Malin IN the plan, never buried.
 
-`skip` tier (doc-only / trivial) → no panel, plan normally.
+`skip` → no panel.
 
 ## Commit gates (shared workflow-guards plugin; config in .claude/shared-plugin.json)
 
