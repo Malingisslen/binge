@@ -26,7 +26,7 @@ export function RangePicker() {
             aria-pressed={active}
             onClick={() => setRange({ preset: p.value, from: '', to: '' })}
             className={`px-3 py-1.5 text-sm border-r border-rule last:border-r-0 transition-colors ${
-              active ? 'bg-acc text-white font-medium' : 'bg-surface text-ink-2 hover:bg-bg-2'
+              active ? 'bg-acc-deep text-on-acc font-medium' : 'bg-surface text-ink-2 hover:bg-bg-2'
             }`}
           >
             {p.label}

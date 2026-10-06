@@ -60,7 +60,7 @@ export default function VannerTile() {
         <Link href="/my/friends/" className="more">alla →</Link>
       </div>
       {!friends || friends.length === 0 ? (
-        <div className="empty" style={{ fontSize: 13, color: 'var(--ink-3)', padding: '6px 0', lineHeight: 1.4 }}>
+        <div className="empty" style={{ fontSize: 'var(--fs-base)', color: 'var(--ink-3)', padding: '6px 0', lineHeight: 1.4 }}>
           Du har inga vänner än.{' '}
           <Link href="/search/" style={{ color: 'var(--ink)', textDecoration: 'none', borderBottom: '1px solid var(--rule)' }}>
             Sök efter någon →
@@ -81,7 +81,7 @@ export default function VannerTile() {
                   {f.username && (
                     <span className="when">@{f.username}</span>
                   )}
-                  <div style={{ color: 'var(--ink-3)', fontSize: 10.5, marginTop: 2, letterSpacing: 0.04 }}>
+                  <div style={{ color: 'var(--ink-3)', fontSize: 'var(--fs-xs)', marginTop: 2, letterSpacing: 0.04 }}>
                     blev vän {formatSince(f.since)}
                   </div>
                 </div>

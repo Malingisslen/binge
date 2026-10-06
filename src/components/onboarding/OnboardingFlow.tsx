@@ -28,6 +28,7 @@ import {
 } from '@/lib/watchlist/libraryHoldCopy';
 import type { TMDBSearchResult, WatchStatus } from '@/types';
 import { Button } from '@/components/ui/Button';
+import { cardClass } from '@/components/ui/Card';
 
 /**
  * Onboarding-flöde för nya användare. 4 steg:
@@ -144,7 +145,7 @@ export function OnboardingFlow() {
   return (
     <div className="max-w-[640px] mx-auto py-8 px-4">
       <StepIndicator current={step} total={4} />
-      <div className="mt-6 bg-surface border border-rule rounded-sm p-6">
+      <div className={cardClass('mt-6 p-6')}>
         {step === 1 && <StepWelcome onNext={() => goToStep(2)} />}
         {step === 2 && <StepProviders onBack={() => goToStep(1)} onNext={() => goToStep(3)} />}
         {step === 3 && <StepFirstTitle onBack={() => goToStep(2)} onNext={() => goToStep(4)} onFinish={finish} saving={saving} />}
@@ -211,12 +212,12 @@ function StepWelcome({ onNext }: { onNext: () => void }) {
           <span>Se vad du betalar och vad du kan pausa</span>
         </li>
       </ul>
-      <button
+      <Button
         onClick={onNext}
-        className="inline-flex items-center gap-2 px-4 py-2 bg-acc-deep text-on-acc rounded-sm text-sm font-semibold cursor-pointer"
+        variant="acc" className="inline-flex items-center gap-2"
       >
         Börja <ArrowRight size={14} />
-      </button>
+      </Button>
     </div>
   );
 }
@@ -354,7 +355,7 @@ function StepProviders({ onBack, onNext }: { onBack: () => void; onNext: () => v
                     aria-label={`Nivå för ${p.name}`}
                     value={tiers[p.id] ?? ''}
                     onChange={e => chooseTier(p.id, e.target.value)}
-                    className="text-xs border border-rule rounded-sm bg-surface text-ink px-1 py-[3px] max-w-[11rem]"
+                    className="select max-w-[11rem]"
                   >
                     <option value="">Vet inte</option>
                     {p.tiers.map(t => (
@@ -375,19 +376,19 @@ function StepProviders({ onBack, onNext }: { onBack: () => void; onNext: () => v
         <SaveError message="Kunde inte spara dina tjänster. Kontrollera anslutningen och försök igen." />
       )}
       <div className="flex items-center gap-2">
-        <button
+        <Button
           onClick={onBack}
-          className="inline-flex items-center gap-1 px-3 py-2 border border-rule rounded-sm text-sm bg-surface cursor-pointer"
+          variant="ghost" className="inline-flex items-center gap-1"
         >
           <ArrowLeft size={14} /> Tillbaka
-        </button>
-        <button
+        </Button>
+        <Button
           onClick={save}
           disabled={saving}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-acc-deep text-on-acc rounded-sm text-sm font-semibold cursor-pointer disabled:opacity-50"
+          variant="acc" className="inline-flex items-center gap-2 disabled:opacity-50"
         >
           {saving ? 'Sparar…' : 'Nästa'} <ArrowRight size={14} />
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -486,7 +487,7 @@ function StepFirstTitle({
         Sök efter en film eller serie. Serier följer du; filmer markerar du
         som vill se eller sedda.
       </p>
-      <div className="flex items-center gap-2 mb-3 border border-rule rounded-sm bg-surface px-2">
+      <div className={cardClass('flex items-center gap-2 mb-3 px-2')}>
         <Search size={13} className="text-ink-3" />
         <input
           type="search"
@@ -522,7 +523,7 @@ function StepFirstTitle({
               return (
                 <li
                   key={r.id}
-                  className="flex items-center gap-2 px-2 py-[5px] bg-surface border border-rule rounded-sm"
+                  className={cardClass('flex items-center gap-2 px-2 py-[5px]')}
                 >
                   {poster && (
                     <div className={`poster duo-${r.genre_ids?.length ? toneForGenreIds(r.genre_ids) : toneForId(r.id)} w-[28px] h-[42px] shrink-0`}>
@@ -550,29 +551,29 @@ function StepFirstTitle({
                       <Check size={11} /> Tillagd
                     </span>
                   ) : r.media_type === 'tv' ? (
-                    <button
+                    <Button
                       onClick={() => handleAdd(r, 'engage')}
                       disabled={!libraryKnown}
-                      className="text-xxs px-2 py-[3px] bg-acc-deep text-on-acc rounded-sm cursor-pointer disabled:opacity-50"
+                      variant="acc" size="xs" className="disabled:opacity-50"
                     >
                       Följ
-                    </button>
+                    </Button>
                   ) : (
                     <div className="flex gap-1">
-                      <button
+                      <Button
                         onClick={() => handleAdd(r, 'plan')}
                         disabled={!libraryKnown}
-                        className="text-xxs px-2 py-[3px] border border-rule rounded-sm bg-surface cursor-pointer disabled:opacity-50"
+                        variant="ghost" size="xs" className="disabled:opacity-50"
                       >
                         Vill se
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         onClick={() => handleAdd(r, 'engage')}
                         disabled={!libraryKnown}
-                        className="text-xxs px-2 py-[3px] bg-acc-deep text-on-acc rounded-sm cursor-pointer disabled:opacity-50"
+                        variant="acc" size="xs" className="disabled:opacity-50"
                       >
                         Sedd
-                      </button>
+                      </Button>
                     </div>
                   )}
                 </li>
@@ -623,28 +624,28 @@ function StepFirstTitle({
       )}
 
       <div className="flex items-center gap-2">
-        <button
+        <Button
           onClick={onBack}
-          className="inline-flex items-center gap-1 px-3 py-2 border border-rule rounded-sm text-sm bg-surface cursor-pointer"
+          variant="ghost" className="inline-flex items-center gap-1"
         >
           <ArrowLeft size={14} /> Tillbaka
-        </button>
-        <button
+        </Button>
+        <Button
           onClick={onNext}
           disabled={!canContinue}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-acc-deep text-on-acc rounded-sm text-sm font-semibold cursor-pointer disabled:opacity-50"
+          variant="acc" className="inline-flex items-center gap-2 disabled:opacity-50"
         >
           Nästa <ArrowRight size={14} />
-        </button>
+        </Button>
         {!canContinue && (
           // BIN-1442: an ordinary button, not a faint text link. Skipping the
           // first title is a real choice, and the last step is where the value is.
-          <button
+          <Button
             onClick={onNext}
-            className="inline-flex items-center gap-1 px-3 py-2 border border-rule rounded-sm text-sm bg-surface cursor-pointer ml-auto"
+            className="ml-auto"
           >
             Hoppa över
-          </button>
+          </Button>
         )}
       </div>
     </div>
@@ -702,22 +703,22 @@ function StepDone({
             </p>
           )}
           <div className="flex flex-wrap items-center gap-2 mt-3">
-            <button
+            <Button
               type="button"
               onClick={() => { void remindMe(); }}
               disabled={saving}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-acc-deep text-on-acc rounded-sm text-sm font-semibold cursor-pointer disabled:opacity-50"
+              variant="acc" className="disabled:opacity-50"
             >
               Påminn mig när jag kan pausa
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               onClick={() => onFinish('/savings/')}
               disabled={saving}
-              className="px-3 py-2 border border-rule rounded-sm text-sm bg-surface cursor-pointer disabled:opacity-50"
+              className="disabled:opacity-50"
             >
               Öppna Rådgivaren
-            </button>
+            </Button>
           </div>
           <p className="text-xxs text-ink-3 mt-2">
             Binge säger till när en tjänst du betalar för inte har något du följer, och när den blir värd att starta igen.
@@ -744,41 +745,40 @@ function StepDone({
           </div>
         </div>
         <div className="flex gap-2">
-          <button
+          <Button
             onClick={() => onFinish('/kalibrera/')}
             disabled={saving}
-            className={spend.paidCount > 0
-              // One saffron button per screen: with the money box, that is "Påminn mig".
-              ? 'inline-flex items-center gap-1 px-3 py-[5px] border border-rule rounded-sm text-xs font-semibold bg-surface cursor-pointer disabled:opacity-50'
-              : 'inline-flex items-center gap-1 px-3 py-[5px] bg-acc-deep text-on-acc rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50'}
+            // One saffron button per screen: with the money box, that is "Påminn mig".
+            variant={spend.paidCount > 0 ? 'default' : 'acc'}
+            size="sm" className="inline-flex items-center gap-1 disabled:opacity-50"
           >
             <Target size={11} /> Kalibrera smak
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => onFinish()}
             disabled={saving}
-            className="px-3 py-[5px] border border-rule rounded-sm text-xs bg-surface cursor-pointer disabled:opacity-50"
+            variant="ghost" size="sm" className="disabled:opacity-50"
           >
             Senare
-          </button>
+          </Button>
         </div>
       </div>
 
       <div className="flex items-center gap-2">
-        <button
+        <Button
           onClick={onBack}
           disabled={saving}
-          className="inline-flex items-center gap-1 px-3 py-2 border border-rule rounded-sm text-sm bg-surface cursor-pointer disabled:opacity-50"
+          variant="ghost" className="inline-flex items-center gap-1 disabled:opacity-50"
         >
           <ArrowLeft size={14} /> Tillbaka
-        </button>
-        <button
+        </Button>
+        <Button
           onClick={() => onFinish()}
           disabled={saving}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-acc-deep text-on-acc rounded-sm text-sm font-semibold cursor-pointer disabled:opacity-50"
+          variant="acc" className="inline-flex items-center gap-2 disabled:opacity-50"
         >
           {saving ? 'Sparar…' : 'Klar'} <ArrowRight size={14} />
-        </button>
+        </Button>
       </div>
     </div>
   );

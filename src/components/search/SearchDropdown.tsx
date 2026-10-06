@@ -8,6 +8,8 @@ import { useUserSearch } from '@/hooks/useUserSearch';
 import { posterUrl, getDisplayTitle, getReleaseYear, isAddableMediaType, titleHref } from '@/lib/tmdb/client';
 import { toneForId } from '@/lib/duotone';
 import type { ResolvedUser } from '@/lib/firebase/username';
+import { eyebrowClass } from '@/components/ui/Eyebrow';
+import { cardClass } from '@/components/ui/Card';
 
 interface SearchDropdownProps {
   query: string;
@@ -91,7 +93,7 @@ export default function SearchDropdown({ query, onSelect, onActiveOptionChange }
       id="search-listbox"
       role="listbox"
       aria-label="Sökresultat"
-      className="absolute top-full left-0 right-0 mt-1 bg-surface border border-rule rounded-sm shadow-pop z-50 max-h-[400px] overflow-y-auto"
+      className={cardClass('absolute top-full left-0 right-0 mt-1 shadow-pop z-50 max-h-[400px] overflow-y-auto')}
     >
       {isLoading && !hasAny && (
         <div role="presentation" className="px-3 py-2 text-sm text-ink-3">Söker…</div>
@@ -102,7 +104,7 @@ export default function SearchDropdown({ query, onSelect, onActiveOptionChange }
 
       {userResults.length > 0 && (
         <>
-          <div role="presentation" className="px-3 pt-2 pb-[2px] text-xxs uppercase tracking-[1px] text-ink-3 font-semibold">
+          <div role="presentation" className={eyebrowClass({ className: 'px-3 pt-2 pb-[2px]' })}>
             Användare
           </div>
           {userResults.map((user, i) => {
@@ -133,7 +135,7 @@ export default function SearchDropdown({ query, onSelect, onActiveOptionChange }
       {titleResults.length > 0 && (
         <>
           {userResults.length > 0 && (
-            <div role="presentation" className="px-3 pt-2 pb-[2px] text-xxs uppercase tracking-[1px] text-ink-3 font-semibold border-t border-rule-2">
+            <div role="presentation" className={eyebrowClass({ className: 'px-3 pt-2 pb-[2px] border-t border-rule-2' })}>
               Titlar
             </div>
           )}

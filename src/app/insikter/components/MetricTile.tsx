@@ -7,6 +7,8 @@ import { DATA_RESOLVERS } from '../metrics/resolvers';
 import { useInsightsContext } from '../state/InsightsContext';
 import { useSelectedMetric } from '../state/useSelectedMetric';
 import { formatScalar } from './format';
+import { eyebrowClass } from '@/components/ui/Eyebrow';
+import { cardClass } from '@/components/ui/Card';
 
 /** Compact KPI tile. Click/Enter opens the ExplainDrawer for the metric. */
 export function MetricTile({ metricKey }: { metricKey: MetricKey }) {
@@ -62,9 +64,9 @@ export function MetricTile({ metricKey }: { metricKey: MetricKey }) {
       tabIndex={0}
       onClick={open}
       onKeyDown={onKeyDown}
-      className="bg-surface border border-rule rounded-sm px-3 py-2.5 cursor-pointer hover:shadow-lift transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-acc"
+      className={cardClass('px-3 py-2.5 cursor-pointer hover:shadow-lift transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-acc')}
     >
-      <div className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-ink-3">
+      <div className={eyebrowClass({ size: 'xs', className: 'flex items-center gap-1.5' })}>
         {def.label}
         {def.isNew && <span className="text-acc font-semibold">NY</span>}
       </div>

@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { buildPriceRows, sortPriceRows, type PriceRow, type PriceSort } from '@/lib/priceTableRows';
 import { formatPriceDay, priceFreshness } from '@/lib/priceFreshness';
 import { formatKr } from '@/lib/formatKr';
+import { cardClass } from '@/components/ui/Card';
+import { thClass } from '@/components/ui/tableHead';
 
 // /streamingpriser/ — tabellen. Kontrolldatumet jämförs mot klientens klocka efter
 // montering (#28:s villkor 10): den statiska HTML:en byggs en gång och kan inte
@@ -49,14 +51,14 @@ export default function PriceTable({ rows = buildPriceRows() }: { rows?: PriceRo
         {sortButton('provider', 'Per tjänst')}
         {sortButton('cheapest', 'Billigast först')}
       </div>
-      <div className="overflow-x-auto border border-rule rounded-sm bg-surface">
+      <div className={cardClass('overflow-x-auto')}>
         <table className="w-full text-sm border-collapse">
-          <thead className="bg-bg-2 text-left text-xs text-ink-2">
+          <thead>
             <tr>
-              <th scope="col" className="px-3 py-[6px] font-semibold">Tjänst</th>
-              <th scope="col" className="px-3 py-[6px] font-semibold">Nivå</th>
-              <th scope="col" className="px-3 py-[6px] font-semibold text-right">kr/mån</th>
-              <th scope="col" className="px-3 py-[6px] font-semibold">Kontrollerat</th>
+              <th scope="col" className={thClass('text-left px-3')}>Tjänst</th>
+              <th scope="col" className={thClass('text-left px-3')}>Nivå</th>
+              <th scope="col" className={thClass('text-right px-3')}>kr/mån</th>
+              <th scope="col" className={thClass('text-left px-3')}>Kontrollerat</th>
             </tr>
           </thead>
           <tbody>

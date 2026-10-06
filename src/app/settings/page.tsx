@@ -16,6 +16,7 @@ import { DataExportSection } from '@/components/settings/DataExportSection';
 import { DeleteAccountSection } from '@/components/settings/DeleteAccountSection';
 import { SettingsSection } from '@/components/settings/SettingsSection';
 import Link from 'next/link';
+import { buttonClass } from '@/components/ui/Button';
 
 export default function SettingsPage() {
   return <AuthGuard><SettingsContent /></AuthGuard>;
@@ -47,7 +48,7 @@ function SettingsContent() {
         <TasteDataSection />
         <SettingsSection title="Importera">
           <p className="text-xs text-ink-3 mb-2">Ta med din historik från Letterboxd eller IMDb (CSV).</p>
-          <Link href="/settings/import/" className="btn btn-ghost btn-sm">Importera från CSV</Link>
+          <Link href="/settings/import/" className={buttonClass({ variant: 'ghost', size: 'sm' })}>Importera från CSV</Link>
         </SettingsSection>
         <DataExportSection />
         <DeleteAccountSection />

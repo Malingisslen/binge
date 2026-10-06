@@ -13,6 +13,7 @@ import type { MediaType, TMDBSearchResult } from '@/types';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { JsonLd, breadcrumbSchema, collectionPageSchema } from '@/components/title/JsonLd';
 import { Button } from '@/components/ui/Button';
+import { cardClass } from '@/components/ui/Card';
 
 const CONFIG = {
   tv: {
@@ -91,7 +92,7 @@ export default function MediaTypePage({
       <PageHeader crumb={cfg.title} title={cfg.title} standfirst={cfg.standfirst} />
 
       {following.length > 0 ? (
-        <div className="bg-surface border border-rule rounded-sm mb-[14px]">
+        <div className={cardClass('mb-[14px]')}>
           <div className="flex items-center justify-between px-3 py-[6px] border-b border-rule-2">
             <h2 className="text-sm font-bold text-ink-2 m-0">Följer</h2>
             <Link href={mediaType === 'tv' ? '/my/series/' : '/my/films/'} className="text-xs text-acc-deep no-underline">
@@ -113,12 +114,12 @@ export default function MediaTypePage({
           </div>
         </div>
       ) : (
-        <div className="bg-surface border border-rule rounded-sm mb-[14px] px-3 py-4 text-center text-sm text-ink-3">
+        <div className={cardClass('mb-[14px] px-3 py-4 text-center text-sm text-ink-3')}>
           {cfg.emptyText}
         </div>
       )}
 
-      <div className="bg-surface border border-rule rounded-sm">
+      <div className={cardClass()}>
         <div className="px-3 py-[6px] border-b border-rule-2">
           <h2 className="text-sm font-bold text-ink-2 m-0">{cfg.popularLabel}</h2>
         </div>

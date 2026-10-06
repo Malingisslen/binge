@@ -11,6 +11,7 @@ import type { WatchlistItem } from '@/types';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import { useIncrementalList } from '@/hooks/useIncrementalList';
 import { Eyebrow } from '@/components/ui/Eyebrow';
+import { cardClass } from '@/components/ui/Card';
 
 const CARD_GRID_CLASS = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-[10px]';
 
@@ -101,7 +102,7 @@ export function FollowingCardSections({
 
   if (total === 0) {
     return (
-      <div className="bg-surface border border-rule rounded-sm px-3 py-4 text-center text-sm text-ink-3">
+      <div className={cardClass('px-3 py-4 text-center text-sm text-ink-3')}>
         Inga serier i Följer än. Lägg till en serie via Rekommendationer eller sök.
       </div>
     );

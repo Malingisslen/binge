@@ -13,6 +13,9 @@ import type { TMDBCollectionPart } from '@/types/tmdb';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/ui/EmptyState';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
+import { buttonClass } from '@/components/ui/Button';
+import { eyebrowClass } from '@/components/ui/Eyebrow';
+import { cardClass } from '@/components/ui/Card';
 
 export const dynamic = 'force-static';
 export const dynamicParams = false;
@@ -141,7 +144,7 @@ export default async function BilligastePage({ params }: { params: Promise<PageP
         <EmptyState
           title={`${franchise.name} — streamingläget uppdateras`}
           body={`Var ${franchise.name} går att streama i Sverige kartläggs just nu. Titta in snart, sidan fylls på så fort tillgänglighetsdatan är klar.`}
-          action={<Link href="/guider/" className="btn btn-acc btn-sm">Utforska fler streamingguider</Link>}
+          action={<Link href="/guider/" className={buttonClass({ variant: 'acc', size: 'sm' })}>Utforska fler streamingguider</Link>}
         />
         <div className="mt-6">
           <JustWatchCredit />
@@ -195,8 +198,8 @@ export default async function BilligastePage({ params }: { params: Promise<PageP
         standfirst={`${plan.totalFilms} ${plan.totalFilms === 1 ? 'film' : 'filmer'}. Vilken tjänst som täcker flest, vad du behöver hyra, och var du ser resten.`}
       />
 
-      <section className="bg-surface rounded-lg p-4 mt-6 mb-5 border border-rule">
-        <div className="text-xs uppercase tracking-wide text-ink-3 mb-1">Billigaste vägen</div>
+      <section className={cardClass('p-4 mt-6 mb-5')}>
+        <div className={eyebrowClass({ size: 'xs', className: 'mb-1' })}>Billigaste vägen</div>
         <div className="text-xl font-semibold text-ink">{verdict}</div>
         {remainderLine && <div className="text-base text-ink-2 mt-1">{remainderLine}</div>}
         <div className="text-xs text-ink-3 mt-2">
@@ -215,7 +218,7 @@ export default async function BilligastePage({ params }: { params: Promise<PageP
           const poster = posterUrl(r.posterPath, 'w92');
           return (
             <li key={r.tmdbId}>
-              <Link href={`/movie/${r.tmdbId}/`} className="flex items-center gap-3 bg-surface rounded p-2 border border-rule hover:shadow-lift transition-shadow">
+              <Link href={`/movie/${r.tmdbId}/`} className={cardClass('flex items-center gap-3 p-2 hover:shadow-lift transition-shadow')}>
                 {poster ? (
                   <img src={poster} alt="" width={46} height={69} loading="lazy" decoding="async" className="rounded-sm shrink-0" />
                 ) : (

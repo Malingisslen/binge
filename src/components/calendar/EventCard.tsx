@@ -70,7 +70,7 @@ export default function EventCard({ entry, isTonight = false }: Props) {
   // card surface (and flip that strip's cursor from pointer to default) for no
   // a11y gain — it stays inside the anchor, with the spacing it always had.
   const footerStyle = { padding: '0 12px 12px', cursor: 'default' } as const;
-  const footerLabelStyle = { fontSize: 10.5, color: 'var(--ink-3)', letterSpacing: 0.04 } as const;
+  const footerLabelStyle = { fontSize: 'var(--fs-xs)', color: 'var(--ink-3)', letterSpacing: 0.04 } as const;
 
   return (
     <div className={`ev${isTonight ? ' is-tonight' : ''}${watched ? ' is-watched' : ''}`}>
