@@ -292,8 +292,6 @@
         "src/lib/tmdb/seasonCompletion.ts",
         "src/lib/tmdb/semaphore.test.ts",
         "src/lib/tmdb/semaphore.ts",
-        "src/lib/tmdb/seoPersonIds.test.ts",
-        "src/lib/tmdb/seoPersonIds.ts",
         "src/test/rules/available-notify-orchestrator.test.ts",
         "src/types/tmdb.ts"
       ]
@@ -343,6 +341,7 @@
         "src/app/guider/page.tsx",
         "src/app/page.tsx",
         "src/app/sitemapFailedFetch.test.ts",
+        "src/components/pages/indexability.test.ts",
         "src/components/share/ShareButton.test.tsx",
         "src/components/share/ShareButton.tsx",
         "src/hooks/usePageMeta.test.ts",
@@ -368,8 +367,6 @@
         "src/lib/seo/jsonLd.ts",
         "src/lib/seo/providerHubCopy.test.ts",
         "src/lib/seo/providerHubCopy.ts",
-        "src/lib/seo/selectionSeed.test.ts",
-        "src/lib/seo/selectionSeed.ts",
         "src/lib/seo/shareShells.test.ts",
         "src/lib/seo/shareShells.ts",
         "src/lib/seo/sitemap.test.ts",
@@ -709,6 +706,8 @@
         "src/components/pages/UserProfilePageClient.tsx",
         "src/components/pages/resolveRoute.test.ts",
         "src/components/pages/resolveRoute.ts",
+        "src/components/seo/AvailabilityTable.test.tsx",
+        "src/components/seo/AvailabilityTable.tsx",
         "src/components/tv/RelatedSeriesStrip.tsx",
         "src/hooks/useAllEpisodeProgress.ts",
         "src/hooks/useEpisodeProgress.ts",
@@ -735,7 +734,9 @@
         "src/lib/markedSeen.test.ts",
         "src/lib/markedSeen.ts",
         "src/lib/seenDate.test.ts",
-        "src/lib/seenDate.ts"
+        "src/lib/seenDate.ts",
+        "src/lib/seo/titleAvailability.test.ts",
+        "src/lib/seo/titleAvailability.ts"
       ]
     },
     "27": {

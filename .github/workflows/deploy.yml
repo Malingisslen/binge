@@ -426,8 +426,8 @@ jobs:
           #
           # Tom (kod-deploy) → routerna läser urvalet ur .tmdb-cache/selection-*.json
           # och gör NOLL listanrop. '1' (schedule/full_refresh) → urvalet härleds
-          # om ur TMDB:s topplistor och UNIONERAS med det befintliga; en titel som
-          # roterat ur topplistan behålls tills taket tvingar fram evakuering.
+          # om och UNIONERAS med det befintliga; en titel som
+          # roterat ur härledningen behålls tills taket tvingar fram evakuering.
           #
           # Före detta härleddes urvalet vid varje deploy, och eftersom TMDB:s
           # ranking roterar veckovis roterade urvalet med den: titlar ramlade ur,

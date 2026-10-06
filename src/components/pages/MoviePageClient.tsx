@@ -50,6 +50,8 @@ import { CheapestPathVerdict } from '@/components/title/CheapestPathVerdict';
 import CinemaCountdownStrip from '@/components/title/CinemaCountdownStrip';
 import PriceHistoryChart from '@/components/title/PriceHistoryChart';
 import { TitleCrumb, GenreLinks, ProviderHubLinks } from '@/components/title/TitleHubLinks';
+import { AvailabilityTable } from '@/components/seo/AvailabilityTable';
+import { titleAvailability } from '@/lib/seo/titleAvailability';
 import { cinemaToStreaming } from '@/lib/calendar/releaseDate';
 import { useToast } from '@/contexts/ToastContext';
 import { trackEvent } from '@/lib/analytics';
@@ -174,10 +176,9 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
       : 'Film',
     description: contentFloor?.description,
     ogImage: movie?.poster_path ? posterUrl(movie.poster_path, 'w500') ?? undefined : undefined,
-    // Tar bort catch-all-shellets noindex när TMDB bekräftat att filmen finns.
-    // Pre-renderade /movie/[id] (topp-N) påverkas inte — de har egen statisk
-    // HTML med generateMetadata och passerar aldrig catch-all-shellet.
-    indexable: !!movie,
+    // Ingen `indexable` (ADR 0024): en film utanför urvalet ska förbli noindex
+    // även efter hydrering. Förrenderade /movie/[id] har sitt robots-besked i
+    // sin egen statiska HTML.
   });
 
   if (isLoading) return <LoadingView variant="detail" label="Laddar filmen…" />;
@@ -581,6 +582,8 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
           )}
         </div>
       </div>
+
+      <AvailabilityTable title={displayTitle} availability={titleAvailability(movie['watch/providers']?.results?.SE)} />
 
       {/* Trailer — raw 16:9 (preview surface). Döljs helt när embed saknas/failar (M1). */}
       <TrailerSection video={trailer} />

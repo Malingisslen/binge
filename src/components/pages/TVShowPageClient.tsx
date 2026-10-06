@@ -54,6 +54,8 @@ import { useStreamingOffers } from '@/hooks/useStreamingOffers';
 import { CheapestPathVerdict } from '@/components/title/CheapestPathVerdict';
 import PriceHistoryChart from '@/components/title/PriceHistoryChart';
 import { TitleCrumb, GenreLinks, ProviderHubLinks } from '@/components/title/TitleHubLinks';
+import { AvailabilityTable } from '@/components/seo/AvailabilityTable';
+import { titleAvailability } from '@/lib/seo/titleAvailability';
 import { offerForProvider, isLeavingSoon, formatLeaving } from '@/lib/streaming/offers';
 import type { TMDBTVShow } from '@/types';
 import { trackEvent } from '@/lib/analytics';
@@ -186,9 +188,8 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
       : 'Serie',
     description: contentFloor?.description,
     ogImage: show?.poster_path ? posterUrl(show.poster_path, 'w500') ?? undefined : undefined,
-    // Tar bort catch-all-shellets noindex när TMDB bekräftat att serien finns.
-    // Pre-renderade /tv/[id] (topp-N) påverkas inte — egen statisk HTML.
-    indexable: !!show,
+    // Ingen `indexable` (ADR 0024): en serie utanför urvalet ska förbli noindex
+    // även efter hydrering. Förrenderade /tv/[id] har egen statisk HTML.
   });
 
   const watchlistItem = mounted && show ? getItem('tv', show.id) : null;
@@ -517,6 +518,8 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
           </div>
         </section>
       </ClientOnly>
+
+      <AvailabilityTable title={displayTitle} availability={titleAvailability(show['watch/providers']?.results?.SE)} />
 
       {/* Trailer — raw 16:9 video (preview surface). Döljs helt när embed saknas/failar (M1). */}
       <TrailerSection video={trailer} />

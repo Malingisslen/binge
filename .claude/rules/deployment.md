@@ -13,9 +13,10 @@ paths:
 till `out/` → Firebase Hosting (`public: "out"`) → Cloudflare proxy.
 SPA-rewrite `**` → `/index.html`.
 
-**Byggtids-TMDB (SEO-pre-rendering):** `/{tv,movie,person}/[id]` pre-renderas
-för ~25k populära titlar (`generateStaticParams`). Varje sida gör ett
-TMDB-anrop vid byggtid. Två skydd (se `src/lib/tmdb/buildFetch.ts` +
+**Byggtids-TMDB (SEO-pre-rendering):** `/{tv,movie}/[id]` pre-renderas för en
+kärna av titlar med svensk tjänst (ADR 0024; taken står i `SELECTION_CEILING`).
+`/person/[id]` bygger bara `SEO_FALLBACK_PERSON_IDS`, med noindex. Varje sida gör
+ett TMDB-anrop vid byggtid. Två skydd (se `src/lib/tmdb/buildFetch.ts` +
 `buildCache.ts`):
 - **AbortSignal.timeout (20s)** på alla byggtids-anrop → ingen sida når Next
   60s-tak; exporten kan aldrig avbrytas av en strypt fetch (otursdrabbade
@@ -30,7 +31,7 @@ TMDB-anrop vid byggtid. Två skydd (se `src/lib/tmdb/buildFetch.ts` +
   och hämtar färsk metadata för alla stale titlar.
 
 **`.tmdb-cache/` bär sedan BIN-823 även URVALET, inte bara metadatan.**
-`selection-{movie,tv,person}.json` är listan över vilka id:n som pre-renderas, och
+`selection-{movie,tv}.json` är listan över vilka id:n som pre-renderas, och
 den är en SPÄRRHAKE: kod-deployer läser den och gör noll listanrop, veckobygget
 härleder om och unionerar. Två regimflaggor sätts under samma villkor i
 `deploy.yml` och måste följas åt — `TMDB_BUILD_REFRESH_BUDGET` (hur mycket
@@ -44,9 +45,9 @@ verktyg. `deploy.yml` sätter den ALDRIG, och det är den egenskapen hela skydde
 vilar på. Hela resonemanget: ADR 0018, vars beskrivning av de två raderade
 workflowsen är historik.
 
-Skär **inte** ner pre-render-antalet för att fixa byggtid — catch-all-skalet är
-`noindex` by default, så en icke-pre-renderad titel indexeras opålitligt
-(endast efter JS-hydrering). Mekaniken är fixad; täckningen ska behållas.
+Ändra inte pre-render-antalet för att fixa byggtid. Antalet är ett SEO-beslut
+(ADR 0024): sidor utanför kärnan är `noindex`, också efter hydrering, och det är
+avsikten.
 
 Workflows ligger i `.github/workflows/`. Det som inte syns av filnamnen: **`deploy.yml`
 deployar regler, index och funktioner först när Malin godkänt körningen** i miljön

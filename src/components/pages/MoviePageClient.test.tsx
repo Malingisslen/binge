@@ -1,6 +1,7 @@
 // src/components/pages/MoviePageClient.test.tsx
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
+import { renderToStaticMarkup } from 'react-dom/server';
 
 // Three things are pinned here, and they need different amounts of the page:
 //
@@ -510,5 +511,51 @@ describe('MoviePageClient — what a crawler reads without clicking (SEO-2/SEO-4
 
     expect(screen.getByText('Historia')).toBeTruthy();
     expect(screen.queryByRole('link', { name: 'Historia' })).toBeNull();
+  });
+});
+
+// BIN-1439 steg 2. renderToStaticMarkup kör inga effekter, så `mounted` är falsk
+// och ClientOnly renderar ingenting — samma läge som den förrenderade HTML:en
+// Google läser.
+function staticAvailabilitySection(html: string): Element | null {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const h2 = [...doc.querySelectorAll('h2')].find(h => h.textContent?.startsWith('Så ser du'));
+  return h2?.closest('section') ?? null;
+}
+
+describe('MoviePageClient — tabellen "Så ser du X i Sverige" finns i den statiska HTML:en (BIN-1439)', () => {
+  it('renderas i första renderingen, före mounted, med tjänst och hubblänk', () => {
+    signedInWithSettledLibrary();
+    tmdb.movie = movie;
+    const section = staticAvailabilitySection(renderToStaticMarkup(<MoviePageClient id="603" />));
+
+    expect(section?.querySelector('h2')?.textContent).toBe('Så ser du The Matrix i Sverige');
+    expect(section?.querySelector('th[scope="row"]')?.textContent).toBe('Netflix');
+    const hub = [...(section?.querySelectorAll('a') ?? [])].find(a => a.textContent === 'Mer på Netflix');
+    expect(hub?.getAttribute('href')).toMatch(/^\/provider\/8\/?$/);
+  });
+
+  it('visar ingen tabell för en film utan svenska tjänster', () => {
+    signedInWithSettledLibrary();
+    tmdb.movie = { ...movie, 'watch/providers': { results: { SE: {} } } };
+    const html = renderToStaticMarkup(<MoviePageClient id="603" />);
+
+    expect(html).toContain('The Matrix');
+    expect(staticAvailabilitySection(html)).toBeNull();
+  });
+
+  it('visar TV4 Plays två id som en rad', () => {
+    signedInWithSettledLibrary();
+    tmdb.movie = {
+      ...movie,
+      'watch/providers': { results: { SE: {
+        flatrate: [{ provider_id: 1944, provider_name: 'TV4 Play' }],
+        rent: [{ provider_id: 489, provider_name: 'TV4 Play' }],
+      } } },
+    };
+    const section = staticAvailabilitySection(renderToStaticMarkup(<MoviePageClient id="603" />));
+
+    const names = [...(section?.querySelectorAll('th[scope="row"]') ?? [])].map(th => th.textContent);
+    expect(names).toEqual(['TV4 Play']);
   });
 });
