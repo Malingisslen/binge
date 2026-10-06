@@ -7,7 +7,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/contexts/ToastContext';
 import { backfillGenreIds, type BackfillProgress } from '@/lib/taste/backfill';
 import { SettingsSection } from './SettingsSection';
-import { Button } from '@/components/ui/Button';
+import { Button, buttonClass } from '@/components/ui/Button';
 
 export function TasteDataSection() {
   const { uid } = useAuth();
@@ -60,7 +60,7 @@ export function TasteDataSection() {
         <p className="text-xs text-ink-2 mb-2">
           Justera smakmatchningen genom att ranka genrer du gillar.
         </p>
-        <Link href="/kalibrera" className="btn btn-ghost btn-sm no-underline">
+        <Link href="/kalibrera" className={buttonClass({ variant: 'ghost', size: 'sm', className: 'no-underline' })}>
           <Target size={11} />
           Kalibrera smak
         </Link>

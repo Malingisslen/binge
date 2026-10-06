@@ -48,8 +48,18 @@ import {
   filesOfCommit,
   stagedFiles,
   TICKET_BY_SHA,
+  REVIEW_SCOPE_EFFECTIVE_FROM,
+  TYPE_FREE,
+  isFeature,
+  reviewOwedFor,
+  owesReview,
+  reviewGatesAtCommits,
+  stagedAddedFiles,
+  stagedReviewGates,
+  GATES_CONFIG_REL,
 } from './check_review_coverage.mjs';
 import { EVENTS_PATH, parseEvents, historyIsAvailable } from './check_events.mjs';
+import { HIGH_STAKES, parseReviewGates, readReviewGates } from '../route.mjs';
 
 // The METRICS directory, not the repo root — named for what it is. Its only use is a `git
 // show <rev>:<path>` rev-spec, which ignores the cwd; calling it REPO taught the wrong fact
@@ -377,17 +387,34 @@ describe('gradeSubject — the COMMIT-TIME half (BIN-917 criterion 4)', () => {
   it('agrees with the history rule about what owes a row', () => {
     // Two graders, one denominator. If they ever disagree, a commit passes the hook and then
     // fails `npm run test:process` — the "two answers to one question" defect, split across
-    // two modes.
-    for (const subject of [
-      'test(radering): pinna felet (BIN-100)',
-      'refactor(push): move a port (BIN-100)',
-      'docs(map): re-trace (BIN-100)',
-      'chore: sweep',
-    ]) {
-      const owes = owesReviewRow(subject);
-      const graded = gradeSubject(subject, new Set());
-      expect(graded.ok, subject).toBe(!owes);
+    // two modes. The commit-time grade is held against the history grade of the same commit
+    // dated after the decision-1 epoch, where both apply the rule in force.
+    const gates = [{ name: 'fixture', patterns: ['^src/lib/firebase/'] }];
+    const after = new Date(Date.parse(REVIEW_SCOPE_EFFECTIVE_FROM) + 60_000).toISOString();
+    const cases = [
+      ['test(radering): pinna felet (BIN-100)', ['src/lib/firebase/userDocWrite.ts'], []],
+      ['refactor(push): move a port (BIN-100)', ['src/lib/push.ts'], []],
+      ['fix(ui): a thing', ['src/components/ui/Button.tsx'], []],
+      ['fix(ui): a new screen', ['src/app/ny/page.tsx'], ['src/app/ny/page.tsx']],
+      ['feat(ui): a thing', ['src/components/ui/Button.tsx'], []],
+      ['docs(map): re-trace (BIN-100)', ['docs/workflow-map.html'], []],
+      ['docs(rules): a comment', ['firestore.rules'], []],
+      ['chore: sweep', ['lefthook.yml'], []],
+      ['chore: sweep', ['tasks/todo.md'], []],
+    ];
+    let owedSeen = 0;
+    for (const [subject, files, added] of cases) {
+      const owes = owesReview({ subject, files, added, gates });
+      owedSeen += owes ? 1 : 0;
+      expect(gradeSubject(subject, new Set(), files, { added, gates }).ok, subject).toBe(!owes);
+      const history = findCoverageGaps([{ sha: 'h1', date: after, subject, files, added }], new Set(), {
+        gatesAt: () => new Map([['h1', gates]]),
+      });
+      expect(history.violations.length, subject).toBe(owes ? 1 : 0);
     }
+    // Both directions are exercised, or the loop proves nothing.
+    expect(owedSeen).toBeGreaterThan(0);
+    expect(owedSeen).toBeLessThan(cases.length);
   });
 });
 
@@ -403,26 +430,30 @@ describe('mainMessage — the exit code the commit-msg hook acts on', () => {
     writeFileSync(p, body, 'utf8');
     return p;
   };
+  // Every input handed in, so the verdict cannot depend on what happens to be staged in the
+  // checkout running the suite. A gated file makes a code type owe a row under decision 1.
+  const GATED = ['src/lib/firebase/friends.ts'];
+  const inputs = { added: [], gatesRead: { gates: [{ name: 'fixture', patterns: ['^src/lib/firebase/'] }], source: 'a fixture' } };
 
   it('exits 0 for a subject whose tickets all have rows', () => {
     // BIN-917 itself: this very batch logged its row, so the live log answers for it.
     const p = tmp('ok', 'fix(org): a thing (BIN-917)\n\nbody\n');
     try {
-      expect(mainMessage(p, [])).toBe(0);
+      expect(mainMessage(p, GATED, inputs)).toBe(0);
     } finally { rmSync(p, { force: true }); }
   });
 
   it('exits 1 for a subject naming a ticket with no row', () => {
     const p = tmp('bad', 'fix(org): a thing (BIN-9999999)\n');
     try {
-      expect(mainMessage(p, [])).toBe(1);
+      expect(mainMessage(p, GATED, inputs)).toBe(1);
     } finally { rmSync(p, { force: true }); }
   });
 
   it('exits 1 for a code-changing subject naming no ticket', () => {
     const p = tmp('noid', 'feat(x): untraceable\n');
     try {
-      expect(mainMessage(p, [])).toBe(1);
+      expect(mainMessage(p, [], inputs)).toBe(1);
     } finally { rmSync(p, { force: true }); }
   });
 
@@ -432,7 +463,15 @@ describe('mainMessage — the exit code the commit-msg hook acts on', () => {
     // below names an unreviewed ticket and the commit is still allowed.
     const p = tmp('docs', 'docs(map): re-trace\n\nRefs BIN-9999999 in the body only.\n');
     try {
-      expect(mainMessage(p, [])).toBe(0);
+      expect(mainMessage(p, GATED, inputs)).toBe(0);
+    } finally { rmSync(p, { force: true }); }
+  });
+
+  it('exits 0 for an ordinary fix that names no ticket at all (decision 1)', () => {
+    const p = tmp('ordinary', 'fix(ui): knappen stod snett\n');
+    try {
+      expect(mainMessage(p, ['src/components/ui/DuotonePoster.tsx'], inputs)).toBe(0);
+      expect(mainMessage(p, GATED, inputs), 'the same subject on a gated file must still be refused').toBe(1);
     } finally { rmSync(p, { force: true }); }
   });
 });
@@ -762,7 +801,7 @@ describe('reviewer instructions owe a review row whatever the type (BIN-959 del 
       commit('i3', 'docs(agents): reword (BIN-999)', BEFORE_INSTR),
       commit('d1', 'docs(map): unrelated (BIN-999)', AFTER_INSTR),
     ];
-    const r = findCoverageGaps(commits, reviewed, { filesOf, instructionsFrom: INSTRUCTIONS_EFFECTIVE_FROM });
+    const r = findCoverageGaps(commits, reviewed, { filesOf });
     expect(r.violations.map((v) => v.sha)).toEqual(['i1', 'i2']);
     expect(r.eligible).toBe(2);
   });
@@ -802,8 +841,11 @@ describe('reviewer instructions owe a review row whatever the type (BIN-959 del 
     const p = join(tmpdir(), `binge-bin959-${process.pid}.txt`);
     writeFileSync(p, 'docs(agents): reword a step (BIN-9999999)\n', 'utf8');
     try {
-      expect(mainMessage(p, [INSTR])).toBe(1);
-      expect(mainMessage(p, ['docs/x.md'])).toBe(0);
+      // Nothing read from the index of the checkout running the suite: no added files, and
+      // the gates as this commit ships them.
+      const inputs = { added: [], gatesRead: { gates: readReviewGates(), source: 'the config' } };
+      expect(mainMessage(p, [INSTR], inputs)).toBe(1);
+      expect(mainMessage(p, ['docs/x.md'], inputs)).toBe(0);
     } finally { rmSync(p, { force: true }); }
   });
 
@@ -820,12 +862,16 @@ describe('reviewer instructions owe a review row whatever the type (BIN-959 del 
     } finally { rmSync(repo, { recursive: true, force: true }); }
   });
 
-  it('mainMessage reads the staged files by default', () => {
+  it('mainMessage reads the staged files, the added files and the staged gates by default', () => {
     // BIN-852's shape: a check that is only ever handed its input by a test can be unwired
-    // from the entry point with the whole suite green. Pin the default parameter itself.
+    // from the entry point with the whole suite green. Pin the default parameters themselves,
+    // and the call that passes them on, read from mainMessage's own body.
     const src = readFileSync(join(METRICS_DIR, 'check_review_coverage.mjs'), 'utf8');
-    expect(src).toMatch(/export function mainMessage\(messagePath, staged = stagedFiles\(\)\)/);
-    expect(src).toMatch(/gradeSubject\(subject, reviewed, staged\)/);
+    const body = src.slice(src.indexOf('export function mainMessage('));
+    expect(body).toMatch(
+      /^export function mainMessage\(\s*messagePath,\s*staged = stagedFiles\(\),\s*\{ added = stagedAddedFiles\(\), gatesRead = stagedReviewGates\(\) \} = \{\},?\s*\)/,
+    );
+    expect(body).toMatch(/gradeSubject\(subject, reviewed, staged, \{ added, gates: gatesRead\.gates \}\)/);
   });
 });
 
@@ -900,4 +946,320 @@ describe('TICKET_BY_SHA — a pushed commit whose subject lost its id', () => {
       expect(without.violations, `${sha}'s entry changes nothing`).toHaveLength(1);
     }
   }, LIVE_WALK_TIMEOUT_MS);
+});
+
+describe('decision 1 (BIN-1426): who owes a review row', () => {
+  // Malin's decision 1, 2026-10-05: critiques and reviewer agents only for database rules,
+  // sign-in, personal data, server functions and new features; ordinary fixes ship on
+  // typecheck and tests. Fixture gates keep these cases independent of the real config; the
+  // block further down holds the real config to the same answers.
+  const reviewed = new Set(['BIN-100']);
+  const GATES = [{ name: 'fixture', patterns: ['^src/lib/firebase/'] }];
+  const ORDINARY = ['src/components/ui/DuotonePoster.tsx'];
+  const GATED = ['src/lib/firebase/friends.ts'];
+  const EPOCH_MS = Date.parse(REVIEW_SCOPE_EFFECTIVE_FROM);
+  const AFTER_SCOPE = new Date(EPOCH_MS + 3_600_000).toISOString();
+  const BEFORE_SCOPE = new Date(EPOCH_MS - 3_600_000).toISOString();
+  const grade = (subject, files, added = []) => gradeSubject(subject, reviewed, files, { added, gates: GATES });
+
+  it('an ordinary fix passes without a BIN-id', () => {
+    const v = grade('fix(ui): knappen stod snett', ORDINARY);
+    expect(v.ok).toBe(true);
+    expect(v.owed).toBeNull();
+  });
+
+  it('a fix that touches a gated file is refused without one, and the refusal names the file', () => {
+    const v = grade('fix(data): vänlistan', GATED);
+    expect(v.ok).toBe(false);
+    expect(v.reason).toContain('no BIN-id');
+    expect(v.reason).toContain(GATED[0]);
+    expect(grade('fix(data): vänlistan (BIN-100)', GATED).ok).toBe(true);
+  });
+
+  it('a feat is refused without one even when every file is ordinary', () => {
+    const v = grade('feat(ui): en ny knapp', ORDINARY);
+    expect(v.ok).toBe(false);
+    expect(v.owed).toContain('feat');
+  });
+
+  it('an ADDED page makes any commit a feature; a changed page or another added file does not', () => {
+    const page = 'src/app/ny/page.tsx';
+    expect(grade('fix(ui): ny sida', [page], [page]).ok).toBe(false);
+    expect(grade('fix(ui): ny sida', [page], [page]).owed).toContain(page);
+    expect(grade('chore: ny sida', [page], [page]).ok, 'the page clause must not depend on the type').toBe(false);
+    expect(grade('fix(ui): en rad på sidan', [page], []).ok).toBe(true);
+    expect(grade('fix(ui): ny layout', ['src/app/ny/layout.tsx'], ['src/app/ny/layout.tsx']).ok).toBe(true);
+    expect(isFeature('fix: x', ['src/app/page.tsx']), 'the root page is a page too').toBe(true);
+    expect(isFeature('fix: x', ['src/components/page.tsx'])).toBe(false);
+    expect(isFeature('feat(x)!: y')).toBe(true);
+    expect(isFeature('docs: describe the feat(x): syntax')).toBe(false);
+  });
+
+  it('a non-code type touching a gated file owes nothing — the gate clause needs a code type', () => {
+    expect(grade('docs(data): en kommentar', GATED).ok).toBe(true);
+  });
+
+  it('a docs commit touching a TYPE_FREE path is refused without a BIN-id', () => {
+    for (const file of ['firestore.rules', 'src/contexts/AuthContext.tsx', 'docs/org/route.mjs', 'lefthook.yml',
+      '.claude/shared-plugin.json', 'docs/org/metrics/check_staged_routing.mjs']) {
+      const v = grade('docs: en kommentar', [file]);
+      expect(v.ok, file).toBe(false);
+      expect(v.owed, file).toContain(file);
+    }
+  });
+
+  it('unreadable gates make a code type owe a row, as it did before decision 1', () => {
+    for (const gates of [null, undefined, []]) {
+      const v = gradeSubject('fix(ui): knappen', reviewed, ORDINARY, { gates });
+      expect(v.ok, String(gates)).toBe(false);
+      expect(v.owed).toContain('could not be read');
+    }
+    expect(gradeSubject('docs: en rad', reviewed, ORDINARY, { gates: null }).ok).toBe(true);
+  });
+
+  it('every high-stakes path in route.mjs is TYPE_FREE', () => {
+    // The two lists are written separately; this is what keeps a path added to HIGH_STAKES from
+    // being critiqued before the build and then committed under `docs:` with no row.
+    expect(HIGH_STAKES.length).toBeGreaterThan(0);
+    for (const hs of HIGH_STAKES) {
+      const path = hs.endsWith('/') ? `${hs}index.ts` : hs;
+      expect(TYPE_FREE.some(({ pattern }) => pattern.test(path)), hs).toBe(true);
+    }
+  });
+
+  it('every TYPE_FREE pattern matches a tracked file, so none of them guards nothing', () => {
+    const tracked = execFileSync('git', ['ls-files'], { cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 })
+      .split(/\r?\n/).filter(Boolean);
+    expect(tracked.length).toBeGreaterThan(500);
+    for (const { pattern } of TYPE_FREE) {
+      expect(tracked.some((f) => pattern.test(f)), String(pattern)).toBe(true);
+    }
+  });
+
+  it('each TYPE_FREE entry binds only from its own date, and none from the future', () => {
+    const instr = TYPE_FREE.filter(({ from }) => from === INSTRUCTIONS_EFFECTIVE_FROM);
+    expect(instr.map(({ pattern }) => String(pattern))).toEqual([String(REVIEWER_INSTRUCTIONS)]);
+    for (const { from } of TYPE_FREE) {
+      expect([INSTRUCTIONS_EFFECTIVE_FROM, REVIEW_SCOPE_EFFECTIVE_FROM]).toContain(from);
+    }
+    expect(EPOCH_MS).toBeGreaterThanOrEqual(Date.parse('2026-10-05T00:00:00.000Z'));
+    expect(EPOCH_MS).toBeLessThanOrEqual(Date.now());
+  });
+
+  it('history: a docs commit touching firestore.rules is graded after the epoch and not before it', () => {
+    const commits = [
+      { sha: 'r1', date: AFTER_SCOPE, subject: 'docs: en kommentar', files: ['firestore.rules'], added: [] },
+      { sha: 'r2', date: BEFORE_SCOPE, subject: 'docs: en kommentar', files: ['firestore.rules'], added: [] },
+    ];
+    const r = findCoverageGaps(commits, reviewed);
+    expect(r.violations.map((v) => v.sha)).toEqual(['r1']);
+    expect(r.violations[0].reason).toContain('firestore.rules');
+  });
+
+  it('history: an ordinary fix with no id is fine after the epoch, and still owes under the rule of its day before it', () => {
+    const fix = (sha, date) => ({ sha, date, subject: 'fix(ui): knappen', files: ORDINARY, added: [] });
+    const gatesAt = (shas) => new Map(shas.map((sha) => [sha, GATES]));
+    const r = findCoverageGaps([fix('o1', AFTER_SCOPE), fix('o2', BEFORE_SCOPE)], reviewed, { gatesAt });
+    expect(r.violations.map((v) => v.sha)).toEqual(['o2']);
+  });
+
+  it('history: a commit EXACTLY on the epoch is graded by the new rule, one ms earlier by the old one', () => {
+    const at = (ms) => new Date(ms).toISOString();
+    const gatesAt = (shas) => new Map(shas.map((sha) => [sha, GATES]));
+    const ordinary = (sha, ms) => ({ sha, date: at(ms), subject: 'fix(ui): knappen', files: ORDINARY, added: [] });
+    const typeFree = (sha, ms) => ({ sha, date: at(ms), subject: 'chore: hooks', files: ['lefthook.yml'], added: [] });
+    const r = findCoverageGaps([
+      ordinary('on-o', EPOCH_MS), ordinary('pre-o', EPOCH_MS - 1),
+      typeFree('on-t', EPOCH_MS), typeFree('pre-t', EPOCH_MS - 1),
+    ], reviewed, { gatesAt });
+    expect(r.violations.map((v) => v.sha).sort()).toEqual(['on-t', 'pre-o']);
+  });
+
+  it('history: each commit is graded by ITS OWN gates, so a later widening re-grades nothing', () => {
+    const fix = { sha: 'g1', date: AFTER_SCOPE, subject: 'fix(data): x', files: GATED, added: [] };
+    const narrow = [{ name: 'then', patterns: ['^nothing-matches$'] }];
+    expect(findCoverageGaps([fix], reviewed, { gatesAt: () => new Map([['g1', narrow]]) }).violations).toEqual([]);
+    expect(findCoverageGaps([fix], reviewed, { gatesAt: () => new Map([['g1', GATES]]) }).violations).toHaveLength(1);
+    // A sha the reader could not resolve is graded as unreadable gates: the code type owes.
+    expect(findCoverageGaps([fix], reviewed, { gatesAt: () => new Map() }).violations).toHaveLength(1);
+  });
+
+  it('history: gates are asked for only for commits on or after the epoch', () => {
+    const asked = [];
+    const gatesAt = (shas) => { asked.push(...shas); return new Map(); };
+    findCoverageGaps([
+      { sha: 'new', date: AFTER_SCOPE, subject: 'fix: x (BIN-100)', files: [], added: [] },
+      { sha: 'old', date: BEFORE_SCOPE, subject: 'fix: x (BIN-100)', files: [], added: [] },
+    ], reviewed, { gatesAt });
+    expect(asked).toEqual(['new']);
+  });
+
+  it('exemptionInputs hands both callers the per-commit gate reader', () => {
+    expect(exemptionInputs(true).gatesAt).toBe(reviewGatesAtCommits);
+    expect(exemptionInputs(false).gatesAt(['x']).size).toBe(0);
+  });
+});
+
+describe('parseGitLog — the --name-status section', () => {
+  const NUL = String.fromCharCode(0);
+  const SOH = String.fromCharCode(1);
+  const STX = String.fromCharCode(2);
+  const LF = String.fromCharCode(10);
+  // The shape `readGitLog` asks git for: SOH, the three fields, STX, then `-z` name-status pairs.
+  const record = (sha, date, subject, pairs) =>
+    `${SOH}${sha}${NUL}${date}${NUL}${subject}${STX}${NUL}${LF}${pairs.flat().join(NUL)}${pairs.length ? NUL : ''}`;
+
+  it('reads every path, and only an A into `added`', () => {
+    const parsed = parseGitLog(record('abc', '2026-10-06T12:00:00+02:00', 'fix(x): y (BIN-1)', [
+      ['M', 'src/a.ts'], ['A', 'src/app/ny/page.tsx'], ['D', 'src/gone.ts'],
+    ]));
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0].subject).toBe('fix(x): y (BIN-1)');
+    expect(parsed[0].files).toEqual(['src/a.ts', 'src/app/ny/page.tsx', 'src/gone.ts']);
+    expect(parsed[0].added).toEqual(['src/app/ny/page.tsx']);
+  });
+
+  it('a rename carries both of its paths, so neither end can hide', () => {
+    const parsed = parseGitLog(record('abc', '2026-10-06T12:00:00+02:00', 'refactor: move', [
+      ['R100', 'src/lib/firebase/friends.ts', 'src/lib/social/friends.ts'], ['M', 'src/b.ts'],
+    ]));
+    expect(parsed[0].files).toEqual(['src/lib/firebase/friends.ts', 'src/lib/social/friends.ts', 'src/b.ts']);
+    expect(parsed[0].added).toEqual([]);
+  });
+
+  it('keeps several records apart, and an empty commit has no files rather than a stray one', () => {
+    const parsed = parseGitLog(
+      record('a1', '2026-10-06T12:00:00Z', 'chore: empty', [])
+      + record('a2', '2026-10-06T13:00:00Z', 'fix: x', [['M', 'src/c.ts']]),
+    );
+    expect(parsed.map((c) => [c.sha, c.files])).toEqual([['a1', []], ['a2', ['src/c.ts']]]);
+  });
+
+  it('a record without the section still parses, with no file list at all', () => {
+    const parsed = parseGitLog(`a3${NUL}2026-10-06T12:00:00Z${NUL}fix: x${SOH}`);
+    expect(parsed).toEqual([{ sha: 'a3', date: '2026-10-06T12:00:00Z', subject: 'fix: x' }]);
+  });
+});
+
+describe('the decision-1 readers, against real git', () => {
+  const git = (repo, ...args) =>
+    execFileSync('git', args, { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+  const scratch = (name) => {
+    const repo = mkdtempSync(join(tmpdir(), `binge-bin1426-${name}-`));
+    git(repo, 'init', '-q');
+    git(repo, 'config', 'user.email', 'test@example.invalid');
+    git(repo, 'config', 'user.name', 'test');
+    return repo;
+  };
+  const write = (repo, rel, body) => {
+    mkdirSync(dirname(join(repo, rel)), { recursive: true });
+    writeFileSync(join(repo, rel), body, 'utf8');
+  };
+  const config = (pattern) => JSON.stringify({ reviewGates: [{ name: 'g', patterns: [pattern] }] });
+
+  it('readGitLog gives each commit the files git itself reports for it', () => {
+    if (!historyIsAvailable()) return;
+    const log = readGitLog();
+    expect(log.filter((c) => Array.isArray(c.files) && c.files.length > 0).length).toBeGreaterThan(500);
+    for (const c of log.slice(0, 5)) {
+      expect(new Set(c.files), c.sha).toEqual(new Set(filesOfCommit(c.sha)));
+    }
+    const adding = log.find((c) => c.added.length > 0);
+    expect(adding, 'no commit in history adds a file — the A status stopped parsing').toBeDefined();
+    const addedByGit = execFileSync('git', ['diff-tree', '--no-commit-id', '--name-only', '-r', '--diff-filter=A', adding.sha], {
+      cwd: REPO_ROOT, encoding: 'utf8',
+    }).split(/\r?\n/).filter(Boolean);
+    expect(new Set(adding.added)).toEqual(new Set(addedByGit));
+  }, LIVE_WALK_TIMEOUT_MS);
+
+  it('reviewGatesAtCommits reads each commit\'s own config, and null where there is none', () => {
+    const repo = scratch('gates');
+    try {
+      write(repo, 'a.txt', 'x\n');
+      git(repo, 'add', '.');
+      git(repo, 'commit', '-q', '-m', 'no config yet');
+      const none = git(repo, 'rev-parse', 'HEAD').trim();
+      write(repo, GATES_CONFIG_REL, config('^first$'));
+      git(repo, 'add', '.');
+      git(repo, 'commit', '-q', '-m', 'first');
+      const first = git(repo, 'rev-parse', 'HEAD').trim();
+      write(repo, GATES_CONFIG_REL, config('^second$'));
+      git(repo, 'add', '.');
+      git(repo, 'commit', '-q', '-m', 'second');
+      const second = git(repo, 'rev-parse', 'HEAD').trim();
+      const read = reviewGatesAtCommits([second, none, first], repo);
+      expect(read.get(first)[0].patterns).toEqual(['^first$']);
+      expect(read.get(second)[0].patterns).toEqual(['^second$']);
+      expect(read.get(none)).toBeNull();
+      expect(reviewGatesAtCommits([], repo).size).toBe(0);
+    } finally { rmSync(repo, { recursive: true, force: true }); }
+  });
+
+  it('reviewGatesAtCommits on this repo agrees with the config in HEAD', () => {
+    if (!historyIsAvailable()) return;
+    const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: REPO_ROOT, encoding: 'utf8' }).trim();
+    const atHead = parseReviewGates(execFileSync('git', ['show', `HEAD:${GATES_CONFIG_REL}`], { cwd: REPO_ROOT, encoding: 'utf8' }));
+    expect(atHead).not.toBeNull();
+    expect(reviewGatesAtCommits([head]).get(head)).toEqual(atHead);
+  });
+
+  it('stagedAddedFiles lists an added file and a moved one, never a modified one', () => {
+    const repo = scratch('added');
+    try {
+      write(repo, 'kept.ts', 'a\n');
+      write(repo, 'src/app/gammal/page.tsx', 'b\n');
+      git(repo, 'add', '.');
+      git(repo, 'commit', '-q', '-m', 'seed');
+      write(repo, 'kept.ts', 'changed\n');
+      write(repo, 'src/app/ny/page.tsx', 'c\n');
+      git(repo, 'add', '.');
+      mkdirSync(join(repo, 'src', 'app', 'flyttad'), { recursive: true });
+      git(repo, 'mv', 'src/app/gammal/page.tsx', 'src/app/flyttad/page.tsx');
+      expect(stagedAddedFiles(repo).sort()).toEqual(['src/app/flyttad/page.tsx', 'src/app/ny/page.tsx']);
+      expect(stagedFiles(repo).sort(), 'a move must show its old path too').toEqual([
+        'kept.ts', 'src/app/flyttad/page.tsx', 'src/app/gammal/page.tsx', 'src/app/ny/page.tsx',
+      ]);
+    } finally { rmSync(repo, { recursive: true, force: true }); }
+  });
+
+  it('stagedReviewGates reads the INDEX, falls back to the working tree and says so, and else gives null', () => {
+    const repo = scratch('staged-gates');
+    try {
+      write(repo, GATES_CONFIG_REL, config('^committed$'));
+      git(repo, 'add', '.');
+      git(repo, 'commit', '-q', '-m', 'seed');
+      write(repo, GATES_CONFIG_REL, config('^staged$'));
+      git(repo, 'add', '.');
+      write(repo, GATES_CONFIG_REL, config('^worktree$'));
+      const staged = stagedReviewGates(repo);
+      expect(staged.source).toContain('index');
+      expect(staged.gates[0].patterns).toEqual(['^staged$']);
+    } finally { rmSync(repo, { recursive: true, force: true }); }
+
+    const plain = mkdtempSync(join(tmpdir(), 'binge-bin1426-nogit-'));
+    try {
+      write(plain, GATES_CONFIG_REL, config('^worktree$'));
+      const fallback = stagedReviewGates(plain);
+      expect(fallback.source).toContain('WORKING TREE');
+      expect(fallback.gates[0].patterns).toEqual(['^worktree$']);
+      rmSync(join(plain, GATES_CONFIG_REL));
+      expect(stagedReviewGates(plain).gates).toBeNull();
+    } finally { rmSync(plain, { recursive: true, force: true }); }
+  });
+
+  it('the real gates give the decision-1 answers the fixture cases assume', () => {
+    // Held against the working-tree config, which is what this commit ships.
+    const gates = readReviewGates();
+    expect(gates).not.toBeNull();
+    const owed = (subject, files, added = []) => owesReview({ subject, files, added, gates });
+    for (const file of [
+      'src/lib/firebase/friends.ts', 'src/contexts/WatchlistContext.tsx', 'src/app/login/page.tsx',
+      'src/lib/analytics.ts', 'functions/src/index.ts', 'src/app/admin/reports/page.tsx',
+    ]) expect(owed('fix: x', [file]), file).toBe(true);
+    for (const file of [
+      'src/components/ui/DuotonePoster.tsx', 'src/lib/watchStatus.ts', 'src/app/page.tsx', 'tailwind.config.ts',
+    ]) expect(owed('fix: x', [file]), file).toBe(false);
+    expect(reviewOwedFor({ subject: 'fix: x', files: ['src/app/page.tsx'], added: ['src/app/page.tsx'], gates }))
+      .toContain('new screen');
+  });
 });

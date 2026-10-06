@@ -1,5 +1,7 @@
 // src/components/title/RatingsRow.tsx
 import type { Ratings } from '@/lib/ratings/types';
+import { cardClass } from '@/components/ui/Card';
+import { eyebrowClass } from '@/components/ui/Eyebrow';
 
 // External + TMDB ratings as polished per-source cards: source label + saffron
 // value + muted scale. The IMDb card links to IMDb. Returns null when there is
@@ -18,8 +20,8 @@ export function RatingsRow({
     !!ratings && (!!ratings.imdb || ratings.rottenTomatoes != null || ratings.metacritic != null);
   if (!hasTmdb && !hasExternal) return null;
 
-  const card = 'flex flex-col gap-0.5 rounded border border-rule bg-surface px-3 py-1.5 min-w-[78px]';
-  const src = 'text-xs uppercase tracking-wide text-ink-3';
+  const card = cardClass('flex flex-col gap-0.5 px-3 py-1.5 min-w-[78px]');
+  const src = eyebrowClass({ size: 'xs' });
   const val = 'text-xl font-medium text-acc-deep leading-none';
   const scale = 'text-sm font-normal text-ink-3';
 

@@ -7,6 +7,7 @@ import { aggregateHousehold, HOUSEHOLD_STALE_DAYS } from '@/lib/advisor/househol
 import { formatKr } from '@/lib/formatKr';
 import { Eyebrow } from '@/components/ui/Eyebrow';
 import { Button } from '@/components/ui/Button';
+import { cardClass } from '@/components/ui/Card';
 
 // BIN-184 — "Hushåll"-panelen i gruppens vänsterspalt. Aggregat-ENDAST i UI:t
 // ("Disney+ betalas av 2 av er"), aldrig per person. Opt-in via en explicit
@@ -28,7 +29,7 @@ export default function HouseholdPanel({ groupId }: { groupId: string }) {
   );
 
   return (
-    <div className="bg-surface border border-rule rounded-sm">
+    <div className={cardClass()}>
       <Eyebrow className="px-3 py-[6px] border-b border-rule-2">
         Hushåll
       </Eyebrow>

@@ -6,6 +6,7 @@ import { useEpisodeProgressWithSync } from '@/hooks/useEpisodeProgressWithSync';
 import { useToast } from '@/contexts/ToastContext';
 import { formatEpisodeCode } from '@/lib/utils';
 import { captureError } from '@/lib/sentry';
+import { buttonClass } from '@/components/ui/Button';
 
 // BIN-1442 — one tap on Hem marks the episode seen, through the same write the
 // calendar and the series page use. The toast, and its "Ångra", only appear once
@@ -53,7 +54,7 @@ export default function MarkEpisodeSeenButton({ tmdbId, season, episode, classNa
   return (
     <button
       type="button"
-      className={className ?? 'btn btn-sm'}
+      className={className ?? buttonClass({ size: 'sm' })}
       onClick={() => { void mark(); }}
       disabled={busy}
       aria-label={`Markera ${code} som sett`}

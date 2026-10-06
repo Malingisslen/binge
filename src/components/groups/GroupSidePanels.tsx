@@ -18,6 +18,9 @@ import {
 import { useMountTime } from '@/hooks/useMountTime';
 import { captureError } from '@/lib/sentry';
 import { Eyebrow } from '@/components/ui/Eyebrow';
+import { Button } from '@/components/ui/Button';
+import { fieldClass } from '@/components/ui/Field';
+import { cardClass } from '@/components/ui/Card';
 import {
   inviteTokenAgeDays,
   inviteTokenAgeLabel,
@@ -41,7 +44,7 @@ export function ProviderOverlapPanel({ intersect, union }: { intersect: number[]
   const onlySome = useMemo(() => union.filter(id => !intersectSet.has(id)), [union, intersectSet]);
 
   return (
-    <div className="bg-surface border border-rule rounded-sm">
+    <div className={cardClass()}>
       <Eyebrow className="px-3 py-[6px] border-b border-rule-2">
         Streamingöverlapp
       </Eyebrow>
@@ -175,7 +178,7 @@ export function InvitePanel({
   };
 
   return (
-    <div className="bg-surface border border-rule rounded-sm">
+    <div className={cardClass()}>
       <Eyebrow className="px-3 py-[6px] border-b border-rule-2">
         Inbjudningslänk
       </Eyebrow>
@@ -186,38 +189,38 @@ export function InvitePanel({
               <input
                 readOnly
                 value={inviteUrl}
-                className="flex-1 px-2 py-1 text-xxs border border-rule rounded-sm bg-surface truncate"
+                className={fieldClass({ size: 'sm', className: 'flex-1 truncate' })}
                 onFocus={e => e.currentTarget.select()}
               />
-              <button
+              <Button
                 onClick={copy}
-                className="px-2 py-1 border border-rule rounded-sm text-xxs bg-surface cursor-pointer"
+                variant="ghost" size="xs"
                 title="Kopiera"
               >
                 <Copy size={11} />
-              </button>
+              </Button>
             </div>
             {copied && <div className="text-xxs text-acc-deep">Kopierad.</div>}
             {isStale && ageLabel && (
-              <div className="text-xxs text-amber-700 bg-amber-50 border border-amber-200 rounded-sm px-2 py-1">
+              <div className="text-xxs text-warn-ink bg-warn-soft border border-warn-deep/30 rounded-sm px-2 py-1">
                 {ageLabel}. Generera en ny om du misstänker att den läckt.
               </div>
             )}
             <div className="flex gap-1">
-              <button
+              <Button
                 onClick={handleRotate}
                 disabled={working}
-                className="inline-flex items-center gap-1 px-2 py-1 border border-rule rounded-sm text-xxs bg-surface cursor-pointer disabled:opacity-50"
+                variant="ghost" size="xs" className="inline-flex items-center gap-1 disabled:opacity-50"
               >
                 <RefreshCw size={10} /> Generera ny
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={() => setConfirmingDisable(true)}
                 disabled={working}
-                className="px-2 py-1 border border-rule rounded-sm text-xxs bg-surface cursor-pointer disabled:opacity-50"
+                variant="ghost" size="xs" className="disabled:opacity-50"
               >
                 Inaktivera
-              </button>
+              </Button>
             </div>
           </>
         ) : tokenIsActive ? (
@@ -228,32 +231,32 @@ export function InvitePanel({
               för att få en synlig länk att kopiera. Den gamla länken slutar då fungera.
             </p>
             <div className="flex gap-1">
-              <button
+              <Button
                 onClick={handleRotate}
                 disabled={working}
-                className="inline-flex items-center gap-1 px-2 py-1 border border-rule rounded-sm text-xxs bg-surface cursor-pointer disabled:opacity-50"
+                variant="ghost" size="xs" className="inline-flex items-center gap-1 disabled:opacity-50"
               >
                 <RefreshCw size={10} /> Generera ny
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={() => setConfirmingDisable(true)}
                 disabled={working}
-                className="px-2 py-1 border border-rule rounded-sm text-xxs bg-surface cursor-pointer disabled:opacity-50"
+                variant="ghost" size="xs" className="disabled:opacity-50"
               >
                 Inaktivera
-              </button>
+              </Button>
             </div>
           </>
         ) : (
           <>
             <p className="text-xxs text-ink-3">Ingen aktiv inbjudningslänk.</p>
-            <button
+            <Button
               onClick={handleRotate}
               disabled={working}
-              className="inline-flex items-center gap-1 px-2 py-1 border border-rule rounded-sm text-xxs bg-surface cursor-pointer disabled:opacity-50"
+              variant="ghost" size="xs" className="inline-flex items-center gap-1 disabled:opacity-50"
             >
               <RefreshCw size={10} /> Skapa länk
-            </button>
+            </Button>
           </>
         )}
       </div>

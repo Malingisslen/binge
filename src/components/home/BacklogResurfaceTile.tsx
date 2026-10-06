@@ -9,6 +9,7 @@ import DuotonePoster from '@/components/ui/DuotonePoster';
 import ProviderDot from '@/components/ui/ProviderDot';
 import type { WatchlistItem } from '@/types';
 import { Eyebrow } from '@/components/ui/Eyebrow';
+import { cardClass } from '@/components/ui/Card';
 
 // BIN-88 — "ville se — finns nu på din tjänst". A small Home tile that
 // resurfaces forgotten vill_se titles streamable on a service the user already
@@ -52,7 +53,7 @@ export default function BacklogResurfaceTile({
             <Link
               key={item.tmdbId}
               href={titleHref(item.mediaType, item.tmdbId)}
-              className="no-underline flex gap-[10px] items-center bg-surface border border-rule rounded-sm p-[8px] hover:shadow-lift transition-shadow"
+              className={cardClass('no-underline flex gap-[10px] items-center p-[8px] hover:shadow-lift transition-shadow')}
               style={{ color: 'var(--ink)' }}
             >
               <span className="shrink-0 w-[40px]">

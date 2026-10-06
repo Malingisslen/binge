@@ -21,6 +21,7 @@ import { LoadingView } from '@/components/ui/LoadingView';
 import { NotFound } from '@/components/ui/NotFound';
 import { EmptyState } from '@/components/ui/EmptyState';
 import type { TMDBPerson } from '@/types';
+import { cardClass } from '@/components/ui/Card';
 
 export default function PersonPageClient({ id, initialData }: { id: string; initialData?: TMDBPerson }) {
   const personId = parseInt(id, 10);
@@ -251,7 +252,7 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
             Osedda att samla klart ({unseenDirected.length})
             <span className="ml-2 font-normal text-xxs text-ink-3">regisserade filmer du inte sett</span>
           </summary>
-          <div className="bg-surface border border-rule rounded-sm">
+          <div className={cardClass()}>
             <TitleGrid items={unseenDirected} />
           </div>
         </details>
@@ -260,7 +261,7 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
       {roles.length > 0 && (
         <div className="mb-4">
           <h2 className="text-sm font-bold text-ink-2 mb-2">Filmografi ({roles.length})</h2>
-          <div className="bg-surface border border-rule rounded-sm">
+          <div className={cardClass()}>
             <TitleGrid items={roles} />
           </div>
         </div>
@@ -272,7 +273,7 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
             Gästframträdanden ({selfCredits.length})
             <span className="ml-2 font-normal text-xxs text-ink-3">talkshows, galor, dokumentärer — som sig själv</span>
           </summary>
-          <div className="bg-surface border border-rule rounded-sm">
+          <div className={cardClass()}>
             <TitleGrid items={selfCredits} />
           </div>
         </details>

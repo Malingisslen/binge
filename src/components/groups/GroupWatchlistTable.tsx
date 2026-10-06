@@ -13,6 +13,9 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { captureError } from '@/lib/sentry';
 import type { GroupMember, GroupWatchlistItem } from '@/types';
 import { Eyebrow } from '@/components/ui/Eyebrow';
+import { thClass } from '@/components/ui/tableHead';
+import { Button } from '@/components/ui/Button';
+import { cardClass } from '@/components/ui/Card';
 
 /**
  * Gemensam watchlist för en grupp. Varje medlem får en kolumn för sitt
@@ -129,7 +132,7 @@ export function GroupWatchlistTable({
   );
 
   return (
-    <div className="bg-surface border border-rule rounded-sm">
+    <div className={cardClass()}>
       <Eyebrow className="px-3 py-[6px] border-b border-rule-2">
         Gemensamt bibliotek ({watchlist.length})
       </Eyebrow>
@@ -141,19 +144,19 @@ export function GroupWatchlistTable({
       ) : (
         <table className="w-full text-xs">
           <thead>
-            <tr className="bg-rule-2/40">
-              <th className="text-left px-3 py-[6px] text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold">Titel</th>
+            <tr>
+              <th className={thClass('text-left px-3')}>Titel</th>
               {members.map(m => (
                 <th
                   key={m.uid}
-                  className="text-center px-2 py-[6px] text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold"
+                  className={thClass('text-center px-2')}
                   title={m.displayName}
                 >
                   {abbrev(m.displayName)}
                 </th>
               ))}
-              <th className="text-right px-3 py-[6px] text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold">Snitt</th>
-              <th className="px-2 py-[6px]"></th>
+              <th className={thClass('text-right px-3')}>Snitt</th>
+              <th className={thClass('px-2')}></th>
             </tr>
           </thead>
           <tbody>
@@ -337,22 +340,22 @@ function RatingPicker({
   const [open, setOpen] = useState(false);
   return (
     <div className="relative inline-block">
-      <button
+      <Button
         onClick={() => setOpen(v => !v)}
-        className="px-[5px] py-[1px] border border-rule rounded-sm text-xxs bg-surface cursor-pointer"
+        variant="ghost" size="xs"
       >
         {value != null ? value : '+'}
-      </button>
+      </Button>
       {open && (
-        <div className="absolute z-10 right-0 mt-[2px] bg-surface border border-rule rounded-sm shadow-none flex flex-wrap gap-[2px] p-1 w-[120px]">
+        <div className={cardClass('absolute z-10 right-0 mt-[2px] shadow-none flex flex-wrap gap-[2px] p-1 w-[120px]')}>
           {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
-            <button
+            <Button
               key={n}
               onClick={() => { onChange(n); setOpen(false); }}
-              className="w-[20px] h-[20px] text-xxs border border-rule-2 rounded-sm hover:border-acc-deep hover:text-acc-deep cursor-pointer bg-surface"
+              variant="ghost" size="xs" className="w-[20px] h-[20px] !p-0 justify-center"
             >
               {n}
-            </button>
+            </Button>
           ))}
           <button
             onClick={() => { onChange(null); setOpen(false); }}

@@ -13,6 +13,9 @@ import { SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
 import { storeParticipantId } from '@/hooks/useSession';
 import { FormSection, FormRadioGroup } from '@/components/ui/FormSection';
 import { MAX_SESSION_DISPLAY_NAME } from '@/lib/clampText';
+import { Button } from '@/components/ui/Button';
+import { fieldClass } from '@/components/ui/Field';
+import { cardClass } from '@/components/ui/Card';
 import type {
   AggregationStrategy,
   ProviderMode,
@@ -96,7 +99,7 @@ function NyContent() {
         standfirst="Skapa en delad session. Alla röstar ja eller nej — bland titlar ni faktiskt kan streama just nu. Dela länken efter sessionen är skapad; de som får länken behöver inget konto."
       />
 
-      <form onSubmit={onSubmit} className="bg-surface border border-rule rounded-sm">
+      <form onSubmit={onSubmit} className={cardClass()}>
         <FormSection title="Du">
           <label htmlFor="tillsammans-vardnamn" className="block text-xs text-ink-3 mb-1">Ditt namn</label>
           <input
@@ -106,7 +109,7 @@ function NyContent() {
             onChange={e => setHostName(e.target.value)}
             placeholder="T.ex. Lisa"
             maxLength={MAX_SESSION_DISPLAY_NAME}
-            className="w-full max-w-[260px] px-2 py-1 text-base border border-rule rounded-sm bg-surface"
+            className={fieldClass({ className: 'w-full max-w-[260px]' })}
           />
         </FormSection>
 
@@ -182,7 +185,7 @@ function NyContent() {
             placeholder="T.ex. 120 (lämna tomt för ingen gräns)"
             min="30"
             max="400"
-            className="w-full max-w-[220px] px-2 py-1 text-base border border-rule rounded-sm bg-surface"
+            className={fieldClass({ className: 'w-full max-w-[220px]' })}
           />
           <p className="text-xxs text-ink-3 mt-1">Gäller bara filmer.</p>
         </FormSection>
@@ -206,21 +209,21 @@ function NyContent() {
         )}
 
         <div className="px-3 py-2 border-t border-rule-2 flex items-center gap-2">
-          <button
+          <Button
             type="submit"
             disabled={submitting}
-            className="px-3 py-[5px] bg-acc-deep text-on-acc border-none rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
+            variant="acc" size="sm" className="disabled:opacity-50"
           >
             <Share2 size={11} className="inline mr-1" />
             {submitting ? 'Skapar…' : 'Skapa session och få länk'}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={() => router.push('/')}
-            className="px-3 py-[5px] border border-rule rounded-sm text-xs bg-surface cursor-pointer"
+            variant="ghost" size="sm"
           >
             Avbryt
-          </button>
+          </Button>
         </div>
       </form>
     </div>

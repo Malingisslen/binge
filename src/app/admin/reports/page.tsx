@@ -19,6 +19,9 @@ import { useQuery } from '@tanstack/react-query';
 import { getProfileForModeration } from '@/lib/firebase/moderationProfile';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { LoadingView } from '@/components/ui/LoadingView';
+import { Button } from '@/components/ui/Button';
+import { fieldClass } from '@/components/ui/Field';
+import { cardClass } from '@/components/ui/Card';
 
 const STATUS_TABS: ReportStatus[] = ['open', 'reviewed', 'actioned', 'dismissed'];
 
@@ -120,7 +123,7 @@ function ReportsDashboard() {
       )}
 
       {!loading && reports.length === 0 && !error && (
-        <div className="bg-surface border border-rule rounded-sm px-3 py-6 text-center text-sm text-ink-3">
+        <div className={cardClass('px-3 py-6 text-center text-sm text-ink-3')}>
           Inga {REPORT_STATUS_LABELS[activeTab].toLowerCase()} rapporter.
         </div>
       )}
@@ -162,7 +165,7 @@ function ReportRow({
   const notice = reportedProfileNotice(reportedUid, profile);
 
   return (
-    <li className="bg-surface border border-rule rounded-sm p-3">
+    <li className={cardClass('p-3')}>
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="min-w-0 flex-1">
           <div className="text-xs text-ink-3 mb-1">
@@ -246,26 +249,26 @@ function ReportRow({
                 onChange={e => setNote(e.target.value)}
                 maxLength={MAX_DECISION_NOTE}
                 rows={2}
-                className="w-56 px-2 py-1 text-xs border border-rule rounded-sm bg-surface"
+                className={fieldClass({ size: 'sm', className: 'w-56' })}
               />
-              <button
+              <Button
                 onClick={() => onAction(report.id, 'reviewed', note)}
-                className="px-3 py-[3px] text-xs border border-rule rounded-sm bg-surface cursor-pointer hover:bg-bg-2"
+                variant="ghost" size="sm"
               >
                 Granskad
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={() => onAction(report.id, 'actioned', note)}
-                className="px-3 py-[3px] text-xs bg-acc-deep text-on-acc border-none rounded-sm cursor-pointer"
+                variant="acc" size="sm"
               >
                 Åtgärda
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={() => onAction(report.id, 'dismissed', note)}
-                className="px-3 py-[3px] text-xs border border-rule rounded-sm bg-surface text-ink-3 cursor-pointer hover:bg-bg-2"
+                variant="ghost" size="sm"
               >
                 Avfärda
-              </button>
+              </Button>
             </>
           )}
           {report.status !== 'open' && (
@@ -273,12 +276,12 @@ function ReportRow({
               <span className="px-3 py-[3px] text-xxs text-ink-3 text-right">
                 {REPORT_STATUS_LABELS[report.status]}
               </span>
-              <button
+              <Button
                 onClick={() => onAction(report.id, 'open')}
-                className="px-3 py-[3px] text-xs border border-rule rounded-sm bg-surface cursor-pointer hover:bg-bg-2"
+                variant="ghost" size="sm"
               >
                 Öppna igen
-              </button>
+              </Button>
             </>
           )}
         </div>

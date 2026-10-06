@@ -18,12 +18,15 @@
 // it is for the sibling check. The staged files are readable in both phases; the ticket ids
 // are not.
 //
+// WHICH COMMITS IT GRADES. Only those `owesReview` in the sibling says owe a review row
+// (BIN-1426, decision 1): an ordinary change owes no critique, so no role can be missing from
+// one. A new feature is routed as one, with `route.mjs --feature`.
+//
 // WHAT THIS DOES NOT DO. It never asks whether a review row EXISTS — that is
 // `check_review_coverage.mjs`, which runs beside it and owns the silence case. This one
 // grades only the ROLES: given rows that exist, does their panel cover what the staged files
 // route to. A commit whose tickets have no rows at all passes here, so the two messages never
-// compete to explain the same failure. Whether the sibling refuses it instead depends on that
-// check's own commit-type list — read it there.
+// compete to explain the same failure.
 //
 // AND IT DOES NOT TEST A ROW'S AGE OR SCOPE. `loggedPanel` unions every `review` row bearing
 // one of the ticket ids, whenever it was written and whatever fileset it was written about.
@@ -41,7 +44,9 @@ import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseEvents, ticketOf } from './check_events.mjs';
-import { ticketsInSubject, stagedEventsLog, REPO_ROOT } from './check_review_coverage.mjs';
+import {
+  ticketsInSubject, stagedEventsLog, REPO_ROOT, owesReview, isFeature, stagedAddedFiles, stagedReviewGates,
+} from './check_review_coverage.mjs';
 import { route, ROLE_TITLES } from '../route.mjs';
 
 /**
@@ -165,19 +170,26 @@ export function loggedPanel(rows, tickets) {
 }
 
 /**
- * @returns {{ok: boolean, reason: string, tickets: string[], paths: string[],
+ * `added` and `gates` are what `owesReview` reads. With `gates` null, the router reads the
+ * gates in the working tree itself.
+ *
+ * @returns {{ok: boolean, reason: string, tickets: string[], paths: string[], feature: boolean,
  *          tier: string, routed: number[], logged: number[], missing: number[],
  *          roleTitles: Map<number, string>}}
  */
-export function gradeStagedRouting({ subject, stagedPaths, rows }) {
+export function gradeStagedRouting({ subject, stagedPaths, rows, added = [], gates = null }) {
   const tickets = ticketsInSubject(subject);
   const paths = stagedRoutingUnion(stagedPaths);
-  const base = { tickets, paths, tier: 'n/a', routed: [], logged: [], missing: [], roleTitles: new Map() };
+  const feature = isFeature(subject, added);
+  const base = { tickets, paths, feature, tier: 'n/a', routed: [], logged: [], missing: [], roleTitles: new Map() };
 
+  if (!owesReview({ subject, files: stagedPaths, added, gates })) {
+    return { ...base, ok: true, reason: 'this commit owes no review row' };
+  }
   if (tickets.length === 0) return { ...base, ok: true, reason: 'the subject names no ticket' };
   if (paths.length === 0) return { ...base, ok: true, reason: 'nothing is staged that the router reads' };
 
-  const routing = route(paths);
+  const routing = route(paths, { feature, gates: gates ?? undefined });
   const routed = [...new Set(panelNumbers(routing.panel))].sort((a, b) => a - b);
   // The fallback seat is never in `roles` — nothing matched it, the router invented it — so
   // a message built from `roles` alone would name it `#14` and nothing else. That is the
@@ -199,6 +211,24 @@ export function gradeStagedRouting({ subject, stagedPaths, rows }) {
 
   const loggedSet = new Set(logged);
   const missing = routed.filter((n) => !loggedSet.has(n));
+  // The sprint routes every ticket as a feature (`delivery.router.command` carries
+  // `--feature`), and on a mix of sensitive and ordinary files that seats a different role
+  // than the default routing. A critique logged under either routing of the same files
+  // covers the commit, so a sprint's fix is not refused for the role it did not convene.
+  if (missing.length > 0) {
+    const asFeature = [...new Set(panelNumbers(route(paths, { feature: true, gates: gates ?? undefined }).panel))];
+    if (asFeature.length > 0 && asFeature.every((n) => loggedSet.has(n))) {
+      return {
+        ...base,
+        ok: true,
+        reason: 'every role the routing as a feature names is logged, which is how a sprint routes a ticket',
+        tier: routing.tier,
+        routed,
+        logged,
+        roleTitles,
+      };
+    }
+  }
   return {
     ...base,
     ok: missing.length === 0,
@@ -211,9 +241,9 @@ export function gradeStagedRouting({ subject, stagedPaths, rows }) {
   };
 }
 
-/** The staged file list, as git sees it right now. */
+/** The staged file list, as git sees it right now; a moved file under both of its paths. */
 export function readStagedPaths(repoDir = REPO_ROOT) {
-  const raw = execFileSync('git', ['diff', '--cached', '--name-only'], {
+  const raw = execFileSync('git', ['diff', '--cached', '--name-only', '--no-renames'], {
     cwd: repoDir, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'],
   });
   return raw.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
@@ -233,7 +263,7 @@ export function refusalLines(verdict) {
     'The staged files route to a role that no `review` row for these tickets names. That is',
     'BIN-1059: the panel was decided on a file set that has since moved. Reproduce it with',
     '',
-    `  node docs/org/route.mjs ${verdict.paths.join(' ')}`,
+    `  node docs/org/route.mjs ${verdict.feature ? '--feature ' : ''}${verdict.paths.join(' ')}`,
     '',
     'Then either convene the missing role\'s blind critique and log a row naming it, or commit',
     'the files SPLIT so each commit routes to the critique that actually ran. Do not widen the',
@@ -249,6 +279,8 @@ export function mainMessage(messagePath) {
     subject,
     stagedPaths: readStagedPaths(),
     rows: parseEvents(log.text),
+    added: stagedAddedFiles(),
+    gates: stagedReviewGates().gates,
   });
 
   if (verdict.ok) {

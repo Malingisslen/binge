@@ -16,10 +16,12 @@ import RatingStars from '@/components/title/RatingStars';
 import { buildDiary, diaryEntryCount, firstEntries } from '@/lib/diary';
 import { computeBingeStats } from '@/lib/bingeStats';
 import { Eyebrow } from '@/components/ui/Eyebrow';
+import { buttonClass } from '@/components/ui/Button';
+import { cardClass } from '@/components/ui/Card';
 
 function StatBox({ value, label }: { value: number; label: string }) {
   return (
-    <div className="bg-surface border border-rule rounded-md px-[12px] py-[8px] min-w-[92px]">
+    <div className={cardClass('px-[12px] py-[8px] min-w-[92px]')}>
       <div className="text-2xl font-bold text-ink leading-none tabular-nums">{value}</div>
       <div className="text-xxs text-ink-3 mt-[3px]">{label}</div>
     </div>
@@ -72,7 +74,7 @@ export default function DiaryPageClient() {
             icon={<BookOpen size={28} />}
             title="Inga daterade visningar än"
             body="När du markerar en film som sedd eller bockar av ett avsnitt sparas datumet här. Filmers datum kan du backdatera i efterhand — avsnitt stämplas med dagens datum när du bockar av dem."
-            action={<Link href="/my/films/" className="btn btn-sm">Till dina filmer</Link>}
+            action={<Link href="/my/films/" className={buttonClass({ size: 'sm' })}>Till dina filmer</Link>}
           />
         </div>
       ) : (
@@ -105,7 +107,7 @@ export default function DiaryPageClient() {
                     <Link
                       key={`${item.tmdbId}-${episodeCode ?? 'film'}`}
                       href={titleHref(item.mediaType, item.tmdbId)}
-                      className="flex items-center gap-[10px] bg-surface border border-rule rounded-sm px-[10px] py-[7px] no-underline hover:border-rule-2 transition-colors"
+                      className={cardClass('flex items-center gap-[10px] px-[10px] py-[7px] no-underline hover:border-rule-2 transition-colors')}
                     >
                       <div className={`poster duo-${tone} w-[34px] h-[51px] shrink-0`} style={{ aspectRatio: '2 / 3' }}>
                         {poster && (
@@ -133,7 +135,7 @@ export default function DiaryPageClient() {
           ))}
           {shownCount < total && (
             <div className="flex items-center gap-[10px]">
-              <button type="button" className="btn btn-sm" onClick={() => setShownCount(n => n + PAGE_SIZE * 2)}>
+              <button type="button" className={buttonClass({ size: 'sm' })} onClick={() => setShownCount(n => n + PAGE_SIZE * 2)}>
                 Visa fler
               </button>
               <span className="text-xxs text-ink-3 tabular-nums">{shownCount} av {total} visas</span>

@@ -15,6 +15,8 @@ import type { FriendRequest, FriendUser } from '@/lib/firebase/friends';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { usePageMeta } from '@/hooks/usePageMeta';
 import { LoadingView } from '@/components/ui/LoadingView';
+import { Button } from '@/components/ui/Button';
+import { cardClass } from '@/components/ui/Card';
 
 type Tab = 'friends' | 'requests' | 'following' | 'followers';
 
@@ -95,19 +97,19 @@ export default function FriendsPageClient() {
       )}
 
       {!empty && tab === 'friends' && (
-        <ul className="bg-surface border border-rule rounded-sm divide-y divide-rule-2">
+        <ul className={cardClass('divide-y divide-rule-2')}>
           {friends.map(f => <FriendRow key={f.uid} friend={f} />)}
         </ul>
       )}
 
       {!empty && tab === 'requests' && (
-        <ul className="bg-surface border border-rule rounded-sm divide-y divide-rule-2">
+        <ul className={cardClass('divide-y divide-rule-2')}>
           {requests.map(r => <RequestRow key={r.fromUid} request={r} />)}
         </ul>
       )}
 
       {!empty && (tab === 'following' || tab === 'followers') && (
-        <ul className="bg-surface border border-rule rounded-sm divide-y divide-rule-2">
+        <ul className={cardClass('divide-y divide-rule-2')}>
           {list.map(u => <Row key={u.uid} user={u} tab={tab} />)}
         </ul>
       )}
@@ -154,12 +156,12 @@ function FriendRow({ friend }: { friend: FriendUser }) {
       </div>
       {!isMe && (
         <div className="flex flex-col items-end gap-1">
-          <button
+          <Button
             onClick={run('remove', () => removeFriend(friend.uid))}
-            className="px-2 py-[2px] text-xxs border border-rule bg-surface text-ink-2 rounded-sm cursor-pointer font-[inherit] hover:bg-bg-2"
+            variant="ghost" size="xs"
           >
             Ta bort
-          </button>
+          </Button>
           {failedAction === 'remove' && (
             <span role="alert" className="text-xs text-danger-ink">{FRIEND_FAILURE_TEXT.remove}</span>
           )}
@@ -197,18 +199,18 @@ function RequestRow({ request }: { request: FriendRequest }) {
           racing it for the banner. */}
       <div className="flex flex-col items-end gap-1">
         <div className="flex gap-1">
-          <button
+          <Button
             onClick={run('accept', () => acceptFriendRequest(request.fromUid))}
-            className="px-2 py-[2px] text-xxs border border-acc-deep bg-acc-deep text-on-acc rounded-sm cursor-pointer font-[inherit]"
+            variant="acc" size="xs"
           >
             Acceptera
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={run('decline', () => declineFriendRequest(request.fromUid))}
-            className="px-2 py-[2px] text-xxs border border-rule bg-surface text-ink-2 rounded-sm cursor-pointer font-[inherit] hover:bg-bg-2"
+            variant="ghost" size="xs"
           >
             Avböj
-          </button>
+          </Button>
         </div>
         {failedAction && (
           <span role="alert" className="text-xs text-danger-ink">{FRIEND_FAILURE_TEXT[failedAction]}</span>
@@ -259,7 +261,7 @@ function Row({ user, tab }: { user: FollowListUser; tab: Tab }) {
 
 function EmptyState({ headline, body }: { headline: string; body: string }) {
   return (
-    <div className="bg-surface border border-rule rounded-sm px-4 py-6 text-center">
+    <div className={cardClass('px-4 py-6 text-center')}>
       <Search size={18} className="mx-auto text-ink-3 mb-2" />
       <div className="text-sm font-semibold text-ink mb-1">{headline}</div>
       <p className="text-xs text-ink-3 leading-relaxed">{body}</p>

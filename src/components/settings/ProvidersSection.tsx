@@ -9,6 +9,8 @@ import { isValidBillingDay, daysUntilRenewal } from '@/lib/renewal';
 import { trackEvent } from '@/lib/analytics';
 import { formatKr } from '@/lib/formatKr';
 import { SettingsSection } from './SettingsSection';
+import { eyebrowClass } from '@/components/ui/Eyebrow';
+import { fieldClass } from '@/components/ui/Field';
 import {
   readableTextColor,
   splitProviders,
@@ -80,7 +82,7 @@ export function ProvidersSection() {
     <SettingsSection title="Mina streamingtjänster" collapsible defaultOpen={savedProviders.length === 0}>
       {selectedProviders.length > 0 ? (
         <>
-          <div className="text-xxs uppercase tracking-[0.14em] text-ink-3 mb-2">
+          <div className={eyebrowClass({ className: 'mb-2' })}>
             Dina tjänster · {selectedProviders.length}
           </div>
           <div className="grid grid-cols-4 gap-[7px] mb-4">
@@ -105,7 +107,7 @@ export function ProvidersSection() {
 
       {available.length > 0 && (
         <div ref={addMoreRef}>
-          <div className="text-xxs uppercase tracking-[0.14em] text-ink-3 mb-2">Lägg till fler</div>
+          <div className={eyebrowClass({ className: 'mb-2' })}>Lägg till fler</div>
           <div className="grid grid-cols-4 gap-[7px] mb-4">
             {available.map(p => tile(p, false))}
           </div>
@@ -114,7 +116,7 @@ export function ProvidersSection() {
 
       {selectedProviders.length > 0 && (
         <div className="border-t border-rule-2 pt-3">
-          <div className="text-xxs uppercase tracking-[0.14em] text-ink-3 mb-2">Nivå &amp; kostnad</div>
+          <div className={eyebrowClass({ className: 'mb-2' })}>Nivå &amp; kostnad</div>
           <p className="text-xs text-ink-3 mb-2 leading-snug">
             Väljer du en nivå följer priset tjänstens aktuella listpris — det uppdateras automatiskt när tjänsten
             ändrar sitt. Väljer du <span className="whitespace-nowrap">&quot;Egen kostnad…&quot;</span> gäller beloppet du själv skriver in.
@@ -172,7 +174,7 @@ export function ProvidersSection() {
                           toast('Kunde inte spara kostnaden. Försök igen om en stund.'),
                         );
                       }}
-                      className="w-[70px] px-1 py-[1px] text-xs border border-rule rounded-sm bg-surface text-ink font-[inherit] outline-none text-right"
+                      className={fieldClass({ size: 'sm', className: 'w-[70px] text-right' })}
                     />
                   )}
                   <input
@@ -192,7 +194,7 @@ export function ProvidersSection() {
                         toast('Kunde inte spara förnyelsedagen. Försök igen om en stund.'),
                       );
                     }}
-                    className="w-[48px] px-1 py-[1px] text-xs border border-rule rounded-sm bg-surface text-ink font-[inherit] outline-none text-right"
+                    className={fieldClass({ size: 'sm', className: 'w-[48px] text-right' })}
                   />
                 </div>
                 <ProviderCampaignRow
@@ -292,7 +294,7 @@ function ProviderCampaignRow({
         value={cost}
         onChange={e => setCost(e.target.value)}
         aria-label="Kampanjpris per månad"
-        className="w-[70px] px-1 py-[1px] text-xs border border-rule rounded-sm bg-surface text-ink font-[inherit] outline-none text-right"
+        className={fieldClass({ size: 'sm', className: 'w-[70px] text-right' })}
       />
       <span className="text-ink-3">t.o.m.</span>
       <input
@@ -300,7 +302,7 @@ function ProviderCampaignRow({
         value={endDate}
         onChange={e => setEndDate(e.target.value)}
         aria-label="Kampanjens slutdatum"
-        className="px-1 py-[1px] text-xs border border-rule rounded-sm bg-surface text-ink font-[inherit] outline-none"
+        className={fieldClass({ size: 'sm' })}
       />
       <button
         type="button"

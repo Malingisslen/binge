@@ -22,6 +22,8 @@ import ListCheapestPlanPanel from '@/components/lists/ListCheapestPlanPanel';
 import ShareButton from '@/components/share/ShareButton';
 import type { ListPlanItem } from '@/hooks/useListCheapestPlan';
 import { Eyebrow } from '@/components/ui/Eyebrow';
+import { buttonClass, Button } from '@/components/ui/Button';
+import { cardClass } from '@/components/ui/Card';
 
 export default function ListPageClient({ listId }: { listId: string }) {
   const { uid } = useAuth();
@@ -58,7 +60,7 @@ export default function ListPageClient({ listId }: { listId: string }) {
         crumb="Lista"
         title="Listan hittades inte"
         body="Listan kan vara borttagen eller satt till privat."
-        action={<Link href="/bibliotek" className="btn btn-ghost">Till biblioteket</Link>}
+        action={<Link href="/bibliotek" className={buttonClass({ variant: 'ghost' })}>Till biblioteket</Link>}
       />
     );
   }
@@ -110,12 +112,12 @@ export default function ListPageClient({ listId }: { listId: string }) {
         crumb="Lista"
         title={list.title}
         actions={canEdit && !showPicker ? (
-          <button
+          <Button
             onClick={() => setShowPicker(true)}
-            className="inline-flex items-center gap-1 px-3 py-[3px] border-none rounded-sm text-xs font-[inherit] cursor-pointer bg-acc-deep text-on-acc shrink-0"
+            variant="acc" size="sm" className="inline-flex items-center gap-1 shrink-0"
           >
             <Plus size={12} /> Lägg till titel
-          </button>
+          </Button>
         ) : (!canEdit && uid) ? (
           // BIN-96: följ/avfölj någon annans lista (inloggad, ej egen lista
           // och ej medredigerare — canEdit täcker både ägare och editors).
@@ -168,7 +170,7 @@ export default function ListPageClient({ listId }: { listId: string }) {
           body={canEdit && !showPicker ? 'Lägg till din första titel med knappen ovan.' : canEdit ? 'Använd sökfältet ovan.' : 'Den här listan har inga titlar ännu.'}
         />
       ) : (
-        <div className="bg-surface border border-rule rounded-sm mt-3">
+        <div className={cardClass('mt-3')}>
           <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-[10px] md:gap-[7px] px-3 py-2">
             {list.items.map(item => {
             const poster = posterUrl(item.posterPath, 'w342');
@@ -221,8 +223,8 @@ function TitlePicker({ existingIds, onAdd, onClose }: TitlePickerProps) {
     .slice(0, 8);
 
   return (
-    <div className="bg-surface border border-rule rounded-sm p-2 mt-3">
-      <div className="flex items-center gap-2 mb-2 border border-rule rounded-sm bg-surface px-2">
+    <div className={cardClass('p-2 mt-3')}>
+      <div className={cardClass('flex items-center gap-2 mb-2 px-2')}>
         <Search size={12} className="text-ink-3" />
         <input
           type="search"
@@ -322,7 +324,7 @@ function EditorsManager({ editors, onAdd, onRemove }: {
     if (!res.ok) setMsg(res.error ?? 'Kunde inte ta bort medredigeraren.');
   };
   return (
-    <div className="bg-surface border border-rule rounded-md px-3 py-[10px] mt-3 max-w-[420px]">
+    <div className={cardClass('px-3 py-[10px] mt-3 max-w-[420px]')}>
       <Eyebrow className="mb-1">Medredigerare</Eyebrow>
       <p className="text-xxs text-ink-3 mb-2">
         De du lägger till kan lägga till och ta bort titlar — men inte ändra listans namn eller synlighet.
@@ -362,13 +364,13 @@ function EditorRow({ uid, onRemove }: { uid: string; onRemove: () => void }) {
   return (
     <div className="flex items-center justify-between text-xs">
       <span className="text-ink truncate">{name ?? '…'}</span>
-      <button
+      <Button
         type="button"
         onClick={onRemove}
-        className="text-xxs text-danger-ink border border-rule rounded-sm px-2 py-[1px] bg-surface cursor-pointer shrink-0 ml-2"
+        variant="danger-ghost" size="xs" className="shrink-0 ml-2"
       >
         Ta bort
-      </button>
+      </Button>
     </div>
   );
 }

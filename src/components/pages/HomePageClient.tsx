@@ -31,6 +31,8 @@ import { useSignedOutRedirect } from '@/hooks/useSignedOutRedirect';
 import GuestCostDemo from '@/components/pricing/GuestCostDemo';
 import BrandMark from '@/components/ui/BrandMark';
 import type { TMDBSearchResult } from '@/types';
+import { buttonClass } from '@/components/ui/Button';
+import { cardClass } from '@/components/ui/Card';
 
 // LandingPage tar trending-sektionen som ReactNode-prop istället för en
 // withTrending-flagga: auth-loading-grenen (den som pre-renderas) skickar en
@@ -98,7 +100,7 @@ function LandingPage({ trending, guestDemo }: { trending?: React.ReactNode; gues
               // back out by LoginPage's own uid effect.
               goToLogin();
             }}
-            className="px-5 py-[7px] bg-acc-deep text-on-acc border-none rounded-sm cursor-pointer font-[inherit] text-sm font-semibold mb-8"
+            className={buttonClass({ variant: 'acc', className: 'mb-8' })}
           >
             Skapa konto gratis
           </button>
@@ -132,7 +134,7 @@ function TrendingSection({ items }: { items: TMDBSearchResult[] }) {
 
   return (
     <section className="max-w-[1000px] mx-auto px-4 py-8">
-      <div className="bg-surface border border-rule rounded-sm">
+      <div className={cardClass()}>
         <div className="px-3 py-[6px] border-b border-rule-2">
           <h2 className="text-sm font-bold text-ink-2 m-0">Trendande just nu</h2>
         </div>
@@ -167,8 +169,8 @@ function EmptyLibrary() {
         som möjliga pauser i Streamingrådgivaren.
       </p>
       <div className="actions">
-        <Link href="/series/" className="btn">Utforska serier</Link>
-        <Link href="/films/" className="btn btn-ghost">Utforska filmer</Link>
+        <Link href="/series/" className={buttonClass()}>Utforska serier</Link>
+        <Link href="/films/" className={buttonClass({ variant: 'ghost' })}>Utforska filmer</Link>
       </div>
     </div>
   );

@@ -2621,6 +2621,22 @@ punkt 2.
 
 **Re-open when:** någon av punkterna ovan inträffar.
 
+## BIN-1426 del 3: en kodändrande commit är skyldig en granskningsrad bara i de känsliga delarna — 2026-10-06
+
+Efterföljare till `## 2026-08-29 — kodändrande commits FÖRE COVERAGE_EFFECTIVE_FROM …(BIN-938)`,
+som står kvar ordagrant. Dess första stycke säger att kontrollen grindar på att varje
+kodändrande commit namnger en biljett med en `review`-rad. Sedan Malins beslut 1 (2026-10-05)
+är bara de commits skyldiga en rad som `owesReview` i `check_review_coverage.mjs` säger, med
+epoken `REVIEW_SCOPE_EFFECTIVE_FROM`. Härled regeln och epoken:
+
+```
+git grep -n "export function owesReview\|export const REVIEW_SCOPE_EFFECTIVE_FROM" -- docs/org/metrics/check_review_coverage.mjs
+```
+
+En vanlig fix utanför granskningsgrindarna bär alltså ingen rad och inget biljett-id, och det är
+avsett. BIN-938-postens kommando listar fortfarande sådana commits; läs dess utdata mot
+`owesReview`, inte som en lista över brister.
+
 ## BIN-1450: paket P:s commits utan biljett-id kopplas via sin sha — 2026-10-06
 
 Tråden "Små fel från bilderna" pushade commits till main utan biljett-id i ämnesraden;

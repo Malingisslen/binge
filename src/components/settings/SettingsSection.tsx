@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
+import { eyebrowClass } from '@/components/ui/Eyebrow';
 
 /**
  * Enhetligt sektion-kort för /settings. Ersätter de tidigare separata
@@ -35,9 +36,8 @@ export function SettingsSection({
   const isOpen = collapsible ? open : true;
 
   const borderClass = tone === 'danger' ? 'border-danger' : 'border-rule';
-  const eyebrowClass = tone === 'danger' ? 'text-danger-ink' : 'text-ink-3';
   const eyebrow = (
-    <span className={`text-xs uppercase tracking-[0.14em] font-medium ${eyebrowClass}`}>
+    <span className={eyebrowClass({ size: 'xs', tone: tone === 'danger' ? 'danger' : 'muted' })}>
       {title}
     </span>
   );

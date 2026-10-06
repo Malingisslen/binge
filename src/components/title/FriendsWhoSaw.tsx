@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { AvatarInitials } from '@/components/ui/AvatarInitials';
 import { useFriendsWhoSaw, type FriendWhoSaw } from '@/hooks/useFriendsWhoSaw';
 import type { MediaType } from '@/types';
+import { eyebrowClass } from '@/components/ui/Eyebrow';
 
 /**
  * BIN-97 — kompakt rad med personer man följer som har titeln publikt.
@@ -33,7 +34,7 @@ export default function FriendsWhoSaw({ mediaType, tmdbId }: { mediaType: MediaT
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>
-      <span style={{ fontSize: 10.5, letterSpacing: 0.12, textTransform: 'uppercase', color: 'var(--ink-3)' }}>
+      <span className={eyebrowClass({ size: 'xs' })}>
         vänner som sett detta
       </span>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -50,9 +51,9 @@ export default function FriendsWhoSaw({ mediaType, tmdbId }: { mediaType: MediaT
               ) : (
                 <AvatarInitials name={f.displayName} size={22} />
               )}
-              <span style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>{f.displayName}</span>
+              <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--ink-2)' }}>{f.displayName}</span>
               {label(f) && (
-                <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>{label(f)}</span>
+                <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--ink-3)' }}>{label(f)}</span>
               )}
             </span>
           );
@@ -65,7 +66,7 @@ export default function FriendsWhoSaw({ mediaType, tmdbId }: { mediaType: MediaT
           );
         })}
         {overflow > 0 && (
-          <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>+{overflow}</span>
+          <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--ink-3)' }}>+{overflow}</span>
         )}
       </div>
     </div>

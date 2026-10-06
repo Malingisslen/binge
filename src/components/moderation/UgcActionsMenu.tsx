@@ -7,6 +7,10 @@ import { useBlockedUsers } from '@/hooks/useBlockedUsers';
 import { useFriendActions } from '@/hooks/useFriends';
 import { useToast } from '@/contexts/ToastContext';
 import { captureError } from '@/lib/sentry';
+import { eyebrowClass } from '@/components/ui/Eyebrow';
+import { Button } from '@/components/ui/Button';
+import { fieldClass } from '@/components/ui/Field';
+import { cardClass } from '@/components/ui/Card';
 import {
   createReport,
   REPORT_REASON_LABELS,
@@ -152,7 +156,7 @@ export function UgcActionsMenu({
         {triggerLabel && <span className="text-xs">{triggerLabel}</span>}
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-[2px] bg-surface border border-rule rounded-sm min-w-[160px] z-20">
+        <div className={cardClass('absolute right-0 top-full mt-[2px] min-w-[160px] z-20')}>
           {extraItems.map((item, i) => (
             <button
               key={item.key}
@@ -241,14 +245,14 @@ function ReportDialog({
 
   return (
     <div
-      className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 bg-scrim z-50 flex items-center justify-center p-4"
       onClick={onClose}
       role="presentation"
     >
       <form
         onSubmit={submit}
         onClick={e => e.stopPropagation()}
-        className="bg-surface border border-rule rounded-sm max-w-[440px] w-full"
+        className={cardClass('max-w-[440px] w-full')}
         role="dialog"
         aria-modal="true"
         aria-labelledby="report-dialog-title"
@@ -262,7 +266,7 @@ function ReportDialog({
         </div>
         <div className="px-3 py-3 space-y-3">
           <div>
-            <label className="block text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold mb-1">
+            <label className={eyebrowClass({ className: 'block mb-1' })}>
               Anledning
             </label>
             <select
@@ -276,7 +280,7 @@ function ReportDialog({
             </select>
           </div>
           <div>
-            <label className="block text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold mb-1">
+            <label className={eyebrowClass({ className: 'block mb-1' })}>
               Kommentar (valfritt)
             </label>
             <textarea
@@ -285,7 +289,7 @@ function ReportDialog({
               maxLength={500}
               rows={3}
               placeholder="Extra kontext för moderationen…"
-              className="w-full px-2 py-1 text-xs border border-rule rounded-sm bg-surface font-[inherit] resize-none"
+              className={fieldClass({ size: 'sm', className: 'w-full resize-none' })}
             />
             <div className="text-xxs text-ink-3 mt-[2px] text-right">
               {note.length}/500
@@ -294,20 +298,20 @@ function ReportDialog({
           {error && <div className="text-xxs text-danger-ink">{error}</div>}
         </div>
         <div className="px-3 py-2 border-t border-rule-2 flex items-center gap-2">
-          <button
+          <Button
             type="submit"
             disabled={submitting}
-            className="px-3 py-[5px] bg-acc-deep text-on-acc rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
+            variant="acc" size="sm" className="disabled:opacity-50"
           >
             {submitting ? 'Skickar…' : 'Skicka rapport'}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={onClose}
-            className="px-3 py-[5px] border border-rule rounded-sm text-xs bg-surface cursor-pointer"
+            variant="ghost" size="sm"
           >
             Avbryt
-          </button>
+          </Button>
         </div>
       </form>
     </div>

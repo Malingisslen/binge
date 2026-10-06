@@ -7,6 +7,7 @@ import { SettingsSection } from './SettingsSection';
 import type { ItemVisibility } from '@/types';
 import { MAX_BIO } from '@/lib/clampText';
 import { Button } from '@/components/ui/Button';
+import { fieldClass } from '@/components/ui/Field';
 
 const VISIBILITY_OPTIONS: { value: ItemVisibility; label: string; description: string }[] = [
   { value: 'private', label: 'Privat', description: 'Bara jag ser mina titlar.' },
@@ -67,7 +68,7 @@ export function UsernameSection() {
               onChange={e => setUsernameInput(e.target.value.toLowerCase())}
               placeholder="filmnerden"
               maxLength={20}
-              className="flex-1 px-2 py-[3px] text-xs border border-rule rounded-sm bg-surface text-ink font-[inherit] outline-none"
+              className={fieldClass({ size: 'sm', className: 'flex-1' })}
             />
             <Button
               onClick={handleSaveUsername}
@@ -102,7 +103,7 @@ export function UsernameSection() {
             placeholder="Berätta lite om dig…"
             maxLength={MAX_BIO}
             rows={2}
-            className="w-full px-2 py-1 text-xs border border-rule rounded-sm bg-surface text-ink font-[inherit] resize-none outline-none"
+            className={fieldClass({ size: 'sm', className: 'w-full resize-none' })}
           />
         </div>
         <div>

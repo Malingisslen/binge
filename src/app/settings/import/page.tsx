@@ -20,6 +20,8 @@ import {
 } from '@/lib/watchlist/libraryHoldCopy';
 import type { MediaType, WatchStatus } from '@/types';
 import { Button } from '@/components/ui/Button';
+import { eyebrowClass } from '@/components/ui/Eyebrow';
+import { cardClass } from '@/components/ui/Card';
 
 /**
  * BIN-69 — CSV-import (Letterboxd / IMDb). Dry-run-säkerhet är bärande: vi
@@ -185,7 +187,7 @@ function ImportContent() {
       />
 
       <div className="mt-7 max-w-2xl">
-        <div className="bg-surface border border-rule rounded-md p-4">
+        <div className={cardClass('p-4')}>
           <p className="text-sm text-ink-2 mb-3">
             Exportera en CSV från <strong>Letterboxd</strong> (Inställningar → Import &amp; Export) eller{' '}
             <strong>IMDb</strong> (din lista → Export) och välj filen här.
@@ -267,7 +269,7 @@ function ImportContent() {
 
             {unmatchedCount > 0 && (
               <details className="mt-2">
-                <summary className="text-xs font-bold uppercase tracking-[0.5px] text-ink-3 cursor-pointer">
+                <summary className={eyebrowClass({ size: 'xs', className: 'cursor-pointer' })}>
                   Ej matchade ({unmatchedCount}) ›
                 </summary>
                 <ul className="mt-2 text-sm text-ink-2 list-disc pl-5">
