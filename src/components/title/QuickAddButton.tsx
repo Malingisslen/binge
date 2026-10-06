@@ -129,7 +129,10 @@ export default function QuickAddButton({
           // BIN-645, now shared with StatusButton as BIN-714 — the whole rule
           // and every reason behind it live in useSignedOutRedirect. Called
           // FIRST, above the library gates: a signed-out visitor has no library.
-          if (signedOut) { goToLogin(); return; }
+          if (signedOut) {
+            goToLogin({ tmdbId, mediaType, title, posterPath, releaseYear, providers, subscriptionProviders, genreIds });
+            return;
+          }
           // Belt-and-braces behind the disabled attribute below: we do not yet
           // know whether this visitor is signed in, so there is no honest
           // destination — neither the menu nor a trip to /login.
