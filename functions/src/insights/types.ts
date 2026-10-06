@@ -29,6 +29,9 @@ export interface RollupData {
   // Non-anonymous Auth accounts seen within 7 / 30 days (decision 8). Optional:
   // rollup docs written before this field existed lack it.
   activeUsers?: { d7: number; d30: number };
+  // BIN-1442: accounts whose second week closed within the last 30 days (cohort)
+  // and how many of them opened Binge in it (returned). Optional: older docs lack it.
+  secondWeekReturn?: { returned: number; cohort: number };
   statusDistribution: { vill_se: number; mina: number; sedd: number; avbruten: number };
   mediaTypeSplit: { movie: number; tv: number };
   ratingsHistogram: number[]; // length 10, index i => rating (i+1)

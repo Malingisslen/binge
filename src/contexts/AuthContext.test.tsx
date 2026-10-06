@@ -2909,3 +2909,89 @@ describe('AuthContext — signIn() säger om Google-kontot är nytt', () => {
     expect(result).toEqual({ isNewUser: expected });
   });
 });
+
+// BIN-1442 — "Påminn mig". The server finds due users by pauseReminderNext alone,
+// so every write of providerPauses must carry it, computed from the same map.
+describe('pause reminders (BIN-1442)', () => {
+  const pauses = { 8: { pausedAt: '2026-10-01', resumeAt: '2026-11-03' }, 76: { pausedAt: '2026-10-01', resumeAt: '2026-12-12', remind: true } };
+
+  it('setPauseReminder writes the reminder and the earliest reminded date together', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerPauses: pauses });
+    setDoc.mockClear();
+    await act(async () => { await ctx!.setPauseReminder(8, true); });
+    const data = userDocWrites().at(-1)![1] as Record<string, unknown>;
+    expect((data.providerPauses as Record<number, { remind?: boolean }>)[8].remind).toBe(true);
+    expect(data.pauseReminderNext).toBe('2026-11-03');
+  });
+
+  it('pauseProvider keeps a reminder with its pause when the end date moves', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerPauses: pauses });
+    setDoc.mockClear();
+    await act(async () => { await ctx!.pauseProvider(76, '2026-12-01'); });
+    const data = userDocWrites().at(-1)![1] as Record<string, unknown>;
+    expect((data.providerPauses as Record<number, unknown>)[76]).toEqual({ pausedAt: '2026-10-01', resumeAt: '2026-12-01', remind: true });
+    expect(data.pauseReminderNext).toBe('2026-12-01');
+  });
+
+  it('setPauseReminder refuses while a deletion is unfinished, and writes nothing', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerPauses: pauses });
+    window.localStorage.setItem('binge:deletionStarted:u1', JSON.stringify({ startedAt: 1 }));
+    setDoc.mockClear();
+    await act(async () => {
+      await expect(ctx!.setPauseReminder(8, true)).rejects.toThrow('binge/deletion-in-progress');
+    });
+    expect(userDocWrites()).toHaveLength(0);
+  });
+
+  it('resumeProvider deletes the pause key on the server and recomputes the date', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerPauses: pauses });
+    batchSets.length = 0;
+    await act(async () => { await ctx!.resumeProvider(76); });
+    const userSet = batchSets.find(b => b.ref._path === 'users/u1')!;
+    // A merge write keeps an omitted nested key, so only deleteField() removes it.
+    expect(userSet.data.providerPauses).toEqual({ 76: '__delete__' });
+    expect(userSet.data.pauseReminderNext).toBeNull();
+  });
+});
+
+describe('second-week visit stamp (BIN-1442)', () => {
+  const daysAgo = (n: number) => { const d = new Date(Date.now() - n * 86_400_000); return { toDate: () => d }; };
+  const stamps = () => userDocWrites().filter(c => 'secondWeekVisitAt' in (c[1] as Record<string, unknown>));
+
+  it('stamps once on a visit in the second week', async () => {
+    renderAuth();
+    await login({ username: 'malin', createdAt: daysAgo(9) });
+    await act(async () => {});
+    expect(stamps()).toHaveLength(1);
+    expect((stamps()[0][1] as Record<string, unknown>).secondWeekVisitAt).toBe('ts');
+    await act(async () => { await ctx!.updateNotificationSettings({ weeklyDigest: false }); });
+    expect(stamps()).toHaveLength(1);
+  });
+
+  it('writes nothing in the first week, after it, or when already stamped', async () => {
+    for (const data of [
+      { username: 'malin', createdAt: daysAgo(3) },
+      { username: 'malin', createdAt: daysAgo(20) },
+      { username: 'malin', createdAt: daysAgo(9), secondWeekVisitAt: daysAgo(8) },
+    ]) {
+      setDoc.mockClear();
+      const { unmount } = renderAuth();
+      await login(data);
+      await act(async () => {});
+      expect(stamps()).toHaveLength(0);
+      unmount();
+    }
+  });
+
+  it('writes nothing while a deletion is unfinished', async () => {
+    window.localStorage.setItem('binge:deletionStarted:u1', JSON.stringify({ startedAt: 1 }));
+    renderAuth();
+    await login({ username: 'malin', createdAt: daysAgo(9) });
+    await act(async () => {});
+    expect(stamps()).toHaveLength(0);
+  });
+});

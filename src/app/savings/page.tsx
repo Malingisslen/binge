@@ -20,6 +20,7 @@ import RotationCalendar from '@/components/savings/RotationCalendar';
 import SavingsSidebar from '@/components/savings/SavingsSidebar';
 import UpcomingEpisodes from '@/components/savings/UpcomingEpisodes';
 import CancelHint from '@/components/savings/CancelHint';
+import PauseReminderPrompt from '@/components/savings/PauseReminderPrompt';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -104,7 +105,7 @@ function SubscribeRowTable({ rows }: { rows: SubscribeRow[] }) {
 // ---- Återanvänd: ActivePausesSection (oförändrad) ----
 
 function ActivePausesSection({ pauses, onResume }: { pauses: ActivePause[]; onResume: (id: number) => void }) {
-  const { user } = useAuth();
+  const { user, setPauseReminder } = useAuth();
   if (pauses.length === 0) return null;
   const now = new Date();
   const totalSaved = pauses.reduce((sum, p) => sum + p.savingsSoFar, 0);
@@ -131,6 +132,20 @@ function ActivePausesSection({ pauses, onResume }: { pauses: ActivePause[]; onRe
                 <td className="px-3 py-[6px] text-xxs text-ink-3">
                   Pausad {formatSwedishDate(p.pausedAt)}
                   {p.resumeAt ? ` · återuppta ${formatSwedishDate(p.resumeAt)}` : ''}
+                  {p.resumeAt && (user?.providerPauses?.[p.providerId]?.remind
+                    ? ` · påminnelse ${formatSwedishDate(p.resumeAt)}`
+                    : (
+                      <>
+                        {' · '}
+                        <button
+                          type="button"
+                          onClick={() => { void setPauseReminder(p.providerId, true).catch(() => {}); }}
+                          className="text-xxs text-acc-deep underline font-[inherit] bg-transparent border-none p-0 cursor-pointer"
+                        >
+                          Påminn mig
+                        </button>
+                      </>
+                    ))}
                   <CancelHint providerId={p.providerId} billingDay={user?.providerRenewalDays?.[p.providerId]} now={now} />
                 </td>
                 <td className="px-3 py-[6px] text-xxs text-season-done font-semibold text-right whitespace-nowrap">
@@ -156,6 +171,8 @@ function ActivePausesSection({ pauses, onResume }: { pauses: ActivePause[]; onRe
 function SavingsContent() {
   const advisor = useSubscriptionAdvisor(LOOK_AHEAD_DAYS);
   const { pauseProvider, resumeProvider, profileLoading } = useAuth();
+  // BIN-1442: the pause just made, so its "Påminn mig" can be offered right away.
+  const [justPaused, setJustPaused] = useState<{ providerId: number; resumeAt: string } | null>(null);
   const hasAdvisorProviders = advisor.providers.length > 0;
   // En-skott per sidladd: fyr 'advisor_viewed' bara första gången rådgivaren
   // är klar med providers. Utan guarden skulle providerCount-ändringar (t.ex.
@@ -352,6 +369,19 @@ function SavingsContent() {
 
         <CampaignExpiryNudges />
 
+        {justPaused && (() => {
+          const paused = advisor.providers.find(p => p.providerId === justPaused.providerId);
+          return (
+            <PauseReminderPrompt
+              providerId={justPaused.providerId}
+              providerName={paused?.providerName ?? 'Tjänsten'}
+              resumeAt={justPaused.resumeAt}
+              monthlyCost={paused?.monthlyCost ?? null}
+              onDone={() => setJustPaused(null)}
+            />
+          );
+        })()}
+
         {advisor.activePauses.length > 0 && (
           <ActivePausesSection
             pauses={advisor.activePauses}
@@ -363,7 +393,10 @@ function SavingsContent() {
           <div className="min-w-0">
             <NumberedActionsList
               advisor={advisor}
-              onPauseProvider={(id, resumeAt) => { pauseProvider(id, resumeAt); trackEvent('advisor_action_taken', { action: 'pause', providerId: id }); }}
+              onPauseProvider={(id, resumeAt) => {
+                void pauseProvider(id, resumeAt).then(() => { if (resumeAt) setJustPaused({ providerId: id, resumeAt }); });
+                trackEvent('advisor_action_taken', { action: 'pause', providerId: id });
+              }}
               onShowSubscribeRows={handleShowSubscribeRows}
             />
 

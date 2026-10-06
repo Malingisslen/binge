@@ -2585,3 +2585,38 @@ grep -rln "AbortController\|Promise.race\|setTimeout\|withTimeout" functions/src
 
 **Re-open when:** det andra kommandot listar någon annan fil än `runHealth.ts`, eller
 `readBackupsBounded` flyttas in i sopningen. Då beskriver ingen av posterna koden.
+
+## BIN-1442: tre nya profilfält är ägarskrivbara utan regelgolv — 2026-10-06
+
+Ett beslut, inte en öppen brist. Fila inte "fältet går att förfalska" för `secondWeekVisitAt`,
+`pauseReminderNext` eller `providerPauses.{id}.remind`.
+
+**Läget.** `users/{uid}` har ingen fältlista i `firestore.rules`; ägaren skriver vilka nycklar
+som helst utom `isAdmin`. Härled att de tre fälten inte nämns där:
+
+```
+grep -n "secondWeekVisitAt\|pauseReminderNext\|remind" firestore.rules
+```
+
+**Vad en förfalskning når.**
+* `secondWeekVisitAt`: Insikters summa `secondWeekReturn`. Rollupen räknar bara ett datum som
+  ligger i kontots andra vecka (`secondWeekReturn` i `functions/src/insights/secondWeek.ts`),
+  så det värsta är att ens eget konto räknas som återkommet. Ingen annans data rörs.
+* `pauseReminderNext` och `remind`: ens egna inkorgskort och pushar från
+  `rotationReminderNotify`. Läsningen per konto är begränsad av `MAX_PAUSES_READ` och
+  frågan av sin `limit`; härled båda:
+
+```
+git grep -n "MAX_PAUSES_READ =\|pauseReminderNext', '<='" -- functions/src/rotationReminder
+```
+
+**Why:** ett regelgolv för fälten är en regeländring med full panel och manuell deploy, för
+fält där den enda som påverkas är kontoägaren själv. Samma avvägning som BIN-590 och BIN-1154
+punkt 2.
+
+**INTE accepterat, alltså fortfarande fileable:**
+1. Att rollupen sparar VILKA konton som kom tillbaka, inte bara summan.
+2. Att påminnelsefrågan eller läsningen per konto förlorar sin gräns.
+3. Att något av fälten börjar läsas för någon ANNAN än ägaren.
+
+**Re-open when:** någon av punkterna ovan inträffar.

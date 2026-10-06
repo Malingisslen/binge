@@ -142,6 +142,7 @@ export default function InsikterClient() {
             <TimeSeriesChart metricKey="signupsTrend" />
             <Funnel metricKey="onboardingFunnel" />
             <Donut metricKey="signinMethodSplit" />
+            <Donut metricKey="secondWeekReturn" />
             <div className="self-start">
               <MetricGrid>
                 <MetricTile metricKey="donateClicks" />
