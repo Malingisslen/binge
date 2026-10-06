@@ -38,6 +38,8 @@ const captureErrorMock = vi.hoisted(() => vi.fn());
 // factory below could not, which is why the failure path shipped untested the
 // first time.
 const signOutMock = vi.fn(async () => {});
+// Det signInWithPopup svarar; getAdditionalUserInfo-mocken läser `additional` ur det.
+const signInWithPopupMock = vi.fn(async (): Promise<unknown> => ({}));
 // Säkerhetsgranskning 2026-08-05: deleteAccount's pre-flight freshness gate and
 // the auth deletion it gates. Both controllable, because the whole point of the
 // fix is WHICH of them runs first when the session is stale.
@@ -50,7 +52,7 @@ vi.mock('firebase/auth', () => ({
     authCallback = cb;
     return () => {};
   },
-  signInWithPopup: vi.fn(async () => {}),
+  signInWithPopup: (...args: unknown[]) => (signInWithPopupMock as (...a: unknown[]) => Promise<unknown>)(...args),
   signInWithEmailAndPassword: vi.fn(async () => {}),
   createUserWithEmailAndPassword: (...args: unknown[]) =>
     (createUserWithEmailAndPassword as (...a: unknown[]) => Promise<{ user: FakeUser }>)(...args),
@@ -63,6 +65,7 @@ vi.mock('firebase/auth', () => ({
   getIdTokenResult: (...args: unknown[]) =>
     (getIdTokenResultMock as (...a: unknown[]) => Promise<{ authTime: string }>)(...args),
   GoogleAuthProvider: class {},
+  getAdditionalUserInfo: (cred: { additional?: { isNewUser: boolean } } | undefined) => cred?.additional ?? null,
 }));
 
 // Mutabelt auth-objekt — testen sätter currentUser innan authCallback drivs så
@@ -2889,5 +2892,20 @@ describe('AuthContext — offline på första inloggningen (BIN-559)', () => {
     authObj.currentUser = null;
     await act(async () => { authCallback!(null); });
     expect(ctx!.profileLoadError).toBeNull();
+  });
+});
+
+describe('AuthContext — signIn() säger om Google-kontot är nytt', () => {
+  it.each([
+    [{ additional: { isNewUser: true } }, true],
+    [{ additional: { isNewUser: false } }, false],
+    [{}, false],
+  ])('svaret %o ger isNewUser %s', async (cred, expected) => {
+    signInWithPopupMock.mockResolvedValueOnce(cred);
+    renderAuth();
+    await act(async () => {});
+    let result: { isNewUser: boolean } | undefined;
+    await act(async () => { result = await ctx!.signIn(); });
+    expect(result).toEqual({ isNewUser: expected });
   });
 });
