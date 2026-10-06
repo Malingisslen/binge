@@ -41,6 +41,7 @@ import type {
   SessionConfig,
 } from '@/types';
 import type { GroupWatchlistRow } from '@/lib/firebase/groups';
+import { Button } from '@/components/ui/Button';
 
 const GroupSettingsModal = dynamic(
   () => import('@/components/groups/GroupSettingsModal').then(m => m.GroupSettingsModal),
@@ -267,12 +268,12 @@ function JoinInviteCard({
         standfirst="Du har bjudits in till den här gruppen. Om du går med ser medlemmarna ditt namn, ditt användarnamn, din profilbild och vilka streamingtjänster du har, och hur långt du kommit i gruppens titlar. Du kan lämna gruppen när du vill."
         actions={
           <div className="flex gap-2">
-            <button type="button" className="btn btn-acc btn-sm" onClick={onJoin} disabled={joining}>
+            <Button type="button" variant="acc" size="sm" onClick={onJoin} disabled={joining}>
               {joining ? 'Går med…' : 'Gå med'}
-            </button>
-            <button type="button" className="btn btn-sm" onClick={onDecline} disabled={joining}>
+            </Button>
+            <Button type="button" size="sm" onClick={onDecline} disabled={joining}>
               Nej tack
-            </button>
+            </Button>
           </div>
         }
       />
@@ -392,37 +393,37 @@ function GroupView({
         icon={<Users size={20} className="text-acc-deep shrink-0" />}
         actions={
           <>
-            <button
+            <Button
               type="button"
               onClick={startSession}
               disabled={startingSession || members.length === 0}
-              className="btn btn-acc btn-sm"
+              variant="acc" size="sm"
             >
               <Play size={11} />
               {startingSession ? 'Startar…' : 'Starta session'}
-            </button>
+            </Button>
             {isOwner && (
-              <button
+              <Button
                 type="button"
                 onClick={() => setShowSettings(true)}
-                className="btn btn-ghost btn-sm"
+                variant="ghost" size="sm"
               >
                 <Settings size={11} />
                 Inställningar
-              </button>
+              </Button>
             )}
             {/* BIN-1120: kopiera-länken står UTANFÖR menyn. Menyn nedan döljer
                 sig själv för den som äger det anmälda — det är rätt för en
                 moderingsåtgärd, men det hade tagit bort ägarens enda väg att
                 kopiera en länk till sin egen grupp. */}
-            <button
+            <Button
               type="button"
               onClick={copyGroupLink}
-              className="btn btn-ghost btn-sm"
+              variant="ghost" size="sm"
             >
               <Copy size={11} />
               {copied ? 'Kopierad.' : 'Kopiera länk'}
-            </button>
+            </Button>
             {/* BIN-1120: gruppens sällan-åtgärder ligger i samma meny som
                 recensioner och profiler redan använder — utträdet flyttades hit
                 ur vänsterkolumnen. Menyn döljer sig själv för ägaren, som i

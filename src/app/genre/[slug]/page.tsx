@@ -225,14 +225,14 @@ export default async function GenrePage({ params }: { params: Promise<PageParams
 
       {movieRows.length > 0 && (
         <section>
-          <h2 className="text-[15px] font-semibold text-ink uppercase tracking-wide mb-2">Filmer</h2>
+          <h2 className="text-lg font-semibold text-ink uppercase tracking-wide mb-2">Filmer</h2>
           <TitleRows rows={movieRows} />
         </section>
       )}
 
       {tvRows.length > 0 && (
         <section>
-          <h2 className="text-[15px] font-semibold text-ink uppercase tracking-wide mb-2">Serier</h2>
+          <h2 className="text-lg font-semibold text-ink uppercase tracking-wide mb-2">Serier</h2>
           <TitleRows rows={tvRows} />
         </section>
       )}

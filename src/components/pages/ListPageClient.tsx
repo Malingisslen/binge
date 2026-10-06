@@ -21,6 +21,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import ListCheapestPlanPanel from '@/components/lists/ListCheapestPlanPanel';
 import ShareButton from '@/components/share/ShareButton';
 import type { ListPlanItem } from '@/hooks/useListCheapestPlan';
+import { Eyebrow } from '@/components/ui/Eyebrow';
 
 export default function ListPageClient({ listId }: { listId: string }) {
   const { uid } = useAuth();
@@ -322,7 +323,7 @@ function EditorsManager({ editors, onAdd, onRemove }: {
   };
   return (
     <div className="bg-surface border border-rule rounded-md px-3 py-[10px] mt-3 max-w-[420px]">
-      <div className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold mb-1">Medredigerare</div>
+      <Eyebrow className="mb-1">Medredigerare</Eyebrow>
       <p className="text-xxs text-ink-3 mb-2">
         De du lägger till kan lägga till och ta bort titlar — men inte ändra listans namn eller synlighet.
       </p>

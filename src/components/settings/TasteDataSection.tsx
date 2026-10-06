@@ -7,6 +7,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/contexts/ToastContext';
 import { backfillGenreIds, type BackfillProgress } from '@/lib/taste/backfill';
 import { SettingsSection } from './SettingsSection';
+import { Button } from '@/components/ui/Button';
 
 export function TasteDataSection() {
   const { uid } = useAuth();
@@ -33,14 +34,14 @@ export function TasteDataSection() {
       <p className="text-xs text-ink-2 mb-2">
         Fyll i genrer och streamingtjänster på äldre titlar i ditt bibliotek så de syns i Följer/Vill se och bidrar till smak-match. Körs en gång — nya titlar sparas automatiskt.
       </p>
-      <button
+      <Button
         onClick={run}
         disabled={running}
-        className="btn btn-acc btn-sm disabled:opacity-50"
+        variant="acc" size="sm" className="disabled:opacity-50"
       >
         <Sparkles size={11} />
         {running ? 'Uppdaterar…' : 'Uppdatera smakdata'}
-      </button>
+      </Button>
       {progress && progress.total > 0 && (
         <div className="mt-2 text-xxs text-ink-3">
           {progress.processed}/{progress.total} — {progress.updated} uppdaterade

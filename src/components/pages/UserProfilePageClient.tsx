@@ -18,6 +18,7 @@ import { LoadingView } from '@/components/ui/LoadingView';
 import { NotFound } from '@/components/ui/NotFound';
 import { markedSeen } from '@/lib/markedSeen';
 import ShareButton from '@/components/share/ShareButton';
+import { Eyebrow } from '@/components/ui/Eyebrow';
 
 export default function UserProfilePageClient({ username }: { username: string }) {
   const { data, isLoading } = usePublicProfile(username);
@@ -131,12 +132,12 @@ export default function UserProfilePageClient({ username }: { username: string }
 
       {!isOwnProfile && (
         <div className="bg-surface border border-rule rounded-sm px-3 py-2 mb-4">
-          <div className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold mb-[2px]">
+          <Eyebrow className="mb-[2px]">
             Smak-match med dig
-          </div>
+          </Eyebrow>
           {taste.percent != null ? (
             <div className="flex items-baseline gap-2">
-              <span className="text-[22px] font-bold text-acc-deep leading-none">{taste.percent}%</span>
+              <span className="text-3xl font-bold text-acc-deep leading-none">{taste.percent}%</span>
               <span className="text-xxs text-ink-3">
                 baserat på {taste.mySampleSize} titlar från dig och {taste.theirSampleSize} från {card.displayName}
               </span>

@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { captureError } from '@/lib/sentry';
 import { trackEvent } from '@/lib/analytics';
+import { Button } from '@/components/ui/Button';
 
 /**
  * Reusable segment-level error boundary body for app-router `error.tsx`.
@@ -52,11 +53,11 @@ export function SegmentError({
         {body ?? 'Kunde inte ladda den här delen. Försök igen om en stund.'}
       </p>
       {error.digest && (
-        <p className="text-[11px] text-ink-3 mb-4">ref: {error.digest}</p>
+        <p className="text-xs text-ink-3 mb-4">ref: {error.digest}</p>
       )}
-      <button onClick={reset} className="btn btn-danger">
+      <Button onClick={reset} variant="danger">
         Försök igen
-      </button>
+      </Button>
     </div>
   );
 }

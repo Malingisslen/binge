@@ -2,6 +2,7 @@
 
 import { useRef } from 'react';
 import { DialogShell } from './DialogShell';
+import { Button } from '@/components/ui/Button';
 
 /**
  * Designad bekräftelsedialog som ersätter native window.confirm() (G1).
@@ -46,14 +47,14 @@ export function ConfirmDialog({
         {body && <p id="confirm-dialog-desc" className="text-xs text-ink-3 mt-1 leading-relaxed">{body}</p>}
       </div>
       <div className="px-3 py-2 border-t border-rule-2 flex items-center justify-end gap-2">
-        <button
+        <Button
           type="button"
           onClick={onCancel}
           disabled={busy}
-          className="btn btn-ghost btn-sm"
+          variant="ghost" size="sm"
         >
           {cancelLabel}
-        </button>
+        </Button>
         <button
           ref={confirmRef}
           type="button"

@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/contexts/ToastContext';
 import { SettingsSection } from './SettingsSection';
 import { MUNICIPALITY_NAMES } from '@/lib/libraries/municipalities';
+import { Button } from '@/components/ui/Button';
 
 /**
  * BIN-172 — "Gratis med ditt lånekort": let the user declare their home
@@ -45,16 +46,16 @@ export function BibliotekSection() {
           ))}
         </select>
         {user.hemkommun && (
-          <button
+          <Button
             type="button"
             onClick={async () => {
               try { await updateHomeMunicipality(null); toast('Hemkommun rensad'); }
               catch { toast('Kunde inte spara. Försök igen om en stund.'); }
             }}
-            className="btn btn-ghost btn-sm"
+            variant="ghost" size="sm"
           >
             Rensa
-          </button>
+          </Button>
         )}
       </div>
     </SettingsSection>

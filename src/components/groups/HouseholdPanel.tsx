@@ -5,6 +5,8 @@ import { useGroupHousehold } from '@/hooks/useGroupHousehold';
 import { useMountTime } from '@/hooks/useMountTime';
 import { aggregateHousehold, HOUSEHOLD_STALE_DAYS } from '@/lib/advisor/householdAggregate';
 import { formatKr } from '@/lib/formatKr';
+import { Eyebrow } from '@/components/ui/Eyebrow';
+import { Button } from '@/components/ui/Button';
 
 // BIN-184 — "Hushåll"-panelen i gruppens vänsterspalt. Aggregat-ENDAST i UI:t
 // ("Disney+ betalas av 2 av er"), aldrig per person. Opt-in via en explicit
@@ -27,9 +29,9 @@ export default function HouseholdPanel({ groupId }: { groupId: string }) {
 
   return (
     <div className="bg-surface border border-rule rounded-sm">
-      <div className="px-3 py-[6px] border-b border-rule-2 text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">
+      <Eyebrow className="px-3 py-[6px] border-b border-rule-2">
         Hushåll
-      </div>
+      </Eyebrow>
 
       {status === 'loading' && (
         // Skeleton-rad, inte bar "Laddar…"-text (design-guarden i consistency.test.ts).
@@ -54,9 +56,9 @@ export default function HouseholdPanel({ groupId }: { groupId: string }) {
           <p className="text-xxs text-ink-3">
             Bara medlemmar som själva delar ser hushållsvyn.
           </p>
-          <button type="button" className="btn btn-primary btn-sm w-full" onClick={() => setConsentOpen(true)}>
+          <Button type="button" variant="acc" size="sm" className="w-full" onClick={() => setConsentOpen(true)}>
             Dela mina kostnader…
-          </button>
+          </Button>
         </div>
       )}
 
@@ -89,12 +91,12 @@ export default function HouseholdPanel({ groupId }: { groupId: string }) {
           </ul>
           <div className="flex items-center gap-2 pt-1">
             {/* disabled tills payloaden är byggd — klick får aldrig tyst no-op:a */}
-            <button type="button" className="btn btn-primary btn-sm flex-1" disabled={busy || !ready} onClick={() => { void optIn(); }}>
+            <Button type="button" variant="acc" size="sm" className="flex-1" disabled={busy || !ready} onClick={() => { void optIn(); }}>
               Dela
-            </button>
-            <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => setConsentOpen(false)}>
+            </Button>
+            <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => setConsentOpen(false)}>
               Avbryt
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -102,7 +104,7 @@ export default function HouseholdPanel({ groupId }: { groupId: string }) {
       {status === 'active' && overview && (
         <div className="px-3 py-2 space-y-2">
           <div>
-            <span className="text-[17px] font-bold text-ink">{formatKr(overview.totalKr)} kr</span>
+            <span className="text-xl font-bold text-ink">{formatKr(overview.totalKr)} kr</span>
             <span className="text-xxs text-ink-3"> /mån sammanlagt · {overview.memberCount} delar</span>
           </div>
 
@@ -146,9 +148,9 @@ export default function HouseholdPanel({ groupId }: { groupId: string }) {
               </div>
             )}
             <div className="text-xxs text-ink-3">Bara medlemmar som delar ser detta.</div>
-            <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => { void optOut(); }}>
+            <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => { void optOut(); }}>
               Sluta dela
-            </button>
+            </Button>
           </div>
         </div>
       )}

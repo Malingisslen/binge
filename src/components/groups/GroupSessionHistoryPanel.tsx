@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { getGroupSessionHistory } from '@/lib/firebase/groups';
 import { posterUrl, titleHref } from '@/lib/tmdb/client';
 import type { GroupMember } from '@/types';
+import { Eyebrow } from '@/components/ui/Eyebrow';
 
 // "Senaste filmkvällar" — listar avtryck av Tillsammans-sessioner som
 // gruppen valt en titel ifrån. Skrivs av host (eller annan medlem) via
@@ -30,9 +31,9 @@ export function GroupSessionHistoryPanel({
 
   return (
     <div className="bg-surface border border-rule rounded-sm">
-      <div className="px-3 py-[6px] border-b border-rule-2 text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">
+      <Eyebrow className="px-3 py-[6px] border-b border-rule-2">
         Senaste filmkvällar
-      </div>
+      </Eyebrow>
       <ul className="divide-y divide-rule-2">
         {history.map(entry => {
           const poster = posterUrl(entry.posterPath, 'w92');

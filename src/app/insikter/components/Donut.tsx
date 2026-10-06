@@ -39,7 +39,7 @@ export function Donut({ metricKey }: { metricKey: MetricKey }) {
 
   return (
     <div className="bg-surface border border-rule rounded-md p-3">
-      <div className="text-[11px] uppercase tracking-wide text-ink-3 mb-2">{label}</div>
+      <div className="text-xs uppercase tracking-wide text-ink-3 mb-2">{label}</div>
       {total === 0 ? (
         <div className="text-sm text-ink-3 py-2">{value.missing ?? 'Ingen data'}</div>
       ) : (
@@ -66,7 +66,7 @@ export function Donut({ metricKey }: { metricKey: MetricKey }) {
                 <span className={`inline-block w-2.5 h-2.5 rounded-full ${SLICE_CLASSES[i % SLICE_CLASSES.length]} bg-current shrink-0`} />
                 <span className="truncate text-ink-2">{e.label}</span>
                 <span className="ml-auto text-ink tabular-nums">{e.value.toLocaleString('sv-SE')}</span>
-                <span className="text-ink-3 tabular-nums text-[11px] w-9 text-right">{Math.round((e.value / total) * 100)}%</span>
+                <span className="text-ink-3 tabular-nums text-xs w-9 text-right">{Math.round((e.value / total) * 100)}%</span>
               </li>
             ))}
           </ul>

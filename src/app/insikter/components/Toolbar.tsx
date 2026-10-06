@@ -41,7 +41,7 @@ export function Toolbar({ lastFetchedAt }: { lastFetchedAt: Date | null }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
       <RangePicker />
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-ink-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-3">
         {basis && <span>Periodsiffror jämförda mot {basis}</span>}
         {eventsSince && <span>Händelser mäts sedan {eventsSince}</span>}
         {!data.eventsSince && !data.partial && <span>Händelser har inte räknats än</span>}

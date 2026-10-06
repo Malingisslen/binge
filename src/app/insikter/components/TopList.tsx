@@ -16,14 +16,14 @@ export function TopList({ metricKey }: { metricKey: MetricKey }) {
 
   return (
     <div className="bg-surface border border-rule rounded-md p-3">
-      <div className="text-[11px] uppercase tracking-wide text-ink-3 mb-2">{label}</div>
+      <div className="text-xs uppercase tracking-wide text-ink-3 mb-2">{label}</div>
       {entries.length === 0 ? (
         <div className="text-sm text-ink-3 py-2">{value.missing ?? 'Ingen data'}</div>
       ) : (
         <ol className="flex flex-col gap-1.5">
           {entries.map((e, i) => (
             <li key={`${e.label}-${i}`} className="flex items-center gap-2 text-sm">
-              <span className="w-4 text-right text-ink-3 tabular-nums text-[11px]">{i + 1}</span>
+              <span className="w-4 text-right text-ink-3 tabular-nums text-xs">{i + 1}</span>
               <span className="flex-1 truncate text-ink" title={e.label}>{e.label}</span>
               <span className="w-[38%] h-1.5 bg-rule-2 rounded-sm overflow-hidden">
                 <span className="block h-full bg-acc rounded-sm" style={{ width: `${max === 0 ? 0 : (e.value / max) * 100}%` }} />

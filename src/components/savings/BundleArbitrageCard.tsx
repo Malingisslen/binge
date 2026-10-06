@@ -2,6 +2,7 @@
 
 import { formatKr } from '@/lib/formatKr';
 import type { BundleSuggestion } from '@/types';
+import { Eyebrow } from '@/components/ui/Eyebrow';
 
 // BIN-430 — UI-yta för paket-arbitrage (motorn: src/lib/advisor/bundleArbitrage.ts,
 // BIN-183/433). Visar när användarens LÖSA, var-för-sig-betalda tjänster vore
@@ -54,9 +55,9 @@ export default function BundleArbitrageCard({ suggestions }: { suggestions: Bund
   return (
     <div className="mb-[14px]">
       <div className="flex items-baseline justify-between mb-[6px]">
-        <h2 className="text-[11px] font-bold uppercase tracking-[0.5px] text-ink-3">
+        <Eyebrow as="h2" size="xs">
           Dina lösa tjänster kan bli billigare i ett paket
-        </h2>
+        </Eyebrow>
         {suggestions.length > 1 && (
           <span className="text-xxs text-ink-3">välj ett — de gäller inte tillsammans</span>
         )}
