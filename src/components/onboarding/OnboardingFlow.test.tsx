@@ -21,6 +21,7 @@ const auth = vi.hoisted(() => ({
   user: { uid: 'u1', myProviders: [] as number[] } as Record<string, unknown> | null,
   updateProviders: vi.fn<(providers: number[]) => Promise<void>>(async () => {}),
   updateProviderTiers: vi.fn<(changes: Record<number, string | null>) => Promise<void>>(async () => {}),
+  updateNotificationSettings: vi.fn<(patch: Record<string, unknown>) => Promise<void>>(async () => {}),
 }));
 const watchlist = vi.hoisted(() => ({
   items: [] as WatchlistItem[],
@@ -534,8 +535,10 @@ describe('Paket I — tjänster och pengar i introduktionen', () => {
       auth.user = { uid: 'u1', myProviders: [8, 76] };
       render(<OnboardingFlow />);
       await goToLastStep();
-      expect(screen.getByText(/Du betalar/)).toHaveTextContent(
-        'Du betalar ungefär 338 kr i månaden för 2 tjänster, alltså 4 056 kr om året.');
+      // BIN-1442: the sum stands on its own line, large.
+      expect(screen.getByText('Du betalar ungefär')).toBeInTheDocument();
+      expect(screen.getByText('338 kr/mån')).toBeInTheDocument();
+      expect(screen.getByText(/för 2 tjänster/)).toHaveTextContent('för 2 tjänster, alltså 4 056 kr om året.');
       expect(screen.getByText(/räknar vi med tjänstens listpris/)).toBeInTheDocument();
     });
 
@@ -543,8 +546,9 @@ describe('Paket I — tjänster och pengar i introduktionen', () => {
       auth.user = { uid: 'u1', myProviders: [8, 520], providerTiers: { 8: 'standard' } };
       render(<OnboardingFlow />);
       await goToLastStep();
-      expect(screen.getByText(/Du betalar/)).toHaveTextContent(
-        'Du betalar 169 kr i månaden för 1 tjänst, alltså 2 028 kr om året.');
+      expect(screen.getByText('Du betalar')).toBeInTheDocument();
+      expect(screen.getByText('169 kr/mån')).toBeInTheDocument();
+      expect(screen.getByText(/för 1 tjänst/)).toHaveTextContent('för 1 tjänst, alltså 2 028 kr om året.');
       expect(screen.queryByText(/räknar vi med tjänstens listpris/)).not.toBeInTheDocument();
     });
 
@@ -559,9 +563,32 @@ describe('Paket I — tjänster och pengar i introduktionen', () => {
       auth.user = { uid: 'u1', myProviders: [8] };
       render(<OnboardingFlow />);
       await goToLastStep();
-      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Öppna Streamingrådgivaren' })); });
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Öppna Rådgivaren' })); });
       expect(setDoc).toHaveBeenCalled();
       expect(push).toHaveBeenCalledWith('/savings/');
+    });
+
+    // BIN-1442 — the onboarding ends on "Påminn mig när jag kan pausa".
+    it('"Påminn mig" turns the pause reminders on, then finishes to the advisor', async () => {
+      auth.user = { uid: 'u1', myProviders: [8] };
+      auth.updateNotificationSettings.mockClear();
+      render(<OnboardingFlow />);
+      await goToLastStep();
+      expect(screen.getByText(/Binge säger till när en tjänst du betalar för inte har något du följer/)).toBeInTheDocument();
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Påminn mig när jag kan pausa' })); });
+      expect(auth.updateNotificationSettings).toHaveBeenCalledWith({ rotationReminders: true });
+      expect(setDoc).toHaveBeenCalled();
+      expect(push).toHaveBeenCalledWith('/savings/');
+    });
+
+    it('"Påminn mig" stays on the step and says so when the setting cannot be saved', async () => {
+      auth.user = { uid: 'u1', myProviders: [8] };
+      auth.updateNotificationSettings.mockRejectedValueOnce(new Error('Kunde inte spara.'));
+      render(<OnboardingFlow />);
+      await goToLastStep();
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Påminn mig när jag kan pausa' })); });
+      expect(screen.getByRole('alert')).toHaveTextContent('Kunde inte spara.');
+      expect(push).not.toHaveBeenCalled();
     });
   });
 });

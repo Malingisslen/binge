@@ -15,9 +15,10 @@
     "flow-tillsammans": 4591,
     "flow-episodes": 1994,
     "flow-available": 6610,
-    "flow-digest": 1856,
-    "flow-rotation": 1535,
-    "flow-savings": 2378,
+    "flow-digest": 1766,
+    "flow-price-change-push": 1355,
+    "flow-rotation": 2832,
+    "flow-savings": 2737,
     "flow-leaving": 1165,
     "flow-tmdb-sweep": 3740,
     "flow-cineasterna": 1217,
@@ -31,7 +32,7 @@
     "flow-static": 2603,
     "flow-crash-telemetry": 4567,
     "flow-recap-gaps": 1788,
-    "flow-record-event": 1737,
+    "flow-record-event": 1968,
     "flow-premiarer": 2242,
     "flow-guest-pricing": 2781
   }

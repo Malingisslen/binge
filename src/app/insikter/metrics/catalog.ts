@@ -21,6 +21,7 @@ export const METRICS: Record<MetricKey, MetricDef> = {
   onboardingFunnel: { key: 'onboardingFunnel', label: 'Onboarding-tratt', category: 'growth', format: { kind: 'number' }, source: 'events' },
   signinMethodSplit: { key: 'signinMethodSplit', label: 'Inloggningsmetod', category: 'growth', format: { kind: 'number' }, source: 'events' },
   donateClicks: { key: 'donateClicks', label: 'Donate-klick', category: 'growth', format: { kind: 'number' }, source: 'events' },
+  secondWeekReturn: { key: 'secondWeekReturn', label: 'Nya konton som kom tillbaka andra veckan', category: 'growth', format: { kind: 'number' }, isNew: true },
   signupLandingPages: { key: 'signupLandingPages', label: 'Registreringar per landningssida', category: 'growth', format: { kind: 'number' }, isNew: true },
   providerClicks: { key: 'providerClicks', label: 'Klick till tjänster', category: 'growth', format: { kind: 'number' }, isNew: true, source: 'events' },
   providerClicksByType: { key: 'providerClicksByType', label: 'Klick till tjänster per typ', category: 'growth', format: { kind: 'number' }, isNew: true, source: 'events' },
