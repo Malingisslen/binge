@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isValidBillingDay, nextRenewalDate, daysUntilRenewal, MAX_BILLING_DAY } from './renewal';
+import { isValidBillingDay, nextRenewalDate, daysUntilRenewal, MAX_BILLING_DAY, nextAvoidableCharge } from './renewal';
 
 describe('isValidBillingDay', () => {
   it('accepts 1–28, rejects out-of-range and non-integers', () => {
@@ -54,5 +54,25 @@ describe('daysUntilRenewal', () => {
   it('counts across the year boundary (Dec→Jan)', () => {
     // 25 Dec → next 10 Jan: 6 remaining Dec days (26..31) + 10 = 16.
     expect(daysUntilRenewal(10, new Date(2026, 11, 25))).toBe(16);
+  });
+});
+
+describe('nextAvoidableCharge', () => {
+  const ymd = (d: Date) => [d.getFullYear(), d.getMonth() + 1, d.getDate()];
+
+  it('är nästa dragning efter idag', () => {
+    expect(ymd(nextAvoidableCharge(11, new Date(2026, 9, 6)))).toEqual([2026, 10, 11]);
+  });
+
+  it('är i morgon när dragningen är i morgon', () => {
+    expect(ymd(nextAvoidableCharge(7, new Date(2026, 9, 6)))).toEqual([2026, 10, 7]);
+  });
+
+  it('pekar på nästa månad på själva dragningsdagen', () => {
+    expect(ymd(nextAvoidableCharge(6, new Date(2026, 9, 6)))).toEqual([2026, 11, 6]);
+  });
+
+  it('går över årsskiftet', () => {
+    expect(ymd(nextAvoidableCharge(1, new Date(2026, 11, 15)))).toEqual([2027, 1, 1]);
   });
 });
