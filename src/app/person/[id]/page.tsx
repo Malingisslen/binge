@@ -78,8 +78,8 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
     recordBuildFetchOutcome('person', personId, false);
     // Build-time TMDB-hämtning misslyckades för denna förrenderade person. Skicka
     // ALDRIG en indexerbar sida med root-layoutens default-title + canonical:/
-    // (Google läser den som en homepage-dubblett). noindex + self-canonical tills
-    // ett senare lyckat bygge fyller i riktig metadata; klient-hydrering via
+    // (Google läser den som en homepage-dubblett). noindex + self-canonical;
+    // klient-hydrering via
     // usePageMeta sätter rätt title för besökare.
     return {
       title: 'Person',

@@ -316,7 +316,7 @@ export function writeSelectionManifest(manifest: SelectionManifest): void {
   } catch {
     // Best-effort: ett skrivfel ska inte fälla bygget HÄR. Nästa bygge härleder
     // om. Men om skrivningen aldrig lyckas fäller sitemapen bygget senare, med
-    // flit — den vägrar publicera en frö-endast-lista som sajtens kanoniska.
+    // flit.
   }
 }
 

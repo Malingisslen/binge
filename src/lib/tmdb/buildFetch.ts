@@ -295,7 +295,7 @@ export function buildFetchCount(): number {
 }
 
 /** AbortSignal med byggtids-deadline. Används även för list-fetcharna i
- *  generateStaticParams (getPopular…/getTopRated…). */
+ *  generateStaticParams. */
 export function buildSignal(): AbortSignal {
   return AbortSignal.timeout(BUILD_FETCH_TIMEOUT_MS);
 }
@@ -320,10 +320,8 @@ export const RESCUE_DERIVE_TIMEOUT_MS = 15 * 60_000;
 // hade fällt den körning som är hela poängen med regimen.
 //
 // SÄNK DEN INTE PÅ KÄNSLA. Granskningen 2026-08-08 föreslog 45 min ("en frisk
-// härledning tar ~40 s"). Men de 40 sekunderna gäller VARM cache; den enda kalla
-// mätningen vi har är 2 672 s = 44,5 min för person ensam — ett 45-minuterstak
-// hade dödat den med en halv minuts marginal, alltså precis den körning taket
-// ska rädda. Byggtiderna som 150 vilar på: ADR 0018, efterföljaren 2026-10-02 (BIN-1114).
+// härledning tar ~40 s"). Byggtiderna som 150 vilar på: `docs/org/adr/0018-seo-selection-ratchet.md`,
+// avsnittet "Efterföljare 2026-10-02 (BIN-1114): 150 minuter står kvar".
 export const REFRESH_DERIVE_TIMEOUT_MS = 150 * 60_000;
 
 /**
@@ -345,7 +343,7 @@ export const REFRESH_DERIVE_TIMEOUT_MS = 150 * 60_000;
  * reträttbygget rendrerar.
  * Det är samma konkurrens som ADR 0018 redovisar under "Rättelse om
  * budgetkonkurrens", och den är accepterad — inte bortkonstruerad.
- * Anroparen faller tillbaka på befintligt urval + frön, och täckningsgolvet
+ * Anroparen faller tillbaka på befintligt urval, och täckningsgolvet
  * avgör om det är gott nog att deploya eller om bygget ska fällas.
  */
 export async function withAggregateTimeout<T>(

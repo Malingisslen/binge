@@ -16,8 +16,8 @@ export function generateStaticParams() {
  * skickar ALLA okända URLs hit och returnerar HTTP 200, vilket gör att
  * Google tidigare indexerade tusentals soft-404:s som dubletter.
  *
- * Genom att sätta noindex här ärver alla long-tail routes (movie/tv/person
- * utanför topp-N, /user/:u, /provider/:id, /list/:id, /grupper, /tillsammans,
+ * Genom att sätta noindex här ärver alla long-tail routes (movie/tv/person,
+ * /user/:u, /provider/:id, /list/:id, /grupper, /tillsammans,
  * helt okända paths) noindex i den initiala HTML:en — innan JavaScript körs.
  *
  * Titlar och personer utanför det förrenderade urvalet förblir noindex även

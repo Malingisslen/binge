@@ -4,7 +4,7 @@
  * Hub pages (home guest-landing, /films, /series, /discover) render their
  * grids from client fetches, so the exported static HTML carried zero
  * crawlable <a href> to title pages — the domain's highest-authority pages
- * passed no link equity to the ~25k pre-rendered titles. The fix (proven by
+ * passed no link equity to the pre-rendered titles. The fix (proven by
  * /provider/[id], whose build-seeded grid ships 40 crawlable links): fetch
  * one list page at build and seed the client grid's initial state.
  *

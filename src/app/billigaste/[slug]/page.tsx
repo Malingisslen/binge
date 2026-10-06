@@ -115,7 +115,7 @@ export default async function BilligastePage({ params }: { params: Promise<PageP
   }
 
   // BIN-460 — zero released rows means either a flaked build-time TMDB fetch
-  // (collection/movie-lite miss under the 25k-page export concurrency) OR a
+  // (collection/movie-lite miss under the export concurrency) OR a
   // franchise whose films aren't out/mapped in SE yet. The URL is already in the
   // sitemap + generateStaticParams, so notFound() here would advertise a soft-404.
   // Instead ship a resilient, indexable "kommer snart" page: it stays a valid 200

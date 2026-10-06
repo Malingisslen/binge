@@ -589,8 +589,8 @@ längre kunna fälla bygget efter 2026-06 (AbortSignal.timeout i
      hängning innan du förlitar dig på den.)
      **Men vänta dig inte att härledningen hoppas över:** `full_refresh` sätter
      `TMDB_SELECTION_REFRESH`, och det tvingar omhärledning av båda typerna
-     oavsett hur färska manifesten är. Det som sparas gör två OLIKA saker:
-     manifesten för de typer som HANN klart låter deras täckningsgolv passera
+     oavsett hur färska manifesten är.
+     Manifesten för de typer som HANN klart låter deras täckningsgolv passera
      nästa gång. Den typ som slog i
      taket har inget manifest alls — `writeSelectionManifest` nås bara när
      härledningen lyckades — så den måste hinna klart för att bygget ska bli

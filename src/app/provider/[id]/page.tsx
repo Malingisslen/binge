@@ -22,7 +22,7 @@ export const dynamicParams = false;
  * till catch-all-klientrenderingen (noindex), precis som long-tail-titlar.
  *
  * Bara ~12 sidor → vi hämtar populära titlar direkt vid build (ingen
- * budget/cache-plumbing som titel-pre-rendren behöver för sina ~25k sidor).
+ * budget/cache-plumbing som titel-pre-rendren behöver).
  */
 
 const SITE = 'https://binge.nu';
