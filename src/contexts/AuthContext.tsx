@@ -14,6 +14,7 @@ import {
   deleteUser,
   getIdTokenResult,
   GoogleAuthProvider,
+  getAdditionalUserInfo,
   type User,
 } from 'firebase/auth';
 import { auth } from '@/lib/firebase/config';
@@ -62,7 +63,8 @@ interface AuthState {
   // Firebase Auth email-verification-state. Gör inte gating idag men UI:t
   // kan visa en banner när emailVerified=false (och resend därifrån).
   emailVerified: boolean;
-  signIn: () => Promise<void>;
+  // Svarar om Google-inloggningen skapade ett nytt konto, så att registreringen kan räknas.
+  signIn: () => Promise<{ isNewUser: boolean }>;
   signInEmail: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, name: string, termsVersion: string) => Promise<void>;
   resendEmailVerification: () => Promise<void>;
@@ -140,7 +142,7 @@ const AuthContext = createContext<AuthState>({
   profileLoadError: null,
   retryProfileLoad: async () => {},
   emailVerified: false,
-  signIn: async () => {},
+  signIn: async () => ({ isNewUser: false }),
   signInEmail: async () => {},
   register: async () => {},
   resendEmailVerification: async () => {},
@@ -928,7 +930,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(async () => {
     const provider = new GoogleAuthProvider();
-    await signInWithPopup(auth, provider);
+    const cred = await signInWithPopup(auth, provider);
+    return { isNewUser: getAdditionalUserInfo(cred)?.isNewUser === true };
   }, []);
 
   const signInEmail = useCallback(async (email: string, password: string) => {
