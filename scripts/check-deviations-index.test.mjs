@@ -114,17 +114,24 @@ describe('the repository', () => {
 // STAGED copies, not the working tree or HEAD.
 describe('the script lefthook runs', () => {
   it('is wired into pre-commit, on both files', () => {
-    const lefthook = readFileSync('lefthook.yml', 'utf8');
-    const block = lefthook.slice(lefthook.indexOf('    deviations-index:'));
+    const lefthook = readFileSync('lefthook.yml', 'utf8').replace(/\r\n/g, '\n');
+    const start = lefthook.indexOf('    deviations-index:');
+    const next = lefthook.slice(start + 1).search(/\n {4}[\w-]+:\s*\n|\n\S/);
+    const block = next === -1 ? lefthook.slice(start) : lefthook.slice(start, start + 1 + next);
     expect(lefthook.indexOf('    deviations-index:')).toBeGreaterThan(lefthook.indexOf('pre-commit:'));
     expect(lefthook.indexOf('    deviations-index:')).toBeLessThan(lefthook.indexOf('commit-msg:'));
     expect(block).toMatch(/^\s*run: node scripts\/check-deviations-index\.mjs\s*$/m);
     expect(block).toMatch(/^\s*- "\.claude\/accepted-deviations\.md"\s*$/m);
     expect(block).toMatch(/^\s*- "\.claude\/rules\/accepted-deviations\.md"\s*$/m);
+    // Keys that switch the command off while every line above stays in place.
+    expect(block).not.toMatch(/^\s*(skip|only|exclude):/m);
   });
 
-  const git = (cwd, ...args) => execFileSync('git', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
-  const run = (cwd) => spawnSync(process.execPath, [SCRIPT], { cwd, encoding: 'utf8' }).status;
+  // Without the parent's GIT_* variables: a GIT_INDEX_FILE or GIT_DIR from a hook would point
+  // these commands at the real repository.
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
+  const git = (cwd, ...args) => execFileSync('git', args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  const run = (cwd) => spawnSync(process.execPath, [SCRIPT], { cwd, env, encoding: 'utf8' }).status;
   const write = (dir, path, text) => {
     mkdirSync(dirname(join(dir, path)), { recursive: true });
     writeFileSync(join(dir, path), text);
@@ -137,6 +144,7 @@ describe('the script lefthook runs', () => {
       git(dir, 'config', 'user.email', 'test@example.invalid');
       git(dir, 'config', 'user.name', 'test');
       git(dir, 'config', 'commit.gpgsign', 'false');
+      git(dir, 'config', 'core.autocrlf', 'false');
       git(dir, 'config', 'core.hooksPath', join(dir, 'no-hooks'));
       const headings = entries(FLOOR);
       write(dir, LEDGER, ledgerOf(headings));
