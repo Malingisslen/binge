@@ -88,6 +88,17 @@ pre-commit:
       run: node scripts/prune-map-flag.mjs
       priority: 3
 
+    # BIN-1426. The decided-deviations ledger lives in `.claude/accepted-deviations.md`; the
+    # trigger-loaded file `.claude/rules/accepted-deviations.md` lists only its headings. A
+    # reviewer reads the list first, so a heading missing there hides that decision.
+    deviations-index:
+      glob:
+        - ".claude/accepted-deviations.md"
+        - ".claude/rules/accepted-deviations.md"
+      run: node scripts/check-deviations-index.mjs
+      fail_text: "The deviations index and the ledger's headings differ. Copy the new heading line, unchanged, to the end of .claude/rules/accepted-deviations.md."
+      priority: 2
+
 # BIN-917's criterion 4, and the reason it lives here rather than nowhere.
 #
 # The ticket asks that a batch not reach the COMMITTER without a stakeholder-review row in
