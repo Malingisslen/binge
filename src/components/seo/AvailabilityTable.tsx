@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { AvailabilityHow, TitleAvailability } from '@/lib/seo/titleAvailability';
 import { formatKr } from '@/lib/formatKr';
+import { thClass } from '@/components/ui/tableHead';
 
 // BIN-1439 steg 2 (ADR 0024) — inga hooks, så tabellen hamnar i den statiska
 // HTML:en som Google läser, inte bara efter hydrering.
@@ -30,13 +31,13 @@ export function AvailabilityTable({ title, availability }: { title: string; avai
         <h2>Så ser du {title} i Sverige</h2>
       </div>
       <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14, fontVariantNumeric: 'tabular-nums' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--fs-md)', fontVariantNumeric: 'tabular-nums' }}>
           <thead>
-            <tr className="text-ink-3" style={{ fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', textAlign: 'left' }}>
-              <th scope="col" style={{ padding: '6px 8px', fontWeight: 600, borderBottom: '1px solid var(--rule)' }}>Tjänst</th>
-              <th scope="col" style={{ padding: '6px 8px', fontWeight: 600, borderBottom: '1px solid var(--rule)' }}>Hur</th>
-              <th scope="col" style={{ padding: '6px 8px', fontWeight: 600, borderBottom: '1px solid var(--rule)' }}>Pris</th>
-              <th scope="col" style={{ padding: '6px 8px', fontWeight: 600, borderBottom: '1px solid var(--rule)' }}><span className="sr-only">Mer</span></th>
+            <tr>
+              <th scope="col" className={thClass('text-left px-2')}>Tjänst</th>
+              <th scope="col" className={thClass('text-left px-2')}>Hur</th>
+              <th scope="col" className={thClass('text-left px-2')}>Pris</th>
+              <th scope="col" className={thClass('text-left px-2')}><span className="sr-only">Mer</span></th>
             </tr>
           </thead>
           <tbody>
@@ -47,7 +48,7 @@ export function AvailabilityTable({ title, availability }: { title: string; avai
                 <tr key={r.name} className={cheapest ? 'bg-acc-soft' : undefined}>
                   <th scope="row" style={{ ...cell, textAlign: 'left', fontWeight: 600 }}>
                     {r.name}
-                    {cheapest && <span className="text-acc-deep" style={{ marginLeft: 6, fontSize: 11, fontWeight: 700 }}>Billigast av dessa</span>}
+                    {cheapest && <span className="text-acc-deep" style={{ marginLeft: 6, fontSize: 'var(--fs-xs)', fontWeight: 700 }}>Billigast av dessa</span>}
                   </th>
                   <td style={cell} className="text-ink-2">{HOW_LABEL[r.how]}</td>
                   <td style={cell}>
@@ -66,7 +67,7 @@ export function AvailabilityTable({ title, availability }: { title: string; avai
           </tbody>
         </table>
       </div>
-      <p className="text-ink-3" style={{ fontSize: 12, marginTop: 8 }}>
+      <p className="text-ink-3" style={{ fontSize: 'var(--fs-sm)', marginTop: 8 }}>
         Tjänsterna gäller när sidan senast byggdes.
         {pricesVerifiedOn && ` Priser ur binges prislista, kontrollerade ${svDate(pricesVerifiedOn)}.`}
         {' '}<Link href="/streamingkostnad/" style={linkStyle}>Räkna ut vad din streaming kostar</Link>

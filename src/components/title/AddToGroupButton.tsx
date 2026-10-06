@@ -13,6 +13,8 @@ import {
 } from '@/lib/firebase/groups';
 import { captureError } from '@/lib/sentry';
 import type { MediaType } from '@/types';
+import { Button } from '@/components/ui/Button';
+import { cardClass } from '@/components/ui/Card';
 
 interface Props {
   tmdbId: number;
@@ -72,15 +74,15 @@ export default function AddToGroupButton({
 
   return (
     <div className="relative inline-block" ref={ref}>
-      <button
+      <Button
         onClick={onOpen}
-        className="px-[7px] py-[3px] border border-rule rounded-sm text-xs font-[inherit] cursor-pointer bg-surface text-ink-2 hover:bg-bg-2 flex items-center gap-1"
+        variant="ghost" size="sm" className="flex items-center gap-1"
       >
         <UsersRound size={12} />
         Grupp
-      </button>
+      </Button>
       {open && (
-        <div className="absolute left-0 top-full mt-1 w-[220px] bg-surface border border-rule rounded-sm z-50 max-h-[260px] overflow-y-auto">
+        <div className={cardClass('absolute left-0 top-full mt-1 w-[220px] z-50 max-h-[260px] overflow-y-auto')}>
           {groups.map(g => {
             const isIn = presence[g.id] ?? false;
             const busy = working === g.id;

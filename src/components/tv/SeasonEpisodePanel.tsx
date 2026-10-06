@@ -8,6 +8,7 @@ import { isEpisodeMasked, type MaskBoundary } from '@/lib/groupProgress';
 import { countAiredEpisodes } from '@/lib/episodeLabel';
 import { todayIso } from '@/lib/utils';
 import type { TMDBEpisode } from '@/types';
+import { Button } from '@/components/ui/Button';
 
 interface SeasonEpisodePanelProps {
   tmdbId: number;
@@ -102,23 +103,23 @@ export default function SeasonEpisodePanel({
     <div className="bg-bg-2 border-t border-rule-2">
       <div className="px-0 sm:px-4 pt-2 pb-2 flex gap-2">
         {!allWatched && airedCount > 0 && (
-          <button
+          <Button
             onClick={() => markSeasonWatched(seasonNumber, episodes.length)}
-            className="min-h-[28px] px-[10px] py-[3px] rounded-sm text-xxs font-semibold border-none cursor-pointer bg-acc-deep text-on-acc"
+            variant="acc" size="xs" className="min-h-[28px]"
           >
             Markera alla sedda
-          </button>
+          </Button>
         )}
         {watchedCount > 0 && (
-          <button
+          <Button
             onClick={() => markSeasonUnwatched(
               seasonNumber,
               episodes.filter(ep => isWatched(seasonNumber, ep.episode_number)).map(ep => ep.episode_number),
             )}
-            className="min-h-[28px] px-[10px] py-[3px] rounded-sm text-xxs font-semibold border border-rule cursor-pointer bg-surface text-ink-2"
+            variant="ghost" size="xs" className="min-h-[28px]"
           >
             Avmarkera alla
-          </button>
+          </Button>
         )}
       </div>
       <div className="px-0 sm:px-4 pb-3">

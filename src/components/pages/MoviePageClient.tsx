@@ -59,6 +59,8 @@ import { trackEvent } from '@/lib/analytics';
 import ShareButton from '@/components/share/ShareButton';
 import type { TMDBMovie } from '@/types';
 import { DELETION_IN_PROGRESS_MESSAGE, isDeletionInProgressError } from '@/lib/deletionInProgressError';
+import { buttonClass } from '@/components/ui/Button';
+import { eyebrowClass } from '@/components/ui/Eyebrow';
 
 // Direction H movie-detail page. Same duotone/raw boundary as TV detail:
 //   - Hero poster → duotone (identification)
@@ -339,7 +341,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
           </div>
           <h1>{displayTitle}</h1>
           {(directors.length > 0 || writers.length > 0) && (
-            <div style={{ marginTop: 10, fontSize: 12, color: 'var(--ink-3)', letterSpacing: 0.04 }}>
+            <div style={{ marginTop: 10, fontSize: 'var(--fs-sm)', color: 'var(--ink-3)', letterSpacing: 0.04 }}>
               {directors.length > 0 && (
                 <>
                   regi:{' '}
@@ -382,7 +384,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
           {overviewText && <p className="syn">{overviewText}</p>}
           {needsContentFloorParagraph && <p className="syn">{contentFloor?.paragraph}</p>}
           {!needsContentFloorParagraph && availability && (
-            <p style={{ marginTop: 10, fontSize: 13.5, color: 'var(--ink-2)' }}>{availability}</p>
+            <p style={{ marginTop: 10, fontSize: 'var(--fs-base)', color: 'var(--ink-2)' }}>{availability}</p>
           )}
 
           {/* BIN-193: cinema→streaming countdown. ClientOnly — depends on
@@ -453,7 +455,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
               />
               <div>
                 {watchlistItem && (
-                  <div style={{ fontSize: 10.5, color: 'var(--ink-3)', letterSpacing: 0.12, textTransform: 'uppercase', marginBottom: 3 }}>
+                  <div className={eyebrowClass({ size: 'xs', className: 'mb-[3px]' })}>
                     Ditt betyg
                   </div>
                 )}
@@ -545,10 +547,10 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
               visitor. The price chart still mounts only once it is opened. */}
           {hasRentBuy && (
             <details className="group" style={{ marginTop: 10 }} onToggle={e => setShowRentBuy(e.currentTarget.open)}>
-              <summary className="btn btn-ghost btn-sm list-none [&::-webkit-details-marker]:hidden" style={{ cursor: 'pointer' }}>
+              <summary className={buttonClass({ variant: 'ghost', size: 'sm', className: 'list-none [&::-webkit-details-marker]:hidden' })} style={{ cursor: 'pointer' }}>
                 Hyr & köp <ChevronDown size={12} className="transition-transform group-open:rotate-180" />
               </summary>
-            <div style={{ marginTop: 10, fontSize: 11, color: 'var(--ink-3)' }}>
+            <div style={{ marginTop: 10, fontSize: 'var(--fs-xs)', color: 'var(--ink-3)' }}>
               {onSubscription.length > 0 && (
                 <div className="rounded-sm bg-acc-soft text-acc-deep px-2 py-1 text-sm" style={{ marginBottom: 8 }}>
                   {subsYouOwn.length > 0
@@ -558,7 +560,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
               )}
               {rent.length > 0 && (
                 <div>
-                  <span style={{ letterSpacing: 0.12, textTransform: 'uppercase', marginRight: 6 }}>Hyr:</span>
+                  <span className={eyebrowClass({ size: 'xs', className: 'mr-1.5' })}>Hyr:</span>
                   {rent.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" offer={offerForProvider(offers, canonicalProviderId(p.provider_id))} nowMs={now} mediaType="movie" />)}
                 </div>
               )}
@@ -567,7 +569,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
               {showRentBuy && <PriceHistoryChart tmdbId={movie.id} mediaType="movie" nowMs={now} />}
               {buy.length > 0 && (
                 <div>
-                  <span style={{ letterSpacing: 0.12, textTransform: 'uppercase', marginRight: 6 }}>Köp:</span>
+                  <span className={eyebrowClass({ size: 'xs', className: 'mr-1.5' })}>Köp:</span>
                   {buy.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" offer={offerForProvider(offers, canonicalProviderId(p.provider_id))} nowMs={now} mediaType="movie" />)}
                 </div>
               )}
@@ -617,8 +619,8 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
                     <AvatarInitials name={person.name} size={72} />
                   )}
                 </div>
-                <div style={{ fontSize: 13, fontWeight: 500, lineHeight: 1.25 }}>{person.name}</div>
-                <div style={{ fontSize: 10.5, color: 'var(--ink-3)', marginTop: 2, lineHeight: 1.2 }}>
+                <div style={{ fontSize: 'var(--fs-base)', fontWeight: 500, lineHeight: 1.25 }}>{person.name}</div>
+                <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--ink-3)', marginTop: 2, lineHeight: 1.2 }}>
                   {person.character}
                 </div>
               </Link>

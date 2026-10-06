@@ -9,6 +9,9 @@ import type { TMDBSearchResult } from '@/types';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/ui/EmptyState';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
+import { buttonClass } from '@/components/ui/Button';
+import { eyebrowClass } from '@/components/ui/Eyebrow';
+import { cardClass } from '@/components/ui/Card';
 
 export const dynamic = 'force-static';
 export const dynamicParams = false;
@@ -145,7 +148,7 @@ function TitleRows({ rows }: { rows: Row[] }) {
         const poster = posterUrl(r.posterPath, 'w92');
         return (
           <li key={r.href}>
-            <Link href={r.href} className="flex items-center gap-3 bg-surface rounded p-2 border border-rule hover:shadow-lift transition-shadow">
+            <Link href={r.href} className={cardClass('flex items-center gap-3 p-2 hover:shadow-lift transition-shadow')}>
               {poster ? (
                 <img src={poster} alt="" width={46} height={69} loading="lazy" decoding="async" className="rounded-sm shrink-0" />
               ) : (
@@ -194,7 +197,7 @@ export default async function GenrePage({ params }: { params: Promise<PageParams
         <EmptyState
           title={`${hub.label} — listan uppdateras`}
           body="Vad som streamar i Sverige inom genren hämtas just nu. Titta in snart, sidan fylls på så fort datan är klar."
-          action={<Link href="/guider/" className="btn btn-acc btn-sm">Utforska fler streamingguider</Link>}
+          action={<Link href="/guider/" className={buttonClass({ variant: 'acc', size: 'sm' })}>Utforska fler streamingguider</Link>}
         />
         <div className="mt-6">
           <JustWatchCredit />
@@ -225,14 +228,14 @@ export default async function GenrePage({ params }: { params: Promise<PageParams
 
       {movieRows.length > 0 && (
         <section>
-          <h2 className="text-lg font-semibold text-ink uppercase tracking-wide mb-2">Filmer</h2>
+          <h2 className={eyebrowClass({ size: 'xs', tone: 'ink', className: 'mb-2' })}>Filmer</h2>
           <TitleRows rows={movieRows} />
         </section>
       )}
 
       {tvRows.length > 0 && (
         <section>
-          <h2 className="text-lg font-semibold text-ink uppercase tracking-wide mb-2">Serier</h2>
+          <h2 className={eyebrowClass({ size: 'xs', tone: 'ink', className: 'mb-2' })}>Serier</h2>
           <TitleRows rows={tvRows} />
         </section>
       )}

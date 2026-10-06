@@ -51,7 +51,7 @@ export function ProviderHubLinks({ providerIds }: { providerIds: number[] }) {
   }
   if (links.size === 0) return null;
   return (
-    <div style={{ marginTop: 6, fontSize: 12, color: 'var(--ink-3)' }}>
+    <div style={{ marginTop: 6, fontSize: 'var(--fs-sm)', color: 'var(--ink-3)' }}>
       Mer på{' '}
       {[...links].map(([href, name], i) => (
         <Fragment key={href}>
