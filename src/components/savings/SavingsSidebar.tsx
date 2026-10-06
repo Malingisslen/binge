@@ -40,6 +40,11 @@ function pickNextReviewDate(advisor: AdvisorResult): { date: string | null; rati
           ? `När första nya avsnittet kommer på ${a.providerName}`
           : 'När en titel du följer börjar streama',
       };
+    case 'needs-library':
+      return {
+        date: null,
+        rationale: 'När du har lagt till det du följer',
+      };
     case 'idle':
     default:
       return {

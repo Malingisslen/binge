@@ -9,6 +9,7 @@ import { scorePassword } from '@/lib/passwordStrength';
 import { PasswordStrengthMeter } from '@/components/auth/PasswordStrengthMeter';
 import { CURRENT_TERMS_VERSION, MIN_AGE } from '@/lib/legal';
 import { takeNextPath } from '@/lib/nextPath';
+import { dropStalePendingAdd } from '@/lib/pendingAdd';
 import { needsOnboarding } from '@/lib/onboarding';
 import { MAX_DISPLAY_NAME } from '@/lib/clampText';
 
@@ -55,6 +56,13 @@ export default function LoginPage() {
   // in production. A ref latches the one redirect; refs survive the StrictMode
   // remount, which is the whole reason it isn't state.
   const redirectedRef = useRef(false);
+
+  // BIN-1442: a pending "Lägg till" belongs to the trip that brought the visitor
+  // here. One left by an abandoned trip — on a shared computer, maybe someone
+  // else's — is dropped when this page opens. A form left open and used by the
+  // next person is not covered; see pendingAdd.ts. Idempotent, so the StrictMode
+  // double-run is harmless.
+  useEffect(() => { dropStalePendingAdd(); }, []);
 
   // Gated on `uid` — the AUTH verdict — not on `user`, the Firestore profile.
   // AuthContext deliberately KEEPS uid and nulls the profile when a profile read

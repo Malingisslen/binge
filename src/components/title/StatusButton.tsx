@@ -167,7 +167,13 @@ export default function StatusButton({
         aria-expanded={open}
         onClick={() => {
           // BIN-714: first, and before every library gate — see the hook.
-          if (signedOut) { goToLogin(); return; }
+          if (signedOut) {
+            goToLogin({
+              tmdbId, mediaType, title, posterPath, releaseYear,
+              totalSeasons, providers, subscriptionProviders, genreIds, tmdbStatus,
+            });
+            return;
+          }
           // A dead listener answers on tap instead of going inert — the tooltip
           // below is hover-only, and this hold has no end. See libraryHold.ts.
           if (libraryDead) { toast(LIBRARY_UNAVAILABLE); return; }

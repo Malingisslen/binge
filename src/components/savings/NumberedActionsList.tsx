@@ -122,6 +122,14 @@ function stepFromPrimary(action: PrimaryAction, ctx: BuildStepsContext): Step {
         active: true,
         cta: { label: 'Visa titlar' },
       };
+    case 'needs-library':
+      return {
+        number: 1,
+        title: 'Lägg till det du följer',
+        desc: `Binge behöver minst ${action.minTitles} titlar i Följer eller Vill se för att räkna.`,
+        active: true,
+        cta: { label: 'Utforska serier', href: '/series/' },
+      };
     case 'idle':
     default:
       return {
