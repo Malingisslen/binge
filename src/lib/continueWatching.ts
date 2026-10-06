@@ -6,9 +6,8 @@ import type { WatchlistItem } from '@/types';
 // complementing the air-date-driven home focal. Cost-conscious: derived from
 // PERSISTED fields only (lastWatchedSeason/Episode + librarySubState, both
 // persisted-fields-only) — NO per-series TMDB fan-out on the home page (25
-// SEK/mån cap). The precise next-unwatched-S/E + one-tap mark lives on the
-// series page, where the season data is already loaded; here we surface where
-// you left off and a jump-back link.
+// SEK/mån cap). `next` is the episode a one-tap "Sett" may mark, and only when
+// it is provable from those fields plus the calendar (nextEpisodeToMark).
 //
 // Caught-up filtering (the "watched as long as possible" bug): a series you've
 // caught up on has nothing to continue tonight and must NOT appear here. Two
@@ -27,9 +26,10 @@ export interface ContinueWatchingEntry {
   item: WatchlistItem;
   seen: string | null; // "S2E10" — last episode marked, or null
   behind: boolean;     // sort to top — genuinely behind on aired episodes
+  next: Pos | null;    // the episode "Sett" marks, or null when it can't be proven
 }
 
-interface Pos { season: number; episode: number; }
+export interface Pos { season: number; episode: number; }
 
 function comparePos(a: Pos, b: Pos): number {
   return a.season - b.season || a.episode - b.episode;
@@ -39,6 +39,22 @@ function watchedPos(item: WatchlistItem): Pos {
   // == null guards: season 0 (Specials) and episode 0 (season auto-advance
   // sentinel) are both valid progress values.
   return { season: item.lastWatchedSeason ?? 0, episode: item.lastWatchedEpisode ?? 0 };
+}
+
+/**
+ * BIN-1442 — the next episode after where you left off, but only when it is known
+ * to exist and to have aired: the same season as the latest aired episode, at or
+ * before it. Episode 0 is the season auto-advance sentinel, so its next is E1.
+ * Across a season boundary the episode count is unknown without a TMDB call, so
+ * the answer there is null and the series page does the marking.
+ */
+export function nextEpisodeToMark(item: WatchlistItem, airedPos: Pos | undefined): Pos | null {
+  if (!airedPos || item.lastWatchedSeason == null) return null;
+  const { season, episode } = watchedPos(item);
+  if (season === 0) return null; // specials never move the pointer (BIN-679)
+  const next = { season, episode: episode + 1 };
+  if (next.season !== airedPos.season || next.episode > airedPos.episode) return null;
+  return next;
 }
 
 /** True once you're on or past the last season we have a count for. */
@@ -101,7 +117,12 @@ export function pickContinueWatching(
     // consistent with the library: only a demonstrable backlog
     // (librarySubState === 'ligger_efter'), never just "one fresh episode aired".
     // The calendar decides inclusion, not the badge.
-    entries.push({ item, seen: seenEpisodeCode(item), behind: sub === 'ligger_efter' });
+    entries.push({
+      item,
+      seen: seenEpisodeCode(item),
+      behind: sub === 'ligger_efter',
+      next: nextEpisodeToMark(item, airedPos),
+    });
   }
   entries.sort((a, b) => {
     if (a.behind !== b.behind) return a.behind ? -1 : 1;            // behind first

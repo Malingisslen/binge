@@ -10,6 +10,8 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useToast } from '@/contexts/ToastContext';
 import { statusLabel, statusMenuLabel, statusOptionsFor } from '@/lib/watchStatus';
 import { useRemoveWithUndo } from '@/hooks/useRemoveWithUndo';
+import { useFirstFollowConfirmation } from '@/hooks/useFollowConfirmation';
+import { isFirstFollow } from '@/hooks/useFollowConfirmation.helpers';
 import { buildWatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
 import { useSignedOutRedirect } from '@/hooks/useSignedOutRedirect';
 import { LIBRARY_UNAVAILABLE } from './libraryHold';
@@ -38,7 +40,8 @@ export default function QuickAddButton({
   // would read as "signed out" forever for that user — handing them a login
   // round trip on every tap.
   const signedOut = !authLoading && uid == null;
-  const { getItem, upsertTitle, listenerFailed, libraryKnown } = useWatchlist();
+  const { items, getItem, upsertTitle, listenerFailed, libraryKnown } = useWatchlist();
+  const confirmFirstFollow = useFirstFollowConfirmation();
   const removeWithUndo = useRemoveWithUndo();
   // BIN-596: the OTHER half of the gate. `loading` from useWatchlist() cannot be
   // used here — it goes false both when the first snapshot lands and when the
@@ -84,6 +87,8 @@ export default function QuickAddButton({
     // anything false — but it said nothing either, and the user was left with a menu that
     // closed and no answer at all. Narrow on purpose: only the deletion refusal is answered
     // here; every other failure keeps propagating exactly as it did before.
+    // Read before the write: the add itself lands in `items` optimistically.
+    const firstFollow = isFirstFollow(items, mediaType, status, current != null);
     try {
       await upsertTitle(buildWatchlistAddPayload({
         tmdbId, mediaType, status, title, posterPath, releaseYear,
@@ -93,7 +98,8 @@ export default function QuickAddButton({
       if (isDeletionInProgressError(err)) { toast(DELETION_IN_PROGRESS_MESSAGE); return; }
       throw err;
     }
-    toast(`${title} — ${labelFor(status)}`);
+    if (firstFollow) confirmFirstFollow(title, `${title} — ${labelFor(status)}`);
+    else toast(`${title} — ${labelFor(status)}`);
   }
 
   function handleRemove() {
