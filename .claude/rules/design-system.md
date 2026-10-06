@@ -25,8 +25,8 @@ Sticky, horisontell toppkrom — **ingen sidebar**:
 - **Sans:** Albert Sans (primär) → `system-ui, -apple-system, Segoe UI, sans-serif` som fallback
 - **Mono:** `--mono` är alias för `--sans` — monospace-typsnittet (JetBrains Mono) fasas ut. Koda inte nytt med `font-mono`/`var(--mono)` — städas bort mekaniskt
 - **Täthetskänsla:** verktyg, inte marknadsföringssida. Håll textstorlekar och marginaler kompakta
-- **Typskala:** storlekarna i `tailwind.config.ts` `fontSize` (`text-nano` … `text-6xl`). Inga godtyckliga `text-[Npx]` — `consistency.test.ts` fäller dem; saknas en storlek läggs den till i skalan
-- **Delar att ta från hyllan:** `Eyebrow` (det lilla versala ögonbrynet), `Button`/`buttonClass` (`.btn`-varianterna). Allt syns på `/designsystem/` i ljust och mörkt läge
+- **Typskala:** `--fs-*` i `globals.css :root`, speglad som `text-nano` … `text-6xl` i `tailwind.config.ts`. Ingen px-storlek någon annanstans — testet fäller den
+- **Delar att ta från hyllan** (`src/components/ui/`): `Button`/`buttonClass`, `Eyebrow`/`eyebrowClass`, `cardClass`, `fieldClass` (+ `.select`), `badgeClass`, `thClass`, `bg-scrim`. `consistency.test.ts` fäller handskrivna varianter. Allt syns på `/designsystem/`
 
 ## Färgsystem
 
@@ -57,7 +57,7 @@ Allt annat är platt. Inga `drop-shadow`-, `filter: blur`- eller godtyckliga box
 ## Kantradie
 
 - `rounded-sm` = 3px, `rounded` / `rounded-md` = 6px, `rounded-lg` = 8px
-- Poster-thumbnails: 3px. Knappar: 6px. Modaler/kort: 6-8px. Aldrig mer än 8px.
+- Poster-thumbnails: 3px. Knappar: 6px. Aldrig mer än 8px.
 
 ## Posters och duotone
 

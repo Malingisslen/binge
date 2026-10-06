@@ -95,7 +95,7 @@ export function DialogShell({
 
   return (
     <div
-      className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4"
+      className="fixed inset-0 bg-scrim z-[60] flex items-center justify-center p-4"
       onMouseDown={e => { mouseDownOnBackdrop.current = e.target === e.currentTarget; }}
       onClick={e => {
         e.stopPropagation();

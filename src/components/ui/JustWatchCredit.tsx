@@ -24,7 +24,7 @@ export default function JustWatchCredit({ className = '' }: JustWatchCreditProps
       className={className}
       style={{
         display: 'inline-block',
-        fontSize: 11,
+        fontSize: 'var(--fs-xs)',
         color: 'var(--ink-3)',
         letterSpacing: 0.02,
       }}
