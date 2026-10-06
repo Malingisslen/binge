@@ -2620,3 +2620,21 @@ punkt 2.
 3. Att något av fälten börjar läsas för någon ANNAN än ägaren.
 
 **Re-open when:** någon av punkterna ovan inträffar.
+
+## BIN-1450: paket P:s commits utan biljett-id kopplas via sin sha — 2026-10-06
+
+Tråden "Små fel från bilderna" pushade commits till main utan biljett-id i ämnesraden;
+biljetten BIN-1450 filades efteråt. Historiken på main skrivs inte om, så de knyts till
+BIN-1450 i `TICKET_BY_SHA`.
+
+**Villkor (c) i BIN-1367-posten är uppfyllt bara i efterhand.** Biljettens `review`-rader
+är bokförda i samma commit som kartan. Kritikerna kördes före respektive bygge enligt
+tråden, men ingen rad fanns när commitarna gjordes. Det är en medveten vidgning av
+BIN-1367-postens villkor, inte en ny standardväg. `0db2528` bär ingen egen rollkritik;
+endast de tre commit-grindarna granskade den. Härled posterna:
+
+```
+git grep -n "BIN-1450" -- docs/org/metrics/check_review_coverage.mjs docs/org/metrics/events.jsonl
+```
+
+**INTE accepterat:** samma villkor som i BIN-1367-posten, och att rader i efterhand blir standardvägen för en commit utan id.
