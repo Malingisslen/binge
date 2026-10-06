@@ -13,8 +13,9 @@ Direction H · "Schemat" — den shippade designen. Se `globals.css :root` och
 ## Layout
 
 Sticky, horisontell toppkrom — **ingen sidebar**:
-- `AppTopbar` (brand-logotyp · WeekStrip · sökfält · avatar) — `position: sticky; top: 0; z-index: 30`
-- `Subnav` (Hem · Bibliotek · Kalender · Rekommendationer · Streamingrådgivaren · Vänner · Grupper) — horisontell länkrad direkt under topbar
+- `AppTopbar` (logga `BrandMark` · WeekStrip · sökfält · avatar) — `position: sticky; top: 0; z-index: 30`
+- `Subnav` — horisontell länkrad direkt under topbar; länkarna står i `Subnav.tsx`
+- Utloggade får gästmenyn i stället för veckoremsa, subnav och appens flikar (`chromeMode.ts`)
 - Huvudinnehållet i `.canvas` — `max-width: 1320px`, `margin: 0 auto`, `padding: 32px 40px 48px`
 - Mobil: `MobileTabBar` (5-tabs, `position: fixed; bottom: 0`) ersätter subnav på smala skärmar
 

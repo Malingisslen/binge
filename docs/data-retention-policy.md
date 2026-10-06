@@ -11,7 +11,9 @@ UGC enligt följande regler.
 
 Allt som bara användaren själv ser tas bort helt:
 
-- `users/{uid}` (privat profil-doc; sedan BIN-505 ägar-låst läsning)
+- `users/{uid}` (privat profil-doc; sedan BIN-505 ägar-låst läsning). Fältet
+  `secondWeekVisitAt` (BIN-1442) följer med: datumet för första besöket under
+  andra veckan, som Insikter bara läser som en summa.
 - `publicProfiles/{uid}` (BIN-505 — den publika projektionen; TOP-LEVEL, ej en
   user-subcollection, så den raderas explicit i `collectDeletionRefs` via
   `snaps.publicProfileSnap.ref`, inte via subcollection-guarden)

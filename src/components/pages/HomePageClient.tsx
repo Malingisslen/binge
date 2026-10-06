@@ -29,6 +29,7 @@ import { seedCalendarEntries } from '@/lib/calendar/seedEntries';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import { useSignedOutRedirect } from '@/hooks/useSignedOutRedirect';
 import GuestCostDemo from '@/components/pricing/GuestCostDemo';
+import BrandMark from '@/components/ui/BrandMark';
 import type { TMDBSearchResult } from '@/types';
 
 // LandingPage tar trending-sektionen som ReactNode-prop istället för en
@@ -49,14 +50,15 @@ function LandingPage({ trending, guestDemo }: { trending?: React.ReactNode; gues
     <div className="min-h-screen bg-bg">
       <section className="bg-sidebar-bg text-white">
         <div className="max-w-[640px] mx-auto px-4 py-16 text-center">
-          <h1 className="text-5xl font-extrabold text-acc mb-2">
-            binge<span className="font-normal text-white/60 text-3xl">.nu</span>
+          <h1 className="inline-flex items-center gap-3 text-5xl font-extrabold tracking-[-0.04em] text-white mb-2">
+            <BrandMark size={36} />
+            binge.nu
           </h1>
           <p className="text-xl font-semibold mb-2 max-w-[520px] mx-auto">
-            Håll koll på vad du tittar på — och var det streamas.
+            Se vad du betalar för streaming, och vad du kan pausa.
           </p>
           <p className="text-sm text-white/60 mb-5 max-w-[480px] mx-auto leading-relaxed">
-            Se vilken streamingtjänst som har filmen eller serien du söker, håll reda på kommande avsnitt och samla allt på ett ställe.
+            Binge håller koll på dina serier och säger till när en tjänst inte används, med svenska priser.
           </p>
           <div className="relative max-w-[440px] mx-auto mb-4" ref={searchRef}>
             <div className="flex items-center gap-[5px] px-3 py-[8px] bg-white/[0.08] border border-white/10 rounded-sm">
@@ -98,7 +100,7 @@ function LandingPage({ trending, guestDemo }: { trending?: React.ReactNode; gues
             }}
             className="px-5 py-[7px] bg-acc-deep text-on-acc border-none rounded-sm cursor-pointer font-[inherit] text-sm font-semibold mb-8"
           >
-            Logga in med Google
+            Skapa konto gratis
           </button>
           <div className="flex justify-center gap-8 flex-wrap max-w-[520px] mx-auto">
             <div className="text-center">

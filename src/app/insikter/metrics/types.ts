@@ -11,7 +11,7 @@ export type MetricKey =
   | 'activeUsers7d' | 'activeUsers30d'
   // Tillväxt
   | 'signupsTrend' | 'onboardingFunnel' | 'signinMethodSplit' | 'donateClicks'
-  | 'signupLandingPages' | 'providerClicks' | 'providerClicksByType'
+  | 'secondWeekReturn' | 'signupLandingPages' | 'providerClicks' | 'providerClicksByType'
   | 'shareClicks' | 'shareClicksBySurface' | 'priceCheckTotals' | 'priceCheckSaves'
   // Produktanvändning
   | 'statusDistribution' | 'mediaTypeSplit' | 'topTitles' | 'topProviders' | 'topGenres'

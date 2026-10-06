@@ -2,6 +2,7 @@ import type { MetricKey, MetricValue } from './types';
 import type { InsightsData } from '../insights.types';
 import { getProvider, canonicalProviderId } from '@/lib/tmdb/providers';
 import { genreLabel } from '@/lib/tmdb/genreLabels';
+import { MIN_COHORT } from '@/lib/secondWeek';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -43,6 +44,7 @@ export const MISSING = {
   noSource: 'Ingen källa',
   notCounted: 'Ingen räkning i intervallet',
   notMeasured: 'inte mätt',
+  tooFewAccounts: 'för få konton än',
 } as const;
 
 // ── Egen räkning (eventStats, BIN-1438) ──────────────────────────────────────
@@ -132,6 +134,21 @@ export const DATA_RESOLVERS: Record<MetricKey, (data: InsightsData) => MetricVal
         count: s.count,
         pctOfStart: first === 0 ? 0 : Math.round((s.count / first) * 1000) / 10,
       })),
+    };
+  },
+
+  // BIN-1442: snapshot from the latest rollup, like activeUsers. Under MIN_COHORT
+  // accounts a split would point at individuals, so the tile says so instead.
+  secondWeekReturn: (d) => {
+    const r = d.rollup?.secondWeekReturn;
+    if (!r) return { kind: 'breakdown', entries: [], missing: MISSING.notMeasured };
+    if (r.cohort < MIN_COHORT) return { kind: 'breakdown', entries: [], missing: MISSING.tooFewAccounts };
+    return {
+      kind: 'breakdown',
+      entries: [
+        { label: 'Kom tillbaka', value: r.returned },
+        { label: 'Kom inte tillbaka', value: r.cohort - r.returned },
+      ],
     };
   },
 

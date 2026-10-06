@@ -17,13 +17,21 @@ function advisor(estimated: boolean): AdvisorResult {
 describe('DiagnosisCard — uppskattat', () => {
   it('märker totalen när ett belopp är listpriset', () => {
     render(<DiagnosisCard advisor={advisor(true)} activeProviderCount={2} />);
-    expect(screen.getByText(/Du betalar/)).toHaveTextContent('Du betalar 318 kr/mån (uppskattat) för 2 tjänster.');
+    expect(screen.getByTestId('money-figure')).toHaveTextContent(/Per månad\s*318 kr/);
+    expect(screen.getByTestId('money-figure')).toHaveTextContent(/Per år, uppskattat\s*3 816 kr/);
+    expect(screen.getByText(/Du har/)).toHaveTextContent('Du har 2 tjänster.');
   });
 
   it('märker inte totalen när alla belopp är användarens egna', () => {
     render(<DiagnosisCard advisor={advisor(false)} activeProviderCount={2} />);
-    expect(screen.getByText(/Du betalar/)).toHaveTextContent('Du betalar 318 kr/mån för 2 tjänster.');
+    expect(screen.getByTestId('money-figure')).toHaveTextContent(/Per år\s*3 816 kr/);
     expect(screen.queryByText(/uppskattat/)).not.toBeInTheDocument();
+  });
+
+  it('visar ingen summa när inga tjänster kostar något', () => {
+    render(<DiagnosisCard advisor={{ ...advisor(false), totalMonthlyCost: 0 }} activeProviderCount={1} />);
+    expect(screen.queryByTestId('money-figure')).toBeNull();
+    expect(screen.getByText(/Du har/)).toHaveTextContent('Du har 1 tjänst.');
   });
 });
 
@@ -35,8 +43,10 @@ describe('DiagnosisCard — pausgolvet', () => {
       primaryAction: { kind: 'needs-library', titleCount: 1, minTitles: 3 },
     } as unknown as AdvisorResult;
     render(<DiagnosisCard advisor={a} activeProviderCount={1} />);
-    expect(screen.getByText(/Du betalar/)).toHaveTextContent(
-      'Du betalar 169 kr/mån för 1 tjänst. Lägg till det du följer, så kan Binge räkna ut vad du kan pausa. Binge behöver minst 3 titlar i Följer eller Vill se, du har 1.',
+    // The amount is the receipt figure above the sentence (BIN-1446), the sentence counts the services.
+    expect(screen.getByTestId('money-figure')).toHaveTextContent(/Per månad\s*169 kr/);
+    expect(screen.getByText(/Du har 1 tjänst/)).toHaveTextContent(
+      'Du har 1 tjänst. Lägg till det du följer, så kan Binge räkna ut vad du kan pausa. Binge behöver minst 3 titlar i Följer eller Vill se, du har 1.',
     );
     expect(screen.queryByText(/kan pausas/)).not.toBeInTheDocument();
   });

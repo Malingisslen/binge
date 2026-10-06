@@ -194,8 +194,8 @@ function StepWelcome({ onNext }: { onNext: () => void }) {
         Välkommen till Binge.nu
       </h1>
       <p className="text-sm text-ink-2 mb-4">
-        Håll koll på vad du tittar på och se var filmer och serier streamas i
-        Sverige.
+        Se vad du betalar för streaming och vad du kan pausa. Binge håller koll
+        på dina serier och var de streamas i Sverige.
       </p>
       <ul className="space-y-2 mb-6 text-sm text-ink-2">
         <li className="flex items-start gap-2">
@@ -208,7 +208,7 @@ function StepWelcome({ onNext }: { onNext: () => void }) {
         </li>
         <li className="flex items-start gap-2">
           <Check size={14} className="text-acc-deep mt-[3px] shrink-0" />
-          <span>Få rekommendationer baserat på din smak</span>
+          <span>Se vad du betalar och vad du kan pausa</span>
         </li>
       </ul>
       <button
@@ -637,9 +637,11 @@ function StepFirstTitle({
           Nästa <ArrowRight size={14} />
         </button>
         {!canContinue && (
+          // BIN-1442: an ordinary button, not a faint text link. Skipping the
+          // first title is a real choice, and the last step is where the value is.
           <button
             onClick={onNext}
-            className="text-xxs text-ink-3 hover:text-ink-2 bg-transparent border-none cursor-pointer ml-auto"
+            className="inline-flex items-center gap-1 px-3 py-2 border border-rule rounded-sm text-sm bg-surface cursor-pointer ml-auto"
           >
             Hoppa över
           </button>
@@ -660,20 +662,38 @@ function StepDone({
   onFinish: (destination?: string) => Promise<void>;
   saving: boolean;
 }) {
-  const { user } = useAuth();
+  const { user, updateNotificationSettings } = useAuth();
   const [now] = useState(() => new Date());
   const spend = summarizeMonthlySpend(user?.myProviders ?? [], user ?? {}, now);
+  const [reminderError, setReminderError] = useState<string | null>(null);
+  // BIN-1442 — the onboarding ends on the money (Malin, 2026-10-06). The button
+  // turns on the existing rotation reminders; since BIN-1442 those also reach the
+  // bell, so they arrive without push. The dates come from the advisor's
+  // rotation calendar, which needs a library past the pause floor (three titles);
+  // until then there is nothing to remind about.
+  const remindMe = async () => {
+    setReminderError(null);
+    try {
+      await updateNotificationSettings({ rotationReminders: true });
+    } catch (err) {
+      setReminderError(err instanceof Error ? err.message : 'Kunde inte slå på påminnelserna. Försök igen.');
+      return;
+    }
+    await onFinish('/savings/');
+  };
   return (
     <div>
       <h1 className="page-h1" style={{ marginBottom: 12 }}>
         Klar.
       </h1>
       {spend.paidCount > 0 && (
-        <div className="border border-rule rounded-sm p-3 mb-4">
-          <p className="text-sm text-ink">
-            Du betalar{spend.estimated ? ' ungefär' : ''}{' '}
-            <strong>{formatKr(spend.totalKr)} kr i månaden</strong> för{' '}
-            {spend.paidCount} {spend.paidCount === 1 ? 'tjänst' : 'tjänster'}, alltså{' '}
+        <div className="border border-rule rounded-sm p-4 mb-4">
+          <p className="text-sm text-ink-2">Du betalar{spend.estimated ? ' ungefär' : ''}</p>
+          <p className="text-5xl leading-tight font-bold text-ink" style={{ fontVariantNumeric: 'tabular-nums' }}>
+            {formatKr(spend.totalKr)} kr/mån
+          </p>
+          <p className="text-sm text-ink-2">
+            för {spend.paidCount} {spend.paidCount === 1 ? 'tjänst' : 'tjänster'}, alltså{' '}
             {formatKr(spend.totalKr * 12)} kr om året.
           </p>
           {spend.estimated && (
@@ -681,17 +701,28 @@ function StepDone({
               Där du inte valt nivå räknar vi med tjänstens listpris. Du kan ändra det i inställningarna.
             </p>
           )}
-          <p className="text-xxs text-ink-3 mt-1">
-            Lägg till det du följer, så kan Streamingrådgivaren säga vad du kan pausa.
+          <div className="flex flex-wrap items-center gap-2 mt-3">
+            <button
+              type="button"
+              onClick={() => { void remindMe(); }}
+              disabled={saving}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-acc-deep text-on-acc rounded-sm text-sm font-semibold cursor-pointer disabled:opacity-50"
+            >
+              Påminn mig när jag kan pausa
+            </button>
+            <button
+              type="button"
+              onClick={() => onFinish('/savings/')}
+              disabled={saving}
+              className="px-3 py-2 border border-rule rounded-sm text-sm bg-surface cursor-pointer disabled:opacity-50"
+            >
+              Öppna Rådgivaren
+            </button>
+          </div>
+          <p className="text-xxs text-ink-3 mt-2">
+            Binge säger till när en tjänst du betalar för inte har något du följer, och när den blir värd att starta igen.
           </p>
-          <button
-            type="button"
-            onClick={() => onFinish('/savings/')}
-            disabled={saving}
-            className="mt-2 text-xs text-acc-deep underline bg-transparent border-none p-0 cursor-pointer font-[inherit] disabled:opacity-50"
-          >
-            Öppna Streamingrådgivaren
-          </button>
+          {reminderError && <p className="text-xxs text-danger-ink mt-1" role="alert">{reminderError}</p>}
         </div>
       )}
       <p className="text-sm text-ink-2 mb-4">
@@ -716,7 +747,10 @@ function StepDone({
           <button
             onClick={() => onFinish('/kalibrera/')}
             disabled={saving}
-            className="inline-flex items-center gap-1 px-3 py-[5px] bg-acc-deep text-on-acc rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
+            className={spend.paidCount > 0
+              // One saffron button per screen: with the money box, that is "Påminn mig".
+              ? 'inline-flex items-center gap-1 px-3 py-[5px] border border-rule rounded-sm text-xs font-semibold bg-surface cursor-pointer disabled:opacity-50'
+              : 'inline-flex items-center gap-1 px-3 py-[5px] bg-acc-deep text-on-acc rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50'}
           >
             <Target size={11} /> Kalibrera smak
           </button>
