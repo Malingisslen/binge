@@ -34,7 +34,7 @@ function safeHref(url: string): string | null {
 function RecapSourceCredit({ sources }: { sources: RecapSource[] }) {
   const label = sources.length === 1 ? 'Källa' : 'Källor';
   return (
-    <div className="text-[11px] text-ink-3 mt-2">
+    <div className="text-xs text-ink-3 mt-2">
       {label}:{' '}
       {sources.map((s, i) => {
         const href = safeHref(s.url);
@@ -63,9 +63,9 @@ function RecapSourceCredit({ sources }: { sources: RecapSource[] }) {
 function DisclosedRecapProse({ text, sources }: { text: string; sources: RecapSource[] }) {
   return (
     <>
-      <div className="text-[11px] text-ink-2 font-medium">AI-genererad sammanfattning</div>
-      <p className="text-[14px] text-ink mt-1 whitespace-pre-line">{text}</p>
-      <div className="text-[11px] text-ink-3 mt-2">Kan innehålla mindre felaktigheter.</div>
+      <div className="text-xs text-ink-2 font-medium">AI-genererad sammanfattning</div>
+      <p className="text-md text-ink mt-1 whitespace-pre-line">{text}</p>
+      <div className="text-xs text-ink-3 mt-2">Kan innehålla mindre felaktigheter.</div>
       <RecapSourceCredit sources={sources} />
     </>
   );
@@ -178,15 +178,15 @@ export default function RecapPanel({
   const hereContent = hasBoundaryRecap ? (
     <div>
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[13px] font-semibold text-ink">
+        <span className="text-base font-semibold text-ink">
           Säsong {boundary!.season}, avsnitt {boundary!.episode}
         </span>
-        <span className="rounded bg-acc-soft px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-acc-deep">
+        <span className="rounded bg-acc-soft px-1.5 py-0.5 text-xxs font-bold uppercase tracking-wide text-acc-deep">
           Du är här
         </span>
       </div>
       {missing > 0 && (
-        <div className="text-[12px] text-ink-2 mt-1">
+        <div className="text-sm text-ink-2 mt-1">
           Sammanfattningen täcker till och med S{coveredBoundary!.season}E{coveredBoundary!.episode} —
           {' '}informationen från {missing === 1 ? 'det senaste avsnittet' : `de ${missing} senaste avsnitten`} du sett saknas.
         </div>
@@ -199,7 +199,7 @@ export default function RecapPanel({
         <div className="mt-3 border-t border-rule-2 pt-2">
           <button
             type="button"
-            className="flex w-full items-center gap-2 text-[12px] font-medium text-ink-2 hover:text-ink"
+            className="flex w-full items-center gap-2 text-sm font-medium text-ink-2 hover:text-ink"
             onClick={() => setOpenFull((o) => !o)}
             aria-expanded={openFull}
           >
@@ -222,7 +222,7 @@ export default function RecapPanel({
     <div className="mt-3 rounded-md border border-rule bg-surface overflow-hidden">
       <button
         type="button"
-        className="flex w-full items-center gap-2 px-3 py-2.5 text-[13px] font-medium text-ink hover:bg-bg-2"
+        className="flex w-full items-center gap-2 px-3 py-2.5 text-base font-medium text-ink hover:bg-bg-2"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
       >
@@ -258,7 +258,7 @@ export default function RecapPanel({
                 <NodeRow key={season} dot={priorDot} last={i === arr.length - 1}>
                   <button
                     type="button"
-                    className="flex w-full items-center gap-2 text-[13px] font-medium text-ink hover:text-ink-2"
+                    className="flex w-full items-center gap-2 text-base font-medium text-ink hover:text-ink-2"
                     onClick={() => toggleSeason(season)}
                     aria-expanded={isOpen}
                   >

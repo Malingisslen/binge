@@ -17,6 +17,7 @@ import {
 } from '@/lib/groupInviteCache';
 import { useMountTime } from '@/hooks/useMountTime';
 import { captureError } from '@/lib/sentry';
+import { Eyebrow } from '@/components/ui/Eyebrow';
 import {
   inviteTokenAgeDays,
   inviteTokenAgeLabel,
@@ -41,9 +42,9 @@ export function ProviderOverlapPanel({ intersect, union }: { intersect: number[]
 
   return (
     <div className="bg-surface border border-rule rounded-sm">
-      <div className="px-3 py-[6px] border-b border-rule-2 text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">
+      <Eyebrow className="px-3 py-[6px] border-b border-rule-2">
         Streamingöverlapp
-      </div>
+      </Eyebrow>
       <div className="px-3 py-2 space-y-2">
         <div>
           <div className="text-xxs text-ink-3 mb-1">Alla har ({intersect.length})</div>
@@ -175,9 +176,9 @@ export function InvitePanel({
 
   return (
     <div className="bg-surface border border-rule rounded-sm">
-      <div className="px-3 py-[6px] border-b border-rule-2 text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">
+      <Eyebrow className="px-3 py-[6px] border-b border-rule-2">
         Inbjudningslänk
-      </div>
+      </Eyebrow>
       <div className="px-3 py-2 space-y-2">
         {inviteUrl ? (
           <>

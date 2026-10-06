@@ -111,3 +111,47 @@ export function priceChangeText(n: PriceChangeNudge): { lead: string; note: stri
     note: 'Datumet kommer från tjänsten själv.',
   };
 }
+
+/**
+ * Raden som `/prisandringar.json` publicerar för pushfunktionen `priceChangeNotify`.
+ * Texten byggs här, med samma `priceChangeText` som banderollen, så notisen och
+ * banderollen alltid säger samma sak. Ingen persondata: samma uppgifter som
+ * /streamingpriser/ redan visar.
+ */
+export interface PriceChangeFeedRow {
+  key: string;
+  /** Kanoniskt id först, sedan alias. */
+  providerIds: number[];
+  tierId: string | null;
+  date: string;
+  title: string;
+  body: string;
+}
+
+export function buildPriceChangeFeed(changes: PriceChange[] = PRICE_CHANGES): PriceChangeFeedRow[] {
+  const rows: PriceChangeFeedRow[] = [];
+  for (const c of changes) {
+    const provider = getProvider(c.providerId);
+    if (!provider || c.fromKr === c.toKr) continue;
+    const tierName = c.tierId === null ? null : provider.tiers?.find(t => t.id === c.tierId)?.name ?? null;
+    if (c.tierId !== null && tierName === null) continue;
+    const text = priceChangeText({
+      key: priceChangeKey(c),
+      providerId: provider.id,
+      providerName: provider.name,
+      tierName,
+      color: provider.color,
+      change: c,
+      yearlyDiffKr: (c.toKr - c.fromKr) * 12,
+    });
+    rows.push({
+      key: priceChangeKey(c),
+      providerIds: [provider.id, ...(provider.aliases ?? [])],
+      tierId: c.tierId,
+      date: c.date,
+      title: `${provider.name} ${c.toKr > c.fromKr ? 'höjer' : 'sänker'} priset`,
+      body: text.lead,
+    });
+  }
+  return rows;
+}

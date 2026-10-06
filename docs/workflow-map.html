@@ -492,6 +492,18 @@
       "path": "functions/src/rotationReminder/index.ts"
     },
     {
+      "id": "cf-price-change",
+      "label": "priceChangeNotify",
+      "context": "backend-api",
+      "path": "functions/src/priceChangeNotify/index.ts"
+    },
+    {
+      "id": "price-change-feed",
+      "label": "/prisandringar.json (static, build time)",
+      "context": "web-app",
+      "path": "src/app/prisandringar.json/route.ts, src/lib/advisor/priceChangeNudges.ts, src/lib/tmdb/providers.ts"
+    },
+    {
       "id": "savings-advisor",
       "label": "useSubscriptionAdvisor",
       "context": "web-app",
@@ -2041,6 +2053,38 @@
           "to": "firestore",
           "payload": "set weeklyDigestState/{uid}.lastSentDate = runDate (only after a send — Cloud Scheduler is at-least-once; a same-day retry sees the marker and skips)",
           "transport": "Firestore write",
+          "verified": true
+        }
+      ],
+      "area": "notifications"
+    },
+    {
+      "id": "flow-price-change-push",
+      "label": "Price change push",
+      "description": "BIN-1444, paket L. PRICE_CHANGES lives only in the client catalog (src/lib/tmdb/providers.ts), which the price agent edits and which deploys only the site, so the site publishes it at build time as the static /prisandringar.json with the banner's approved copy prebuilt by priceChangeText. A daily function fetches that file from the fixed https://binge.nu origin (timeout, no redirects, schema-validated, row cap; any failure logs and sends nothing), keeps rows at most 14 days old (a month-only date counts from the 1st), and pushes users opted into notificationSettings.priceChanges whose service, tier and pause state match (rowAppliesTo, the same rule as the advisor banner). Dedup is per price change, written BEFORE the sends: at-most-once, and the marker carries no uid.",
+      "covers": [
+        "priceChangeNotify"
+      ],
+      "steps": [
+        {
+          "from": "price-change-feed",
+          "to": "cf-price-change",
+          "payload": "GET https://binge.nu/prisandringar.json → {version:1, rows:[{key, providerIds (canonical first), tierId, date, title, body}]} → parseFeed (whole file rejected on any malformed row) → freshRows(todayStockholm)",
+          "transport": "HTTPS fetch",
+          "verified": true
+        },
+        {
+          "from": "cf-price-change",
+          "to": "firestore",
+          "payload": "per fresh row: skip if priceChangeNotifyState/{key} exists; query users where notificationSettings.priceChanges==true (single-field equality); write priceChangeNotifyState/{key} {notifiedAt} BEFORE sending",
+          "transport": "Firestore read/write",
+          "verified": true
+        },
+        {
+          "from": "cf-price-change",
+          "to": "cf-sendPush",
+          "payload": "per matching user: sendPushToUser(uid, {title: row.title, body: row.body, actionUrl:'/savings/', tag:'price-change-{key}'}, {pushEnabled}) — push-only, no inbox doc",
+          "transport": "in-process call",
           "verified": true
         }
       ],

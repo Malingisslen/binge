@@ -20,6 +20,7 @@ import {
 import { useMyGroups, useMyGroupInvites } from '@/hooks/useGroups';
 import { getPublicGroupName } from '@/lib/firebase/groups';
 import type { GroupInvite } from '@/lib/firebase/groups';
+import { Eyebrow } from '@/components/ui/Eyebrow';
 
 export default function GrupperPage() {
   return <AuthGuard><GrupperList /></AuthGuard>;
@@ -69,11 +70,11 @@ function GrupperList() {
           <table className="w-full text-xs">
             <thead>
               <tr className="bg-rule-2/40">
-                <th className="text-left px-3 py-[6px] text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">Namn</th>
-                <th className="text-left px-3 py-[6px] text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">Medlemmar</th>
-                <th className="text-left px-3 py-[6px] text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">Tjänster</th>
-                <th className="text-left px-3 py-[6px] text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">Roll</th>
-                <th className="text-left px-3 py-[6px] text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">Uppdaterad</th>
+                <th className="text-left px-3 py-[6px] text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold">Namn</th>
+                <th className="text-left px-3 py-[6px] text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold">Medlemmar</th>
+                <th className="text-left px-3 py-[6px] text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold">Tjänster</th>
+                <th className="text-left px-3 py-[6px] text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold">Roll</th>
+                <th className="text-left px-3 py-[6px] text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold">Uppdaterad</th>
               </tr>
             </thead>
             <tbody>
@@ -164,9 +165,9 @@ function PendingInvites() {
 
   return (
     <div className="bg-surface border border-rule rounded-sm mb-4 overflow-hidden">
-      <div className="px-3 py-[6px] border-b border-rule-2 text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">
+      <Eyebrow className="px-3 py-[6px] border-b border-rule-2">
         Inbjudningar ({invites.length})
-      </div>
+      </Eyebrow>
       <ul className="divide-y divide-rule-2">
         {invites.map(inv => (
           <InviteRow

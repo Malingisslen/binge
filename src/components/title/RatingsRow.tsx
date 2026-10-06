@@ -19,9 +19,9 @@ export function RatingsRow({
   if (!hasTmdb && !hasExternal) return null;
 
   const card = 'flex flex-col gap-0.5 rounded border border-rule bg-surface px-3 py-1.5 min-w-[78px]';
-  const src = 'text-[11px] uppercase tracking-wide text-ink-3';
-  const val = 'text-[17px] font-medium text-acc-deep leading-none';
-  const scale = 'text-[12px] font-normal text-ink-3';
+  const src = 'text-xs uppercase tracking-wide text-ink-3';
+  const val = 'text-xl font-medium text-acc-deep leading-none';
+  const scale = 'text-sm font-normal text-ink-3';
 
   return (
     <div className="mt-2 flex flex-wrap gap-2">

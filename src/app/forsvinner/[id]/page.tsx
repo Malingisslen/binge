@@ -83,7 +83,7 @@ export default async function ForsvinnerPage({ params }: { params: Promise<PageP
 
       <div className="mt-6">
         <JustWatchCredit />
-        <span className="text-ink-3 text-[11px]">{' · '}Datum via Movie of the Night · Listan uppdateras dagligen och kan vara ofullständig</span>
+        <span className="text-ink-3 text-xs">{' · '}Datum via Movie of the Night · Listan uppdateras dagligen och kan vara ofullständig</span>
       </div>
     </div>
   );

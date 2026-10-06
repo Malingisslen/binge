@@ -157,7 +157,7 @@ export default function LoginPage() {
     <div className="flex items-center justify-center min-h-[60vh]">
       <div className="bg-surface border border-rule rounded-sm px-8 py-6 max-w-[340px] w-full">
         <div className="text-center mb-4">
-          <h1 className="text-[20px] font-extrabold text-acc-deep">
+          <h1 className="text-2xl font-extrabold text-acc-deep">
             binge<span className="font-normal text-ink-3 text-sm">.nu</span>
           </h1>
           <p className="text-sm text-ink-3 mt-1">

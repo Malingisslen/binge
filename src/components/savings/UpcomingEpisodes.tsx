@@ -5,6 +5,7 @@ import ProviderDot from '@/components/ui/ProviderDot';
 import { useUpcomingShowsForAdvisor, type UpcomingEpisode, type UpcomingShow } from '@/hooks/useUpcomingShowsForAdvisor';
 import { formatSwedishDate, pluralSv } from '@/lib/utils';
 import { titleHref } from '@/lib/tmdb/client';
+import { Eyebrow } from '@/components/ui/Eyebrow';
 
 // Streamingrådgivaren · "Närmaste avsnitt"-listan (V1 — Per serie).
 // En rad per serie där kommande air-datum visas som klickbara datum-pills.
@@ -117,7 +118,7 @@ export default function UpcomingEpisodes() {
   return (
     <div className="mb-[14px]">
       <div className="flex items-baseline justify-between mb-[6px]">
-        <h2 className="text-[11px] font-bold uppercase tracking-[0.5px] text-ink-3">Närmaste avsnitt</h2>
+        <Eyebrow as="h2" size="xs">Närmaste avsnitt</Eyebrow>
         <span className="text-xxs text-ink-3">{totalEpisodes} avsnitt · {weeks} veckor</span>
       </div>
 

@@ -11,7 +11,7 @@ export default function PriceChangeLog() {
   if (changes.length === 0) return null;
   return (
     <section aria-labelledby="prisandringar" className="mt-8">
-      <h2 id="prisandringar" className="text-[17px] font-semibold text-ink mb-1">Prisändringar</h2>
+      <h2 id="prisandringar" className="text-xl font-semibold text-ink mb-1">Prisändringar</h2>
       <p className="text-xs text-ink-3 mb-2">
         Från: när tjänsten själv anger att priset gällde. Upptäckt: när Binge såg det nya
         priset, ändringen kan ha skett tidigare.

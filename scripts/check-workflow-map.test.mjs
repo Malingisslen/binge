@@ -839,8 +839,7 @@ test('check 7 — the COMMITTED universe already lists every walked function and
   assert.deepEqual(routeProblems, [], `universe lost a route: ${routeProblems.join(' | ')}`);
   assert.ok(routeCount >= MIN_ROUTES, `walk found only ${routeCount}`);
 
-  // Both exemption maps are empty today, and the test says so out loud: an exemption added
-  // later without a reason string is exactly what this shape exists to prevent.
+  // An exemption without a reason string is exactly what this shape exists to prevent.
   for (const [name, map] of [['FUNCTION_EXEMPTIONS', FUNCTION_EXEMPTIONS], ['ROUTE_EXEMPTIONS', ROUTE_EXEMPTIONS]]) {
     for (const [entry, reason] of Object.entries(map)) {
       assert.equal(typeof reason, 'string', `${name}['${entry}'] has no reason`);

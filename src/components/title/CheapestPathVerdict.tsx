@@ -78,7 +78,7 @@ export function CheapestPathVerdict({
 
   return (
     <div
-      className={`rounded-sm px-2 py-1 text-[13px] font-semibold ${
+      className={`rounded-sm px-2 py-1 text-base font-semibold ${
         positive ? 'bg-acc-soft text-acc-deep' : 'bg-bg-2 text-ink-2'
       }`}
       style={{ marginBottom: 8 }}

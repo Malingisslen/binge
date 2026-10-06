@@ -10,6 +10,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { UgcActionsMenu } from '@/components/moderation/UgcActionsMenu';
 import { JsonLd, reviewSchema } from './JsonLd';
 import type { MediaType, Review } from '@/types';
+import { Button } from '@/components/ui/Button';
 
 interface ReviewListProps {
   tmdbId: number;
@@ -109,14 +110,14 @@ export default function ReviewList({ tmdbId, mediaType, title, posterPath }: Rev
       ))}
 
       {hasNextPage && (
-        <button
+        <Button
           type="button"
           onClick={() => fetchNextPage()}
           disabled={isFetchingNextPage}
-          className="btn btn-ghost"
+          variant="ghost"
         >
           {isFetchingNextPage ? 'Laddar…' : 'Visa fler recensioner'}
-        </button>
+        </Button>
       )}
 
       {reviews.length === 0 && !showForm && (

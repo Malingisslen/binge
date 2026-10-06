@@ -5,6 +5,7 @@ import { titleHref, posterUrl } from '@/lib/tmdb/client';
 import { toneForGenreIds, toneForId } from '@/lib/duotone';
 import DuotonePoster from '@/components/ui/DuotonePoster';
 import type { ContinueWatchingEntry } from '@/lib/continueWatching';
+import { Eyebrow } from '@/components/ui/Eyebrow';
 import MarkEpisodeSeenButton from './MarkEpisodeSeenButton';
 
 // BIN-86 — "Fortsätt titta". Progress-driven Up Next row, complementing the
@@ -19,9 +20,9 @@ export default function ContinueWatchingTile({ entries }: { entries: ContinueWat
   return (
     <section className="mt-[18px] mb-[14px]">
       <div className="flex items-baseline justify-between mb-[8px]">
-        <h2 className="text-[11px] font-bold uppercase tracking-[0.5px] text-ink-3">
+        <Eyebrow as="h2" size="xs">
           Fortsätt titta
-        </h2>
+        </Eyebrow>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-[10px]">
         {entries.map(({ item, seen, behind, next }) => {

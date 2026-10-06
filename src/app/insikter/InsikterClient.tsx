@@ -9,6 +9,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { useDateRange } from './state/useDateRange';
 import { useInsightsData } from './state/useInsightsData';
 import { InsightsProvider } from './state/InsightsContext';
+import { Button } from '@/components/ui/Button';
 import {
   Toolbar, MetricGrid, MetricTile, TimeSeriesChart, Donut, Funnel,
   Histogram, TopList, ExplainDrawer,
@@ -17,7 +18,7 @@ import {
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="mt-7">
-      <h2 className="text-[13px] font-semibold uppercase tracking-wide text-ink-3 mb-2">{title}</h2>
+      <h2 className="text-base font-semibold uppercase tracking-wide text-ink-3 mb-2">{title}</h2>
       {children}
     </section>
   );
@@ -89,9 +90,9 @@ export default function InsikterClient() {
             title="Kunde inte ladda insikter"
             body={error}
             action={
-              <button type="button" onClick={() => window.location.reload()} className="btn btn-acc">
+              <Button type="button" onClick={() => window.location.reload()} variant="acc">
                 Försök igen
-              </button>
+              </Button>
             }
           />
         </div>
@@ -134,7 +135,7 @@ export default function InsikterClient() {
         </Section>
 
         <Section title="Tillväxt">
-          <p className="text-[13px] text-ink-3 mb-2">
+          <p className="text-base text-ink-3 mb-2">
             Registreringar och inloggningsmetod räknar händelser, inte personer.
           </p>
           <div className="grid lg:grid-cols-2 gap-3">
@@ -188,7 +189,7 @@ export default function InsikterClient() {
         </Section>
 
         <Section title="Trafik">
-          <p className="text-[13px] text-ink-3 mb-2">
+          <p className="text-base text-ink-3 mb-2">
             Ingen källa: Binge räknar händelser, inte besök. Besökare, sidvisningar och hänvisare mäts inte.
           </p>
           <MetricGrid>

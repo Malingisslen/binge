@@ -13,6 +13,7 @@ import { buildWatchlistAddPayload, type WatchlistAddPayload } from '@/lib/watchl
 import { planQuickRateWrite } from '@/lib/watchlistWrites';
 import { useToast } from '@/contexts/ToastContext';
 import { DELETION_IN_PROGRESS_MESSAGE, isDeletionInProgressError } from '@/lib/deletionInProgressError';
+import { Button } from '@/components/ui/Button';
 import {
   LIBRARY_UNREACHABLE_TITLE,
   LIBRARY_UNREACHABLE_BODY,
@@ -147,9 +148,9 @@ export default function QuickRateModal({ open, onClose }: Props) {
             <div role="alert" className="m-3 bg-danger-soft border border-danger/30 rounded-sm px-3 py-2">
               <p className="text-xs font-semibold text-danger-ink">{LIBRARY_UNREACHABLE_TITLE}</p>
               <p className="text-xs text-ink-2 mt-1">{LIBRARY_UNREACHABLE_BODY}</p>
-              <button type="button" onClick={retryListener} className="btn btn-acc btn-sm mt-2">
+              <Button type="button" onClick={retryListener} variant="acc" size="sm" className="mt-2">
                 {LIBRARY_RETRY_LABEL}
-              </button>
+              </Button>
             </div>
           ) : (
             <p className="px-3 pt-3 text-xs text-ink-3">{LIBRARY_LOADING}</p>
@@ -178,10 +179,10 @@ export default function QuickRateModal({ open, onClose }: Props) {
                       disabling it would strand the visitor in a modal whose only
                       exit is the footer. */}
                   <div className="grid grid-cols-2 gap-1">
-                    <button onClick={() => markRated(t, 5)} disabled={!libraryKnown} className="bg-acc-deep/10 text-acc-deep text-[10px] py-1 rounded-sm disabled:opacity-50">Sett 5★</button>
-                    <button onClick={() => markRated(t, 4)} disabled={!libraryKnown} className="bg-acc-deep/10 text-acc-deep text-[10px] py-1 rounded-sm disabled:opacity-50">Sett 4★</button>
-                    <button onClick={() => markRated(t, 3)} disabled={!libraryKnown} className="bg-surface border border-rule text-[10px] py-1 rounded-sm disabled:opacity-50">Sett 3★</button>
-                    <button onClick={() => skip(t.id)} className="bg-surface border border-rule text-[10px] py-1 rounded-sm">Hoppa över</button>
+                    <button onClick={() => markRated(t, 5)} disabled={!libraryKnown} className="bg-acc-deep/10 text-acc-deep text-xxs py-1 rounded-sm disabled:opacity-50">Sett 5★</button>
+                    <button onClick={() => markRated(t, 4)} disabled={!libraryKnown} className="bg-acc-deep/10 text-acc-deep text-xxs py-1 rounded-sm disabled:opacity-50">Sett 4★</button>
+                    <button onClick={() => markRated(t, 3)} disabled={!libraryKnown} className="bg-surface border border-rule text-xxs py-1 rounded-sm disabled:opacity-50">Sett 3★</button>
+                    <button onClick={() => skip(t.id)} className="bg-surface border border-rule text-xxs py-1 rounded-sm">Hoppa över</button>
                   </div>
                 </div>
               );
