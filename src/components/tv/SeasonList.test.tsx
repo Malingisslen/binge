@@ -314,3 +314,30 @@ describe('SeasonList — curated season-0 specials (BIN-580)', () => {
     expect(screen.getByText(/Säsong 2/)).toBeTruthy();
   });
 });
+
+describe('SeasonList — en kommande säsong utan avsnitt', () => {
+  beforeEach(() => {
+    useTVSeason.mockReset();
+    useTVSeason.mockReturnValue({ data: undefined, isLoading: false });
+    groupState.group = null;
+  });
+
+  it('visar "Kommande" i stället för "(0 avs)"', () => {
+    const upcoming = [
+      { id: 3, name: 'Säsong 3', season_number: 3, episode_count: 0, air_date: null, overview: '', poster_path: null },
+    ] as unknown as TMDBSeason[];
+    render(
+      <SeasonList
+        tmdbId={BREAKING_BAD}
+        seasons={upcoming}
+        isWatched={() => false}
+        markEpisodeWatched={markEpisodeWatched}
+        markSeasonWatched={async () => {}}
+        markSeasonUnwatched={async () => {}}
+        getSeasonProgress={() => ({ watched: 0, total: 0 })}
+      />
+    );
+    expect(screen.getByText('Kommande')).toBeTruthy();
+    expect(screen.queryByText(/avs\)/)).toBeNull();
+  });
+});

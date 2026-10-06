@@ -43,7 +43,7 @@ export default function SeasonRow({
             className={`shrink-0 text-ink-3 transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`}
           />
           <span className="font-semibold text-ink-2">
-            {name} <span className="font-normal text-ink-3 text-xs">({episodeCount} avs)</span>
+            {name}{episodeCount > 0 && <> <span className="font-normal text-ink-3 text-xs">({episodeCount} avs)</span></>}
           </span>
         </button>
         {episodeCount > 0 ? (
