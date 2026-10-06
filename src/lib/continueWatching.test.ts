@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pickContinueWatching, latestAiredEpisodeByShow } from './continueWatching';
+import { pickContinueWatching, latestAiredEpisodeByShow, nextEpisodeToMark } from './continueWatching';
 import type { WatchlistItem } from '@/types';
 import type { CalendarEntry } from '@/lib/calendar/types';
 
@@ -165,5 +165,38 @@ describe('latestAiredEpisodeByShow', () => {
       now,
     );
     expect(aired.get(1)).toEqual({ season: 1, episode: 1 });
+  });
+});
+
+describe('nextEpisodeToMark (BIN-1442)', () => {
+  const at = (season: number, episode: number) => mk({ lastWatchedSeason: season, lastWatchedEpisode: episode });
+
+  it('gives the next episode in the same season when it has aired', () => {
+    expect(nextEpisodeToMark(at(2, 4), { season: 2, episode: 5 })).toEqual({ season: 2, episode: 5 });
+    expect(nextEpisodeToMark(at(2, 4), { season: 2, episode: 8 })).toEqual({ season: 2, episode: 5 });
+  });
+
+  it('gives nothing when the next episode has not aired', () => {
+    expect(nextEpisodeToMark(at(2, 5), { season: 2, episode: 5 })).toBeNull();
+  });
+
+  it('gives E1 after the season auto-advance sentinel', () => {
+    expect(nextEpisodeToMark(at(3, 0), { season: 3, episode: 2 })).toEqual({ season: 3, episode: 1 });
+  });
+
+  it('gives nothing across a season boundary, where the episode count is unknown', () => {
+    expect(nextEpisodeToMark(at(1, 10), { season: 2, episode: 3 })).toBeNull();
+  });
+
+  it('gives nothing without calendar data, before the series is started, or on specials', () => {
+    expect(nextEpisodeToMark(at(2, 4), undefined)).toBeNull();
+    expect(nextEpisodeToMark(mk({ lastWatchedSeason: null }), { season: 1, episode: 3 })).toBeNull();
+    expect(nextEpisodeToMark(at(0, 1), { season: 0, episode: 3 })).toBeNull();
+  });
+
+  it('is carried on each picked entry', () => {
+    const item = mk({ tmdbId: 30, lastWatchedSeason: 1, lastWatchedEpisode: 2 });
+    const aired = new Map([[30, { season: 1, episode: 4 }]]);
+    expect(pickContinueWatching([item], { aired })[0].next).toEqual({ season: 1, episode: 3 });
   });
 });

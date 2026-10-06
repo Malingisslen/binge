@@ -488,12 +488,16 @@
         "src/components/layout/EmailVerificationBanner.tsx",
         "src/components/layout/Footer.tsx",
         "src/components/settings/",
+        "src/lib/firebase/pendingAddServerCheck.ts",
         "src/lib/nextPath.test.ts",
         "src/lib/nextPath.ts",
         "src/lib/notificationSections.test.ts",
         "src/lib/notificationSections.ts",
         "src/lib/onboarding.test.ts",
-        "src/lib/onboarding.ts"
+        "src/lib/onboarding.ts",
+        "src/lib/pendingAdd.helpers.ts",
+        "src/lib/pendingAdd.test.ts",
+        "src/lib/pendingAdd.ts"
       ]
     },
     "20": {
