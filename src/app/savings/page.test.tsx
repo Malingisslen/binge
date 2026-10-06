@@ -41,6 +41,7 @@ vi.mock('@/lib/analytics', () => ({ trackEvent: vi.fn() }));
 // read their own hooks, so they render nothing here; the existing
 // providers-empty tests never reach them.
 vi.mock('@/components/savings/CampaignExpiryNudges', () => ({ default: () => null }));
+vi.mock('@/components/savings/PriceChangeNudges', () => ({ default: () => <div data-testid="price-change-nudges" /> }));
 vi.mock('@/components/savings/ProvidersByValue', () => ({ default: () => null }));
 vi.mock('@/components/savings/ServiceValueCard', () => ({ default: () => null }));
 vi.mock('@/components/savings/RotationCalendar', () => ({ default: () => null }));
@@ -220,6 +221,8 @@ describe('SavingsPage — pausgolvet', () => {
     expect(screen.queryByText(/Netflix kan pausas/)).not.toBeInTheDocument();
     expect(screen.getByText('Utforska serier')).toBeInTheDocument();
     expect(screen.getByText('Dina lösa tjänster kan bli billigare i ett paket')).toBeInTheDocument();
+    // Prisändringar beror inte på biblioteket, så de står kvar under golvet.
+    expect(screen.getByTestId('price-change-nudges')).toBeInTheDocument();
   });
 
   it('visar pausförslaget när biblioteket räcker', () => {
@@ -237,5 +240,6 @@ describe('SavingsPage — pausgolvet', () => {
 
     expect(screen.getByText('Pausa →')).toBeInTheDocument();
     expect(screen.queryByText(/Lägg till det du följer/)).not.toBeInTheDocument();
+    expect(screen.getByTestId('price-change-nudges')).toBeInTheDocument();
   });
 });

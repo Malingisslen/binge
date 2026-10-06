@@ -281,7 +281,7 @@ function SavingsContent() {
   // Pausgolvet: med för få titlar i biblioteket ser varje tjänst oanvänd ut, så
   // allt som räknar på pauser (stegen, värdelistan, rotationen och kalendern som
   // sparar ett rotationsschema) väntar tills biblioteket räcker. Det som inte
-  // beror på biblioteket — kostnaden, paketen och egna pauser — visas ändå.
+  // beror på biblioteket — kostnaden, prisändringar, paketen och egna pauser — visas ändå.
   if (!advisor.pauseAdviceReady) {
     return (
       <>
@@ -295,6 +295,7 @@ function SavingsContent() {
             <Link href="/series/" className="btn btn-sm">Utforska serier</Link>
             <Link href="/films/" className="btn btn-ghost btn-sm">Utforska filmer</Link>
           </div>
+          <PriceChangeNudges />
           <CampaignExpiryNudges />
           {advisor.activePauses.length > 0 && (
             <ActivePausesSection
