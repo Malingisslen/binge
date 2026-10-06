@@ -2136,6 +2136,13 @@
           "verified": true
         },
         {
+          "from": "pricing-ui",
+          "to": "savings-ui",
+          "payload": "price watch + cancel link (paket L): computePriceChangeNudges(user.myProviders/providerTiers/providerPauses) over the static PRICE_CHANGES → PriceChangeNudges banners (dismissed keys in localStorage only); CancelHint reads the catalog's manageUrl + lastCancelDay(providerRenewalDays) in ProvidersByValue and the paused-services list — no network, no Firestore",
+          "transport": "method call",
+          "verified": true
+        },
+        {
           "from": "savings-ui",
           "to": "firestore",
           "payload": "updateRotationSchedule() → setDoc users/{uid} {rotationSchedule:[{providerId,shortName,cancelDate,resumeDate}]} (merge, write-on-change only, opted-in users)",
