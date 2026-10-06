@@ -11,14 +11,14 @@
  */
 
 import * as crypto from 'crypto';
-import { getFirestore, FieldPath } from 'firebase-admin/firestore';
+import { getFirestore } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import { onRequest } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import { logger } from 'firebase-functions/v2';
 import { readAskBingeStats } from './askbinge';
 import { readEventStats } from './eventStats';
-import { computeWindowDeltas } from './window';
+import { computeWindowDeltas, pickBaselineId } from './window';
 import { stockholmDayId } from '../askbinge/logic';
 import type { InsightsData, RangeInfo, RollupData } from './types';
 
@@ -92,27 +92,21 @@ async function readRollup(): Promise<RollupData | null> {
 }
 
 /**
- * Baseline snapshot for the window: newest dated snapshot on or before `from`.
- * Date ids ("2026-…") sort before the live "daily" doc ("d"), so a `<= {date}`
- * bound excludes "daily" naturally. If history doesn't reach `from`, fall back
- * to the oldest dated snapshot (the dashboard then shows a "sedan {datum}" note).
+ * Baseline snapshot for the window (`pickBaselineId`), chosen from listDocuments() ids,
+ * the call the rollup's retention sweep already makes. Not an `orderBy(documentId,
+ * 'desc')` query: that needs a __name__ DESCENDING index, and without it every call
+ * failed with FAILED_PRECONDITION in production.
  */
 async function readBaseline(
   from: string,
 ): Promise<{ data: RollupData; date: string } | null> {
   const col = getFirestore().collection('insights');
   try {
-    let snap = await col
-      .where(FieldPath.documentId(), '<=', from)
-      .orderBy(FieldPath.documentId(), 'desc')
-      .limit(1)
-      .get();
-    if (snap.empty) {
-      snap = await col.orderBy(FieldPath.documentId(), 'asc').limit(1).get();
-    }
-    if (snap.empty) return null;
-    const doc = snap.docs[0];
-    if (doc.id === 'daily') return null; // only the live doc exists — no history yet
+    const refs = await col.listDocuments();
+    const id = pickBaselineId(refs.map((r) => r.id), from);
+    if (!id) return null; // no dated history yet
+    const doc = await col.doc(id).get();
+    if (!doc.exists) return null;
     return { data: doc.data() as RollupData, date: doc.id };
   } catch (err) {
     logger.error('readBaseline failed', err);
