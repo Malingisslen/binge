@@ -30,3 +30,13 @@ export function daysUntilRenewal(billingDay: number, from: Date): number {
   // Math.round absorberar ev. DST-timskift inom dygnsdiffen.
   return Math.round((next.getTime() - today.getTime()) / 86_400_000);
 }
+
+/**
+ * Nästa dragning som en uppsägning idag fortfarande kan hinna före: nästa förnyelse
+ * EFTER idag. På själva dragningsdagen är det alltså nästa månads — dagens dragning
+ * hinner man inte undvika. Datumet bygger bara på användarens egen faktureringsdag.
+ */
+export function nextAvoidableCharge(billingDay: number, from: Date): Date {
+  const tomorrow = new Date(from.getFullYear(), from.getMonth(), from.getDate() + 1);
+  return nextRenewalDate(billingDay, tomorrow);
+}
