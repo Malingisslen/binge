@@ -6,6 +6,7 @@ import SrOnlyTableHeader from '@/components/ui/SrOnlyTableHeader';
 import { pluralSv } from '@/lib/utils';
 import { daysUntilRenewal } from '@/lib/renewal';
 import { useAuth } from '@/hooks/useAuth';
+import CancelHint from '@/components/savings/CancelHint';
 import type { ProviderAdvisory, ActivePause } from '@/types';
 
 // "Dina tjänster" sorterad efter kr/aktiv-serie — ersätter den gamla
@@ -102,6 +103,7 @@ export default function ProvidersByValue({ providers, activePauses }: Props) {
                     {renewalDay != null && !row.isFree && (
                       <span className="block text-xxs text-ink-3">förnyas om {daysUntilRenewal(renewalDay, new Date())} d</span>
                     )}
+                    {!row.isFree && <CancelHint providerId={row.providerId} billingDay={renewalDay} now={new Date()} />}
                   </td>
                   <td className={`px-3 py-[6px] text-xs text-right whitespace-nowrap tabular-nums ${krCellClass}`}>
                     {row.isFree

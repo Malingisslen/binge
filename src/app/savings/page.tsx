@@ -9,6 +9,7 @@ import SrOnlyTableHeader from '@/components/ui/SrOnlyTableHeader';
 import dynamic from 'next/dynamic';
 import DiagnosisCard from '@/components/savings/DiagnosisCard';
 import CampaignExpiryNudges from '@/components/savings/CampaignExpiryNudges';
+import PriceChangeNudges from '@/components/savings/PriceChangeNudges';
 import NumberedActionsList from '@/components/savings/NumberedActionsList';
 import BundleArbitrageCard from '@/components/savings/BundleArbitrageCard';
 import ProvidersByValue from '@/components/savings/ProvidersByValue';
@@ -18,6 +19,7 @@ import RotationPlanner from '@/components/savings/RotationPlanner';
 import RotationCalendar from '@/components/savings/RotationCalendar';
 import SavingsSidebar from '@/components/savings/SavingsSidebar';
 import UpcomingEpisodes from '@/components/savings/UpcomingEpisodes';
+import CancelHint from '@/components/savings/CancelHint';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -100,7 +102,9 @@ function SubscribeRowTable({ rows }: { rows: SubscribeRow[] }) {
 // ---- Återanvänd: ActivePausesSection (oförändrad) ----
 
 function ActivePausesSection({ pauses, onResume }: { pauses: ActivePause[]; onResume: (id: number) => void }) {
+  const { user } = useAuth();
   if (pauses.length === 0) return null;
+  const now = new Date();
   const totalSaved = pauses.reduce((sum, p) => sum + p.savingsSoFar, 0);
   return (
     <div className="mb-[14px]">
@@ -125,6 +129,7 @@ function ActivePausesSection({ pauses, onResume }: { pauses: ActivePause[]; onRe
                 <td className="px-3 py-[6px] text-xxs text-ink-3">
                   Pausad {formatSwedishDate(p.pausedAt)}
                   {p.resumeAt ? ` · återuppta ${formatSwedishDate(p.resumeAt)}` : ''}
+                  <CancelHint providerId={p.providerId} billingDay={user?.providerRenewalDays?.[p.providerId]} now={now} />
                 </td>
                 <td className="px-3 py-[6px] text-xxs text-season-done font-semibold text-right whitespace-nowrap">
                   +{formatKr(p.savingsSoFar)} kr
@@ -306,6 +311,8 @@ function SavingsContent() {
           </div>
         )}
         <DiagnosisCard advisor={advisor} activeProviderCount={activeProviderCount} />
+
+        <PriceChangeNudges />
 
         <CampaignExpiryNudges />
 
