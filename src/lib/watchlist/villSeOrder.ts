@@ -1,4 +1,5 @@
 import { subscriptionProviderIds } from '@/lib/watchlist/subscriptionProviders';
+import { canonicalProviderId } from '@/lib/tmdb/providers';
 import type { WatchlistItem } from '@/types';
 
 /** A runtime-lensed pick, as `applyRuntimeBudget` produces it. */
@@ -26,7 +27,10 @@ export function orderVillSePicks(
   lensed: readonly LensedPick[],
   myProviders: ReadonlySet<number>,
 ): LensedPick[] {
-  const onMine = (i: WatchlistItem) => subscriptionProviderIds(i).some(p => myProviders.has(p));
+  // Båda sidorna kan bära ett alias (HBO Max 1899 för 384); prickarna jämför
+  // tjänsten, inte id:t, och sorteringen måste göra detsamma.
+  const mine = new Set([...myProviders].map(canonicalProviderId));
+  const onMine = (i: WatchlistItem) => subscriptionProviderIds(i).some(p => mine.has(canonicalProviderId(p)));
   return [...lensed].sort((a, b) => {
     if (a.unknownRuntime !== b.unknownRuntime) return a.unknownRuntime ? 1 : -1;
     const am = onMine(a.item) ? 0 : 1;

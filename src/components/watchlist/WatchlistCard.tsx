@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Film, Tv, Check } from 'lucide-react';
 import { posterUrl, titleHref } from '@/lib/tmdb/client';
 import { useAuth } from '@/hooks/useAuth';
-import { getProvider } from '@/lib/tmdb/providers';
+import { ProviderChips } from './WatchlistProviderDisplay';
 import { shortSwedishWeekday, daysBetween, todayIso } from '@/lib/utils';
 import { toneForGenreIds, toneForId } from '@/lib/duotone';
 import RatingStars from '@/components/title/RatingStars';
@@ -99,8 +99,6 @@ export function WatchlistCard({
     return { text: 'Ej påbörjad', tone: 'muted' };
   })();
 
-  const providersToShow = item.providers.slice(0, 3);
-
   const posterInner = (
     <div className={`poster duo-${tone} w-[50px] h-[75px]`} style={{ aspectRatio: '2 / 3' }}>
       {poster ? (
@@ -164,31 +162,7 @@ export function WatchlistCard({
           {item.releaseYear ?? '—'}
           {item.mediaType === 'tv' && item.totalSeasons ? ` · ${item.totalSeasons} säsong${item.totalSeasons === 1 ? '' : 'er'}` : ''}
         </div>
-        {providersToShow.length > 0 ? (
-          <div className="mt-[4px] flex flex-wrap gap-[2px]">
-            {providersToShow.map(id => {
-              const p = getProvider(id);
-              if (!p) return null;
-              const isMine = myProviders.includes(id);
-              return (
-                <span
-                  key={id}
-                  className={`text-xxs px-1 py-[1px] border rounded-sm inline-block ${
-                    isMine ? 'border-acc-deep text-acc-deep' : 'border-rule text-ink-3'
-                  }`}
-                >
-                  {p.shortName}
-                </span>
-              );
-            })}
-          </div>
-        ) : item.providersCheckedAt != null ? (
-          <div className="mt-[4px] flex flex-wrap gap-[2px]">
-            <span className="text-xxs px-1 py-[1px] border border-rule-2 text-ink-3/70 rounded-sm inline-block">
-              Ej på SE
-            </span>
-          </div>
-        ) : null}
+        <ProviderChips className="mt-[4px]" providers={item.providers} myProviders={myProviders} providersCheckedAt={item.providersCheckedAt} />
         {/* BIN-164: privata taggar — max 2 + "+N" så de inte tränger ut annan info. */}
         {(item.tags?.length ?? 0) > 0 && (
           <div className="mt-[4px] flex flex-wrap items-center gap-[2px]">

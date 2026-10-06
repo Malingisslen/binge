@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { BookOpen } from 'lucide-react';
 import { useWatchlist } from '@/hooks/useWatchlist';
@@ -13,7 +13,7 @@ import { posterUrl, titleHref } from '@/lib/tmdb/client';
 import { toneForGenreIds, toneForId } from '@/lib/duotone';
 import { seenDate } from '@/lib/seenDate';
 import RatingStars from '@/components/title/RatingStars';
-import { buildDiary, diaryEntryCount } from '@/lib/diary';
+import { buildDiary, diaryEntryCount, firstEntries } from '@/lib/diary';
 import { computeBingeStats } from '@/lib/bingeStats';
 
 function StatBox({ value, label }: { value: number; label: string }) {
@@ -25,6 +25,10 @@ function StatBox({ value, label }: { value: number; label: string }) {
   );
 }
 
+// Ett bibliotek med hundratals serier har tusentals sedda avsnitt, och att rita alla
+// rader på en gång låste fliken. Dagboken visar de senaste först och fler på begäran.
+const PAGE_SIZE = 150;
+
 // BIN-103 — activity diary. Reverse-chron list of watched films (by watchedAt)
 // merged with watched TV episodes (per-show episodeProgress), grouped by month.
 // Films are free from the loaded watchlist; episodes are one cached collection
@@ -34,6 +38,8 @@ export default function DiaryPageClient() {
   const { episodes, episodesLoading } = useAllEpisodeProgress();
   const months = useMemo(() => buildDiary(items, episodes), [items, episodes]);
   const total = diaryEntryCount(months);
+  const [shownCount, setShownCount] = useState(PAGE_SIZE);
+  const shownMonths = useMemo(() => firstEntries(months, shownCount), [months, shownCount]);
 
   const films = useMemo(
     () => items.flatMap(i => {
@@ -83,7 +89,7 @@ export default function DiaryPageClient() {
               )}
             </div>
           )}
-          {months.map(month => (
+          {shownMonths.map(month => (
             <section key={month.key}>
               <h2 className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold mb-2">
                 {month.label}
@@ -124,6 +130,14 @@ export default function DiaryPageClient() {
               </div>
             </section>
           ))}
+          {shownCount < total && (
+            <div className="flex items-center gap-[10px]">
+              <button type="button" className="btn btn-sm" onClick={() => setShownCount(n => n + PAGE_SIZE * 2)}>
+                Visa fler
+              </button>
+              <span className="text-xxs text-ink-3 tabular-nums">{shownCount} av {total} visas</span>
+            </div>
+          )}
         </div>
       )}
     </div>

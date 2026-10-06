@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildFilmDiary, buildDiary, flattenEpisodeProgress, diaryEntryCount } from './diary';
+import { buildFilmDiary, buildDiary, flattenEpisodeProgress, diaryEntryCount, firstEntries, type DiaryMonth } from './diary';
 import type { WatchlistItem } from '@/types';
 
 const mk = (over: Partial<WatchlistItem>): WatchlistItem => ({
@@ -91,5 +91,24 @@ describe('buildDiary with episodes (BIN-103)', () => {
       ['En film', null],
     ]);
     expect(diaryEntryCount(months)).toBe(2); // orphan episode excluded
+  });
+});
+
+describe('firstEntries', () => {
+  const month = (key: string, n: number): DiaryMonth => ({
+    key, label: key,
+    entries: Array.from({ length: n }, (_, i) => ({ item: { tmdbId: i } as unknown as WatchlistItem, date: new Date(2026, 0, 1), episodeCode: `S1E${i + 1}` })),
+  });
+  const months = [month('2026-10', 3), month('2026-09', 4), month('2026-08', 5)];
+
+  it('cuts inside the month where the limit lands and drops the rest', () => {
+    const out = firstEntries(months, 5);
+    expect(out.map(m => [m.key, m.entries.length])).toEqual([['2026-10', 3], ['2026-09', 2]]);
+    expect(diaryEntryCount(out)).toBe(5);
+  });
+
+  it('returns everything when the limit covers it, and nothing for zero', () => {
+    expect(diaryEntryCount(firstEntries(months, 100))).toBe(12);
+    expect(firstEntries(months, 0)).toEqual([]);
   });
 });
