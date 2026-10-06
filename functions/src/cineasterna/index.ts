@@ -44,7 +44,7 @@ async function resolveUnknown(
 }
 
 export const cineasternaCatalogSync = onSchedule(
-  { schedule: 'every 168 hours', region: 'europe-west1', timeoutSeconds: 300, memory: '512MiB', secrets: [TMDB_API_KEY, ADMIN_UID] },
+  { schedule: 'every 168 hours', region: 'europe-west1', timeoutSeconds: 540, memory: '512MiB', secrets: [TMDB_API_KEY, ADMIN_UID] },
   async () => {
     const db = getFirestore();
     const ref = db.collection('cineasternaCatalog').doc('current');

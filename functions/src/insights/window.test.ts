@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeWindowDeltas } from './window';
+import { computeWindowDeltas, pickBaselineId } from './window';
 import type { RollupData } from './types';
 
 function rollup(users: number, titlesTracked: number): RollupData {
@@ -40,5 +40,24 @@ describe('computeWindowDeltas', () => {
   it('is not truncated when baseline is at or before the requested start', () => {
     const v = computeWindowDeltas(rollup(3, 320), rollup(3, 301), '2026-06-09', '2026-06-11');
     expect(v?.truncated).toBe(false);
+  });
+});
+
+describe('pickBaselineId', () => {
+  it('picks the newest dated snapshot on or before from, whatever order the ids come in', () => {
+    expect(pickBaselineId(['2026-06-12', 'daily', '2026-06-09', '2026-06-10'], '2026-06-11')).toBe('2026-06-10');
+  });
+
+  it('takes the snapshot dated exactly from', () => {
+    expect(pickBaselineId(['2026-06-10', '2026-06-11', '2026-06-12'], '2026-06-11')).toBe('2026-06-11');
+  });
+
+  it('falls back to the oldest snapshot when history does not reach from', () => {
+    expect(pickBaselineId(['2026-06-14', 'daily', '2026-06-13'], '2026-06-11')).toBe('2026-06-13');
+  });
+
+  it('never returns the live daily doc or another non-date id', () => {
+    expect(pickBaselineId(['daily', 'notes'], '2026-06-11')).toBeNull();
+    expect(pickBaselineId([], '2026-06-11')).toBeNull();
   });
 });

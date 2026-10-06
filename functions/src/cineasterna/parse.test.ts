@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseTitles, dedupeByImdb, detectRot } from './parse';
+import { parseTitles, dedupeByImdb, detectRot, parseSessionId } from './parse';
 
 const apiResponse = {
   success: true,
@@ -55,5 +55,22 @@ describe('detectRot', () => {
   });
   it('just under 50% IS rot (boundary)', () => {
     expect(detectRot(1000, 499)).toBe(true);
+  });
+});
+
+describe('parseSessionId', () => {
+  it('reads sessionid from a successful init_portal_session answer', () => {
+    expect(parseSessionId({ sessionid: 'abc123', csrftoken: 'x', success: true })).toBe('abc123');
+  });
+  it('rejects the 400 answer the old handshake now gets', () => {
+    expect(parseSessionId({ success: false })).toBeNull();
+  });
+  it('does not accept the old portal_sessionid key', () => {
+    expect(parseSessionId({ portal_sessionid: 'abc123', success: true })).toBeNull();
+  });
+  it('rejects an empty id and non-object answers', () => {
+    expect(parseSessionId({ sessionid: '', success: true })).toBeNull();
+    expect(parseSessionId(null)).toBeNull();
+    expect(parseSessionId(['abc'])).toBeNull();
   });
 });
