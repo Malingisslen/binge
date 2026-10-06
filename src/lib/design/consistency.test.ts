@@ -260,6 +260,14 @@ describe('design consistency — type scale (paket N)', () => {
     expect(offenders).toEqual([]);
   }, TREE_SWEEP_TIMEOUT_MS);
 
+  it('every font-size in globals.css reads a --fs-* step', () => {
+    const css = readFileSync(join(process.cwd(), 'src', 'app', 'globals.css'), 'utf8');
+    const decls = css.match(/(?<![\w-])font-size:[^;]+;/g) ?? [];
+    // Floor: the sweep must see the declarations it guards.
+    expect(decls.length).toBeGreaterThan(50);
+    expect(decls.filter(d => !/^font-size:\s*var\(--fs-[\w-]+\);$/.test(d))).toEqual([]);
+  });
+
   it('no .tsx under src uses btn-primary, which globals.css never defined (use <Button variant="acc">)', () => {
     const files = tsxFilesRecursive(join(process.cwd(), 'src'));
     expect(files.length).toBeGreaterThan(0);

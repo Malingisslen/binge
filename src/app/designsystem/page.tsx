@@ -6,6 +6,10 @@ import { Button, buttonClass } from '@/components/ui/Button';
 import StatCard from '@/components/ui/StatCard';
 import DuotonePoster from '@/components/ui/DuotonePoster';
 import { DUOTONES } from '@/lib/duotone';
+import { cardClass } from '@/components/ui/Card';
+import { fieldClass } from '@/components/ui/Field';
+import { badgeClass } from '@/components/ui/Badge';
+import { thClass } from '@/components/ui/tableHead';
 
 // The living component page: every piece is the real component or CSS class, so the
 // page changes when they do. Both themes side by side, whatever theme the viewer runs.
@@ -18,8 +22,8 @@ const COLOR_TOKENS = [
 
 // Class names spelled out in full so Tailwind's content scan generates them.
 const TYPE_SCALE = [
-  ['text-6xl', '48px'], ['text-5xl', '32px'], ['text-4xl', '24px'], ['text-3xl', '22px'],
-  ['text-2xl', '20px'], ['text-xl', '17px'], ['text-lg', '15.5px'], ['text-md', '14px'],
+  ['text-6xl', '44px'], ['text-5xl', '32px'], ['text-4xl', '24px'], ['text-3xl', '22px'],
+  ['text-2xl', '20px'], ['text-xl', '17px'], ['text-lg', '15px'], ['text-md', '14px'],
   ['text-base', '13.5px'], ['text-sm', '12.5px'], ['text-xs', '11px'], ['text-xxs', '10px'],
   ['text-micro', '9px'], ['text-nano', '8px'],
 ] as const;
@@ -97,12 +101,44 @@ function Specimen({ theme }: { theme: 'light' | 'dark' }) {
         </div>
       </Section>
 
+      <Section title="Märken">
+        <div className="flex flex-wrap gap-2">
+          <span className={badgeClass('acc')}>Du är här</span>
+          <span className={badgeClass('success')}>Gratis</span>
+          <span className={badgeClass()}>Premiär</span>
+        </div>
+      </Section>
+
+      <Section title="Fält">
+        <input type="text" aria-label="Exempelfält" placeholder="Sök titel" className={fieldClass({ className: 'w-full' })} />
+        <div className="flex flex-wrap gap-2 items-center">
+          <input type="text" aria-label="Litet fält" defaultValue="129" className={fieldClass({ size: 'sm', className: 'w-[70px] text-right' })} />
+          <select aria-label="Val" className="select" defaultValue="a"><option value="a">Netflix</option><option value="b">Max</option></select>
+          <Button type="button" variant="ghost" size="xs">Ta bort</Button>
+        </div>
+      </Section>
+
+      <Section title="Tabell">
+        <table className={cardClass('w-full text-xs border-separate border-spacing-0')}>
+          <thead>
+            <tr>
+              <th className={thClass('text-left px-3')}>Tjänst</th>
+              <th className={thClass('text-right px-3')}>Pris</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td className="px-3 py-1.5">Netflix</td><td className="px-3 py-1.5 text-right tabular-nums">129 kr</td></tr>
+            <tr><td className="px-3 py-1.5">Max</td><td className="px-3 py-1.5 text-right tabular-nums">109 kr</td></tr>
+          </tbody>
+        </table>
+      </Section>
+
       <Section title="Kort">
         <div className="grid grid-cols-2 gap-3">
           <StatCard label="Sparat i år" value="1 284 kr" />
-          <div className="border border-rule rounded-sm bg-surface p-3">
+          <div className={cardClass('p-3')}>
             <Eyebrow className="mb-1">Kort</Eyebrow>
-            <p className="text-sm text-ink-2">border-rule, rounded-sm, bg-surface</p>
+            <p className="text-sm text-ink-2">cardClass()</p>
           </div>
         </div>
       </Section>
@@ -124,7 +160,7 @@ function Specimen({ theme }: { theme: 'light' | 'dark' }) {
         <div className="grid grid-cols-4 gap-2">
           {DUOTONES.map(tone => (
             <div key={tone} className="flex flex-col gap-1">
-              <DuotonePoster src={POSTER_SRC} alt="" tone={tone} />
+              <DuotonePoster src={POSTER_SRC} alt="" tone={tone} loading="eager" />
               <span className="text-xxs text-ink-2">{tone}</span>
             </div>
           ))}
