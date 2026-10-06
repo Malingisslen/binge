@@ -9,7 +9,7 @@
  * on Binge's wedge: *where can I stream this in Sweden, and can I rent it?*
  *
  * Two stakeholder reviews shaped this (both APPROVE-WITH-CONDITIONS, folded in):
- *  - Growth Marketer #15: a single fixed sentence grammar across 25k pages is a
+ *  - Growth Marketer #15: a single fixed sentence grammar across the pages is a
  *    doorway-page fingerprint → the descriptive sentence rotates through THREE
  *    structurally distinct templates, chosen deterministically by tmdbId
  *    (stable per title → reproducible builds; Math.random is banned in build

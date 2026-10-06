@@ -576,8 +576,7 @@ längre kunna fälla bygget efter 2026-06 (AbortSignal.timeout i
    pre-rendren fick färre id:n än täckningsgolvet tillåter och bygget fälls hellre
    än att ersätta kärnan med fallback-listan. Felmeddelandet namnger utvägen.
    - **Vanligaste orsaken:** `.tmdb-cache` evakuerad ur actions/cache ⇒ urvalet
-     måste härledas om från kallt, under 15-minuters räddningstaket. För `movie`
-     och `tv` krävs att TMDB dessutom stryper. Gäller vid varje kall start, inte bara första deployen: även
+     måste härledas om från kallt, under 15-minuters räddningstaket. Gäller vid varje kall start, inte bara första deployen: även
      en `MANIFEST_VERSION`-bump eller ett korrupt manifest landar här.
      Åtgärd: `gh workflow run deploy.yml -f full_refresh=true` — det ger
      150-minuters härledningstak och 175-minuters steg-tak.
@@ -589,8 +588,8 @@ längre kunna fälla bygget efter 2026-06 (AbortSignal.timeout i
      hängning innan du förlitar dig på den.)
      **Men vänta dig inte att härledningen hoppas över:** `full_refresh` sätter
      `TMDB_SELECTION_REFRESH`, och det tvingar omhärledning av båda typerna
-     oavsett hur färska manifesten är. Det som sparas gör två OLIKA saker:
-     manifesten för de typer som HANN klart låter deras täckningsgolv passera
+     oavsett hur färska manifesten är.
+     Manifesten för de typer som HANN klart låter deras täckningsgolv passera
      nästa gång. Den typ som slog i
      taket har inget manifest alls — `writeSelectionManifest` nås bara när
      härledningen lyckades — så den måste hinna klart för att bygget ska bli

@@ -103,7 +103,7 @@ describe('AuthGuard — the bounce remembers the page it bounced off', () => {
     // The whole app boots `loading: true` — so "signed out when the guard first
     // got a verdict" has to mean the first pass with loading false, not the first
     // render. Reading it at mount would silence every genuine deep-link bounce,
-    // which is the funnel from the 25k prerendered title pages (BIN-645).
+    // which is the funnel from the prerendered title pages (BIN-645).
     auth.loading = true;
     window.history.replaceState({}, '', '/bibliotek/?status=vill_se');
     const { rerender } = render(guard());
@@ -262,7 +262,7 @@ describe('AuthGuard — a tab that BOOTS into a just-ended session (BIN-748)', (
 
   it('an UNMARKED tab booting signed-out is still a real bounce', async () => {
     // The negative that keeps the fix honest: a visitor who was never signed in
-    // here is the BIN-645 funnel from the 25k prerendered title pages, and it
+    // here is the BIN-645 funnel from the prerendered title pages, and it
     // has to survive. This is the same boot sequence, minus the marker.
     await bootSignedOut('/bibliotek/?status=vill_se');
 
@@ -272,7 +272,7 @@ describe('AuthGuard — a tab that BOOTS into a just-ended session (BIN-748)', (
   it('the very next guarded page is a bounce again, with the marker untouched', async () => {
     // What replaces "retire the marker at the right moment": the marker names
     // ONE page, so every other guarded page is an ordinary signed-out visit and
-    // keeps its return path (BIN-645) — the funnel from the 25k prerendered
+    // keeps its return path (BIN-645) — the funnel from the prerendered
     // title pages survives the handover instead of going quiet for the rest of
     // the tab's life. Note the marker is deliberately still set here.
     window.sessionStorage.setItem(TAB_KEY, '/grupper/g-hemlig-123');

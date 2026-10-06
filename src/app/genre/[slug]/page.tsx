@@ -23,7 +23,7 @@ export const dynamicParams = false;
  *
  * Build-data: EN discover-fråga per medium direkt via discoverMovies/discoverTV
  * (PE-villkor: ALDRIG via fetchForBuild — dess cache/budget är id-nycklad för
- * 25k-titelpipelinen; query-formade anrop hör inte hemma där). Zero-rader
+ * titelpipelinen; query-formade anrop hör inte hemma där). Zero-rader
  * (flakad build-fetch) skeppar en resilient "kommer snart"-EmptyState istället
  * för notFound() — URL:en ligger redan i sitemapen (BIN-460-läxan).
  */

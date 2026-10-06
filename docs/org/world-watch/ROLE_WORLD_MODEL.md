@@ -399,7 +399,7 @@ migration).
 ## 15. Growth Marketer
 **compliance, trend, tooling-frontier · high · weekly · auto-ticket**
 
-~25k pre-rendered title pages depend on being indexed & ranked → ranking/indexing
+Pre-rendered title pages depend on being indexed & ranked → ranking/indexing
 breakage auto-tickets. **Live audit item surfaced during research: Google removed
 FAQ rich results in June 2026 — existing FAQPage JSON-LD needs cleanup.**
 

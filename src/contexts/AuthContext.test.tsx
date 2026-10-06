@@ -1384,7 +1384,7 @@ describe('AuthContext — a session ending forgets the return path (BIN-732)', (
     // The negative that makes the transition the right signal rather than "uid
     // is null". A signed-out visitor taps the poster badge, the path is stored,
     // /login loads — and Firebase then reports "no session" for the first time.
-    // Clearing on that verdict would break the funnel from the 25k prerendered
+    // Clearing on that verdict would break the funnel from the prerendered
     // title pages (BIN-645) for every visitor, every time.
     renderAuth();
     await act(async () => {}); // flusha initAppCheck().then(subscribe)
@@ -1634,7 +1634,7 @@ describe('AuthContext + AuthGuard — a tab that BOOTS mid-sign-out (BIN-748)', 
   });
 
   it('an unmarked tab booting signed-out still remembers where it was', async () => {
-    // The funnel from the 25k prerendered title pages (BIN-645) is the thing
+    // The funnel from the prerendered title pages (BIN-645) is the thing
     // this must not cost. Same boot, no marker.
     await bootWithNoSession('/bibliotek/?status=vill_se');
 

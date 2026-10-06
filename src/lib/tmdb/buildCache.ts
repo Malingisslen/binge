@@ -1,6 +1,6 @@
 // Fil-baserad byggcache för TMDB-detaljsvar (server-only, node:fs).
 //
-// Syfte: en kod-deploy ska INTE hämta om ~25k titlar. Varje detaljsvar
+// Syfte: en kod-deploy ska INTE hämta om titlarna. Varje detaljsvar
 // persistas i .tmdb-cache/{kind}-{id}.json med en tidsstämpel; nästa build
 // återanvänder det. Cache-katalogen persistas mellan CI-körningar via
 // actions/cache (se .github/workflows/deploy.yml).

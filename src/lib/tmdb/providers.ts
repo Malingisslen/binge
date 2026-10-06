@@ -383,7 +383,7 @@ export function hasFreeProvider(ids: number[]): boolean {
 }
 
 // BIN-173 — affiliate-tag the rent/buy deeplinks Binge already renders, so the
-// outbound clicks we already drive (across 25k SEO title pages) earn commission
+// outbound clicks we already drive earn commission
 // instead of leaking. Table-driven: each entry is keyed by the *canonical*
 // provider id and rewrites the bare MOTN deeplink into the network's tagged URL.
 //

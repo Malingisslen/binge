@@ -2,7 +2,7 @@
  * Retry a build-time async fetch a few times with linear backoff.
  *
  * Build-time TMDB fetches flake intermittently ("fetch failed") under the
- * 25k-page static export's concurrency. A single miss would empty a whole SEO
+ * static export's concurrency. A single miss would empty a whole SEO
  * landing page (notFound / empty state), so the pre-rendered pages retry. Retry
  * PER CALL (not per page): a flaked TV discover must not re-run an already
  * successful movie discover on the same page.

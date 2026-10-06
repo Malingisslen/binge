@@ -252,7 +252,7 @@ describe('vakthund (BIN-815)', () => {
 
   // Vakthunden tystnar INTE längre när budgeten tar slut. Den regeln togs bort
   // efter granskningen 2026-08-07: budgeten är slut på svansen av ett
-  // 25k-sidorsbygge, alltså precis där en hängning är billigast att missa, och
+  // bygge, alltså precis där en hängning är billigast att missa, och
   // en tyst vakthund går inte att skilja från en som aldrig startade.
   it('fortsätter skriva även när budgeten är förbrukad', async () => {
     process.env.TMDB_BUILD_REFRESH_BUDGET = '1';
