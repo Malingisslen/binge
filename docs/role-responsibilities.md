@@ -87,7 +87,7 @@ experience.
 - **Canonical page recipe** — `PageHeader` (crumb → 44px h1 → standfirst),
   `LoadingView`, `EmptyState`/`NotFound`, segment error boundaries, `danger`
   token for destructive UI.
-  → `src/components/layout/PageHeader.tsx`, `src/components/ui/`, `src/components/layout/SegmentError.tsx`
+  → `src/components/layout/PageHeader.tsx`, `src/components/ui/`, `src/components/layout/SegmentError.tsx`, `src/lib/trailer.ts`, `src/lib/trailer.test.ts`
 - **Information density & typography** — 15px base, Albert Sans, compact margins,
   tabular numbers; the deliberate "tool not marketing page" feel.
 - **Posters & duotone** — 8 genre-mapped SVG duotone filters, hover-to-reveal,
@@ -716,7 +716,7 @@ Owns wayfinding.
   section taxonomy mapping watch-status → routes; breadcrumb/`PageHeader` patterns;
   search/discovery filter hierarchy; genre cross-media mapping; noindex-by-default
   on private pages.
-  → `src/components/layout/{Subnav,MobileTabBar}.tsx`, `src/components/pages/DynamicRouter.tsx`, `firebase.json` (redirects), `src/lib/libraryView.ts`
+  → `src/components/layout/{Subnav,MobileTabBar}.tsx`, `src/components/pages/DynamicRouter.tsx`, `firebase.json` (redirects), `src/lib/libraryView.ts`, `src/components/pages/routeRewrites.test.ts`
 - Where a visitor ends up, and how she gets back. `AuthGuard` gates on `uid` rather
   than `user` (the profile loads in parallel with the auth verdict) and carries the
   return path; `WatchlistPage` is the screen the library taxonomy above renders into,
