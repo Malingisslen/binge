@@ -27,6 +27,7 @@ import { excludedIdsForOtherRows, exclusionsForRow } from './RecommendationsHub.
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import { DEFAULT_FILTERS } from '@/types';
 import type { FilterState, RowSpec, MediaTypeFilter } from '@/types';
+import { Button } from '@/components/ui/Button';
 
 const INITIAL_VISIBLE_ROWS = 5;
 
@@ -178,13 +179,13 @@ export default function RecommendationsHub() {
           </RowExhaustionContext.Provider>
 
           {visibleRowCount < filteredRows.length && (
-            <button
+            <Button
               onClick={() => setVisibleRowCount(c => c + 2)}
-              className="btn btn-ghost btn-sm"
+              variant="ghost" size="sm"
               style={{ marginTop: 24 }}
             >
               Visa fler rader ›
-            </button>
+            </Button>
           )}
           {filteredRows.length === 0 && cascade.rows.length > 0 && (
             <p className="stand" style={{ marginTop: 24 }}>

@@ -74,7 +74,7 @@ export default function RotationPlanner({ advisor, now }: { advisor: AdvisorResu
 
   return (
     <div className="bg-surface border border-rule rounded-sm px-[14px] py-[12px] mb-3">
-      <h2 className="text-[10px] uppercase tracking-[0.5px] text-ink-3 font-bold mb-[4px]">
+      <h2 className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-bold mb-[4px]">
         Rotationsplan — en tjänst i taget
       </h2>
       <p className="text-xs text-ink-2 mb-[10px]">
@@ -92,28 +92,28 @@ export default function RotationPlanner({ advisor, now }: { advisor: AdvisorResu
               background: m.provider ? 'var(--cal-soft)' : 'var(--bg-2)',
             }}
           >
-            <div className="text-[10px] uppercase tracking-[0.5px] text-ink-3 font-bold capitalize">
+            <div className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-bold capitalize">
               {monthLabel(m.monthOffset, base)}
             </div>
             {m.provider ? (
               <>
                 <div className="flex items-center gap-[6px] mt-[6px]">
                   <ProviderDot color={m.provider.color} size={9} />
-                  <span className="text-[13px] font-medium text-ink">{m.provider.shortName}</span>
+                  <span className="text-base font-medium text-ink">{m.provider.shortName}</span>
                 </div>
-                <div className="text-[11px] text-ink-3 mt-[3px]">
+                <div className="text-xs text-ink-3 mt-[3px]">
                   {formatKr(m.cost)} kr · {m.backlogCleared} i kö
                 </div>
               </>
             ) : (
-              <div className="text-[12px] text-ink-3 mt-[8px]">paus — spara</div>
+              <div className="text-sm text-ink-3 mt-[8px]">paus — spara</div>
             )}
           </div>
         ))}
       </div>
 
       {plan.alwaysFree.length > 0 && (
-        <p className="text-[11px] text-ink-3 mt-[8px]">
+        <p className="text-xs text-ink-3 mt-[8px]">
           Gratis hela tiden: {plan.alwaysFree.map(f => f.shortName).join(', ')}.
         </p>
       )}

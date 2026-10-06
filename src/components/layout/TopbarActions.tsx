@@ -15,6 +15,7 @@ import { useSignedOutRedirect } from '@/hooks/useSignedOutRedirect';
 import { useFriendActionAlert } from '@/hooks/useFriendActionAlert';
 import { FRIEND_FAILURE_TEXT } from '@/lib/friendActionText';
 import type { FriendRequest } from '@/lib/firebase/friends';
+import { Button } from '@/components/ui/Button';
 
 // Right-hand cluster of the new topbar: sessions popover, notifications bell
 // popover, and the user avatar (or "Logga in" if signed out). Extracted from
@@ -368,12 +369,12 @@ function FriendRequestRow({
       <div className="popover-row-title">{displayName}</div>
       {username && <div className="popover-row-meta">@{username}</div>}
       <div className="popover-actions">
-        <button onClick={run('accept', onAccept)} className="btn btn-sm btn-acc">
+        <Button onClick={run('accept', onAccept)} variant="acc" size="sm">
           Acceptera
-        </button>
-        <button onClick={run('decline', onDecline)} className="btn btn-sm btn-ghost">
+        </Button>
+        <Button onClick={run('decline', onDecline)} variant="ghost" size="sm">
           Avböj
-        </button>
+        </Button>
       </div>
       {/* Both buttons are live at once. The alert names the LATEST click's action:
           every click clears the flag first, so a second click abandons the first. */}

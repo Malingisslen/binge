@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/contexts/ToastContext';
 import { SettingsSection } from './SettingsSection';
 import { MAX_DISPLAY_NAME } from '@/lib/clampText';
+import { Button } from '@/components/ui/Button';
 
 export function ProfileSection() {
   const { user, signOut, updateDisplayName } = useAuth();
@@ -68,9 +69,9 @@ export function ProfileSection() {
         <span className="text-ink-3 text-xs mr-2">E-post:</span>
         {user.email}
       </div>
-      <button onClick={signOut} className="btn btn-ghost btn-sm mt-3">
+      <Button onClick={signOut} variant="ghost" size="sm" className="mt-3">
         Logga ut
-      </button>
+      </Button>
     </SettingsSection>
   );
 }

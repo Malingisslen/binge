@@ -8,6 +8,8 @@ import { useToast } from '@/contexts/ToastContext';
 import { usePageMeta } from '@/hooks/usePageMeta';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { Eyebrow } from '@/components/ui/Eyebrow';
+import { Button } from '@/components/ui/Button';
 
 export default function ListsPage() {
   usePageMeta({ title: 'Mina listor' });
@@ -84,9 +86,9 @@ function ListsContent() {
           title="Inga listor ännu"
           body="Skapa en lista för att samla titlar du vill gruppera."
           action={
-            <button onClick={() => setShowForm(true)} className="btn btn-acc btn-sm">
+            <Button onClick={() => setShowForm(true)} variant="acc" size="sm">
               Skapa ny lista
-            </button>
+            </Button>
           }
         />
       )}
@@ -114,9 +116,9 @@ function ListsContent() {
 
       {followed.length > 0 && (
         <div className="mt-6">
-          <h2 className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold mb-2">
+          <Eyebrow as="h2" className="mb-2">
             Följda listor
-          </h2>
+          </Eyebrow>
           <div className="space-y-[6px]">
             {followed.map(list => (
               <Link

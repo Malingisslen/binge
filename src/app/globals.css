@@ -9,7 +9,8 @@
      --cal-* (plum)    means "today / picker / time-position"
    Don't mix them. See CLAUDE.md → Design Constraints → Färgsystem (Tvåaccentregel).
    ────────────────────────────────────────────────────────────────────────── */
-:root {
+/* [data-theme='light'] lets a subtree show the light theme inside a dark page (/designsystem/). */
+:root, [data-theme='light'] {
   /* surfaces */
   --bg:        oklch(0.985 0.003 90);   /* warm off-white page */
   --bg-2:      oklch(0.968 0.004 90);   /* alternating rows, headers */

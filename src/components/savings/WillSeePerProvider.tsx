@@ -6,6 +6,7 @@ import ProviderDot from '@/components/ui/ProviderDot';
 import SrOnlyTableHeader from '@/components/ui/SrOnlyTableHeader';
 import { pluralSv } from '@/lib/utils';
 import type { WillSeePerProviderRow } from '@/types';
+import { Eyebrow } from '@/components/ui/Eyebrow';
 
 function formatBreakdown(tv: number, movie: number): string {
   const total = pluralSv(tv + movie, 'titel', 'titlar');
@@ -22,9 +23,9 @@ export default function WillSeePerProvider({ rows }: { rows: WillSeePerProviderR
   return (
     <div className="mb-[14px]">
       <div className="flex items-baseline justify-between mb-[6px]">
-        <h2 className="text-[11px] font-bold uppercase tracking-[0.5px] text-ink-3">
+        <Eyebrow as="h2" size="xs">
           Din Vill se per tjänst
-        </h2>
+        </Eyebrow>
         <span className="text-xxs text-ink-3">
           {pluralSv(rows.length, 'tjänst', 'tjänster')}
         </span>

@@ -31,7 +31,7 @@ export function TimeSeriesChart({ metricKey }: { metricKey: MetricKey }) {
   return (
     <div className="bg-surface border border-rule rounded-md p-3">
       <div className="flex items-baseline justify-between mb-2">
-        <span className="text-[11px] uppercase tracking-wide text-ink-3">{label}</span>
+        <span className="text-xs uppercase tracking-wide text-ink-3">{label}</span>
         {!value.missing && <span className="text-sm text-ink-2 tabular-nums">{total.toLocaleString('sv-SE')} totalt</span>}
       </div>
       {points.length === 0 ? (

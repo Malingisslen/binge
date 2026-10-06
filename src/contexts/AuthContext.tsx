@@ -33,6 +33,7 @@ import { resolveEffectiveMonthlyCost } from '@/lib/advisor/effectiveCost';
 import type { ProviderCampaign } from '@/lib/advisor/campaignPricing';
 import { daysBetween, todayIso } from '@/lib/utils';
 import { clearNextPath } from '@/lib/nextPath';
+import { clearPendingAdd } from '@/lib/pendingAdd';
 import { markTabSession } from '@/lib/tabSession';
 import { markDeletionStarted, clearDeletionStarted, isDeletionStarted, deletionMarkerKey } from '@/lib/deletionMarker';
 import { mergeUserDoc, assertProfileWritable } from '@/lib/firebase/userDocWrite';
@@ -293,6 +294,7 @@ async function buildExistingProfile(data: Record<string, unknown>, firebaseUser:
       episodeReleases: (data.notificationSettings as UserProfile['notificationSettings'])?.episodeReleases ?? true,
       priceDrops: (data.notificationSettings as UserProfile['notificationSettings'])?.priceDrops ?? false,
       rotationReminders: (data.notificationSettings as UserProfile['notificationSettings'])?.rotationReminders ?? false,
+      priceChanges: (data.notificationSettings as UserProfile['notificationSettings'])?.priceChanges ?? false,
       weeklyDigest: (data.notificationSettings as UserProfile['notificationSettings'])?.weeklyDigest ?? false,
     },
     rotationSchedule: (data.rotationSchedule as UserProfile['rotationSchedule']) ?? undefined,
@@ -508,6 +510,7 @@ async function createProfileWithConsent(firebaseUser: User): Promise<ProfileLoad
       episodeReleases: true,
       priceDrops: false,
       rotationReminders: false,
+      priceChanges: false,
       weeklyDigest: false,
     },
   };
@@ -746,6 +749,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (hadSessionRef.current) {
             hadSessionRef.current = false;
             clearNextPath();
+            clearPendingAdd();
           }
           setUser(null);
           setUid(null);
@@ -977,7 +981,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       providerPauses: {},
       calibrationGenres: null,
       hemkommun: null,
-      notificationSettings: { newEpisodes: true, availableOnMyServices: true, pushEnabled: false, episodeReleases: true, priceDrops: false, rotationReminders: false, weeklyDigest: false },
+      notificationSettings: { newEpisodes: true, availableOnMyServices: true, pushEnabled: false, episodeReleases: true, priceDrops: false, rotationReminders: false, priceChanges: false, weeklyDigest: false },
       termsAcceptedAt: kit.serverTimestamp(),
       termsVersion,
       ageConfirmedAt: kit.serverTimestamp(), // BIN-348: the register form gates on the 13+ checkbox; record it.
@@ -1006,6 +1010,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // what reaches the OTHER tabs, but it lands a network round-trip later and
     // never lands at all if `firebaseSignOut` throws.
     clearNextPath();
+    clearPendingAdd();
     // BIN-844: unregister push BEFORE the sign-out, and capture the uid first.
     //
     // Two orderings are load-bearing and neither is obvious:

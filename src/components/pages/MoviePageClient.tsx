@@ -420,7 +420,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
                 <CinemaCountdownStrip
                   info={cinemaInfo}
                   inLibrary={!!watchlistItem}
-                  onBevaka={signedOut ? goToLogin : handleBevaka}
+                  onBevaka={signedOut ? () => goToLogin() : handleBevaka}
                 />
               )}
             </ClientOnly>
@@ -513,7 +513,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
                         <a href={affiliateWrap(p.provider_id, offer.link)} target="_blank" rel="noopener noreferrer" onClick={() => trackEvent('provider_clicked', { providerId: canonicalProviderId(p.provider_id), offerType: offer.type, mediaType: 'movie' })}>{imgEl}</a>
                       ) : imgEl}
                       {leavingLabel && (
-                        <span className="rounded-sm bg-acc-soft text-acc-deep px-1 text-[11px]">{leavingLabel}</span>
+                        <span className="rounded-sm bg-acc-soft text-acc-deep px-1 text-xs">{leavingLabel}</span>
                       )}
                     </span>
                   );
@@ -532,7 +532,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
                 href="https://www.cineasterna.com/sv/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 rounded-sm bg-bg-2 text-ink-2 px-2 py-1 text-[12px]"
+                className="inline-flex items-center gap-1 rounded-sm bg-bg-2 text-ink-2 px-2 py-1 text-sm"
               >
                 Finns på Cineasterna ({user?.hemkommun ? `via biblioteket i ${user.hemkommun}` : 'via ditt bibliotek'})
                 {cineRental && <span className="text-ink-3">· hyr {cineRental.amount} {cineRental.currency}</span>}
@@ -550,7 +550,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
               </summary>
             <div style={{ marginTop: 10, fontSize: 11, color: 'var(--ink-3)' }}>
               {onSubscription.length > 0 && (
-                <div className="rounded-sm bg-acc-soft text-acc-deep px-2 py-1 text-[12px]" style={{ marginBottom: 8 }}>
+                <div className="rounded-sm bg-acc-soft text-acc-deep px-2 py-1 text-sm" style={{ marginBottom: 8 }}>
                   {subsYouOwn.length > 0
                     ? `Du abonnerar redan på ${subsYouOwn.map(p => p.provider_name).join(', ')} — du behöver inte hyra.`
                     : `Finns även med abonnemang på ${onSubscription.map(p => p.provider_name).join(', ')} — billigare än att hyra om du ser mer därifrån.`}
@@ -577,7 +577,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
 
           {(subscription.length > 0 || hasRentBuy) && (
             <div style={{ marginTop: 8 }}>
-              <JustWatchCredit />{' · '}<span className="text-ink-3 text-[11px]">Tillgänglighet via Movie of the Night</span>
+              <JustWatchCredit />{' · '}<span className="text-ink-3 text-xs">Tillgänglighet via Movie of the Night</span>
             </div>
           )}
         </div>

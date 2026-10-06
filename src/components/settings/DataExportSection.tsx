@@ -7,6 +7,7 @@ import { useToast } from '@/contexts/ToastContext';
 import { SettingsSection } from './SettingsSection';
 import { captureError } from '@/lib/sentry';
 import type { SkippedGroup } from '@/lib/firebase/dataExport';
+import { Button } from '@/components/ui/Button';
 
 const NAMED_GROUPS_SHOWN = 3;
 const UNNAMED_GROUP = 'en grupp utan namn';
@@ -77,14 +78,14 @@ export function DataExportSection() {
         Ladda ner all data om dig som en JSON-fil (GDPR artikel 20). Innehåller profil,
         bibliotek, betyg, progress, recensioner, listor och sociala kopplingar.
       </p>
-      <button
+      <Button
         onClick={handleExport}
         disabled={exporting || !uid}
-        className="btn btn-ghost btn-sm disabled:opacity-50"
+        variant="ghost" size="sm" className="disabled:opacity-50"
       >
         <Download size={11} />
         {exporting ? 'Förbereder…' : 'Ladda ner mina data'}
-      </button>
+      </Button>
       {incomplete && (
         <p role="status" className="text-xs text-danger-ink mt-2">
           {incomplete}

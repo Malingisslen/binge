@@ -49,10 +49,10 @@ function LandingPage({ trending, guestDemo }: { trending?: React.ReactNode; gues
     <div className="min-h-screen bg-bg">
       <section className="bg-sidebar-bg text-white">
         <div className="max-w-[640px] mx-auto px-4 py-16 text-center">
-          <h1 className="text-[32px] font-extrabold text-acc mb-2">
-            binge<span className="font-normal text-white/60 text-[22px]">.nu</span>
+          <h1 className="text-5xl font-extrabold text-acc mb-2">
+            binge<span className="font-normal text-white/60 text-3xl">.nu</span>
           </h1>
-          <p className="text-[17px] font-semibold mb-2 max-w-[520px] mx-auto">
+          <p className="text-xl font-semibold mb-2 max-w-[520px] mx-auto">
             Håll koll på vad du tittar på — och var det streamas.
           </p>
           <p className="text-sm text-white/60 mb-5 max-w-[480px] mx-auto leading-relaxed">

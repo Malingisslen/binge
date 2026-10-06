@@ -8,6 +8,7 @@ import { toneForGenreIds, toneForId } from '@/lib/duotone';
 import DuotonePoster from '@/components/ui/DuotonePoster';
 import ProviderDot from '@/components/ui/ProviderDot';
 import type { WatchlistItem } from '@/types';
+import { Eyebrow } from '@/components/ui/Eyebrow';
 
 // BIN-88 — "ville se — finns nu på din tjänst". A small Home tile that
 // resurfaces forgotten vill_se titles streamable on a service the user already
@@ -36,9 +37,9 @@ export default function BacklogResurfaceTile({
   return (
     <section className="mt-[18px] mb-[14px]">
       <div className="flex items-baseline justify-between mb-[8px]">
-        <h2 className="text-[11px] font-bold uppercase tracking-[0.5px] text-ink-3">
+        <Eyebrow as="h2" size="xs">
           Ville se — finns nu på din tjänst
-        </h2>
+        </Eyebrow>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-[10px]">
         {items.map(item => {

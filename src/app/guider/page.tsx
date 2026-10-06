@@ -84,7 +84,7 @@ export default function GuiderPage() {
       <div className="flex flex-col gap-6 mt-6">
         {sections.map((section) => (
           <section key={section.id} aria-labelledby={`hub-${section.id}`}>
-            <h2 id={`hub-${section.id}`} className="text-[17px] font-semibold text-ink mb-1">
+            <h2 id={`hub-${section.id}`} className="text-xl font-semibold text-ink mb-1">
               {section.heading}
             </h2>
             <p className="text-sm text-ink-2 mb-3">{section.blurb}</p>

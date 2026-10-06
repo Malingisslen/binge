@@ -9,6 +9,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import type { ResolvedUser } from '@/lib/firebase/username';
 import type { GroupMember } from '@/types';
+import { Eyebrow } from '@/components/ui/Eyebrow';
 
 /**
  * Medlemslistan i en grupp med per-rad delete och "+ Lägg till"-expansion.
@@ -29,9 +30,9 @@ export function GroupMembersPanel({
   return (
     <div className="bg-surface border border-rule rounded-sm">
       <div className="px-3 py-[6px] border-b border-rule-2 flex items-center justify-between">
-        <div className="text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">
+        <Eyebrow>
           Medlemmar ({members.length})
-        </div>
+        </Eyebrow>
         {isOwner && (
           <button
             onClick={() => setAdding(v => !v)}

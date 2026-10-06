@@ -205,6 +205,9 @@ export interface UserProfile {
     // BIN-181 — opt-in (default false): push när ett paus/återkom-datum i din
     // rotationskalender förfaller (rotationReminderNotify läser rotationSchedule).
     rotationReminders: boolean;
+    // BIN-1444 — opt-in (default false): push när en tjänst och nivå du har ändrar
+    // pris (priceChangeNotify läser sajtens /prisandringar.json).
+    priceChanges: boolean;
     // BIN-163 — opt-in (default false): veckovis digest (mån morgon) som rullar
     // upp titlar som lämnar dina tjänster snart + nytt på dina tjänster den här
     // veckan (weeklyDigestNotify). ETT push + ETT inbox-kort, inte per titel.
