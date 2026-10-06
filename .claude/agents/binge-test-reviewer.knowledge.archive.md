@@ -29768,3 +29768,33 @@ fixture, asserted as a string).
 **Verdict:** fail, 2 blocking — the fallback's union input is unpinned (the knowledge-file case), and the _note33 widening is revertible green (DECISION_1_AREAS names none of the six added files).
 
 **Knowledge fold:** tooling chapter — union-floor bullet extended to lists held in step (all copies retreating together is green); two-call-site bullet extended to a second call on the same filtered input.
+
+## 2026-10-06 — BIN-1426 part 3 (PR B): the deviations index check
+
+Scope: `ea90e495..HEAD` — scripts/check-deviations-index.mjs (new), its test, lefthook.yml, vitest.config.ts, scripts-self-tests-present, route.test.mjs, gen-ownership-map.test.mjs.
+
+Mutants killed: fence handling dropped or not toggled, floor disabled, lengths-only compare, `main()` 0 on mismatch, read error 0, ledger-only loop, set compare, entry pattern widened, CR strip dropped, ledger compared with itself. Survived: `FLOOR = 5`; `readStaged` reading `HEAD:`; the lefthook block deleted; `process.exit(0)` at the entry point (no test spawned the script).
+
+A CRLF-converted index turned "keeps the trigger on the index and none on the ledger" red (`^---\n`), and the `not.toMatch(/^---\n/)` twin cannot fail on CRLF.
+
+**Verdict:** fail, 2 blocking — the CRLF-blind live assertion, and no pin on the lefthook wiring or on reading the staged copies. Fixed by the author: `\r?\n` in both regexes, a lefthook block pin, and a throwaway-repo spawn test (staged mismatch exits 1, working-tree-only mismatch exits 0) that kills the `HEAD:` and `process.exit(0)` mutants; a literal floor pin; the route test now covers index and ledger.
+
+**Knowledge fold:** tooling chapter, vacuous oracles — the CRLF live-tree assertion bullet.
+
+## 2026-10-06 — BIN-1426 part 3 (PR B), round 2: the fixes in 8a60f847
+
+Scope: `ea90e495..HEAD`, fixes in `8a60f847` — scripts/check-deviations-index.test.mjs (CRLF-tolerant frontmatter regexes, literal floor pin, lefthook block pin, throwaway-repo spawn test), docs/org/route.test.mjs (index and ledger routed). Read in full: scripts/check-deviations-index.mjs, its test, lefthook.yml, docs/org/route.test.mjs, both accepted-deviations files.
+
+Method: each file snapshotted to the scratchpad; each mutant asserted landed (bytes differ), still in place after the run, restored from the snapshot and `git hash-object` equal to `HEAD:<f>`; `node_modules/.vite/vitest` removed before every run. Clean control: 270/270 across the two files.
+
+Mutants, `npx vitest run scripts/check-deviations-index.test.mjs` (16 tests):
+- lefthook.yml: block deleted, 1 failed ("is wired into pre-commit, on both files"); block `#`-commented, 1 failed, same; `run:` with `|| true`, 1 failed, same; block moved under `commit-msg:`, 1 failed, same. `skip: true` added to the block: SURVIVED 16/16. `exclude: [".claude/**"]` added: SURVIVED 16/16.
+- check-deviations-index.mjs: `HEAD:` read, 1 failed ("judges the staged copies"); `process.exit(0)`, same; `main();` without exit, same; working-tree read (`readFileSync`), same, failing at the working-tree-only step, not by crashing; entry guard `if (false)`, same; `FLOOR = 5` and `FLOOR = 59`, 1 failed each ("keeps the floor near the ledger size"); read-error branch `return 0`, 1 failed ("exits 1 when a file cannot be read").
+- CRLF: index, ledger and lefthook.yml all CRLF, 16/16 green. CRLF plus `---\r\npaths:` frontmatter on the ledger, 1 failed ("keeps the trigger…"); CRLF index with `paths:` renamed, 1 failed, same; LF ledger with `---\n` prefix, 1 failed, same.
+- docs/org/route.test.mjs: `.claude/accepted-deviations.md` dropped from role 25's patterns in docs/org/ownership-map.json, 1 failed of 254 ("seats the same owner for the decided-deviations index and ledger").
+
+Hermeticity of the throwaway-repo test (`-t 'judges the staged'`): `GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1`, pass; global `core.autocrlf=true`, pass; global `init.templateDir` + `core.hooksPath` to a failing pre-commit + `commit.gpgsign=true` with `gpg.program=/bin/false`, pass (the local settings override them); global `autocrlf=true` + `safecrlf=true`, FAIL ("fatal: LF would be replaced by CRLF in .claude/accepted-deviations.md" at `git add .`). `GIT_INDEX_FILE=<repo>/.git/index`, PASS, and the fixture's `git add` rewrote this repo's real index to the two fixture files: `git status` showed the whole tree staged for deletion. Restored with `git read-tree HEAD` + `git update-index --refresh`; HEAD unchanged at 8a60f847, porcelain empty, the reviewed files' index and worktree blobs equal HEAD. No lefthook hook runs vitest (lefthook.yml has pre-commit and commit-msg commands only), so no current runner leaks `GIT_*` into the suite.
+
+**Verdict:** pass, 0 blocking. Both round-1 blocking findings and both optional ones are closed by mutants that now die. Non-blocking: `skip:`/`exclude:` on the lefthook block survive; the fixture helper inherits `GIT_*` env and global `safecrlf`.
+
+**Knowledge fold:** tooling chapter, Extract-then-test & layering — the injected-runner bullet gained the real-git throwaway-repo hermeticity check and the scratch-clone rule for probing it.

@@ -179,6 +179,11 @@ export const TOOLING_CODE_FILES = new Set([
   // blocks, and widening one has never widened the other.
   'scripts/run-rules-tests.mjs',
   'scripts/run-rules-tests.test.mjs',
+  // BIN-1426. Refuses a commit where the decided-deviations index and the ledger's headings
+  // differ, so a decision cannot drop out of what reviewers read first. Added in the SAME
+  // commit as its `reviewGates` pattern, per BIN-830.
+  'scripts/check-deviations-index.mjs',
+  'scripts/check-deviations-index.test.mjs',
   // BIN-1063 steg 2. Engangs-backfillen som skriver motpartens uid som ett falt
   // pa friends/friendRequestsSent. Den kor med Admin SDK och forbigar darmed
   // firestore.rules helt — den ar det enda som kan skriva de raderna, eftersom

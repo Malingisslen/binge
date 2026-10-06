@@ -16,7 +16,11 @@ const RULES_PARITY = [
 ];
 // check-published-commands.test.mjs is not here: a runbook command that opens the wrong
 // database is a product defect, so it stays in `product`.
-const PROCESS_SCRIPTS = ['scripts/check-knowledge-caps.test.mjs', 'scripts/prune-map-flag.test.mjs'];
+const PROCESS_SCRIPTS = [
+  'scripts/check-knowledge-caps.test.mjs',
+  'scripts/prune-map-flag.test.mjs',
+  'scripts/check-deviations-index.test.mjs',
+];
 const EXCLUDE = ['node_modules', '.next', 'out', 'src/test/rules/**'];
 
 export default defineConfig({

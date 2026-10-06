@@ -513,13 +513,15 @@ describe('the file that decides who reviews everything else (BIN-851)', () => {
     expect(r.panel).toEqual([25]);
   });
 
-  it('seats the same owner for the decided-deviations ledger', () => {
-    // The mirror image: this file decides what a reviewer is FORBIDDEN to flag, so
-    // appending to it silently retires a finding class.
-    const r = route(['.claude/rules/accepted-deviations.md']);
+  it('seats the same owner for the decided-deviations index and ledger', () => {
+    // The mirror image: these files decide what a reviewer is FORBIDDEN to flag, so
+    // appending to them silently retires a finding class.
+    for (const path of ['.claude/rules/accepted-deviations.md', '.claude/accepted-deviations.md']) {
+      const r = route([path]);
 
-    expect(r.tier).toBe('medium');
-    expect(r.panel).toEqual([25]);
+      expect(r.tier).toBe('medium');
+      expect(r.panel).toEqual([25]);
+    }
   });
 
   it('names both files in the BLOCKING gate list too, not just here', () => {
@@ -528,6 +530,7 @@ describe('the file that decides who reviews everything else (BIN-851)', () => {
     // assertions above green and still reopen the hole.
     expect(integrationGateMatches('.claude/shared-plugin.json')).toBe(true);
     expect(integrationGateMatches('.claude/rules/accepted-deviations.md')).toBe(true);
+    expect(integrationGateMatches('.claude/accepted-deviations.md')).toBe(true);
     // Reached by a `keyed` rule, not a pattern (BIN-990). Without this the keyed arm in
     // gateMatches() is pinned by nothing in this file.
     expect(integrationGateMatches('.claude/settings.json')).toBe(true);
@@ -911,6 +914,7 @@ const MACHINERY = [
   '.claude/shared-plugin.json',
   '.claude/settings.json',
   '.claude/rules/accepted-deviations.md',
+  '.claude/accepted-deviations.md',
   '.claude/rules/code-style.md',
   '.claude/agents/binge-code-reviewer.md',
   '.claude/hooks/freshness.mjs',
