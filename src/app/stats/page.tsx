@@ -1,5 +1,6 @@
 'use client';
 
+import { ratingDistribution } from '@/lib/stats/ratingDistribution';
 import { providerTally, withProviderDataCount } from '@/lib/stats/providerTally';
 import { useMemo } from 'react';
 import AuthGuard from '@/components/AuthGuard';
@@ -33,11 +34,7 @@ function StatsContent() {
       ? rated.reduce((sum, i) => sum + (i.rating ?? 0), 0) / rated.length
       : 0;
 
-    const ratingDist: Record<string, number> = {};
-    for (const item of rated) {
-      const bucket = String(Math.floor(item.rating!));
-      ratingDist[bucket] = (ratingDist[bucket] ?? 0) + 1;
-    }
+    const ratingDist = ratingDistribution(rated.map(i => i.rating!));
 
     const providerStats = providerTally(items);
 
@@ -200,7 +197,7 @@ function StatsContent() {
                 </span>
                 <div className="flex-1 h-[8px] bg-rule rounded-full overflow-hidden">
                   <div
-                    className="h-full rounded-full"
+                    className="provider-swatch h-full rounded-full"
                     style={{
                       width: `${(p.count / maxProviderCount) * 100}%`,
                       backgroundColor: p.provider?.color ?? 'var(--ink-3)',

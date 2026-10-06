@@ -63,7 +63,7 @@ export default function ProfileStatsPanel({ items }: { items: WatchlistItem[] })
                 if (!provider) return null;
                 return (
                   <li key={p.providerId} className="text-xs flex items-center gap-[6px]">
-                    <span className="w-[6px] h-[6px] rounded-full shrink-0" style={{ background: provider.color }} />
+                    <span className="provider-swatch w-[6px] h-[6px] rounded-full shrink-0" style={{ background: provider.color }} />
                     <Link href={`/provider/${p.providerId}/`} className="text-ink no-underline hover:text-acc-deep flex-1 truncate">
                       {provider.name}
                     </Link>

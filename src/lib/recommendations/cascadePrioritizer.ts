@@ -1,3 +1,4 @@
+import { swedishKeywordLabel } from './keywordLabels';
 import type { CascadeInput, RowSpec, Seed, RowId, CompanionAnchor } from '@/types';
 import { rowKey } from '@/types';
 
@@ -127,11 +128,13 @@ export function prioritizeRows(input: CascadeInput): RowSpec[] {
 
   // Row 4 — recurring keywords
   for (const k of input.recurringKeywords) {
+    const name = swedishKeywordLabel(k.name);
+    if (!name) continue;
     const score = Math.min(k.recurrence * 10, 70);
     out.push({
       id: { kind: 'thematic', keywordId: k.id },
       rowKey: rowKey({ kind: 'thematic', keywordId: k.id }),
-      label: `Tematiskt: ${k.name}`,
+      label: `Tematiskt: ${name}`,
       score,
       jtbd: jtbdOf('thematic'),
       meta: { keyword: k },
