@@ -89,7 +89,9 @@ export default function LoginPage() {
   async function handleGoogle() {
     setError('');
     try {
-      await signIn();
+      const { isNewUser } = await signIn();
+      // Ett första Google-konto är en registrering, precis som e-postformulärets.
+      if (isNewUser) trackEvent('signed_up');
       trackEvent('signed_in', { method: 'google' });
     } catch (err: unknown) {
       console.error('Google sign-in failed:', err);

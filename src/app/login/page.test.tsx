@@ -18,7 +18,7 @@ const auth = vi.hoisted(() => ({
   uid: null as string | null,
   profileLoading: false,
   loading: false,
-  signIn: vi.fn(async () => {}),
+  signIn: vi.fn(async () => ({ isNewUser: false })),
   signInEmail: vi.fn(async () => {}),
   register: vi.fn(async () => {}),
 }));
@@ -33,7 +33,8 @@ vi.mock('next/navigation', () => {
   return { useRouter: () => router };
 });
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => auth }));
-vi.mock('@/lib/analytics', () => ({ trackEvent: vi.fn() }));
+const trackEvent = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/analytics', () => ({ trackEvent }));
 
 const returning = { onboardingCompletedAt: '2026-01-01', myProviders: [8] };
 const brandNew = { onboardingCompletedAt: null, myProviders: [] };
@@ -266,5 +267,48 @@ describe('LoginPage — Google-inloggningens felkoder (BIN-1169)', () => {
   it('en okand kod faller igenom till den generella texten', async () => {
     const text = await googleWithCode('auth/internal-error');
     expect(text).toContain('Inloggningen misslyckades. Försök igen om en stund.');
+  });
+});
+
+// Insikters registreringstrend läser signed_up. Ett nytt konto via Google är också en
+// registrering, så det räknas här och inte bara i e-postformuläret.
+describe('LoginPage — Google-registrering räknas som registrering', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    window.sessionStorage.clear();
+    auth.user = null;
+    auth.uid = null;
+    auth.profileLoading = false;
+    auth.loading = false;
+  });
+
+  async function clickGoogle(isNewUser: boolean) {
+    auth.signIn.mockResolvedValueOnce({ isNewUser });
+    const { getByRole } = render(<LoginPage />);
+    await act(async () => {
+      fireEvent.click(getByRole('button', { name: /google/i }));
+    });
+  }
+
+  it('ett nytt Google-konto räknas som registrering och inloggning', async () => {
+    await clickGoogle(true);
+    expect(trackEvent.mock.calls).toEqual([
+      ['signed_up'],
+      ['signed_in', { method: 'google' }],
+    ]);
+  });
+
+  it('ett befintligt Google-konto räknas bara som inloggning', async () => {
+    await clickGoogle(false);
+    expect(trackEvent.mock.calls).toEqual([['signed_in', { method: 'google' }]]);
+  });
+
+  it('en misslyckad Google-inloggning räknas inte alls', async () => {
+    auth.signIn.mockRejectedValueOnce(Object.assign(new Error('x'), { code: 'auth/popup-closed-by-user' }));
+    const { getByRole } = render(<LoginPage />);
+    await act(async () => {
+      fireEvent.click(getByRole('button', { name: /google/i }));
+    });
+    expect(trackEvent).not.toHaveBeenCalled();
   });
 });
