@@ -6,6 +6,7 @@ import { useToast } from '@/contexts/ToastContext';
 import { SettingsSection } from './SettingsSection';
 import { MAX_DISPLAY_NAME } from '@/lib/clampText';
 import { Button } from '@/components/ui/Button';
+import { fieldClass } from '@/components/ui/Field';
 
 export function ProfileSection() {
   const { user, signOut, updateDisplayName } = useAuth();
@@ -58,7 +59,7 @@ export function ProfileSection() {
         value={nameInput}
         onChange={e => setNameInput(e.target.value)}
         onBlur={saveName}
-        className="w-full px-2 py-1 text-base border border-rule rounded-sm bg-surface text-ink font-[inherit] outline-none focus:border-acc-deep"
+        className={fieldClass({ className: 'w-full' })}
       />
       <p id="displayName-help" className="text-xxs text-ink-3 mt-1">
         Visas för andra användare i appen, till exempel i notiser och på din profil.

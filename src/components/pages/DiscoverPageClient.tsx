@@ -14,6 +14,7 @@ import { hasNonLatinTitle, isFromHiddenCountry } from '@/lib/utils/titleFilter';
 import { JsonLd, breadcrumbSchema, collectionPageSchema } from '@/components/title/JsonLd';
 import { nordicLanguageParam } from '@/lib/discover/nordic';
 import { Button } from '@/components/ui/Button';
+import { cardClass } from '@/components/ui/Card';
 
 const DISCOVER_DESCRIPTION = 'Trendande, populära och nya filmer och serier på Netflix, Viaplay, HBO Max, Disney+, SVT Play och fler svenska streamingtjänster.';
 
@@ -239,7 +240,7 @@ export default function DiscoverPageClient({
           }
         />
       ) : (
-        <div className="bg-surface border border-rule rounded-sm">
+        <div className={cardClass()}>
           <TitleGrid items={items} loading={isLoading && items.length === 0} />
           <div className="px-3 py-[6px] border-t border-rule-2">
             <JustWatchCredit />

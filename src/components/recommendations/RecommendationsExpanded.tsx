@@ -29,6 +29,7 @@ import { useRowUpcoming } from '@/hooks/rows/useRowUpcoming';
 import { useRowFreePublic } from '@/hooks/rows/useRowFreePublic';
 import { useRowCompanion } from '@/hooks/rows/useRowCompanion';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
+import { Button } from '@/components/ui/Button';
 
 interface Props {
   rowKeyParam: string;
@@ -84,12 +85,12 @@ export default function RecommendationsExpanded({ rowKeyParam }: Props) {
   if (!id || !spec) {
     return (
       <div>
-        <button
+        <Button
           onClick={goBack}
-          className="inline-flex items-center gap-1 text-xs px-3 py-[6px] mb-3 border border-rule rounded-sm bg-surface text-ink-2 hover:bg-bg-2 cursor-pointer"
+          variant="ghost" size="sm" className="inline-flex items-center gap-1 mb-3"
         >
           <ChevronLeft size={14} /> Tillbaka till rekommendationer
-        </button>
+        </Button>
         <p className="text-sm text-ink-3">Raden hittades inte. Den kan ha försvunnit när dina betyg ändrades.</p>
       </div>
     );
@@ -97,12 +98,12 @@ export default function RecommendationsExpanded({ rowKeyParam }: Props) {
 
   return (
     <>
-      <button
+      <Button
         onClick={goBack}
-        className="inline-flex items-center gap-1 text-xs px-3 py-[6px] mb-3 border border-rule rounded-sm bg-surface text-ink-2 hover:bg-bg-2 cursor-pointer"
+        variant="ghost" size="sm" className="inline-flex items-center gap-1 mb-3"
       >
         <ChevronLeft size={14} /> Tillbaka till rekommendationer
-      </button>
+      </Button>
       <PageHeader
         crumb="Rekommendationer"
         title={spec.label}

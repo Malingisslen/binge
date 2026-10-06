@@ -4,6 +4,8 @@ import type { MetricKey } from '../metrics/types';
 import { DATA_RESOLVERS } from '../metrics/resolvers';
 import { METRICS } from '../metrics/catalog';
 import { useInsightsContext } from '../state/InsightsContext';
+import { eyebrowClass } from '@/components/ui/Eyebrow';
+import { cardClass } from '@/components/ui/Card';
 
 /** Lightweight inline-SVG line chart for a series metric (no chart library). */
 export function TimeSeriesChart({ metricKey }: { metricKey: MetricKey }) {
@@ -29,9 +31,9 @@ export function TimeSeriesChart({ metricKey }: { metricKey: MetricKey }) {
   const total = ys.reduce((a, b) => a + b, 0);
 
   return (
-    <div className="bg-surface border border-rule rounded-md p-3">
+    <div className={cardClass('p-3')}>
       <div className="flex items-baseline justify-between mb-2">
-        <span className="text-xs uppercase tracking-wide text-ink-3">{label}</span>
+        <span className={eyebrowClass({ size: 'xs' })}>{label}</span>
         {!value.missing && <span className="text-sm text-ink-2 tabular-nums">{total.toLocaleString('sv-SE')} totalt</span>}
       </div>
       {points.length === 0 ? (

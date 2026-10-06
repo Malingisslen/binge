@@ -7,6 +7,8 @@ import DuotonePoster from '@/components/ui/DuotonePoster';
 import type { ContinueWatchingEntry } from '@/lib/continueWatching';
 import { Eyebrow } from '@/components/ui/Eyebrow';
 import MarkEpisodeSeenButton from './MarkEpisodeSeenButton';
+import { buttonClass } from '@/components/ui/Button';
+import { cardClass } from '@/components/ui/Card';
 
 // BIN-86 — "Fortsätt titta". Progress-driven Up Next row, complementing the
 // air-date focal. Shows where you left off + a jump-back link to the series
@@ -33,7 +35,7 @@ export default function ContinueWatchingTile({ entries }: { entries: ContinueWat
           return (
             <div
               key={item.tmdbId}
-              className="flex gap-[8px] items-center bg-surface border border-rule rounded-sm p-[8px] hover:shadow-lift transition-shadow"
+              className={cardClass('flex gap-[8px] items-center p-[8px] hover:shadow-lift transition-shadow')}
             >
               <Link
                 href={titleHref('tv', item.tmdbId)}
@@ -58,7 +60,7 @@ export default function ContinueWatchingTile({ entries }: { entries: ContinueWat
                   tmdbId={item.tmdbId}
                   season={next.season}
                   episode={next.episode}
-                  className="btn btn-ghost btn-sm shrink-0"
+                  className={buttonClass({ variant: 'ghost', size: 'sm', className: 'shrink-0' })}
                 />
               )}
             </div>

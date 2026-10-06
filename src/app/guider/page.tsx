@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { hubSections } from '@/lib/seo/hubLinks';
 import { jsonLd } from '@/lib/seo/jsonLd';
+import { cardClass } from '@/components/ui/Card';
 
 export const dynamic = 'force-static';
 
@@ -93,7 +94,7 @@ export default function GuiderPage() {
                 <li key={l.href}>
                   <Link
                     href={l.href}
-                    className="inline-block bg-surface rounded border border-rule px-3 py-1.5 text-base text-ink hover:shadow-lift transition-shadow"
+                    className={cardClass('inline-block px-3 py-1.5 text-base text-ink hover:shadow-lift transition-shadow')}
                   >
                     {l.label}
                   </Link>

@@ -1,6 +1,7 @@
 import { formatKr } from '@/lib/formatKr';
 import { formatPriceDay } from '@/lib/priceFreshness';
 import type { BundleSuggestion } from '@/lib/advisor/bundleArbitrage';
+import { cardClass } from '@/components/ui/Card';
 
 // Paketrutan för gäster — kalkylatorn och startsidans demo. Systerkomponenten
 // BundleArbitrageCard säger "Du betalar …" om inloggades egna belopp; en gäst har
@@ -41,7 +42,7 @@ export default function GuestBundleBox({
     <section
       aria-label="Billigare som paket"
       data-testid="guest-bundle"
-      className="bg-surface border border-rule border-l-[3px] border-l-acc-deep rounded-sm px-3 py-[10px]"
+      className={cardClass('border-l-[3px] border-l-acc-deep px-3 py-[10px]')}
     >
       <h2 className="text-sm font-semibold text-ink m-0">Billigare som paket</h2>
       <p className="text-sm text-ink mt-1">

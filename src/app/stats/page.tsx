@@ -10,6 +10,7 @@ import { useWatchlist } from '@/hooks/useWatchlist';
 import { getProvider } from '@/lib/tmdb/providers';
 import { seenDate } from '@/lib/seenDate';
 import { markedSeen } from '@/lib/markedSeen';
+import { cardClass } from '@/components/ui/Card';
 
 const MONTH_NAMES = ['jan', 'feb', 'mar', 'apr', 'maj', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
 
@@ -116,7 +117,7 @@ function StatsContent() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-[14px] mb-4">
         {/* Film vs Serier — stacked bar */}
-        <div className="bg-surface border border-rule rounded-sm">
+        <div className={cardClass()}>
           <div className="px-3 py-[6px] border-b border-rule-2">
             <span className="text-sm font-bold text-ink-2">Film vs Serier</span>
           </div>
@@ -150,7 +151,7 @@ function StatsContent() {
         </div>
 
         {/* Betygsfördelning */}
-        <div className="bg-surface border border-rule rounded-sm">
+        <div className={cardClass()}>
           <div className="px-3 py-[6px] border-b border-rule-2">
             <span className="text-sm font-bold text-ink-2">Betygsfördelning</span>
           </div>
@@ -174,7 +175,7 @@ function StatsContent() {
 
       {/* Streamingtjänster — horizontal colored bars */}
       {stats.topProviders.length > 0 && (
-        <div className="bg-surface border border-rule rounded-sm mb-4">
+        <div className={cardClass('mb-4')}>
           <div className="px-3 py-[6px] border-b border-rule-2 flex items-baseline justify-between gap-2">
             <span className="text-sm font-bold text-ink-2">Streamingtjänster</span>
             <span className="text-xxs text-ink-3">
@@ -213,7 +214,7 @@ function StatsContent() {
 
       {/* BIN-164: dina taggar — privata, räknas bara över din egen data */}
       {stats.topTags.length > 0 && (
-        <div className="bg-surface border border-rule rounded-sm mb-4">
+        <div className={cardClass('mb-4')}>
           <div className="px-3 py-[6px] border-b border-rule-2 flex items-baseline justify-between gap-2">
             <span className="text-sm font-bold text-ink-2">Dina taggar</span>
             <span className="text-xxs text-ink-3">Bara synliga för dig</span>
@@ -230,7 +231,7 @@ function StatsContent() {
 
       {/* Aktivitet per månad — proper bar chart */}
       {stats.activityMonths.length > 1 && (
-        <div className="bg-surface border border-rule rounded-sm mb-4">
+        <div className={cardClass('mb-4')}>
           <div className="px-3 py-[6px] border-b border-rule-2">
             <span className="text-sm font-bold text-ink-2">Aktivitet per månad</span>
           </div>

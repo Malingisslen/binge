@@ -9,6 +9,7 @@ import type { CalendarEntry } from '@/hooks/useCalendar';
 import { entryHref } from '@/lib/calendar/entry';
 import { daysFromToday } from './focalPick';
 import MarkEpisodeSeenButton from './MarkEpisodeSeenButton';
+import { buttonClass } from '@/components/ui/Button';
 
 // The Hem focal block: 21:9 duotone still up top + a 2:3 poster overlapping
 // the bottom-left + a meta column + a CTA column. Designed for the "tonight
@@ -131,10 +132,10 @@ export default function HemFocal({ entry }: Props) {
 
         <div className="cta">
           {entry.kind === 'episode' && days <= 0 && (
-            <MarkEpisodeSeenButton tmdbId={entry.tmdbId} season={entry.season} episode={entry.episode} className="btn" />
+            <MarkEpisodeSeenButton tmdbId={entry.tmdbId} season={entry.season} episode={entry.episode} className={buttonClass()} />
           )}
-          <Link href={href} className={entry.kind === 'episode' && days <= 0 ? 'btn btn-ghost' : 'btn'}>{isMovie ? 'Öppna filmen' : 'Öppna serien'}</Link>
-          <Link href="/calendar/" className="btn btn-ghost btn-sm">Se hela veckan</Link>
+          <Link href={href} className={buttonClass({ variant: entry.kind === 'episode' && days <= 0 ? 'ghost' : 'default' })}>{isMovie ? 'Öppna filmen' : 'Öppna serien'}</Link>
+          <Link href="/calendar/" className={buttonClass({ variant: 'ghost', size: 'sm' })}>Se hela veckan</Link>
         </div>
       </div>
     </article>

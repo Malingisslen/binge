@@ -18,7 +18,9 @@ import { formatKr } from '@/lib/formatKr';
 import { trackEvent } from '@/lib/analytics';
 import GuestBundleBox, { joinNames } from '@/components/pricing/GuestBundleBox';
 import MoneyFigure from '@/components/ui/MoneyFigure';
-import { Button } from '@/components/ui/Button';
+import { Button, buttonClass } from '@/components/ui/Button';
+import { cardClass } from '@/components/ui/Card';
+import { eyebrowClass } from '@/components/ui/Eyebrow';
 
 // /streamingkostnad/ — den interaktiva delen. Rubriken och introtexten renderas av
 // sidans serverkomponent så att de står i den statiska HTML:en.
@@ -85,7 +87,7 @@ export default function CostCalculator() {
           every row (plan round 2, decision 4). On phones the tier gets a row of its own. */}
       <div
         aria-hidden="true"
-        className={`hidden sm:grid ${ROW_COLUMNS} px-3 py-[6px] border-t border-rule-2 bg-bg-2 text-xxs font-bold uppercase tracking-[0.06em] text-ink-3`}
+        className={`hidden sm:grid ${ROW_COLUMNS} px-3 py-[6px] border-t border-rule-2 ${eyebrowClass({ className: 'bg-bg-2' })}`}
       >
         <span>Tjänst</span>
         <span>Nivå</span>
@@ -112,7 +114,7 @@ export default function CostCalculator() {
                   aria-label={`Nivå för ${p.name}`}
                   value={selection[p.id] ?? ''}
                   onChange={e => chooseTier(p.id, e.target.value)}
-                  className="col-span-2 row-start-2 sm:col-span-1 sm:row-start-1 sm:col-start-2 w-full min-w-0 text-xs border border-rule rounded-sm bg-surface text-ink px-1 py-[3px]"
+                  className="select col-span-2 row-start-2 sm:col-span-1 sm:row-start-1 sm:col-start-2 w-full min-w-0"
                 >
                   <option value="">Vet inte</option>
                   {p.tiers.map(t => (
@@ -153,7 +155,7 @@ export default function CostCalculator() {
 
       <div
         data-testid="cost-bar"
-        className="sticky bottom-0 max-[980px]:bottom-[calc(64px_+_env(safe-area-inset-bottom,0px))] z-20 mt-6 bg-surface border border-rule rounded-sm px-3 py-[10px] flex flex-wrap items-center justify-between gap-3"
+        className={cardClass('sticky bottom-0 max-[980px]:bottom-[calc(64px_+_env(safe-area-inset-bottom,0px))] z-20 mt-6 px-3 py-[10px] flex flex-wrap items-center justify-between gap-3')}
       >
         <div className="flex-1 min-w-[12rem] max-w-[360px]" aria-live="polite">
           {result.paidCount > 0 ? (
@@ -164,7 +166,7 @@ export default function CostCalculator() {
           )}
         </div>
         {uid ? (
-          <Link href="/settings/" className="btn btn-ghost btn-sm">
+          <Link href="/settings/" className={buttonClass({ variant: 'ghost', size: 'sm' })}>
             Ändra dina tjänster
           </Link>
         ) : (

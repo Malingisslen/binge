@@ -15,6 +15,7 @@ import { providerHubCopy } from '@/lib/seo/providerHubCopy';
 import { leavingHubHref } from '@/lib/seo/hubLinks';
 import type { TMDBSearchResult } from '@/types';
 import { Button } from '@/components/ui/Button';
+import { cardClass } from '@/components/ui/Card';
 
 type Tab = 'new' | 'movies' | 'tv';
 
@@ -149,7 +150,7 @@ export default function ProviderPageClient({
         </div>
       )}
 
-      <div className="bg-surface border border-rule rounded-sm">
+      <div className={cardClass()}>
         <TitleGrid items={allResults} loading={isLoading && allResults.length === 0} />
         <div className="px-3 py-[6px] border-t border-rule">
           <JustWatchCredit />

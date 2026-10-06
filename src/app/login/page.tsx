@@ -13,6 +13,9 @@ import { takeNextPath } from '@/lib/nextPath';
 import { dropStalePendingAdd } from '@/lib/pendingAdd';
 import { needsOnboarding } from '@/lib/onboarding';
 import { MAX_DISPLAY_NAME } from '@/lib/clampText';
+import { fieldClass } from '@/components/ui/Field';
+import { cardClass } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
 
 /**
  * BIN-1169: the error codes whose text is the same whichever way the visitor signed in.
@@ -156,7 +159,7 @@ export default function LoginPage() {
 
   return (
     <div className="flex items-center justify-center min-h-[60vh]">
-      <div className="bg-surface border border-rule rounded-sm px-8 py-6 max-w-[340px] w-full">
+      <div className={cardClass('px-8 py-6 max-w-[340px] w-full')}>
         <div className="text-center mb-4">
           <h1 className="inline-flex items-center gap-2 text-2xl font-extrabold tracking-[-0.04em] text-ink">
             <BrandMark size={24} />
@@ -167,13 +170,13 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <button
+        <Button
           onClick={handleGoogle}
           disabled={loading}
-          className="w-full px-4 py-2 bg-acc-deep text-on-acc border-none rounded-sm cursor-pointer font-[inherit] text-base font-semibold hover:bg-acc-deep-hover disabled:opacity-50 mb-2"
+          variant="acc" className="w-full disabled:opacity-50 mb-2"
         >
           Logga in med Google
-        </button>
+        </Button>
 
         {/* BIN-275/348: browse-wrap consent + 13+ age notice at the Google entry
             point. Continuing past this records terms acceptance + age confirmation
@@ -204,7 +207,7 @@ export default function LoginPage() {
               maxLength={MAX_DISPLAY_NAME}
               value={name}
               onChange={e => setName(e.target.value)}
-              className="w-full px-2 py-[6px] mb-2 text-base border border-rule rounded-sm bg-surface font-[inherit] outline-none focus:border-acc-deep"
+              className={fieldClass({ className: 'w-full mb-2' })}
             />
           )}
           <input
@@ -214,7 +217,7 @@ export default function LoginPage() {
             value={email}
             onChange={e => setEmail(e.target.value)}
             required
-            className="w-full px-2 py-[6px] mb-2 text-base border border-rule rounded-sm bg-surface font-[inherit] outline-none focus:border-acc-deep"
+            className={fieldClass({ className: 'w-full mb-2' })}
           />
           <input
             type="password"
@@ -224,7 +227,7 @@ export default function LoginPage() {
             onChange={e => setPassword(e.target.value)}
             required
             minLength={mode === 'register' ? 8 : 6}
-            className="w-full px-2 py-[6px] mb-2 text-base border border-rule rounded-sm bg-surface font-[inherit] outline-none focus:border-acc-deep"
+            className={fieldClass({ className: 'w-full mb-2' })}
           />
           {mode === 'register' && passwordStrength && (
             <PasswordStrengthMeter strength={passwordStrength} />

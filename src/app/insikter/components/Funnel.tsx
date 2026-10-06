@@ -4,6 +4,8 @@ import type { MetricKey } from '../metrics/types';
 import { DATA_RESOLVERS } from '../metrics/resolvers';
 import { METRICS } from '../metrics/catalog';
 import { useInsightsContext } from '../state/InsightsContext';
+import { eyebrowClass } from '@/components/ui/Eyebrow';
+import { cardClass } from '@/components/ui/Card';
 
 /** Stacked descending funnel bars (e.g. onboarding step drop-off). */
 export function Funnel({ metricKey }: { metricKey: MetricKey }) {
@@ -15,8 +17,8 @@ export function Funnel({ metricKey }: { metricKey: MetricKey }) {
   const max = steps[0]?.count ?? 0;
 
   return (
-    <div className="bg-surface border border-rule rounded-md p-3">
-      <div className="text-xs uppercase tracking-wide text-ink-3 mb-2">{label}</div>
+    <div className={cardClass('p-3')}>
+      <div className={eyebrowClass({ size: 'xs', className: 'mb-2' })}>{label}</div>
       {steps.length === 0 ? (
         <div className="text-sm text-ink-3 py-2">{value.missing ?? 'Ingen data'}</div>
       ) : (

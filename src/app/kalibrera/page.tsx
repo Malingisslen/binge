@@ -11,6 +11,8 @@ import { getTrending, posterUrl, backdropUrl, isAddableMediaType } from '@/lib/t
 import type { TMDBSearchResult } from '@/types';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { LoadingView } from '@/components/ui/LoadingView';
+import { Button } from '@/components/ui/Button';
+import { cardClass } from '@/components/ui/Card';
 
 const ROUND_SIZE = 10;
 
@@ -105,18 +107,18 @@ function KalibreraContent() {
       )}
 
       {done && (
-        <div className="bg-surface border border-rule rounded-sm p-4">
+        <div className={cardClass('p-4')}>
           <div className="text-sm font-semibold mb-1">Klar.</div>
           <div className="text-xs text-ink-3 mb-3">
             {Object.keys(votes).length} av {pool.length} svar — resten räknades som &quot;vet inte&quot;.
           </div>
-          <button
+          <Button
             onClick={submit}
             disabled={saving}
-            className="px-3 py-[5px] bg-acc-deep text-on-acc rounded-sm text-xs font-semibold cursor-pointer border-none disabled:opacity-50"
+            variant="acc" size="sm" className="disabled:opacity-50"
           >
             {saving ? 'Sparar…' : 'Spara och gå till startsidan'}
-          </button>
+          </Button>
         </div>
       )}
     </div>
@@ -139,7 +141,7 @@ function CalibrationCard({
   const year = (item.release_date ?? item.first_air_date ?? '').slice(0, 4);
 
   return (
-    <div className="bg-surface border border-rule rounded-sm overflow-hidden">
+    <div className={cardClass('overflow-hidden')}>
       <div className="text-xxs text-ink-3 px-3 py-[4px] border-b border-rule-2">
         {progress.current}/{progress.total}
       </div>
@@ -166,25 +168,25 @@ function CalibrationCard({
         {item.overview || <span className="text-ink-3 italic">Ingen beskrivning.</span>}
       </p>
       <div className="flex gap-1 px-3 py-2 border-t border-rule-2">
-        <button
+        <Button
           onClick={() => onVote('down')}
-          className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-[6px] border border-rule rounded-sm text-xs font-semibold bg-surface cursor-pointer hover:bg-danger-soft hover:border-danger/30"
+          variant="ghost" size="sm" className="flex-1 inline-flex items-center justify-center gap-1"
         >
           <ThumbsDown size={12} /> Inte min grej
-        </button>
-        <button
+        </Button>
+        <Button
           onClick={onSkip}
-          className="px-3 py-[6px] border border-rule rounded-sm text-xs bg-surface cursor-pointer text-ink-3"
+          variant="ghost" size="sm"
           title="Hoppa över"
         >
           Hoppa
-        </button>
-        <button
+        </Button>
+        <Button
           onClick={() => onVote('up')}
-          className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-[6px] border border-acc-deep rounded-sm text-xs font-semibold bg-acc-deep text-on-acc cursor-pointer hover:bg-acc-deep-hover"
+          variant="acc" size="sm" className="flex-1 inline-flex items-center justify-center gap-1"
         >
           <ThumbsUp size={12} /> Gillar
-        </button>
+        </Button>
       </div>
     </div>
   );

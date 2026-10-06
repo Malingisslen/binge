@@ -8,6 +8,7 @@ import { loadGuestSelection, saveGuestSelection, type GuestSelection } from '@/l
 import { trackEvent } from '@/lib/analytics';
 import GuestBundleBox from '@/components/pricing/GuestBundleBox';
 import MoneyFigure from '@/components/ui/MoneyFigure';
+import { cardClass } from '@/components/ui/Card';
 
 // Startsidans gästdemo (Malins val 3B). Monteras bara i den gren av HomePageClient
 // där auth löst till utloggad — aldrig i den förrenderade auth-laddningsgrenen och
@@ -47,7 +48,7 @@ export default function GuestCostDemo() {
 
   return (
     <section className="max-w-[1000px] mx-auto px-4 pt-8" aria-labelledby="guest-cost-heading">
-      <div className="bg-surface border border-rule rounded-sm px-4 py-3">
+      <div className={cardClass('px-4 py-3')}>
         <h2 id="guest-cost-heading" className="text-xl font-semibold text-ink m-0">
           Vad betalar du för streaming?
         </h2>

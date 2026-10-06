@@ -10,6 +10,7 @@ import { useDateRange } from './state/useDateRange';
 import { useInsightsData } from './state/useInsightsData';
 import { InsightsProvider } from './state/InsightsContext';
 import { Button } from '@/components/ui/Button';
+import { eyebrowClass } from '@/components/ui/Eyebrow';
 import {
   Toolbar, MetricGrid, MetricTile, TimeSeriesChart, Donut, Funnel,
   Histogram, TopList, ExplainDrawer,
@@ -18,7 +19,7 @@ import {
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="mt-7">
-      <h2 className="text-base font-semibold uppercase tracking-wide text-ink-3 mb-2">{title}</h2>
+      <h2 className={eyebrowClass({ size: 'xs', className: 'mb-2' })}>{title}</h2>
       {children}
     </section>
   );

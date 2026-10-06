@@ -52,6 +52,9 @@ import {
 } from '@/lib/watchlist/libraryHoldCopy';
 import type { WatchStatus, WatchlistItem } from '@/types';
 import { Button } from '@/components/ui/Button';
+import { eyebrowClass } from '@/components/ui/Eyebrow';
+import { thClass } from '@/components/ui/tableHead';
+import { cardClass } from '@/components/ui/Card';
 
 // BIN-560 Phase 4: selection/next-air state is keyed by the composite doc id
 // `mediaTypeDocId(mediaType, tmdbId)`, not bare tmdbId — a movie and a TV show
@@ -410,7 +413,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
 
       {(providerFilter || behindFilterActive) && (
         <div className="chip acc" style={{ marginTop: 18, padding: '6px 12px', display: 'inline-flex', gap: 8 }}>
-          <span style={{ fontSize: 11, letterSpacing: 0.12, textTransform: 'uppercase' }}>
+          <span className={eyebrowClass({ size: 'xs', tone: 'acc' })}>
             filter:
           </span>
           {providerFilter && (
@@ -494,7 +497,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
               autoCapitalize="off"
               style={{
                 background: 'transparent', border: 0,
-                fontSize: 11.5,
+                fontSize: 'var(--fs-xs)',
                 color: 'var(--ink)', outline: 'none', width: 140,
               }}
             />
@@ -515,7 +518,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
               // Sitter på en is-on (mörk) chip → ljus badge.
               <span style={{
                 background: 'var(--bg)', color: 'var(--ink)',
-                fontSize: 10, fontWeight: 700, borderRadius: 20, padding: '0 6px', lineHeight: '15px',
+                fontSize: 'var(--fs-xxs)', fontWeight: 700, borderRadius: 20, padding: '0 6px', lineHeight: '15px',
               }}>
                 {activeFilterCount}
               </span>
@@ -577,31 +580,31 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
         <div className="flex items-center gap-2 mb-2 px-2 py-[5px] bg-acc-deep/10 border border-acc-deep/20 rounded-sm">
           <span className="text-xs text-ink-2">{pluralSv(selected.size, 'markerad', 'markerade')}</span>
           {status === 'sedd' && (
-            <button
+            <Button
               onClick={async () => {
                 await Promise.all(displayItems.filter(i => selected.has(keyOf(i))).map(i => updateStatus(i.mediaType, i.tmdbId, 'vill_se')));
                 setSelected(new Set());
               }}
-              className="px-2 py-[2px] text-xs border-none rounded-sm cursor-pointer bg-acc-deep text-on-acc font-[inherit]"
+              variant="acc" size="sm"
             >
               Flytta till Vill se
-            </button>
+            </Button>
           )}
           {/* BIN-168: bulk "Avbryt" på serievyn (/my/series). Avbruten är ett
               giltigt slutläge för serier man gett upp — tidigare gick bara att
               massradera dem, inte avbryta. Skopad till 'mina' så den inte dyker
               upp på sedda filmer (terminalt) eller redan avbrutna. */}
           {status === 'mina' && (
-            <button
+            <Button
               onClick={async () => {
                 await Promise.all(displayItems.filter(i => selected.has(keyOf(i))).map(i => updateStatus(i.mediaType, i.tmdbId, 'avbruten')));
                 setSelected(new Set());
               }}
-              className="px-2 py-[2px] text-xs border border-rule rounded-sm cursor-pointer bg-surface text-ink-2 font-[inherit]"
+              variant="ghost" size="sm"
               title="Markera valda serier som avbrutna"
             >
               Avbryt
-            </button>
+            </Button>
           )}
           <button
             onClick={() => { if (selected.size > 0) setConfirmDelete(displayItems.filter(i => selected.has(keyOf(i)))); }}
@@ -609,12 +612,12 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
           >
             Ta bort
           </button>
-          <button
+          <Button
             onClick={() => setSelected(new Set())}
-            className="px-2 py-[2px] text-xs border border-rule rounded-sm cursor-pointer bg-surface text-ink-3 font-[inherit] ml-auto"
+            variant="ghost" size="sm" className="ml-auto"
           >
             Avmarkera
-          </button>
+          </Button>
         </div>
       )}
 
@@ -640,9 +643,9 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
 
       <div className={filterOpen ? 'grid grid-cols-1 md:grid-cols-[220px_1fr] gap-5 mt-4' : 'mt-4'}>
         {filterOpen && (
-          <aside className="bg-surface border border-rule rounded-md p-4 self-start">
+          <aside className={cardClass('p-4 self-start')}>
             <div className="flex items-center justify-between mb-3">
-              <span className="text-xs uppercase tracking-[0.5px] text-ink-3">Filter</span>
+              <span className={eyebrowClass({ size: 'xs' })}>Filter</span>
               <button
                 type="button"
                 onClick={() => setFilterOpen(false)}
@@ -705,7 +708,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
             ))}
             {hasMore && <div ref={sentinelRef} aria-hidden className="col-span-full h-px" />}
             {displayItems.length === 0 && (
-              <div className="col-span-full bg-surface border border-rule rounded-sm px-3 py-4 text-center text-sm text-ink-3">
+              <div className={cardClass('col-span-full px-3 py-4 text-center text-sm text-ink-3')}>
                 {emptyMessage}
               </div>
             )}
@@ -713,11 +716,11 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
         )
       ) : view === 'table' ? (
         <>
-        <div className="bg-surface border border-rule rounded-sm overflow-x-auto">
+        <div className={cardClass('overflow-x-auto')}>
           <table className="w-full border-collapse">
             <thead>
               <tr>
-                <th className="px-2 py-[6px] border-b border-rule-2 bg-cal-header w-[28px]">
+                <th className={thClass('px-2 w-[28px]')}>
                   <input
                     type="checkbox"
                     aria-label="Välj alla"
@@ -729,14 +732,14 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                     className="accent-acc-deep w-[13px] h-[13px] cursor-pointer"
                   />
                 </th>
-                <th className="text-left px-2 py-[6px] text-xxs text-ink-3 font-semibold uppercase tracking-[0.5px] border-b border-rule-2 bg-cal-header w-[44px]"></th>
-                <th className="text-left px-2 py-[6px] text-xxs text-ink-3 font-semibold uppercase tracking-[0.5px] border-b border-rule-2 bg-cal-header">Titel</th>
-                {showTypeCol && <th className="text-left px-2 py-[6px] text-xxs text-ink-3 font-semibold uppercase tracking-[0.5px] border-b border-rule-2 bg-cal-header">Typ</th>}
-                <th className="text-left px-2 py-[6px] text-xxs text-ink-3 font-semibold uppercase tracking-[0.5px] border-b border-rule-2 bg-cal-header">År</th>
-                {showAddedCol && <th className="hidden md:table-cell text-left px-2 py-[6px] text-xxs text-ink-3 font-semibold uppercase tracking-[0.5px] border-b border-rule-2 bg-cal-header">Tillagd</th>}
-                {showWatchedCol && <th className="hidden md:table-cell text-left px-2 py-[6px] text-xxs text-ink-3 font-semibold uppercase tracking-[0.5px] border-b border-rule-2 bg-cal-header">Sedd</th>}
-                <th className="hidden lg:table-cell text-left px-2 py-[6px] text-xxs text-ink-3 font-semibold uppercase tracking-[0.5px] border-b border-rule-2 bg-cal-header">Tjänster</th>
-                <th className="text-left px-2 py-[6px] text-xxs text-ink-3 font-semibold uppercase tracking-[0.5px] border-b border-rule-2 bg-cal-header">Betyg</th>
+                <th className={thClass('text-left px-2 w-[44px]')}></th>
+                <th className={thClass('text-left px-2')}>Titel</th>
+                {showTypeCol && <th className={thClass('text-left px-2')}>Typ</th>}
+                <th className={thClass('text-left px-2')}>År</th>
+                {showAddedCol && <th className={thClass('hidden md:table-cell text-left px-2')}>Tillagd</th>}
+                {showWatchedCol && <th className={thClass('hidden md:table-cell text-left px-2')}>Sedd</th>}
+                <th className={thClass('hidden lg:table-cell text-left px-2')}>Tjänster</th>
+                <th className={thClass('text-left px-2')}>Betyg</th>
               </tr>
             </thead>
             <tbody>
@@ -828,7 +831,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
         {hasMore && <div ref={sentinelRef} aria-hidden className="h-px" />}
         </>
       ) : (
-        <div className="bg-surface border border-rule rounded-sm">
+        <div className={cardClass()}>
           <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-[10px] md:gap-[7px] px-3 py-2">
             {visibleItems.map(item => {
               const poster = posterUrl(item.posterPath, 'w342');
@@ -939,7 +942,7 @@ function Segmented<T extends string>({
             style={{
               padding: o.label ? '5px 11px' : '6px 9px',
               fontFamily: 'inherit',
-              fontSize: 12.5,
+              fontSize: 'var(--fs-sm)',
               border: 0,
               borderLeft: i > 0 ? '1px solid var(--rule)' : undefined,
               background: active ? 'var(--ink)' : 'transparent',
@@ -1026,7 +1029,7 @@ export function LibrarySubnav({ status, activeKey }: { status?: WatchStatus; act
       {open && (
         <nav
           aria-label="Biblioteksvyer"
-          className="absolute left-0 top-full mt-[3px] bg-surface border border-rule rounded-md shadow-pop min-w-[180px] z-30 py-1"
+          className={cardClass('absolute left-0 top-full mt-[3px] shadow-pop min-w-[180px] z-30 py-1')}
         >
           {LIBRARY_VIEWS.map(view => {
             const active = isActive(view);
