@@ -2451,7 +2451,7 @@
         {
           "from": "movie-tv-page",
           "to": "tmdb-api",
-          "payload": "getMovie/getTVShow(id) — full detail incl. credits, videos, watch/providers.SE, recommendations (pre-rendered for top-N via generateStaticParams; catch-all client fetch for long tail)",
+          "payload": "getMovie/getTVShow(id) — full detail incl. credits, videos, watch/providers.SE, recommendations (catch-all client fetch for long tail)",
           "transport": "fetch (TMDB)",
           "verified": true
         },
@@ -3068,7 +3068,7 @@
         {
           "from": "static-passive-pages",
           "to": "hub-seed-lib",
-          "payload": "SEO WP1 (build-time only, static export): '/', '/films', '/series' server components build-fetch one TMDB list page (getTrending('all','week') for '/'; getPopularMovies(1)/getPopularTV(1) for '/films'/'/series') and run seedHubItems() — drops person results + non-Latin-title items (stricter than the SEO pre-render filter, so a seed can never link a de-indexed title), caps ~10-20 — to seed the client grid's initial state as a prop; exported static HTML now carries crawlable <a href=\"/movie|tv/{id}/\"> links, hydration-safe (client filters are no-ops on the seed)",
+          "payload": "SEO WP1 (build-time only, static export): '/', '/films', '/series' server components build-fetch one TMDB list page (getTrending('all','week') for '/'; getPopularMovies(1)/getPopularTV(1) for '/films'/'/series') and run seedHubItems() — drops person results + non-Latin-title items, caps ~10-20 — to seed the client grid's initial state as a prop; exported static HTML now carries crawlable <a href=\"/movie|tv/{id}/\"> links, hydration-safe (client filters are no-ops on the seed)",
           "transport": "build-time fetch (TMDB) + method call",
           "verified": true
         }
