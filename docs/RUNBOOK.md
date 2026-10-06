@@ -576,8 +576,7 @@ längre kunna fälla bygget efter 2026-06 (AbortSignal.timeout i
    pre-rendren fick färre id:n än täckningsgolvet tillåter och bygget fälls hellre
    än att ersätta kärnan med fallback-listan. Felmeddelandet namnger utvägen.
    - **Vanligaste orsaken:** `.tmdb-cache` evakuerad ur actions/cache ⇒ urvalet
-     måste härledas om från kallt, under 15-minuters räddningstaket. För `movie`
-     och `tv` krävs att TMDB dessutom stryper. Gäller vid varje kall start, inte bara första deployen: även
+     måste härledas om från kallt, under 15-minuters räddningstaket. Gäller vid varje kall start, inte bara första deployen: även
      en `MANIFEST_VERSION`-bump eller ett korrupt manifest landar här.
      Åtgärd: `gh workflow run deploy.yml -f full_refresh=true` — det ger
      150-minuters härledningstak och 175-minuters steg-tak.

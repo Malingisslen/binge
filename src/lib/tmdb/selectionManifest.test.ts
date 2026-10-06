@@ -195,8 +195,6 @@ describe('resolvedIds — frön kan aldrig evakueras', () => {
     expect(resolvedIds(m, [2, 3])).toEqual([1, 2, 3]);
   });
 
-  // Frönas hela uppgift: de 117 sidor Google har i sitt index ska byggas även
-  // om actions/cache evakuerats och manifestet är borta.
   it('ger frö-id:na även utan manifest', () => {
     expect(resolvedIds(null, [7, 8])).toEqual([7, 8]);
   });
@@ -300,7 +298,7 @@ describe('täckningsgolvet', () => {
   // föregående manifest kan per konstruktion aldrig fyra: spärrhaken behåller
   // allt, så urvalet krymper aldrig. Katastrofen är den motsatta — manifestet
   // borta (evakuerad actions/cache) OCH härledningen misslyckad, alltså inget
-  // att jämföra mot och ~150 frö/fallback-id kvar. Det MÅSTE fälla bygget.
+  // att jämföra mot. Det MÅSTE fälla bygget.
   it('fäller ett tunt urval även när det inte finns något tidigare att jämföra mot', () => {
     expect(floorFor('movie', 0)).toBe(SELECTION_ABSOLUTE_FLOOR.movie);
     expect(() => assertCoverageFloor('movie', 150, 0)).toThrow(/\[selection\] movie/);
