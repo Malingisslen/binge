@@ -94,13 +94,12 @@ export function shouldRetryQuery(failureCount: number, error: unknown): boolean 
 /**
  * Central React Query-klient med global felhantering.
  *
- * Tidigare blev fel i bakgrundsfetcher tysta — toast saknades, inget
- * spårades i Plausible, och ingen logg hjälpte oss ta reda på varifrån
- * felet kom. Nu:
+ * Tidigare blev fel i bakgrundsfetcher tysta — toast saknades och ingen
+ * logg hjälpte oss ta reda på varifrån felet kom. Nu:
  *
  * 1. console.error() med queryKey/mutationKey så DevTools visar scope
- * 2. trackEvent('query_error', { scope, kind }) — icke-PII-telemetri till
- *    Plausible (vi mäter bara vilken sub-query som fallerar, inte datat)
+ * 2. trackEvent('query_error', { scope, kind }) — skickas inte sedan BIN-1438:
+ *    query_error är inte bland händelserna analytics.ts räknar
  * 3. Krok för framtida Sentry.captureException — när 8.1 landar byter vi
  *    bara ut reportError() mot Sentry.captureException + tags
  *

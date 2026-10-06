@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { DATA_RESOLVERS } from './resolvers';
+import { DATA_RESOLVERS, MISSING } from './resolvers';
 import type { InsightsData } from '../insights.types';
 
 function emptyData(over: Partial<InsightsData> = {}): InsightsData {
@@ -7,13 +7,19 @@ function emptyData(over: Partial<InsightsData> = {}): InsightsData {
     generatedAt: '2026-06-02T00:00:00.000Z',
     range: { preset: '30d', from: '2026-05-03', to: '2026-06-02' },
     rollup: null,
-    plausible: null,
+    events: null,
+    eventsSince: null,
     askBinge: null,
     window: null,
     partial: false,
     ...over,
   };
 }
+
+const eventsData = (over: Partial<NonNullable<InsightsData['events']>> = {}): InsightsData['events'] => ({
+  counts: {}, props: {}, daily: [], days: 1,
+  ...over,
+});
 
 const askBingeData = (over: Partial<NonNullable<InsightsData['askBinge']>> = {}): InsightsData['askBinge'] => ({
   searches: 0, zeroResults: 0, lowConfidence: 0, chipRemovals: 0,
@@ -66,8 +72,18 @@ describe('scalar resolvers fall back to NaN when their source is missing', () =>
     expect(DATA_RESOLVERS.totalUsers(d)).toEqual({ kind: 'scalar', value: 42 });
   });
 
-  it('avgSessionDuration is NaN with no plausible bundle', () => {
-    expect(DATA_RESOLVERS.avgSessionDuration(emptyData())).toEqual({ kind: 'scalar', value: NaN });
+  it('web-traffic metrics say "Ingen källa" even when events were counted', () => {
+    const d = emptyData({ events: eventsData({ counts: { signed_up: 3 } }) });
+    for (const key of ['avgSessionDuration', 'pageViews'] as const) {
+      expect(DATA_RESOLVERS[key](d), key).toEqual({ kind: 'scalar', value: NaN, missing: 'Ingen källa' });
+    }
+    for (const key of ['topPages', 'topReferrers', 'signupLandingPages'] as const) {
+      expect(DATA_RESOLVERS[key](d), key).toEqual({ kind: 'breakdown', entries: [], missing: 'Ingen källa' });
+    }
+  });
+
+  it('the three missing reasons read differently from each other', () => {
+    expect(new Set(Object.values(MISSING)).size).toBe(Object.keys(MISSING).length);
   });
 });
 
@@ -97,24 +113,23 @@ describe('statusDistribution resolves to a Swedish-labelled breakdown', () => {
 describe('onboardingFunnel builds funnel steps with pctOfStart', () => {
   it('orders by step and computes pct relative to the first step', () => {
     const d = emptyData({
-      plausible: {
-        visitors: 0, pageviews: 0, avgVisitDurationSec: 0, bounceRatePct: 0,
-        visitorsTimeseries: [], topPages: [], topReferrers: [],
-        goals: { signed_up: 0, title_added_watchlist: 0, review_created: 0, advisor_pause_taken: 0, donate_clicked: 0 },
-        signupsTimeseries: [],
-        onboardingFunnel: [{ step: 3, count: 20 }, { step: 1, count: 100 }, { step: 2, count: 50 }],
-        signinMethodSplit: { google: 0, email: 0 },
-      },
+      events: eventsData({ props: { onboarding_completed: { step_reached: { '3': 20, '1': 100, '2': 50 } } } }),
     });
     const v = DATA_RESOLVERS.onboardingFunnel(d);
     expect(v.kind).toBe('funnel');
     if (v.kind !== 'funnel') return;
+    expect(v.steps.map((s) => s.name)).toEqual(['Steg 1', 'Steg 2', 'Steg 3']);
     expect(v.steps.map((s) => s.count)).toEqual([100, 50, 20]);
     expect(v.steps.map((s) => s.pctOfStart)).toEqual([100, 50, 20]);
   });
 
-  it('is an empty funnel when plausible is missing', () => {
-    expect(DATA_RESOLVERS.onboardingFunnel(emptyData())).toEqual({ kind: 'funnel', steps: [] });
+  it('says "Ingen räkning i intervallet" when nothing was counted', () => {
+    expect(DATA_RESOLVERS.onboardingFunnel(emptyData()))
+      .toEqual({ kind: 'funnel', steps: [], missing: 'Ingen räkning i intervallet' });
+  });
+
+  it('is an empty funnel with no missing reason when days were counted but no step reached', () => {
+    expect(DATA_RESOLVERS.onboardingFunnel(emptyData({ events: eventsData() }))).toEqual({ kind: 'funnel', steps: [] });
   });
 });
 
@@ -210,14 +225,6 @@ describe('Delning och mätning resolvers', () => {
     mediaTypeSplit: { movie: 0, tv: 0 },
     ratingsHistogram: [], topTitles: [], topProviders: [], topGenres: [],
   });
-  const plausibleWith = (over: Partial<NonNullable<InsightsData['plausible']>>): InsightsData['plausible'] => ({
-    visitors: 0, pageviews: 0, avgVisitDurationSec: 0, bounceRatePct: 0,
-    visitorsTimeseries: [], topPages: [], topReferrers: [],
-    goals: { signed_up: 0, title_added_watchlist: 0, review_created: 0, advisor_pause_taken: 0, donate_clicked: 0 },
-    signupsTimeseries: [], onboardingFunnel: [], signinMethodSplit: { google: 0, email: 0 },
-    ...over,
-  });
-
   it('active users read the rollup snapshot, and are NaN on a rollup written before the field', () => {
     const d = emptyData({ rollup: rollupWith({ d7: 2, d30: 3 }) });
     expect(DATA_RESOLVERS.activeUsers7d(d)).toEqual({ kind: 'scalar', value: 2 });
@@ -225,27 +232,91 @@ describe('Delning och mätning resolvers', () => {
     expect(DATA_RESOLVERS.activeUsers7d(emptyData({ rollup: rollupWith() }))).toEqual({ kind: 'scalar', value: NaN });
   });
 
-  it('providerClicks is NaN when the deployed function predates the event', () => {
-    expect(DATA_RESOLVERS.providerClicks(emptyData({ plausible: plausibleWith({}) }))).toEqual({ kind: 'scalar', value: NaN });
-    const d = emptyData({ plausible: plausibleWith({ goals: { signed_up: 0, title_added_watchlist: 0, review_created: 0, advisor_pause_taken: 0, donate_clicked: 0, provider_clicked: 7 } }) });
+  it('providerClicks is not-counted when nothing was counted, 0 when counted days lack the event', () => {
+    expect(DATA_RESOLVERS.providerClicks(emptyData()))
+      .toEqual({ kind: 'scalar', value: NaN, missing: 'Ingen räkning i intervallet' });
+    expect(DATA_RESOLVERS.providerClicks(emptyData({ events: eventsData() }))).toEqual({ kind: 'scalar', value: 0 });
+    const d = emptyData({ events: eventsData({ counts: { provider_clicked: 7 } }) });
     expect(DATA_RESOLVERS.providerClicks(d)).toEqual({ kind: 'scalar', value: 7 });
   });
 
   it('providerClicksByType labels offer types in Swedish, largest first', () => {
-    const d = emptyData({ plausible: plausibleWith({ providerClicksByType: { rent: 2, subscription: 9 } }) });
+    const d = emptyData({ events: eventsData({ props: { provider_clicked: { offerType: { rent: 2, subscription: 9 } } } }) });
     expect(DATA_RESOLVERS.providerClicksByType(d)).toEqual({
       kind: 'breakdown',
       entries: [{ label: 'Abonnemang', value: 9 }, { label: 'Hyra', value: 2 }],
     });
   });
+});
 
-  it('signupLandingPages shows sign-ups per entry page next to that page’s visits', () => {
+describe('eventStats resolvers (BIN-1438) — inte mätt är aldrig noll', () => {
+  it('every event-backed metric says "Ingen räkning i intervallet" when the range has no eventStats docs', () => {
+    const missing = 'Ingen räkning i intervallet';
+    for (const key of ['providerClicks', 'shareClicks', 'priceCheckTotals', 'priceCheckSaves', 'advisorPauses'] as const) {
+      expect(DATA_RESOLVERS[key](emptyData()), key).toEqual({ kind: 'scalar', value: NaN, missing });
+    }
+    for (const key of ['signinMethodSplit', 'providerClicksByType', 'shareClicksBySurface'] as const) {
+      expect(DATA_RESOLVERS[key](emptyData()), key).toEqual({ kind: 'breakdown', entries: [], missing });
+    }
+    expect(DATA_RESOLVERS.signupsTrend(emptyData())).toEqual({ kind: 'series', points: [], missing });
+  });
+
+  it('a counted range carries no missing reason — a zero is a measured zero', () => {
+    const d = emptyData({ events: eventsData() });
+    for (const key of ['providerClicks', 'shareClicks', 'priceCheckTotals', 'priceCheckSaves', 'advisorPauses'] as const) {
+      expect(DATA_RESOLVERS[key](d), key).toEqual({ kind: 'scalar', value: 0 });
+    }
+  });
+
+  it('donateClicks reads "inte mätt" even with counted days — donate_clicked has no call site', () => {
+    const d = emptyData({ events: eventsData({ counts: { donate_clicked: 4 } }) });
+    expect(DATA_RESOLVERS.donateClicks(d)).toEqual({ kind: 'scalar', value: NaN, missing: 'inte mätt' });
+  });
+
+  it('advisorPauses reads advisor_action_taken with action=pause, not other actions', () => {
     const d = emptyData({
-      plausible: plausibleWith({ signupLandingPages: [{ page: '/movie/27205/', signups: 2, visitors: 40 }, { page: '/', signups: 1, visitors: 0 }] }),
+      events: eventsData({ props: { advisor_action_taken: { action: { pause: 3, resume: 5 } } } }),
     });
-    expect(DATA_RESOLVERS.signupLandingPages(d)).toEqual({
+    expect(DATA_RESOLVERS.advisorPauses(d)).toEqual({ kind: 'scalar', value: 3 });
+  });
+
+  it('signinMethodSplit reads the method prop of signed_in', () => {
+    const d = emptyData({ events: eventsData({ props: { signed_in: { method: { google: 4, email: 1 } } } }) });
+    expect(DATA_RESOLVERS.signinMethodSplit(d)).toEqual({
       kind: 'breakdown',
-      entries: [{ label: '/movie/27205/ · av 40 besök', value: 2 }, { label: '/', value: 1 }],
+      entries: [{ label: 'Google', value: 4 }, { label: 'E-post', value: 1 }],
+    });
+  });
+
+  it('signupsTrend has a point per day WITH a doc only — a missing day is not a 0', () => {
+    const d = emptyData({
+      events: eventsData({
+        daily: [
+          { date: '2026-10-01', counts: { signed_up: 2 } },
+          { date: '2026-10-03', counts: { provider_clicked: 1 } },
+        ],
+        days: 2,
+      }),
+    });
+    expect(DATA_RESOLVERS.signupsTrend(d)).toEqual({
+      kind: 'series',
+      points: [{ x: '2026-10-01', y: 2 }, { x: '2026-10-03', y: 0 }],
+    });
+  });
+
+  it('share and price-check tiles read their own events', () => {
+    const d = emptyData({
+      events: eventsData({
+        counts: { share_clicked: 6, price_check_total_shown: 9, price_check_save_clicked: 2 },
+        props: { share_clicked: { surface: { list: 1, title: 5 } } },
+      }),
+    });
+    expect(DATA_RESOLVERS.shareClicks(d)).toEqual({ kind: 'scalar', value: 6 });
+    expect(DATA_RESOLVERS.priceCheckTotals(d)).toEqual({ kind: 'scalar', value: 9 });
+    expect(DATA_RESOLVERS.priceCheckSaves(d)).toEqual({ kind: 'scalar', value: 2 });
+    expect(DATA_RESOLVERS.shareClicksBySurface(d)).toEqual({
+      kind: 'breakdown',
+      entries: [{ label: 'Titel', value: 5 }, { label: 'Lista', value: 1 }],
     });
   });
 });

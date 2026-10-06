@@ -109,6 +109,9 @@ Admin-SDK:s `Timestamp.fromMillis()`.
   Tidpunkten då du skickade en inbjudan går därför inte att få ut. Härled
   läsregeln:
   `grep -n -A 4 "match /users/{uid}/groupInvites/{groupId}" firestore.rules`
+- Räkningen av hur funktioner används, `eventStats/{YYYY-MM-DD}` (BIN-1438). Den är
+  inte per användare: varje dokument är en summa per dag utan koppling till vem som
+  gjorde något, så det finns inget i den som är ditt att exportera.
 
 ## Vad du får ut
 

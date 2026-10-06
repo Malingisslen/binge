@@ -162,7 +162,6 @@ Set via `firebase functions:secrets:set NAME` **before** deploying the function 
 | Secret | Used by | Notes |
 |---|---|---|
 | `INSIGHTS_TOKEN` | `/api/insights` | bearer token for admin-bypass |
-| `PLAUSIBLE_API_KEY`, `PLAUSIBLE_SITE_ID` | insights rollup | site id = `binge.nu` |
 | `TMDB_API_KEY` | `episodeReleaseNotify` etc. | same value as `NEXT_PUBLIC_TMDB_API_KEY`, but functions need it as a secret |
 | `OMDB_API_KEY` | `titleRatings` | OMDb free tier 1,000/day |
 | `MOTN_API_KEY` | `streamingOffersRefresh` | RapidAPI (Movie of the Night), free 100/day |
@@ -207,16 +206,12 @@ Firestore Console — rules forbid client writes to the field.
   provider uses it**, so the alias `1759 → 489` (`canonicalProviderId`) is zero-collision — it
   only catches old stored `watch/providers` payloads.
 
-## Plausible-mål för Insikter (BIN-1425)
+## Egen räkning för Insikter (BIN-1438)
 
-Insikter läser händelserna nedan ur Plausible. En händelse som inte är registrerad som mål
-(Site settings → Goals → Custom event) och vars egenskap inte är tillagd (Custom properties)
-ger tomma rutor, inte ett fel.
-
-| Mål | Egenskap som bryts ned |
-|---|---|
-| `provider_clicked` | `offerType` |
-| `share_clicked` | `surface`, `method` |
+Insikter läser händelserna ur `eventStats/{YYYY-MM-DD}`, som den anropbara `recordEvent`
+skriver. Det finns inget externt konto att konfigurera: ordförrådet (vilka händelser och
+egenskaper som räknas) står i `functions/src/eventStats/logic.ts`. Tills `recordEvent`,
+`apiInsights` och reglerna är driftsatta sväljer klienten felet.
 
 Aktiva användare och pushmärkningen ligger i `rollupInsights` och `sendPushToUser`, som
 driftsätts med `deploy.yml`:s `backend`-jobb (BIN-1426).

@@ -882,6 +882,25 @@ hittades. Profilens innehåll loggas aldrig.
   regel i `firestore.rules` matchar samlingen, så klienten kan varken läsa, ändra eller
   radera den. Kontoraderingen tar inte bort dokumentet; det gäller bara admin-konton.
 
+### Räkning av hur funktioner används → summor per dag, sparas tills vidare (BIN-1438, 2026-10-05)
+
+Den anropbara funktionen `recordEvent` (`functions/src/eventStats/`) lägger händelser
+från ett fast ordförråd — till exempel ett klick vidare till en tjänst eller en delning
+— till dagens summa i `eventStats/{YYYY-MM-DD}`. Dokumentet bär bara antal per händelse
+och per uppräknat egenskapsvärde; funktionen läser, loggar och skriver aldrig uid,
+IP-adress eller webbläsare. Härled ordförrådet:
+`git grep -n "export const EVENT_VOCABULARY" -- functions/src/eventStats/logic.ts`
+
+- **Personuppgifter:** inga i dokumenten. De sparas **tills vidare**, utan gallring.
+- **Export och radering:** ingår inte i exporten och rörs inte av kontoraderingen —
+  ingenting i dem är knutet till ett konto (se `docs/data-export-format.md`).
+- **Tekniska anropsloggar:** som vid alla anrop till en Cloud Function kan Googles
+  förfrågningsloggar för `recordEvent` innehålla IP-adressen. De ligger i Cloud
+  Loggings `_Default`-bucket med dess lagringstid (se avsnittet om admins uppslag ovan
+  för kommandot som läser den), med Google som personuppgiftsbiträde.
+- **Läsning:** bara `/api/insights` på servern; `firestore.rules` nekar klienter både
+  läsning och skrivning.
+
 ### Tillsammans-sessioner och notifikationer — schemalagt svep
 
 `retentionCleanup` raderar dagligen:
@@ -918,6 +937,10 @@ Policy ska omvärderas om:
 - **Moderation-runbook** (`docs/moderation.md`).
 
 ## Ändringslogg
+
+- **2026-10-05 (BIN-1438)** — Malins val "Egen räknare": Plausible är borttaget, och
+  Binge räknar själv ett fast urval händelser som summor per dag i `eventStats`. Se
+  avsnittet "Räkning av hur funktioner används" ovan.
 
 - **2026-09-27 (BIN-1317)** — `retentionCleanup` larmar nu admin-inkorgen (Malins val
   2026-09-27) när en körning loggar fel, när förra körningen aldrig blev klar — oavsett

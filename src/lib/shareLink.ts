@@ -1,7 +1,8 @@
 /**
- * Länken som delningsknappen lämnar ifrån sig. UTM-märkningen låter Plausible
- * skilja besök från en delad länk från direktbesök, per yta. robots.txt håller
+ * Länken som delningsknappen lämnar ifrån sig, UTM-märkt per yta. robots.txt håller
  * UTM-varianter utanför indexet, så märkningen skapar inga dubbletter hos Google.
+ * Ingenting i appen läser märkningen sedan Plausible togs bort (BIN-1438); härled
+ * läsarna med `git grep -n "utm_" -- src functions/src`.
  */
 
 export type ShareSurface = 'title' | 'list' | 'profile';

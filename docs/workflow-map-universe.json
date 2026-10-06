@@ -19,6 +19,7 @@
     "priceDropNotify",
     "reclaimOrphanFollows",
     "recordAskBinge",
+    "recordEvent",
     "retentionCleanup",
     "rollupInsights",
     "rotationReminderNotify",

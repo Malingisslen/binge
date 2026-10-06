@@ -68,7 +68,12 @@ export function MetricTile({ metricKey }: { metricKey: MetricKey }) {
         {def.label}
         {def.isNew && <span className="text-acc font-semibold">NY</span>}
       </div>
-      <div className="text-[22px] leading-tight font-semibold text-ink tabular-nums mt-0.5">{display}</div>
+      {value.missing ? (
+        <div className="text-sm leading-tight text-ink-3 mt-1.5">{value.missing}</div>
+      ) : (
+        <div className="text-[22px] leading-tight font-semibold text-ink tabular-nums mt-0.5">{display}</div>
+      )}
+      {def.source === 'events' && <div className="text-[11px] text-ink-3">händelser</div>}
       {sparkEl}
     </div>
   );

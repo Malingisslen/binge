@@ -32,7 +32,7 @@ export default function UserProfilePageClient({ username }: { username: string }
   // per rules bara läsbar för PUBLIKA profiler eller ägaren — INTE vänner. Så vi
   // skickar bara in uid när projektionen säger publik (card.isPublic) eller det
   // är min egen profil; annars skulle en vän-bara-profilvisning fyra två nekade
-  // count-queries → Sentry/Plausible-brus (och räkningen faller ändå till 0).
+  // count-queries → Sentry-brus (och räkningen faller ändå till 0).
   const countableUid = data && 'card' in data && (data.card.isPublic || profileUid === myUid)
     ? profileUid : null;
   // Watchlistan läses bara när profilen faktiskt är läsbar för mig. Att

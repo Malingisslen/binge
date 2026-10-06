@@ -173,7 +173,7 @@ without a link.
 
 Signals: EDPB guidelines on data-subject rights / erasure (Art.17) / portability
 (Art.20) — Binge ships export + erasure that must track shape changes; ePrivacy /
-cookie & analytics rulings (cookie-free Plausible / Swedish LEK); EU AI Act
+cookie & analytics rulings (cookie-free first-party counting / Swedish LEK); EU AI Act
 milestones, GPAI/transparency duties, AI-generated-content labelling (hits the
 Gemini "Ask Binge" feature); DSA scope reaching smaller UGC platforms; IMY
 enforcement + age-gate interpretation; TMDB/JustWatch attribution ToS changes; any
@@ -528,17 +528,13 @@ the ADR corpus under `docs/org/adr/`.
 ## 22. Data Analyst / BI
 **trend, compliance, tooling-frontier · medium · monthly · flag-only**
 
-Signals: Plausible script/feature changes that silently alter the typed
-`AnalyticsEvent` mapping; Plausible CE security advisories / pricing; privacy-analytics
-regulatory drift (the reason Binge chose Plausible over GA4); Firestore/BigQuery
+Signals: privacy-analytics regulatory drift (the reason Binge counts its own events in
+`eventStats` instead of using a third-party tool, BIN-1438); Firestore/BigQuery
 export + per-read cost-model changes affecting the daily `/insikter` rollup; Gemini
 changelog (Ask-Binge learning-loop telemetry).
 
 | Source | URL | status |
 |---|---|---|
-| Plausible changelog | https://plausible.io/changelog | live |
-| Plausible blog | https://plausible.io/blog | live |
-| Plausible releases | https://github.com/plausible/analytics/releases | live |
 | Firebase release notes | https://firebase.google.com/support/releases | live |
 | Gemini API changelog | https://ai.google.dev/gemini-api/docs/changelog | live |
 
@@ -690,7 +686,7 @@ $0/interactive constraint:
 | **Bot-blocked canonical sources** | ETSI (EN 301 549), Council of EU (CSA), Letterboxd (journal + import), Chromium Dash all 403 / JS-shell to WebFetch. Each has a verified sibling, but the *canonical* source needs a real-browser check. | Accessibility (2), Trust & Safety (12), PM (9), Support (19), Manual QA (20) |
 | **Cineasterna / library e-media has no dev surface** | B2B-to-library product; only a FAQ page to watch. The library-card wedge depends on coverage that shifts via municipal budget decisions, visible only through trade press (Biblioteksbladet). | Monetization (24), Localization (11) |
 | **No feed for the affiliate-infra "go-live" trigger** | Affiliate programs launch/change terms on vendor schedules with no aggregated feed; the empty `AFFILIATE_PROGRAMS` table can't tell when a partner becomes available. | Monetization (24), Vendor (23) |
-| **Plausible/analytics positioning is judgement, not a signal** | Whether cookie-free analytics stays consent-exempt is an interpretive legal read with no changelog — sits between Data Analyst (flag) and Legal (escalate). | Data Analyst (22), Legal (5) |
+| **Analytics positioning is judgement, not a signal** | Whether cookie-free analytics stays consent-exempt is an interpretive legal read with no changelog — sits between Data Analyst (flag) and Legal (escalate). | Data Analyst (22), Legal (5) |
 | **No outbound social integration to watch** | Community Manager has no platform-API source because none is wired; if sharing ships, a whole class of platform-policy watching appears overnight. | Community (18) |
 
 Common shape: **the highest-stakes external facts (TMDB terms, EU regulation,

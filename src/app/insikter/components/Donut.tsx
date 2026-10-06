@@ -41,7 +41,7 @@ export function Donut({ metricKey }: { metricKey: MetricKey }) {
     <div className="bg-surface border border-rule rounded-md p-3">
       <div className="text-[11px] uppercase tracking-wide text-ink-3 mb-2">{label}</div>
       {total === 0 ? (
-        <div className="text-sm text-ink-3 py-2">Ingen data</div>
+        <div className="text-sm text-ink-3 py-2">{value.missing ?? 'Ingen data'}</div>
       ) : (
         <div className="flex items-center gap-4">
           <svg width={104} height={104} viewBox="0 0 100 100" aria-hidden className="shrink-0">

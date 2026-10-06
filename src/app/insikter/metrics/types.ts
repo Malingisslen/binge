@@ -7,11 +7,12 @@
 
 export type MetricKey =
   // Översikt
-  | 'totalUsers' | 'newUsers' | 'activeVisitors' | 'totalTitlesTracked' | 'totalReviews' | 'titlesAdded'
+  | 'totalUsers' | 'newUsers' | 'totalTitlesTracked' | 'totalReviews' | 'titlesAdded'
   | 'activeUsers7d' | 'activeUsers30d'
   // Tillväxt
   | 'signupsTrend' | 'onboardingFunnel' | 'signinMethodSplit' | 'donateClicks'
   | 'signupLandingPages' | 'providerClicks' | 'providerClicksByType'
+  | 'shareClicks' | 'shareClicksBySurface' | 'priceCheckTotals' | 'priceCheckSaves'
   // Produktanvändning
   | 'statusDistribution' | 'mediaTypeSplit' | 'topTitles' | 'topProviders' | 'topGenres'
   | 'ratingsHistogram' | 'advisorPauses' | 'activeSessions' | 'groupsCount'
@@ -19,7 +20,7 @@ export type MetricKey =
   | 'askSearches' | 'askZeroRate' | 'askLowConfidence'
   | 'askResultBuckets' | 'askStrandingFilters' | 'askRemovedChips'
   // Trafik
-  | 'pageViews' | 'visitors' | 'avgSessionDuration' | 'topPages' | 'topReferrers';
+  | 'pageViews' | 'avgSessionDuration' | 'topPages' | 'topReferrers';
 
 export type MetricCategory = 'overview' | 'growth' | 'product' | 'traffic';
 
@@ -43,6 +44,8 @@ export interface MetricDef {
   format: MetricFormat;
   thresholds?: Threshold;
   isNew?: boolean;
+  /** 'events' = räknas ur eventStats; rutan visar enheten "händelser", inte personer. */
+  source?: 'events';
 }
 
 export interface Explanation {
@@ -52,8 +55,11 @@ export interface Explanation {
   source: string;
 }
 
-export type MetricValue =
+// `missing` säger VARFÖR ett värde saknas (se MISSING i resolvers.ts), så att "inte mätt"
+// aldrig läses som noll eller som en tom lista.
+export type MetricValue = (
   | { kind: 'scalar'; value: number; previous?: number }
   | { kind: 'series'; points: { x: string; y: number }[] }
   | { kind: 'breakdown'; entries: { label: string; value: number }[] }
-  | { kind: 'funnel'; steps: { name: string; count: number; pctOfStart: number }[] };
+  | { kind: 'funnel'; steps: { name: string; count: number; pctOfStart: number }[] }
+) & { missing?: string };

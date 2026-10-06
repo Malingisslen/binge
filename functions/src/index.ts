@@ -181,7 +181,7 @@ export const onSessionPickCreate = onDocumentCreated(
 
 // ── Insikter (intern analys-dashboard) ───────────────────────────────────────
 // rollupInsights: schemalagd Firestore-aggregering → insights/daily.
-// apiInsights: HTTP-endpoint bakom /api/insights (admin-token + Plausible-merge).
+// apiInsights: HTTP-endpoint bakom /api/insights (admin-token + eventStats-summor).
 export { rollupInsights } from './insights/rollup';
 export { apiInsights } from './insights/api';
 
@@ -269,6 +269,12 @@ export { notifyReportDecided } from './reportDecided';
 // skrivaren — askBingeStats är låst för klienter i firestore.rules. App Check ELLER
 // inloggad krävs (ingen öppen flod-vektor). /api/insights läser dem per intervall.
 export { recordAskBinge } from './askbinge';
+// ── Egen räkning av hur funktioner används (BIN-1438) ───────────────────────
+// recordEvent: callable som inkrementerar dagliga summor i eventStats/{date} för ett
+// fast ordförråd av händelser (klick till tjänster, delningar, priskollar, inloggningar).
+// Ersätter Plausible. eventStats är låst för klienter i firestore.rules. App Check krävs
+// för varje anrop; funktionen läser aldrig vem som anropar. /api/insights läser summorna.
+export { recordEvent } from './eventStats';
 // LLM-fallback query parser (runs only on low-confidence deterministic parses).
 // Needs GEMINI_API_KEY secret + a functions deploy; client degrades gracefully.
 export { askBingeParse } from './askbinge/parse';

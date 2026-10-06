@@ -217,7 +217,7 @@ Owns data-protection compliance under Swedish/EU law.
 - Terms / Privacy / Community-Guidelines pages (versioned), terms-acceptance
   capture at signup, 13-year age gate.
   → `src/app/{villkor,integritet,community-guidelines}/page.tsx`
-- Cookie-free Plausible (LEK compliance, no consent banner).
+- Cookie-free first-party usage counting (`recordEvent` → `eventStats`, BIN-1438): LEK compliance, no consent banner.
 - TMDB **and** JustWatch attribution requirements.
   → `src/lib/tmdb/attribution.ts`
 - Cross-border transfer / SCC documentation; Sentry PII scrubbing.
@@ -300,7 +300,7 @@ Owns CI/CD, hosting, observability, and incident response.
   → `.github/workflows/secret-scan.yml`
 - Static export → Firebase Hosting → Cloudflare; CSP/HSTS headers; cache tiers.
   → `firebase.json`
-- Observability — Sentry, Plausible, UptimeRobot; `SLO.md`; incident `RUNBOOK.md`;
+- Observability — Sentry, UptimeRobot; `SLO.md`; incident `RUNBOOK.md`;
   the `docs/analysis/EXTERNAL_ACTIONS.md` ops reference; emulator suite.
 - **Filer som saknade en ägande roll** (BIN-871). Felrapportering och plattformsdetektering — driftens sida av klienten.
   → `src/lib/platform.test.ts`, `src/lib/platform.ts`
@@ -438,8 +438,8 @@ Owns acquisition and the top of the funnel.
   `src/app/billigaste/[slug]/page.tsx`, `src/app/forsvinner/[id]/page.tsx`,
   `src/app/guider/page.tsx`, `src/lib/seo/genreHubs.ts`, `src/lib/seo/franchises.ts`,
   `src/lib/seo/jsonLd.ts`
-- The anonymous landing page; Plausible conversion goals (`signed_up`,
-  `first_title_added`, `onboarding_completed` by step); group/session invite-share
+- The anonymous landing page; conversion events counted by `recordEvent` (`signed_up`,
+  `onboarding_completed` by step); group/session invite-share
   loops.
   → `src/app/page.tsx`, `src/lib/analytics.ts`
 - Sharing: the Dela button's UTM-tagged links and each shareable prefix's own link-preview
@@ -551,11 +551,12 @@ Owns the `docs/` corpus.
 
 Owns measurement.
 
-- The typed `AnalyticsEvent` taxonomy; the daily Firestore rollup feeding the
+- The typed `AnalyticsEvent` taxonomy and the first-party event counter behind it
+  (`recordEvent` → `eventStats`, BIN-1438); the daily Firestore rollup feeding the
   admin `/insikter` dashboard; the metrics catalog with thresholds + explanations;
   Ask-Binge learning-loop telemetry (which filter combos strand users);
   onboarding-funnel dropoff; per-read cost tracking.
-  → `functions/src/insights/`, `functions/src/askbinge/`, `src/app/insikter/metrics/catalog.ts`
+  → `functions/src/insights/`, `functions/src/askbinge/`, `functions/src/eventStats/`, `src/app/insikter/metrics/catalog.ts`, `src/app/insikter/metrics/catalog.test.ts`, `src/lib/analytics.parity.test.ts`
 - **Filer som saknade en ägande roll** (BIN-871). Insiktsmåtten, AskBinge-analysen och bingestatistiken.
   → `src/app/insikter/metrics/explanations.ts`, `src/app/insikter/metrics/resolvers.test.ts`, `src/app/insikter/metrics/resolvers.ts`, `src/app/insikter/metrics/types.ts`, `src/lib/askBinge/llmFallback.ts`, `src/lib/askBinge/rankResults.test.ts`, `src/lib/askBinge/rankResults.ts`, `src/lib/askBinge/record.ts`, `src/lib/askBinge/telemetry.test.ts`, `src/lib/askBinge/telemetry.ts`, `src/lib/askBinge/toDiscoverParams.test.ts`, `src/lib/askBinge/toDiscoverParams.ts`, `src/lib/askBinge/types.ts`, `src/lib/bingeStats.test.ts`, `src/lib/bingeStats.ts`
 
@@ -564,7 +565,7 @@ Owns measurement.
 
 Owns the third-party stack and its costs.
 
-- ~10 vendors (TMDB, MOTN/RapidAPI, OMDb, Firebase, Cloudflare, Sentry, Plausible,
+- ~10 vendors (TMDB, MOTN/RapidAPI, OMDb, Firebase, Cloudflare, Sentry,
   reCAPTCHA, Gemini, Cineasterna), each with a per-service budget (MOTN ~450 of 500
   requests per MONTH on a billing-cycle anchor, shared with `leavingRollup` — BIN-541
   replaced the earlier "100/day" belief, which was never verified; OMDb 900/day under

@@ -22,7 +22,7 @@ export interface PublicProfileCard {
   // Coarse visibility flag — whether the source profile is public. Used ONLY to
   // gate follower/following-count queries client-side (those rules allow read for
   // public OR owner, not friends), so a friend-only profile view doesn't fire a
-  // denied count query into Sentry/Plausible. NOT an access gate (the projection
+  // denied count query into Sentry. NOT an access gate (the projection
   // read is live-gated by the rule); a stale value is at worst transient noise.
   isPublic: boolean;
   createdAt: Date | null;

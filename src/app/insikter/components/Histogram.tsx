@@ -19,7 +19,7 @@ export function Histogram({ metricKey }: { metricKey: MetricKey }) {
     <div className="bg-surface border border-rule rounded-md p-3">
       <div className="text-[11px] uppercase tracking-wide text-ink-3 mb-2">{label}</div>
       {!hasData ? (
-        <div className="text-sm text-ink-3 py-2">Ingen data</div>
+        <div className="text-sm text-ink-3 py-2">{value.missing ?? 'Ingen data'}</div>
       ) : (
         <div className="flex items-end gap-1 h-28">
           {entries.map((e) => (

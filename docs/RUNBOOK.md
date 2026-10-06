@@ -10,7 +10,7 @@ _Version: 1.0 (2026-04-24)_
 ## 0. Quick triage
 
 1. **Är det nere?** Testa själv: https://binge.nu + incognito.
-2. **Hur många drabbas?** Kolla Plausible → idag → visitors/timme. Är det 0?
+2. **Hur många drabbas?** Kolla Firebase Console → Functions → `recordEvent` → anrop senaste timmen. Är det 0? (Besökssiffror finns inte sedan BIN-1438.)
 3. **Vad ser Sentry?** https://sentry.io → binge-nu → last 1h.
 4. **Vad säger användaren?** Om rapport via mejl/chat: vilken webbläsare, vilken sida, vad hände?
 
@@ -35,7 +35,7 @@ _Version: 1.0 (2026-04-24)_
 - Förbered DNS-failover: byt nameservers temporärt till Firebase direct
   (binge-nu.web.app alias). Kräver registrar-access.
 - Eller vänta ut incidenten (oftast minuter, inte timmar)
-- Meddela användare via Plausible-banner om det drar ut
+- Meddela användare om det drar ut
 
 ### 1c. Firebase Hosting nere
 

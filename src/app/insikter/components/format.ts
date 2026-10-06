@@ -2,8 +2,9 @@ import { assertNever } from '@/lib/assertNever';
 import type { MetricFormat } from '../metrics/types';
 
 export function formatScalar(value: number, format: MetricFormat): string {
-  // A metric reading a field absent on an older rollup (or a null Plausible
-  // bundle) can produce NaN. Never surface "NaN%" — show an en-dash instead.
+  // A metric reading a field absent on an older rollup, or an events bundle that is
+  // null because nothing was counted in the range, produces NaN. Never surface "NaN%" —
+  // show an en-dash instead.
   if (!Number.isFinite(value)) return '–';
   switch (format.kind) {
     case 'number':

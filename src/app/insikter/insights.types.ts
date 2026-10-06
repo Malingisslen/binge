@@ -37,31 +37,13 @@ export interface RollupData {
   partial: boolean;
 }
 
-export interface PlausibleData {
-  visitors: number;
-  pageviews: number;
-  avgVisitDurationSec: number;
-  bounceRatePct: number;
-  visitorsTimeseries: { date: string; visitors: number }[];
-  topPages: { page: string; visitors: number }[];
-  topReferrers: { referrer: string; visitors: number }[];
-  goals: {
-    signed_up: number;
-    title_added_watchlist: number;
-    review_created: number;
-    advisor_pause_taken: number;
-    donate_clicked: number;
-    provider_clicked?: number;
-  };
-  // Optional: absent when the frontend is newer than the deployed function.
-  providerClicksByType?: Record<string, number>;
-  signupLandingPages?: { page: string; signups: number; visitors: number }[];
-  signupsTimeseries: { date: string; count: number }[];
-  onboardingFunnel: { step: number; count: number }[];
-  signinMethodSplit: { google: number; email: number };
+export interface EventsData {
+  counts: Record<string, number>;
+  props: Record<string, Record<string, Record<string, number>>>;
+  daily: { date: string; counts: Record<string, number> }[];
+  days: number;
 }
 
-/** Fråga Binge usage/error counters aggregated over the requested range. */
 export interface AskBingeData {
   searches: number;
   zeroResults: number;
@@ -87,7 +69,8 @@ export interface InsightsData {
   generatedAt: string;
   range: RangeInfo;
   rollup: RollupData | null;
-  plausible: PlausibleData | null;
+  events: EventsData | null; // null = not measured in the range (no eventStats docs) or read failed
+  eventsSince: string | null;
   askBinge: AskBingeData | null; // null if the read failed; zeroed if no data yet
   window: WindowDeltas | null; // null until at least one prior snapshot exists
   partial: boolean;

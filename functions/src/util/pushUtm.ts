@@ -1,11 +1,11 @@
 /**
- * Märker en pushlänk så att Plausible kan se besök som kom från en notis.
- *
- * Utan märkning ser ett klick på en push ut som ett direktbesök, och då går det
- * inte att svara på om notiserna får folk att komma tillbaka. `utm_campaign` är
- * notisens sort — tagg-prefixet före första bindestrecket (`episode-1399` →
- * `episode`), så att tmdb-id:t inte splittrar kampanjlistan i Plausible.
+ * Märker en pushlänk med UTM-parametrar för besök som kom från en notis.
+ * `utm_campaign` är notisens sort — tagg-prefixet före första bindestrecket
+ * (`episode-1399` → `episode`), så att tmdb-id:t inte splittrar kampanjerna.
  * robots.txt håller redan UTM-varianter utanför indexet.
+ *
+ * Ingenting i appen läser märkningen sedan Plausible togs bort (BIN-1438); härled
+ * läsarna med `git grep -n "utm_" -- src functions/src`.
  *
  * Ren hjälpare utan firebase-admin-import, så den testas under rotens vitest.
  */
