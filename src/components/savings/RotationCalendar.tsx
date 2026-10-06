@@ -6,6 +6,7 @@ import ProviderDot from '@/components/ui/ProviderDot';
 import { formatSwedishDate } from '@/lib/utils';
 import { useRotationCalendar, useSavingsLedger } from '@/hooks/useRotationCalendar';
 import { useAuth } from '@/hooks/useAuth';
+import { Eyebrow } from '@/components/ui/Eyebrow';
 
 /**
  * BIN-181 — Rotationskalender + sparat-ledger.
@@ -57,7 +58,7 @@ export default function RotationCalendar() {
   return (
     <div className="mb-[14px]">
       <div className="flex items-baseline justify-between mb-[6px]">
-        <h2 className="text-[11px] font-bold uppercase tracking-[0.5px] text-ink-3">Rotationskalender</h2>
+        <Eyebrow as="h2" size="xs">Rotationskalender</Eyebrow>
         {calendar.totalProjectedSavings > 0 && (
           <span className="text-xxs text-season-done font-semibold">
             Spara ~{formatKr(calendar.totalProjectedSavings)} kr

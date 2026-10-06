@@ -6,7 +6,9 @@ import SrOnlyTableHeader from '@/components/ui/SrOnlyTableHeader';
 import { pluralSv } from '@/lib/utils';
 import { daysUntilRenewal } from '@/lib/renewal';
 import { useAuth } from '@/hooks/useAuth';
+import CancelHint from '@/components/savings/CancelHint';
 import type { ProviderAdvisory, ActivePause } from '@/types';
+import { Eyebrow } from '@/components/ui/Eyebrow';
 
 // "Dina tjänster" sorterad efter kr/aktiv-serie — ersätter den gamla
 // KPI-3-griden. Bäst valuta överst, sämst nedanför så ögat naturligt
@@ -70,7 +72,7 @@ export default function ProvidersByValue({ providers, activePauses }: Props) {
   return (
     <div className="mb-[14px]">
       <div className="flex items-baseline justify-between mb-[6px]">
-        <h2 className="text-[11px] font-bold uppercase tracking-[0.5px] text-ink-3">Dina tjänster</h2>
+        <Eyebrow as="h2" size="xs">Dina tjänster</Eyebrow>
         <span className="text-xxs text-ink-3">Sorterat efter kostnad per aktiv serie</span>
       </div>
       <div className="bg-surface border border-rule rounded-sm overflow-hidden">
@@ -102,6 +104,7 @@ export default function ProvidersByValue({ providers, activePauses }: Props) {
                     {renewalDay != null && !row.isFree && (
                       <span className="block text-xxs text-ink-3">förnyas om {daysUntilRenewal(renewalDay, new Date())} d</span>
                     )}
+                    {!row.isFree && <CancelHint providerId={row.providerId} billingDay={renewalDay} now={new Date()} />}
                   </td>
                   <td className={`px-3 py-[6px] text-xs text-right whitespace-nowrap tabular-nums ${krCellClass}`}>
                     {row.isFree

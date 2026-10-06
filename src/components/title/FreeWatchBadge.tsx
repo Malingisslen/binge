@@ -28,7 +28,7 @@ export default function FreeWatchBadge({ free, ads }: { free: ProviderEntry[]; a
     <div className="flex flex-wrap items-center gap-x-[10px] gap-y-[4px] mt-[8px]">
       {free.length > 0 && (
         <span className="inline-flex items-center gap-[6px]">
-          <span className="text-[10px] uppercase font-bold tracking-[0.4px] rounded-sm border border-season-done text-season-done px-[6px] py-[1px]">
+          <span className="text-xxs uppercase font-bold tracking-[0.4px] rounded-sm border border-season-done text-season-done px-[6px] py-[1px]">
             Gratis
           </span>
           <span className="text-xs text-ink-2">{providerNames(free)}</span>
@@ -36,7 +36,7 @@ export default function FreeWatchBadge({ free, ads }: { free: ProviderEntry[]; a
       )}
       {ads.length > 0 && (
         <span className="inline-flex items-center gap-[6px]">
-          <span className="text-[10px] uppercase font-bold tracking-[0.4px] rounded-sm border border-season-done text-season-done px-[6px] py-[1px]">
+          <span className="text-xxs uppercase font-bold tracking-[0.4px] rounded-sm border border-season-done text-season-done px-[6px] py-[1px]">
             Gratis med reklam
           </span>
           <span className="text-xs text-ink-2">{providerNames(ads)}</span>

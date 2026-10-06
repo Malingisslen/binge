@@ -13,6 +13,7 @@ import { LoadingView } from '@/components/ui/LoadingView';
 import { NotFound } from '@/components/ui/NotFound';
 import { countAiredEpisodes } from '@/lib/episodeLabel';
 import { todayIso } from '@/lib/utils';
+import { Button } from '@/components/ui/Button';
 
 export default function SeasonPageClient({ id, num }: { id: string; num: string }) {
   const seriesId = parseInt(id, 10);
@@ -45,7 +46,7 @@ export default function SeasonPageClient({ id, num }: { id: string; num: string 
         title={season.name}
         standfirst={`${progressLoading ? '—' : watchedCount}/${episodes.length} avsnitt sedda`}
         actions={!progressLoading && watchedCount < episodes.length && airedCount > 0 ? (
-          <button type="button" onClick={() => markSeasonWatched(seasonNum, episodes.length)} className="btn btn-acc btn-sm">Markera alla sedda</button>
+          <Button type="button" onClick={() => markSeasonWatched(seasonNum, episodes.length)} variant="acc" size="sm">Markera alla sedda</Button>
         ) : undefined}
       />
 

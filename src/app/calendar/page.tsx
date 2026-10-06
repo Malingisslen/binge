@@ -12,6 +12,7 @@ import { useCalendarEntries, getWeekStart, getWeekNumber } from '@/hooks/useCale
 import { countEntries } from '@/lib/calendar/summary';
 import { buildCalendarHeadline, buildCalendarStandfirst } from '@/lib/calendar/copy';
 import { parseDayParam } from '@/lib/calendar/dayParam';
+import { Button } from '@/components/ui/Button';
 
 export default function CalendarPage() {
   // Suspense: useSearchParams needs a boundary in a static export.
@@ -118,9 +119,9 @@ function CalendarContent() {
           </button>
         </div>
         {!isCurrentWeek && (
-          <button onClick={goToday} className="btn btn-ghost btn-sm">
+          <Button onClick={goToday} variant="ghost" size="sm">
             Hoppa till idag
-          </button>
+          </Button>
         )}
       </div>
 

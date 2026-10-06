@@ -12,6 +12,7 @@ import { toneForId } from '@/lib/duotone';
 import type { MediaType, TMDBSearchResult } from '@/types';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { JsonLd, breadcrumbSchema, collectionPageSchema } from '@/components/title/JsonLd';
+import { Button } from '@/components/ui/Button';
 
 const CONFIG = {
   tv: {
@@ -130,13 +131,13 @@ export default function MediaTypePage({
       </div>
 
       {hasMore && (
-        <button
+        <Button
           onClick={() => setPage(p => p + 1)}
           disabled={isLoading}
-          className="btn btn-ghost btn-sm mt-3 disabled:opacity-50"
+          variant="ghost" size="sm" className="mt-3 disabled:opacity-50"
         >
           {isLoading ? 'Laddar…' : 'Visa fler'}
-        </button>
+        </Button>
       )}
     </div>
   );

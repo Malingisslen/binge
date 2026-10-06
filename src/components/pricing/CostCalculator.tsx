@@ -17,6 +17,7 @@ import {
 import { formatKr } from '@/lib/formatKr';
 import { trackEvent } from '@/lib/analytics';
 import GuestBundleBox, { joinNames } from '@/components/pricing/GuestBundleBox';
+import { Button } from '@/components/ui/Button';
 
 // /streamingkostnad/ — den interaktiva delen. Rubriken och introtexten renderas av
 // sidans serverkomponent så att de står i den statiska HTML:en.
@@ -157,14 +158,14 @@ export default function CostCalculator() {
             Ändra dina tjänster
           </Link>
         ) : (
-          <button
+          <Button
             type="button"
             onClick={saveAndSignIn}
             disabled={result.paidCount === 0}
-            className="btn btn-acc btn-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            variant="acc" size="sm" className="disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Logga in och spara
-          </button>
+          </Button>
         )}
       </div>
     </div>

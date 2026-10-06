@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useEpisodeReactions, type EpisodeReaction } from '@/hooks/useEpisodeReactions';
 import { LoadingView } from '@/components/ui/LoadingView';
+import { Eyebrow } from '@/components/ui/Eyebrow';
 
 // BIN-95: per-episode reaction thread. The whole thread is spoiler-gated on the
 // viewer's own progress — if they haven't watched THIS episode, no reactions are
@@ -57,7 +58,7 @@ function ReactionsThread({ tmdbId, season, episode, onClose }: {
   return (
     <div className="ep-reactions bg-surface border border-rule rounded-md p-2 mt-1">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold">Reaktioner</span>
+        <Eyebrow as="span">Reaktioner</Eyebrow>
         <button type="button" onClick={onClose} className="text-xxs text-ink-3 bg-transparent border-none cursor-pointer">Dölj</button>
       </div>
 

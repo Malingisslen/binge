@@ -23,6 +23,7 @@ import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { isDeletionInProgressError } from '@/lib/deletionInProgressError';
+import { Button } from '@/components/ui/Button';
 
 export function ReconsentGate() {
   const { completeReconsent, signOut } = useAuth();
@@ -141,18 +142,18 @@ export function ReconsentGate() {
       )}
 
       <div className="mt-4 flex flex-wrap gap-3">
-        <button
+        <Button
           type="button"
           onClick={onSubmit}
           disabled={!ready || submitting}
           aria-describedby={ready ? undefined : 'reconsent-hint'}
-          className="btn-primary"
+          variant="acc"
         >
           {submitting ? 'Skapar…' : 'Skapa profil'}
-        </button>
-        <button type="button" onClick={() => void signOut()} className="btn">
+        </Button>
+        <Button type="button" onClick={() => void signOut()}>
           Logga ut
-        </button>
+        </Button>
       </div>
 
       {error && (

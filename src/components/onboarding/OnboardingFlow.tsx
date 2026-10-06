@@ -27,6 +27,7 @@ import {
   LIBRARY_LOADING,
 } from '@/lib/watchlist/libraryHoldCopy';
 import type { TMDBSearchResult, WatchStatus } from '@/types';
+import { Button } from '@/components/ui/Button';
 
 /**
  * Onboarding-flöde för nya användare. 4 steg:
@@ -592,9 +593,9 @@ function StepFirstTitle({
           <div role="alert" className="text-xs text-danger-ink bg-danger-soft border border-danger/30 rounded-sm px-3 py-2 mb-3">
             <p className="font-semibold">{LIBRARY_UNREACHABLE_TITLE}</p>
             <p className="mt-1 text-ink-2">{LIBRARY_UNREACHABLE_BODY}</p>
-            <button type="button" onClick={retryListener} className="btn btn-acc btn-sm mt-2">
+            <Button type="button" onClick={retryListener} variant="acc" size="sm" className="mt-2">
               {LIBRARY_RETRY_LABEL}
-            </button>
+            </Button>
           </div>
         ) : (
           <p className="text-xs text-ink-3 mb-3">{LIBRARY_LOADING}</p>

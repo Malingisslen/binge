@@ -14,6 +14,7 @@ import { localIsoDate } from '@/lib/utils';
 import { providerHubCopy } from '@/lib/seo/providerHubCopy';
 import { leavingHubHref } from '@/lib/seo/hubLinks';
 import type { TMDBSearchResult } from '@/types';
+import { Button } from '@/components/ui/Button';
 
 type Tab = 'new' | 'movies' | 'tv';
 
@@ -156,13 +157,13 @@ export default function ProviderPageClient({
       </div>
 
       {hasMore && (
-        <button
+        <Button
           onClick={() => setPage(p => p + 1)}
           disabled={isLoading}
-          className="btn btn-ghost btn-sm mt-3 disabled:opacity-50"
+          variant="ghost" size="sm" className="mt-3 disabled:opacity-50"
         >
           {isLoading ? 'Laddar…' : 'Visa fler'}
-        </button>
+        </Button>
       )}
     </div>
   );

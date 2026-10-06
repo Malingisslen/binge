@@ -104,6 +104,17 @@ describe('QuickAddButton — signed-out taps reach the consent notice (BIN-645)'
     expect(screen.queryByText('Följ')).not.toBeInTheDocument();
   });
 
+  // BIN-1442: the title they tapped rides along, so it is added after sign-in.
+  it('remembers the tapped title for after sign-in', async () => {
+    auth.uid = null;
+    watchlist.getItem.mockReturnValue(null);
+    render(button());
+    await act(async () => { fireEvent.click(screen.getByTitle('Lägg till')); });
+
+    const stored = JSON.parse(window.sessionStorage.getItem('binge:pendingAdd') ?? 'null');
+    expect(stored).toMatchObject({ tmdbId: 1399, mediaType: 'tv', title: 'Game of Thrones', releaseYear: 2011 });
+  });
+
   it('treats a signed-in user with no loaded profile as signed IN', async () => {
     // AuthContext keeps uid and nulls the profile when the profile read fails.
     auth.uid = 'u1';

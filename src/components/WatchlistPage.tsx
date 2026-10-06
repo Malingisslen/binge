@@ -51,6 +51,7 @@ import {
   LIBRARY_RETRY_LABEL,
 } from '@/lib/watchlist/libraryHoldCopy';
 import type { WatchStatus, WatchlistItem } from '@/types';
+import { Button } from '@/components/ui/Button';
 
 // BIN-560 Phase 4: selection/next-air state is keyed by the composite doc id
 // `mediaTypeDocId(mediaType, tmdbId)`, not bare tmdbId — a movie and a TV show
@@ -385,9 +386,9 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
             title={LIBRARY_UNREACHABLE_TITLE}
             body={LIBRARY_UNREACHABLE_BODY}
             action={
-              <button type="button" onClick={retryListener} className="btn btn-acc">
+              <Button type="button" onClick={retryListener} variant="acc">
                 {LIBRARY_RETRY_LABEL}
-              </button>
+              </Button>
             }
           />
         </div>
@@ -641,7 +642,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
         {filterOpen && (
           <aside className="bg-surface border border-rule rounded-md p-4 self-start">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-[11px] uppercase tracking-[0.5px] text-ink-3">Filter</span>
+              <span className="text-xs uppercase tracking-[0.5px] text-ink-3">Filter</span>
               <button
                 type="button"
                 onClick={() => setFilterOpen(false)}
@@ -842,7 +843,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                     ) : (
                       <div className="absolute inset-0 flex flex-col items-center justify-center px-2 gap-1">
                         <Icon size={20} className="text-ink-3 opacity-40" />
-                        <span className="text-[10px] text-ink-3 text-center line-clamp-3 leading-tight">{item.title}</span>
+                        <span className="text-xxs text-ink-3 text-center line-clamp-3 leading-tight">{item.title}</span>
                       </div>
                     )}
                     <PosterProviderDots providers={item.providers} myProviders={user?.myProviders ?? []} />

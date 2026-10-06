@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { classifyDeletionFailure } from '@/lib/authErrors';
+import { Button } from '@/components/ui/Button';
 
 /**
  * BIN-816 / ADR 0019 condition 4 — the screen a half-deleted account gets.
@@ -137,16 +138,16 @@ export function DeletionLimbo() {
         )}
 
         <div className="mt-6 flex flex-wrap gap-2">
-          <button
+          <Button
             onClick={handleFinish}
             disabled={busy}
-            className="btn btn-danger btn-sm disabled:opacity-50"
+            variant="danger" size="sm" className="disabled:opacity-50"
           >
             {busy ? 'Slutför…' : 'Slutför raderingen'}
-          </button>
-          <button onClick={() => void signOut()} className="btn btn-ghost btn-sm">
+          </Button>
+          <Button onClick={() => void signOut()} variant="ghost" size="sm">
             Logga ut
-          </button>
+          </Button>
         </div>
 
         {/*

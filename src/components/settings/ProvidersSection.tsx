@@ -63,7 +63,7 @@ export function ProvidersSection() {
         type="button"
         aria-pressed={isSelected}
         onClick={() => toggle(p.id)}
-        className="relative h-[46px] rounded-md flex items-center justify-center text-center text-[12px] font-bold px-2 transition-colors"
+        className="relative h-[46px] rounded-md flex items-center justify-center text-center text-sm font-bold px-2 transition-colors"
         style={
           isSelected
             ? { background: p.color, color: fg === 'white' ? 'white' : 'var(--ink)' }
@@ -71,7 +71,7 @@ export function ProvidersSection() {
         }
       >
         {p.shortName}
-        {isSelected && <span aria-hidden="true" className="absolute top-1 right-1.5 text-[10px]">✓</span>}
+        {isSelected && <span aria-hidden="true" className="absolute top-1 right-1.5 text-xxs">✓</span>}
       </button>
     );
   };
@@ -80,7 +80,7 @@ export function ProvidersSection() {
     <SettingsSection title="Mina streamingtjänster" collapsible defaultOpen={savedProviders.length === 0}>
       {selectedProviders.length > 0 ? (
         <>
-          <div className="text-[10px] uppercase tracking-[0.14em] text-ink-3 mb-2">
+          <div className="text-xxs uppercase tracking-[0.14em] text-ink-3 mb-2">
             Dina tjänster · {selectedProviders.length}
           </div>
           <div className="grid grid-cols-4 gap-[7px] mb-4">
@@ -90,7 +90,7 @@ export function ProvidersSection() {
                 type="button"
                 aria-label="Lägg till fler tjänster"
                 onClick={() => addMoreRef.current?.scrollIntoView({ behavior: 'smooth' })}
-                className="h-[46px] rounded-md flex items-center justify-center border-[1.5px] border-dashed border-rule text-ink-3 text-[20px] leading-none transition-colors hover:border-ink-3 hover:text-ink"
+                className="h-[46px] rounded-md flex items-center justify-center border-[1.5px] border-dashed border-rule text-ink-3 text-2xl leading-none transition-colors hover:border-ink-3 hover:text-ink"
               >
                 +
               </button>
@@ -105,7 +105,7 @@ export function ProvidersSection() {
 
       {available.length > 0 && (
         <div ref={addMoreRef}>
-          <div className="text-[10px] uppercase tracking-[0.14em] text-ink-3 mb-2">Lägg till fler</div>
+          <div className="text-xxs uppercase tracking-[0.14em] text-ink-3 mb-2">Lägg till fler</div>
           <div className="grid grid-cols-4 gap-[7px] mb-4">
             {available.map(p => tile(p, false))}
           </div>
@@ -114,8 +114,8 @@ export function ProvidersSection() {
 
       {selectedProviders.length > 0 && (
         <div className="border-t border-rule-2 pt-3">
-          <div className="text-[10px] uppercase tracking-[0.14em] text-ink-3 mb-2">Nivå &amp; kostnad</div>
-          <p className="text-[11px] text-ink-3 mb-2 leading-snug">
+          <div className="text-xxs uppercase tracking-[0.14em] text-ink-3 mb-2">Nivå &amp; kostnad</div>
+          <p className="text-xs text-ink-3 mb-2 leading-snug">
             Väljer du en nivå följer priset tjänstens aktuella listpris — det uppdateras automatiskt när tjänsten
             ändrar sitt. Väljer du <span className="whitespace-nowrap">&quot;Egen kostnad…&quot;</span> gäller beloppet du själv skriver in.
           </p>
@@ -130,12 +130,12 @@ export function ProvidersSection() {
                 <div key={provider.id}>
                 <div className="flex items-center gap-[10px] py-[3px]">
                   <span
-                    className="rounded-sm px-2 py-[1px] text-[11px] font-semibold min-w-[54px] text-center"
+                    className="rounded-sm px-2 py-[1px] text-xs font-semibold min-w-[54px] text-center"
                     style={{ background: provider.color, color: fg === 'white' ? 'white' : 'var(--ink)' }}
                   >
                     {provider.shortName}
                   </span>
-                  <span className="flex-1 text-[11px] text-ink-3">
+                  <span className="flex-1 text-xs text-ink-3">
                     {renewalDay != null ? `förnyas om ${daysUntilRenewal(renewalDay, new Date())} d` : ''}
                   </span>
                   {hasTiers ? (
@@ -209,10 +209,10 @@ export function ProvidersSection() {
             })}
           </div>
           <div className="flex items-center justify-between mt-3 border-t border-rule-2 pt-[10px]">
-            <span className="text-[11px] text-ink-3">
+            <span className="text-xs text-ink-3">
               {pendingSave ? 'Sparar…' : '✓ Sparat automatiskt'}
             </span>
-            <span className="text-[13px] font-bold tabular-nums">{formatKr(total)} kr/mån</span>
+            <span className="text-base font-bold tabular-nums">{formatKr(total)} kr/mån</span>
           </div>
         </div>
       )}
@@ -261,7 +261,7 @@ function ProviderCampaignRow({
 
   if (!editing) {
     return (
-      <div className="flex items-center gap-2 pl-[64px] pb-[4px] text-[11px]">
+      <div className="flex items-center gap-2 pl-[64px] pb-[4px] text-xs">
         {campaign ? (
           <>
             <span className="text-ink-3">
@@ -282,7 +282,7 @@ function ProviderCampaignRow({
   }
 
   return (
-    <div className="flex items-center gap-2 pl-[64px] pb-[5px] text-[11px] flex-wrap">
+    <div className="flex items-center gap-2 pl-[64px] pb-[5px] text-xs flex-wrap">
       <span className="text-ink-3">Kampanjpris</span>
       <input
         type="number"

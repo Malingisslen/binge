@@ -13,6 +13,7 @@ import type { TMDBSearchResult } from '@/types';
 import { hasNonLatinTitle, isFromHiddenCountry } from '@/lib/utils/titleFilter';
 import { JsonLd, breadcrumbSchema, collectionPageSchema } from '@/components/title/JsonLd';
 import { nordicLanguageParam } from '@/lib/discover/nordic';
+import { Button } from '@/components/ui/Button';
 
 const DISCOVER_DESCRIPTION = 'Trendande, populära och nya filmer och serier på Netflix, Viaplay, HBO Max, Disney+, SVT Play och fler svenska streamingtjänster.';
 
@@ -247,15 +248,15 @@ export default function DiscoverPageClient({
       )}
 
       {hasMore && (
-        <button
+        <Button
           onClick={() => setPage(p => p + 1)}
           onMouseEnter={prefetchNextPage}
           onFocus={prefetchNextPage}
           disabled={discoverLoading}
-          className="btn btn-ghost btn-sm disabled:opacity-50"
+          variant="ghost" size="sm" className="disabled:opacity-50"
         >
           {discoverLoading ? 'Laddar…' : 'Visa fler'}
-        </button>
+        </Button>
       )}
     </>
   );

@@ -85,3 +85,36 @@ describe('PRICE_CHANGES', () => {
     }
   });
 });
+
+describe('manageUrl (Säg upp-länken)', () => {
+  const linked = SWEDISH_PROVIDERS.filter(p => p.manageUrl !== undefined);
+
+  it('is set on at least one provider (the guards below are not vacuous)', () => {
+    expect(linked.length).toBeGreaterThan(0);
+  });
+
+  it('is an https address on a provider that is paid for, with a valid, non-future verification date', () => {
+    const today = todayLocal();
+    for (const p of linked) {
+      expect(new URL(p.manageUrl!).protocol, p.name).toBe('https:');
+      expect(p.isFree, p.name).not.toBe(true);
+      const verified = parseIsoDay(p.manageUrlVerifiedDate);
+      expect(verified, `${p.name} manageUrlVerifiedDate`).not.toBeNull();
+      expect(verified!.getTime(), p.name).toBeLessThanOrEqual(today.getTime());
+    }
+  });
+
+  it('is a plain link: no query string or fragment, so no tracking or affiliate parameters', () => {
+    for (const p of linked) {
+      const url = new URL(p.manageUrl!);
+      expect(url.search, p.name).toBe('');
+      expect(url.hash, p.name).toBe('');
+    }
+  });
+
+  it('never carries a verification date without a link', () => {
+    for (const p of SWEDISH_PROVIDERS) {
+      if (p.manageUrlVerifiedDate !== undefined) expect(p.manageUrl, p.name).toBeDefined();
+    }
+  });
+});

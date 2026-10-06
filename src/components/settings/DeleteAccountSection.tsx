@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { classifyDeletionFailure, deletionWasHandedOff } from '@/lib/authErrors';
 import { useToast } from '@/contexts/ToastContext';
 import { SettingsSection } from './SettingsSection';
+import { Button } from '@/components/ui/Button';
 
 export function DeleteAccountSection() {
   const [confirming, setConfirming] = useState(false);
@@ -178,24 +179,24 @@ export function DeleteAccountSection() {
         {' '}så hjälper vi dig.
       </p>
       {!confirming ? (
-        <button
+        <Button
           onClick={() => setConfirming(true)}
-          className="btn btn-danger-ghost btn-sm"
+          variant="danger-ghost" size="sm"
         >
           Ta bort mitt konto
-        </button>
+        </Button>
       ) : (
         <div className="flex gap-2">
-          <button
+          <Button
             onClick={handleDelete}
             disabled={deleting}
-            className="btn btn-danger btn-sm disabled:opacity-50"
+            variant="danger" size="sm" className="disabled:opacity-50"
           >
             {deleting ? 'Raderar…' : 'Ja, ta bort permanent'}
-          </button>
-          <button onClick={() => setConfirming(false)} className="btn btn-ghost btn-sm">
+          </Button>
+          <Button onClick={() => setConfirming(false)} variant="ghost" size="sm">
             Avbryt
-          </button>
+          </Button>
         </div>
       )}
     </SettingsSection>

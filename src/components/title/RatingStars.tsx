@@ -14,7 +14,7 @@ export default function RatingStars({ rating, onChange, size = 'sm', readonly = 
   const [hover, setHover] = useState<number | null>(null);
 
   const display = hover ?? rating ?? 0;
-  const starSize = size === 'lg' ? 'text-[18px]' : size === 'md' ? 'text-base' : 'text-sm';
+  const starSize = size === 'lg' ? 'text-xl' : size === 'md' ? 'text-base' : 'text-sm';
 
   return (
     <span

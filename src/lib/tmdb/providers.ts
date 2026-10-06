@@ -38,12 +38,20 @@ export interface SwedishProvider {
   // Abonnemangets namn hos en tjänst utan `tiers`, för prissidans nivåkolumn. Bara
   // visningstext: ingen beräkning läser det.
   planName?: string;
+  // Tjänstens egen sida där en inloggad användare hanterar eller säger upp
+  // abonnemanget ("Säg upp" i Rådgivaren). Bara en adress tjänstens egen hjälpsida
+  // anger; `manageUrlVerifiedDate` är dagen någon senast läste den hjälpsidan.
+  // Prisagenten kontrollerar länkarna varje månad (docs/price-agent-runbook.md).
+  manageUrl?: string;
+  manageUrlVerifiedDate?: string;
 }
 
 export const SWEDISH_PROVIDERS: SwedishProvider[] = [
   {
     // live-verifierat 2026-07-02 — https://help.netflix.com/en/node/24926 (SE-höjning ~2026-05-15, +20 kr rakt över, ordinarie ej kampanj)
     id: 8, name: 'Netflix', shortName: 'Netflix', color: '#E50914', type: 'flatrate', defaultMonthlyCost: 169,
+    // Säg upp: https://help.netflix.com/sv/node/407 (läst 2026-10-06)
+    manageUrl: 'https://www.netflix.com/cancelplan', manageUrlVerifiedDate: '2026-10-06',
     priceVerifiedDate: '2026-07-02',
     // 175 = "Netflix Kids", TMDB:s egen variantpost för samma abonnemang — inte en egen
     // tjänst. Utan aliaset renderas en titel TMDB märker med 175 som en okänd leverantör.
@@ -76,6 +84,8 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
     // Standard 149,00, Premium 189,00 kr/månad. Sporttillägget (70 kr) modelleras inte.
     id: 384, name: 'HBO Max', shortName: 'HBO', color: '#7B2FBE', type: 'flatrate', defaultMonthlyCost: 149,
     priceVerifiedDate: '2026-10-06',
+    // Säg upp: https://help.hbomax.com/se-sv/answer/detail/000002526 (läst 2026-10-06)
+    manageUrl: 'https://www.hbomax.com/subscription', manageUrlVerifiedDate: '2026-10-06',
     // 1899 = legacy HBO Max-id. 1825 = "HBO Max Amazon Channel"
     // (live-verifierat SE-id 2026-06-10) — samma tjänst via Prime Video.
     aliases: [1899, 1825],
@@ -131,6 +141,8 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
     // efter en kostnadsfri provperiod". Apple kallar tjänsten Apple TV på sidan.
     id: 350, name: 'Apple TV+', shortName: 'Apple', color: '#555555', type: 'flatrate', defaultMonthlyCost: 119,
     priceVerifiedDate: '2026-10-06', planName: 'Apple TV',
+    // Säg upp: https://support.apple.com/sv-se/118428 (läst 2026-10-06)
+    manageUrl: 'https://account.apple.com/account/manage/section/subscriptions', manageUrlVerifiedDate: '2026-10-06',
     // 2243 = "Apple TV Amazon Channel" (live-verifierat SE-id 2026-06-10).
     aliases: [2243],
   },
@@ -175,6 +187,8 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
     // Reklam-nivån var 59 och är 69. Standard 109 och Premium 159 lästes om och står kvar.
     // Skärmbilden visade också bindningspriser (6 och 12 mån) som katalogen inte modellerar.
     id: 431, name: 'SkyShowtime', shortName: 'Sky', color: '#0D1D40', type: 'flatrate', defaultMonthlyCost: 109,
+    // Säg upp: https://www.skyshowtime.com/se/help/article/how-do-i-cancel-my-skyshowtime-subscription (läst 2026-10-06)
+    manageUrl: 'https://www.skyshowtime.com/en/account/plans', manageUrlVerifiedDate: '2026-10-06',
     priceVerifiedDate: '2026-09-03',
     // 1773 = TMDB:s nuvarande SE-id för SkyShowtime (katalog-endpoint 2026-06-20). (BIN-64)
     // 531 = nedlagda Paramount+ (SE-nedläggning 2022-10-01, uppgick i SkyShowtime — BIN-404);
@@ -193,6 +207,8 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
     // hade dessutom fel om Student, som de uppgav vara oförändrad på 95. Storefronten: 109.
     // Skärmbilden visade tre kort (Enskild, Familj, Student). Nivån Lite: BIN-1400.
     id: 335, name: 'YouTube Premium', shortName: 'YT', color: '#FF0000', type: 'flatrate', defaultMonthlyCost: 169,
+    // Säg upp: https://support.google.com/youtube/answer/6308278?hl=sv (läst 2026-10-06)
+    manageUrl: 'https://www.youtube.com/paid_memberships', manageUrlVerifiedDate: '2026-10-06',
     priceVerifiedDate: '2026-09-03',
     // 188 = TMDB:s nuvarande SE-id för YouTube Premium (katalog-endpoint 2026-06-20). (BIN-64)
     aliases: [188],
@@ -223,11 +239,14 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
   // live-verifierat 2026-10-02 — https://mubi.com/en/se/memberships (dit /sv/se omdirigerar) —
   // agenten läste sidans planlista med geoLocation SE: månadsplanen 129 SEK. Årsplanen och
   // studentplanen modelleras inte. Färgen är den som sidan använder. (BIN-1401)
-  { id: 11, name: 'MUBI', shortName: 'MUBI', color: '#001489', type: 'flatrate', defaultMonthlyCost: 129, priceVerifiedDate: '2026-10-02', planName: 'Månadsplan' },
+  // Säg upp: https://help.mubi.com/article/68-how-do-i-cancel-my-subscription-if-i-purchased-it-online-through-the-web (läst 2026-10-06)
+  { id: 11, name: 'MUBI', shortName: 'MUBI', color: '#001489', type: 'flatrate', defaultMonthlyCost: 129, priceVerifiedDate: '2026-10-02', manageUrl: 'https://mubi.com/subscription', manageUrlVerifiedDate: '2026-10-06', planName: 'Månadsplan' },
   {
     // live-verifierat 2026-10-02 — https://www.drakenfilm.se — sidans planlista, månadspris i
     // SEK. Färgen är sidans accentfärg. (BIN-1401; nivåerna: Malins val 2026-10-02, BIN-1418)
     id: 435, name: 'Draken Film', shortName: 'Draken', color: '#EC6446', type: 'flatrate', defaultMonthlyCost: 125,
+    // Säg upp: https://support.goteborgfilmfestival.se/hur-avslutar-jag-min-prenumeration-pa-draken-film/ (läst 2026-10-06)
+    manageUrl: 'https://drakenfilm.se/mina-sidor/prenumerationer', manageUrlVerifiedDate: '2026-10-06',
     priceVerifiedDate: '2026-10-02',
     tiers: [
       { id: 'bas', name: 'Bas', cost: 95 },

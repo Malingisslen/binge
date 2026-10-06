@@ -48,9 +48,9 @@ export default function ProviderTag({ provider, size = 'sm', offer, nowMs, media
   const body = (
     <span className="inline-flex items-center gap-1">
       {chip}
-      {price && <span className="text-ink-2 text-[12px]">{price}</span>}
+      {price && <span className="text-ink-2 text-sm">{price}</span>}
       {leaving && (
-        <span className="rounded-sm bg-acc-soft text-acc-deep px-1 text-[11px]">
+        <span className="rounded-sm bg-acc-soft text-acc-deep px-1 text-xs">
           {formatLeaving(offer!)}
         </span>
       )}

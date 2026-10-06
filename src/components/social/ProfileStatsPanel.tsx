@@ -6,6 +6,7 @@ import { computeProfileStats } from '@/lib/taste/stats';
 import { useGenreMap } from '@/hooks/useGenreMap';
 import { getProvider } from '@/lib/tmdb/providers';
 import type { WatchlistItem } from '@/types';
+import { Eyebrow } from '@/components/ui/Eyebrow';
 
 export default function ProfileStatsPanel({ items }: { items: WatchlistItem[] }) {
   const genreMap = useGenreMap();
@@ -23,9 +24,9 @@ export default function ProfileStatsPanel({ items }: { items: WatchlistItem[] })
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 px-3 py-3">
         <div>
-          <div className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold mb-2">
+          <Eyebrow className="mb-2">
             Topp-genrer
-          </div>
+          </Eyebrow>
           {stats.topGenres.length === 0 ? (
             <div className="text-xs text-ink-3">—</div>
           ) : (
@@ -50,9 +51,9 @@ export default function ProfileStatsPanel({ items }: { items: WatchlistItem[] })
         </div>
 
         <div>
-          <div className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold mb-2">
+          <Eyebrow className="mb-2">
             Topp-tjänster
-          </div>
+          </Eyebrow>
           {stats.topProviders.length === 0 ? (
             <div className="text-xs text-ink-3">—</div>
           ) : (
@@ -75,9 +76,9 @@ export default function ProfileStatsPanel({ items }: { items: WatchlistItem[] })
         </div>
 
         <div>
-          <div className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold mb-2">
+          <Eyebrow className="mb-2">
             Senaste 30 dagarna
-          </div>
+          </Eyebrow>
           <ul className="space-y-[4px] text-xs">
             <li className="flex justify-between">
               <span className="text-ink">Sedd</span>

@@ -102,16 +102,27 @@ const config: Config = {
       }),
       fontFamily: {
         sans: ['Albert Sans', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
-        mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        // Monospace is phased out (design-system.md): --mono aliases the sans stack.
+        mono: 'var(--mono)',
       },
+      // The type scale. consistency.test.ts rejects arbitrary text-[Npx] in TSX, so a
+      // size missing here gets added here, not hand-written at the call site.
+      // xl…6xl deliberately replace Tailwind's defaults (20…60px): a copied snippet gets these sizes.
       fontSize: {
-        // Direction H bumps the base — pages now read at 15px.
+        'nano': '8px',
+        'micro': '9px',
         'xxs': '10px',
         'xs': '11px',
         'sm': '12.5px',
         'base': '13.5px',
         'md': '14px',
         'lg': '15.5px',
+        'xl': '17px',
+        '2xl': '20px',
+        '3xl': '22px',
+        '4xl': '24px',
+        '5xl': '32px',
+        '6xl': '48px',
       },
       maxWidth: {
         canvas: '1320px',

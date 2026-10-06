@@ -16,6 +16,7 @@ import { getPublicProfileCard } from '@/lib/firebase/publicProfile';
 import { posterUrl, titleHref } from '@/lib/tmdb/client';
 import { computeFollowTrending, type TrendingTitle } from '@/lib/feedTrending';
 import type { MediaType } from '@/types';
+import { Eyebrow } from '@/components/ui/Eyebrow';
 
 interface FeedWatchlistItem {
   kind: 'watchlist';
@@ -218,9 +219,9 @@ function TrendingRow({ titles }: { titles: TrendingTitle[] }) {
     `${t.followerCount} du följer har den`;
   return (
     <section className="mb-4">
-      <h2 className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold mb-2 flex items-center gap-1">
+      <Eyebrow as="h2" className="mb-2 flex items-center gap-1">
         <TrendingUp size={12} aria-hidden /> Trendar bland personer du följer
-      </h2>
+      </Eyebrow>
       <div className="flex gap-[8px] overflow-x-auto pb-1">
         {titles.map(t => {
           const poster = posterUrl(t.posterPath, 'w92');

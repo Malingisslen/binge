@@ -15,11 +15,12 @@ import { seenDate } from '@/lib/seenDate';
 import RatingStars from '@/components/title/RatingStars';
 import { buildDiary, diaryEntryCount } from '@/lib/diary';
 import { computeBingeStats } from '@/lib/bingeStats';
+import { Eyebrow } from '@/components/ui/Eyebrow';
 
 function StatBox({ value, label }: { value: number; label: string }) {
   return (
     <div className="bg-surface border border-rule rounded-md px-[12px] py-[8px] min-w-[92px]">
-      <div className="text-[20px] font-bold text-ink leading-none tabular-nums">{value}</div>
+      <div className="text-2xl font-bold text-ink leading-none tabular-nums">{value}</div>
       <div className="text-xxs text-ink-3 mt-[3px]">{label}</div>
     </div>
   );
@@ -85,9 +86,9 @@ export default function DiaryPageClient() {
           )}
           {months.map(month => (
             <section key={month.key}>
-              <h2 className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold mb-2">
+              <Eyebrow as="h2" className="mb-2">
                 {month.label}
-              </h2>
+              </Eyebrow>
               <div className="flex flex-col gap-[6px]">
                 {month.entries.map(({ item, date, episodeCode }) => {
                   const tone = item.genreIds.length > 0

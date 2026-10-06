@@ -48,7 +48,7 @@ export default function GuestCostDemo() {
   return (
     <section className="max-w-[1000px] mx-auto px-4 pt-8" aria-labelledby="guest-cost-heading">
       <div className="bg-surface border border-rule rounded-sm px-4 py-3">
-        <h2 id="guest-cost-heading" className="text-[17px] font-semibold text-ink m-0">
+        <h2 id="guest-cost-heading" className="text-xl font-semibold text-ink m-0">
           Vad betalar du för streaming?
         </h2>
         <p className="text-sm text-ink-2 mt-1 mb-3">Tryck på dem du har.</p>

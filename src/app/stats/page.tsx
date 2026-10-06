@@ -250,7 +250,7 @@ function StatsContent() {
                       className="w-full bg-acc-deep rounded-t-[2px] min-h-[2px] transition-all"
                       style={{ height: `${(count / maxCount) * 80}%` }}
                     />
-                    <div className="text-[8px] text-ink-3 mt-[3px]">{label}</div>
+                    <div className="text-nano text-ink-3 mt-[3px]">{label}</div>
                   </div>
                 );
               })}

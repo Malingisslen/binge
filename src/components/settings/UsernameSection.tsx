@@ -6,6 +6,7 @@ import { useToast } from '@/contexts/ToastContext';
 import { SettingsSection } from './SettingsSection';
 import type { ItemVisibility } from '@/types';
 import { MAX_BIO } from '@/lib/clampText';
+import { Button } from '@/components/ui/Button';
 
 const VISIBILITY_OPTIONS: { value: ItemVisibility; label: string; description: string }[] = [
   { value: 'private', label: 'Privat', description: 'Bara jag ser mina titlar.' },
@@ -68,13 +69,13 @@ export function UsernameSection() {
               maxLength={20}
               className="flex-1 px-2 py-[3px] text-xs border border-rule rounded-sm bg-surface text-ink font-[inherit] outline-none"
             />
-            <button
+            <Button
               onClick={handleSaveUsername}
               disabled={saving || usernameInput === (user.username ?? '')}
-              className="btn btn-acc btn-sm disabled:opacity-50"
+              variant="acc" size="sm" className="disabled:opacity-50"
             >
               Spara
-            </button>
+            </Button>
           </div>
           {user.username && (
             <div id="username-help" className="text-xxs text-ink-3 mt-[2px]">binge.nu/user/{user.username}</div>
@@ -141,13 +142,13 @@ export function UsernameSection() {
                 titlar — några kan fortfarande visas enligt din tidigare inställning.
                 Binge försöker igen nästa gång du öppnar appen.
               </p>
-              <button
+              <Button
                 onClick={handleRetryVisibility}
                 disabled={retryingVisibility}
-                className="btn btn-sm btn-danger-ghost mt-[4px] disabled:opacity-50"
+                variant="danger-ghost" size="sm" className="mt-[4px] disabled:opacity-50"
               >
                 {retryingVisibility ? 'Försöker…' : 'Försök igen nu'}
-              </button>
+              </Button>
             </div>
           )}
         </div>
