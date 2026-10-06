@@ -63,6 +63,7 @@ function baseAdvisor(over: Partial<AdvisorResult> = {}): AdvisorResult {
     hasConfiguredProviders: false,
     primaryAction: { kind: 'idle', nextCheckDate: null },
     secondaryAction: null,
+    pauseAdviceReady: true,
     activePauses: [],
     mostUsedProvider: null,
     unfinishedTmdbIds: new Set<number>(),
@@ -189,5 +190,52 @@ describe('SavingsPage — paused-service amounts are grouped by thousands (BIN-1
 
     expect(screen.getByText(krText('Sparat hittills: 1 234 kr'), verbatim)).toBeInTheDocument();
     expect(screen.getByText(krText('+1 000 kr'), verbatim)).toBeInTheDocument();
+  });
+});
+
+// Paket K: under pausgolvet visar sidan inget som räknar på pauser — inga steg
+// med Pausa-knapp och ingen rotationsplan — men kostnaden och paketen står kvar.
+describe('SavingsPage — pausgolvet', () => {
+  beforeEach(() => {
+    advisorMock.mockReset();
+  });
+
+  it('visar ingen pausknapp och ber om fler titlar när biblioteket är för litet', () => {
+    advisorMock.mockReturnValue(
+      baseAdvisor({
+        providers: [
+          { providerId: 8, providerName: 'Netflix', shortName: 'Netflix', color: '#e50914', shows: [], monthlyCost: 169, status: 'pause', nextAirDate: null },
+        ],
+        hasConfiguredProviders: true,
+        totalMonthlyCost: 169,
+        pauseAdviceReady: false,
+        primaryAction: { kind: 'needs-library', titleCount: 0, minTitles: 3 },
+        bundleSuggestions: [SUGGESTION],
+      }),
+    );
+    render(<SavingsPage />);
+
+    expect(screen.getByText(/Lägg till det du följer, så kan Binge räkna/)).toBeInTheDocument();
+    expect(screen.queryByText('Pausa →')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Netflix kan pausas/)).not.toBeInTheDocument();
+    expect(screen.getByText('Utforska serier')).toBeInTheDocument();
+    expect(screen.getByText('Dina lösa tjänster kan bli billigare i ett paket')).toBeInTheDocument();
+  });
+
+  it('visar pausförslaget när biblioteket räcker', () => {
+    advisorMock.mockReturnValue(
+      baseAdvisor({
+        providers: [
+          { providerId: 8, providerName: 'Netflix', shortName: 'Netflix', color: '#e50914', shows: [], monthlyCost: 169, status: 'pause', nextAirDate: null },
+        ],
+        hasConfiguredProviders: true,
+        totalMonthlyCost: 169,
+        primaryAction: { kind: 'pause', providerId: 8, providerName: 'Netflix', shortName: 'Netflix', color: '#e50914', monthlyCost: 169, nextAirDate: null },
+      }),
+    );
+    render(<SavingsPage />);
+
+    expect(screen.getByText('Pausa →')).toBeInTheDocument();
+    expect(screen.queryByText(/Lägg till det du följer/)).not.toBeInTheDocument();
   });
 });
