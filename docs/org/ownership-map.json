@@ -283,6 +283,7 @@
         "src/lib/tmdb/prefetch.test.ts",
         "src/lib/tmdb/prefetch.ts",
         "src/lib/tmdb/providerAliasParity.test.ts",
+        "src/lib/tmdb/providerNames.parity.test.ts",
         "src/lib/tmdb/providers.affiliate.test.ts",
         "src/lib/tmdb/providers.identityGuard.test.ts",
         "src/lib/tmdb/providers.test.ts",
@@ -497,6 +498,8 @@
         "src/lib/firebase/pendingAddServerCheck.ts",
         "src/lib/nextPath.test.ts",
         "src/lib/nextPath.ts",
+        "src/lib/notificationDefaults.test.ts",
+        "src/lib/notificationDefaults.ts",
         "src/lib/notificationSections.test.ts",
         "src/lib/notificationSections.ts",
         "src/lib/onboarding.test.ts",
@@ -552,7 +555,9 @@
         "src/lib/askBinge/toDiscoverParams.ts",
         "src/lib/askBinge/types.ts",
         "src/lib/bingeStats.test.ts",
-        "src/lib/bingeStats.ts"
+        "src/lib/bingeStats.ts",
+        "src/lib/secondWeek.parity.test.ts",
+        "src/lib/secondWeek.ts"
       ]
     },
     "23": {
@@ -586,6 +591,8 @@
         "src/lib/formatKr.ts",
         "src/lib/guestProviders.test.ts",
         "src/lib/guestProviders.ts",
+        "src/lib/pauseReminder.parity.test.ts",
+        "src/lib/pauseReminder.ts",
         "src/lib/priceFreshness.test.ts",
         "src/lib/priceFreshness.ts",
         "src/lib/priceTableRows.test.ts",

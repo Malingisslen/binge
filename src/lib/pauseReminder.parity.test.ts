@@ -18,6 +18,7 @@ const cases: Record<string, Record<number, ProviderPauseState>> = {
     384: { pausedAt: '2026-10-01', resumeAt: '2026-10-20' },
   },
   unknownService: { 999999: { pausedAt: '2026-10-01', resumeAt: '2026-10-20', remind: true } },
+  aliasKey: { ['08' as unknown as number]: { pausedAt: '2026-10-01', resumeAt: '2026-10-20', remind: true } },
   badDate: { 76: { pausedAt: '2026-10-01', resumeAt: '20/10/2026', remind: true } },
 };
 

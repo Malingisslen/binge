@@ -1302,8 +1302,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (existing && existing.resumeAt === resumeAt) return Promise.resolve();
     const pausedAt = existing?.pausedAt ?? todayIso();
     // A reminder follows the pause to its new end date; an open-ended pause has none.
+    // A dropped reminder is written as false: the merge write would keep the old key.
     const remind = existing?.remind === true && resumeAt != null;
-    const next = { ...current, [providerId]: remind ? { pausedAt, resumeAt, remind } : { pausedAt, resumeAt } };
+    const entry: ProviderPauseState = existing?.remind !== undefined ? { pausedAt, resumeAt, remind } : { pausedAt, resumeAt };
+    const next = { ...current, [providerId]: entry };
     return writePauses(next);
   }, [writePauses, user?.providerPauses]);
   // BIN-1442 — "Påminn mig" after Pausa. `false` is written rather than the key

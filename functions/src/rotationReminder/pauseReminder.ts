@@ -32,6 +32,9 @@ function remindedPauses(providerPauses: unknown): PauseReminder[] {
   const out: PauseReminder[] = [];
   for (const [key, raw] of Object.entries(providerPauses as Record<string, unknown>).slice(0, MAX_PAUSES_READ)) {
     const providerId = Number(key);
+    // Only the canonical key: the clear in index.ts writes `providerPauses.{id}`,
+    // so an alias such as "08" would keep its reminder forever.
+    if (String(providerId) !== key) continue;
     const providerName = PROVIDER_NAMES[providerId];
     if (!providerName || !raw || typeof raw !== 'object') continue;
     const p = raw as { remind?: unknown; resumeAt?: unknown };

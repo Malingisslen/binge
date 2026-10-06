@@ -27,6 +27,8 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { useSubscriptionAdvisor } from '@/hooks/useSubscriptionAdvisor';
 import { useAuth } from '@/hooks/useAuth';
 import { trackEvent } from '@/lib/analytics';
+import { useToast } from '@/contexts/ToastContext';
+import { captureError } from '@/lib/sentry';
 import { titleHref } from '@/lib/tmdb/client';
 import { formatSwedishDate } from '@/lib/utils';
 import type { AdvisedShow, ActivePause, SubscribeAdvisory } from '@/types';
@@ -173,6 +175,7 @@ function SavingsContent() {
   const { pauseProvider, resumeProvider, profileLoading } = useAuth();
   // BIN-1442: the pause just made, so its "Påminn mig" can be offered right away.
   const [justPaused, setJustPaused] = useState<{ providerId: number; resumeAt: string } | null>(null);
+  const { show: toast } = useToast();
   const hasAdvisorProviders = advisor.providers.length > 0;
   // En-skott per sidladd: fyr 'advisor_viewed' bara första gången rådgivaren
   // är klar med providers. Utan guarden skulle providerCount-ändringar (t.ex.
@@ -394,7 +397,13 @@ function SavingsContent() {
             <NumberedActionsList
               advisor={advisor}
               onPauseProvider={(id, resumeAt) => {
-                void pauseProvider(id, resumeAt).then(() => { if (resumeAt) setJustPaused({ providerId: id, resumeAt }); });
+                pauseProvider(id, resumeAt)
+                  .then(() => { if (resumeAt) setJustPaused({ providerId: id, resumeAt }); })
+                  .catch((err: unknown) => {
+                    console.error('Pause failed:', err);
+                    captureError(err, { scope: 'advisor', kind: 'pauseProvider' });
+                    toast('Kunde inte pausa tjänsten. Försök igen.');
+                  });
                 trackEvent('advisor_action_taken', { action: 'pause', providerId: id });
               }}
               onShowSubscribeRows={handleShowSubscribeRows}

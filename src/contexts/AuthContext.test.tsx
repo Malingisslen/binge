@@ -2935,6 +2935,17 @@ describe('pause reminders (BIN-1442)', () => {
     expect(data.pauseReminderNext).toBe('2026-12-01');
   });
 
+  it('pauseProvider writes remind:false when an open-ended pause drops the reminder', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerPauses: pauses });
+    setDoc.mockClear();
+    await act(async () => { await ctx!.pauseProvider(76, null); });
+    const data = userDocWrites().at(-1)![1] as Record<string, unknown>;
+    // The merge write would keep a stored remind:true if the key were omitted.
+    expect((data.providerPauses as Record<number, unknown>)[76]).toEqual({ pausedAt: '2026-10-01', resumeAt: null, remind: false });
+    expect(data.pauseReminderNext).toBeNull();
+  });
+
   it('setPauseReminder refuses while a deletion is unfinished, and writes nothing', async () => {
     renderAuth();
     await login({ username: 'malin', providerPauses: pauses });

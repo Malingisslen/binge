@@ -25,6 +25,7 @@ describe('duePauseReminders (BIN-1442)', () => {
       384: pause(null),
       999999: pause('2026-12-01'),
       337: 'nonsense',
+      '08': pause('2026-12-01'),
     };
     expect(duePauseReminders(pauses, '2026-12-12')).toEqual([]);
     expect(duePauseReminders(null, '2026-12-12')).toEqual([]);

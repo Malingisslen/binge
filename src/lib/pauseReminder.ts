@@ -12,7 +12,7 @@ import { PROVIDER_MAP } from '@/lib/tmdb/providers';
 export function nextPauseReminderDay(pauses: Record<number, ProviderPauseState> | null | undefined): string | null {
   if (!pauses) return null;
   const days = Object.entries(pauses)
-    .filter(([id, p]) => PROVIDER_MAP.has(Number(id)) && p?.remind === true
+    .filter(([id, p]) => String(Number(id)) === id && PROVIDER_MAP.has(Number(id)) && p?.remind === true
       && typeof p.resumeAt === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(p.resumeAt))
     .map(([, p]) => p.resumeAt as string)
     .sort();

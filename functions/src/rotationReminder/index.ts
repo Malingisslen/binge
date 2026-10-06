@@ -38,6 +38,8 @@ import {
 
 /** Users handled per run by the pause-reminder pass; the rest wait a day. */
 const PAUSE_REMINDER_PAGE = 500;
+/** Followed series read per due user; past it the count in the text is a floor. */
+const FOLLOWED_READ_LIMIT = 1000;
 
 /**
  * An inbox card under a deterministic id, written with create(): a retry after a
@@ -92,6 +94,7 @@ async function runPauseReminders(db: Firestore, today: string): Promise<number> 
         const followed = await db.collection('users').doc(doc.id).collection('watchlist')
           .where('status', '==', 'mina')
           .select('subscriptionProviders', 'nextAirDate')
+          .limit(FOLLOWED_READ_LIMIT)
           .get();
         const series = followed.docs.map(d => d.data() as FollowedSeries);
         for (const r of due) {
