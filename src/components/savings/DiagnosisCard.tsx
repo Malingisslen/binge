@@ -67,6 +67,18 @@ export default function DiagnosisCard({ advisor, activeProviderCount }: Props) {
         </>
       );
       break;
+    case 'needs-library':
+      // Beslutad text (förbättringsplan 2, beslut 2) — ändra inte utan Malin.
+      suggestion = (
+        <>
+          {' '}
+          <strong className="text-ink">Lägg till det du följer, så kan Binge räkna</strong>
+          <span className="text-ink-3">
+            {' '}ut vad du kan pausa. Binge behöver minst {action.minTitles} titlar i Följer eller Vill se, du har {action.titleCount}.
+          </span>
+        </>
+      );
+      break;
     case 'idle':
     default:
       suggestion = (

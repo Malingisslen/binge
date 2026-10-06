@@ -278,6 +278,40 @@ function SavingsContent() {
 
   const activeProviderCount = advisor.providers.length;
 
+  // Pausgolvet: med för få titlar i biblioteket ser varje tjänst oanvänd ut, så
+  // allt som räknar på pauser (stegen, värdelistan, rotationen och kalendern som
+  // sparar ett rotationsschema) väntar tills biblioteket räcker. Det som inte
+  // beror på biblioteket — kostnaden, prisändringar, paketen och egna pauser — visas ändå.
+  if (!advisor.pauseAdviceReady) {
+    return (
+      <>
+        <header>
+          <div className="crumb">Streamingrådgivaren · {activeProviderCount} tjänster</div>
+          <h1 className="page-h1">Streamingrådgivaren</h1>
+        </header>
+        <div style={{ marginTop: 22 }}>
+          <DiagnosisCard advisor={advisor} activeProviderCount={activeProviderCount} />
+          <div className="flex flex-wrap gap-2 mb-[14px]">
+            <Link href="/series/" className="btn btn-sm">Utforska serier</Link>
+            <Link href="/films/" className="btn btn-ghost btn-sm">Utforska filmer</Link>
+          </div>
+          <PriceChangeNudges />
+          <CampaignExpiryNudges />
+          {advisor.activePauses.length > 0 && (
+            <ActivePausesSection
+              pauses={advisor.activePauses}
+              onResume={(id) => { resumeProvider(id); trackEvent('advisor_action_taken', { action: 'resume', providerId: id }); }}
+            />
+          )}
+          <BundleArbitrageCard suggestions={advisor.bundleSuggestions} />
+          <div style={{ marginTop: 16 }}>
+            <JustWatchCredit />
+          </div>
+        </div>
+      </>
+    );
+  }
+
   const allSubscribeRows = advisor.subscribeAdvice
     .flatMap(sa => sa.shows.map(show => ({ show, provider: sa })))
     .sort((a, b) => {

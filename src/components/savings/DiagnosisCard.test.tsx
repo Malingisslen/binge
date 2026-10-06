@@ -26,3 +26,18 @@ describe('DiagnosisCard — uppskattat', () => {
     expect(screen.queryByText(/uppskattat/)).not.toBeInTheDocument();
   });
 });
+
+describe('DiagnosisCard — pausgolvet', () => {
+  it('ber om fler titlar i stället för att föreslå en paus', () => {
+    const a = {
+      totalMonthlyCost: 169,
+      totalMonthlyCostEstimated: false,
+      primaryAction: { kind: 'needs-library', titleCount: 1, minTitles: 3 },
+    } as unknown as AdvisorResult;
+    render(<DiagnosisCard advisor={a} activeProviderCount={1} />);
+    expect(screen.getByText(/Du betalar/)).toHaveTextContent(
+      'Du betalar 169 kr/mån för 1 tjänst. Lägg till det du följer, så kan Binge räkna ut vad du kan pausa. Binge behöver minst 3 titlar i Följer eller Vill se, du har 1.',
+    );
+    expect(screen.queryByText(/kan pausas/)).not.toBeInTheDocument();
+  });
+});

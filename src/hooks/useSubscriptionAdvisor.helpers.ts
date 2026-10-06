@@ -19,6 +19,7 @@ import type {
   WatchlistItem,
   WillSeePerProviderRow,
   CoverageOption,
+  PrimaryAction,
 } from '@/types';
 
 // A1/X1: "allt laddat?"-aggregering för rådgivaren. Rådgivaren är klar först
@@ -106,6 +107,34 @@ export function findTopPausable(
   return providers
     .filter(p => p.status === 'pause' && !userPausedSet.has(p.providerId) && (p.monthlyCost ?? 0) > 0)
     .sort((a, b) => (b.monthlyCost ?? 0) - (a.monthlyCost ?? 0))[0];
+}
+
+// Golvet för pausbeskedet (paket K, beslut 2 i förbättringsplan 2): med färre
+// titlar i Följer + Vill se än så här vet Binge för lite om vad användaren
+// tittar på — en tjänst utan något följt ser då "oanvänd" ut fast den kanske
+// används varje kväll. Under golvet ger rådgivaren inget pausförslag alls.
+export const PAUSE_ADVICE_MIN_TITLES = 3;
+
+export function hasEnoughTitlesForPauseAdvice(anchorTitleCount: number): boolean {
+  return anchorTitleCount >= PAUSE_ADVICE_MIN_TITLES;
+}
+
+// Under golvet vinner 'needs-library' över allt annat — även catchup och
+// subscribe, eftersom båda också räknar på ett bibliotek som inte finns än.
+export function selectPrimaryAction(input: {
+  anchorTitleCount: number;
+  pauseAction: Extract<PrimaryAction, { kind: 'pause' }> | null;
+  catchupAction: Extract<PrimaryAction, { kind: 'catchup' }> | null;
+  subscribeAction: Extract<PrimaryAction, { kind: 'subscribe' }> | null;
+  idleNextCheckDate: string | null;
+}): PrimaryAction {
+  if (!hasEnoughTitlesForPauseAdvice(input.anchorTitleCount)) {
+    return { kind: 'needs-library', titleCount: input.anchorTitleCount, minTitles: PAUSE_ADVICE_MIN_TITLES };
+  }
+  return input.pauseAction
+    ?? input.catchupAction
+    ?? input.subscribeAction
+    ?? { kind: 'idle', nextCheckDate: input.idleNextCheckDate };
 }
 
 // Threshold 3 = "påbörjat flera serier" — undviker att tjata om enstaka påbörjade titlar.

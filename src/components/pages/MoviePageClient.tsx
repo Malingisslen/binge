@@ -420,7 +420,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
                 <CinemaCountdownStrip
                   info={cinemaInfo}
                   inLibrary={!!watchlistItem}
-                  onBevaka={signedOut ? goToLogin : handleBevaka}
+                  onBevaka={signedOut ? () => goToLogin() : handleBevaka}
                 />
               )}
             </ClientOnly>
