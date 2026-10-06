@@ -80,6 +80,7 @@ describe('the gate roster has a named owner (BIN-851)', () => {
 
     expect(map.roles['25'].patterns).toContain('.claude/shared-plugin.json');
     expect(map.roles['25'].patterns).toContain('.claude/rules/accepted-deviations.md');
+    expect(map.roles['25'].patterns).toContain('.claude/accepted-deviations.md');
   });
 });
 

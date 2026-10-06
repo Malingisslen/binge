@@ -912,6 +912,7 @@ const MACHINERY = [
   '.claude/shared-plugin.json',
   '.claude/settings.json',
   '.claude/rules/accepted-deviations.md',
+  '.claude/accepted-deviations.md',
   '.claude/rules/code-style.md',
   '.claude/agents/binge-code-reviewer.md',
   '.claude/hooks/freshness.mjs',

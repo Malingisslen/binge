@@ -688,7 +688,7 @@ Owns the process.
   and the arrow below is what this bullet claims. File names in this bullet are written without backticks for
   the same reason the lockfile is: the generator harvests backtick-quoted tracked paths, so
   naming a file in a sentence that declines to own it would own it.
-  → `scripts/check-workflow-map.mjs`, `scripts/check-workflow-map.test.mjs`, `scripts/check-knowledge-caps.mjs`, `scripts/check-knowledge-caps.test.mjs`, `scripts/prune-map-flag.mjs`, `scripts/prune-map-flag.test.mjs`
+  → `scripts/check-workflow-map.mjs`, `scripts/check-workflow-map.test.mjs`, `scripts/check-knowledge-caps.mjs`, `scripts/check-knowledge-caps.test.mjs`, `scripts/prune-map-flag.mjs`, `scripts/prune-map-flag.test.mjs`, `scripts/check-deviations-index.mjs`, `scripts/check-deviations-index.test.mjs`
 
 - **The risk router and the ownership map it reads** (BIN-834, BIN-869). `route.mjs`
   decides which roles a change is shown to; `gen-ownership-map.mjs` computes the map
@@ -819,7 +819,7 @@ findings here too.
   that build/repair those payloads. A silent change here collides or shadows real user
   data (BIN-569, BIN-608, BIN-624, BIN-766, BIN-965, BIN-1010, BIN-1011 — the last
   three are the add-vs-delete race in `WatchlistContext`'s `addIfMissing` branch,
-  decided in `.claude/rules/accepted-deviations.md` rather than fixed with a
+  decided in `.claude/accepted-deviations.md` rather than fixed with a
   compensating delete).
   → `src/lib/mediaTypeDocId.ts`, `src/lib/watchlistDocKey.ts`, `src/lib/watchlistDocKey.test.ts`, `src/lib/watchlist/**`, `src/contexts/WatchlistContext.tsx`
 - **Disaster recovery** — PITR + scheduled backups (region `eur3`).

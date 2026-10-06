@@ -618,6 +618,7 @@
       "title": "Engineering Manager / Release Manager",
       "slug": "engineering-manager-release-manager",
       "patterns": [
+        ".claude/accepted-deviations.md",
         ".claude/agents/binge-code-reviewer.build.knowledge.md",
         ".claude/agents/binge-code-reviewer.client.knowledge.md",
         ".claude/agents/binge-code-reviewer.data.knowledge.md",
@@ -661,6 +662,8 @@
         "functions/tsconfig.typecheck.json",
         "lefthook.yml",
         "package.json",
+        "scripts/check-deviations-index.mjs",
+        "scripts/check-deviations-index.test.mjs",
         "scripts/check-knowledge-caps.mjs",
         "scripts/check-knowledge-caps.test.mjs",
         "scripts/check-workflow-map.mjs",
@@ -761,7 +764,7 @@
       "title": "Database Administrator / Data-layer Engineer",
       "slug": "database-administrator-data-layer-engineer",
       "patterns": [
-        ".claude/rules/accepted-deviations.md",
+        ".claude/accepted-deviations.md",
         "docs/analysis/EXTERNAL_ACTIONS.md",
         "firestore.indexes.json",
         "firestore.rules",

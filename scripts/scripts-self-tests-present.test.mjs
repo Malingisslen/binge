@@ -70,6 +70,9 @@ const REQUIRED = [
   // deploys and refuses a run nobody approved, so a test file that stops running leaves
   // both decisions unverified.
   'check-deploy-drift.test.mjs',
+  // BIN-1426. The check that the decided-deviations index lists every ledger heading. A
+  // reviewer reads the index first, so an entry missing there is a decision it never sees.
+  'check-deviations-index.test.mjs',
 ];
 
 // A LITERAL, deliberately not `REQUIRED.length`. Deriving it made this assertion unable
@@ -78,7 +81,7 @@ const REQUIRED = [
 // replaced BIN-838's floor to prevent, reproduced inside its own replacement. Growth is
 // free at the runner; raising this number is the deliberate act that keeps the new file
 // protected, and lowering it is the deliberate act a shrink must perform out loud.
-const MIN = 9;
+const MIN = 10;
 
 // Reads the DISK set, recursively and on both suffixes, to line up as closely as a
 // directory read can with what vitest's `scripts/**/*.{test,spec}.mjs` collects. It is not
