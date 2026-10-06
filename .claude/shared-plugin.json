@@ -173,7 +173,7 @@
       ".claude/rules/lessons-digest-delivery.md",
       ".claude/rules/lessons-digest-testing.md"
     ],
-    "digestCoreMaxChars": 18000,
+    "digestCoreMaxChars": 8000,
     "tiers": {
       "coreMaxChars": 15000,
       "chapterMaxChars": 20000,
