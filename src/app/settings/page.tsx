@@ -4,7 +4,6 @@ import AuthGuard from '@/components/AuthGuard';
 import { useAuth } from '@/hooks/useAuth';
 import { usePageMeta } from '@/hooks/usePageMeta';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { TMDB_ATTRIBUTION_EN } from '@/lib/tmdb/attribution';
 import { ProfileSection } from '@/components/settings/ProfileSection';
 import { UsernameSection } from '@/components/settings/UsernameSection';
 import { ProvidersSection } from '@/components/settings/ProvidersSection';
@@ -52,8 +51,6 @@ function SettingsContent() {
         </SettingsSection>
         <DataExportSection />
         <DeleteAccountSection />
-
-        <div className="text-xxs text-ink-3 mt-4">{TMDB_ATTRIBUTION_EN}</div>
       </div>
     </>
   );

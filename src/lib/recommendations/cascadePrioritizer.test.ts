@@ -290,3 +290,18 @@ describe('describeCompanionAnchors — the row says WHICH (BIN-811)', () => {
     expect(row?.description).toBe('Eftersom du har sett klart Breaking Bad.');
   });
 });
+
+describe('prioritizeRows — tematiska rader', () => {
+  it('rubriken är på svenska, och ett tema utan översättning ger ingen rad', () => {
+    const rows = prioritizeRows({
+      ...emptyInput(),
+      recurringKeywords: [
+        { id: 818, name: 'based on novel or book', recurrence: 4 },
+        { id: 1, name: 'woman director', recurrence: 5 },
+      ],
+    });
+    const thematic = rows.filter(r => r.id.kind === 'thematic');
+    expect(thematic.map(r => r.label)).toEqual(['Tematiskt: bygger på en roman']);
+    expect(thematic[0]).toMatchObject({ rowKey: 'keyword:818', score: 40 });
+  });
+});

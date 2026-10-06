@@ -853,6 +853,8 @@
         "src/lib/recommendations/companionSeeds.cap.test.ts",
         "src/lib/recommendations/companionSeeds.test.ts",
         "src/lib/recommendations/companionSeeds.ts",
+        "src/lib/recommendations/keywordLabels.test.ts",
+        "src/lib/recommendations/keywordLabels.ts",
         "src/lib/recommendations/rowComposition.test.ts",
         "src/lib/recommendations/rowComposition.ts",
         "src/lib/recommendations/rowMediaFilter.test.ts",

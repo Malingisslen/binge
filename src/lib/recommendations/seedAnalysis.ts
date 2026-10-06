@@ -1,3 +1,4 @@
+import { swedishKeywordLabel } from './keywordLabels';
 import type {
   WatchlistItem,
   Seed,
@@ -137,7 +138,9 @@ export function detectRecurringKeywords(
     }
   }
   return Array.from(buckets.values())
-    .filter(b => b.titles.size >= threshold)
+    // Bara teman som kan visas med svensk rubrik tävlar om de tre platserna, så
+    // ett oöversatt tema överst tränger inte undan ett översatt längre ned.
+    .filter(b => b.titles.size >= threshold && swedishKeywordLabel(b.name) !== null)
     .map<RecurringKeyword>(b => ({ id: b.id, name: b.name, recurrence: b.titles.size }))
     .sort((a, b) => b.recurrence - a.recurrence)
     .slice(0, 3);

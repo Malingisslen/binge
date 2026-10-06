@@ -898,7 +898,7 @@ owns the _social graph_). This is the Binge analog of the sibling projects'
 - **Recommendation cascade** — the per-row score ceilings (latest-fav `100−daysSince`,
   person `min(recurrence×15, 90)`, similar `min(rank×12, 80)`, free-public 55,
   trending 30) and tie-breaks.
-  → `src/lib/recommendations/cascadePrioritizer.ts`
+  → `src/lib/recommendations/cascadePrioritizer.ts`, `src/lib/recommendations/keywordLabels.ts`, `src/lib/recommendations/keywordLabels.test.ts`
 - **Seed classification** — strong (rating ≥4) / weak (3) seeds, the 30-day latest-5★
   window, recurrence thresholds (people 3, keywords 2).
   → `src/lib/recommendations/seedAnalysis.ts`

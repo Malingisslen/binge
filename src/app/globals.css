@@ -1250,6 +1250,8 @@ button { font: inherit; cursor: pointer; }
    riktig avatar med användarens initial. */
 .topbar-avatar-skeleton { display: none; }
 .returning-user .topbar-avatar-skeleton { display: flex; }
+/* Medan profilen laddas: en dämpad platshållare, inte en tom svart cirkel som ser ut som en trasig avatar. */
+.topbar-avatar-skeleton .avatar { background: var(--placeholder-fill); }
 
 /* ─── "Senare i veckan" filmstrip ───────────────────────────────────────── */
 .filmstrip {
@@ -1590,7 +1592,7 @@ button { font: inherit; cursor: pointer; }
   flex-direction: column;
 }
 .week-board .col:last-child { border-right: 0; }
-.week-board .col.today { background: oklch(0.965 0.03 300 / 0.55); }
+.week-board .col.today { background: color-mix(in oklch, var(--cal-soft) 55%, transparent); }
 /* K4: passerade dagar visar sina avsnitt men dämpade — schemat ljuger inte
    om vad som redan sänts, det tonar bara ner det. */
 .week-board .col.past .col-body { opacity: 0.55; }
@@ -2282,6 +2284,15 @@ button { font: inherit; cursor: pointer; }
   color: var(--ink-3);
   letter-spacing: 0.12em;
   text-transform: uppercase;
+}
+
+/* Mörkt läge: tjänsternas egna färger och loggor är ibland nästan svarta
+   (SkyShowtimes marinblå, Apple TV:s svarta logga) och försvinner mot den
+   mörka ytan. En ljus kant håller dem synliga utan att ändra märkets färg. */
+[data-theme='dark'] .provider-swatch,
+[data-theme='dark'] .detail-hero .providers-row img {
+  outline: 1px solid var(--ink-3);
+  outline-offset: -1px;
 }
 
 @media (max-width: 760px) {
