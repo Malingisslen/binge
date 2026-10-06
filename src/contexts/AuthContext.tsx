@@ -293,6 +293,7 @@ async function buildExistingProfile(data: Record<string, unknown>, firebaseUser:
       episodeReleases: (data.notificationSettings as UserProfile['notificationSettings'])?.episodeReleases ?? true,
       priceDrops: (data.notificationSettings as UserProfile['notificationSettings'])?.priceDrops ?? false,
       rotationReminders: (data.notificationSettings as UserProfile['notificationSettings'])?.rotationReminders ?? false,
+      priceChanges: (data.notificationSettings as UserProfile['notificationSettings'])?.priceChanges ?? false,
       weeklyDigest: (data.notificationSettings as UserProfile['notificationSettings'])?.weeklyDigest ?? false,
     },
     rotationSchedule: (data.rotationSchedule as UserProfile['rotationSchedule']) ?? undefined,
@@ -508,6 +509,7 @@ async function createProfileWithConsent(firebaseUser: User): Promise<ProfileLoad
       episodeReleases: true,
       priceDrops: false,
       rotationReminders: false,
+      priceChanges: false,
       weeklyDigest: false,
     },
   };
@@ -977,7 +979,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       providerPauses: {},
       calibrationGenres: null,
       hemkommun: null,
-      notificationSettings: { newEpisodes: true, availableOnMyServices: true, pushEnabled: false, episodeReleases: true, priceDrops: false, rotationReminders: false, weeklyDigest: false },
+      notificationSettings: { newEpisodes: true, availableOnMyServices: true, pushEnabled: false, episodeReleases: true, priceDrops: false, rotationReminders: false, priceChanges: false, weeklyDigest: false },
       termsAcceptedAt: kit.serverTimestamp(),
       termsVersion,
       ageConfirmedAt: kit.serverTimestamp(), // BIN-348: the register form gates on the 13+ checkbox; record it.
