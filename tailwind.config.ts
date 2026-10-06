@@ -13,6 +13,25 @@ import type { Config } from "tailwindcss";
 // values so existing pages inherit the new look without component-by-
 // component edits. They will be removed once every page is migrated to the
 // Direction-H component vocabulary.
+// Every colour is a bare var(), which Tailwind cannot split into channels, so an
+// opacity modifier (bg-acc-deep/10, border-danger/30) used to generate no CSS at
+// all. A modifier now mixes the token with transparent; without one the class
+// stays the plain var() it always was.
+type ColorFn = (args: { opacityValue?: string | number }) => string;
+// Tailwind's types only list strings, but its runtime accepts a colour function.
+function withOpacityModifier(colors: Record<string, string>): Record<string, string> {
+  const fns: Record<string, ColorFn> = Object.fromEntries(
+    Object.entries(colors).map(([name, value]) => [
+      name,
+      ({ opacityValue }: { opacityValue?: string | number }) =>
+        opacityValue === undefined || String(opacityValue).startsWith('var(')
+          ? value
+          : `color-mix(in oklch, ${value} calc(${opacityValue} * 100%), transparent)`,
+    ]),
+  );
+  return fns as unknown as Record<string, string>;
+}
+
 const config: Config = {
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
@@ -21,7 +40,7 @@ const config: Config = {
   ],
   theme: {
     extend: {
-      colors: {
+      colors: withOpacityModifier({
         // Direction H · primary token names
         bg: 'var(--bg)',
         'bg-2': 'var(--bg-2)',
@@ -80,7 +99,7 @@ const config: Config = {
         // sidebar-bg — the landing hero band (HomePageClient). Its own token so it
         // stays dark under white text in both themes.
         'sidebar-bg': 'var(--hero-bg)',
-      },
+      }),
       fontFamily: {
         sans: ['Albert Sans', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
         mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'],
