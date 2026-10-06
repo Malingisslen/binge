@@ -3,6 +3,7 @@
 import { useRef } from 'react';
 import { DialogShell } from './DialogShell';
 import { Button } from '@/components/ui/Button';
+import { cardClass } from '@/components/ui/Card';
 
 /**
  * Designad bekräftelsedialog som ersätter native window.confirm() (G1).
@@ -38,7 +39,7 @@ export function ConfirmDialog({
       describedBy={body ? 'confirm-dialog-desc' : undefined}
       onDismiss={onCancel}
       initialFocusRef={confirmRef}
-      className="bg-surface border border-rule rounded-sm max-w-[380px] w-full"
+      className={cardClass('max-w-[380px] w-full')}
     >
       <div className="px-3 py-3">
         <h2 id="confirm-dialog-title" className="text-sm font-bold text-ink">
@@ -55,15 +56,15 @@ export function ConfirmDialog({
         >
           {cancelLabel}
         </Button>
-        <button
+        <Button
           ref={confirmRef}
           type="button"
           onClick={onConfirm}
           disabled={busy}
-          className="btn btn-danger btn-sm"
+          variant="danger" size="sm"
         >
           {confirmLabel}
-        </button>
+        </Button>
       </div>
     </DialogShell>
   );
