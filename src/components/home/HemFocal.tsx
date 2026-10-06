@@ -8,6 +8,7 @@ import { shortSwedishWeekday } from '@/lib/utils';
 import type { CalendarEntry } from '@/hooks/useCalendar';
 import { entryHref } from '@/lib/calendar/entry';
 import { daysFromToday } from './focalPick';
+import MarkEpisodeSeenButton from './MarkEpisodeSeenButton';
 
 // The Hem focal block: 21:9 duotone still up top + a 2:3 poster overlapping
 // the bottom-left + a meta column + a CTA column. Designed for the "tonight
@@ -129,7 +130,10 @@ export default function HemFocal({ entry }: Props) {
         </div>
 
         <div className="cta">
-          <Link href={href} className="btn">{isMovie ? 'Öppna filmen' : 'Öppna serien'}</Link>
+          {entry.kind === 'episode' && days <= 0 && (
+            <MarkEpisodeSeenButton tmdbId={entry.tmdbId} season={entry.season} episode={entry.episode} className="btn" />
+          )}
+          <Link href={href} className={entry.kind === 'episode' && days <= 0 ? 'btn btn-ghost' : 'btn'}>{isMovie ? 'Öppna filmen' : 'Öppna serien'}</Link>
           <Link href="/calendar/" className="btn btn-ghost btn-sm">Se hela veckan</Link>
         </div>
       </div>

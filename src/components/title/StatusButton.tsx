@@ -10,6 +10,8 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useToast } from '@/contexts/ToastContext';
 import { statusLabel, statusMenuLabel, statusOptionsFor } from '@/lib/watchStatus';
 import { useRemoveWithUndo } from '@/hooks/useRemoveWithUndo';
+import { useFirstFollowConfirmation } from '@/hooks/useFollowConfirmation';
+import { isFirstFollow } from '@/hooks/useFollowConfirmation.helpers';
 import { buildWatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
 import { rewatchFields } from '@/lib/watchlistWrites';
 import { LIBRARY_UNAVAILABLE } from './libraryHold';
@@ -43,7 +45,8 @@ export default function StatusButton({
   tmdbStatus,
 }: StatusButtonProps) {
   const { uid, loading: authLoading } = useAuth();
-  const { getItem, upsertTitle, listenerFailed, libraryKnown } = useWatchlist();
+  const { items, getItem, upsertTitle, listenerFailed, libraryKnown } = useWatchlist();
+  const confirmFirstFollow = useFirstFollowConfirmation();
   const removeWithUndo = useRemoveWithUndo();
   const markSeen = useMarkSeen();
   const goToLogin = useSignedOutRedirect();
@@ -134,6 +137,8 @@ export default function StatusButton({
     // (which returned above via markSeen), so it can never be a viewing.
     // BIN-1038, the same answer QuickAddButton gives: the refusal was silent, never false.
     // Only the refusal is caught; everything else propagates exactly as before.
+    // Read before the write: the add itself lands in `items` optimistically.
+    const firstFollow = isFirstFollow(items, mediaType, status, current != null);
     try {
       await upsertTitle(buildWatchlistAddPayload({
         tmdbId, mediaType, status, title, posterPath, releaseYear,
@@ -146,7 +151,8 @@ export default function StatusButton({
       if (isDeletionInProgressError(err)) { toast(DELETION_IN_PROGRESS_MESSAGE); return; }
       throw err;
     }
-    toast(`${title} — ${labelFor(status)}`);
+    if (firstFollow) confirmFirstFollow(title, `${title} — ${labelFor(status)}`);
+    else toast(`${title} — ${labelFor(status)}`);
   }
 
   function handleRemove() {
