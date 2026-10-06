@@ -528,6 +528,7 @@ describe('the file that decides who reviews everything else (BIN-851)', () => {
     // assertions above green and still reopen the hole.
     expect(integrationGateMatches('.claude/shared-plugin.json')).toBe(true);
     expect(integrationGateMatches('.claude/rules/accepted-deviations.md')).toBe(true);
+    expect(integrationGateMatches('.claude/accepted-deviations.md')).toBe(true);
     // Reached by a `keyed` rule, not a pattern (BIN-990). Without this the keyed arm in
     // gateMatches() is pinned by nothing in this file.
     expect(integrationGateMatches('.claude/settings.json')).toBe(true);

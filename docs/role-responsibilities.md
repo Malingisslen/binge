@@ -657,7 +657,7 @@ Owns the process.
   made the commit gate POINT at that file. That moved the authority to a file no gate
   here stopped. lessons-digest.md is deliberately not
   owned.
-  → `.claude/shared-plugin.json`, `.claude/rules/accepted-deviations.md`, `.claude/rules/code-style.md`
+  → `.claude/shared-plugin.json`, `.claude/rules/accepted-deviations.md`, `.claude/accepted-deviations.md`, `.claude/rules/code-style.md`
 - **The reviewers' own instruction files and the hooks that stamp their state**
   (BIN-869). Editing what a reviewer is told to look for disarms a gate exactly as
   effectively as deleting its pattern, and until now both routed `skip` and matched
