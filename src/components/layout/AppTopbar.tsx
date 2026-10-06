@@ -8,14 +8,19 @@ import TopbarActions from './TopbarActions';
 import { useSearchBox } from '@/hooks/useSearchBox';
 import { detectMacLike, shortcutHint } from '@/lib/platform';
 import SearchDropdown from '@/components/search/SearchDropdown';
-import { TOPBAR_SEARCH_ID } from './MobileTabBar';
+import { usePathname } from 'next/navigation';
+import { TOPBAR_SEARCH_ID, GUEST_LINKS, isActive } from './MobileTabBar';
+import type { ChromeMode } from './chromeMode';
+import ChromePart from './ChromePart';
+import BrandMark from '@/components/ui/BrandMark';
 
 // The new Direction-H topbar. Grid: 200px brand · 1fr week strip ·
 // search+avatar. On narrow screens the grid collapses to a single column
 // (see globals.css). The week strip itself remains 7 day-cells on all sizes,
 // just compressed.
 
-export default function AppTopbar() {
+export default function AppTopbar({ chrome }: { chrome: ChromeMode }) {
+  const pathname = usePathname();
   const {
     searchQuery, setSearchQuery, debouncedQuery,
     searchFocused, setSearchFocused, searchRef, inputRef, clearSearch,
@@ -42,11 +47,30 @@ export default function AppTopbar() {
   return (
     <header className="app-topbar" role="banner">
       <Link href="/" className="brand" aria-label="binge.nu">
-        <span className="mark-sq" aria-hidden="true" />
+        <BrandMark />
         binge.nu
       </Link>
 
-      <WeekStrip />
+      <ChromePart mode={chrome} audience="app">
+        <WeekStrip />
+      </ChromePart>
+      <ChromePart mode={chrome} audience="guest">
+        <nav className="guest-nav" aria-label="Meny">
+          {GUEST_LINKS.filter(item => item.href !== '/').map(item => {
+            const active = isActive(pathname, item);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={active ? 'is-on' : undefined}
+                aria-current={active ? 'page' : undefined}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+      </ChromePart>
 
       <div className="topbar-rhs">
         <div className="search-wrap" ref={searchRef}>

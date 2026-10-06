@@ -38,6 +38,8 @@ export interface MonthlySpendSummary {
   paidCount: number;
   /** Minst ett av beloppen i summan är katalogens listpris. */
   estimated: boolean;
+  /** En rad per tjänst i summan, dyrast först — kvittots rader (MoneyFigure). */
+  lines: { label: string; kr: number }[];
 }
 
 export function summarizeMonthlySpend(
@@ -59,5 +61,6 @@ export function summarizeMonthlySpend(
     totalKr: snapshot.totalKr,
     paidCount: counted.length,
     estimated: counted.some(p => isEstimatedMonthlyCost(p.id, user, now)),
+    lines: counted.map(p => ({ label: p.name, kr: p.cost })),
   };
 }

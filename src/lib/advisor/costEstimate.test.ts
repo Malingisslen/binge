@@ -54,12 +54,12 @@ describe('isEstimatedMonthlyCost', () => {
 
 describe('summarizeMonthlySpend', () => {
   it('bara gratistjänster ger noll betalda och ingen summa', () => {
-    expect(summarizeMonthlySpend([SVT], {}, NOW)).toEqual({ totalKr: 0, paidCount: 0, estimated: false });
+    expect(summarizeMonthlySpend([SVT], {}, NOW)).toEqual({ totalKr: 0, paidCount: 0, estimated: false, lines: [] });
   });
 
   it('gratistjänsten räknas inte bland tjänsterna', () => {
     const s = summarizeMonthlySpend([NETFLIX, SVT], { providerTiers: { [NETFLIX]: 'standard' } }, NOW);
-    expect(s).toEqual({ totalKr: 169, paidCount: 1, estimated: false });
+    expect(s).toEqual({ totalKr: 169, paidCount: 1, estimated: false, lines: [{ label: 'Netflix', kr: 169 }] });
   });
 
   it('"Vet inte" ger katalogens standardpris, aldrig en sportnivå', () => {
@@ -79,7 +79,11 @@ describe('summarizeMonthlySpend', () => {
       { providerTiers: { [NETFLIX]: 'standard', [VIAPLAY]: 'reklam' } },
       NOW,
     );
-    expect(all).toEqual({ totalKr: 169 + 99, paidCount: 2, estimated: false });
+    expect(all).toEqual({
+      totalKr: 169 + 99, paidCount: 2, estimated: false,
+      // The receipt's lines: one per paid service, priciest first, summing to the total.
+      lines: [{ label: 'Netflix', kr: 169 }, { label: 'Viaplay', kr: 99 }],
+    });
   });
 
   it('en löpande kampanj sänker summan till kampanjpriset', () => {
@@ -88,6 +92,6 @@ describe('summarizeMonthlySpend', () => {
       { providerCampaigns: { [NETFLIX]: { monthlyCost: 99, endDate: '2026-12-31' } } },
       NOW,
     );
-    expect(s).toEqual({ totalKr: 99, paidCount: 1, estimated: false });
+    expect(s).toEqual({ totalKr: 99, paidCount: 1, estimated: false, lines: [{ label: 'Netflix', kr: 99 }] });
   });
 });

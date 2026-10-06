@@ -36,7 +36,7 @@ import { useEffect } from 'react';
  * server-rendering — som ligger utanför scope givet static-export-upplägget.
  */
 
-const DEFAULT_TITLE = 'Binge.nu — Håll koll på vad du tittar på';
+const DEFAULT_TITLE = 'Binge.nu – dina serier och vad de kostar';
 const DEFAULT_DESCRIPTION = 'Svensk mediatracker för film och TV-serier. Se var titlar finns att streama i Sverige.';
 // Matchar layout.tsx OG-default — återställs vid unmount så en titelsidas poster
 // inte läcker till nästa sidas share-preview (BIN-30).

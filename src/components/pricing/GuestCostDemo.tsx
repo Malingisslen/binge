@@ -5,9 +5,9 @@ import Link from 'next/link';
 import { getProvider } from '@/lib/tmdb/providers';
 import { computeGuestCost } from '@/lib/advisor/guestCost';
 import { loadGuestSelection, saveGuestSelection, type GuestSelection } from '@/lib/guestProviders';
-import { formatKr } from '@/lib/formatKr';
 import { trackEvent } from '@/lib/analytics';
 import GuestBundleBox from '@/components/pricing/GuestBundleBox';
+import MoneyFigure from '@/components/ui/MoneyFigure';
 
 // Startsidans gästdemo (Malins val 3B). Monteras bara i den gren av HomePageClient
 // där auth löst till utloggad — aldrig i den förrenderade auth-laddningsgrenen och
@@ -81,12 +81,9 @@ export default function GuestCostDemo() {
 
         {result.paidCount > 0 && (
           <div className="mt-3 flex flex-col gap-2">
-            <p className="text-sm text-ink m-0 tabular-nums" aria-live="polite">
-              <strong>{formatKr(result.totalKr)} kr/mån</strong>
-              {result.estimated && ' uppskattat'}
-              {' · '}
-              {formatKr(result.yearlyKr)} kr/år
-            </p>
+            <div aria-live="polite" className="max-w-[360px]">
+              <MoneyFigure monthlyKr={result.totalKr} estimated={result.estimated} lines={result.lines} />
+            </div>
             {result.bundle && (
               <GuestBundleBox suggestion={result.bundle} estimated={result.bundleEstimated} compact />
             )}
@@ -99,3 +96,4 @@ export default function GuestCostDemo() {
     </section>
   );
 }
+
