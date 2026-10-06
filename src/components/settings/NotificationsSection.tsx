@@ -125,6 +125,19 @@ export function NotificationsSection() {
     }
   }
 
+  async function handlePriceChangesToggle(next: boolean) {
+    if (busyKeys.has('priceChanges')) return;
+    setBusyKey('priceChanges', true);
+    try {
+      await updateNotificationSettings({ priceChanges: next });
+      toast(next ? 'Prisvaktsnotiser på' : 'Prisvaktsnotiser av');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Kunde inte ändra notisinställningar. Försök igen om en stund.');
+    } finally {
+      setBusyKey('priceChanges', false);
+    }
+  }
+
   async function handleWeeklyDigestToggle(next: boolean) {
     if (busyKeys.has('weeklyDigest')) return;
     setBusyKey('weeklyDigest', true);
@@ -234,6 +247,16 @@ export function NotificationsSection() {
           className="accent-acc-deep w-[14px] h-[14px]" />
         Påminnelser om att pausa/återuppta tjänster (rotationskalendern)
       </label>
+
+      <label className="flex items-center gap-2 cursor-pointer text-base mt-3">
+        <input type="checkbox" checked={user.notificationSettings.priceChanges} disabled={busyKeys.has('priceChanges')}
+          onChange={(e) => { void handlePriceChangesToggle(e.target.checked); }}
+          className="accent-acc-deep w-[14px] h-[14px]" />
+        Notiser när en streamingtjänst jag betalar för ändrar pris
+      </label>
+      <p className="text-xs text-ink-3 mt-1 ml-[22px]">
+        Gäller tjänster där du valt vilken nivå du har, och kräver att push-notiser är på.
+      </p>
 
       <label className="flex items-center gap-2 cursor-pointer text-base mt-3">
         <input type="checkbox" checked={user.notificationSettings.weeklyDigest} disabled={busyKeys.has('weeklyDigest')}

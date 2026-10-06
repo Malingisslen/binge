@@ -67,6 +67,18 @@ export default function DiagnosisCard({ advisor, activeProviderCount }: Props) {
         </>
       );
       break;
+    case 'needs-library':
+      // Beslutad text (förbättringsplan 2, beslut 2) — ändra inte utan Malin.
+      suggestion = (
+        <>
+          {' '}
+          <strong className="text-ink">Lägg till det du följer, så kan Binge räkna</strong>
+          <span className="text-ink-3">
+            {' '}ut vad du kan pausa. Binge behöver minst {action.minTitles} titlar i Följer eller Vill se, du har {action.titleCount}.
+          </span>
+        </>
+      );
+      break;
     case 'idle':
     default:
       suggestion = (
@@ -76,7 +88,7 @@ export default function DiagnosisCard({ advisor, activeProviderCount }: Props) {
 
   return (
     <div className="bg-surface border border-rule border-l-[3px] border-l-acc-deep rounded-sm px-4 py-[14px] mb-[14px]">
-      <p className="text-[15px] leading-[1.45] text-ink-2 font-medium">
+      <p className="text-lg leading-[1.45] text-ink-2 font-medium">
         {lead}
         {suggestion}
       </p>

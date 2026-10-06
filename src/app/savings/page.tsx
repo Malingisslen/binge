@@ -29,6 +29,8 @@ import { trackEvent } from '@/lib/analytics';
 import { titleHref } from '@/lib/tmdb/client';
 import { formatSwedishDate } from '@/lib/utils';
 import type { AdvisedShow, ActivePause, SubscribeAdvisory } from '@/types';
+import { Eyebrow } from '@/components/ui/Eyebrow';
+import { Button } from '@/components/ui/Button';
 
 const LOOK_AHEAD_DAYS = 60;
 
@@ -109,7 +111,7 @@ function ActivePausesSection({ pauses, onResume }: { pauses: ActivePause[]; onRe
   return (
     <div className="mb-[14px]">
       <div className="flex items-baseline justify-between mb-[6px]">
-        <h2 className="text-[11px] font-bold uppercase tracking-[0.5px] text-ink-3">Dina pausade tjänster</h2>
+        <Eyebrow as="h2" size="xs">Dina pausade tjänster</Eyebrow>
         {totalSaved > 0 && (
           <span className="text-xxs text-season-done font-semibold">Sparat hittills: {formatKr(totalSaved)} kr</span>
         )}
@@ -247,13 +249,13 @@ function SavingsContent() {
             title="Kunde inte räkna på dina tjänster just nu"
             body="Streamingdatan går inte att nå just nu. Det är oftast tillfälligt, försök igen om en stund."
             action={
-              <button
+              <Button
                 type="button"
                 onClick={() => window.location.reload()}
-                className="btn btn-ghost btn-sm"
+                variant="ghost" size="sm"
               >
                 Försök igen
-              </button>
+              </Button>
             }
           />
         </>
@@ -277,6 +279,40 @@ function SavingsContent() {
   }
 
   const activeProviderCount = advisor.providers.length;
+
+  // Pausgolvet: med för få titlar i biblioteket ser varje tjänst oanvänd ut, så
+  // allt som räknar på pauser (stegen, värdelistan, rotationen och kalendern som
+  // sparar ett rotationsschema) väntar tills biblioteket räcker. Det som inte
+  // beror på biblioteket — kostnaden, prisändringar, paketen och egna pauser — visas ändå.
+  if (!advisor.pauseAdviceReady) {
+    return (
+      <>
+        <header>
+          <div className="crumb">Streamingrådgivaren · {activeProviderCount} tjänster</div>
+          <h1 className="page-h1">Streamingrådgivaren</h1>
+        </header>
+        <div style={{ marginTop: 22 }}>
+          <DiagnosisCard advisor={advisor} activeProviderCount={activeProviderCount} />
+          <div className="flex flex-wrap gap-2 mb-[14px]">
+            <Link href="/series/" className="btn btn-sm">Utforska serier</Link>
+            <Link href="/films/" className="btn btn-ghost btn-sm">Utforska filmer</Link>
+          </div>
+          <PriceChangeNudges />
+          <CampaignExpiryNudges />
+          {advisor.activePauses.length > 0 && (
+            <ActivePausesSection
+              pauses={advisor.activePauses}
+              onResume={(id) => { resumeProvider(id); trackEvent('advisor_action_taken', { action: 'resume', providerId: id }); }}
+            />
+          )}
+          <BundleArbitrageCard suggestions={advisor.bundleSuggestions} />
+          <div style={{ marginTop: 16 }}>
+            <JustWatchCredit />
+          </div>
+        </div>
+      </>
+    );
+  }
 
   const allSubscribeRows = advisor.subscribeAdvice
     .flatMap(sa => sa.shows.map(show => ({ show, provider: sa })))
@@ -353,7 +389,7 @@ function SavingsContent() {
               className="mb-3 scroll-mt-3 mt-3"
               onToggle={e => setDetailsOpen((e.currentTarget as HTMLDetailsElement).open)}
             >
-              <summary className="text-[11px] font-bold uppercase tracking-[0.5px] text-ink-3 cursor-pointer select-none list-none">
+              <summary className="text-xs font-bold uppercase tracking-[0.5px] text-ink-3 cursor-pointer select-none list-none">
                 Mer detaljer ›
               </summary>
               <div className="mt-3 flex flex-col gap-3">
@@ -362,9 +398,9 @@ function SavingsContent() {
                 {hasSubscribeDetails && (
                   <div>
                     <div className="flex items-baseline justify-between mb-[6px]">
-                      <h3 className="text-[11px] font-bold uppercase tracking-[0.5px] text-ink-3">
+                      <Eyebrow as="h3" size="xs">
                         Titlar på tjänster du inte har
-                      </h3>
+                      </Eyebrow>
                       <span className="text-xxs text-ink-3">
                         {subscribeRows.length + datelessSubscribeRows.length} totalt
                       </span>

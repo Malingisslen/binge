@@ -43,6 +43,19 @@ export default function SparandeTile() {
   if (advisor.isLoading) return <SparandeTileSkeleton />;
   if (advisor.providers.length === 0) return null;
 
+  // Pausgolvet: under det vet Binge för lite för att kalla en tjänst pausbar.
+  if (!advisor.pauseAdviceReady) {
+    return (
+      <section className="tile sparande" aria-label="Streamingrådgivaren">
+        <div className="h">
+          <span>Streamingrådgivaren</span>
+          <Link href="/savings/" className="more">öppna →</Link>
+        </div>
+        <p className="note">Lägg till det du följer, så kan Binge räkna ut vad du kan pausa.</p>
+      </section>
+    );
+  }
+
   const pausable = advisor.providers.filter(p => p.status === 'pause');
   const totalSavings = pausable.reduce((sum, p) => sum + (p.monthlyCost ?? 0), 0);
   const featured = pausable[0];

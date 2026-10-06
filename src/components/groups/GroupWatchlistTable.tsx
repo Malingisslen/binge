@@ -12,6 +12,7 @@ import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { captureError } from '@/lib/sentry';
 import type { GroupMember, GroupWatchlistItem } from '@/types';
+import { Eyebrow } from '@/components/ui/Eyebrow';
 
 /**
  * Gemensam watchlist för en grupp. Varje medlem får en kolumn för sitt
@@ -129,9 +130,9 @@ export function GroupWatchlistTable({
 
   return (
     <div className="bg-surface border border-rule rounded-sm">
-      <div className="px-3 py-[6px] border-b border-rule-2 text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">
+      <Eyebrow className="px-3 py-[6px] border-b border-rule-2">
         Gemensamt bibliotek ({watchlist.length})
-      </div>
+      </Eyebrow>
 
       {sorted.length === 0 ? (
         <div className="px-3 py-6 text-center text-xs text-ink-3">
@@ -141,17 +142,17 @@ export function GroupWatchlistTable({
         <table className="w-full text-xs">
           <thead>
             <tr className="bg-rule-2/40">
-              <th className="text-left px-3 py-[6px] text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">Titel</th>
+              <th className="text-left px-3 py-[6px] text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold">Titel</th>
               {members.map(m => (
                 <th
                   key={m.uid}
-                  className="text-center px-2 py-[6px] text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold"
+                  className="text-center px-2 py-[6px] text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold"
                   title={m.displayName}
                 >
                   {abbrev(m.displayName)}
                 </th>
               ))}
-              <th className="text-right px-3 py-[6px] text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">Snitt</th>
+              <th className="text-right px-3 py-[6px] text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold">Snitt</th>
               <th className="px-2 py-[6px]"></th>
             </tr>
           </thead>

@@ -324,6 +324,14 @@ export { priceDropNotify } from './priceDropNotify';
 // ingen rules-ändring (rotationSchedule + flaggan är owner-skrivbara user-fält).
 export { rotationReminderNotify } from './rotationReminder';
 
+// ── Prisvakt-push (BIN-1444, paket L) ────────────────────────────────────────
+// priceChangeNotify: daglig hämtning av sajtens /prisandringar.json (byggd ur
+// klientkatalogens PRICE_CHANGES) → rader högst 14 dygn gamla → push till users
+// med opt-in (notificationSettings.priceChanges) vars tjänst+nivå matchar.
+// Deduppas per prisändring mot priceChangeNotifyState/{key} (ingen uid). Admin
+// SDK → ingen rules-ändring.
+export { priceChangeNotify } from './priceChangeNotify';
+
 // ── Veckodigest "lämnar snart + nytt på dina tjänster" (BIN-163) ─────────────
 // weeklyDigestNotify: veckovis (mån 09:00 Europe/Stockholm) query av users med
 // opt-in (notificationSettings.weeklyDigest) → läser deras bibliotek + delade

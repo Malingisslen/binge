@@ -32,6 +32,7 @@ import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { trackEvent } from '@/lib/analytics';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import type { RowTitle, TMDBSearchResult } from '@/types';
+import { Button } from '@/components/ui/Button';
 
 const EXAMPLES = [
   'mysig komedi under 90 min',
@@ -207,7 +208,7 @@ export default function AskPage() {
             style={{ padding: '8px 10px 8px 30px', fontSize: 15 }}
           />
         </div>
-        <button type="submit" className="btn btn-acc" style={{ whiteSpace: 'nowrap' }}>Sök</button>
+        <Button type="submit" variant="acc" style={{ whiteSpace: 'nowrap' }}>Sök</Button>
       </form>
 
       {/* Examples — only before the first search */}

@@ -400,7 +400,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
                         <a href={affiliateWrap(p.provider_id, offer.link)} target="_blank" rel="noopener noreferrer" onClick={() => trackEvent('provider_clicked', { providerId: canonicalProviderId(p.provider_id), offerType: offer.type, mediaType: 'tv' })}>{imgEl}</a>
                       ) : imgEl}
                       {leavingLabel && (
-                        <span className="rounded-sm bg-acc-soft text-acc-deep px-1 text-[11px]">{leavingLabel}</span>
+                        <span className="rounded-sm bg-acc-soft text-acc-deep px-1 text-xs">{leavingLabel}</span>
                       )}
                     </span>
                   );
@@ -441,7 +441,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
 
           {(subscription.length > 0 || hasRentBuy) && (
             <div style={{ marginTop: 8 }}>
-              <JustWatchCredit />{' · '}<span className="text-ink-3 text-[11px]">Tillgänglighet via Movie of the Night</span>
+              <JustWatchCredit />{' · '}<span className="text-ink-3 text-xs">Tillgänglighet via Movie of the Night</span>
             </div>
           )}
         </div>

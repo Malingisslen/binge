@@ -15,6 +15,7 @@ import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import { summarizeCollectionStreaming, seFlatrateProviderIds, streamingSummaryText } from '@/lib/collection/streamingSummary';
 import { useToast } from '@/contexts/ToastContext';
 import { DELETION_IN_PROGRESS_MESSAGE, isDeletionInProgressError } from '@/lib/deletionInProgressError';
+import { Button } from '@/components/ui/Button';
 
 /**
  * BIN-94 — franchise/collection completion tracking + BIN-135 streaming-summary.
@@ -183,26 +184,26 @@ export default function CollectionSection({
             BIN-596 exists to remove. (Sending them to /login instead is the
             BIN-714 question, and it is about the two per-title buttons.) */}
         {mounted && libraryKnown && unseenNotInLibrary.length > 0 && (
-          <button
+          <Button
             onClick={addAllUnseen}
             disabled={adding}
-            className="btn btn-ghost btn-sm inline-flex items-center gap-1"
+            variant="ghost" size="sm" className="inline-flex items-center gap-1"
           >
             <Plus size={12} />
             Lägg alla osedda i vill se
-          </button>
+          </Button>
         )}
       </div>
 
       {mounted && unseen.length > 0 && (
         <div style={{ marginTop: 2, marginBottom: 14 }}>
-          <button
+          <Button
             onClick={() => setShowStreaming(s => !s)}
-            className="btn btn-ghost btn-sm inline-flex items-center gap-1"
+            variant="ghost" size="sm" className="inline-flex items-center gap-1"
             aria-expanded={showStreaming}
           >
             Var streamar de osedda? {showStreaming ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-          </button>
+          </Button>
           {showStreaming && (
             <div style={{ marginTop: 8, fontSize: 13, color: 'var(--ink-2)' }}>
               {streamingLoading ? (

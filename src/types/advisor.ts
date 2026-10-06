@@ -79,7 +79,9 @@ export type PrimaryAction =
   | { kind: 'pause'; providerId: number; providerName: string; shortName: string; color: string; monthlyCost: number; nextAirDate: string | null }
   | { kind: 'catchup'; providerId: number; providerName: string; shortName: string; color: string; unfinishedCount: number; monthlyCost: number }
   | { kind: 'subscribe'; providerId: number; providerName: string; shortName: string; color: string; showCount: number; nearestAirDate: string | null; monthlyCost: number }
-  | { kind: 'idle'; nextCheckDate: string | null };
+  | { kind: 'idle'; nextCheckDate: string | null }
+  // Under pausgolvet (PAUSE_ADVICE_MIN_TITLES): för få titlar för att avgöra vad som används.
+  | { kind: 'needs-library'; titleCount: number; minTitles: number };
 
 export interface MostUsedProvider {
   providerId: number;
@@ -111,6 +113,9 @@ export interface AdvisorResult {
   // När primaryAction är pause kan vi också ha en catchup-kandidat — visas
   // som mindre framträdande andra-kort så besparing alltid hamnar överst.
   secondaryAction: Extract<PrimaryAction, { kind: 'catchup' }> | null;
+  // false under pausgolvet (PAUSE_ADVICE_MIN_TITLES): då föreslås ingen paus
+  // och ytor som visar pausbara tjänster ska be om fler titlar i stället.
+  pauseAdviceReady: boolean;
   activePauses: ActivePause[];
   // Provider med flest titlar i Följer + Vill se. null om användaren inte
   // har några anchor-titlar alls.

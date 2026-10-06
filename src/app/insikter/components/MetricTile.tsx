@@ -64,16 +64,16 @@ export function MetricTile({ metricKey }: { metricKey: MetricKey }) {
       onKeyDown={onKeyDown}
       className="bg-surface border border-rule rounded-sm px-3 py-2.5 cursor-pointer hover:shadow-lift transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-acc"
     >
-      <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-ink-3">
+      <div className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-ink-3">
         {def.label}
         {def.isNew && <span className="text-acc font-semibold">NY</span>}
       </div>
       {value.missing ? (
         <div className="text-sm leading-tight text-ink-3 mt-1.5">{value.missing}</div>
       ) : (
-        <div className="text-[22px] leading-tight font-semibold text-ink tabular-nums mt-0.5">{display}</div>
+        <div className="text-3xl leading-tight font-semibold text-ink tabular-nums mt-0.5">{display}</div>
       )}
-      {def.source === 'events' && <div className="text-[11px] text-ink-3">händelser</div>}
+      {def.source === 'events' && <div className="text-xs text-ink-3">händelser</div>}
       {sparkEl}
     </div>
   );

@@ -145,7 +145,7 @@ export default async function BilligastePage({ params }: { params: Promise<PageP
         />
         <div className="mt-6">
           <JustWatchCredit />
-          <span className="text-ink-3 text-[11px]">{' · '}Tillgänglighet via Movie of the Night · Data från TMDB</span>
+          <span className="text-ink-3 text-xs">{' · '}Tillgänglighet via Movie of the Night · Data från TMDB</span>
         </div>
       </div>
     );
@@ -196,8 +196,8 @@ export default async function BilligastePage({ params }: { params: Promise<PageP
       />
 
       <section className="bg-surface rounded-lg p-4 mb-5 border border-rule">
-        <div className="text-[11px] uppercase tracking-wide text-ink-3 mb-1">Billigaste vägen</div>
-        <div className="text-[17px] font-semibold text-ink">{verdict}</div>
+        <div className="text-xs uppercase tracking-wide text-ink-3 mb-1">Billigaste vägen</div>
+        <div className="text-xl font-semibold text-ink">{verdict}</div>
         {remainderLine && <div className="text-base text-ink-2 mt-1">{remainderLine}</div>}
         <div className="text-xs text-ink-3 mt-2">
           Exakta hyrpriser varierar — öppna en filmsida för det aktuella priset och länk till tjänsten.
@@ -234,7 +234,7 @@ export default async function BilligastePage({ params }: { params: Promise<PageP
       </ol>
 
       <JustWatchCredit />
-      <span className="text-ink-3 text-[11px]">{' · '}Tillgänglighet via Movie of the Night · Data från TMDB</span>
+      <span className="text-ink-3 text-xs">{' · '}Tillgänglighet via Movie of the Night · Data från TMDB</span>
     </div>
   );
 }

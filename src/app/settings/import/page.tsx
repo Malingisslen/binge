@@ -19,6 +19,7 @@ import {
   LIBRARY_WRITE_HELD,
 } from '@/lib/watchlist/libraryHoldCopy';
 import type { MediaType, WatchStatus } from '@/types';
+import { Button } from '@/components/ui/Button';
 
 /**
  * BIN-69 — CSV-import (Letterboxd / IMDb). Dry-run-säkerhet är bärande: vi
@@ -223,9 +224,9 @@ function ImportContent() {
               <p className="text-sm font-semibold text-danger-ink">{LIBRARY_UNREACHABLE_TITLE}</p>
               <p className="text-sm text-ink-2 mt-1">{LIBRARY_UNREACHABLE_BODY}</p>
               <p className="text-xs text-ink-3 mt-1">{LIBRARY_WRITE_HELD}</p>
-              <button type="button" onClick={retryListener} className="btn btn-acc mt-3">
+              <Button type="button" onClick={retryListener} variant="acc" className="mt-3">
                 {LIBRARY_RETRY_LABEL}
-              </button>
+              </Button>
             </div>
           ) : (
             <p className="text-sm text-ink-3 mt-4">{LIBRARY_LOADING}</p>
@@ -233,9 +234,9 @@ function ImportContent() {
         )}
 
         {stage === 'parsed' && (
-          <button onClick={analyze} disabled={!libraryKnown} className="btn btn-acc mt-4 disabled:opacity-50">
+          <Button onClick={analyze} disabled={!libraryKnown} variant="acc" className="mt-4 disabled:opacity-50">
             Analysera mot TMDB
-          </button>
+          </Button>
         )}
         {stage === 'analyzing' && (
           <p className="text-sm text-ink-3 mt-4">Matchar {rows.length} titlar mot TMDB…</p>
@@ -250,9 +251,9 @@ function ImportContent() {
             </div>
 
             {stage === 'analyzed' && importable.length > 0 && (
-              <button onClick={runImport} disabled={!libraryKnown} className="btn btn-acc mb-4 disabled:opacity-50">
+              <Button onClick={runImport} disabled={!libraryKnown} variant="acc" className="mb-4 disabled:opacity-50">
                 Importera {importable.length} titlar
-              </button>
+              </Button>
             )}
             {stage === 'importing' && (
               <p className="text-sm text-ink-3 mb-4">Importerar… {imported}/{importable.length}</p>

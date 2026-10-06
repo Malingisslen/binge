@@ -3,7 +3,8 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const PAGES_DIR = join(process.cwd(), 'src', 'components', 'pages');
-const BANNED = /text-\[18px\]\s+font-bold/;
+// text-xl is the type-scale name the 18px titles were snapped to (paket N).
+const BANNED = /text-(?:\[18px\]|xl)\s+font-bold/;
 
 // Raw Tailwind reds — design rules require the danger token instead.
 const RAW_RED = /\b(?:text|bg|border|ring|from|to|via)-red-\d/;
@@ -222,5 +223,49 @@ describe('design consistency — text on saffron fills (BIN-1434)', () => {
         .filter((x): x is string => x !== null),
     );
     expect(offenders).toEqual([]);
+  }, TREE_SWEEP_TIMEOUT_MS);
+});
+
+// Paket N (designsystemet): textstorlekar kommer från typskalan i tailwind.config.ts.
+// Ett godtyckligt text-[13px] var hur 18 olika storlekar uppstod; en storlek som
+// saknas läggs till i skalan, inte vid anropet.
+const ARBITRARY_TEXT_SIZE = /\btext-\[\d[\d.]*(?:px|rem|em)\]/;
+
+function sourceFilesRecursive(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) return sourceFilesRecursive(full);
+    return /\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name) ? [full] : [];
+  });
+}
+
+describe('design consistency — type scale (paket N)', () => {
+  it('the pattern flags arbitrary sizes and lets scale tokens and colours through', () => {
+    expect(ARBITRARY_TEXT_SIZE.test('text-[11px] font-bold')).toBe(true);
+    expect(ARBITRARY_TEXT_SIZE.test('md:text-[13.5px]')).toBe(true);
+    expect(ARBITRARY_TEXT_SIZE.test('text-[0.8rem]')).toBe(true);
+    expect(ARBITRARY_TEXT_SIZE.test('text-xs font-bold')).toBe(false);
+    expect(ARBITRARY_TEXT_SIZE.test('text-[var(--ink)]')).toBe(false);
+  });
+
+  it('no .ts or .tsx under src uses an arbitrary text-[N] size (use the type scale)', () => {
+    const files = sourceFilesRecursive(join(process.cwd(), 'src'));
+    // Floor: an empty or broken walk would pass silently.
+    expect(files.length).toBeGreaterThan(100);
+    const offenders = files.flatMap(f =>
+      readFileSync(f, 'utf8').split('\n')
+        .map((line, i) => (ARBITRARY_TEXT_SIZE.test(line) ? `${f.replace(process.cwd(), '')}:${i + 1}` : null))
+        .filter((x): x is string => x !== null),
+    );
+    expect(offenders).toEqual([]);
+  }, TREE_SWEEP_TIMEOUT_MS);
+
+  it('no .tsx under src uses btn-primary, which globals.css never defined (use <Button variant="acc">)', () => {
+    const files = tsxFilesRecursive(join(process.cwd(), 'src'));
+    expect(files.length).toBeGreaterThan(0);
+    const css = readFileSync(join(process.cwd(), 'src', 'app', 'globals.css'), 'utf8');
+    expect(css).not.toMatch(/\.btn-primary\b/);
+    const offenders = files.filter(f => /\bbtn-primary\b/.test(readFileSync(f, 'utf8')));
+    expect(offenders.map(f => f.replace(process.cwd(), ''))).toEqual([]);
   }, TREE_SWEEP_TIMEOUT_MS);
 });
