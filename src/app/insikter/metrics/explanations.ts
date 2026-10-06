@@ -17,6 +17,12 @@ export const EXPLANATIONS: Partial<Record<MetricKey, Explanation>> = {
     whyImportant: 'Kvoten mellan 7- och 30-dagarssiffran visar hur stor del av månadens användare som är veckovana.',
     source: 'Firebase Auth (rollup)',
   },
+  secondWeekReturn: {
+    whatIsIt: 'Av kontona vars andra vecka tagit slut de senaste 30 dagarna: hur många som öppnade Binge någon gång dag 7 till 13 efter att kontot skapades.',
+    howCalculated: 'Appen sparar en gång per konto datumet för första besöket under andra veckan. Rollupen räknar bara summorna och sparar aldrig vilka konton det gäller. Ett datum utanför veckan räknas inte. Konton som skapades före mätningen saknar datumet och räknas som att de inte kom tillbaka. Under fem konton visas ingen fördelning. Följer inte datumväljaren.',
+    whyImportant: 'Visar om första veckan får folk att komma tillbaka.',
+    source: 'Firestore (rollup)',
+  },
   signupLandingPages: {
     whatIsIt: 'Vilken sida de som registrerade sig kom in på, och hur många som totalt kom in där.',
     howCalculated: 'Kräver besöksdata per sida. Binge räknar händelser, inte besök, så måttet har ingen källa.',

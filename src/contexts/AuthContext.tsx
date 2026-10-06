@@ -27,6 +27,9 @@ import { syncMyPublicProfile, clearPublicProfileSignature } from '@/lib/firebase
 import { captureError } from '@/lib/sentry';
 import { disablePushForUser, clearLocalPushTokenId, hasLocalPushToken } from '@/lib/firebase/messaging';
 import { clearAllInviteTokens } from '@/lib/groupInviteCache';
+import { nextPauseReminderDay } from '@/lib/pauseReminder';
+import { isSecondWeekVisit } from '@/lib/secondWeek';
+import { NEW_ACCOUNT_NOTIFICATION_SETTINGS } from '@/lib/notificationDefaults';
 import { CURRENT_TERMS_VERSION } from '@/lib/legal';
 import { getProvider, canonicalProviderId } from '@/lib/tmdb/providers';
 import { resolveEffectiveMonthlyCost } from '@/lib/advisor/effectiveCost';
@@ -41,7 +44,7 @@ import { REQUIRES_RECENT_LOGIN, STALE_SESSION_PREFLIGHT, markHandedOff, markCasc
 import { useOptimisticMirrorField } from '@/hooks/useOptimisticMirrorField';
 import { clampToCodeUnits, MAX_BIO, MAX_DISPLAY_NAME } from '@/lib/clampText';
 import { openProfileIdentityChannel, type ProfileIdentityChannel } from '@/lib/profileIdentityChannel';
-import type { ItemVisibility, UserProfile } from '@/types';
+import type { ItemVisibility, ProviderPauseState, UserProfile } from '@/types';
 
 
 interface AuthState {
@@ -91,6 +94,7 @@ interface AuthState {
   // kanoniskt id. Samma funktionella-merge-härdning som setProviderCost.
   setProviderCampaign: (providerId: number, campaign: ProviderCampaign | null) => Promise<void>;
   pauseProvider: (providerId: number, resumeAt?: string | null) => Promise<void>;
+  setPauseReminder: (providerId: number, remind: boolean) => Promise<void>;
   resumeProvider: (providerId: number) => Promise<void>;
   updateUsername: (username: string) => Promise<void>;
   /**
@@ -159,6 +163,7 @@ const AuthContext = createContext<AuthState>({
   updateProviderTiers: async () => {},
   setProviderCampaign: async () => {},
   pauseProvider: async () => {},
+  setPauseReminder: async () => {},
   resumeProvider: async () => {},
   updateUsername: async () => {},
   updateDisplayName: async (name: string) => name,
@@ -281,6 +286,7 @@ async function buildExistingProfile(data: Record<string, unknown>, firebaseUser:
     hemkommun: (data.hemkommun as string | null) ?? null,
     createdAt: (data.createdAt as { toDate?: () => Date } | undefined)?.toDate?.() ?? new Date(),
     updatedAt: (data.updatedAt as { toDate?: () => Date } | undefined)?.toDate?.() ?? new Date(),
+    secondWeekVisitAt: (data.secondWeekVisitAt as { toDate?: () => Date } | undefined)?.toDate?.(),
     termsAcceptedAt: (data.termsAcceptedAt as { toDate?: () => Date } | undefined)?.toDate?.(),
     termsVersion: data.termsVersion as string | undefined,
     ageConfirmedAt: (data.ageConfirmedAt as { toDate?: () => Date } | undefined)?.toDate?.(),
@@ -503,16 +509,7 @@ async function createProfileWithConsent(firebaseUser: User): Promise<ProfileLoad
     termsAcceptedAt: new Date(),
     termsVersion: CURRENT_TERMS_VERSION,
     ageConfirmedAt: new Date(),
-    notificationSettings: {
-      newEpisodes: true,
-      availableOnMyServices: true,
-      pushEnabled: false,
-      episodeReleases: true,
-      priceDrops: false,
-      rotationReminders: false,
-      priceChanges: false,
-      weeklyDigest: false,
-    },
+    notificationSettings: { ...NEW_ACCOUNT_NOTIFICATION_SETTINGS },
   };
 
   // BIN-535: the getDoc above is NOT atomic with register()'s own setDoc —
@@ -904,6 +901,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, [uid, deletionInProgress, user?.displayName, user?.username, user?.photoURL, user?.bio, user?.isPublic, user?.createdAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // BIN-1442: stamp the first visit in the account's second week, once. The ref
+  // keeps a re-render (or a failed write) from writing again this session; the
+  // field itself keeps later sessions from writing at all. Best effort: a missed
+  // stamp only lowers an Insikter sum.
+  const secondWeekStampedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!uid || !user || deletionInProgress) return;
+    if (user.secondWeekVisitAt || secondWeekStampedFor.current === uid) return;
+    if (!isSecondWeekVisit(user.createdAt, new Date())) return;
+    secondWeekStampedFor.current = uid;
+    mergeUserDoc(uid, kit => ({ secondWeekVisitAt: kit.serverTimestamp() })).catch(err => {
+      console.error('[secondWeekVisitAt]', err);
+      captureError(err, { scope: 'auth', kind: 'secondWeekVisit-stamp' });
+    });
+  }, [uid, user, deletionInProgress]);
+
   // BIN-587: reparera en cascade som failade. Profilen kan säga 'private'
   // medan items fortfarande bär effectiveVisibility:'public' — och läs-regeln
   // litar på item-fältet utan att slå upp profilen, så läckan består tills
@@ -981,7 +994,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       providerPauses: {},
       calibrationGenres: null,
       hemkommun: null,
-      notificationSettings: { newEpisodes: true, availableOnMyServices: true, pushEnabled: false, episodeReleases: true, priceDrops: false, rotationReminders: false, priceChanges: false, weeklyDigest: false },
+      notificationSettings: { ...NEW_ACCOUNT_NOTIFICATION_SETTINGS },
       termsAcceptedAt: kit.serverTimestamp(),
       termsVersion,
       ageConfirmedAt: kit.serverTimestamp(), // BIN-348: the register form gates on the 13+ checkbox; record it.
@@ -1275,14 +1288,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     (providerId: number, tierId: string | null) => updateProviderTiers({ [providerId]: tierId }),
     [updateProviderTiers],
   );
+  // BIN-1442: providerPauses and pauseReminderNext are always written together,
+  // so the server's due-query can never point at a reminder that is not there.
+  const writePauses = useCallback(async (next: Record<number, ProviderPauseState>) => {
+    if (!uid) return;
+    const pauseReminderNext = nextPauseReminderDay(next);
+    await mergeUserDoc(uid, { providerPauses: next, pauseReminderNext });
+    setUser(prev => prev ? { ...prev, providerPauses: next, pauseReminderNext } : null);
+  }, [uid]);
   const pauseProvider = useCallback((providerId: number, resumeAt: string | null = null) => {
     const current = user?.providerPauses ?? {};
     const existing = current[providerId];
     if (existing && existing.resumeAt === resumeAt) return Promise.resolve();
     const pausedAt = existing?.pausedAt ?? todayIso();
-    const next = { ...current, [providerId]: { pausedAt, resumeAt } };
-    return updateUserField('providerPauses', next);
-  }, [updateUserField, user?.providerPauses]);
+    // A reminder follows the pause to its new end date; an open-ended pause has none.
+    // A dropped reminder is written as false: the merge write would keep the old key.
+    const remind = existing?.remind === true && resumeAt != null;
+    const entry: ProviderPauseState = existing?.remind !== undefined ? { pausedAt, resumeAt, remind } : { pausedAt, resumeAt };
+    const next = { ...current, [providerId]: entry };
+    return writePauses(next);
+  }, [writePauses, user?.providerPauses]);
+  // BIN-1442 — "Påminn mig" after Pausa. `false` is written rather than the key
+  // removed: a merge write keeps map keys it is not given.
+  const setPauseReminder = useCallback((providerId: number, remind: boolean) => {
+    const current = user?.providerPauses ?? {};
+    const existing = current[providerId];
+    if (!existing || (existing.remind === true) === remind) return Promise.resolve();
+    if (remind && existing.resumeAt == null) return Promise.resolve();
+    return writePauses({ ...current, [providerId]: { ...existing, remind } });
+  }, [writePauses, user?.providerPauses]);
   const resumeProvider = useCallback(async (providerId: number) => {
     if (!uid) return;
     const current = user?.providerPauses ?? {};
@@ -1319,7 +1353,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // users/{uid} här ingår i en större atomisk batch. Grinden anropas direkt
     // i stället — samma implementation, en annan ingång (userDocWrite.ts).
     assertProfileWritable(uid);
-    const { db, doc, collection, writeBatch, serverTimestamp } = await fsdb();
+    const { db, doc, collection, writeBatch, serverTimestamp, deleteField } = await fsdb();
     const batch = writeBatch(db);
     const historyRef = doc(collection(db, 'users', uid, 'pauseHistory'));
     batch.set(historyRef, {
@@ -1332,13 +1366,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       savedAmount,
       createdAt: serverTimestamp(),
     });
+    const pauseReminderNext = nextPauseReminderDay(next);
+    // BIN-1442: deleteField(), not the map without the key. A merge write keeps an
+    // omitted nested key on the server (see updateProviderTiers), so the resumed pause
+    // used to stay stored, and a "Påminn mig" on it would still have been sent.
     batch.set(
       doc(db, 'users', uid),
-      { providerPauses: next, updatedAt: serverTimestamp() },
+      { providerPauses: { [providerId]: deleteField() }, pauseReminderNext, updatedAt: serverTimestamp() },
       { merge: true },
     );
     await batch.commit();
-    setUser(prev => prev ? { ...prev, providerPauses: next } : null);
+    setUser(prev => prev ? { ...prev, providerPauses: next, pauseReminderNext } : null);
   }, [uid, user]);
   // BIN-1154: visningsnamnet far en redigeringsyta. Den ror flera lagringar av
   // samma personuppgift, och ordningen mellan dem ar ett beslut, inte en slump.
@@ -1716,7 +1754,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user, uid, loading, profileLoading, profileLoadError, retryProfileLoad, emailVerified,
       signIn, signInEmail, register, resendEmailVerification, signOut,
       updateProviders, updateDefaultView, updateProviderCosts, updateHomeMunicipality, updateRotationSchedule, setProviderCost, setProviderRenewalDay, updateProviderTier, updateProviderTiers, setProviderCampaign,
-      pauseProvider, resumeProvider,
+      pauseProvider, setPauseReminder, resumeProvider,
       updateUsername, updateDisplayName, updateBio, updateDefaultVisibility, visibilitySyncPending, deletionInProgress, pendingReconsent, completeReconsent, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
       setCalibrationGenres, deleteAccount,
     }),
@@ -1724,7 +1762,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user, uid, loading, profileLoading, profileLoadError, retryProfileLoad, emailVerified,
       signIn, signInEmail, register, resendEmailVerification, signOut,
       updateProviders, updateDefaultView, updateProviderCosts, updateHomeMunicipality, updateRotationSchedule, setProviderCost, setProviderRenewalDay, updateProviderTier, updateProviderTiers, setProviderCampaign,
-      pauseProvider, resumeProvider,
+      pauseProvider, setPauseReminder, resumeProvider,
       updateUsername, updateDisplayName, updateBio, updateDefaultVisibility, visibilitySyncPending, deletionInProgress, pendingReconsent, completeReconsent, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
       setCalibrationGenres, deleteAccount,
     ]

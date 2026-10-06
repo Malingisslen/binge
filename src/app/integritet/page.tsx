@@ -10,8 +10,8 @@ export default function IntegritetPage() {
   return (
     <LegalPageShell
       title="Integritetspolicy"
-      lastUpdated="2026-10-05"
-      version="1.9"
+      lastUpdated="2026-10-06"
+      version="1.10"
       toc={[
         { id: 'ansvarig', label: '1. Vem är ansvarig?' },
         { id: 'uppgifter', label: '2. Vilka uppgifter vi samlar in' },
@@ -51,6 +51,8 @@ export default function IntegritetPage() {
           <li><strong>Recensioner, listor och sociala kopplingar</strong> — recensioner, kommentarer och listor du skapat, samt vänner, följare och grupp-medlemskap. Ditt medlemskap i en grupp bär ditt visningsnamn, användarnamn, din profilbild och vilka streamingtjänster du har (se §10).</li>
           <li><strong>Streamingrådgivaren-historik</strong> — dina pausa- och återuppta-beslut (sparbeslut) som rådgivaren sparar.</li>
           <li><strong>&quot;Inte intresserad&quot;-markeringar</strong> — titlar du gömt från rekommendationer.</li>
+          <li><strong>Veckobrevet</strong> — Nya konton får veckobrevet &quot;Din streamingvecka&quot; i appens klocka varje måndag. Det byggs av det du redan sparat i Binge och skickas inte som e-post eller notis. Du stänger av det under Inställningar, Notiser.</li>
+          <li><strong>Andra veckan</strong> — Binge sparar en gång per konto datumet när du öppnar appen under din andra vecka. Det används bara för att räkna hur många nya konton som kommer tillbaka, som en summa, och raderas när du raderar kontot.</li>
           <li><strong>Push-notistoken</strong> — om du aktiverat push-notiser sparar vi en enhetsspecifik token (Firebase Cloud Messaging) för att kunna skicka notiser.</li>
           <li><strong>Hemkommun</strong> — om du själv väljer en kommun för att se vad som finns på ditt bibliotek. Den är frivillig och går att ta bort i inställningarna.</li>
           <li><strong>Avsnittsreaktioner</strong> — reaktioner du lämnar på enskilda avsnitt. De är publika och visar att de kommer från ditt konto.</li>

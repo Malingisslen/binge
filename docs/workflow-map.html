@@ -2000,7 +2000,7 @@
     {
       "id": "flow-digest",
       "label": "Weekly digest",
-      "description": "Every Monday 09:00 Europe/Stockholm, for each user with notificationSettings.weeklyDigest==true: rolls up library-altitude what's normally a per-title badge. LEAVING half reads the shared streamingOffers docs (written by the separate streamingOffersRefresh job — no TMDB calls here) for subscription offers leaving within 14 days on a provider the user owns. NEW half is just a COUNT of the user's own provider_available inbox docs from the last 7 days (reuses availableNotify's detection, no second system). Sends at most one push + one inbox card per Stockholm calendar day.",
+      "description": "Every Monday 09:00 Europe/Stockholm, for each user with notificationSettings.weeklyDigest==true: rolls up library-altitude what's normally a per-title badge. LEAVING half reads the shared streamingOffers docs (written by the separate streamingOffersRefresh job — no TMDB calls here) for subscription offers leaving within 14 days on a provider the user owns. NEW half is just a COUNT of the user's own provider_available inbox docs from the last 7 days (reuses availableNotify's detection, no second system). Writes at most one inbox card per Stockholm calendar day and sends no push (BIN-1442). On by default for accounts created since BIN-1442.",
       "covers": [
         "weeklyDigestNotify",
         "/my/all"
@@ -2043,15 +2043,8 @@
         },
         {
           "from": "cf-weekly-digest",
-          "to": "cf-sendPush",
-          "payload": "sendPushToUser(uid, {title:'Din streamingvecka', body:'N titlar lämnar dina tjänster snart · M nya den här veckan', actionUrl:'/my/all', tag:'weekly-digest'}, {pushEnabled})",
-          "transport": "in-process call",
-          "verified": true
-        },
-        {
-          "from": "cf-weekly-digest",
           "to": "firestore",
-          "payload": "set weeklyDigestState/{uid}.lastSentDate = runDate (only after a send — Cloud Scheduler is at-least-once; a same-day retry sees the marker and skips)",
+          "payload": "set weeklyDigestState/{uid}.lastSentDate = runDate (only after the card is written — Cloud Scheduler is at-least-once; a same-day retry sees the marker and skips)",
           "transport": "Firestore write",
           "verified": true
         }
@@ -2093,7 +2086,7 @@
     {
       "id": "flow-rotation",
       "label": "Rotation reminder",
-      "description": "Daily scan of users opted into notificationSettings.rotationReminders==true. The rotation calendar itself is computed client-side (watchlist × TMDB × subscription cost) and persisted inline as users/{uid}.rotationSchedule when the user confirms reminders — the scheduled function never talks to TMDB, it only evaluates that persisted schedule against a 1-day due window (Stockholm date) and fires cancel/resume nudges, deduped per event via a marker written AFTER the push.",
+      "description": "Daily scan of users opted into notificationSettings.rotationReminders==true. The rotation calendar itself is computed client-side (watchlist × TMDB × subscription cost) and persisted inline as users/{uid}.rotationSchedule when the user confirms reminders — the scheduled function never talks to TMDB, it only evaluates that persisted schedule against a 1-day due window (Stockholm date) and fires cancel/resume nudges as a bell card plus a push, deduped per event via a marker written AFTER the push. BIN-1442: the same run first sends the \"Påminn mig\" reminders for paused services, found through users/{uid}.pauseReminderNext.",
       "covers": [
         "rotationReminderNotify"
       ],
@@ -2104,6 +2097,34 @@
           "payload": "client writes the confirmed rotation calendar inline to users/{uid}.rotationSchedule (providerId, cancelDate, resumeDate) when the user opts into reminders",
           "transport": "Firestore write",
           "verified": false
+        },
+        {
+          "from": "web-app",
+          "to": "firestore",
+          "payload": "Pausa → \"Påminn mig {datum}\": mergeUserDoc users/{uid} {providerPauses.{id}.remind:true, pauseReminderNext: earliest reminded resumeAt} (written together with every pause change)",
+          "transport": "Firestore write",
+          "verified": true
+        },
+        {
+          "from": "cf-rotation-reminder",
+          "to": "firestore",
+          "payload": "first: query users where pauseReminderNext <= today, select(providerPauses, notificationSettings), limit 500; per user duePauseReminders() and one read of users/{uid}/watchlist where status=='mina' to count followed series airing on that service",
+          "transport": "Firestore read",
+          "verified": true
+        },
+        {
+          "from": "cf-rotation-reminder",
+          "to": "cf-sendPush",
+          "payload": "per due pause: create users/{uid}/notifications/pause-reminder-{providerId}-{resumeAt}, then create rotationReminderState/{uid}_{providerId}_pause_{resumeAt} BEFORE the push (an existing marker skips the push), then sendPushToUser(uid, {title:{service}, body:'{service} har nytt igen: N serier du följer släpper avsnitt. Dags att starta om?'}, {pushEnabled})",
+          "transport": "in-process call",
+          "verified": true
+        },
+        {
+          "from": "cf-rotation-reminder",
+          "to": "firestore",
+          "payload": "update() users/{uid}: delete providerPauses.{id}.remind for the handled pauses, pauseReminderNext = next remaining or deleted (update fails rather than recreating a deleted profile)",
+          "transport": "Firestore write",
+          "verified": true
         },
         {
           "from": "cf-rotation-reminder",
@@ -2129,7 +2150,7 @@
         {
           "from": "cf-rotation-reminder",
           "to": "cf-sendPush",
-          "payload": "sendPushToUser(uid, {title: cancel?'Dags att rotera':'Värt det igen', body:'Dags att pausa {service} — inget du följer sänds just nu' / '{service} är värt det igen — nytt att följa', actionUrl:'/savings/', tag:'rotation-{providerId}'}, {pushEnabled}) — push-only, no inbox doc (inbox model is tmdbId-shaped)",
+          "payload": "per due event: create users/{uid}/notifications/rotation-{providerId}-{kind}-{date} (kind system, create() so a retry never doubles it), then sendPushToUser(uid, {title: cancel?'Dags att rotera':'Värt det igen', body:'Dags att pausa {service} — inget du följer sänds just nu' / '{service} är värt det igen — nytt att följa', actionUrl:'/savings/', tag:'rotation-{providerId}'}, {pushEnabled}); {service} is the server's PROVIDER_NAMES entry, the client-written shortName only as fallback",
           "transport": "in-process call",
           "verified": true
         },

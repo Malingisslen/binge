@@ -33,6 +33,7 @@ import { topTitles, expiredInsightDocIds, canonicalProviderId, type WatchlistLit
 // with the /insikter reader range BIN-343 already switched to Stockholm (otherwise
 // the near-midnight baseline read can land a day off the UTC-keyed rollup doc).
 import { stockholmDayId } from '../util/dayId';
+import { cohortCreatedRange, secondWeekReturn } from './secondWeek';
 
 /** Page size for the bounded scan (BIN-156) — mirrors the sibling watchlist
  *  scanners (streamingOffers/retentionCleanup/reclaimOrphanFollows). Never
@@ -43,6 +44,23 @@ const PAGE_SIZE = 2000;
 // run; without a sweep it grows one doc/day forever against the 25 SEK cap.
 // 90 days is plenty for the Fas-2 trend charts.
 const RETENTION_DAYS = 90;
+
+/** Upper bound on the second-week cohort read (BIN-1442). Hitting it marks the
+ *  rollup partial rather than reporting a figure computed on a cut-off cohort. */
+const COHORT_READ_LIMIT = 5000;
+
+/** Accounts created inside the reported cohort range, two fields each. */
+async function readSecondWeekCohort(now: Date): Promise<{ rows: FirebaseFirestore.DocumentData[]; truncated: boolean }> {
+  const { start, end } = cohortCreatedRange(now);
+  const snap = await getFirestore()
+    .collection('users')
+    .where('createdAt', '>=', Timestamp.fromDate(start))
+    .where('createdAt', '<', Timestamp.fromDate(end))
+    .select('createdAt', 'secondWeekVisitAt')
+    .limit(COHORT_READ_LIMIT)
+    .get();
+  return { rows: snap.docs.map((d) => d.data()), truncated: snap.size >= COHORT_READ_LIMIT };
+}
 
 /** Read every watchlist doc (narrowed fields) across all users, paginated. */
 async function readWatchlist(): Promise<{ rows: WatchlistLite[]; docsRead: number }> {
@@ -164,6 +182,25 @@ export async function computeRollup(): Promise<RollupData> {
     partial = true;
   }
 
+  // BIN-1442: how many new accounts came back during their second week. Only the
+  // two counts are stored, never which accounts.
+  let secondWeek: RollupData['secondWeekReturn'];
+  let cohortReads = 0;
+  try {
+    const now = new Date();
+    const { rows, truncated } = await readSecondWeekCohort(now);
+    cohortReads = rows.length;
+    if (truncated) {
+      logger.error('rollup: second-week cohort hit the read limit', { limit: COHORT_READ_LIMIT });
+      partial = true;
+    } else {
+      secondWeek = secondWeekReturn(rows, now);
+    }
+  } catch (err) {
+    logger.error('rollup: second-week cohort scan failed', err);
+    partial = true;
+  }
+
   // Fold TMDB's alias ids onto the canonical service before tallying, so a
   // service stored under several ids (e.g. Max = 384/1899/1825 across docs of
   // different vintages) counts as ONE row instead of splitting the panel.
@@ -185,14 +222,16 @@ export async function computeRollup(): Promise<RollupData> {
       groups,
     },
     ...(activeUsers ? { activeUsers } : {}),
+    ...(secondWeek ? { secondWeekReturn: secondWeek } : {}),
     statusDistribution: statusDistribution(watchlist),
     mediaTypeSplit: mediaTypeSplit(watchlist),
     ratingsHistogram: ratingsHistogram(watchlist),
     topTitles: topTitles(watchlist, 10),
     topProviders: tallyTop(providers, 10).map((t) => ({ providerId: t.value, count: t.count })),
     topGenres: tallyTop(genres, 10).map((t) => ({ genreId: t.value, count: t.count })),
-    // 4 aggregation reads + one read per scanned watchlist doc, group rows included.
-    readsUsed: watchlistReads + 4,
+    // 4 aggregation reads + one read per scanned watchlist doc, group rows included,
+    // + one per cohort account read for secondWeekReturn.
+    readsUsed: watchlistReads + 4 + cohortReads,
     partial,
   };
 }

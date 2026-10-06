@@ -232,6 +232,19 @@ describe('Delning och mätning resolvers', () => {
     expect(DATA_RESOLVERS.activeUsers7d(emptyData({ rollup: rollupWith() }))).toEqual({ kind: 'scalar', value: NaN });
   });
 
+  it('secondWeekReturn splits the cohort, hides a cohort under five, and says not measured on an older rollup (BIN-1442)', () => {
+    const withReturn = (r: { returned: number; cohort: number }) =>
+      emptyData({ rollup: { ...rollupWith()!, secondWeekReturn: r } });
+    expect(DATA_RESOLVERS.secondWeekReturn(withReturn({ returned: 2, cohort: 5 }))).toEqual({
+      kind: 'breakdown',
+      entries: [{ label: 'Kom tillbaka', value: 2 }, { label: 'Kom inte tillbaka', value: 3 }],
+    });
+    expect(DATA_RESOLVERS.secondWeekReturn(withReturn({ returned: 4, cohort: 4 })))
+      .toEqual({ kind: 'breakdown', entries: [], missing: 'för få konton än' });
+    expect(DATA_RESOLVERS.secondWeekReturn(emptyData({ rollup: rollupWith() })))
+      .toEqual({ kind: 'breakdown', entries: [], missing: 'inte mätt' });
+  });
+
   it('providerClicks is not-counted when nothing was counted, 0 when counted days lack the event', () => {
     expect(DATA_RESOLVERS.providerClicks(emptyData()))
       .toEqual({ kind: 'scalar', value: NaN, missing: 'Ingen räkning i intervallet' });
