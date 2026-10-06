@@ -27,6 +27,10 @@
 <style>
 /* ── tokens: verbatim from src/app/globals.css :root ───────────────────────── */
 :root {
+  --fs-nano: 8px; --fs-micro: 9px; --fs-xxs: 10px; --fs-xs: 11px; --fs-sm: 12.5px;
+  --fs-base: 13.5px; --fs-md: 14px; --fs-lg: 15px; --fs-xl: 17px; --fs-2xl: 20px;
+  --fs-3xl: 22px; --fs-4xl: 24px; --fs-5xl: 32px; --fs-6xl: 44px;
+  --scrim:     oklch(0 0 0 / 0.45);
   --bg:        oklch(0.985 0.003 90);
   --bg-2:      oklch(0.968 0.004 90);
   --surface:   oklch(1 0 0);
@@ -117,7 +121,7 @@ html, body { margin: 0; font-size: 15px; font-family: var(--sans); background: v
 
 /* ── primitives — radii 3/6/8 only, two shadows only, two accents only ─────── */
 h2.screen { font-size: 19px; margin: 0 0 16px; }
-.card { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 16px; }
+.card { background: var(--surface); border: 1px solid var(--rule); border-radius: 3px; padding: 16px; }
 .row { display: flex; gap: 16px; flex-wrap: wrap; }
 .btn { height: 34px; padding: 0 14px; border-radius: 6px; border: 1px solid transparent;
        background: var(--acc); color: oklch(0.18 0.006 80); font: inherit; font-weight: 600;

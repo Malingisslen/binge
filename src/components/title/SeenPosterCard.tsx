@@ -63,14 +63,14 @@ export default function SeenPosterCard({
           </span>
         )}
       </div>
-      <div style={{ fontSize: 12.5, fontWeight: isCurrent ? 600 : 500, marginTop: 6, lineHeight: 1.25 }}>
+      <div style={{ fontSize: 'var(--fs-sm)', fontWeight: isCurrent ? 600 : 500, marginTop: 6, lineHeight: 1.25 }}>
         {title}
         {/* The only announceable carrier of the seen-state — it rides in the link's
             accessible name, so the tile reads "Titel — sedd" instead of being
             indistinguishable from an unseen one. */}
         {seen && <span className="sr-only"> — sedd</span>}
       </div>
-      {year && <div style={{ fontSize: 10.5, color: 'var(--ink-3)', marginTop: 1 }}>{year}</div>}
+      {year && <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--ink-3)', marginTop: 1 }}>{year}</div>}
     </Link>
   );
 }

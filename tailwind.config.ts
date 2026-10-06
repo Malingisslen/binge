@@ -99,30 +99,33 @@ const config: Config = {
         // sidebar-bg — the landing hero band (HomePageClient). Its own token so it
         // stays dark under white text in both themes.
         'sidebar-bg': 'var(--hero-bg)',
+        // The dimmed page behind a modal or drawer.
+        scrim: 'var(--scrim)',
       }),
       fontFamily: {
         sans: ['Albert Sans', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
         // Monospace is phased out (design-system.md): --mono aliases the sans stack.
         mono: 'var(--mono)',
       },
-      // The type scale. consistency.test.ts rejects arbitrary text-[Npx] in TSX, so a
-      // size missing here gets added here, not hand-written at the call site.
-      // xl…6xl deliberately replace Tailwind's defaults (20…60px): a copied snippet gets these sizes.
+      // The type scale. The px values live once, as --fs-* in globals.css :root, and
+      // consistency.test.ts rejects a size written anywhere else; a missing size gets
+      // added there. xl…6xl deliberately replace Tailwind's defaults (20…60px).
       fontSize: {
-        'nano': '8px',
-        'micro': '9px',
-        'xxs': '10px',
-        'xs': '11px',
-        'sm': '12.5px',
-        'base': '13.5px',
-        'md': '14px',
-        'lg': '15.5px',
-        'xl': '17px',
-        '2xl': '20px',
-        '3xl': '22px',
-        '4xl': '24px',
-        '5xl': '32px',
-        '6xl': '48px',
+        'nano': 'var(--fs-nano)',
+        'micro': 'var(--fs-micro)',
+        'xxs': 'var(--fs-xxs)',
+        'xs': 'var(--fs-xs)',
+        'sm': 'var(--fs-sm)',
+        'base': 'var(--fs-base)',
+        'md': 'var(--fs-md)',
+        'lg': 'var(--fs-lg)',
+        'xl': 'var(--fs-xl)',
+        '2xl': 'var(--fs-2xl)',
+        '3xl': 'var(--fs-3xl)',
+        '4xl': 'var(--fs-4xl)',
+        '5xl': 'var(--fs-5xl)',
+        '6xl': 'var(--fs-6xl)',
+        'display': 'var(--fs-display)',
       },
       maxWidth: {
         canvas: '1320px',

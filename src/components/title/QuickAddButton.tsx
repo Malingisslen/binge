@@ -17,6 +17,7 @@ import { useSignedOutRedirect } from '@/hooks/useSignedOutRedirect';
 import { LIBRARY_UNAVAILABLE } from './libraryHold';
 import { DELETION_IN_PROGRESS_MESSAGE, isDeletionInProgressError } from '@/lib/deletionInProgressError';
 import type { WatchStatus, MediaType } from '@/types';
+import { cardClass } from '@/components/ui/Card';
 
 interface QuickAddButtonProps {
   tmdbId: number;
@@ -172,7 +173,7 @@ export default function QuickAddButton({
         {current ? <Check size={13} /> : <Plus size={13} />}
       </button>
       {open && (
-        <div className="absolute top-full right-0 mt-1 bg-surface border border-rule rounded-sm z-50 min-w-[110px] shadow-pop">
+        <div className={cardClass('absolute top-full right-0 mt-1 z-50 min-w-[110px] shadow-pop')}>
           {options.map(status => (
             <button
               key={status}
