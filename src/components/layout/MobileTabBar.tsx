@@ -3,9 +3,11 @@
 import { useCallback, useId, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutGrid, Calendar, Search, BarChart3, Menu } from 'lucide-react';
+import { LayoutGrid, Calendar, Search, BarChart3, Menu, Home, Tag, Calculator, BookOpen } from 'lucide-react';
 import { useClickOutside } from '@/hooks/useClickOutside';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
+import ChromePart from './ChromePart';
+import type { ChromeMode } from './chromeMode';
 
 // Mobile bottom tab bar — on phones the ONLY navigation (the subnav is hidden
 // ≤980px). Malin picked variant B on 2026-10-05: the money layer (Rådgivaren)
@@ -32,11 +34,67 @@ export const MORE_ITEMS: readonly NavItem[] = [
   { label: 'Rekommendationer', href: '/recommendations/', matches: ['/kalibrera'] },
   { label: 'Fråga Binge', href: '/ask/' },
   { label: 'Vänner', href: '/my/friends/', matches: ['/feed', '/user/'] },
-  { label: 'Grupper', href: '/grupper/', matches: ['/tillsammans/'] },
   { label: 'Inställningar', href: '/settings/' },
 ];
 
-export default function MobileTabBar() {
+// The signed-out menu: only pages that work without an account. Grupper is out of
+// every menu while the feature is paused (plan round 2, decision 4); its pages
+// still answer for anyone holding a link.
+const GUEST_HOME: NavItem = { label: 'Hem', href: '/' };
+const GUEST_PRICES: NavItem = { label: 'Priser', href: '/streamingpriser/' };
+const GUEST_CALCULATOR: NavItem = { label: 'Kalkylator', href: '/streamingkostnad/' };
+const GUEST_GUIDES: NavItem = { label: 'Guider', href: '/guider/' };
+export const GUEST_LINKS: readonly NavItem[] = [GUEST_HOME, GUEST_PRICES, GUEST_CALCULATOR, GUEST_GUIDES];
+
+export default function MobileTabBar({ chrome = 'app' }: { chrome?: ChromeMode }) {
+  return (
+    <>
+      <ChromePart mode={chrome} audience="app"><AppTabBar /></ChromePart>
+      <ChromePart mode={chrome} audience="guest"><GuestTabBar /></ChromePart>
+    </>
+  );
+}
+
+function GuestTabBar() {
+  const pathname = usePathname();
+  const router = useRouter();
+  return (
+    <nav className="m-tabs" aria-label="Huvudmeny">
+      <TabLink item={GUEST_HOME} icon={Home} active={isActive(pathname, GUEST_HOME)} />
+      <TabLink item={GUEST_PRICES} icon={Tag} active={isActive(pathname, GUEST_PRICES)} />
+      <SearchTab pathname={pathname} onOpen={() => openTopbarSearch(router)} />
+      <TabLink item={GUEST_CALCULATOR} icon={Calculator} active={isActive(pathname, GUEST_CALCULATOR)} />
+      <TabLink item={GUEST_GUIDES} icon={BookOpen} active={isActive(pathname, GUEST_GUIDES)} />
+    </nav>
+  );
+}
+
+// Focus must happen inside the tap itself, or iOS will not raise the keyboard.
+function openTopbarSearch(router: ReturnType<typeof useRouter>) {
+  const input = document.getElementById(TOPBAR_SEARCH_ID);
+  if (input instanceof HTMLInputElement) {
+    input.focus();
+    input.select();
+    return;
+  }
+  router.push('/search/');
+}
+
+function SearchTab({ pathname, onOpen }: { pathname: string | null; onOpen: () => void }) {
+  return (
+    <button
+      type="button"
+      className="center"
+      onClick={onOpen}
+      aria-current={pathname?.startsWith('/search') ? 'page' : undefined}
+    >
+      <span className="icn"><Search size={22} strokeWidth={1.5} aria-hidden="true" /></span>
+      Sök
+    </button>
+  );
+}
+
+function AppTabBar() {
   const pathname = usePathname();
   const router = useRouter();
   const panelId = useId();
@@ -55,16 +113,9 @@ export default function MobileTabBar() {
   useClickOutside(moreRef, close);
   useEscapeKey(open, closeAndRefocus);
 
-  // Focus must happen inside the tap itself, or iOS will not raise the keyboard.
   function openSearch() {
     setOpenOn(null);
-    const input = document.getElementById(TOPBAR_SEARCH_ID);
-    if (input instanceof HTMLInputElement) {
-      input.focus();
-      input.select();
-      return;
-    }
-    router.push('/search/');
+    openTopbarSearch(router);
   }
 
   const moreActive = MORE_ITEMS.some(item => isActive(pathname, item));
@@ -73,15 +124,7 @@ export default function MobileTabBar() {
     <nav className="m-tabs" aria-label="Huvudmeny">
       <TabLink item={BIBLIOTEK} icon={LayoutGrid} active={isActive(pathname, BIBLIOTEK)} />
       <TabLink item={KALENDER} icon={Calendar} active={isActive(pathname, KALENDER)} />
-      <button
-        type="button"
-        className="center"
-        onClick={openSearch}
-        aria-current={pathname?.startsWith('/search') ? 'page' : undefined}
-      >
-        <span className="icn"><Search size={22} strokeWidth={1.5} aria-hidden="true" /></span>
-        Sök
-      </button>
+      <SearchTab pathname={pathname} onOpen={openSearch} />
       <TabLink item={RADGIVAREN} icon={BarChart3} active={isActive(pathname, RADGIVAREN)} />
       <div ref={moreRef} className="m-more">
         <button

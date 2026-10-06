@@ -16,6 +16,8 @@ export interface GuestCostResult {
   paidCount: number;
   /** Minst ett belopp i summan är katalogens listpris ("Vet inte"). */
   estimated: boolean;
+  /** Summans rader, ur samma kedja som summan. */
+  lines: { label: string; kr: number }[];
   /** Paketet med störst besparing för exakt de valda tjänsterna, annars null. */
   bundle: BundleSuggestion | null;
   /** Minst en av tjänsterna paketet ersätter är räknad på listpris. */
@@ -42,6 +44,7 @@ export function computeGuestCost(
     yearlyKr: summary.totalKr * 12,
     paidCount: summary.paidCount,
     estimated: summary.estimated,
+    lines: summary.lines,
     bundle,
     bundleEstimated: bundle
       ? bundle.replacedProviderIds.some(id => isEstimatedMonthlyCost(id, settings, now))

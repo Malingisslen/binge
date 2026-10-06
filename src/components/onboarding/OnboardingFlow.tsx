@@ -194,8 +194,8 @@ function StepWelcome({ onNext }: { onNext: () => void }) {
         Välkommen till Binge.nu
       </h1>
       <p className="text-sm text-ink-2 mb-4">
-        Håll koll på vad du tittar på och se var filmer och serier streamas i
-        Sverige.
+        Se vad du betalar för streaming och vad du kan pausa. Binge håller koll
+        på dina serier och var de streamas i Sverige.
       </p>
       <ul className="space-y-2 mb-6 text-sm text-ink-2">
         <li className="flex items-start gap-2">
@@ -208,7 +208,7 @@ function StepWelcome({ onNext }: { onNext: () => void }) {
         </li>
         <li className="flex items-start gap-2">
           <Check size={14} className="text-acc-deep mt-[3px] shrink-0" />
-          <span>Få rekommendationer baserat på din smak</span>
+          <span>Se vad du betalar och vad du kan pausa</span>
         </li>
       </ul>
       <button

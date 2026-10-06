@@ -1,6 +1,7 @@
 'use client';
 
 import { formatKr } from '@/lib/formatKr';
+import MoneyFigure from '@/components/ui/MoneyFigure';
 import type { AdvisorResult } from '@/types';
 
 // Streamingrådgivarens "diagnos-mening" — en enda framing-mening som
@@ -19,14 +20,9 @@ export default function DiagnosisCard({ advisor, activeProviderCount }: Props) {
   const cost = advisor.totalMonthlyCost;
   const action = advisor.primaryAction;
 
-  const lead = cost > 0
-    ? <>
-        Du betalar <strong className="text-ink">{formatKr(cost)} kr/mån</strong>
-        {/* Paket I: listpriset är katalogens, inte användarens — säg det där siffran står. */}
-        {advisor.totalMonthlyCostEstimated && <span className="text-ink-3"> (uppskattat)</span>}
-        {' '}för {activeProviderCount} {activeProviderCount === 1 ? 'tjänst' : 'tjänster'}.
-      </>
-    : <>Du har {activeProviderCount} {activeProviderCount === 1 ? 'tjänst' : 'tjänster'}.</>;
+  // The amount itself is the receipt figure above the sentence (Malin's choice B,
+  // plan round 2), so the sentence only counts the services.
+  const lead = <>Du har {activeProviderCount} {activeProviderCount === 1 ? 'tjänst' : 'tjänster'}.</>;
 
   let suggestion: React.ReactNode;
   switch (action.kind) {
@@ -88,6 +84,11 @@ export default function DiagnosisCard({ advisor, activeProviderCount }: Props) {
 
   return (
     <div className="bg-surface border border-rule border-l-[3px] border-l-acc-deep rounded-sm px-4 py-[14px] mb-[14px]">
+      {cost > 0 && (
+        <div className="max-w-[360px] mb-3">
+          <MoneyFigure monthlyKr={cost} estimated={advisor.totalMonthlyCostEstimated} />
+        </div>
+      )}
       <p className="text-lg leading-[1.45] text-ink-2 font-medium">
         {lead}
         {suggestion}

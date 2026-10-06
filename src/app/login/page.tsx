@@ -1,5 +1,6 @@
 'use client';
 
+import BrandMark from '@/components/ui/BrandMark';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -157,11 +158,12 @@ export default function LoginPage() {
     <div className="flex items-center justify-center min-h-[60vh]">
       <div className="bg-surface border border-rule rounded-sm px-8 py-6 max-w-[340px] w-full">
         <div className="text-center mb-4">
-          <h1 className="text-2xl font-extrabold text-acc-deep">
-            binge<span className="font-normal text-ink-3 text-sm">.nu</span>
+          <h1 className="inline-flex items-center gap-2 text-2xl font-extrabold tracking-[-0.04em] text-ink">
+            <BrandMark size={24} />
+            binge.nu
           </h1>
           <p className="text-sm text-ink-3 mt-1">
-            Håll koll på vad du tittar på och var det finns att streama i Sverige.
+            Se vad du betalar för streaming, och vad du kan pausa.
           </p>
         </div>
 

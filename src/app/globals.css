@@ -38,6 +38,9 @@
      hover-läge och flyttar sig bort från on-acc i varje tema. */
   --on-acc:    oklch(1 0 0);
   --acc-deep-hover: oklch(0.48 0.13 70);
+  /* The "b" in the logo tile. Same in both themes, like the app icon
+     (scripts/gen-app-icons.mjs draws it from the light --bg). */
+  --brand-glyph: oklch(0.985 0.003 90);
 
   /* plum — today / picker / time-position */
   --cal-deep:  oklch(0.48 0.11 300);
@@ -247,12 +250,9 @@ button { font: inherit; cursor: pointer; }
   color: var(--ink);
   text-decoration: none;
 }
-.app-topbar .brand .mark-sq {
-  display: inline-block;
-  width: 10px; height: 10px;
-  background: var(--acc);
+.app-topbar .brand .brand-mark {
+  width: 20px; height: 20px;
   margin-right: 8px;
-  border-radius: 1px;
 }
 
 .topbar-week {
@@ -2520,4 +2520,38 @@ button.ep .syn { display: block; }
   border-radius: 8px;
   min-height: 96px;
   background: var(--surface);
+}
+
+/* ─── Guest chrome (chromeMode.ts) ───────────────────────────────────────
+   Before auth answers both menus are in the HTML; the returning-user flag
+   picks one. Wrappers use display: contents so the topbar grid is unchanged. */
+.pre-app, .pre-guest { display: contents; }
+html:not(.returning-user) .pre-app { display: none; }
+html.returning-user .pre-guest { display: none; }
+
+.guest-nav {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  padding: 0 12px;
+  border-left: 1px solid var(--rule);
+}
+.guest-nav a {
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  font-family: var(--sans);
+  font-weight: 500;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  white-space: nowrap;
+}
+.guest-nav a:hover { color: var(--ink); }
+.guest-nav a.is-on { color: var(--ink); border-bottom-color: var(--ink); }
+@media (max-width: 980px) {
+  /* Phones reach these pages from the guest tab bar. */
+  .guest-nav { display: none; }
 }

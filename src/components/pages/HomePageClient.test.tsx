@@ -52,7 +52,7 @@ vi.mock('@/components/title/TitleGrid', () => ({ default: () => null }));
 import HomePageClient from './HomePageClient';
 
 const STORAGE_KEY = 'binge:nextAfterLogin';
-const cta = () => screen.getAllByRole('button', { name: 'Logga in med Google' })[0];
+const cta = () => screen.getAllByRole('button', { name: 'Skapa konto gratis' })[0];
 
 describe('HomePageClient — the landing sign-in CTA (BIN-668)', () => {
   beforeEach(() => {
@@ -110,7 +110,7 @@ describe('HomePageClient — the landing sign-in CTA (BIN-668)', () => {
     auth.user = null;
     await act(async () => { render(<HomePageClient />); });
 
-    expect(screen.queryByRole('button', { name: 'Logga in med Google' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Skapa konto gratis' })).toBeNull();
   });
 });
 
@@ -150,7 +150,7 @@ describe('HomePageClient — guest cost demo (3B)', () => {
     await act(async () => { render(<HomePageClient initialTrending={[{ id: 1, media_type: 'movie', title: 'X' } as never]} />); });
     const demo = demoHeading()!.closest('section')!;
     const trending = screen.getByRole('heading', { name: 'Trendande just nu' }).closest('section')!;
-    const hero = screen.getAllByRole('button', { name: 'Logga in med Google' })[0].closest('section')!;
+    const hero = screen.getAllByRole('button', { name: 'Skapa konto gratis' })[0].closest('section')!;
     expect(hero.nextElementSibling).toBe(demo);
     expect(demo.compareDocumentPosition(trending) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
@@ -158,7 +158,9 @@ describe('HomePageClient — guest cost demo (3B)', () => {
   it('a tap gives a total and shares the selection with the calculator', async () => {
     await act(async () => { render(<HomePageClient />); });
     fireEvent.click(screen.getByRole('button', { name: 'Netflix' }));
-    expect(screen.getByText(/169 kr\/mån/).closest('p')).toHaveTextContent('169 kr/mån uppskattat · 2 028 kr/år');
+    const figure = screen.getByTestId('money-figure');
+    expect(figure).toHaveTextContent(/Per månad\s*169 kr/);
+    expect(figure).toHaveTextContent(/Per år, uppskattat\s*2 028 kr/);
     expect(JSON.parse(window.sessionStorage.getItem('binge:guestProviders')!)).toEqual({ 8: null });
     expect(screen.getByRole('link', { name: 'Visa mer' })).toHaveAttribute('href', expect.stringMatching(/^\/streamingkostnad\/?$/));
     expect(screen.getByRole('link', { name: 'Fler' })).toHaveAttribute('href', expect.stringMatching(/^\/streamingkostnad\/?$/));

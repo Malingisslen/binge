@@ -17,6 +17,7 @@ import {
 import { formatKr } from '@/lib/formatKr';
 import { trackEvent } from '@/lib/analytics';
 import GuestBundleBox, { joinNames } from '@/components/pricing/GuestBundleBox';
+import MoneyFigure from '@/components/ui/MoneyFigure';
 import { Button } from '@/components/ui/Button';
 
 // /streamingkostnad/ — den interaktiva delen. Rubriken och introtexten renderas av
@@ -29,6 +30,9 @@ import { Button } from '@/components/ui/Button';
 const FREE_NAMES = SWEDISH_PROVIDERS
   .filter(p => p.type === 'flatrate' && (p.isFree || p.isAds))
   .map(p => p.name);
+
+// Desktop: tjänst | nivå | pris. Phone: tjänst | pris, with the tier below.
+const ROW_COLUMNS = 'grid-cols-[minmax(0,1fr)_5.5rem] sm:grid-cols-[minmax(0,1fr)_minmax(0,13rem)_5.5rem]';
 
 export default function CostCalculator() {
   const { uid } = useAuth();
@@ -77,14 +81,24 @@ export default function CostCalculator() {
 
   return (
     <div className="mt-6">
+      {/* Fixed columns, so the tier picker and the price start at the same place on
+          every row (plan round 2, decision 4). On phones the tier gets a row of its own. */}
+      <div
+        aria-hidden="true"
+        className={`hidden sm:grid ${ROW_COLUMNS} px-3 py-[6px] border-t border-rule-2 bg-bg-2 text-xxs font-bold uppercase tracking-[0.06em] text-ink-3`}
+      >
+        <span>Tjänst</span>
+        <span>Nivå</span>
+        <span className="text-right">Pris/mån</span>
+      </div>
       <ul className="divide-y divide-rule-2 border-y border-rule-2 bg-surface">
         {GUEST_PRICED_PROVIDERS.map(p => {
           const checked = p.id in selection;
           const cost = resolveEffectiveMonthlyCost(p.id, settings, now);
           const estimated = checked && isEstimatedMonthlyCost(p.id, settings, now);
           return (
-            <li key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm">
-              <label className="flex items-center gap-2 flex-1 min-w-[9rem] cursor-pointer">
+            <li key={p.id} className={`grid ${ROW_COLUMNS} items-center gap-x-3 gap-y-1 px-3 py-2 text-sm`}>
+              <label className="flex items-center gap-2 min-w-0 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={checked}
@@ -98,7 +112,7 @@ export default function CostCalculator() {
                   aria-label={`Nivå för ${p.name}`}
                   value={selection[p.id] ?? ''}
                   onChange={e => chooseTier(p.id, e.target.value)}
-                  className="text-xs border border-rule rounded-sm bg-surface text-ink px-1 py-[3px] max-w-[13rem]"
+                  className="col-span-2 row-start-2 sm:col-span-1 sm:row-start-1 sm:col-start-2 w-full min-w-0 text-xs border border-rule rounded-sm bg-surface text-ink px-1 py-[3px]"
                 >
                   <option value="">Vet inte</option>
                   {p.tiers.map(t => (
@@ -108,7 +122,7 @@ export default function CostCalculator() {
                   ))}
                 </select>
               )}
-              <span className="flex flex-col items-end w-[5.5rem] shrink-0 tabular-nums">
+              <span className="col-start-2 row-start-1 sm:col-start-3 flex flex-col items-end tabular-nums">
                 <span className={checked ? 'font-semibold text-ink' : 'text-ink-3'}>
                   {cost == null ? '–' : `${formatKr(cost)} kr`}
                 </span>
@@ -141,18 +155,14 @@ export default function CostCalculator() {
         data-testid="cost-bar"
         className="sticky bottom-0 max-[980px]:bottom-[calc(64px_+_env(safe-area-inset-bottom,0px))] z-20 mt-6 bg-surface border border-rule rounded-sm px-3 py-[10px] flex flex-wrap items-center justify-between gap-3"
       >
-        <p className="text-sm text-ink m-0 tabular-nums" aria-live="polite">
+        <div className="flex-1 min-w-[12rem] max-w-[360px]" aria-live="polite">
           {result.paidCount > 0 ? (
-            <>
-              <strong>{formatKr(result.totalKr)} kr per månad</strong>
-              {' · '}
-              {formatKr(result.yearlyKr)} kr per år
-              {result.estimated && <span className="text-ink-3"> · uppskattat</span>}
-            </>
+            // The rows above are the receipt's lines, so the bar shows the total only.
+            <MoneyFigure monthlyKr={result.totalKr} estimated={result.estimated} size="md" />
           ) : (
-            <span className="text-ink-2">Kryssa i en tjänst för att se summan.</span>
+            <p className="text-sm text-ink-2 m-0">Kryssa i en tjänst för att se summan.</p>
           )}
-        </p>
+        </div>
         {uid ? (
           <Link href="/settings/" className="btn btn-ghost btn-sm">
             Ändra dina tjänster

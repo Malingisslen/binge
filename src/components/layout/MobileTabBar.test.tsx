@@ -58,7 +58,7 @@ describe('MobileTabBar (variant B)', () => {
     fireEvent.click(moreButton());
     expect(moreButton()).toHaveAttribute('aria-expanded', 'true');
     const links = within(panel()).getAllByRole('link').map(a => a.textContent);
-    expect(links).toEqual(['Hem', 'Rekommendationer', 'Fråga Binge', 'Vänner', 'Grupper', 'Inställningar']);
+    expect(links).toEqual(['Hem', 'Rekommendationer', 'Fråga Binge', 'Vänner', 'Inställningar']);
   });
 
   it('Escape closes Mer and returns focus to the button', () => {
@@ -99,8 +99,6 @@ describe('MobileTabBar (variant B)', () => {
     ['/my/friends/', 'Mer'],
     ['/feed/', 'Mer'],
     ['/user/anna/', 'Mer'],
-    ['/grupper/abc/', 'Mer'],
-    ['/tillsammans/xyz/', 'Mer'],
     ['/settings/', 'Mer'],
     ['/my/all/', 'Bibliotek'],
     ['/my/series/', 'Bibliotek'],
@@ -124,5 +122,57 @@ describe('MobileTabBar (variant B)', () => {
     const subnavHrefs = Array.from(subnav.querySelectorAll('a')).map(a => a.getAttribute('href'));
     expect(subnavHrefs.length).toBeGreaterThan(0);
     for (const href of subnavHrefs) expect(phoneHrefs).toContain(href);
+  });
+
+  // Grupper is paused (plan round 2, decision 4): no menu links to it, and a
+  // group page reached by an old link marks no tab as current.
+  it.each(['/grupper/abc/', '/tillsammans/xyz/'])('no tab is current on %s', path => {
+    nav.pathname = path;
+    render(<><Subnav /><MobileTabBar /></>);
+    expect(document.querySelectorAll('[aria-current="page"]')).toHaveLength(0);
+    expect(document.querySelectorAll('a[href^="/grupper"], a[href^="/tillsammans"]')).toHaveLength(0);
+  });
+});
+
+describe('MobileTabBar for signed-out visitors', () => {
+  it('shows only pages that work without an account', () => {
+    render(<MobileTabBar chrome="guest" />);
+    const bar = screen.getByRole('navigation', { name: 'Huvudmeny' });
+    expect(Array.from(bar.children).map(el => el.textContent)).toEqual(['Hem', 'Priser', 'Sök', 'Kalkylator', 'Guider']);
+    expect(screen.queryByRole('button', { name: 'Mer' })).toBeNull();
+  });
+
+  it('marks the calculator tab on the calculator page', () => {
+    nav.pathname = '/streamingkostnad/';
+    render(<MobileTabBar chrome="guest" />);
+    expect(screen.getByRole('link', { name: 'Kalkylator' })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it.each([
+    ['/guider/vad-kostar-netflix/', 'Guider'],
+    ['/streamingpriser/', 'Priser'],
+    ['/streamingkostnad/', 'Kalkylator'],
+    ['/', 'Hem'],
+  ])('on %s only %s is the current guest tab', (path, expected) => {
+    nav.pathname = path;
+    render(<MobileTabBar chrome="guest" />);
+    expect(Array.from(document.querySelectorAll('[aria-current="page"]')).map(el => el.textContent)).toEqual([expected]);
+  });
+
+  it('Sök focuses the topbar search field', () => {
+    const input = document.createElement('input');
+    input.id = TOPBAR_SEARCH_ID;
+    document.body.appendChild(input);
+    render(<MobileTabBar chrome="guest" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Sök' }));
+    expect(document.activeElement).toBe(input);
+  });
+
+  // Before auth answers both bars are in the page, each wrapped so CSS can pick one
+  // from the returning-user flag.
+  it('renders both bars, wrapped, while auth is unknown', () => {
+    const { container } = render(<MobileTabBar chrome="unknown" />);
+    expect(container.querySelector('.pre-app nav')).not.toBeNull();
+    expect(container.querySelector('.pre-guest nav')).not.toBeNull();
   });
 });

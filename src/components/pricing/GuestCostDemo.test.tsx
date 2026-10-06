@@ -23,7 +23,10 @@ describe('GuestCostDemo', () => {
     await act(async () => { render(<GuestCostDemo />); });
     fireEvent.click(screen.getByRole('button', { name: 'Netflix' }));
     expect(screen.getByRole('button', { name: 'Netflix' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByText(/kr\/mån/).closest('p')).toHaveTextContent('169 kr/mån uppskattat · 2 028 kr/år');
+    const figure = screen.getByTestId('money-figure');
+    expect(figure).toHaveTextContent(/Netflix\s*169 kr/);
+    expect(figure).toHaveTextContent(/Per månad\s*169 kr/);
+    expect(figure).toHaveTextContent(/Per år, uppskattat\s*2 028 kr/);
     expect(track).toHaveBeenCalledWith('price_check_total_shown', { surface: 'home', paidCount: 1 });
   });
 

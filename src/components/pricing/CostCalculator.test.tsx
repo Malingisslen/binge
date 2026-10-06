@@ -38,11 +38,13 @@ describe('CostCalculator', () => {
   it('"Vet inte" gives the list price marked uppskattat; picking a tier removes the mark (#28 condition 7)', async () => {
     await act(async () => { render(<CostCalculator />); });
     fireEvent.click(screen.getByRole('checkbox', { name: 'Netflix' }));
-    expect(bar()).toHaveTextContent('169 kr per månad · 2 028 kr per år · uppskattat');
+    expect(bar()).toHaveTextContent(/Per månad\s*169 kr/);
+    expect(bar()).toHaveTextContent(/Per år, uppskattat\s*2 028 kr/);
     expect(within(row('Netflix')).getByText('uppskattat')).toBeInTheDocument();
 
     fireEvent.change(screen.getByRole('combobox', { name: 'Nivå för Netflix' }), { target: { value: 'basic' } });
-    expect(bar()).toHaveTextContent('129 kr per månad · 1 548 kr per år');
+    expect(bar()).toHaveTextContent(/Per månad\s*129 kr/);
+    expect(bar()).toHaveTextContent(/Per år\s*1 548 kr/);
     expect(bar()).not.toHaveTextContent('uppskattat');
     expect(within(row('Netflix')).queryByText('uppskattat')).toBeNull();
   });

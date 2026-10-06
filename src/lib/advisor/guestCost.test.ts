@@ -51,7 +51,7 @@ describe('computeGuestCost — totals come from summarizeMonthlySpend', () => {
 
   it('an empty selection is zero, not estimated, no bundle', () => {
     expect(computeGuestCost({}, NOW)).toEqual({
-      totalKr: 0, yearlyKr: 0, paidCount: 0, estimated: false, bundle: null, bundleEstimated: false,
+      totalKr: 0, yearlyKr: 0, paidCount: 0, estimated: false, lines: [], bundle: null, bundleEstimated: false,
     });
   });
 });
