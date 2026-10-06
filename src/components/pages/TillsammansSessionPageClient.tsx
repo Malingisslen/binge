@@ -19,6 +19,7 @@ import { LoadingView } from '@/components/ui/LoadingView';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import type { SessionCandidate, SessionParticipant, TogetherSession, VoteKind } from '@/types';
 import { MAX_SESSION_DISPLAY_NAME } from '@/lib/clampText';
+import { Eyebrow } from '@/components/ui/Eyebrow';
 
 export default function TillsammansSessionPageClient({ id }: { id: string }) {
   const { session, participants, swipes, loading, notFound, expired } = useSession(id);
@@ -168,7 +169,7 @@ function JoinSessionForm({
           />
         </div>
         <div className="px-3 py-[10px]">
-          <div className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold mb-[6px]">Dina streamingtjänster</div>
+          <Eyebrow className="mb-[6px]">Dina streamingtjänster</Eyebrow>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-[3px]">
             {flatrate.map(p => {
               const selected = providers.includes(p.id);
@@ -358,7 +359,7 @@ function SessionMain({
           </button>
         </div>
         <div className="px-3 py-[6px] flex items-center gap-2 flex-wrap text-xs">
-          <span className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold">Deltagare:</span>
+          <Eyebrow as="span">Deltagare:</Eyebrow>
           {participants.map(p => {
             const prog = participantSwipeProgress(swipes, filteredCandidates, p.id);
             const isMe = p.id === me.id;
@@ -464,7 +465,7 @@ function SwipeCard({
           <div className="w-[140px] h-[210px] bg-rule-2 rounded-sm shrink-0" />
         )}
         <div className="flex-1 min-w-0">
-          <div className="text-[16px] font-bold leading-tight">{cand.title}</div>
+          <div className="text-lg font-bold leading-tight">{cand.title}</div>
           <div className="text-xxs text-ink-3 mt-[2px]">
             {cand.year ?? '—'} · {cand.mediaType === 'movie' ? 'Film' : 'Serie'}
             {cand.voteAverage > 0 && <> · <span className="text-acc-deep">★ {cand.voteAverage.toFixed(1)}</span></>}

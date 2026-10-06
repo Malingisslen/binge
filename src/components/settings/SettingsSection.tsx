@@ -37,7 +37,7 @@ export function SettingsSection({
   const borderClass = tone === 'danger' ? 'border-danger' : 'border-rule';
   const eyebrowClass = tone === 'danger' ? 'text-danger-ink' : 'text-ink-3';
   const eyebrow = (
-    <span className={`text-[11px] uppercase tracking-[0.14em] font-medium ${eyebrowClass}`}>
+    <span className={`text-xs uppercase tracking-[0.14em] font-medium ${eyebrowClass}`}>
       {title}
     </span>
   );

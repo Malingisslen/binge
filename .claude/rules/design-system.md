@@ -24,6 +24,8 @@ Sticky, horisontell toppkrom — **ingen sidebar**:
 - **Sans:** Albert Sans (primär) → `system-ui, -apple-system, Segoe UI, sans-serif` som fallback
 - **Mono:** `--mono` är alias för `--sans` — monospace-typsnittet (JetBrains Mono) fasas ut. Koda inte nytt med `font-mono`/`var(--mono)` — städas bort mekaniskt
 - **Täthetskänsla:** verktyg, inte marknadsföringssida. Håll textstorlekar och marginaler kompakta
+- **Typskala:** storlekarna i `tailwind.config.ts` `fontSize` (`text-nano` … `text-6xl`). Inga godtyckliga `text-[Npx]` — `consistency.test.ts` fäller dem; saknas en storlek läggs den till i skalan
+- **Delar att ta från hyllan:** `Eyebrow` (det lilla versala ögonbrynet), `Button`/`buttonClass` (`.btn`-varianterna). Allt syns på `/designsystem/` i ljust och mörkt läge
 
 ## Färgsystem
 

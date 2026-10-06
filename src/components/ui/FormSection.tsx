@@ -1,11 +1,12 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { Eyebrow } from '@/components/ui/Eyebrow';
 
 export function FormSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="px-3 py-[10px] border-b border-rule-2 last:border-b-0">
-      <div className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold mb-[6px]">{title}</div>
+      <Eyebrow className="mb-[6px]">{title}</Eyebrow>
       {children}
     </div>
   );

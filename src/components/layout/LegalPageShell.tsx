@@ -18,7 +18,7 @@ export default function LegalPageShell({
   return (
     <article className="max-w-[720px] mx-auto py-6 px-2">
       <header className="mb-6 pb-4 border-b border-rule-2">
-        <h1 className="text-[22px] font-bold text-ink mb-2">{title}</h1>
+        <h1 className="text-3xl font-bold text-ink mb-2">{title}</h1>
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xxs text-ink-3">
           <span>Senast uppdaterad: {lastUpdated}</span>
           <span>Version: {version}</span>

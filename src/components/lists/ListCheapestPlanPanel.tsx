@@ -7,6 +7,7 @@ import { formatKr } from '@/lib/formatKr';
 import { pluralSv } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useListCheapestPlan, type ListPlanItem } from '@/hooks/useListCheapestPlan';
+import { Eyebrow } from '@/components/ui/Eyebrow';
 
 // BIN-416 — "Billigaste sättet att se listan": renders the pure cheapestListPlan
 // optimizer over a curated list's titles. Every kr shown is a subscription cost
@@ -138,9 +139,9 @@ export default function ListCheapestPlanPanel({ items }: { items: ListPlanItem[]
 function SectionHeader() {
   return (
     <div className="flex items-baseline justify-between mb-[6px]">
-      <h2 className="text-[11px] font-bold uppercase tracking-[0.5px] text-ink-3">
+      <Eyebrow as="h2" size="xs">
         Billigaste sättet att se listan
-      </h2>
+      </Eyebrow>
       <span className="text-xxs text-ink-3">för dina tjänster</span>
     </div>
   );

@@ -18,25 +18,25 @@ export function ExplainDrawer() {
       <button type="button" aria-label="Stäng" onClick={close} className="absolute inset-0 bg-black/30" />
       <div className="relative w-full max-w-sm h-full bg-surface border-l border-rule shadow-pop p-5 overflow-y-auto">
         <div className="flex items-start justify-between gap-3 mb-4">
-          <h2 className="text-[18px] font-semibold text-ink">{def.label}</h2>
+          <h2 className="text-xl font-semibold text-ink">{def.label}</h2>
           <button type="button" onClick={close} className="text-ink-3 hover:text-ink text-sm">Stäng</button>
         </div>
         {ex ? (
           <dl className="flex flex-col gap-3 text-sm">
             <div>
-              <dt className="text-ink-3 text-[11px] uppercase tracking-wide">Vad är det?</dt>
+              <dt className="text-ink-3 text-xs uppercase tracking-wide">Vad är det?</dt>
               <dd className="text-ink-2">{ex.whatIsIt}</dd>
             </div>
             <div>
-              <dt className="text-ink-3 text-[11px] uppercase tracking-wide">Hur beräknas det?</dt>
+              <dt className="text-ink-3 text-xs uppercase tracking-wide">Hur beräknas det?</dt>
               <dd className="text-ink-2">{ex.howCalculated}</dd>
             </div>
             <div>
-              <dt className="text-ink-3 text-[11px] uppercase tracking-wide">Varför viktigt?</dt>
+              <dt className="text-ink-3 text-xs uppercase tracking-wide">Varför viktigt?</dt>
               <dd className="text-ink-2">{ex.whyImportant}</dd>
             </div>
             <div>
-              <dt className="text-ink-3 text-[11px] uppercase tracking-wide">Källa</dt>
+              <dt className="text-ink-3 text-xs uppercase tracking-wide">Källa</dt>
               <dd className="text-ink-2">{ex.source}</dd>
             </div>
           </dl>

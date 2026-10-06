@@ -196,7 +196,7 @@ export default function VillSePickerPage() {
                       ) : (
                         <div className="absolute inset-0 flex flex-col items-center justify-center px-2 gap-1">
                           <Icon size={20} className="text-ink-3 opacity-40" />
-                          <span className="text-[10px] text-ink-3 text-center line-clamp-3 leading-tight">{item.title}</span>
+                          <span className="text-xxs text-ink-3 text-center line-clamp-3 leading-tight">{item.title}</span>
                         </div>
                       )}
                       {/* BIN-814: the SUBSCRIPTION subset, so a filled dot and the

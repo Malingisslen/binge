@@ -10,6 +10,7 @@ import {
 import type { WatchlistItem } from '@/types';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import { useIncrementalList } from '@/hooks/useIncrementalList';
+import { Eyebrow } from '@/components/ui/Eyebrow';
 
 const CARD_GRID_CLASS = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-[10px]';
 
@@ -125,12 +126,12 @@ export function FollowingCardSections({
                 onClick={() => setAvslutadOpen(!avslutadOpen)}
                 className="w-full flex items-center justify-between mb-2 bg-transparent border-none p-0 cursor-pointer text-left"
               >
-                <h2 className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold flex items-center gap-1">
+                <Eyebrow as="h2" className="flex items-center gap-1">
                   {heading}
-                  <span className="text-[9px] text-ink-3/70">
+                  <span className="text-micro text-ink-3/70">
                     {avslutadOpen ? '▾' : '▸'}
                   </span>
-                </h2>
+                </Eyebrow>
                 <span className="text-xxs text-ink-3">{countLabel(items.length)}</span>
               </button>
               {avslutadOpen && (
@@ -143,9 +144,9 @@ export function FollowingCardSections({
         return (
           <section key={key}>
             <div className="flex items-center justify-between mb-2">
-              <h2 className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold">
+              <Eyebrow as="h2">
                 {heading}
-              </h2>
+              </Eyebrow>
               <span className="text-xxs text-ink-3">{countLabel(items.length)}</span>
             </div>
             <SectionGrid items={items} nextAirByTmdbId={nextAirByTmdbId} subState={key} selectMode={selectMode} isSelected={isSelected} onToggleSelect={onToggleSelect} />

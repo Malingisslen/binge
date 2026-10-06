@@ -29,6 +29,8 @@ import { trackEvent } from '@/lib/analytics';
 import { titleHref } from '@/lib/tmdb/client';
 import { formatSwedishDate } from '@/lib/utils';
 import type { AdvisedShow, ActivePause, SubscribeAdvisory } from '@/types';
+import { Eyebrow } from '@/components/ui/Eyebrow';
+import { Button } from '@/components/ui/Button';
 
 const LOOK_AHEAD_DAYS = 60;
 
@@ -109,7 +111,7 @@ function ActivePausesSection({ pauses, onResume }: { pauses: ActivePause[]; onRe
   return (
     <div className="mb-[14px]">
       <div className="flex items-baseline justify-between mb-[6px]">
-        <h2 className="text-[11px] font-bold uppercase tracking-[0.5px] text-ink-3">Dina pausade tjänster</h2>
+        <Eyebrow as="h2" size="xs">Dina pausade tjänster</Eyebrow>
         {totalSaved > 0 && (
           <span className="text-xxs text-season-done font-semibold">Sparat hittills: {formatKr(totalSaved)} kr</span>
         )}
@@ -247,13 +249,13 @@ function SavingsContent() {
             title="Kunde inte räkna på dina tjänster just nu"
             body="Streamingdatan går inte att nå just nu. Det är oftast tillfälligt, försök igen om en stund."
             action={
-              <button
+              <Button
                 type="button"
                 onClick={() => window.location.reload()}
-                className="btn btn-ghost btn-sm"
+                variant="ghost" size="sm"
               >
                 Försök igen
-              </button>
+              </Button>
             }
           />
         </>
@@ -387,7 +389,7 @@ function SavingsContent() {
               className="mb-3 scroll-mt-3 mt-3"
               onToggle={e => setDetailsOpen((e.currentTarget as HTMLDetailsElement).open)}
             >
-              <summary className="text-[11px] font-bold uppercase tracking-[0.5px] text-ink-3 cursor-pointer select-none list-none">
+              <summary className="text-xs font-bold uppercase tracking-[0.5px] text-ink-3 cursor-pointer select-none list-none">
                 Mer detaljer ›
               </summary>
               <div className="mt-3 flex flex-col gap-3">
@@ -396,9 +398,9 @@ function SavingsContent() {
                 {hasSubscribeDetails && (
                   <div>
                     <div className="flex items-baseline justify-between mb-[6px]">
-                      <h3 className="text-[11px] font-bold uppercase tracking-[0.5px] text-ink-3">
+                      <Eyebrow as="h3" size="xs">
                         Titlar på tjänster du inte har
-                      </h3>
+                      </Eyebrow>
                       <span className="text-xxs text-ink-3">
                         {subscribeRows.length + datelessSubscribeRows.length} totalt
                       </span>

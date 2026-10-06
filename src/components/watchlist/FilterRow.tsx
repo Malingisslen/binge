@@ -36,8 +36,8 @@ export default function FilterRow({
   if (genres.length === 0 && tags.length === 0) return null;
 
   const groupLabel = vertical
-    ? 'block text-[11px] uppercase tracking-[0.5px] text-ink-3 mb-[6px]'
-    : 'text-[11px] uppercase tracking-[0.5px] text-ink-3 mr-1 shrink-0';
+    ? 'block text-xs uppercase tracking-[0.5px] text-ink-3 mb-[6px]'
+    : 'text-xs uppercase tracking-[0.5px] text-ink-3 mr-1 shrink-0';
   const rowClass = vertical ? 'flex flex-col gap-4 items-stretch' : 'flex items-start gap-[10px] flex-wrap mt-[10px]';
   // Vertical: label ovanför en egen chip-wrap. Horisontellt: label + chip-wrap i rad.
   const groupClass = vertical ? 'flex flex-col items-start' : 'flex items-center gap-[6px] flex-wrap';

@@ -5,6 +5,7 @@ import { Fragment, useState, useCallback } from 'react';
 import Link from 'next/link';
 import ProviderDot from '@/components/ui/ProviderDot';
 import { useAdvisorTimeline, TIMELINE_WEEKS, type TimelineLane, type TimelineWeek } from '@/hooks/useAdvisorTimeline';
+import { Eyebrow } from '@/components/ui/Eyebrow';
 
 // BIN-45 — styled Direction H hover tooltip for timeline cells (replaces the
 // unstyled native title= on content cells). Lifted to the top so it can render
@@ -82,7 +83,7 @@ export default function AdvisorTimeline() {
     return (
       <div className="bg-surface border border-rule rounded-sm mb-[14px] px-3 py-[10px]">
         <div className="flex items-baseline justify-between mb-1">
-          <h2 className="text-xxs uppercase tracking-[0.5px] font-semibold text-ink-3">Kommande 6 månader</h2>
+          <Eyebrow as="h2">Kommande 6 månader</Eyebrow>
         </div>
         <p className="text-xs text-ink-3">
           Inga avsnitt på 6 månader hos dina tjänster — bra läge att pausa något du inte använder.
@@ -98,7 +99,7 @@ export default function AdvisorTimeline() {
     <div className="bg-surface border border-rule rounded-sm mb-[14px] overflow-x-auto">
       <div className="px-3 py-[10px]" style={{ minWidth: totalWidth + 24 }}>
         <div className="flex items-baseline justify-between mb-1">
-          <h2 className="text-xxs uppercase tracking-[0.5px] font-semibold text-ink-3">Kommande 6 månader</h2>
+          <Eyebrow as="h2">Kommande 6 månader</Eyebrow>
           <span className="text-xxs text-ink-3">Varje ruta = en vecka</span>
         </div>
         <Legend />
@@ -115,7 +116,7 @@ export default function AdvisorTimeline() {
 
           {unsubscribedLanes.length > 0 && (
             <>
-              <div className="text-[9px] text-ink-3 uppercase tracking-[0.5px] pt-3 pb-[3px] border-t border-dashed border-rule-2 mt-3">
+              <div className="text-micro text-ink-3 uppercase tracking-[0.5px] pt-3 pb-[3px] border-t border-dashed border-rule-2 mt-3">
                 Tjänster du inte har
               </div>
               <div className="flex flex-col" style={{ gap: ROW_GAP }}>
@@ -162,7 +163,7 @@ function MonthHeader({ weeks }: { weeks: TimelineWeek[] }) {
                 className="absolute flex items-start"
                 style={{ left: i * COL_STRIDE, top: MONTH_LABEL_TOP }}
               >
-                <span className="text-[9px] text-ink-2 uppercase tracking-[0.5px] font-semibold whitespace-nowrap">
+                <span className="text-micro text-ink-2 uppercase tracking-[0.5px] font-semibold whitespace-nowrap">
                   {w.monthLabel}
                 </span>
               </div>
@@ -178,7 +179,7 @@ function MonthHeader({ weeks }: { weeks: TimelineWeek[] }) {
               style={{ left: i * COL_STRIDE + CELL_WIDTH / 2, top: WEEK_LABEL_TOP, transform: 'translateX(-50%)' }}
               title={w.rangeLabel}
             >
-              <span className="text-[8px] text-ink-3 whitespace-nowrap">
+              <span className="text-nano text-ink-3 whitespace-nowrap">
                 v.{w.weekOfYear}
               </span>
             </div>
@@ -201,7 +202,7 @@ function TodayMarker({ todayWeekIndex }: { todayWeekIndex: number }) {
       />
       <div
         aria-hidden
-        className="absolute px-[6px] py-[2px] bg-acc-deep text-on-acc rounded-[2px] text-[9px] font-bold uppercase tracking-[0.5px] pointer-events-none z-30 whitespace-nowrap"
+        className="absolute px-[6px] py-[2px] bg-acc-deep text-on-acc rounded-[2px] text-micro font-bold uppercase tracking-[0.5px] pointer-events-none z-30 whitespace-nowrap"
         style={{ left: lineLeft, top: 0, transform: 'translateX(-50%)' }}
       >
         Idag ↓

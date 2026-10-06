@@ -11,6 +11,7 @@ import SrOnlyTableHeader from '@/components/ui/SrOnlyTableHeader';
 import { pluralSv } from '@/lib/utils';
 import { getProvider, getProviderColor } from '@/lib/tmdb/providers';
 import { useServiceValue } from '@/hooks/useServiceValue';
+import { Eyebrow } from '@/components/ui/Eyebrow';
 
 export default function ServiceValueCard({ nowMs }: { nowMs: number }) {
   const { rows, monthLabel } = useServiceValue(nowMs);
@@ -29,7 +30,7 @@ export default function ServiceValueCard({ nowMs }: { nowMs: number }) {
   return (
     <div className="mb-[14px]">
       <div className="flex items-baseline justify-between mb-[6px]">
-        <h2 className="text-[11px] font-bold uppercase tracking-[0.5px] text-ink-3">Behåll eller säg upp?</h2>
+        <Eyebrow as="h2" size="xs">Behåll eller säg upp?</Eyebrow>
         <span className="text-xxs text-ink-3">Värde i {monthLabel} · film du sett</span>
       </div>
       {/* BIN-527: a followed serie som finns på flera tjänster räknas bara mot EN — hedge
