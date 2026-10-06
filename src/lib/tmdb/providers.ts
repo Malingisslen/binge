@@ -35,6 +35,9 @@ export interface SwedishProvider {
   // Prisagenten får sätta fältet på tjänster den själv kontrollerat
   // (docs/price-agent-runbook.md).
   priceVerifiedDate?: string;
+  // Abonnemangets namn hos en tjänst utan `tiers`, för prissidans nivåkolumn. Bara
+  // visningstext: ingen beräkning läser det.
+  planName?: string;
 }
 
 export const SWEDISH_PROVIDERS: SwedishProvider[] = [
@@ -57,7 +60,7 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
       { id: 'premium', name: 'Premium', cost: 219 },
     ],
   },
-  { id: 119, name: 'Amazon Prime Video', shortName: 'Prime', color: '#00A8E1', type: 'flatrate', defaultMonthlyCost: 69 },
+  { id: 119, name: 'Amazon Prime Video', shortName: 'Prime', color: '#00A8E1', type: 'flatrate', defaultMonthlyCost: 69, planName: 'Prime-medlemskap' },
   {
     // live-verifierat 2026-10-01 — https://www.disneyplus.com/sv-se — prisagenten läste 69/109/159 (BIN-1398)
     id: 337, name: 'Disney+', shortName: 'Disney+', color: '#0063E5', type: 'flatrate', defaultMonthlyCost: 109,
@@ -69,7 +72,10 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
     ],
   },
   {
+    // live-verifierat 2026-10-06 — https://www.hbomax.com/se/sv — Basic med reklam 89,00,
+    // Standard 149,00, Premium 189,00 kr/månad. Sporttillägget (70 kr) modelleras inte.
     id: 384, name: 'HBO Max', shortName: 'HBO', color: '#7B2FBE', type: 'flatrate', defaultMonthlyCost: 149,
+    priceVerifiedDate: '2026-10-06',
     // 1899 = legacy HBO Max-id. 1825 = "HBO Max Amazon Channel"
     // (live-verifierat SE-id 2026-06-10) — samma tjänst via Prime Video.
     aliases: [1899, 1825],
@@ -121,7 +127,10 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
     ],
   },
   {
+    // live-verifierat 2026-10-06 — https://www.apple.com/se/apple-tv-plus/ — "119 kr per månad
+    // efter en kostnadsfri provperiod". Apple kallar tjänsten Apple TV på sidan.
     id: 350, name: 'Apple TV+', shortName: 'Apple', color: '#555555', type: 'flatrate', defaultMonthlyCost: 119,
+    priceVerifiedDate: '2026-10-06', planName: 'Apple TV',
     // 2243 = "Apple TV Amazon Channel" (live-verifierat SE-id 2026-06-10).
     aliases: [2243],
   },
@@ -197,7 +206,7 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
   // 497 / 517 = TMDB:s nuvarande SE-id:n för Tele2 Play / TriArt Play
   // (katalog-endpoint 2026-06-20); 521 / 578 var de gamla. Aliasa de nya (BIN-64).
   // live-verifierat 2026-07-02 — https://www.tele2.se/tv — 99 kr var KAMPANJ (6 mån); ordinarie Streaming Flex = 199 (BIN-406)
-  { id: 521, name: 'Tele2 Play', shortName: 'Tele2', color: '#00A0D6', type: 'flatrate', defaultMonthlyCost: 199, aliases: [497], priceVerifiedDate: '2026-07-02' },
+  { id: 521, name: 'Tele2 Play', shortName: 'Tele2', color: '#00A0D6', type: 'flatrate', defaultMonthlyCost: 199, aliases: [497], priceVerifiedDate: '2026-07-02', planName: 'Streaming Flex' },
   // Pluto TV (TMDB SE-id 300, live-verifierat 2026-07-02) — gratis reklamfinansierad AVOD;
   // ersatte Viafree i SE 2022 (Lyxfällan/Paradise Hotel m.m., 70+ kanaler). isAds driver
   // advisor-ads-bucketen; defaultMonthlyCost 0 → advisor ger 'free'-status (aldrig paus-
@@ -214,7 +223,7 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
   // live-verifierat 2026-10-02 — https://mubi.com/en/se/memberships (dit /sv/se omdirigerar) —
   // agenten läste sidans planlista med geoLocation SE: månadsplanen 129 SEK. Årsplanen och
   // studentplanen modelleras inte. Färgen är den som sidan använder. (BIN-1401)
-  { id: 11, name: 'MUBI', shortName: 'MUBI', color: '#001489', type: 'flatrate', defaultMonthlyCost: 129, priceVerifiedDate: '2026-10-02' },
+  { id: 11, name: 'MUBI', shortName: 'MUBI', color: '#001489', type: 'flatrate', defaultMonthlyCost: 129, priceVerifiedDate: '2026-10-02', planName: 'Månadsplan' },
   {
     // live-verifierat 2026-10-02 — https://www.drakenfilm.se — sidans planlista, månadspris i
     // SEK. Färgen är sidans accentfärg. (BIN-1401; nivåerna: Malins val 2026-10-02, BIN-1418)

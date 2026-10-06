@@ -227,7 +227,7 @@ button { font: inherit; cursor: pointer; }
   background: var(--surface);
   border-bottom: 1px solid var(--ink);
   display: grid;
-  grid-template-columns: 200px 1fr 280px;
+  grid-template-columns: 200px 1fr 320px;
   align-items: stretch;
   position: sticky;
   top: 0;

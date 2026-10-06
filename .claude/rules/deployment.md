@@ -11,7 +11,6 @@ paths:
 
 `next build` (med `NODE_OPTIONS=--max-old-space-size=4096`) → static export
 till `out/` → Firebase Hosting (`public: "out"`) → Cloudflare proxy.
-SPA-rewrite `**` → `/index.html`.
 
 **Byggtids-TMDB (SEO-pre-rendering):** `/{tv,movie}/[id]` pre-renderas för en
 kärna av titlar med svensk tjänst (ADR 0024; taken står i `SELECTION_CEILING`).

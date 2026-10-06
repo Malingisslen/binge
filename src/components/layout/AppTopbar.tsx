@@ -10,7 +10,7 @@ import { detectMacLike, shortcutHint } from '@/lib/platform';
 import SearchDropdown from '@/components/search/SearchDropdown';
 import { TOPBAR_SEARCH_ID } from './MobileTabBar';
 
-// The new Direction-H topbar. Grid: 200px brand · 1fr week strip · 240px
+// The new Direction-H topbar. Grid: 200px brand · 1fr week strip ·
 // search+avatar. On narrow screens the grid collapses to a single column
 // (see globals.css). The week strip itself remains 7 day-cells on all sizes,
 // just compressed.
@@ -56,7 +56,7 @@ export default function AppTopbar() {
               ref={inputRef}
               id={TOPBAR_SEARCH_ID}
               type="text"
-              placeholder="Sök titel, person eller vän…"
+              placeholder="Sök titel, person…"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               onFocus={() => setSearchFocused(true)}

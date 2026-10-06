@@ -134,6 +134,7 @@ export interface TMDBVideo {
   site: string;
   type: string;
   official: boolean;
+  iso_639_1?: string;
 }
 
 export interface TMDBPerson {

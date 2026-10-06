@@ -14,6 +14,7 @@ import { filmographyCompletion } from '@/lib/tmdb/filmographyCompletion';
 import { buildPersonDescription } from '@/lib/seo/contentFloor';
 import { personDescriptionInput } from '@/lib/seo/contentFloorInput';
 import { useWatchlist } from '@/hooks/useWatchlist';
+import { useAuth } from '@/contexts/AuthContext';
 import TitleGrid from '@/components/title/TitleGrid';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { LoadingView } from '@/components/ui/LoadingView';
@@ -36,6 +37,8 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
   const { data: fetchedCredits } = usePersonCredits(person && !seededCredits ? personId : null);
   const credits = seededCredits ?? fetchedCredits;
   const { getItem, loading: watchlistLoading } = useWatchlist();
+  // "Du har sett" förutsätter ett bibliotek; en utloggad besökare har inget.
+  const { uid } = useAuth();
 
   // BIN-747: trimmed at the SOURCE, not just where it renders. TMDB returns
   // blank-but-truthy biographies ('   ', '\n'), and an untrimmed value is truthy
@@ -218,7 +221,7 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
         </div>
       </div>
 
-      {!watchlistLoading && directedMeter.total >= 3 && (
+      {uid && !watchlistLoading && directedMeter.total >= 3 && (
         <div className="mb-4 max-w-sm">
           <div className="flex items-center justify-between text-xs mb-1">
             <span className="font-bold text-ink-2">
@@ -242,7 +245,7 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
       {/* BIN-206: de osedda regisserade filmerna — gör mätaren aktionerbar.
           Bakom en stängd <details> (samma idiom som Filmografi/Gästframträdanden)
           så den inte tränger undan biografin. */}
-      {!watchlistLoading && directedMeter.total >= 3 && unseenDirected.length > 0 && (
+      {uid && !watchlistLoading && directedMeter.total >= 3 && unseenDirected.length > 0 && (
         <details className="mb-4">
           <summary className="text-sm font-bold text-ink-2 mb-2 cursor-pointer select-none">
             Osedda att samla klart ({unseenDirected.length})

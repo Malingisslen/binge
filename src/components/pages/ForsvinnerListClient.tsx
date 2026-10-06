@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { useQueries } from '@tanstack/react-query';
 import { useStreamingLeaving } from '@/hooks/useStreamingLeaving';
-import { getMovieLite, getTVShowLite, posterUrl } from '@/lib/tmdb/client';
+import { getEnglishTitle, getMovieLite, getTVShowLite, posterUrl } from '@/lib/tmdb/client';
+import { hasNonLatinTitle } from '@/lib/utils/titleFilter';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -44,6 +45,23 @@ export default function ForsvinnerListClient({
     })),
   });
 
+  // TMDB faller tillbaka på originaltiteln när en svensk saknas. Står den i ett
+  // annat skriftsystem hämtas den engelska titeln, bara för just den raden.
+  const swedishTitles = shown.map((_, i) => {
+    const data = titleQueries[i]?.data as TMDBMovie | TMDBTVShow | undefined;
+    return data
+      ? ('title' in data ? data.title : data.name) || ('original_title' in data ? data.original_title : data.original_name)
+      : undefined;
+  });
+  const englishQueries = useQueries({
+    queries: shown.map((e, i) => ({
+      queryKey: ['title-en', e.mediaType, e.tmdbId],
+      queryFn: ({ signal }: { signal: AbortSignal }) => getEnglishTitle(e.mediaType, e.tmdbId, { signal }),
+      enabled: hasNonLatinTitle(swedishTitles[i]),
+      staleTime: TMDB_STALE.LITE_DETAIL,
+    })),
+  });
+
   if (loading) return <LoadingView label={`Hämtar vad som försvinner från ${providerName}…`} />;
 
   if (shown.length === 0) {
@@ -59,9 +77,8 @@ export default function ForsvinnerListClient({
     <ol className="flex flex-col gap-2">
       {shown.map((e, i) => {
         const data = titleQueries[i]?.data as TMDBMovie | TMDBTVShow | undefined;
-        const title = data
-          ? ('title' in data ? data.title : data.name) || ('original_title' in data ? data.original_title : data.original_name)
-          : '…';
+        const english = englishQueries[i]?.data;
+        const title = (english && (english.title || english.name)) || swedishTitles[i] || '…';
         const poster = posterUrl(data?.poster_path ?? null, 'w92');
         const href = `/${e.mediaType === 'movie' ? 'movie' : 'tv'}/${e.tmdbId}/`;
         return (

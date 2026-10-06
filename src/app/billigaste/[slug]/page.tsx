@@ -69,7 +69,7 @@ function providerNames(ids: number[]): string {
     if (seen.has(cid)) continue;
     seen.add(cid);
     const p = getProvider(cid);
-    if (p) names.push(p.shortName || p.name);
+    if (p) names.push(p.name);
   }
   return names.join(', ');
 }
@@ -195,7 +195,7 @@ export default async function BilligastePage({ params }: { params: Promise<PageP
         standfirst={`${plan.totalFilms} ${plan.totalFilms === 1 ? 'film' : 'filmer'}. Vilken tjänst som täcker flest, vad du behöver hyra, och var du ser resten.`}
       />
 
-      <section className="bg-surface rounded-lg p-4 mb-5 border border-rule">
+      <section className="bg-surface rounded-lg p-4 mt-6 mb-5 border border-rule">
         <div className="text-[11px] uppercase tracking-wide text-ink-3 mb-1">Billigaste vägen</div>
         <div className="text-[17px] font-semibold text-ink">{verdict}</div>
         {remainderLine && <div className="text-base text-ink-2 mt-1">{remainderLine}</div>}
@@ -208,7 +208,7 @@ export default async function BilligastePage({ params }: { params: Promise<PageP
         {rows.map((r) => {
           const onPlan = plan.bestProviderId != null && r.canonicalSubs.includes(plan.bestProviderId);
           let status: string;
-          if (onPlan && best) status = `Ingår i ${best.shortName || best.name}`;
+          if (onPlan && best) status = `Ingår i ${best.name}`;
           else if (r.canonicalSubs.length > 0) status = `Streamas på ${providerNames(r.canonicalSubs)}`;
           else if (r.rentable) status = 'Hyr eller köp';
           else status = 'Saknas i Sverige';
