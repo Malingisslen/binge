@@ -26,7 +26,7 @@ Sticky, horisontell toppkrom — **ingen sidebar**:
 - **Mono:** `--mono` är alias för `--sans` — monospace-typsnittet (JetBrains Mono) fasas ut. Koda inte nytt med `font-mono`/`var(--mono)` — städas bort mekaniskt
 - **Täthetskänsla:** verktyg, inte marknadsföringssida. Håll textstorlekar och marginaler kompakta
 - **Typskala:** `--fs-*` i `globals.css :root`, speglad som `text-nano` … `text-6xl` i `tailwind.config.ts`. Ingen px-storlek någon annanstans — testet fäller den
-- **Delar att ta från hyllan** (`src/components/ui/`): `Button`/`buttonClass`, `Eyebrow`/`eyebrowClass`, `cardClass`, `fieldClass` (+ `.select`), `badgeClass`, `thClass`, `bg-scrim`. `consistency.test.ts` fäller handskrivna varianter. Allt syns på `/designsystem/`
+- **Delar att ta från hyllan** (`src/components/ui/`): `Button`/`buttonClass`, `Eyebrow`/`eyebrowClass`, `cardClass`, `fieldClass` (+ `.select`), `badgeClass`, `tagClass`, `thClass`, `bg-scrim`. `consistency.test.ts` fäller handskrivna varianter. Allt syns på `/designsystem/`
 - **Avstånd:** Tailwinds steg i px, 4px per steg (`p-1` = 4px, `gap-2` = 8px), satt i `tailwind.config.ts`. Handskrivet `p-[6px]` fälls av testet. Sidans kant är `.canvas`; sidfoten använder `.page-frame`
 
 ## Färgsystem

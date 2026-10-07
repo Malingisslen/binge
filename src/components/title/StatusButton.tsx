@@ -18,6 +18,7 @@ import { LIBRARY_UNAVAILABLE } from './libraryHold';
 import { useSignedOutRedirect } from '@/hooks/useSignedOutRedirect';
 import { DELETION_IN_PROGRESS_MESSAGE, isDeletionInProgressError } from '@/lib/deletionInProgressError';
 import { cardClass } from '@/components/ui/Card';
+import { buttonClass } from '@/components/ui/Button';
 
 interface StatusButtonProps {
   tmdbId: number;
@@ -197,11 +198,7 @@ export default function StatusButton({
         // uid), so they get no tooltip either, which is right: theirs is a normal
         // tappable button now.
         title={holdReason ?? (current ? labelFor(current.status) : undefined)}
-        className={`px-2.5 py-1 border rounded-sm text-xs font-[inherit] cursor-pointer font-semibold disabled:opacity-50 disabled:cursor-default ${
-          current
-            ? 'bg-acc-deep text-on-acc border-acc-deep'
-            : 'bg-acc-deep text-on-acc border-acc-deep hover:bg-acc-deep-hover'
-        }`}
+        className={buttonClass({ variant: 'acc', size: 'sm', className: 'disabled:opacity-50 disabled:cursor-default' })}
       >
         {current ? labelFor(current.status) : '+ Lägg till'}
       </button>

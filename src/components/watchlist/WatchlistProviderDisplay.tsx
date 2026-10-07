@@ -1,4 +1,5 @@
 import { canonicalUniqueProviders, getProvider } from '@/lib/tmdb/providers';
+import { tagClass } from '@/components/ui/Badge';
 
 /**
  * Visuella provider-indikatorer för watchlist-vyer.
@@ -41,7 +42,7 @@ export function ProviderChips({
     if (providersCheckedAt == null) return null;
     return (
       <div className={`flex flex-wrap gap-0.5 ${className}`}>
-        <span className="text-xxs px-1 py-px border border-rule-2 text-ink-3/70 rounded-sm inline-block">
+        <span className={tagClass('faint')}>
           Ej på SE
         </span>
       </div>
@@ -54,12 +55,7 @@ export function ProviderChips({
       {items.map(({ id, isMine }) => {
         const p = getProvider(id)!;
         return (
-          <span
-            key={id}
-            className={`text-xxs px-1 py-px border rounded-sm inline-block ${
-              isMine ? 'border-acc-deep text-acc-deep' : 'border-rule text-ink-3'
-            }`}
-          >
+          <span key={id} className={tagClass(isMine ? 'acc' : 'muted')}>
             {p.shortName}
           </span>
         );

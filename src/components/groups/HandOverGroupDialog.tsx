@@ -157,14 +157,14 @@ export function HandOverGroupDialog({
           >
             Avbryt
           </Button>
-          <button
+          <Button
             onClick={submit}
             disabled={working || done || !picked}
-            className="ml-auto inline-flex items-center gap-1 px-3 py-1.5 border border-danger/40 text-danger-ink rounded-sm text-xs bg-surface cursor-pointer hover:bg-danger-soft disabled:opacity-50"
+            variant="danger-ghost" size="sm" className="ml-auto disabled:opacity-50"
           >
             <UserCheck size={11} />
             {working ? 'Lämnar över…' : `Lämna över till ${pickedName}`}
-          </button>
+          </Button>
         </div>
     </DialogShell>
   );

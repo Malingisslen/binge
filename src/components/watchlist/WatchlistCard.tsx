@@ -17,6 +17,7 @@ import {
   type ProgressTone,
 } from '@/lib/libraryView';
 import type { WatchlistItem } from '@/types';
+import { tagClass } from '@/components/ui/Badge';
 
 function upcomingWeekday(isoDate: string | undefined): string | null {
   if (!isoDate) return null;
@@ -167,11 +168,8 @@ export function WatchlistCard({
         {(item.tags?.length ?? 0) > 0 && (
           <div className="mt-1 flex flex-wrap items-center gap-0.5">
             {item.tags!.slice(0, 2).map(t => (
-              <span
-                key={t}
-                className="text-xxs px-1 py-px border border-rule-2 text-ink-3 rounded-sm inline-block max-w-[110px] truncate"
-              >
-                {t}
+              <span key={t} className={tagClass('faint', 'max-w-[110px]')}>
+                <span className="truncate min-w-0">{t}</span>
               </span>
             ))}
             {item.tags!.length > 2 && (

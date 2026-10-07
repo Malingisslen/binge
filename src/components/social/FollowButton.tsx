@@ -2,6 +2,7 @@
 
 import { useAuth } from '@/hooks/useAuth';
 import { useFollowing } from '@/hooks/useFollow';
+import { Button } from '@/components/ui/Button';
 
 export default function FollowButton({ targetUid }: { targetUid: string }) {
   const { uid } = useAuth();
@@ -12,15 +13,11 @@ export default function FollowButton({ targetUid }: { targetUid: string }) {
   const following = isFollowing(targetUid);
 
   return (
-    <button
+    <Button
       onClick={() => following ? unfollowUser(targetUid) : followUser(targetUid)}
-      className={`px-3 py-1 border rounded-sm text-xs font-[inherit] cursor-pointer ${
-        following
-          ? 'bg-surface text-ink-2 border-rule hover:bg-bg-2'
-          : 'bg-acc-deep text-on-acc border-acc-deep'
-      }`}
+      variant={following ? 'ghost' : 'acc'} size="sm"
     >
       {following ? 'Slutar följa' : 'Följ'}
-    </button>
+    </Button>
   );
 }
