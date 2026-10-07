@@ -28,6 +28,7 @@ import { dueRotationEvents, type RotationScheduleItem } from './logic';
 // not UTC (a 01:00 local reminder would otherwise fire against yesterday's window).
 import { stockholmDayId } from '../util/dayId';
 import { PROVIDER_NAMES } from '../shared/providerNames';
+import { createInboxCard } from '../shared/inboxCard';
 import {
   countFollowedAiring,
   duePauseReminders,
@@ -40,33 +41,6 @@ import {
 const PAUSE_REMINDER_PAGE = 500;
 /** Followed series read per due user; past it the count in the text is a floor. */
 const FOLLOWED_READ_LIMIT = 1000;
-
-/**
- * An inbox card under a deterministic id, written with create(): a retry after a
- * crash finds it and leaves it alone, so it is never doubled and a card the user
- * already read is never marked unread again. Returns false when it existed.
- */
-async function createInboxCard(
-  db: Firestore,
-  uid: string,
-  id: string,
-  card: { title: string; body: string },
-): Promise<boolean> {
-  try {
-    await db.collection('users').doc(uid).collection('notifications').doc(id).create({
-      kind: 'system',
-      title: card.title,
-      body: card.body,
-      actionUrl: '/savings/',
-      read: false,
-      createdAt: FieldValue.serverTimestamp(),
-    });
-    return true;
-  } catch (err) {
-    if ((err as { code?: unknown }).code === 6) return false; // ALREADY_EXISTS
-    throw err;
-  }
-}
 
 /**
  * BIN-1442 — "Påminn mig" after Pausa. Finds users whose earliest reminded pause

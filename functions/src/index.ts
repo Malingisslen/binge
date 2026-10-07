@@ -341,6 +341,12 @@ export { priceChangeNotify } from './priceChangeNotify';
 // weeklyDigestState/{uid}.lastSentDate. Inga TMDB-anrop (rena Firestore-läsningar).
 export { weeklyDigestNotify } from './weeklyDigest';
 
+// monthlyBillNotify: den 1:a varje månad 09:00 Europe/Stockholm. Ett klockkort
+// "Din streaming i <månad>" till den som hade en betald tjänst och bockade av något
+// förra månaden (BIN-1449). Bara klockan, ingen push. Kortets id är
+// monthly-bill-<yyyy-mm>, skrivet med create(), så en omkörning dubblar inget.
+export { monthlyBillNotify } from './monthlyBillNotify';
+
 // ── TMDB ToS-svep (BIN-402) ──────────────────────────────────────────────────
 // tmdbFieldsSweep: månadsvis collectionGroup-scan av ALLA watchlist-docs →
 // rensar (nullar) denormaliserade TMDB-fält vars färskhetsstämpel
