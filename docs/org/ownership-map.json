@@ -580,8 +580,6 @@
         "src/hooks/useCineasternaCatalog.ts",
         "src/hooks/useListCheapestPlan.ts",
         "src/hooks/usePriceHistory.ts",
-        "src/hooks/useServiceValue.test.ts",
-        "src/hooks/useServiceValue.ts",
         "src/hooks/useStreamingLeaving.ts",
         "src/hooks/useStreamingOffers.test.ts",
         "src/hooks/useStreamingOffers.ts",

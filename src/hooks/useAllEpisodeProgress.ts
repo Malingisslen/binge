@@ -11,7 +11,7 @@ import { flattenEpisodeProgress, type WatchedEpisode } from '@/lib/diary';
 // costs at most one collection read per staleTime — own data, manual page, cheap.
 export function useAllEpisodeProgress() {
   const { uid } = useAuth();
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['episodeProgress-all', uid],
     enabled: !!uid,
     staleTime: 5 * 60 * 1000,
@@ -21,5 +21,5 @@ export function useAllEpisodeProgress() {
       return flattenEpisodeProgress(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     },
   });
-  return { episodes: data ?? [], episodesLoading: isLoading };
+  return { episodes: data ?? [], episodesLoading: isLoading, episodesError: isError };
 }

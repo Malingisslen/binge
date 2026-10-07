@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildMonthlyBill, previousMonth, type BillPause, type CheckedOffEpisode } from './monthlyBill';
+import { billLineText, billTotalText, buildMonthlyBill, previousMonth, type BillPause, type CheckedOffEpisode } from './monthlyBill';
 import type { WatchlistItem } from '@/types';
 
 // Viaplay 76, Max 384 (the catalogue ids serviceValue.test.ts uses).
@@ -88,6 +88,18 @@ describe('buildMonthlyBill', () => {
     expect(b.totalKr).toBe(109);
   });
 
+  it('a show on two services is credited to the paid one when the other was paused all month', () => {
+    const pauses: BillPause[] = [{ providerId: 76, pausedAt: '2026-08-01', resumedAt: null }];
+    const b = bill({ items: [show(1, [76, 384])], episodes: eps(1, 5), pauses })!;
+    expect(b.lines.find(l => l.providerId === 384)).toMatchObject({ episodes: 5, krPerItem: 22 });
+    expect(b.lines.find(l => l.providerId === 76)!.episodes).toBe(0);
+  });
+
+  it('a show on a free service and a paid one is credited to the paid one', () => {
+    const b = bill({ ownedProviderIds: [8, 384], costFor: (id) => (id === 384 ? 109 : 0), items: [show(1, [8, 384])], episodes: eps(1, 2) })!;
+    expect(b.lines.find(l => l.providerId === 384)!.episodes).toBe(2);
+  });
+
   it('a pause that ended inside the month still charges the month', () => {
     const pauses: BillPause[] = [{ providerId: 76, pausedAt: '2026-08-20', resumedAt: '2026-09-10' }];
     const b = bill({ items: [show(2, [384])], episodes: eps(2, 2), pauses })!;
@@ -108,5 +120,27 @@ describe('buildMonthlyBill', () => {
       episodes: [...eps(1, 1), ...eps(2, 10)],
     })!;
     expect(b.lines.map(l => l.providerId)).toEqual([76, 8, 384]);
+  });
+});
+
+describe('billLineText', () => {
+  const base = { providerId: 76, costKr: 449, pausedWholeMonth: false, episodes: 0, films: 0, krPerItem: null };
+  it('says the approved sentences, word for word', () => {
+    expect(billLineText({ ...base, episodes: 27, films: 2, krPerItem: 4 }, 'september')).toBe('27 avsnitt och 2 filmer · 4 kr per avsnitt eller film');
+    expect(billLineText({ ...base, episodes: 4, krPerItem: 42 }, 'september')).toBe('4 avsnitt · 42 kr per avsnitt');
+    expect(billLineText({ ...base, films: 2, krPerItem: 55 }, 'september')).toBe('2 filmer · 55 kr per film');
+    expect(billLineText({ ...base, episodes: 1, krPerItem: 449 }, 'september')).toBe('1 avsnitt · 449 kr för ett avsnitt');
+    expect(billLineText(base, 'september')).toBe('Inget sett i september');
+    expect(billLineText({ ...base, costKr: 0, pausedWholeMonth: true }, 'september')).toBe('Pausad hela september');
+  });
+  it('one film uses the singular', () => {
+    expect(billLineText({ ...base, episodes: 3, films: 1, krPerItem: 112 }, 'maj')).toBe('3 avsnitt och 1 film · 112 kr per avsnitt eller film');
+  });
+});
+
+describe('billTotalText', () => {
+  it('counts both kinds and prices them together', () => {
+    const b = bill({ items: [show(1, [76]), film(10, [384], inSeptember)], episodes: eps(1, 3) })!;
+    expect(billTotalText(b)).toEqual({ count: '3 avsnitt och 1 film', perItem: `${b.krPerItem} kr per avsnitt eller film` });
   });
 });
