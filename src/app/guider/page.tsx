@@ -72,7 +72,7 @@ export default function GuiderPage() {
   };
 
   return (
-    <div className="canvas">
+    <div>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(collectionPage) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(itemList) }} />
 

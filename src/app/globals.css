@@ -635,6 +635,13 @@ button { font: inherit; cursor: pointer; }
   margin: 0 auto;
   padding: 32px 40px 48px;
 }
+/* The footer's column: the same width and side margin as .canvas, so its text lines up
+   with the page above it. */
+.page-frame {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding-inline: 40px;
+}
 .canvas .crumb {
   font-family: var(--mono);
   font-size: var(--fs-xs);
@@ -965,6 +972,9 @@ button { font: inherit; cursor: pointer; }
   }
   .canvas {
     padding: 22px 16px 96px;
+  }
+  .page-frame {
+    padding-inline: 16px;
   }
   /* Phones navigate with the bottom tab bar only (Malin's decision 5, 2026-10-05). */
   .subnav {
