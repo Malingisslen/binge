@@ -114,7 +114,7 @@ describe('sitemap — BIN-337 URL shape + family coverage', () => {
     // Auth-walled / noindex routes must never appear (GSC "submitted URL marked noindex").
     // BIN-305: /savings/ is now auth-walled + robots:noindex, so it must NOT leak in.
     // /streamingpriser/ is noindex via its layout.tsx until the price agent is scheduled.
-    for (const leak of ['/my', '/login', '/settings', '/feed', '/kalibrera', '/stats', '/savings', '/streamingpriser']) {
+    for (const leak of ['/my', '/login', '/settings', '/feed', '/kalibrera', '/stats', '/savings', '/streamingpriser', '/vart-det']) {
       expect([...urls].some(u => u.includes(`binge.nu${leak}`)), `leaked: ${leak}`).toBe(false);
     }
   });
