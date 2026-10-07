@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { billLineText, billTotalText, buildMonthlyBill, previousMonth, type BillPause, type CheckedOffEpisode } from './monthlyBill';
+import { billLineText, billShareRowText, billShareText, billTotalText, buildMonthlyBill, previousMonth, type BillPause, type CheckedOffEpisode } from './monthlyBill';
 import type { WatchlistItem } from '@/types';
 
 // Viaplay 76, Max 384 (the catalogue ids serviceValue.test.ts uses).
@@ -142,5 +142,23 @@ describe('billTotalText', () => {
   it('counts both kinds and prices them together', () => {
     const b = bill({ items: [show(1, [76]), film(10, [384], inSeptember)], episodes: eps(1, 3) })!;
     expect(billTotalText(b)).toEqual({ count: '3 avsnitt och 1 film', perItem: `${b.krPerItem} kr per avsnitt eller film` });
+  });
+});
+
+describe('the shared image texts', () => {
+  const base = { providerId: 76, costKr: 449, pausedWholeMonth: false, episodes: 0, films: 0, krPerItem: null };
+  it('prices each service per thing checked off, in the sketch wording', () => {
+    expect(billShareRowText({ ...base, episodes: 1, krPerItem: 449 })).toBe('449 kr för ett avsnitt');
+    expect(billShareRowText({ ...base, films: 1, krPerItem: 109 })).toBe('109 kr för en film');
+    expect(billShareRowText({ ...base, episodes: 4, krPerItem: 42 })).toBe('42 kr per avsnitt');
+    expect(billShareRowText({ ...base, episodes: 27, films: 2, krPerItem: 4 })).toBe('4 kr per avsnitt eller film');
+    expect(billShareRowText(base)).toBe('Inget sett');
+  });
+  it('leaves a service paused all month off the image', () => {
+    expect(billShareRowText({ ...base, costKr: 0, pausedWholeMonth: true })).toBeNull();
+  });
+  it('the share sheet line carries the month and the total with Swedish grouping', () => {
+    const b = bill({ items: [show(1, [76])], episodes: eps(1, 1) })!;
+    expect(billShareText({ ...b, totalKr: 1234 })).toBe('Min streaming i september: 1 234 kr. Räkna på din egen på binge.nu');
   });
 });
