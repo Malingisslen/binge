@@ -67,7 +67,7 @@ const REQUIRED = [
   // RAN — a floor that stops measuring is indistinguishable from a healthy run.
   'run-rules-tests.test.mjs',
   // BIN-1426. The deploy workflow's rules/functions check. It decides what the backend job
-  // deploys and refuses a run nobody approved, so a test file that stops running leaves
+  // deploys and refuses a run that is not on main, so a test file that stops running leaves
   // both decisions unverified.
   'check-deploy-drift.test.mjs',
   // BIN-1426. The check that the decided-deviations index lists every ledger heading. A

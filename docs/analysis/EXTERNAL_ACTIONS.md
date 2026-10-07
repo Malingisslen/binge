@@ -3,14 +3,14 @@
 Evergreen reference for the things that **can't be done from the repo**: function secrets,
 Cloudflare cache config, the third-party accounts each Cloud Function needs, and the
 deploys that stay manual. `deploy.yml` (push → main) deploys the site, and before it the
-rules, indexes and functions that changed, once Malin approves the run (BIN-1426).
+rules, indexes and functions that changed (BIN-1426).
 
 ---
 
 ## Deploying functions, rules and indexes
 
-`deploy.yml`'s `backend` job deploys them once Malin approves the run in the `backend`
-environment (BIN-1426); `docs/RUNBOOK.md` §6e covers approving, rejecting and recovering.
+`deploy.yml`'s `backend` job deploys them without an approval (BIN-1426, Malin's decision
+2026-10-07); `docs/RUNBOOK.md` §6e covers what goes out and recovering.
 The job finishes before the hosting job starts, so a new function is live before the site
 that calls it — the order BIN-1118/1120/1259 (2026-09-20) had to get right by hand. The
 reverse case still needs a decision: a rules change the OLD site cannot live with needs the
@@ -53,8 +53,7 @@ keeps its watch record. `handOverOwnedGroups` does not: the account-delete butto
 it before its cascade, so an unbuilt index fails **every self-service account deletion**,
 and the user is told nothing was deleted.
 
-Push the `firestore.indexes.json` change alone; its run deploys `--only firestore:indexes`
-after the approval. Then confirm the index is actually built. The Console shows it, but
+Push the `firestore.indexes.json` change alone; its run deploys `--only firestore:indexes`. Then confirm the index is actually built. The Console shows it, but
 this is the checkable form — a `fieldOverrides` entry is NOT a composite index, so
 `indexes composite list` will not show it:
 
@@ -68,7 +67,7 @@ Built means an entry with `"queryScope": "COLLECTION_GROUP"` and `"state": "READ
 The reverse order is safe when nothing new reads the index yet.
 
 **Rollback.** Both halves are reversible. Revert the function source and push; the `backend`
-job redeploys the functions after the approval, which is safe, since the old code never
+job redeploys the functions, which is safe, since the old code never
 issues the query. The index is removed by hand: drop its `fieldOverrides` entry and run
 `firebase deploy --only firestore:indexes`, which asks before it deletes. Revert the
 functions first or independently; an index left standing after a function revert is not

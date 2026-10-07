@@ -29798,3 +29798,213 @@ Hermeticity of the throwaway-repo test (`-t 'judges the staged'`): `GIT_CONFIG_G
 **Verdict:** pass, 0 blocking. Both round-1 blocking findings and both optional ones are closed by mutants that now die. Non-blocking: `skip:`/`exclude:` on the lefthook block survive; the fixture helper inherits `GIT_*` env and global `safecrlf`.
 
 **Knowledge fold:** tooling chapter, Extract-then-test & layering — the injected-runner bullet gained the real-git throwaway-repo hermeticity check and the scratch-clone rule for probing it.
+
+## 2026-10-07 — BIN-1426: the backend gate without the approval click (check-deploy-drift.test.mjs)
+
+**Diff reviewed.** Staged on `claude/project-thread-01w0zn` over HEAD b4a8b2c8. Index blobs:
+`scripts/check-deploy-drift.mjs` 1a1d5894, `scripts/check-deploy-drift.test.mjs` 83ede84c,
+`scripts/scripts-self-tests-present.test.mjs` 88749e1f (comment-only: REQUIRED and MIN unchanged),
+`.github/workflows/deploy.yml` fb562274. `--approval-gate`/`approvalProblem`/`gateProblem`/
+`staleProblem`/`lastDeployedRun` are gone from script, workflow and tests; their removed tests are
+the decided removal (Malin 2026-10-07), and the gate's surviving refusals were ported to
+`gateTarget` tests. Report-mode `toContain` strings lost their approval sentences because the
+production strings did. `git grep -i "approval-gate|approvalProblem|Approval gate"` hits only this
+archive and `events.jsonl`.
+
+**Reading list.** The reading-list command failed (`ENOENT` on the plugin cache);
+review-core.md was read from `/home/claude/claude-plugins/plugins/workflow-guards/shared/`, plus
+the core card and the tooling chapter.
+
+**Rig.** `git worktree add --detach <scratchpad>/trrig HEAD`, `git apply` of
+`git diff --cached --binary`; the four blobs hash-equal to the index. `npm ci --ignore-scripts`
+(real directory, no outward symlink). Harness: `node_modules/.vite` removed before every run; clean
+control 189/189 (185 drift + 4 self-tests). Each mutant: anchor matched once, landing proven by a
+changed `git hash-object`, still in place after the run, restored and hash-verified.
+
+**Mutants** (`npx vitest run --project product scripts/check-deploy-drift.test.mjs --reporter=json`):
+- Killed. C1 backend `needs: [checks]`: 1. W1 `environment: backend` deleted: 1. W4 `if: false` on
+  Test the newer commit: 1. W5 Rules tests step deleted: 1. W6 `npm test || true`: 2. W7
+  `continue-on-error` on Test the newer commit: 2. W9 its condition `==`: 1. W11 key step
+  `DEPLOY_ARGS` from `needs.checks.outputs.deploy`: 1. W14 `if: always()` on Deploy rules and
+  functions: 1. W15 job-level `continue-on-error` on backend: 1. R2 `always() &&` on the upload:
+  1. R5 Write-down step without the `clean` term: 1. G1 ref check off: 5. G2 head check off: 1.
+  G3 ancestry check off: 3. G4 `gateMain` refusal `return 0`: 2 (both through `main()`). G5
+  GITHUB_SHA check off: 1. G6 repository check off: 1. G7 `sinceLastDeploy(env.GITHUB_SHA…)`: 3.
+  G8 `gateOutput(env.GITHUB_SHA…)`: 5. G10 fetch deleted: 1. G11 second fetched() check off: 1.
+  G12 `if (problem)` off: 2. R6 expired check off: 1. R7 record-content check off: 2. R9 page
+  check off: 1.
+- SURVIVED 185/185: R1 `set -o pipefail` deleted from Deploy rules and functions (no `shell:` or
+  `defaults:` in deploy.yml, so the step runs `bash -e`: a failing `npx … | tee` exits 0, reaches
+  the else, writes `clean=true`, uploads the record and ends the job green). R8 the else-branch
+  `clean=true` moved after `fi`, so a deploy where firebase skipped functions writes the record:
+  the test's `deploy.indexOf('else', skipped)` lands on the `else` inside "händelsetyp" in the
+  warning text, 330 characters before the real `else`, so its not-in-branch slice holds nothing.
+  P1 backend `actions: read` deleted. P2 checks `actions: read` deleted. P3 backend checkout
+  `fetch-depth: 0` deleted. P1–P3 fail closed (403 or no ancestry → the gate or the report step
+  exits 1, or deploys everything but hosting).
+- Probe (rig-only file, deleted before teardown): pipefail matched as a whole line before
+  `| tee`; the skipped branch sliced up to `'\n          else\n'` holds no `clean=true` and the
+  real else branch holds it. Clean 2/2; R1 killed by the pipefail probe alone, R8 by the branch
+  probe alone.
+
+**Verdict:** fail, 2 blocking (R1 and R8: #8's condition 6, the record only after a clean deploy,
+is not proven). Non-blocking: P1/P2 (#8's condition 8 has no pin on backend or checks; fail
+closed), P3.
+
+**Teardown.** `WORKTREE_GUARD_ROOT=/home/claude/claude-plugins/plugins/workflow-guards node
+scripts/shared-guard.mjs worktree-cleanup <rig>`: removed, shared `node_modules` intact. The four
+reviewed files' worktree blobs still equal the index.
+
+**Knowledge fold:** the tooling chapter's workflow-text bullet gained the pipefail route and the
+bare-keyword anchor.
+
+## 2026-10-07 — BIN-1426 round 2: the record test re-cut, pipefail and permissions pinned (check-deploy-drift.test.mjs)
+
+**Diff reviewed.** Same branch over HEAD b4a8b2c8. Index blobs: `scripts/check-deploy-drift.test.mjs`
+07c78fb1 (was 83ede84c), `scripts/check-deploy-drift.mjs` 1a1d5894 and `.github/workflows/deploy.yml`
+fb562274 (both unchanged since round 1), `scripts/scripts-self-tests-present.test.mjs` 88749e1f
+(comment-only). `git diff 83ede84c 07c78fb1`: the record test now cuts the skipped-functions
+branch at `'\n          else\n'` and `'\n          fi\n'`, asserts both found, the skipped branch
+without `clean=true`, the else branch with it, no `clean=true` after `fi`, and
+`^ {10}set -o pipefail$` before `| tee`; a new test pins `actions: read` on backend and checks and
+the backend checkout's `fetch-depth: 0`. Nothing else in the file changed.
+
+**Reading list.** The command failed again (`ENOENT` on `/root/.claude/plugins/cache/...`);
+review-core.md read from `/home/claude/claude-plugins/plugins/workflow-guards/shared/`, plus the
+core card and the tooling chapter.
+
+**Rig.** `git worktree add --detach <scratchpad>/rig HEAD`, the four index blobs written in with
+`git show :<f>`, `npm ci --ignore-scripts` (own `node_modules`). Clean control 190/190 (186 drift
++ 4 self-tests). Harness `mut.mjs`: anchor once, landing by changed hash, still in place after the
+run, restored and hash-verified, `node_modules/.vite` removed per run, `--project product`.
+
+**Mutants.**
+- Round-1 survivors now killed, each by exactly the named test: R1 (pipefail deleted) 1, R8 (else
+  `clean=true` moved after `fi`) 1 — both "the record is uploaded only after a clean deploy…";
+  P1, P2, P3 1 each — "the backend and checks jobs keep actions: read…".
+- New, killed by the record test: N4 (`clean=true` swapped into the skipped branch), N5 (added to
+  the skipped branch too), N6 (pipefail moved below the tee line), N17 (`else` → `elif true; then`).
+- Round-1 killed set re-run, all still killed: C1 1, W1 1, W4 1, W5 1, W6 2, W7 2, W9 1, W11 1,
+  W14 1, W15 1, R2 1, R5 1, G1 5, G2 1, G3 3, G4 2, G5 1, G6 1, G7 3, G8 5, G10 1, G11 1, G12 2,
+  R6 1, R7 2, R9 1.
+- SURVIVED 186/186: N1 `|| true` after `| tee "$RUNNER_TEMP/backend-deploy.log"`; N2 `set +o
+  pipefail` inserted before the npx line; N3 `set +e` inserted before the npx line (the hosting
+  step's own capture idiom). Each lets a failed `firebase deploy` reach the else, write
+  `clean=true`, upload the record and end the step green. N15 tee to `backend-deploy-full.log`;
+  N16 grep reads `backend-deploy.txt`: grep exits 2, the `if` reads it as "nothing skipped", so a
+  deploy where firebase skipped functions writes the record.
+- Probe (rig-only, deleted before teardown): the step's whole `run:` block compared by equality
+  with a snapshot of the staged one. Clean 1/1; N1, N2, N3, N15, N16 each 0/1.
+
+**Verdict:** fail, 1 blocking: the "Deploy rules and functions" `run:` is not pinned by equality,
+so #8's condition 6 still falls to N1–N3 and N15/N16. I did not run these in round 1; they belong
+to the route class my tooling chapter already named (`|| true` in a `run:`).
+
+**Teardown.** `WORKTREE_GUARD_ROOT=… node scripts/shared-guard.mjs worktree-cleanup <rig>`:
+removed, shared `node_modules` 452 → 452. The four reviewed files' worktree blobs equal the index.
+
+**Knowledge fold:** tooling chapter, the `cmd | tee log` sentence now names the sibling routes a
+pipefail pin leaves open and asks for the whole `run:` by equality.
+
+## 2026-10-07 — BIN-1426 round 3: the deploy step's whole script pinned; its shell is not (check-deploy-drift.test.mjs)
+
+**Diff reviewed.** Same branch over HEAD b4a8b2c8. Index blobs: `scripts/check-deploy-drift.test.mjs`
+9f1772c9 (was 07c78fb1), `scripts/check-deploy-drift.mjs` 1a1d5894 and `.github/workflows/deploy.yml`
+fb562274 (unchanged since round 1), `scripts/scripts-self-tests-present.test.mjs` 88749e1f (comment
+only; REQUIRED and MIN unchanged). New test "the deploy step runs exactly its script": `scripts(...)`
+of the "Deploy rules and functions" step equals the full literal script (comment lines dropped by
+the extractor). `git grep -i -E "approval-gate|approvalProblem|Approval gate"` in the staged tree,
+excluding `events.jsonl` and this archive: no hits.
+
+**Reading list.** The command failed again (`ENOENT` on `/root/.claude/plugins/cache/...`);
+review-core.md read from `/home/claude/claude-plugins/plugins/workflow-guards/shared/`, plus the
+core card and the tooling chapter. Ledger `.claude/accepted-deviations.md`: no entry covers the
+deploy workflow.
+
+**Rig.** `git worktree add --detach <scratchpad>/rig3 HEAD`, `git apply` of `git diff --cached
+--binary`; the four blobs hash-equal to the index. `npm ci --ignore-scripts` (own directory).
+Harness `mut.mjs`: anchor once, landing by changed `git hash-object`, still in place after the run,
+restored and hash-verified, `node_modules/.vite` removed per run, `--project product` over the two
+test files. Clean control 191/191 (187 drift + 4 self-tests).
+
+**Mutants (failed/191, failing tests).**
+- Round-2 survivors, each killed by "the deploy step runs exactly its script" alone: N1 `|| true`
+  after tee 1, N2 `set +o pipefail` before npx 1, N3 `set +e` before npx 1, N15 tee to
+  `backend-deploy-full.log` 1, N16 grep on `backend-deploy.txt` 1. KEY1 missing-key `exit 1`→`exit 0`
+  1 (same test).
+- Re-run, still killed: R1 2, R8 2 (equality test + record test), R2 1, R5 1, W14 1, W15 1, W4 1,
+  W6 2, W16 (`npm run typecheck || true` on Typecheck functions) 2, C1 1, K1 (`environment: backend`
+  deleted) 1, K2 (key env on Test the newer commit) 2, K3 (key as job-level env) 1, P1 1, P2 1, G1 5,
+  G2 1, G3 3, G4 2, G5 1, G6 1, G9 (failed main lookup returns `{ target: sha }`) 1, G11 1.
+- SURVIVED 191/191: SH1 `shell: bash {0}` on the deploy step; SH2 the same as job `defaults.run.shell`
+  on backend; SH3 the same as workflow-level `defaults`; SH4 `shell: sh {0}` on the step. Simulated
+  the extracted step script with a failing `npx` stub: under `bash -e` exit 1 and no output; under
+  plain `bash` exit 0 and `clean=true` in GITHUB_OUTPUT. So a failed deploy ends the step and job
+  green and, when main moved on, uploads the record (#8 condition 6).
+- SURVIVED 191/191, non-blocking: G13 `gateMain`'s comparison-failure branch `return 1`→`return 0`
+  (no test drives the gate with a failing `sinceLastDeploy`). Fail-closed in the workflow: no outputs
+  are written, `target` is '', the pinned checkout step runs and `git checkout -q --detach ""` dies
+  (exit 128, measured), so nothing deploys.
+- ENV1 (`SHELLOPTS: braceexpand` in the step env) survived but is not a route: bash imports SHELLOPTS
+  options without clearing `-e`. Discarded.
+- Probe (rig-only, removed and hash-restored to 9f1772c9): `expect(lines.filter((l) =>
+  /^\s*(shell|defaults):/.test(l))).toEqual([])` inside the workflow describe. Clean 192/192; SH1,
+  SH2, SH3 each 1/192, the probe alone.
+
+**Verdict:** fail, 1 blocking (SH1–SH4: #8 condition 6 still falls to a shell override, the premise
+the equality pin rests on). Non-blocking: G13.
+
+**Teardown.** `WORKTREE_GUARD_ROOT=… node scripts/shared-guard.mjs worktree-cleanup <rig3>`: removed,
+shared `node_modules` 452 → 452. The four reviewed files' worktree blobs equal the index.
+
+**Knowledge fold:** tooling chapter, the `cmd | tee log` sentence now also asks for `shell:`/
+`defaults:` pinned absent beside the equality pin.
+
+## 2026-10-07 — BIN-1426 round 4: the shell pin and the gate's comparison-failure exit (check-deploy-drift.test.mjs)
+
+**Diff reviewed.** Same branch over HEAD b4a8b2c8. Index blobs: `scripts/check-deploy-drift.test.mjs`
+56c572c3 (was 9f1772c9), `scripts/check-deploy-drift.mjs` 1a1d5894 and `.github/workflows/deploy.yml`
+fb562274 (unchanged since round 1), `scripts/scripts-self-tests-present.test.mjs` 88749e1f (comment
+only; REQUIRED and MIN unchanged). New in the test file: "the deploy step runs exactly its script"
+first asserts `lines.filter((l) => /^\s*(shell|defaults):/.test(l))` equals `[]` over the whole
+workflow (comment lines dropped); new test "through main, a comparison that throws exits 1 and
+writes nothing" drives `--backend-gate` with main at the run's own commit and a `git` stub that
+answers only `rev-parse HEAD`, so `sinceLastDeploy` throws at its `rev-parse --verify` (before any
+gh call on the runs path) and lands in `gateMain`'s comparison catch. `git grep --cached -i -E
+"approval-gate|approvalProblem|Approval gate"` excluding `events.jsonl` and this archive: no hits.
+
+**Reading list.** The command failed again (`ENOENT` on `/root/.claude/plugins/cache/...`);
+review-core.md read from `/home/claude/claude-plugins/plugins/workflow-guards/shared/`, plus the core
+card and the tooling chapter. Index `.claude/rules/accepted-deviations.md` and the ledger's BIN-1426
+entry: nothing covers the deploy workflow.
+
+**Rig.** `git worktree add --detach <scratchpad>/rig4 HEAD`, `git apply` of `git diff --cached
+--binary`; the four blobs hash-equal to the index. `npm ci --ignore-scripts` (own directory, not a
+link). Harness `tools/mut.mjs`: anchor matched once, landing checked, hash unchanged after the run,
+restored, `node_modules/.vite` removed per run, `--project product` over the two test files. Clean
+control 192/192 (188 drift + 4 self-tests).
+
+**Mutants (failed/192, failing tests).**
+- Round-3 survivors, each killed by "the deploy step runs exactly its script" alone: SH1 `shell: bash
+  {0}` on the deploy step 1, SH2 the same as backend job `defaults.run.shell` 1, SH3 workflow-level
+  `defaults` 1, SH4 `shell: sh {0}` on the step 1. SH8 `- shell: bash {0}` as the step's first key 1
+  (killed only because the step lookup on `- name: Deploy rules and functions` then misses).
+- G13 `gateMain` comparison catch `return 1`→`return 0`: 1, the new test alone. G13b the catch also
+  writing `gateOutput(target, EXCEPT_HOSTING)`: 1, the same test.
+- Re-run, still killed: G4 2, G1 5, G3 3, G2 1, C1 1, K1 1, K2 2, K3 1, W5 1, W4 1, W17 (a new step
+  between gate and key) 1, R1 2, N1 1, R5 1, P1 1, P2 1, GATE-after-key (gate step's id renamed) 1.
+- SURVIVED 192/192, non-blocking: SH7 `"shell": bash {0}` (quoted key) on the deploy step; SH9
+  `'defaults': {run: {shell: 'bash {0}'}}` at workflow level. Valid YAML keys the regex does not
+  match; whether GitHub's parser honours them was not verified. No quoted key exists in deploy.yml.
+- SURVIVED 192/192, non-blocking: APPROVAL-readd, a `- name: Approval gate` step running
+  `node scripts/check-deploy-drift.mjs --approval-gate` before the backend gate. #8 condition 7 is
+  held by the grep above, not by a test; the step would fail closed (`main(['--approval-gate'])`
+  falls to the before/after path and exits 1 on the missing second ref), so nothing deploys.
+
+**Verdict:** pass, 0 blocking. Non-blocking: SH7/SH9 (quoted-key evasion of the shell pin),
+APPROVAL-readd (condition 7 is a grep, not a test; fails closed).
+
+**Teardown.** `WORKTREE_GUARD_ROOT=… node scripts/shared-guard.mjs worktree-cleanup <rig4>`: removed,
+shared `node_modules` 452 → 452. The four reviewed files' worktree blobs equal the index.
+
+**Knowledge fold:** tooling chapter, the shell/defaults sentence now asks for a quoted-key probe.

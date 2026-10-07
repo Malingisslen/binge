@@ -71,8 +71,8 @@ Sedan: kör rules-testerna i Firebase Console → Rules Playground innan nästa
 deploy. Dokumentera vad som gick fel i commit-meddelandet.
 
 Det är den snabba vägen mitt i en incident. Committa och pusha sedan återställningen, så
-att `main` säger samma sak som produktionen: deploy.yml jämför med sin förra lyckade
-körning, inte med reglerna som är ute, så en regel som bara backats för hand kommer
+att `main` säger samma sak som produktionen: deploy.yml jämför med den commit som senast
+deployades, inte med reglerna som är ute, så en regel som bara backats för hand kommer
 tillbaka med nästa regeländring (§6e). Kör aldrig om en gammal körning för att backa.
 
 ### 2c. `resource-exhausted` / rate-limit
@@ -611,52 +611,46 @@ längre kunna fälla bygget efter 2026-06 (AbortSignal.timeout i
      stänger av både golvet och sitemapens kast, och `deploy.yml` är den enda
      vägen till produktion — det är hela egenskapen golvet vilar på.
 
-### 6e. Regler och funktioner väntar på godkännande (BIN-1426)
+### 6e. Regler och funktioner deployas av sig själva (BIN-1426)
 
-En körning som hittar ändrade regler, index eller funktioner sedan sin förra lyckade
-körning stannar vid jobbet `backend` med *Waiting for review*. Körningens sammanfattning
-(Summary) säger vad som ändrats, vad som deployas och vad du bör läsa först.
+En körning som hittar ändrade regler, index eller funktioner sedan förra deployen
+deployar dem i jobbet `backend`, utan att någon klickar (Malin, 2026-10-07: "Deploya
+backend utan mina klick"), och webbplatsen efter dem. Körningens sammanfattning (Summary)
+säger vad som ändrats och vad som deployas.
 
-- **Godkänn:** *Review deployments* → kryssa `backend` → *Approve and deploy*. Regler,
-  index och funktioner går ut, sedan webbplatsen.
-- **Neka:** *Reject* skjuter bara upp. Webbplatsen går inte heller ut, och nästa körning
-  frågar om samma ändring igen. Vill du inte ha ändringen: reverta den. Starta en ny
-  körning med *Run workflow*, inte *Re-run*.
-- **Avbryt:** *Cancel workflow* släpper kön; nästa körning frågar igen.
-- **Medan en körning väntar** står senare pushar, måndagskörningen och *Run workflow* i
-  kö bakom den. En nyare körning i kö ersätter en äldre i kö.
-- **Brådskande fix av webbplatsen medan en körning väntar:** fixen står i kö bakom den.
-  Får regel- och funktionsändringen gå ut: godkänn, så kommer fixen efter. Får den inte
-  det: avbryt den väntande körningen och pusha fixen tillsammans med en revert av
-  ändringen.
+- **Vad som går ut:** regler, index och funktioner som de ser ut på main när jobbet
+  startar. Har main gått vidare sedan körningen startade körs testerna, funktionernas
+  typkontroll och regeltesterna på main först, och faller något deployas ingenting.
+  Sammanfattningen säger vilken commit som deployades och vad den jämfördes med.
+- **En körning i taget:** senare pushar, måndagskörningen och *Run workflow* står i kö
+  bakom den som kör. En nyare körning i kö ersätter en äldre i kö.
 - **`backend_deployed_by_hand`** bara när det körningen ville deploya redan är ute för
-  hand. Körningen räknas då som lyckad och nästa körning jämför därifrån, så det som inte
-  deployats frågas inte om igen.
-- **"godkänn körningen för den nyare commiten i stället":** main har fått nyare regler
-  eller funktioner, och den här körningen skulle backa dem. Godkänn den nyare när den
-  frågar; har den redan gått igenom behövs inget.
+  hand. Körningen räknas då som lyckad och nästa körning jämför därifrån.
+- **"main pekar på …, som den här körningen inte kunde hämta":** *Re-run failed jobs*.
+- **"Kunde inte avgöra vad som ska deployas" med "har gått ut":** körningen kan inte läsa
+  vad förra deployen lade ut. *Run workflow* med `deploy_all_backend`.
 - **"Webbplatsen deployas inte: körning #… har redan deployat den nyare commiten":** en
   omkörning av en äldre körning, som skulle backa webbplatsen. Inget behövs; vill du
   deploya igen, *Run workflow* på main.
 - **Backend misslyckades:** sammanfattningen visar firebases sista rader och vad du gör.
-  Ett tillfälligt fel: *Re-run failed jobs* och godkänn igen. Annars deploya för hand
-  med kommandot där, och kör sedan *Run workflow* med `backend_deployed_by_hand`.
+  Ett tillfälligt fel: *Re-run failed jobs*. Annars deploya för hand med kommandot där,
+  och kör sedan *Run workflow* med `backend_deployed_by_hand`.
 - **Webbplatsen misslyckades efter backend:** *Re-run failed jobs*. Det kör bara om det
-  som föll, så backend frågar inte igen.
+  som föll.
 - **Varning om utlösare som byter händelsetyp:** körningen är grön men de funktionerna är
   inte uppdaterade. Deploya dem för hand med kommandot i varningen.
 - **Regler, index och alla funktioner på en gång:** *Run workflow* med
   `deploy_all_backend`. Webbplatsen går ut efteråt, som i varje körning.
-- **Backa regler:** §2b, och committa sedan återställningen.
+- **Backa en ändring:** reverta den på main och pusha; nästa körning deployar
+  återställningen. Mitt i en incident: §2b, och committa sedan återställningen.
 
-Inte prövat i en riktig körning ännu: kön och *Re-run failed jobs* ovan. Stryk den här
-raden när båda är sedda.
+Inte prövat i en riktig körning ännu: *Re-run failed jobs* ovan, och en körning som
+deployar en nyare main än sin egen commit. Stryk den här raden när båda är sedda.
 
 **Det här ska finnas innan deploy.yml:s `backend`-jobb kör första gången** (en gång):
 
-- Miljön `backend` i GitHub (Settings → Environments): Malin som *Required reviewers*,
-  *Prevent self-review* avbockad, *Allow administrators to bypass configured protection
-  rules* avbockad, och *Deployment branches and tags* bara `main`.
+- Miljön `backend` i GitHub (Settings → Environments): *Required reviewers* avbockad
+  (2026-10-07), och *Deployment branches and tags* bara `main`.
 - Hemligheten `FIREBASE_BACKEND_SERVICE_ACCOUNT` i miljön `backend`, aldrig under
   Settings → Secrets and variables → Actions, där varje jobb kan läsa den.
 - Kontot `binge-backend-deploy` med rollerna Firebase Rules Admin, Cloud Datastore Index
@@ -666,7 +660,7 @@ raden när båda är sedda.
   (compute-standardkontot, och `binge-nu@appspot.gserviceaccount.com` om det finns),
   aldrig på hela projektet.
 - Webbplatsnyckelns konto (`FIREBASE_SERVICE_ACCOUNT`) utan roller som deployar regler
-  eller funktioner. Kan den det, skyddar godkännandet ingenting. IAM-listan hade
+  eller funktioner. IAM-listan hade
   2026-10-05 inget eget konto för webbplatsen, så det ska vara `binge-hosting-deploy` med
   bara Firebase Hosting Admin. Deployloggens varning "Unable to find a valid endpoint for
   function `apiInsights`" fanns redan före nyckelbytet (körning #897, 2026-09-23):
@@ -681,9 +675,7 @@ gcloud artifacts repositories describe gcf-artifacts --location=europe-west1 --p
 firebase functions:artifacts:setpolicy --location europe-west1 --project binge-nu
 ```
 
-Efter första körningen med `deploy_all_backend`: kontrollera att den stannade på
-*Waiting for review* innan någon godkände, och att GitHub sa till Malin att den väntade.
-Läs sedan hur många byggen den startade och hur stort funktionsarkivet blev:
+Efter första körningen med `deploy_all_backend`: läs hur många byggen den startade och hur stort funktionsarkivet blev:
 
 ```bash
 gcloud builds list --region=europe-west1 --project=binge-nu --limit=50
@@ -766,8 +758,8 @@ Sista kända fungerande commit:
 # Identifiera
 git log --oneline main | head -20
 
-# Rollback = revert + push (deploy.yml bygger om webbplatsen, och deployar regler
-# och funktioner efter ditt godkännande, §6e).
+# Rollback = revert + push (deploy.yml deployar regler och funktioner och bygger
+# om webbplatsen, §6e).
 # OBS: `git checkout <sha> -- out/` funkar INTE — out/ är gitignorerad
 # build-output, inte incheckad, så det blir en no-op. Reverta källan istället:
 git revert <bad-sha>          # enskild commit

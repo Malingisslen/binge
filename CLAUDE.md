@@ -85,11 +85,11 @@ reviewer some other way, point it at both.
   before touching `firestore.rules`' session block, and never "fix" the first with a token
   stored on a public-read doc.
 - **Never approve a run waiting in the `backend` environment, and never tick
-  `backend_deployed_by_hand` unless Malin says the backend is deployed by hand.** The
-  click is Malin's: it is what puts a rules or functions deploy in her hands (BIN-1426). A
-  session that pushes in her name can technically give it too, and then the click guards
-  nothing. The tick skips the approval altogether, and the run's success makes the next
-  comparison start after changes nobody deployed.
+  `backend_deployed_by_hand` unless Malin says the backend is deployed by hand.** Since
+  Malin's decision of 2026-10-07 the `backend` job deploys without an approval (BIN-1426),
+  so a run that waits means the environment's settings changed, and that is hers to sort
+  out. The tick skips the backend job, and the run's success makes the next comparison
+  start after changes nobody deployed.
 
 ## Project Overview
 
@@ -103,9 +103,8 @@ version of this section claimed Next 14 while the app ran 16).
 ## Commands
 
 `package.json` holds the script list. `deploy.yml` ships a push to `main`: the site, and
-before it the rules, indexes and functions changed since its last successful run, once Malin
-approves the run in the `backend` environment (BIN-1426; which files count is `watchedPaths`
-in `scripts/check-deploy-drift.mjs`). A push that only touches `docs/` (the workflow map
+before it the rules, indexes and functions that changed, without an approval (BIN-1426;
+which files count is `watchedPaths` in `scripts/check-deploy-drift.mjs`). A push that only touches `docs/` (the workflow map
 aside), `tasks/`, `.claude/` or Markdown starts no run. By hand only when that job fails,
 then Run workflow with `backend_deployed_by_hand` to ship the site (`docs/RUNBOOK.md` §6e):
 
