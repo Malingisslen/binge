@@ -40,7 +40,7 @@ import {
   LIBRARY_SUB_STATE_ORDER,
 } from '@/lib/libraryView';
 import FilterRow from '@/components/watchlist/FilterRow';
-import { pluralSv } from '@/lib/utils';
+import { formatLibraryDate, pluralSv } from '@/lib/utils';
 import { toneForId } from '@/lib/duotone';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import { useIncrementalList } from '@/hooks/useIncrementalList';
@@ -65,7 +65,7 @@ type SortKey = 'updatedAt' | 'addedAt' | 'watchedAt' | 'title' | 'rating' | 'rel
 
 function fmtDate(d: Date | null): string {
   if (!d) return '—';
-  return d.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short', year: 'numeric' });
+  return formatLibraryDate(d);
 }
 
 // Sedd-kolumnen och "Sedd datum"-sorteringen visas även i den ofiltrerade /my/all-vyn,

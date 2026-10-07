@@ -8,6 +8,12 @@ describe('askFilterToDiscoverParams', () => {
     expect(askFilterToDiscoverParams({ mediaType: 'tv' })).toMatchObject({ wantMovies: false, wantTV: true });
   });
 
+  it('a length limit without a media type asks for films only, since TMDB times series per episode', () => {
+    expect(askFilterToDiscoverParams({ runtimeMax: 90 })).toMatchObject({ wantMovies: true, wantTV: false });
+    expect(askFilterToDiscoverParams({ runtimeMax: 30, mediaType: 'tv' })).toMatchObject({ wantMovies: false, wantTV: true });
+    expect(describeFilter({ runtimeMax: 30, mediaType: 'tv' }).find(c => c.key === 'runtimeMax')?.label).toBe('Avsnitt på högst 30 min');
+  });
+
   it('expands mood into genres and ORs them with explicit genres', () => {
     const { movieParams } = askFilterToDiscoverParams({ genreIds: [27], mood: 'mysig' });
     const genres = movieParams.with_genres.split('|').map(Number).sort((a, b) => a - b);
@@ -54,7 +60,7 @@ describe('describeFilter', () => {
     const byKey = Object.fromEntries(chips.map((c) => [c.key, c.label]));
     expect(byKey.mediaType).toBe('Filmer');
     expect(byKey.genreIds).toBe('Skräck');
-    expect(byKey.runtimeMax).toBe('≤ 90 min');
+    expect(byKey.runtimeMax).toBe('Filmer på högst 90 min');
     expect(byKey.decade).toBe('80-talet');
     expect(byKey.excludeSeen).toBe('Osedda');
     expect(byKey.providerIds).toBe('Netflix');

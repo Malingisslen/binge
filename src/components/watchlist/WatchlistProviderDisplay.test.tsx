@@ -28,12 +28,13 @@ describe('ProviderChips', () => {
   });
 });
 
-describe('ProviderChips — Ej på SE', () => {
+describe('ProviderChips — Finns inte i Sverige', () => {
   const checked = new Date(2026, 9, 1);
 
   it('visas när TMDB inte gav någon tjänst', () => {
     render(<ProviderChips providers={[]} myProviders={[]} providersCheckedAt={checked} />);
-    expect(screen.getByText('Ej på SE')).toBeTruthy();
+    const tag = screen.getByText('Finns inte i Sverige');
+    expect(tag.getAttribute('title')).toBe('Går inte att streama, hyra eller köpa i Sverige just nu');
   });
 
   it('visas inte innan tjänsterna kontrollerats', () => {

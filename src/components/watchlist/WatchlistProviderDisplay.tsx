@@ -36,14 +36,14 @@ export function ProviderChips({
   providersCheckedAt?: Date | null;
   className?: string;
 }) {
-  // "Ej på SE" bara när TMDB inte gav någon tjänst alls. Tjänster utanför vår
+  // "Finns inte i Sverige" bara när TMDB inte gav någon tjänst alls. Tjänster utanför vår
   // tabell (t.ex. Amazon Video 10, hyr/köp) betyder att titeln FINNS här.
   if (providers.length === 0) {
     if (providersCheckedAt == null) return null;
     return (
       <div className={`flex flex-wrap gap-0.5 ${className}`}>
-        <span className={tagClass('faint')}>
-          Ej på SE
+        <span className={tagClass('faint')} title="Går inte att streama, hyra eller köpa i Sverige just nu">
+          Finns inte i Sverige
         </span>
       </div>
     );

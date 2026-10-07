@@ -32,6 +32,44 @@ function getApiKey(): string {
 const MAX_CONCURRENT = 8;
 const tmdbSemaphore = createSemaphore(MAX_CONCURRENT);
 
+// Ett anrop som aldrig svarar höll förut sin plats i semaforen för alltid, och
+// när åtta sådana hängde stod varje TMDB-sida kvar på "Laddar…". Tidsgränsen
+// släpper platsen och låter sidan visa det som hann komma. Meddelandet bär
+// läsbudgetens suffix (se isReadTimeoutMessage i queryClient.ts) så React Query
+// inte väntar ut samma tidsgräns en gång till.
+export const TMDB_REQUEST_TIMEOUT_MS = 10_000;
+export const TMDB_TIMEOUT_MESSAGE = 'tmdb timeout';
+
+type FetchOutcome<T> = { kind: 'ok'; data: T } | { kind: 'rate-limited'; retryAfter: number };
+
+async function fetchOnce<T>(url: URL, callerSignal: AbortSignal | undefined): Promise<FetchOutcome<T>> {
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, TMDB_REQUEST_TIMEOUT_MS);
+  const forwardAbort = () => controller.abort();
+  if (callerSignal?.aborted) controller.abort();
+  callerSignal?.addEventListener('abort', forwardAbort, { once: true });
+  try {
+    const res = await fetch(url.toString(), { signal: controller.signal });
+    if (res.status === 429) {
+      return { kind: 'rate-limited', retryAfter: Number(res.headers.get('Retry-After')) || 1 };
+    }
+    if (!res.ok) {
+      throw new Error(`TMDB API error: ${res.status} ${res.statusText}`);
+    }
+    return { kind: 'ok', data: (await res.json()) as T };
+  } catch (err) {
+    if (timedOut) throw new Error(TMDB_TIMEOUT_MESSAGE);
+    throw err;
+  } finally {
+    clearTimeout(timer);
+    callerSignal?.removeEventListener('abort', forwardAbort);
+  }
+}
+
 export interface TmdbFetchOpts {
   signal?: AbortSignal;
 }
@@ -59,9 +97,9 @@ async function tmdbFetch<T>(
     // 1 s backoff. Ger ingen retry-stormvirvel i tight loops.
     let attempt = 0;
     while (true) {
-      const res = await fetch(url.toString(), { signal: opts.signal });
-      if (res.status === 429 && attempt < 1) {
-        const retryAfter = Number(res.headers.get('Retry-After')) || 1;
+      const outcome = await fetchOnce<T>(url, opts.signal);
+      if (outcome.kind === 'rate-limited' && attempt < 1) {
+        const retryAfter = outcome.retryAfter;
         // Abort-medveten väntan: utan detta håller en navigation-bort under
         // backoffen kvar semaphore-sloten i upp till 5 s (M7). Lyssna på
         // signalen så vi släpper sloten direkt vid abort.
@@ -75,10 +113,10 @@ async function tmdbFetch<T>(
         attempt++;
         continue;
       }
-      if (!res.ok) {
-        throw new Error(`TMDB API error: ${res.status} ${res.statusText}`);
+      if (outcome.kind === 'rate-limited') {
+        throw new Error('TMDB API error: 429 Too Many Requests');
       }
-      return (await res.json()) as T;
+      return outcome.data;
     }
   } finally {
     tmdbSemaphore.release();

@@ -64,6 +64,7 @@ import { trackEvent } from '@/lib/analytics';
 import ShareButton from '@/components/share/ShareButton';
 import { buttonClass } from '@/components/ui/Button';
 import { eyebrowClass } from '@/components/ui/Eyebrow';
+import { GENRE_LABELS } from '@/lib/tmdb/genreLabels';
 
 export default function TVShowPageClient({ id, initialData }: { id: string; initialData?: TMDBTVShow }) {
   const showId = parseInt(id, 10);
@@ -233,7 +234,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   // BIN-735 — see the paragraph render below (the movie sibling is identical).
   const overviewText = show.overview?.trim() ? show.overview : null;
   const needsContentFloorParagraph = !hasSubstantialText(show.overview);
-  const genres = show.genres.map(g => g.name).join(', ');
+  const genres = show.genres.map(g => GENRE_LABELS[g.id] ?? g.name).join(', ');
   const cast = show.credits?.cast?.slice(0, 10) ?? [];
   // BIN-187 — "Samla klart" (seasons leg): how many of this show's seasons the
   // user has fully completed. Cheap O(seasons) derive, so computed inline (not
