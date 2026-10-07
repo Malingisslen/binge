@@ -59,7 +59,7 @@ reviewers its commit gate names.
 2. `medium` → one blind critique from the owning role; `top` → the full panel concurrently,
    each grounded in its dossier section (`docs/role-responsibilities.md §N` +
    `docs/org/world-watch/ROLE_WORLD_MODEL.md`) and blind to the others. Critiques run on
-   **sonnet at low effort**; the commit-gate reviewers stay on **opus**.
+   **sonnet at low effort**.
 3. Fold their conditions into the plan as binding acceptance criteria. An unresolved
    high-stakes conflict — a block from Security #4 / DPO #6 / Legal #5, or anything legal /
    privacy / interpretive — is surfaced to Malin IN the plan, never buried.

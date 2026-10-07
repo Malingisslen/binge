@@ -2,7 +2,8 @@
 name: binge-integration-reviewer
 description: Reviews the staged Binge diff AS A WHOLE for cross-file breakage — contract drift between changed callers and callees, one concept handled two different ways across files, and duplication introduced across the batch. Run before committing any .ts/.tsx change, and any change under .github/workflows/ or .github/actions/.
 tools: Read, Grep, Glob, Bash
-model: inherit
+model: sonnet
+effort: medium
 ---
 
 You are the **integration reviewer** gate for Binge. The other three gates read files; you read the
