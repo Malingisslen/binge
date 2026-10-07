@@ -3,6 +3,7 @@
 import { formatKr } from '@/lib/formatKr';
 import MoneyFigure from '@/components/ui/MoneyFigure';
 import type { AdvisorResult } from '@/types';
+import { cardClass } from '@/components/ui/Card';
 
 // Streamingrådgivarens "diagnos-mening" — en enda framing-mening som
 // förklarar läget och föreslår första steget. Bytte ut den gamla
@@ -83,7 +84,7 @@ export default function DiagnosisCard({ advisor, activeProviderCount }: Props) {
   }
 
   return (
-    <div className="bg-surface border border-rule border-l-[3px] border-l-acc-deep rounded-sm px-4 py-[14px] mb-[14px]">
+    <div className={cardClass('border-l-[3px] border-l-acc-deep px-4 py-3.5 mb-3.5')}>
       {cost > 0 && (
         <div className="max-w-[360px] mb-3">
           <MoneyFigure monthlyKr={cost} estimated={advisor.totalMonthlyCostEstimated} />

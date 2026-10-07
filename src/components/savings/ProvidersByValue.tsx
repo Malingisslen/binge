@@ -9,6 +9,7 @@ import { useAuth } from '@/hooks/useAuth';
 import CancelHint from '@/components/savings/CancelHint';
 import type { ProviderAdvisory, ActivePause } from '@/types';
 import { Eyebrow } from '@/components/ui/Eyebrow';
+import { cardClass } from '@/components/ui/Card';
 
 // "Dina tjänster" sorterad efter kr/aktiv-serie — ersätter den gamla
 // KPI-3-griden. Bäst valuta överst, sämst nedanför så ögat naturligt
@@ -70,12 +71,12 @@ export default function ProvidersByValue({ providers, activePauses }: Props) {
   });
 
   return (
-    <div className="mb-[14px]">
-      <div className="flex items-baseline justify-between mb-[6px]">
+    <div className="mb-3.5">
+      <div className="flex items-baseline justify-between mb-1.5">
         <Eyebrow as="h2" size="xs">Dina tjänster</Eyebrow>
         <span className="text-xxs text-ink-3">Sorterat efter kostnad per aktiv serie</span>
       </div>
-      <div className="bg-surface border border-rule rounded-sm overflow-hidden">
+      <div className={cardClass('overflow-hidden')}>
         <table className="w-full border-collapse">
           <SrOnlyTableHeader columns={['Tjänst', 'Aktiva serier', 'Månadskostnad', 'Kostnad per aktiv serie']} />
           <tbody>
@@ -90,23 +91,23 @@ export default function ProvidersByValue({ providers, activePauses }: Props) {
                     : 'text-ink-2 font-semibold';
               return (
                 <tr key={row.providerId} className="border-b border-rule-2 last:border-b-0">
-                  <td className="px-3 py-[6px] whitespace-nowrap">
-                    <span className="inline-flex items-center gap-[6px]">
+                  <td className="px-3 py-1.5 whitespace-nowrap">
+                    <span className="inline-flex items-center gap-1.5">
                       <ProviderDot color={row.color} size={7} />
                       <span className="text-xs font-semibold text-ink">{row.providerShortName}</span>
                     </span>
                   </td>
-                  <td className="px-3 py-[6px] text-xs text-ink-2 tabular-nums">
+                  <td className="px-3 py-1.5 text-xs text-ink-2 tabular-nums">
                     {pluralSv(row.activeCount, 'aktiv', 'aktiva')}
                   </td>
-                  <td className="px-3 py-[6px] text-xs text-ink-2 text-right whitespace-nowrap tabular-nums">
+                  <td className="px-3 py-1.5 text-xs text-ink-2 text-right whitespace-nowrap tabular-nums">
                     {row.isFree ? '0 kr' : `${formatKr(row.monthlyCost)} kr/mån`}
                     {renewalDay != null && !row.isFree && (
                       <span className="block text-xxs text-ink-3">förnyas om {daysUntilRenewal(renewalDay, new Date())} d</span>
                     )}
                     {!row.isFree && <CancelHint providerId={row.providerId} billingDay={renewalDay} now={new Date()} />}
                   </td>
-                  <td className={`px-3 py-[6px] text-xs text-right whitespace-nowrap tabular-nums ${krCellClass}`}>
+                  <td className={`px-3 py-1.5 text-xs text-right whitespace-nowrap tabular-nums ${krCellClass}`}>
                     {row.isFree
                       ? 'gratis'
                       : row.krPerShow != null

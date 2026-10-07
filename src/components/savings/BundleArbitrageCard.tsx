@@ -53,8 +53,8 @@ export default function BundleArbitrageCard({ suggestions }: { suggestions: Bund
   if (suggestions.length === 0) return null;
 
   return (
-    <div className="mb-[14px]">
-      <div className="flex items-baseline justify-between mb-[6px]">
+    <div className="mb-3.5">
+      <div className="flex items-baseline justify-between mb-1.5">
         <Eyebrow as="h2" size="xs">
           Dina lösa tjänster kan bli billigare i ett paket
         </Eyebrow>
@@ -69,7 +69,7 @@ export default function BundleArbitrageCard({ suggestions }: { suggestions: Bund
           return (
             <div
               key={s.bundle.id}
-              className={`bg-surface border border-rule rounded-sm px-[14px] py-[12px] ${
+              className={`bg-surface border border-rule rounded-sm px-3.5 py-3 ${
                 i === 0 ? 'border-l-[3px] border-l-acc-deep' : ''
               }`}
             >
@@ -81,7 +81,7 @@ export default function BundleArbitrageCard({ suggestions }: { suggestions: Bund
               </div>
 
               {commitment && (
-                <div data-testid="bundle-commitment" className="mt-[4px]">
+                <div data-testid="bundle-commitment" className="mt-1">
                   <p className="text-xs text-ink tabular-nums">{commitment}</p>
                   {s.commitmentTotalKr != null && (
                     <p className="text-xs text-ink tabular-nums">
@@ -91,24 +91,24 @@ export default function BundleArbitrageCard({ suggestions }: { suggestions: Bund
                 </div>
               )}
 
-              <p className="text-xs text-ink-2 mt-[4px]">
+              <p className="text-xs text-ink-2 mt-1">
                 Du betalar {formatKr(s.currentKr)} kr/mån för {joinNames(s.replacedNames)} var för sig.{' '}
                 Samma tjänster ingår i {s.bundle.name} för {formatKr(s.bundleKr)} kr/mån.
               </p>
 
               {s.bonusNames.length > 0 && (
-                <p className="text-xxs text-ink-3 mt-[4px]">
+                <p className="text-xxs text-ink-3 mt-1">
                   Ingår dessutom: {joinNames(s.bonusNames)} (extra värde, inte inräknat i besparingen).
                 </p>
               )}
 
               {s.downgradeNames.length > 0 && (
-                <p className="text-xxs text-ink-3 mt-[4px]">
+                <p className="text-xxs text-ink-3 mt-1">
                   {joinNames(s.downgradeNames)} ingår men i en lägre nivå än du har idag.
                 </p>
               )}
 
-              <div className="flex items-center justify-between gap-3 mt-[8px]">
+              <div className="flex items-center justify-between gap-3 mt-2">
                 <p className={`text-xxs ${s.stale ? 'text-danger-ink' : 'text-ink-3'}`}>
                   Priser verifierade {formatVerified(s.bundle.verifiedDate)}
                   {s.stale ? ' — kan vara inaktuella' : ''}

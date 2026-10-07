@@ -98,12 +98,12 @@ function ReportsDashboard() {
     <div>
       <PageHeader crumb="Admin · Rapporter" title="Rapporter" />
 
-      <div className="flex gap-[1px] mb-3">
+      <div className="flex gap-px mb-3">
         {STATUS_TABS.map(s => (
           <button
             key={s}
             onClick={() => setActiveTab(s)}
-            className={`px-3 py-[4px] text-xs rounded-sm cursor-pointer ${
+            className={`px-3 py-1 text-xs rounded-sm cursor-pointer ${
               activeTab === s ? 'bg-acc-deep text-on-acc' : 'bg-surface text-ink-2 hover:bg-bg-2'
             }`}
           >
@@ -223,18 +223,18 @@ function ReportRow({
             <Link
               href={targetLink}
               target="_blank"
-              className="px-3 py-[3px] text-xs text-acc-deep no-underline hover:underline text-right"
+              className="px-3 py-1 text-xs text-acc-deep no-underline hover:underline text-right"
             >
               Öppna target →
             </Link>
           )}
           {notice === 'lookup-failed' && (
-            <span className="px-3 py-[3px] text-xxs text-ink-3 text-right">
+            <span className="px-3 py-1 text-xxs text-ink-3 text-right">
               Profilen kunde inte hämtas just nu — försök igen om en stund
             </span>
           )}
           {notice === 'missing' && (
-            <span className="px-3 py-[3px] text-xxs text-ink-3 text-right">
+            <span className="px-3 py-1 text-xxs text-ink-3 text-right">
               Ingen profil finns för kontot
             </span>
           )}
@@ -273,7 +273,7 @@ function ReportRow({
           )}
           {report.status !== 'open' && (
             <>
-              <span className="px-3 py-[3px] text-xxs text-ink-3 text-right">
+              <span className="px-3 py-1 text-xxs text-ink-3 text-right">
                 {REPORT_STATUS_LABELS[report.status]}
               </span>
               <Button

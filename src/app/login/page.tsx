@@ -239,7 +239,7 @@ export default function LoginPage() {
                   type="checkbox"
                   checked={ageConfirmed}
                   onChange={e => setAgeConfirmed(e.target.checked)}
-                  className="mt-[2px] cursor-pointer"
+                  className="mt-0.5 cursor-pointer"
                 />
                 <span>Jag är minst {MIN_AGE} år gammal.</span>
               </label>
@@ -248,7 +248,7 @@ export default function LoginPage() {
                   type="checkbox"
                   checked={termsAccepted}
                   onChange={e => setTermsAccepted(e.target.checked)}
-                  className="mt-[2px] cursor-pointer"
+                  className="mt-0.5 cursor-pointer"
                 />
                 <span>
                   Jag godkänner Binges{' '}
@@ -263,7 +263,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={registerDisabled}
-            className="w-full px-4 py-[6px] bg-ink text-bg border-none rounded-sm cursor-pointer font-[inherit] text-base font-semibold hover:opacity-90 disabled:opacity-50"
+            className="w-full px-4 py-1.5 bg-ink text-bg border-none rounded-sm cursor-pointer font-[inherit] text-base font-semibold hover:opacity-90 disabled:opacity-50"
           >
             {submitting ? (mode === 'register' ? 'Skapar…' : 'Loggar in…') : mode === 'register' ? 'Skapa konto' : 'Logga in'}
           </button>

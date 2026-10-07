@@ -15,14 +15,14 @@ export default function MonthlyBillCard({ bill }: { bill: MonthlyBill }) {
   const month = bill.month.name;
   const total = billTotalText(bill);
   return (
-    <section className={cardClass('mb-[14px] p-3 flex flex-col gap-2 min-w-0')} aria-labelledby="monthly-bill-title" data-testid="monthly-bill">
+    <section className={cardClass('mb-3.5 p-3 flex flex-col gap-2 min-w-0')} aria-labelledby="monthly-bill-title" data-testid="monthly-bill">
       <h2 id="monthly-bill-title" className="m-0 text-base font-extrabold text-ink">Din streaming i {month}</h2>
       <div className="border-t-2 border-ink pt-2 flex flex-col gap-2 tabular-nums">
         <ul className="m-0 p-0 list-none flex flex-col gap-2">
           {bill.lines.map(line => (
-            <li key={line.providerId} className="flex flex-col gap-[1px] min-w-0">
+            <li key={line.providerId} className="flex flex-col gap-px min-w-0">
               <span className="flex justify-between gap-3 text-sm font-bold text-ink">
-                <span className="inline-flex items-center gap-[7px] min-w-0">
+                <span className="inline-flex items-center gap-2 min-w-0">
                   <ProviderDot color={getProviderColor(line.providerId)} size={8} />
                   <span className="truncate">{getProvider(line.providerId)?.shortName ?? String(line.providerId)}</span>
                 </span>

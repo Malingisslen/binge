@@ -5,6 +5,7 @@ import { useSubscriptionAdvisor } from '@/hooks/useSubscriptionAdvisor';
 import { useAuth } from '@/hooks/useAuth';
 import { getProvider } from '@/lib/tmdb/providers';
 import { formatKr } from '@/lib/formatKr';
+import { buttonClass } from '@/components/ui/Button';
 
 // Right rail's Sparande tile: monthly savings number + a paused-service card
 // with a resume link. Direction H spec: tabular numbers, one accent (saffran)
@@ -93,7 +94,7 @@ export default function SparandeTile() {
                   pausa · <strong>{formatKr(featured.monthlyCost ?? 0)} kr/mån</strong>
                 </div>
               </div>
-              <Link href="/savings/" className="btn btn-ghost btn-sm">
+              <Link href="/savings/" className={buttonClass({ variant: 'ghost', size: 'sm' })}>
                 hantera
               </Link>
             </div>
