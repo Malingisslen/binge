@@ -17,6 +17,7 @@ export interface TMDBSearchResult {
   first_air_date?: string;
   genre_ids: number[];
   origin_country?: string[];
+  popularity?: number;
 }
 
 export interface TMDBMovie {
@@ -99,6 +100,7 @@ export interface TMDBReleaseDatesByCountry {
 export interface TMDBTVShow {
   id: number;
   name: string;
+  popularity?: number;
   original_name: string;
   overview: string;
   poster_path: string | null;

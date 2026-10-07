@@ -15,17 +15,26 @@ export interface LeavingEntry {
  * slice it to one provider. Query key NOT persisted — it's small but catalog-
  * scoped and refreshes daily server-side, so a 1h client cache is enough.
  */
-export function useStreamingLeaving(providerId: number | undefined): { entries: LeavingEntry[]; loading: boolean } {
-  const { data, isLoading } = useQuery({
+export function useStreamingLeaving(providerId: number | undefined): {
+  entries: LeavingEntry[];
+  loading: boolean;
+  error: boolean;
+  /** The Stockholm day the rollup was built (yyyy-mm-dd); its window runs from there. */
+  today: string | null;
+} {
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['streaming-leaving'],
     staleTime: 1000 * 60 * 60, // 1h
     queryFn: async () => {
       const { db, doc, getDoc } = await fsdb();
       const snap = await getDoc(doc(db, 'streamingLeaving', 'current'));
-      const byProvider = snap.exists() ? snap.data()?.byProvider : undefined;
-      return (byProvider ?? {}) as Record<string, LeavingEntry[]>;
+      const d = snap.exists() ? snap.data() : undefined;
+      return {
+        byProvider: (d?.byProvider ?? {}) as Record<string, LeavingEntry[]>,
+        today: typeof d?.today === 'string' ? d.today : null,
+      };
     },
   });
-  const entries = providerId != null ? (data?.[String(providerId)] ?? []) : [];
-  return { entries, loading: isLoading };
+  const entries = providerId != null ? (data?.byProvider[String(providerId)] ?? []) : [];
+  return { entries, loading: isLoading, error: isError, today: data?.today ?? null };
 }
