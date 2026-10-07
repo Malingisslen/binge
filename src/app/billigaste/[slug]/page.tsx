@@ -134,7 +134,7 @@ export default async function BilligastePage({ params }: { params: Promise<PageP
       isPartOf: { '@type': 'WebSite', name: 'Binge.nu', url: `${SITE}/` },
     };
     return (
-      <div className="canvas">
+      <div>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(emptyCollectionPage) }} />
         <PageHeader
           crumb="Billigaste vägen"
@@ -188,7 +188,7 @@ export default async function BilligastePage({ params }: { params: Promise<PageP
   };
 
   return (
-    <div className="canvas">
+    <div>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(collectionPage) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(itemList) }} />
 

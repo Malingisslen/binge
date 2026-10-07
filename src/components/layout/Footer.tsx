@@ -15,8 +15,8 @@ const FOOTER_PROVIDER_IDS = [8, 76, 337, 384]; // Netflix, Viaplay, Disney+, Max
 
 export default function Footer() {
   return (
-    <footer className="border-t border-rule-2 mt-12 py-6 px-4 text-ink-3">
-      <div className="max-w-[1024px] mx-auto flex flex-col gap-4">
+    <footer className="border-t border-rule-2 mt-12 py-6 text-ink-3">
+      <div className="page-frame flex flex-col gap-4">
         <nav aria-label="Juridisk information">
           <ul className="flex flex-wrap gap-x-4 gap-y-2 text-xs items-center">
             <li><Link href="/integritet" className="hover:text-ink">Integritetspolicy</Link></li>

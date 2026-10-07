@@ -61,12 +61,12 @@ export default function InsikterClient() {
 
   // ── Access / loading / error gates ─────────────────────────────────────────
   if (authLoading || profileLoading) {
-    return <div className="canvas">{header}<LoadingView label="Kontrollerar behörighet…" /></div>;
+    return <div>{header}<LoadingView label="Kontrollerar behörighet…" /></div>;
   }
 
   if (!hasAccess) {
     return (
-      <div className="canvas">
+      <div>
         {header}
         <div className="mt-6">
           <EmptyState
@@ -79,12 +79,12 @@ export default function InsikterClient() {
   }
 
   if (isFirstLoad && loading) {
-    return <div className="canvas">{header}<LoadingView label="Laddar insikter…" variant="detail" /></div>;
+    return <div>{header}<LoadingView label="Laddar insikter…" variant="detail" /></div>;
   }
 
   if (error && !data) {
     return (
-      <div className="canvas">
+      <div>
         {header}
         <div className="mt-6">
           <EmptyState
@@ -102,13 +102,13 @@ export default function InsikterClient() {
   }
 
   if (!data) {
-    return <div className="canvas">{header}<LoadingView label="Ingen data ännu." /></div>;
+    return <div>{header}<LoadingView label="Ingen data ännu." /></div>;
   }
 
   // ── Dashboard ───────────────────────────────────────────────────────────────
   return (
     <InsightsProvider value={data}>
-      <div className={`canvas ${loading ? 'opacity-70 transition-opacity' : ''}`}>
+      <div className={loading ? 'opacity-70 transition-opacity' : undefined}>
         {header}
 
         {(error || data.partial) && (

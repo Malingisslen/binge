@@ -191,7 +191,7 @@ export default async function GenrePage({ params }: { params: Promise<PageParams
   // resilient 200 med designat tomläge, fylls på vid nästa build (BIN-460).
   if (movieRows.length === 0 && tvRows.length === 0) {
     return (
-      <div className="canvas">
+      <div>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(collectionPage) }} />
         <PageHeader crumb="Genreguide" title={hub.h1} standfirst={hub.blurb} />
         <EmptyState
@@ -220,7 +220,7 @@ export default async function GenrePage({ params }: { params: Promise<PageParams
   };
 
   return (
-    <div className="canvas">
+    <div>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(collectionPage) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(itemList) }} />
 
