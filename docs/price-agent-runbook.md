@@ -9,9 +9,8 @@ ett Linear-ärende istället för att shippa.
 publikt API för svenska abonnemangspriser. En agent som *läser* prissidor (till skillnad
 från en selektor-baserad skrapa) är robust mot layoutändringar och kan bedöma osäkerhet.
 
-**Status:** design + kod-skydd (identitetsvakt + levande nivåpriser) är **shippat**. Själva
-schemaläggningen av molnagenten är ett **ops-steg som Malin wire:ar** (se "Wiring" nedan) —
-den kräver ett konto/miljö som får pusha till `main`.
+**Status:** design + kod-skydd (identitetsvakt + levande nivåpriser) är **shippat**, och
+agenten är schemalagd (se "Wiring" nedan).
 
 ---
 
@@ -95,8 +94,9 @@ och filtrera bort Amazon Channel-varianter och mikrotjänster.
   alla användare med vald nivå automatiskt; ingen fryst siffra i användarprofilen att
   släpa efter. `providerCosts` = enbart "egen inskriven kostnad".
 
-## Wiring (ops — Malins steg)
-Schemalägg en molnagent (t.ex. via `/schedule` eller motsvarande cron-routine) månadsvis
-med uppdraget ovan, i en miljö som får pusha till `main`. Agenten ska ha repo-access +
-Telegram + Linear (project Binge). Tills detta wire:as körs ingen automatik — koden är
-oförändrad och säker (identitetsvakten skyddar ändå varje framtida edit av filen).
+## Wiring (ops)
+Rutinen "Binge prisagent" på Malins konto kör den 3:e varje månad kl. 06:59 svensk tid
+(lagd 2026-10-07, projekttråden om förbättringsplanen). Den väcker tråden den lades i, läser
+den här filen och gör uppdraget ovan. Telegram finns inte: i stället för en notis svarar den
+Malin i tråden, även när inget ändrades. Saknar körningen Linear skriver den ärendena i
+`tasks/prisagent/<ÅÅÅÅ-MM>.md`. Rutinen syns och pausas på claude.ai under Routines.
