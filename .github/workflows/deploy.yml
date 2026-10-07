@@ -32,7 +32,7 @@ on:
         type: boolean
         default: false
       deploy_all_backend:
-        description: 'Deploya regler, index och alla funktioner, oavsett vad som ändrats (efter ditt godkännande)'
+        description: 'Deploya regler, index och alla funktioner, oavsett vad som ändrats'
         type: boolean
         default: false
 
@@ -40,11 +40,12 @@ on:
 permissions:
   contents: read
 
-# One lane: a run that waits for Malin's approval holds it, so later pushes, the weekly
-# run and Run workflow queue behind it until she approves, rejects or cancels. A newer
-# queued run replaces an older queued one (not yet seen in a real run), and the comparison
-# in `checks` starts at the last successful run, so the replaced run's rules and functions
-# changes are not lost.
+# One lane: a running run holds it, so later pushes, the weekly run and Run workflow queue
+# behind it, and no two deploys overlap. A newer queued run replaces an older queued one,
+# and the comparison in `checks` starts at the commit the last deploy left live, so the
+# replaced run's rules and functions changes are not lost. The `backend` job deploys main
+# as it stands when the job starts (its backend gate), so the run queued behind it usually
+# has nothing left to deploy.
 concurrency:
   group: deploy-main
   cancel-in-progress: false
@@ -57,7 +58,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
-      # Where the comparison starts: this workflow's last successful run on main.
+      # Where the comparison starts: this workflow's runs on main and the backend job's records.
       actions: read
     outputs:
       deploy: ${{ steps.backend-changes.outputs.deploy }}
@@ -65,7 +66,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # Full history: the comparison reaches back to the last successful run's commit.
+          # Full history: the comparison reaches back to the commit the last deploy left live.
           fetch-depth: 0
 
       - uses: actions/setup-node@v7
@@ -83,9 +84,8 @@ jobs:
           exit 1
 
       # What the `backend` job deploys (BIN-1426): the rules, indexes and functions changes
-      # since this workflow's last successful run on main, so a change whose run failed, was
-      # rejected or was cancelled is found again. The run summary lists them for the
-      # approval. Uses TypeScript from the root install, hence its place after npm ci.
+      # since the commit the last deploy left live, so a change whose run failed, was
+      # rejected or was cancelled is found again. The run summary lists them. Uses TypeScript from the root install, hence its place after npm ci.
       # Skipped when Run workflow says the backend was deployed by hand: that run ships
       # hosting only.
       - name: Find rules and functions changes
@@ -200,10 +200,11 @@ jobs:
           echo "::warning::npm audit hittade high+ sårbarheter — surfat men blockerar INTE prod-deployen (advisory, BIN-344). Åtgärda via npm audit fix / dependabot."
           exit 0
 
-  # Rules, indexes and functions (BIN-1426). Runs only when `checks` found something to
-  # deploy, and only after Malin approves the run: the `backend` environment requires her
-  # review, and its deploy key is that environment's secret, so no step can read it before
-  # her click.
+  # Rules, indexes and functions (BIN-1426). Runs when `checks` found something to deploy,
+  # without an approval since Malin's decision of 2026-10-07 ("Deploya backend utan mina
+  # klick"). The deploy key is the `backend` environment's secret, so only this job, on
+  # main, can read it. The job deploys main as it stands when it starts, which can be newer
+  # than this run's commit; that commit is tested here before the key step.
   backend:
     needs: [checks, rules-tests]
     if: needs.checks.outputs.deploy != ''
@@ -212,12 +213,12 @@ jobs:
     environment: backend
     permissions:
       contents: read
-      # The approval gate reads this run's approvals.
+      # The backend gate reads the runs and the deploy records.
       actions: read
     steps:
       - uses: actions/checkout@v7
         with:
-          # The approval gate compares this commit with main.
+          # The backend gate compares this commit with main.
           fetch-depth: 0
           persist-credentials: false
 
@@ -226,37 +227,98 @@ jobs:
         with:
           node-version: 22
 
-      # The approval gate uses TypeScript from the root install. No install scripts: this
+      # The backend gate uses TypeScript from the root install. No install scripts: this
       # job reads the key later.
       - name: Install deps (no install scripts)
         run: npm ci --ignore-scripts
 
-      # Refuses unless this run holds an approval for `backend`, so an environment that lost
-      # its required reviewer still cannot deploy (not yet seen in a real run). Also refuses
-      # a run that is not on main, and a re-run of an older commit whose rules or functions
-      # main has changed since; where main points comes from GitHub, not from this clone.
-      - name: Approval gate
+      # Refuses a run that is not on main. Otherwise it picks main as GitHub has it now, not
+      # this clone, as the commit to deploy (`target`), and, with this run's checkout of the
+      # script, what that commit deploys (`deploy`).
+      - name: Backend gate
+        id: gate
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node scripts/check-deploy-drift.mjs --approval-gate
+          DEPLOY_ALL: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_all_backend }}
+        run: |
+          if [ "$DEPLOY_ALL" = "true" ]; then
+            node scripts/check-deploy-drift.mjs --backend-gate --github-output "$GITHUB_OUTPUT" --github-summary "$GITHUB_STEP_SUMMARY" --all
+          else
+            node scripts/check-deploy-drift.mjs --backend-gate --github-output "$GITHUB_OUTPUT" --github-summary "$GITHUB_STEP_SUMMARY"
+          fi
 
-      # The functions predeploy in firebase.json builds functions/ with its own TypeScript.
+      # From here to the key step, the code is main's newer commit when main has moved on.
+      # Each step installs without install scripts and writes nothing to GITHUB_ENV or
+      # GITHUB_PATH, which would carry into the key step.
+      - name: Check out main's newer commit
+        if: steps.gate.outputs.target != github.sha
+        env:
+          TARGET: ${{ steps.gate.outputs.target }}
+        run: |
+          git checkout -q --detach "$TARGET"
+          test "$(git rev-parse HEAD)" = "$TARGET"
+
+      - name: Install the newer commit's deps (no install scripts)
+        if: steps.gate.outputs.target != github.sha
+        run: npm ci --ignore-scripts
+
+      # The functions predeploy in firebase.json builds functions/ with its own TypeScript,
+      # and `npm test` runs tests under functions/src that import its dependencies.
       - name: Install functions deps (no install scripts)
         working-directory: functions
         run: npm ci --ignore-scripts
+
+      - name: Typecheck functions
+        working-directory: functions
+        run: npm run typecheck
+
+      - name: Test the newer commit
+        if: steps.gate.outputs.target != github.sha
+        run: npm test
+
+      # The rules tests, as in the `rules-tests` job, on the newer commit. No emulator cache
+      # here, so the emulator is downloaded afresh.
+      - uses: actions/setup-java@v6
+        if: steps.gate.outputs.target != github.sha
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install Firebase CLI for the rules tests (no install scripts)
+        if: steps.gate.outputs.target != github.sha
+        run: npm i -g firebase-tools@14.27.0 --ignore-scripts
+
+      - name: Rules tests on the newer commit
+        if: steps.gate.outputs.target != github.sha
+        run: npm run test:rules
+
+      # A test process still running when the key is written to disk could read it.
+      - name: Refuse while an emulator is still running
+        run: |
+          if pgrep -a java || pgrep -af 'firebase|emulator'; then
+            echo "::error::En emulator från testerna kör fortfarande, så nyckeln läses inte."
+            exit 1
+          fi
 
       # The same pinned firebase-tools and key-file pattern as the hosting deploy below. As
       # there, npx installs firebase-tools' own dependencies in this step, with the key in its
       # environment, without a lockfile (it ships no npm-shrinkwrap.json) and without
       # --ignore-scripts.
       # No --force: a function deletion stops the deploy and is done by hand.
+      # `clean` says the target is live as it stands on main: deployed with nothing skipped,
+      # or nothing to deploy.
       - name: Deploy rules and functions
         id: backend-deploy
         env:
           FIREBASE_BACKEND_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_BACKEND_SERVICE_ACCOUNT }}
-          DEPLOY_ARGS: ${{ needs.checks.outputs.deploy }}
+          DEPLOY_ARGS: ${{ steps.gate.outputs.deploy }}
         run: |
           set -o pipefail
+          if [ -z "$DEPLOY_ARGS" ]; then
+            echo "Inget i regler och funktioner skiljer sig från det som redan är deployat."
+            echo "clean=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           if [ -z "$FIREBASE_BACKEND_SERVICE_ACCOUNT" ]; then
             echo "::error::Nyckeln FIREBASE_BACKEND_SERVICE_ACCOUNT saknas i miljön backend. Deploya för hand med firebase deploy $DEPLOY_ARGS --project binge-nu och kör sedan Run workflow med backend_deployed_by_hand."
             exit 1
@@ -272,13 +334,51 @@ jobs:
           if grep -qF "Skipping updates for functions that may be unsafe to update" "$RUNNER_TEMP/backend-deploy.log"; then
             echo "::warning::firebase hoppade över funktioner vars utlösare byter händelsetyp. Deploya dem för hand med firebase deploy --only functions --project binge-nu."
             echo "> **Varning:** firebase hoppade över funktioner vars utlösare byter händelsetyp. Deploya dem för hand med \`firebase deploy --only functions --project binge-nu\`, som frågar innan den flyttar dem." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "clean=true" >> "$GITHUB_OUTPUT"
           fi
+
+      # When the job deployed main's newer commit, this run's success would name its own,
+      # older commit as live. The record names the newer one, and `checks` in the next run
+      # compares with it (scripts/check-deploy-drift.mjs, lastDeployed).
+      - name: Write down the commit the job deployed
+        if: steps.gate.outputs.target != github.sha && steps.backend-deploy.outputs.clean == 'true'
+        env:
+          TARGET: ${{ steps.gate.outputs.target }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/backend-deployed"
+          printf '%s\n' "$TARGET" > "$RUNNER_TEMP/backend-deployed/deployed-sha"
+
+      - uses: actions/upload-artifact@v7
+        if: steps.gate.outputs.target != github.sha && steps.backend-deploy.outputs.clean == 'true'
+        with:
+          name: backend-deployed-${{ steps.gate.outputs.target }}
+          path: ${{ runner.temp }}/backend-deployed/deployed-sha
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 90
+
+      # A step after the gate and before the key failed, such as a test of main's newer commit.
+      - name: Say that nothing was deployed
+        if: failure() && steps.gate.outcome == 'success' && steps.backend-deploy.outcome == 'skipped'
+        env:
+          TARGET: ${{ steps.gate.outputs.target }}
+          RUN_SHA: ${{ github.sha }}
+        run: |
+          {
+            echo "### Regler och funktioner deployades inte"
+            echo
+            echo "Ett steg före deployen föll, så ingenting deployades: varken main på ${TARGET:0:12} eller körningens egen commit ${RUN_SHA:0:12}. Steget som föll står i loggen."
+            echo
+            echo "- Ett tillfälligt fel: tryck **Re-run failed jobs**."
+            echo "- Annars: rätta felet på main och pusha. Nästa körning deployar det."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # Malin reads the run summary, not the log.
       - name: Say what to do after a failed deploy
         if: failure() && steps.backend-deploy.outcome == 'failure'
         env:
-          DEPLOY_ARGS: ${{ needs.checks.outputs.deploy }}
+          DEPLOY_ARGS: ${{ steps.gate.outputs.deploy }}
         run: |
           LOG="$RUNNER_TEMP/backend-deploy.log"
           {
@@ -297,7 +397,7 @@ jobs:
             if [ -f "$LOG" ] && grep -qF "could not set up cleanup policy" "$LOG"; then
               echo "- **Funktionerna är ute, men städregeln för funktionsbilder saknas.** Kör \`firebase functions:artifacts:setpolicy --location europe-west1 --project binge-nu\` en gång och tryck sedan **Re-run failed jobs**."
             fi
-            echo "- Ett tillfälligt fel: tryck **Re-run failed jobs** och godkänn igen."
+            echo "- Ett tillfälligt fel: tryck **Re-run failed jobs**."
             echo "- Annars: deploya för hand med \`firebase deploy $DEPLOY_ARGS --project binge-nu\` och kör sedan **Run workflow** med backend_deployed_by_hand, så går webbplatsen ut."
             echo "- Alltid för hand: att ta bort en funktion, en ny hemlighet, en trigger som behöver en ny tjänst, städregeln för funktionsbilder, och när firebase frågar om retry eller minInstances."
             echo "- Om felet gäller funktionerna kan nya regler och index redan vara ute."

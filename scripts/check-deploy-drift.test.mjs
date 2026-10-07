@@ -1,5 +1,5 @@
 // Self-test for the deploy workflow's rules/functions check, its report mode and the
-// approval gate (BIN-1426).
+// backend gate (BIN-1426).
 //
 // Run: npm test
 //
@@ -23,17 +23,22 @@ import {
   deployCommand,
   deployArgs,
   githubOutput,
-  approvalProblem,
-  staleProblem,
-  gateProblem,
+  gateTarget,
+  gateOutput,
+  gateSummary,
   mainTip,
   siteGateProblem,
-  lastDeployedRun,
+  lastDeployed,
+  deployRecords,
   newerDeployedRun,
   deployedRunsPath,
+  deployedArtifactsPath,
   orderWarnings,
   EXCEPT_HOSTING,
+  RECORD_FILE,
+  RECORD_PREFIX,
   RUN_OPTIONS,
+  TARGET_NOTE,
   main,
 } from './check-deploy-drift.mjs';
 
@@ -793,7 +798,7 @@ describe('main against a real git repository', { timeout: REAL_GIT_TIMEOUT_MS },
       return { code, out: out.join('\n'), files };
     };
 
-    test('a push with nothing deployable asks for no approval', () => {
+    test('a push with nothing deployable deploys nothing', () => {
       onBase();
       write('README.md', 'changed\n');
       write('firestore.rules', RULES.replace('// who may read', '// who may read, in words'));
@@ -813,37 +818,37 @@ describe('main against a real git repository', { timeout: REAL_GIT_TIMEOUT_MS },
       expect(files.OUT).toBe('deploy=--only firestore:rules,functions\nchecked=true\n');
       expect(files.SUM).toContain('- firestore.rules: ');
       expect(files.SUM).toContain('- functions/src/send.ts: compiled code changed');
-      expect(files.SUM).toContain('Deployas efter godkännande: firebase deploy --only firestore:rules,functions');
+      expect(files.SUM).toContain('Deployas: firebase deploy --only firestore:rules,functions');
     });
 
-    test('a comparison that throws deploys everything but hosting, behind the approval', () => {
+    test('a comparison that throws deploys everything but hosting', () => {
       const { code, files } = report('0123456789abcdef0123456789abcdef01234567', base);
       expect(code).toBe(0);
       expect(files.OUT).toBe(`deploy=${EXCEPT_HOSTING}\nchecked=true\n`);
       expect(files.SUM).toContain('Kunde inte jämföra med 0123456789ab');
       expect(files.SUM).toContain(
-        'kunde inte läsa om .github/, firebase.json eller .firebaserc ändrats. Läs ändringen innan du godkänner.',
+        'kunde inte läsa om .github/, firebase.json eller .firebaserc ändrats.',
       );
     });
 
-    test('a change to the workflow or firebase.json is named before the approval', () => {
+    test('a change to the workflow or firebase.json is named in the summary', () => {
       onBase();
       write('.github/workflows/deploy.yml', 'name: x\n');
       write('firebase.json', JSON.stringify({ firestore: { rules: 'firestore.rules' } }));
       const { files } = report(base, commit('machinery'));
       expect(files.OUT).toBe(`deploy=${EXCEPT_HOSTING}\nchecked=true\n`);
       expect(files.SUM).toContain(
-        'Varning:** ändringen rör också hur deployen går till: .github/workflows/deploy.yml, firebase.json. Läs ändringen innan du godkänner.',
+        'Varning:** ändringen rör också hur deployen går till: .github/workflows/deploy.yml, firebase.json.',
       );
     });
 
-    test('a workflow change with nothing to deploy is named, and asks for no approval', () => {
+    test('a workflow change with nothing to deploy is named, and deploys nothing', () => {
       onBase();
       write('.github/workflows/deploy.yml', 'name: x\n');
       const { files } = report(base, commit('workflow only'));
       expect(files.OUT).toBe('deploy=\nchecked=true\n');
       expect(files.SUM).toContain('Varning:** ändringen rör också hur deployen går till: .github/workflows/deploy.yml.');
-      expect(files.SUM).not.toContain('godkänn');
+      expect(files.SUM).not.toContain('Deployas:');
     });
 
     test('a path is printed without the characters Markdown or HTML would read', () => {
@@ -903,8 +908,15 @@ describe('main against a real git repository', { timeout: REAL_GIT_TIMEOUT_MS },
   // parent: a change whose run failed, was rejected or was cancelled must be found again.
   describe('report mode since the last successful run (--since-last-deploy)', () => {
     const ENV = { GITHUB_REPOSITORY: 'Malingisslen/binge' };
+    const RUNS_PATH = 'repos/Malingisslen/binge/actions/workflows/deploy.yml/runs?per_page=100';
+    const ARTIFACTS_PATH = 'repos/Malingisslen/binge/actions/artifacts?per_page=100';
     const runs = (...list) => JSON.stringify({ workflow_runs: list });
     const ok = (sha, number, created) => ({ head_sha: sha, head_branch: 'main', run_number: number, conclusion: 'success', created_at: created });
+    // GitHub with these runs and no artifacts; an artifact of any kind is a test of its own below.
+    const runsOnly = (answer) => (path) => (path === ARTIFACTS_PATH ? JSON.stringify({ total_count: 0, artifacts: [] }) : answer);
+    const noDownload = () => {
+      throw new Error('no record to download');
+    };
     const since = (after, gh, env = ENV) => {
       const files = {};
       const out = [];
@@ -912,6 +924,7 @@ describe('main against a real git repository', { timeout: REAL_GIT_TIMEOUT_MS },
         git,
         env,
         gh,
+        download: noDownload,
         log: (l) => out.push(l),
         err: (l) => out.push(l),
         write: (file, text) => (files[file] = (files[file] ?? '') + text),
@@ -926,15 +939,17 @@ describe('main against a real git repository', { timeout: REAL_GIT_TIMEOUT_MS },
       write('README.md', 'the next push\n');
       const head = commit('docs');
       const asked = [];
+      const answer = runsOnly(runs(ok(base, 7, '2026-10-01T00:00:00Z')));
       const gh = (path) => {
         asked.push(path);
-        return runs(ok(base, 7, '2026-10-01T00:00:00Z'));
+        return answer(path);
       };
       const { code, files } = since(head, gh);
       expect(code).toBe(0);
-      expect(asked).toEqual(['repos/Malingisslen/binge/actions/workflows/deploy.yml/runs?per_page=100']);
+      expect(asked).toEqual([RUNS_PATH, ARTIFACTS_PATH]);
       expect(files.OUT).toBe('deploy=--only firestore:rules\nchecked=true\n');
       expect(files.SUM).toContain(`Ändrat sedan körning #7 (${base.slice(0, 12)}):`);
+      expect(files.SUM).toContain(TARGET_NOTE);
     });
 
     test('the newest successful run in the history is the base, in whatever order GitHub lists them', () => {
@@ -943,7 +958,7 @@ describe('main against a real git repository', { timeout: REAL_GIT_TIMEOUT_MS },
       const deployed = commit('rules, deployed by run 8');
       write('README.md', 'the next push\n');
       const head = commit('docs');
-      const gh = () => runs(ok(base, 7, '2026-10-01T00:00:00Z'), ok(deployed, 8, '2026-10-02T00:00:00Z'));
+      const gh = runsOnly(runs(ok(base, 7, '2026-10-01T00:00:00Z'), ok(deployed, 8, '2026-10-02T00:00:00Z')));
       const { files } = since(head, gh);
       expect(files.OUT).toBe('deploy=\nchecked=true\n');
       expect(files.SUM).toContain(`inget som deployas har ändrats sedan körning #8 (${deployed.slice(0, 12)})`);
@@ -956,14 +971,15 @@ describe('main against a real git repository', { timeout: REAL_GIT_TIMEOUT_MS },
       onBase();
       write('firestore.rules', RULES.replace('request.auth != null', 'false'));
       const head = commit('rules');
-      const gh = () =>
-        runs(ok(side, 9, '2026-10-03T00:00:00Z'), ok('f'.repeat(40), 10, '2026-10-04T00:00:00Z'), ok(base, 7, '2026-10-01T00:00:00Z'));
+      const gh = runsOnly(
+        runs(ok(side, 9, '2026-10-03T00:00:00Z'), ok('f'.repeat(40), 10, '2026-10-04T00:00:00Z'), ok(base, 7, '2026-10-01T00:00:00Z')),
+      );
       const { files } = since(head, gh);
       expect(files.OUT).toBe('deploy=--only firestore:rules\nchecked=true\n');
       expect(files.SUM).toContain('körning #7');
     });
 
-    test('no successful run in the history deploys everything but hosting, behind the approval', () => {
+    test('no successful run in the history deploys everything but hosting', () => {
       onBase();
       write('README.md', 'docs only\n');
       const head = commit('docs');
@@ -973,12 +989,13 @@ describe('main against a real git repository', { timeout: REAL_GIT_TIMEOUT_MS },
         { head_sha: base, head_branch: 'feature', run_number: 9, conclusion: 'success', created_at: '2026-10-03T00:00:00Z' },
       ];
       for (const answer of [runs(), runs(...notUsable)]) {
-        const { code, files } = since(head, () => answer);
+        const { code, files } = since(head, runsOnly(answer));
         expect(code).toBe(0);
         expect(files.OUT).toBe(`deploy=${EXCEPT_HOSTING}\nchecked=true\n`);
         expect(files.SUM).toContain(
           'Hittade ingen lyckad körning på main bland de 100 senaste vars commit finns i den här historiken, så allt utom webbplatsen deployas.',
         );
+        expect(files.SUM).toContain(TARGET_NOTE);
       }
     });
 
@@ -988,7 +1005,13 @@ describe('main against a real git repository', { timeout: REAL_GIT_TIMEOUT_MS },
       const failing = () => {
         throw new Error('HTTP 403');
       };
-      for (const gh of [failing, () => '<html>', () => '{"message":"Not Found"}']) {
+      const fine = runs(ok(base, 7, '2026-10-01T00:00:00Z'));
+      // The runs, then the artifacts, each unreadable while the other is fine.
+      const cases = [failing, () => '<html>', () => '{"message":"Not Found"}'].flatMap((bad) => [
+        (path) => (path === RUNS_PATH ? bad(path) : JSON.stringify({ total_count: 0, artifacts: [] })),
+        (path) => (path === ARTIFACTS_PATH ? bad(path) : fine),
+      ]);
+      for (const gh of cases) {
         const { code, out, files } = since(head, gh);
         expect(code).toBe(1);
         expect(files).toEqual({});
@@ -997,7 +1020,7 @@ describe('main against a real git repository', { timeout: REAL_GIT_TIMEOUT_MS },
     });
 
     test('a missing repository or an unresolvable commit fails the step and writes nothing', () => {
-      const gh = () => runs(ok(base, 7, '2026-10-01T00:00:00Z'));
+      const gh = runsOnly(runs(ok(base, 7, '2026-10-01T00:00:00Z')));
       expect(since(base, gh, {})).toMatchObject({ code: 1, files: {} });
       expect(since('no-such-ref', gh)).toMatchObject({ code: 1, files: {} });
     });
@@ -1054,8 +1077,203 @@ describe('main against a real git repository', { timeout: REAL_GIT_TIMEOUT_MS },
     });
   });
 
-  // A re-run of an older run must not deploy older rules over the ones a newer run shipped.
-  describe('staleProblem', () => {
+  // The backend job deploys main as GitHub has it when the job starts (BIN-1426, Malin's
+  // choice 2026-10-07), and the next run compares with what that job deployed.
+  describe('the backend gate (--backend-gate)', () => {
+    const RUNS_PATH = 'repos/o/r/actions/workflows/deploy.yml/runs?per_page=100';
+    const ARTIFACTS_PATH = 'repos/o/r/actions/artifacts?per_page=100';
+    const envFor = (sha) => ({ GITHUB_REF: 'refs/heads/main', GITHUB_SHA: sha, GITHUB_REPOSITORY: 'o/r' });
+    const ok = (id, sha, number, created, conclusion = 'success') => ({
+      id,
+      head_sha: sha,
+      head_branch: 'main',
+      run_number: number,
+      conclusion,
+      created_at: created,
+    });
+    const record = (runId, sha, created = '2026-10-07T00:00:00Z') => ({
+      name: `${RECORD_PREFIX}${sha}`,
+      expired: false,
+      created_at: created,
+      workflow_run: { id: runId, head_branch: 'main' },
+    });
+    // Main where `tip` says each time GitHub is asked, and these runs and artifacts.
+    // `asked` collects every path, so a test can count the questions about main.
+    const github = ({ tip, runs = [], artifacts = [], asked = [] }) => (path) => {
+      asked.push(path);
+      if (path === 'repos/o/r/git/ref/heads/main') {
+        return JSON.stringify({ ref: 'refs/heads/main', object: { sha: tip(), type: 'commit' } });
+      }
+      if (path === RUNS_PATH) return JSON.stringify({ workflow_runs: runs });
+      if (path === ARTIFACTS_PATH) return JSON.stringify({ total_count: artifacts.length, artifacts });
+      throw new Error(`unexpected gh ${path}`);
+    };
+    const noDownload = () => {
+      throw new Error('no record to download');
+    };
+    const collect = () => {
+      const files = {};
+      const out = [];
+      const errors = [];
+      return {
+        files,
+        out,
+        errors,
+        io: { log: (l) => out.push(l), err: (l) => errors.push(l), write: (file, text) => (files[file] = (files[file] ?? '') + text) },
+      };
+    };
+    // The backend job's checkout is the run's commit.
+    const gate = (sha, gh, { all = false, download = noDownload } = {}) => {
+      git(['checkout', '-q', '--detach', sha]);
+      const { files, out, errors, io } = collect();
+      const args = ['--backend-gate', '--github-output', 'OUT', '--github-summary', 'SUM', ...(all ? ['--all'] : [])];
+      const code = main(args, { env: envFor(sha), gh, git, download, ...io });
+      return { code, files, out, errors };
+    };
+    // The next run's `checks` job.
+    const nextRun = (head, gh, download = noDownload) => {
+      const { files, io } = collect();
+      const code = main(['--github-output', 'OUT', '--github-summary', 'SUM', '--since-last-deploy', head], {
+        env: { GITHUB_REPOSITORY: 'o/r' },
+        gh,
+        git,
+        download,
+        ...io,
+      });
+      return { code, files };
+    };
+    const rules = (allow) => write('firestore.rules', RULES.replace('request.auth != null', allow));
+
+    test("main at the run's own commit: the job deploys what changed since the last deploy", () => {
+      onBase();
+      rules('false');
+      const run = commit('rules');
+      const { code, files } = gate(run, github({ tip: () => run, runs: [ok(7, base, 7, '2026-10-01T00:00:00Z')] }));
+      expect(code).toBe(0);
+      expect(files.OUT).toBe(`target=${run}\ndeploy=--only firestore:rules\n`);
+      expect(files.SUM).toContain(`Main pekade på körningens egen commit, ${run.slice(0, 12)}, när jobbet startade.`);
+      expect(files.SUM).toContain(`Jämfört med ${base.slice(0, 12)}, som körning #7 deployade.`);
+      expect(files.SUM).toContain('Deployas: firebase deploy --only firestore:rules');
+    });
+
+    // Deploying the run's commit would roll main's newer rules back. The checkout's origin/main is set to the run's commit, as the
+    // checkout may leave it, to show the gate asks GitHub instead.
+    test("main moved on: the job deploys main's commit, compared with the last deploy, whatever origin/main says", () => {
+      onBase();
+      rules('false');
+      const run = commit('rules, the run queued behind another');
+      rules('true');
+      write('functions/src/send.ts', SRC.replace('n * 2', 'n * 3'));
+      const tip = commit('newer rules and a function, pushed while it was queued');
+      git(['update-ref', 'refs/remotes/origin/main', run]);
+      const { code, files, errors } = gate(run, github({ tip: () => tip, runs: [ok(7, base, 7, '2026-10-01T00:00:00Z')] }));
+      expect(errors).toEqual([]);
+      expect(code).toBe(0);
+      expect(files.OUT).toBe(`target=${tip}\ndeploy=--only firestore:rules,functions\n`);
+      expect(files.SUM).toContain(
+        `Main hade gått vidare från körningens commit ${run.slice(0, 12)} till ${tip.slice(0, 12)} när jobbet startade, så det är ${tip.slice(0, 12)} som deployas.`,
+      );
+      expect(files.SUM).toContain('Skiljer dem åt i regler och funktioner: firestore.rules, functions/src/send.ts.');
+      expect(files.SUM).toContain(`Faller ett av dem deployas ingenting, inte heller ${run.slice(0, 12)}.`);
+      expect(files.SUM).toContain(`Jämfört med ${base.slice(0, 12)}, som körning #7 deployade.`);
+    });
+
+    test('main moved on to a commit that undid the change: nothing deploys, and the summary says so', () => {
+      onBase();
+      rules('false');
+      const run = commit('rules');
+      rules('request.auth != null');
+      const tip = commit('revert');
+      const { code, files } = gate(run, github({ tip: () => tip, runs: [ok(7, base, 7, '2026-10-01T00:00:00Z')] }));
+      expect(code).toBe(0);
+      expect(files.OUT).toBe(`target=${tip}\ndeploy=\n`);
+      expect(files.SUM).toContain('Skiljer dem åt i regler och funktioner: firestore.rules.');
+      expect(files.SUM).toContain('Inget i regler och funktioner skiljer sig från det som redan är deployat, så inget deployas.');
+    });
+
+    test('a commit main has left behind is refused, and nothing is written', () => {
+      onBase();
+      rules('false');
+      const side = commit('side');
+      onBase();
+      write('README.md', 'main\n');
+      const tip = commit('main');
+      const { code, files, errors } = gate(side, github({ tip: () => tip }));
+      expect(code).toBe(1);
+      expect(files).toEqual({});
+      expect(errors).toEqual([`::error::Regler och funktioner deployas inte: ${side.slice(0, 12)} finns inte på main.`]);
+    });
+
+    test('deploy_all_backend deploys everything but hosting, for main as it stands', () => {
+      onBase();
+      rules('false');
+      const run = commit('rules');
+      write('README.md', 'later\n');
+      const tip = commit('docs');
+      const asked = [];
+      const { code, files } = gate(run, github({ tip: () => tip, asked }), { all: true });
+      expect(code).toBe(0);
+      expect(files.OUT).toBe(`target=${tip}\ndeploy=${EXCEPT_HOSTING}\n`);
+      expect(files.SUM).toContain('Run workflow med deploy_all_backend');
+      expect(asked).not.toContain(RUNS_PATH);
+    });
+
+    // #8's conditions 4 and 7: main moves again after the gate. The gate asked GitHub once,
+    // and its output is what the job deploys; the next run compares with that commit.
+    test('main moving again after the gate changes nothing it wrote, and the next run compares with what the job deployed', () => {
+      onBase();
+      rules('false');
+      const run = commit('rules, run #8 is queued');
+      rules('true');
+      const target = commit('newer rules, main when the job starts');
+      write('functions/src/send.ts', SRC.replace('n * 2', 'n * 3'));
+      const later = commit('a function, pushed after the gate');
+      let main_ = target;
+      const asked = [];
+      const runs = [ok(7, base, 7, '2026-10-01T00:00:00Z')];
+      const started = gate(run, github({ tip: () => main_, runs, asked }));
+      main_ = later;
+      expect(started.files.OUT).toBe(`target=${target}\ndeploy=--only firestore:rules\n`);
+      expect(asked.filter((p) => p === 'repos/o/r/git/ref/heads/main')).toHaveLength(1);
+
+      // Run #8 then succeeded with its record of `target`.
+      const after = [...runs, ok(8, run, 8, '2026-10-02T00:00:00Z')];
+      const recorded = [record(8, target)];
+      const downloads = [];
+      const download = (repo, runId, name) => {
+        downloads.push([repo, runId, name]);
+        return `${target}\n`;
+      };
+      const next = nextRun(later, github({ tip: () => later, runs: after, artifacts: recorded }), download);
+      expect(next.code).toBe(0);
+      expect(next.files.OUT).toBe('deploy=--only functions\nchecked=true\n');
+      expect(next.files.SUM).toContain(`Ändrat sedan körning #8 (${target.slice(0, 12)}):`);
+      expect(downloads).toEqual([['o/r', 8, `${RECORD_PREFIX}${target}`]]);
+      // Without the record, run #8's own commit is the base, and the rules come again.
+      const without = nextRun(later, github({ tip: () => later, runs: after }));
+      expect(without.files.OUT).toBe('deploy=--only firestore:rules,functions\nchecked=true\n');
+      // The run queued for `target` itself finds nothing left to deploy.
+      const queued = nextRun(target, github({ tip: () => later, runs: after, artifacts: recorded }), download);
+      expect(queued.files.OUT).toBe('deploy=\nchecked=true\n');
+    });
+
+    test('a record whose file names another commit, or that cannot be read, stops the comparison', () => {
+      onBase();
+      rules('false');
+      const run = commit('rules');
+      rules('true');
+      const target = commit('newer rules');
+      const gh = github({ tip: () => target, runs: [ok(7, base, 7, '2026-10-01T00:00:00Z'), ok(8, run, 8, '2026-10-02T00:00:00Z')], artifacts: [record(8, target)] });
+      const failing = () => {
+        throw new Error('HTTP 410');
+      };
+      for (const download of [() => `${run}\n`, () => '', failing]) {
+        expect(nextRun(target, gh, download)).toEqual({ code: 1, files: {} });
+      }
+    });
+  });
+
+  describe('the site gate', () => {
     const twoCommits = (second) => {
       onBase();
       write('firestore.rules', RULES.replace('request.auth != null', 'false'));
@@ -1063,72 +1281,6 @@ describe('main against a real git repository', { timeout: REAL_GIT_TIMEOUT_MS },
       second();
       return [first, commit('later')];
     };
-
-    test('the commit main points at is current', () => {
-      expect(staleProblem(base, base, { git })).toBeNull();
-    });
-
-    test('a newer main that changes nothing the backend deploy ships is current', () => {
-      const [first, later] = twoCommits(() => write('README.md', 'later\n'));
-      expect(staleProblem(first, later, { git })).toBeNull();
-    });
-
-    test('a newer main whose rules differ only in a comment is current', () => {
-      const [first, later] = twoCommits(() =>
-        write('firestore.rules', RULES.replace('request.auth != null', 'false').replace('// who may read', '// nobody')),
-      );
-      expect(staleProblem(first, later, { git })).toBeNull();
-    });
-
-    test('a newer main with other rules would be rolled back', () => {
-      const [first, later] = twoCommits(() => write('firestore.rules', RULES.replace('request.auth != null', 'true')));
-      expect(staleProblem(first, later, { git })).toMatch(
-        new RegExp(
-          `har gått vidare till ${later.slice(0, 12)}, som ändrar firestore\\.rules\\. .*godkänn körningen för den nyare commiten`,
-        ),
-      );
-    });
-
-    test('a commit that is not on main is refused', () => {
-      onBase();
-      write('README.md', 'side\n');
-      const side = commit('side');
-      onBase();
-      write('README.md', 'main\n');
-      expect(staleProblem(side, commit('main'), { git })).toMatch(/finns inte på/);
-    });
-
-    test('a main commit this run has not fetched is refused, with the re-run that fetches it', () => {
-      expect(staleProblem(base, 'f'.repeat(40), { git })).toBe(
-        'main pekar på ffffffffffff, som den här körningen inte har hämtat. Kör om jobbet med Re-run failed jobs',
-      );
-    });
-
-    // The checkout may point origin/main at the commit it checked out, and then a re-run of
-    // an older run finds origin/main at its own commit. The gate asks GitHub where main
-    // points instead (#25's condition, BIN-1426); this pins it against exactly that clone.
-    test('the gate refuses a re-run whose rules main has since replaced, whatever origin/main says', () => {
-      const [first, later] = twoCommits(() => write('firestore.rules', RULES.replace('request.auth != null', 'true')));
-      git(['checkout', '-q', '--detach', first]);
-      git(['update-ref', 'refs/remotes/origin/main', first]);
-      const env = { GITHUB_REF: 'refs/heads/main', GITHUB_SHA: first, GITHUB_REPOSITORY: 'o/r', GITHUB_RUN_ID: '1' };
-      const github = (tip) => (path) => {
-        if (path === 'repos/o/r/actions/runs/1/approvals') {
-          return JSON.stringify([{ state: 'approved', environments: [{ name: 'backend' }] }]);
-        }
-        if (path === 'repos/o/r/git/ref/heads/main') {
-          return JSON.stringify({ ref: 'refs/heads/main', object: { sha: tip, type: 'commit' } });
-        }
-        throw new Error(`unexpected gh ${path}`);
-      };
-      expect(gateProblem({ env, gh: github(later), git })).toMatch(
-        new RegExp(`har gått vidare till ${later.slice(0, 12)}, som ändrar firestore\\.rules\\. Den här körningen skulle backa det`),
-      );
-      expect(gateProblem({ env, gh: github(first), git })).toBeNull();
-      const quiet = { log: () => {}, err: () => {} };
-      expect(main(['--approval-gate'], { env, gh: github(later), git, ...quiet })).toBe(1);
-      expect(main(['--approval-gate'], { env, gh: github(first), git, ...quiet })).toBe(0);
-    });
 
     test('the site gate refuses a commit older than one a successful run deployed', () => {
       const [first, later] = twoCommits(() => write('README.md', 'later\n'));
@@ -1213,14 +1365,16 @@ describe('deployArgs and githubOutput', () => {
   });
 });
 
-describe('lastDeployedRun', () => {
-  const [A, B, C] = ['a', 'b', 'c'].map((c) => c.repeat(40));
-  const inHistory = new Set([A, B, 'main']);
+describe('lastDeployed', () => {
+  const [A, B, C, D] = ['a', 'b', 'c', 'd'].map((c) => c.repeat(40));
+  const inHistory = new Set([A, B, D, 'main']);
+  // `merge-base --is-ancestor <sha> HEAD`: in the history or not.
   const git = ([, , sha]) => {
     if (!inHistory.has(sha)) throw new Error('exit 1');
     return '';
   };
   const run = (sha, number, created, conclusion = 'success', branch = 'main') => ({
+    id: number,
     head_sha: sha,
     head_branch: branch,
     run_number: number,
@@ -1228,10 +1382,23 @@ describe('lastDeployedRun', () => {
     conclusion,
   });
   const runs = (...list) => JSON.stringify({ workflow_runs: list });
+  const artifacts = (...list) => JSON.stringify({ total_count: list.length, artifacts: list });
+  const NONE = artifacts();
+  const record = (runId, sha, { created = '2026-10-07T00:00:00Z', expired = false, branch = 'main', name } = {}) => ({
+    name: name ?? `${RECORD_PREFIX}${sha}`,
+    expired,
+    created_at: created,
+    workflow_run: { id: runId, head_branch: branch },
+  });
+  // The record's own commit, whatever is asked for.
+  const holds = (sha) => () => `${sha}\n`;
+  const never = () => {
+    throw new Error('nothing should be downloaded');
+  };
 
   // Each run that must lose is removed by one filter or by the sort: a failure, a commit named
   // by a branch name, a commit outside the history, a run on another branch, and the older A.
-  test('takes the newest successful run on main with a full commit id in the history', () => {
+  test('without records, takes the newest successful run on main with a full commit id in the history', () => {
     const raw = runs(
       run(A, 1, '2026-10-01T00:00:00Z'),
       run(B, 2, '2026-10-02T00:00:00Z'),
@@ -1240,19 +1407,116 @@ describe('lastDeployedRun', () => {
       run(B, 5, '2026-10-05T00:00:00Z', 'failure'),
       run(A, 6, '2026-10-06T00:00:00Z', 'success', 'feature'),
     );
-    expect(lastDeployedRun(raw, 'HEAD', { git })).toEqual({ sha: B, number: 2 });
+    expect(lastDeployed(raw, NONE, 'HEAD', { git, download: never })).toEqual({ sha: B, number: 2, recorded: false });
   });
 
   // Unfiltered on purpose: GitHub's list filtered by branch and status was stale for this
-  // repository (deployedRunsPath says how to see it). successfulRuns filters instead.
-  test('asks GitHub for the newest runs without a filter', () => {
+  // repository (deployedRunsPath says how to see it). mainRuns filters instead.
+  test('asks GitHub for the newest runs and artifacts without a filter', () => {
     expect(deployedRunsPath('o/r')).toBe('repos/o/r/actions/workflows/deploy.yml/runs?per_page=100');
+    expect(deployedArtifactsPath('o/r')).toBe('repos/o/r/actions/artifacts?per_page=100');
   });
 
   test('answers null when no run qualifies, and throws on an answer that is not a run list', () => {
-    expect(lastDeployedRun(runs(run(C, 4, '2026-10-04T00:00:00Z')), 'HEAD', { git })).toBeNull();
-    expect(() => lastDeployedRun('<html>', 'HEAD', { git })).toThrow('JSON');
-    expect(() => lastDeployedRun('{"message":"Not Found"}', 'HEAD', { git })).toThrow('lista');
+    expect(lastDeployed(runs(run(C, 4, '2026-10-04T00:00:00Z')), NONE, 'HEAD', { git, download: never })).toBeNull();
+    expect(() => lastDeployed('<html>', NONE, 'HEAD', { git, download: never })).toThrow('JSON');
+    expect(() => lastDeployed('{"message":"Not Found"}', NONE, 'HEAD', { git, download: never })).toThrow('lista');
+  });
+
+  // Run 2 deployed D, a newer commit than its own A, because main had moved on when its job started.
+  const movedOn = runs(run(B, 1, '2026-10-01T00:00:00Z'), run(A, 2, '2026-10-02T00:00:00Z'));
+
+  test("a run's record names the commit it deployed, read from the file inside it", () => {
+    const asked = [];
+    const download = (runId, name) => {
+      asked.push([runId, name]);
+      return `${D}\n`;
+    };
+    expect(lastDeployed(movedOn, artifacts(record(2, D)), 'HEAD', { git, download })).toEqual({ sha: D, number: 2, recorded: true });
+    expect(asked).toEqual([[2, `${RECORD_PREFIX}${D}`]]);
+  });
+
+  // The backend went out, the site did not.
+  test('a record counts on a run that failed after it', () => {
+    const failed = runs(run(B, 1, '2026-10-01T00:00:00Z'), run(A, 2, '2026-10-02T00:00:00Z', 'failure'));
+    expect(lastDeployed(failed, artifacts(record(2, D)), 'HEAD', { git, download: holds(D) })).toEqual({ sha: D, number: 2, recorded: true });
+  });
+
+  test('of two records on one run, the newer one counts', () => {
+    const two = artifacts(record(2, B, { created: '2026-10-02T00:00:00Z' }), record(2, D, { created: '2026-10-03T00:00:00Z' }));
+    expect(lastDeployed(movedOn, two, 'HEAD', { git, download: holds(D) })).toMatchObject({ sha: D });
+    const reversed = artifacts(record(2, D, { created: '2026-10-03T00:00:00Z' }), record(2, B, { created: '2026-10-02T00:00:00Z' }));
+    expect(lastDeployed(movedOn, reversed, 'HEAD', { git, download: holds(D) })).toMatchObject({ sha: D });
+  });
+
+  // #8's condition 6: these never make a newer commit the base. Each falls back to run 2's
+  // own commit A, which a record of D would have replaced.
+  test('a record from another run, another branch, or with another name is passed over', () => {
+    const passedOver = [
+      record(99, D),
+      record(2, D, { branch: 'feature' }),
+      record(2, D, { name: `${RECORD_PREFIX}${D.slice(0, 39)}` }),
+      record(2, D, { name: `${RECORD_PREFIX}${D.toUpperCase()}` }),
+      record(2, D, { name: `x${RECORD_PREFIX}${D}` }),
+      record(2, D, { name: `${RECORD_PREFIX}${D}.zip` }),
+      { ...record(2, D), workflow_run: null },
+      null,
+    ];
+    for (const artifact of passedOver) {
+      expect(lastDeployed(movedOn, artifacts(artifact), 'HEAD', { git, download: never }), JSON.stringify(artifact)).toEqual({
+        sha: A,
+        number: 2,
+        recorded: false,
+      });
+    }
+  });
+
+  test('artifacts of other kinds beside a record change nothing; an empty list falls back to the runs', () => {
+    const other = (n) => ({ ...record(2, D), name: `build-${n}` });
+    const crowded = artifacts(other(1), record(2, D), other(2), other(3));
+    expect(lastDeployed(movedOn, crowded, 'HEAD', { git, download: holds(D) })).toMatchObject({ sha: D, recorded: true });
+    expect(lastDeployed(movedOn, NONE, 'HEAD', { git, download: never })).toMatchObject({ sha: A, recorded: false });
+  });
+
+  test('a record of a commit outside the history passes to the next older run', () => {
+    expect(lastDeployed(movedOn, artifacts(record(2, C)), 'HEAD', { git, download: never })).toEqual({ sha: B, number: 1, recorded: false });
+  });
+
+  // Run 2's own commit A is older than what is live, so falling back to it could leave a
+  // change undeployed. Each of these throws, which deploys everything but hosting.
+  test('a record that cannot be trusted throws instead of falling back', () => {
+    const cases = [
+      [artifacts(record(2, D, { expired: true })), never, 'har gått ut'],
+      [artifacts({ ...record(2, D), expired: undefined }), never, 'har gått ut'],
+      [artifacts(record(2, D)), holds(A), 'innehåller inte sin egen commit'],
+      [artifacts(record(2, D)), () => '', 'innehåller inte sin egen commit'],
+      [
+        artifacts(record(2, D)),
+        () => {
+          throw new Error('HTTP 410');
+        },
+        'kunde inte läsa',
+      ],
+    ];
+    for (const [raw, download, message] of cases) {
+      expect(() => lastDeployed(movedOn, raw, 'HEAD', { git, download })).toThrow(message);
+    }
+  });
+
+  // A record that falls off the page would leave its run reading as its own, older commit.
+  test('an artifact list longer than one page, or one it cannot read, throws', () => {
+    const full = JSON.stringify({ total_count: 101, artifacts: [record(2, D)] });
+    expect(() => lastDeployed(movedOn, full, 'HEAD', { git, download: holds(D) })).toThrow('fler än de 1 på en sida');
+    for (const raw of ['<html>', '{"message":"Not Found"}', JSON.stringify({ artifacts: [] }), JSON.stringify({ total_count: 0 })]) {
+      expect(() => lastDeployed(movedOn, raw, 'HEAD', { git, download: never }), raw).toThrow(/GitHub svarade inte/);
+    }
+  });
+
+  test('deployRecords keys each record by its run', () => {
+    expect([...deployRecords(movedOn, artifacts(record(2, D), record(1, B))).entries()]).toEqual([
+      [2, { sha: D, name: `${RECORD_PREFIX}${D}`, expired: false }],
+      [1, { sha: B, name: `${RECORD_PREFIX}${B}`, expired: false }],
+    ]);
   });
 });
 
@@ -1299,35 +1563,6 @@ describe('newerDeployedRun', () => {
   });
 });
 
-describe('approvalProblem', () => {
-  const entry = (state, ...names) => ({ state, environments: names.map((name) => ({ name })) });
-  const answer = (...entries) => JSON.stringify(entries);
-
-  test('an approval for backend lets the run deploy', () => {
-    expect(approvalProblem(answer(entry('approved', 'backend')))).toBeNull();
-    expect(approvalProblem(answer(entry('approved', 'backend'), entry('approved', 'backend')))).toBeNull();
-    expect(approvalProblem(answer(entry('approved', 'other', 'backend')))).toBeNull();
-  });
-
-  test('no approval, or one for another environment only, is refused', () => {
-    const NOBODY = 'ingen har godkänt backend i den här körningen';
-    expect(approvalProblem(answer())).toBe(NOBODY);
-    expect(approvalProblem(answer(entry('approved', 'production')))).toBe(NOBODY);
-    expect(approvalProblem(answer({ state: 'approved', environments: null }))).toBe(NOBODY);
-  });
-
-  test('a rejection is refused, even beside a later approval', () => {
-    expect(approvalProblem(answer(entry('rejected', 'backend')))).toMatch(/svaret 'rejected' för backend/);
-    expect(approvalProblem(answer(entry('rejected', 'backend'), entry('approved', 'backend')))).toMatch(/'rejected'/);
-    expect(approvalProblem(answer(entry('approved', 'backend'), entry('pending', 'backend')))).toMatch(/'pending'/);
-  });
-
-  test('an answer that is not a list of approvals is refused', () => {
-    expect(approvalProblem('<html>')).toBe('GitHub svarade inte med JSON om godkännanden');
-    expect(approvalProblem('{"message":"Not Found"}')).toBe('GitHub svarade inte med en lista över godkännanden');
-  });
-});
-
 describe('mainTip', () => {
   const SHA = 'a'.repeat(40);
   test("reads the commit GitHub says refs/heads/main points at", () => {
@@ -1346,12 +1581,10 @@ describe('mainTip', () => {
   });
 });
 
-describe('gateProblem', () => {
+describe('gateTarget', () => {
   const SHA = 'a'.repeat(40);
-  const ENV = { GITHUB_REF: 'refs/heads/main', GITHUB_SHA: SHA, GITHUB_REPOSITORY: 'Malingisslen/binge', GITHUB_RUN_ID: '42' };
-  const APPROVALS = 'repos/Malingisslen/binge/actions/runs/42/approvals';
+  const ENV = { GITHUB_REF: 'refs/heads/main', GITHUB_SHA: SHA, GITHUB_REPOSITORY: 'Malingisslen/binge' };
   const TIP = 'repos/Malingisslen/binge/git/ref/heads/main';
-  const APPROVED = JSON.stringify([{ state: 'approved', environments: [{ name: 'backend' }] }]);
   const tipAt = (sha) => JSON.stringify({ ref: 'refs/heads/main', object: { sha, type: 'commit' } });
   // GitHub's answers by path; an Error is thrown, and any other path is a call the gate
   // should not make.
@@ -1360,62 +1593,50 @@ describe('gateProblem', () => {
     if (answers[path] instanceof Error) throw answers[path];
     return answers[path];
   };
-  const approvedAt = (tip) => github({ [APPROVALS]: APPROVED, [TIP]: tipAt(tip) });
+  const mainAt = (tip) => github({ [TIP]: tipAt(tip) });
   // HEAD at `head`; anything else is a call the gate should not make.
   const gitAt = (head) => (args) => {
     if (args.join(' ') === 'rev-parse HEAD') return `${head}\n`;
     throw new Error(`unexpected git ${args.join(' ')}`);
   };
 
-  test('an approved run of the commit main points at may deploy, asking GitHub for the approvals and for main', () => {
+  test('a run of the commit main points at deploys that commit, asking GitHub only where main points', () => {
     const asked = [];
-    const answer = approvedAt(SHA);
+    const answer = mainAt(SHA);
     const gh = (path) => {
       asked.push(path);
       return answer(path);
     };
-    expect(gateProblem({ env: ENV, gh, git: gitAt(SHA) })).toBeNull();
-    expect(asked).toEqual([APPROVALS, TIP]);
+    expect(gateTarget({ env: ENV, gh, git: gitAt(SHA) })).toEqual({ target: SHA });
+    expect(asked).toEqual([TIP]);
   });
 
   test.each(['refs/heads/feature', 'refs/pull/1/merge', 'refs/tags/v1', undefined])('a run for %s is refused', (ref) => {
-    expect(gateProblem({ env: { ...ENV, GITHUB_REF: ref }, gh: approvedAt(SHA), git: gitAt(SHA) })).toMatch(
+    expect(gateTarget({ env: { ...ENV, GITHUB_REF: ref }, gh: mainAt(SHA), git: gitAt(SHA) }).problem).toMatch(
       /inte refs\/heads\/main/,
     );
   });
 
   test('a commit id that is not one is refused', () => {
-    expect(gateProblem({ env: { ...ENV, GITHUB_SHA: 'main' }, gh: approvedAt(SHA), git: gitAt(SHA) })).toBe(
+    expect(gateTarget({ env: { ...ENV, GITHUB_SHA: 'main' }, gh: mainAt(SHA), git: gitAt(SHA) }).problem).toBe(
       'GITHUB_SHA är inget commit-id',
     );
   });
 
-  test('a missing or malformed repository or run id is refused', () => {
-    const gate = (env) => gateProblem({ env: { ...ENV, ...env }, gh: approvedAt(SHA), git: gitAt(SHA) });
-    expect(gate({ GITHUB_REPOSITORY: undefined })).toBe('GITHUB_REPOSITORY eller GITHUB_RUN_ID saknas');
-    expect(gate({ GITHUB_RUN_ID: '42/../../x' })).toBe('GITHUB_REPOSITORY eller GITHUB_RUN_ID saknas');
+  test('a missing or malformed repository is refused', () => {
+    const gate = (env) => gateTarget({ env: { ...ENV, ...env }, gh: mainAt(SHA), git: gitAt(SHA) }).problem;
+    expect(gate({ GITHUB_REPOSITORY: undefined })).toBe('GITHUB_REPOSITORY saknas');
+    expect(gate({ GITHUB_REPOSITORY: 'o/r/../../x' })).toBe('GITHUB_REPOSITORY saknas');
   });
 
   test('a checkout of another commit is refused', () => {
-    expect(gateProblem({ env: ENV, gh: approvedAt(SHA), git: gitAt('b'.repeat(40)) })).toMatch(/utcheckade commiten bbbb/);
-  });
-
-  test('an approvals call that fails is refused', () => {
-    const gh = github({ [APPROVALS]: new Error('HTTP 403') });
-    expect(gateProblem({ env: ENV, gh, git: gitAt(SHA) })).toBe('frågan till GitHub om godkännanden misslyckades: HTTP 403');
-  });
-
-  // Without the approval, main is not asked about: the stub throws on that path.
-  test('a run without an approval for backend is refused', () => {
-    expect(gateProblem({ env: ENV, gh: github({ [APPROVALS]: '[]' }), git: gitAt(SHA) })).toBe(
-      'ingen har godkänt backend i den här körningen',
-    );
+    expect(gateTarget({ env: ENV, gh: mainAt(SHA), git: gitAt('b'.repeat(40)) }).problem).toMatch(/utcheckade commiten bbbb/);
   });
 
   test('a main GitHub cannot name is refused', () => {
     for (const answer of [new Error('HTTP 404'), '<html>', tipAt('main')]) {
-      const gh = github({ [APPROVALS]: APPROVED, [TIP]: answer });
-      expect(gateProblem({ env: ENV, gh, git: gitAt(SHA) })).toMatch(/^frågan till GitHub om main misslyckades: /);
+      const gh = github({ [TIP]: answer });
+      expect(gateTarget({ env: ENV, gh, git: gitAt(SHA) }).problem).toMatch(/^frågan till GitHub om main misslyckades: /);
     }
   });
 
@@ -1426,33 +1647,115 @@ describe('gateProblem', () => {
       if (args.join(' ') === `rev-parse --verify --quiet ${MAIN}^{commit}`) return `${MAIN}\n`;
       return gitAt(SHA)(args);
     };
-    expect(gateProblem({ env: ENV, gh: approvedAt(MAIN), git })).toBe(`${SHA.slice(0, 12)} finns inte på main`);
+    expect(gateTarget({ env: ENV, gh: mainAt(MAIN), git }).problem).toBe(`${SHA.slice(0, 12)} finns inte på main`);
+  });
+
+  // GitHub's main is newer than anything this clone fetched: the gate fetches it.
+  test('a newer main the clone lacks is fetched, and one it cannot fetch is refused', () => {
+    const MAIN = 'c'.repeat(40);
+    const calls = [];
+    const clone = ({ fetches }) => {
+      let fetched = false;
+      return (args) => {
+        calls.push(args.join(' '));
+        if (args.join(' ') === `rev-parse --verify --quiet ${MAIN}^{commit}`) {
+          if (!fetched) throw new Error('exit 1');
+          return `${MAIN}\n`;
+        }
+        if (args.join(' ') === `fetch --no-tags --quiet origin ${MAIN}`) {
+          if (!fetches) throw new Error('could not fetch');
+          fetched = true;
+          return '';
+        }
+        if (args.join(' ') === `merge-base --is-ancestor ${SHA} ${MAIN}`) return '';
+        return gitAt(SHA)(args);
+      };
+    };
+    expect(gateTarget({ env: ENV, gh: mainAt(MAIN), git: clone({ fetches: true }) })).toEqual({ target: MAIN });
+    expect(calls).toContain(`fetch --no-tags --quiet origin ${MAIN}`);
+    expect(gateTarget({ env: ENV, gh: mainAt(MAIN), git: clone({ fetches: false }) })).toEqual({
+      problem: 'main pekar på cccccccccccc, som den här körningen inte kunde hämta',
+    });
   });
 
   // The exit code is what stops the job; a refusal that is only printed lets the key step run.
-  test('through main, a refusal exits 1 with its reason and an approved run exits 0', () => {
-    const gate = (gh) => {
-      const out = [];
-      const errors = [];
-      const code = main(['--approval-gate'], {
-        env: ENV,
-        gh,
-        git: gitAt(SHA),
-        log: (l) => out.push(l),
-        err: (l) => errors.push(l),
-      });
-      return { code, out, errors };
-    };
-    expect(gate(github({ [APPROVALS]: '[]' }))).toEqual({
+  // A run for another ref: GitHub is not asked, so the stub throws on any path.
+  test('through main, a refusal exits 1 with its reason and writes nothing', () => {
+    const files = {};
+    const errors = [];
+    const code = main(['--backend-gate', '--github-output', 'OUT', '--github-summary', 'SUM'], {
+      env: { ...ENV, GITHUB_REF: 'refs/heads/feature' },
+      gh: github({}),
+      git: gitAt(SHA),
+      log: () => {},
+      err: (l) => errors.push(l),
+      write: (file, text) => (files[file] = text),
+    });
+    expect({ code, errors, files }).toEqual({
       code: 1,
-      out: [],
-      errors: ['::error::Regler och funktioner deployas inte: ingen har godkänt backend i den här körningen.'],
+      errors: ['::error::Regler och funktioner deployas inte: körningen gäller refs/heads/feature, inte refs/heads/main.'],
+      files: {},
     });
-    expect(gate(approvedAt(SHA))).toEqual({
-      code: 0,
-      out: ['Godkänt för backend i den här körningen, på main, och main har ingen nyare backendändring.'],
-      errors: [],
+  });
+
+  // A comparison that cannot be made is a refusal too: with no outputs the job checks out
+  // an empty target and stops, but the exit code is what says so.
+  test('through main, a comparison that throws exits 1 and writes nothing', () => {
+    const files = {};
+    const errors = [];
+    const code = main(['--backend-gate', '--github-output', 'OUT', '--github-summary', 'SUM'], {
+      env: ENV,
+      gh: github({ [TIP]: tipAt(SHA) }),
+      git: gitAt(SHA),
+      log: () => {},
+      err: (l) => errors.push(l),
+      write: (file, text) => (files[file] = text),
     });
+    expect(code).toBe(1);
+    expect(files).toEqual({});
+    expect(errors.join('\n')).toContain(`::error::Regler och funktioner deployas inte: kunde inte avgöra vad ${SHA.slice(0, 12)} ska deploya: `);
+  });
+
+  test('the gate mode needs both files, and takes --all and nothing else after them', () => {
+    const refuse = () => {
+      throw new Error('a usage error must not ask anyone');
+    };
+    const errors = [];
+    const quiet = { env: ENV, gh: refuse, git: refuse, log: () => {}, err: (l) => errors.push(l), write: refuse };
+    for (const args of [
+      [],
+      ['--github-output', 'OUT'],
+      ['--github-output', 'OUT', '--github-summary'],
+      ['--github-summary', 'SUM', '--github-output', 'OUT'],
+      ['--github-output', 'OUT', '--github-summary', 'SUM', '--bogus'],
+      ['--github-output', 'OUT', '--github-summary', 'SUM', '--all', '--all'],
+    ]) {
+      expect(main(['--backend-gate', ...args], quiet), args.join(' ')).toBe(1);
+    }
+    expect(new Set(errors)).toEqual(
+      new Set(['usage: check-deploy-drift.mjs --backend-gate --github-output <file> --github-summary <file> [--all]']),
+    );
+  });
+
+  test('gateOutput writes the target and the arguments, and refuses anything else', () => {
+    expect(gateOutput(SHA, '--only functions')).toBe(`target=${SHA}\ndeploy=--only functions\n`);
+    expect(gateOutput(SHA, '')).toBe(`target=${SHA}\ndeploy=\n`);
+    expect(() => gateOutput('main', '')).toThrow(/commit id/);
+    expect(() => gateOutput(`${SHA}\ndeploy=x`, '')).toThrow(/commit id/);
+    expect(() => gateOutput(SHA, '--only functions\ntarget=x')).toThrow(/line break/);
+  });
+
+  test("gateSummary names the target, and says when no base was found", () => {
+    const lines = gateSummary(SHA, SHA, { deploy: EXCEPT_HOSTING, base: null }, { git: gitAt(SHA) });
+    expect(lines).toContain(`Main pekade på körningens egen commit, ${SHA.slice(0, 12)}, när jobbet startade.`);
+    expect(lines).toContain(`Hittade ingen tidigare deploy i historiken för ${SHA.slice(0, 12)}.`);
+    expect(lines).toContain(`Deployas: firebase deploy ${EXCEPT_HOSTING}`);
+    const broken = () => {
+      throw new Error('boom');
+    };
+    expect(gateSummary(SHA, 'c'.repeat(40), { deploy: '', base: null }, { git: broken })).toContain(
+      'Kunde inte läsa vad som skiljer dem åt i regler och funktioner.',
+    );
   });
 });
 
@@ -1547,33 +1850,52 @@ describe('the command line wiring', () => {
     return node.getText(file).replace(/\s+/g, ' ');
   };
 
-  test('main reads the real git, gh, environment and output file, and dispatches every mode', () => {
+  test('main reads the real git, gh, environment, output file and record download, and dispatches every mode', () => {
     const body = declared('main');
-    for (const fallback of ['git = runGit', 'env = process.env', 'gh = runGh', 'write = appendFileSync']) {
+    for (const fallback of ['git = runGit', 'env = process.env', 'gh = runGh', 'write = appendFileSync', 'download = downloadRecord']) {
       expect(body).toContain(fallback);
     }
-    expect(body).toContain("if (argv[0] === '--approval-gate') return gateMain({ env, gh, git, log, err });");
+    expect(body).toContain(
+      "if (argv[0] === '--backend-gate') return gateMain(argv.slice(1), { env, gh, git, log, err, write, download });",
+    );
     expect(body).toContain("if (argv[0] === '--site-gate') return siteGateMain({ env, gh, git, log, err });");
     expect(body).toContain(
-      "if (argv[0] === '--github-output') return reportMain(argv.slice(1), { git, log, err, write, env, gh });",
+      "if (argv[0] === '--github-output') return reportMain(argv.slice(1), { git, log, err, write, env, gh, download });",
     );
     expect(SOURCE).toMatch(/^ {2}process\.exit\(main\(process\.argv\.slice\(2\)\)\);$/m);
   });
 
-  test('--since-last-deploy asks GitHub for the runs and compares with the newest successful run on main in the history', () => {
+  test('--since-last-deploy asks GitHub for the runs and the records, and compares with what the last deploy left live', () => {
     const body = declared('sinceLastDeploy');
     expect(body).toContain('gh = runGh');
-    expect(body).toContain('lastDeployedRun(gh(deployedRunsPath(repo)), head, { git })');
-    expect(body).toContain('if (run) return report(run.sha, head, { git, baseRun: run });');
+    expect(body).toContain('download = downloadRecord');
+    expect(body).toContain('lastDeployed(gh(deployedRunsPath(repo)), gh(deployedArtifactsPath(repo)), head, {');
+    expect(body).toContain('download: (runId, name) => download(repo, runId, name),');
+    expect(body).toContain('if (base) return { ...report(base.sha, head, { git, baseRun: base }), base };');
     expect(body).toContain('deploy: EXCEPT_HOSTING');
   });
 
-  test('the gate asks gh for the approvals and for where main points, not the clone', () => {
-    expect(declared('gateMain')).toContain('gateProblem({ env, gh, git })');
-    const gate = declared('gateProblem');
+  test('a record is downloaded by gh into a directory of its own, and its file is read from there', () => {
+    const body = declared('downloadRecord');
+    expect(body).toContain('const dir = mkdtempSync(join(tmpdir(), RECORD_PREFIX));');
+    expect(body).toContain(
+      "execFileSync('gh', ['run', 'download', String(runId), '--repo', repo, '--name', name, '--dir', dir], RUN_OPTIONS);",
+    );
+    expect(body).toContain('return readFileSync(join(dir, RECORD_FILE), \'utf8\');');
+    expect(body).toContain('rmSync(dir, { recursive: true, force: true });');
+    expect(RECORD_FILE).toBe('deployed-sha');
+    expect(RECORD_PREFIX).toBe('backend-deployed-');
+  });
+
+  test('the gate asks gh where main points, not the clone, and deploys what that commit needs', () => {
+    const gateMainBody = declared('gateMain');
+    expect(gateMainBody).toContain('const { problem, target } = gateTarget({ env, gh, git });');
+    expect(gateMainBody).toContain('decided = all ? reportAll() : sinceLastDeploy(target, { git, gh, env, download });');
+    expect(gateMainBody).toContain('write(outFile, gateOutput(target, decided.deploy));');
+    const gate = declared('gateTarget');
     expect(gate).toContain('gh = runGh');
     expect(gate).toContain('tip = mainTip(gh(mainTipPath(repo)));');
-    expect(gate).toContain('return staleProblem(sha, tip, { git });');
+    expect(gate).toContain('if (!isAncestor(sha, tip, git)) return { problem: `${short(sha)} finns inte på main` };');
     expect(gate).not.toContain('origin/main');
     expect(declared('mainTipPath')).toContain('`repos/${repo}/git/ref/heads/main`');
     expect(declared('runGh')).toContain("execFileSync('gh', ['api', path]");
@@ -1600,7 +1922,7 @@ describe('the command line wiring', () => {
   test('report mode writes what the chosen mode decided', () => {
     const body = declared('reportMain');
     expect(body).toContain('decided = reportAll();');
-    expect(body).toContain('decided = sinceLastDeploy(what[1], { git, gh, env });');
+    expect(body).toContain('decided = sinceLastDeploy(what[1], { git, gh, env, download });');
     expect(body).toContain('decided = report(what[0], what[1], { git });');
     expect(body).toContain('const { deploy, summary } = decided;');
     expect(body).toContain('write(outFile, githubOutput(deploy));');
@@ -1679,18 +2001,33 @@ describe('deploy.yml wires the backend deploy safely (BIN-1426)', () => {
     expect(job).toContain("    if: needs.checks.outputs.deploy != ''");
   });
 
-  test('the backend job restores no cache, and its npm installs run no install script', () => {
+  // #8's condition 1: nothing restored from a cache runs where the key does.
+  test('the backend job restores no cache, and its installs run no install script', () => {
     const text = jobs.backend.join('\n');
     expect(text).not.toMatch(/^\s*cache:/m);
     expect(text).not.toContain('actions/cache');
-    const installs = scripts(jobs.backend).filter((s) => /\bnpm\b/.test(s));
-    expect(installs.length).toBeGreaterThan(0);
-    for (const script of installs) expect(script).toMatch(/^npm ci --ignore-scripts$/);
+    // Every npm or npx command before the key step is one of these, so none runs an
+    // install script (`npm rebuild` would, for one).
+    const backend = steps(jobs.backend);
+    const key = backend.findIndex((s) => s.includes('secrets.'));
+    const npm = scripts(backend.slice(0, key).join('\n').split('\n')).filter((s) => /\bnp[mx]\b/.test(s));
+    expect(npm.length).toBeGreaterThan(0);
+    for (const script of npm) {
+      expect([
+        'npm ci --ignore-scripts',
+        'npm run typecheck',
+        'npm test',
+        'npm i -g firebase-tools@14.27.0 --ignore-scripts',
+        'npm run test:rules',
+      ]).toContain(script);
+    }
   });
 
-  test('the approval gate runs before anything reads the key, and only the deploy step reads it', () => {
+  // #8's condition 2. The steps between the gate and the key run main's newer commit when
+  // main has moved on: each is named here, so a new one is a decision, not an accident.
+  test('the backend gate runs before anything reads the key, and only the deploy step reads it', () => {
     const backend = steps(jobs.backend);
-    const gate = backend.findIndex((s) => s.includes('node scripts/check-deploy-drift.mjs --approval-gate'));
+    const gate = backend.findIndex((s) => /^\s+id: gate$/m.test(s));
     const keyed = backend.flatMap((s, i) => (s.includes('secrets.') ? [i] : []));
     const firstInstall = backend.findIndex((s) => s.includes('npm ci --ignore-scripts'));
     expect(firstInstall).toBeGreaterThan(-1);
@@ -1700,31 +2037,198 @@ describe('deploy.yml wires the backend deploy safely (BIN-1426)', () => {
     expect(backend[keyed[0]]).toContain('FIREBASE_BACKEND_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_BACKEND_SERVICE_ACCOUNT }}');
     // The gate runs exactly its command, and neither it nor the key step can be skipped,
     // run after a failure, or have its failure ignored.
-    expect(scripts(backend[gate].split('\n'))).toEqual(['node scripts/check-deploy-drift.mjs --approval-gate']);
+    expect(scripts(backend[gate].split('\n'))).toEqual([
+      [
+        '          if [ "$DEPLOY_ALL" = "true" ]; then',
+        '            node scripts/check-deploy-drift.mjs --backend-gate --github-output "$GITHUB_OUTPUT" --github-summary "$GITHUB_STEP_SUMMARY" --all',
+        '          else',
+        '            node scripts/check-deploy-drift.mjs --backend-gate --github-output "$GITHUB_OUTPUT" --github-summary "$GITHUB_STEP_SUMMARY"',
+        '          fi',
+        '',
+      ].join('\n'),
+    ]);
+    expect(backend[gate]).toContain('GH_TOKEN: ${{ github.token }}');
+    expect(backend[gate]).toContain("DEPLOY_ALL: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_all_backend }}");
     for (const step of [backend[gate], backend[keyed[0]]]) {
       expect(step).not.toMatch(/^\s*(- )?if:/m);
       expect(step).not.toContain('continue-on-error');
     }
-    // Every step between the gate and the key installs the functions dependencies, nothing else.
-    for (const between of backend.slice(gate + 1, keyed[0])) {
-      expect(scripts(between.split('\n'))).toEqual(['npm ci --ignore-scripts']);
+    // Each step's name, the directory it runs in and its whole command.
+    const shape = (step) => ({
+      name: /^ {6}- (?:name|uses): (.+)$/m.exec(step)?.[1],
+      directory: /^ {8}working-directory: (.+)$/m.exec(step)?.[1] ?? null,
+      run: scripts(step.split('\n')).map((script) => script.split('\n').map((l) => l.trim()).filter(Boolean).join('\n')),
+    });
+    const on = (name, run, directory = null) => ({ name, directory, run: run === null ? [] : [run] });
+    expect(backend.slice(gate + 1, keyed[0]).map(shape)).toEqual([
+      on("Check out main's newer commit", 'git checkout -q --detach "$TARGET"\ntest "$(git rev-parse HEAD)" = "$TARGET"'),
+      on("Install the newer commit's deps (no install scripts)", 'npm ci --ignore-scripts'),
+      on('Install functions deps (no install scripts)', 'npm ci --ignore-scripts', 'functions'),
+      on('Typecheck functions', 'npm run typecheck', 'functions'),
+      on('Test the newer commit', 'npm test'),
+      on('actions/setup-java@v6', null),
+      on('Install Firebase CLI for the rules tests (no install scripts)', 'npm i -g firebase-tools@14.27.0 --ignore-scripts'),
+      on('Rules tests on the newer commit', 'npm run test:rules'),
+      on(
+        'Refuse while an emulator is still running',
+        "if pgrep -a java || pgrep -af 'firebase|emulator'; then\necho \"::error::En emulator från testerna kör fortfarande, så nyckeln läses inte.\"\nexit 1\nfi",
+      ),
+    ]);
+    for (const step of backend.slice(0, keyed[0])) {
+      expect(step).not.toMatch(/GITHUB_(ENV|PATH)/);
+      expect(step).not.toContain('continue-on-error');
+      // Skipped only when main has not moved on, never after a failure.
+      const condition = /^\s*(?:- )?if:\s*(.+)$/m.exec(step)?.[1];
+      if (condition !== undefined) expect(condition).toBe('steps.gate.outputs.target != github.sha');
     }
+    // The last step before the key fails while a test's emulator still runs.
+    expect(scripts(backend[keyed[0] - 1].split('\n'))).toEqual([
+      [
+        "          if pgrep -a java || pgrep -af 'firebase|emulator'; then",
+        '            echo "::error::En emulator från testerna kör fortfarande, så nyckeln läses inte."',
+        '            exit 1',
+        '          fi',
+        '',
+      ].join('\n'),
+    ]);
+    expect(backend[keyed[0] - 1]).not.toMatch(/^\s*(- )?if:/m);
+  });
+
+  // #8's condition 4: the commit the gate picked is the one checked out, tested and deployed;
+  // nothing after the gate asks where main points.
+  test('the job deploys the commit the gate picked, with the arguments the gate wrote', () => {
+    const backend = steps(jobs.backend);
+    const checkout = backend.find((s) => s.includes("- name: Check out main's newer commit"));
+    expect(checkout).toContain('TARGET: ${{ steps.gate.outputs.target }}');
+    expect(scripts(checkout.split('\n'))).toEqual([
+      ['          git checkout -q --detach "$TARGET"', '          test "$(git rev-parse HEAD)" = "$TARGET"', ''].join('\n'),
+    ]);
+    const text = jobs.backend.join('\n');
+    expect(text.split('--backend-gate').length - 1).toBe(2);
+    expect(text).not.toContain('heads/main');
+    expect(jobs.backend.filter((l) => l.includes('needs.checks.outputs.deploy'))).toEqual([
+      "    if: needs.checks.outputs.deploy != ''",
+    ]);
+    expect(jobs.backend.filter((l) => l.includes('DEPLOY_ARGS:'))).toEqual([
+      '          DEPLOY_ARGS: ${{ steps.gate.outputs.deploy }}',
+      '          DEPLOY_ARGS: ${{ steps.gate.outputs.deploy }}',
+    ]);
+  });
+
+  test('the backend deploy names the project, takes its arguments from the environment, and forces nothing', () => {
+    const text = jobs.backend.join('\n');
+    for (const banned of ['--force', '--token', '--debug', 'set -x']) expect(text, banned).not.toContain(banned);
+    const deploy = scripts(jobs.backend).filter((s) => s.includes('firebase-tools@15'));
+    expect(deploy).toHaveLength(1);
+    expect(deploy[0]).toContain('deploy "${ARGS[@]}" --project binge-nu --non-interactive');
+    expect(deploy[0]).toContain('read -ra ARGS <<< "$DEPLOY_ARGS"');
+    // With nothing to deploy, the step ends before the key is written: a bare
+    // `firebase deploy` would deploy the site too.
+    const empty = deploy[0].indexOf('if [ -z "$DEPLOY_ARGS" ]; then');
+    expect(empty).toBeGreaterThan(-1);
+    expect(deploy[0].indexOf('exit 0')).toBeGreaterThan(empty);
+    expect(deploy[0].indexOf('exit 0')).toBeLessThan(deploy[0].indexOf('printf \'%s\' "$FIREBASE_BACKEND_SERVICE_ACCOUNT"'));
+  });
+
+  // #8's condition 6, the whole script by equality: a `|| true`, a `set +e` or a log
+  // path that tee and grep do not share would each let a failed or partial deploy write
+  // clean=true, and the record would then name a commit that never went live.
+  test('the deploy step runs exactly its script', () => {
+    // The script relies on the default shell, bash -e: `shell: bash {0}` or `sh {0}` on the
+    // step, the job or the workflow drops -e, and a failed deploy would end green.
+    expect(lines.filter((l) => /^\s*(shell|defaults):/.test(l))).toEqual([]);
+    const backend = steps(jobs.backend);
+    const deploy = backend.find((s) => s.includes('- name: Deploy rules and functions'));
+    expect(scripts(deploy.split('\n'))).toEqual([
+      [
+        "          set -o pipefail",
+        "          if [ -z \"$DEPLOY_ARGS\" ]; then",
+        "            echo \"Inget i regler och funktioner skiljer sig från det som redan är deployat.\"",
+        "            echo \"clean=true\" >> \"$GITHUB_OUTPUT\"",
+        "            exit 0",
+        "          fi",
+        "          if [ -z \"$FIREBASE_BACKEND_SERVICE_ACCOUNT\" ]; then",
+        "            echo \"::error::Nyckeln FIREBASE_BACKEND_SERVICE_ACCOUNT saknas i miljön backend. Deploya för hand med firebase deploy $DEPLOY_ARGS --project binge-nu och kör sedan Run workflow med backend_deployed_by_hand.\"",
+        "            exit 1",
+        "          fi",
+        "          read -ra ARGS <<< \"$DEPLOY_ARGS\"",
+        "          SA=\"$RUNNER_TEMP/firebase-backend-sa.json\"",
+        "          trap 'rm -f \"$SA\"' EXIT",
+        "          printf '%s' \"$FIREBASE_BACKEND_SERVICE_ACCOUNT\" > \"$SA\"",
+        "          export GOOGLE_APPLICATION_CREDENTIALS=\"$SA\"",
+        "          npx --yes firebase-tools@15.22.3 deploy \"${ARGS[@]}\" --project binge-nu --non-interactive 2>&1 | tee \"$RUNNER_TEMP/backend-deploy.log\"",
+        "          if grep -qF \"Skipping updates for functions that may be unsafe to update\" \"$RUNNER_TEMP/backend-deploy.log\"; then",
+        "            echo \"::warning::firebase hoppade över funktioner vars utlösare byter händelsetyp. Deploya dem för hand med firebase deploy --only functions --project binge-nu.\"",
+        "            echo \"> **Varning:** firebase hoppade över funktioner vars utlösare byter händelsetyp. Deploya dem för hand med \\`firebase deploy --only functions --project binge-nu\\`, som frågar innan den flyttar dem.\" >> \"$GITHUB_STEP_SUMMARY\"",
+        "          else",
+        "            echo \"clean=true\" >> \"$GITHUB_OUTPUT\"",
+        "          fi",
+        '',
+      ].join('\n'),
+    ]);
+  });
+
+  // #8's condition 5: the record moves where the next comparison starts, so it is written
+  // only when main's newer commit is live as it stands: deployed with nothing skipped, or
+  // nothing to deploy.
+  test('the record is uploaded only after a clean deploy of a newer main, and holds that commit', () => {
+    const deploy = scripts(jobs.backend).find((s) => s.includes('firebase-tools@15'));
+    const clean = 'echo "clean=true" >> "$GITHUB_OUTPUT"';
+    expect(deploy.split(clean).length - 1).toBe(2);
+    // Once in the nothing-to-deploy branch, once in the else of the skipped-functions check.
+    expect(deploy.indexOf(clean)).toBeLessThan(deploy.indexOf('exit 0'));
+    const skipped = deploy.indexOf('if grep -qF "Skipping updates for functions that may be unsafe to update"');
+    // The branches are cut at whole lines: the warning text itself contains "else".
+    const otherwise = deploy.indexOf('\n          else\n', skipped);
+    const done = deploy.indexOf('\n          fi\n', otherwise);
+    expect(skipped).toBeGreaterThan(-1);
+    expect(otherwise).toBeGreaterThan(skipped);
+    expect(done).toBeGreaterThan(otherwise);
+    expect(deploy.slice(skipped, otherwise)).not.toContain('clean=true');
+    expect(deploy.slice(otherwise, done)).toContain(clean);
+    expect(deploy.lastIndexOf(clean)).toBeLessThan(done);
+    // Without pipefail a failed firebase deploy piped into tee exits 0, reaches the else and
+    // writes the record: the step's shell is bash -e, which reads only tee's exit code.
+    expect(deploy).toMatch(/^ {10}set -o pipefail$/m);
+    expect(deploy.search(/^ {10}set -o pipefail$/m)).toBeLessThan(deploy.indexOf('| tee'));
+
+    const backend = steps(jobs.backend);
+    const when = "        if: steps.gate.outputs.target != github.sha && steps.backend-deploy.outputs.clean == 'true'";
+    const writes = backend.find((s) => s.includes('- name: Write down the commit the job deployed'));
+    const upload = backend.find((s) => s.includes('uses: actions/upload-artifact@'));
+    for (const step of [writes, upload]) expect(step.split('\n')).toContain(when);
+    expect(writes).toContain('TARGET: ${{ steps.gate.outputs.target }}');
+    expect(scripts(writes.split('\n'))).toEqual([
+      [
+        '          mkdir -p "$RUNNER_TEMP/backend-deployed"',
+        `          printf '%s\\n' "$TARGET" > "$RUNNER_TEMP/backend-deployed/${RECORD_FILE}"`,
+        '',
+      ].join('\n'),
+    ]);
+    expect(upload).toContain(`          name: ${RECORD_PREFIX}\${{ steps.gate.outputs.target }}`);
+    expect(upload).toContain(`          path: \${{ runner.temp }}/backend-deployed/${RECORD_FILE}`);
+    expect(upload).toContain('          if-no-files-found: error');
+    expect(upload).toContain('          retention-days: 90');
+    expect(backend.indexOf(writes)).toBeGreaterThan(backend.findIndex((s) => s.includes('id: backend-deploy')));
+    expect(backend.indexOf(upload)).toBe(backend.indexOf(writes) + 1);
+    // Nothing else in the workflows uploads an artifact a reader could mistake for one.
+    expect(lines.filter((l) => l.includes('upload-artifact'))).toHaveLength(1);
+  });
+
+  // #8's condition 8.
+  test('a failure before the deploy says that nothing was deployed, the run\'s own commit included', () => {
+    const backend = steps(jobs.backend);
+    const said = backend.find((s) => s.includes('- name: Say that nothing was deployed'));
+    expect(said).toContain("        if: failure() && steps.gate.outcome == 'success' && steps.backend-deploy.outcome == 'skipped'");
+    expect(scripts(said.split('\n'))[0]).toContain(
+      'varken main på ${TARGET:0:12} eller körningens egen commit ${RUN_SHA:0:12}',
+    );
   });
 
   test('the backend key is read in that one step, and the hosting key never in the backend job', () => {
     const everywhere = lines.join('\n').split('secrets.FIREBASE_BACKEND_SERVICE_ACCOUNT').length - 1;
     expect(everywhere).toBe(1);
     expect(jobs.backend.join('\n')).not.toContain('secrets.FIREBASE_SERVICE_ACCOUNT');
-  });
-
-  test('the backend deploy names the project, takes its arguments from the environment, and forces nothing', () => {
-    const text = jobs.backend.join('\n');
-    for (const banned of ['--force', '--token', '--debug', 'set -x']) expect(text, banned).not.toContain(banned);
-    const deploy = scripts(jobs.backend).filter((s) => s.includes('firebase-tools'));
-    expect(deploy).toHaveLength(1);
-    expect(deploy[0]).toContain('deploy "${ARGS[@]}" --project binge-nu --non-interactive');
-    expect(deploy[0]).toContain('read -ra ARGS <<< "$DEPLOY_ARGS"');
-    expect(text).toContain('DEPLOY_ARGS: ${{ needs.checks.outputs.deploy }}');
   });
 
   test('no expression is expanded inside a script', () => {
@@ -1786,5 +2290,15 @@ describe('deploy.yml wires the backend deploy safely (BIN-1426)', () => {
     expect(checkouts).toHaveLength(1);
     expect(checkouts[0]).toContain('fetch-depth: 0');
     expect(jobs.deploy).toContain('      actions: read');
+  });
+
+  // The gate and `checks` ask GitHub for runs and records; without the permission the call
+  // is refused and the step exits 1.
+  test('the backend and checks jobs keep actions: read and the backend checkout keeps its history', () => {
+    expect(jobs.backend).toContain('      actions: read');
+    expect(jobs.checks).toContain('      actions: read');
+    const checkouts = steps(jobs.backend).filter((s) => s.includes('uses: actions/checkout@'));
+    expect(checkouts).toHaveLength(1);
+    expect(checkouts[0]).toContain('fetch-depth: 0');
   });
 });

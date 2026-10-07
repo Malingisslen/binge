@@ -2,18 +2,20 @@
  * Which rules, indexes and functions changes a range of commits carries — the backend
  * deploy, everything firebase.json names except hosting. deploy.yml runs these modes (BIN-1426):
  *   · `--github-output` (report mode) in the `checks` job says what the `backend` job
- *     deploys once Malin approves the run in the `backend` environment. With
- *     `--since-last-deploy <ref>` it compares with the commit of the last successful
- *     deploy.yml run on main; with `--all` it names every target but hosting, for the
+ *     deploys. With
+ *     `--since-last-deploy <ref>` it compares with the commit the last deploy left live
+ *     (lastDeployed); with `--all` it names every target but hosting, for the
  *     `deploy_all_backend` dispatch;
- *   · `--approval-gate` runs in the `backend` job before anything reads the key;
+ *   · `--backend-gate` runs in the `backend` job before anything reads the key. It picks
+ *     the commit the job deploys, main as GitHub has it when the job starts, and writes that
+ *     commit's deploy arguments for the steps after it;
  *   · `--site-gate` runs in the hosting job before the build, and refuses a run whose
  *     commit is older than one a successful run already deployed.
  * Without a mode it exits 1 on a change the backend deploy must ship, for a check by hand.
  *
  * A change that CANNOT reach production — a comment in the rules, a comment or a type in
  * a function source file, a test file the functions build excludes — does not count, so it
- * neither asks for an approval nor deploys.
+ * does not deploy.
  *
  * The kinds of change let through are these, and each is COMPARED, not assumed:
  *   · `firestore.rules`, modified: equal once comments are removed and whitespace
@@ -32,13 +34,14 @@
  *
  * FAIL CLOSED. "I could not compare" never reads as "nothing changed": without a mode it
  * exits 1, exactly like "they differ", and report mode answers it with EXCEPT_HOSTING —
- * every target but hosting, behind the same approval. An unresolvable revision, a source
+ * every target but hosting. An unresolvable revision, a source
  * that does not parse, an unterminated string or comment, or any other throw counts.
  */
 
 import { execFileSync } from 'node:child_process';
-import { appendFileSync } from 'node:fs';
-import { posix } from 'node:path';
+import { appendFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
@@ -506,12 +509,12 @@ export function deployCommand(changes, before, after, { git = runGit } = {}) {
   return targets ? `firebase deploy --only ${targets.join(',')}` : DEPLOY_ALL;
 }
 
-// ── Report mode and the approval gate (BIN-1426) ─────────────────────────────────────
+// ── Report mode and the backend gate (BIN-1426) ──────────────────────────────────────
 
 // The only targets report mode names after `--only`. A target name is a firebase.json key
 // read from the pushed commit, so the workflow must never receive one this list has not
 // judged: anything else becomes EXCEPT_HOSTING, which deploys every non-hosting target
-// firebase.json names, behind the same approval.
+// firebase.json names.
 export const KNOWN_TARGETS = ['firestore:indexes', 'firestore:rules', 'functions'];
 export const EXCEPT_HOSTING = '--except hosting';
 
@@ -523,7 +526,7 @@ export function deployArgs(changes, before, after, { git = runGit } = {}) {
 }
 
 // Files that change HOW the deploy runs rather than what it ships. The run summary names a
-// change to one, so an approval is never given without seeing it.
+// change to one.
 export const DEPLOY_MACHINERY = ['.github', FIREBASE_JSON, FIREBASERC];
 
 // A path or a message as the run summary prints it: Markdown and HTML characters, and line
@@ -531,11 +534,16 @@ export const DEPLOY_MACHINERY = ['.github', FIREBASE_JSON, FIREBASERC];
 const printable = (text) => String(text).replace(/[^\w ./@:+,()=-]/g, '?');
 const short = (sha) => printable(sha).slice(0, 12);
 
+// The backend gate deploys main as it stands when the job starts, which can be newer than
+// the commit this summary was written for.
+export const TARGET_NOTE =
+  'Backend-jobbet deployar regler och funktioner som de ser ut på main när jobbet startar, efter att testerna körts på just den commiten.';
+
 const TEST_FILE = /\.(test|spec)\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
 const shipsToBrowsers = (path) => !path.startsWith('src/test/') && !TEST_FILE.test(path);
 
 /**
- * Two orders a single `firebase deploy` cannot get right, said before the approval: the
+ * Two orders a single `firebase deploy` cannot get right, said before the deploy: the
  * backend job runs before the hosting job, and firestore before functions.
  */
 export function orderWarnings(real, before, after, { git = runGit } = {}) {
@@ -580,19 +588,21 @@ export function report(before, after, { git = runGit, baseRun = null } = {}) {
       summary.push(`Regler och funktioner: inget som deployas har ändrats sedan ${since}. Bara webbplatsen deployas.`);
     } else {
       deploy = deployArgs(real, before, after, { git });
-      summary.push(`### Regler och funktioner väntar på ditt godkännande`, '', `Ändrat sedan ${since}:`, '');
+      summary.push(`### Regler och funktioner deployas`, '', `Ändrat sedan ${since}:`, '');
       for (const c of real) summary.push(`- ${printable(c.path)}: ${printable(c.reason)}`);
-      summary.push('', `Deployas efter godkännande: firebase deploy ${deploy}`);
+      summary.push('', `Deployas: firebase deploy ${deploy}`, '', TARGET_NOTE);
       for (const warning of orderWarnings(real, before, after, { git })) summary.push('', warning);
     }
   } catch (error) {
     deploy = EXCEPT_HOSTING;
     summary.push(
-      `### Regler och funktioner väntar på ditt godkännande`,
+      `### Regler och funktioner deployas`,
       '',
       `Kunde inte jämföra med ${since} (${printable(error.message)}).`,
       '',
-      `Deployas efter godkännande: firebase deploy ${deploy}`,
+      `Deployas: firebase deploy ${deploy}`,
+      '',
+      TARGET_NOTE,
     );
   }
   let machinery;
@@ -601,12 +611,10 @@ export function report(before, after, { git = runGit, baseRun = null } = {}) {
   } catch {
     machinery = null;
   }
-  // With nothing to deploy the backend job is skipped and nobody is asked to approve.
-  const beforeApproval = deploy === '' ? '' : ' Läs ändringen innan du godkänner.';
   if (machinery === null) {
-    summary.push('', `> **Varning:** kunde inte läsa om .github/, firebase.json eller .firebaserc ändrats.${beforeApproval}`);
+    summary.push('', '> **Varning:** kunde inte läsa om .github/, firebase.json eller .firebaserc ändrats.');
   } else if (machinery.length > 0) {
-    summary.push('', `> **Varning:** ändringen rör också hur deployen går till: ${machinery.join(', ')}.${beforeApproval}`);
+    summary.push('', `> **Varning:** ändringen rör också hur deployen går till: ${machinery.join(', ')}.`);
   }
   return { deploy, summary };
 }
@@ -616,11 +624,13 @@ export function reportAll() {
   return {
     deploy: EXCEPT_HOSTING,
     summary: [
-      '### Hela backend väntar på ditt godkännande',
+      '### Hela backend deployas',
       '',
       'Run workflow med deploy_all_backend: regler, index och alla funktioner deployas, oavsett vad som ändrats.',
       '',
-      `Deployas efter godkännande: firebase deploy ${EXCEPT_HOSTING}`,
+      `Deployas: firebase deploy ${EXCEPT_HOSTING}`,
+      '',
+      TARGET_NOTE,
     ],
   };
 }
@@ -631,7 +641,6 @@ export function githubOutput(deploy) {
   return `deploy=${deploy}\nchecked=true\n`;
 }
 
-export const BACKEND_ENVIRONMENT = 'backend';
 const MAIN_REF = 'refs/heads/main';
 const COMMIT_ID = /^[0-9a-f]{40}$/;
 const REPOSITORY = /^[\w.-]+\/[\w.-]+$/;
@@ -645,7 +654,7 @@ function runGh(path) {
 export const RUNS_PER_PAGE = 100;
 
 /**
- * deploy.yml's newest runs, unfiltered; successfulRuns picks the successful ones on main.
+ * deploy.yml's newest runs, unfiltered; mainRuns picks the ones on main.
  * GitHub's filtered list was stale for this repository: on 2026-10-05, with branch=main and
  * status=success, it ended at run #786 of 2026-09-07 while run #986 had succeeded. Compare
  *   gh api "repos/Malingisslen/binge/actions/workflows/deploy.yml/runs?branch=main&status=success&per_page=1"
@@ -656,10 +665,10 @@ export function deployedRunsPath(repo) {
 }
 
 /**
- * The successful runs on main in a workflow-runs answer that name a full commit id, newest
- * first. Throws on an answer it cannot read, which is not "no runs".
+ * The runs on main in a workflow-runs answer, newest first. Throws on an answer it cannot
+ * read, which is not "no runs".
  */
-function successfulRuns(raw) {
+function mainRuns(raw) {
   let answer;
   try {
     answer = JSON.parse(raw);
@@ -668,24 +677,111 @@ function successfulRuns(raw) {
   }
   if (!Array.isArray(answer?.workflow_runs)) throw new Error('GitHub svarade inte med en lista över tidigare körningar');
   return answer.workflow_runs
-    .filter((run) => run?.head_branch === 'main' && run.conclusion === 'success' && COMMIT_ID.test(run.head_sha ?? ''))
+    .filter((run) => run?.head_branch === 'main')
     .sort((a, b) => String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')));
 }
 
+/** The successful runs on main that name a full commit id, newest first. */
+function successfulRuns(raw) {
+  return mainRuns(raw).filter((run) => run.conclusion === 'success' && COMMIT_ID.test(run.head_sha ?? ''));
+}
+
+function isAncestor(older, newer, git) {
+  try {
+    git(['merge-base', '--is-ancestor', older, newer]);
+    return true;
+  } catch {
+    // Not in that history, or a commit this clone does not have.
+    return false;
+  }
+}
+
+// ── What the backend job deployed when main had moved on (BIN-1426) ────────────────────
+//
+// The backend job deploys main as it stands when the job starts, which can be a newer commit than
+// the run's own. The run's success then does not say which commit is live, so the backend
+// job uploads an artifact named RECORD_PREFIX + <that commit>, holding the commit in the
+// file RECORD_FILE, and the comparison reads it. A record is uploaded only when the newer
+// commit was deployed without firebase skipping anything.
+
+export const RECORD_PREFIX = 'backend-deployed-';
+export const RECORD_FILE = 'deployed-sha';
+const RECORD_NAME = /^backend-deployed-([0-9a-f]{40})$/;
+
+/** This repository's newest artifacts, from every workflow. */
+export function deployedArtifactsPath(repo) {
+  return `repos/${repo}/actions/artifacts?per_page=${RUNS_PER_PAGE}`;
+}
+
 /**
- * The newest successful deploy.yml run on main whose commit is `head` or an ancestor of it, as
- * `{ sha, number }`, or `null` when the answer holds none. A run of any event counts: a run
- * succeeds only when its backend was deployed, had nothing to deploy, or was deployed by
- * hand and the run said so. Throws on an answer it cannot read.
+ * The newest record each run on main uploaded, by run id, as `{ sha, name, expired }`.
+ * Throws on an answer it cannot read, and on a list longer than one page: a record left
+ * off the page would make its run read as having deployed its own commit.
  */
-export function lastDeployedRun(raw, head, { git = runGit } = {}) {
-  for (const run of successfulRuns(raw)) {
-    try {
-      git(['merge-base', '--is-ancestor', run.head_sha, head]);
-      return { sha: run.head_sha, number: run.run_number };
-    } catch {
-      // Not in head's history, or a commit this clone does not have.
+export function deployRecords(runsRaw, artifactsRaw) {
+  const onMain = new Set(mainRuns(runsRaw).map((run) => run.id).filter(Number.isSafeInteger));
+  let answer;
+  try {
+    answer = JSON.parse(artifactsRaw);
+  } catch {
+    throw new Error('GitHub svarade inte med JSON om sparade artefakter');
+  }
+  if (!Array.isArray(answer?.artifacts) || !Number.isSafeInteger(answer.total_count)) {
+    throw new Error('GitHub svarade inte med en lista över sparade artefakter');
+  }
+  if (answer.total_count > answer.artifacts.length) {
+    throw new Error(`GitHub har ${answer.total_count} artefakter, fler än de ${answer.artifacts.length} på en sida`);
+  }
+  const newest = new Map();
+  for (const artifact of answer.artifacts) {
+    const sha = RECORD_NAME.exec(typeof artifact?.name === 'string' ? artifact.name : '')?.[1];
+    const runId = artifact?.workflow_run?.id;
+    if (!sha || !onMain.has(runId) || artifact.workflow_run.head_branch !== 'main') continue;
+    const created = String(artifact.created_at ?? '');
+    if (newest.has(runId) && newest.get(runId).created >= created) continue;
+    newest.set(runId, { sha, name: artifact.name, expired: artifact.expired !== false, created });
+  }
+  return new Map([...newest].map(([runId, { sha, name, expired }]) => [runId, { sha, name, expired }]));
+}
+
+/** What a record artifact holds, downloaded by gh into a directory of its own. */
+function downloadRecord(repo, runId, name) {
+  const dir = mkdtempSync(join(tmpdir(), RECORD_PREFIX));
+  try {
+    execFileSync('gh', ['run', 'download', String(runId), '--repo', repo, '--name', name, '--dir', dir], RUN_OPTIONS);
+    return readFileSync(join(dir, RECORD_FILE), 'utf8');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * The commit of the newest deploy.yml run on main that deployed `head` or an ancestor of
+ * it, as `{ sha, number, recorded }`, or `null` when the answer holds none. A run deployed
+ * the commit its record names; without a record, a successful run deployed its own commit,
+ * because a run succeeds only when its backend was deployed, had nothing to deploy, or was
+ * deployed by hand and the run said so. A record wins only when the file inside it names
+ * the same commit as its name; one that cannot be read, or that has expired, throws, since
+ * its run's own commit may be older than what is live. Throws on an answer it cannot read.
+ */
+export function lastDeployed(runsRaw, artifactsRaw, head, { git = runGit, download }) {
+  const records = deployRecords(runsRaw, artifactsRaw);
+  for (const run of mainRuns(runsRaw)) {
+    const record = records.get(run.id);
+    const ownCommit = run.conclusion === 'success' && COMMIT_ID.test(run.head_sha ?? '') ? run.head_sha : null;
+    const sha = record ? record.sha : ownCommit;
+    if (sha === null || !isAncestor(sha, head, git)) continue;
+    if (record) {
+      if (record.expired) throw new Error(`${record.name} från körning #${printable(run.run_number)} har gått ut`);
+      let content;
+      try {
+        content = download(run.id, record.name);
+      } catch (error) {
+        throw new Error(`kunde inte läsa ${record.name}: ${printable(error.message)}`);
+      }
+      if (String(content).trim() !== record.sha) throw new Error(`${record.name} innehåller inte sin egen commit`);
     }
+    return { sha, number: run.run_number, recorded: Boolean(record) };
   }
   return null;
 }
@@ -698,60 +794,40 @@ export function lastDeployedRun(raw, head, { git = runGit } = {}) {
 export function newerDeployedRun(raw, sha, { git = runGit } = {}) {
   for (const run of successfulRuns(raw)) {
     if (run.head_sha === sha) continue;
-    try {
-      git(['merge-base', '--is-ancestor', sha, run.head_sha]);
-      return { sha: run.head_sha, number: run.run_number };
-    } catch {
-      // An older commit, one outside this history, or one this clone does not have.
-    }
+    if (isAncestor(sha, run.head_sha, git)) return { sha: run.head_sha, number: run.run_number };
   }
   return null;
 }
 
 /**
- * Report mode for a push, the weekly run and Run workflow: compares with the commit of the
- * last successful run, so a change whose run failed, was rejected or was cancelled is found
- * again. No such run among the newest RUNS_PER_PAGE deploys everything but hosting. Throws
- * when GitHub cannot be asked.
+ * Report mode for a push, the weekly run and Run workflow, and the backend gate for the
+ * commit it deploys: compares with the commit the last deploy left live, so a change whose
+ * run failed, was rejected or was cancelled is found again. No such commit among the newest
+ * RUNS_PER_PAGE runs deploys everything but hosting. `base` is that commit, or `null`.
+ * Throws when GitHub cannot be asked.
  */
-export function sinceLastDeploy(after, { git = runGit, gh = runGh, env }) {
+export function sinceLastDeploy(after, { git = runGit, gh = runGh, env, download = downloadRecord }) {
   const repo = env.GITHUB_REPOSITORY;
   if (!REPOSITORY.test(repo ?? '')) throw new Error('GITHUB_REPOSITORY saknas');
   const head = git(['rev-parse', '--verify', '--quiet', `${after}^{commit}`]).trim();
-  const run = lastDeployedRun(gh(deployedRunsPath(repo)), head, { git });
-  if (run) return report(run.sha, head, { git, baseRun: run });
+  const base = lastDeployed(gh(deployedRunsPath(repo)), gh(deployedArtifactsPath(repo)), head, {
+    git,
+    download: (runId, name) => download(repo, runId, name),
+  });
+  if (base) return { ...report(base.sha, head, { git, baseRun: base }), base };
   return {
     deploy: EXCEPT_HOSTING,
+    base: null,
     summary: [
-      '### Regler och funktioner väntar på ditt godkännande',
+      '### Regler och funktioner deployas',
       '',
       `Hittade ingen lyckad körning på main bland de ${RUNS_PER_PAGE} senaste vars commit finns i den här historiken, så allt utom webbplatsen deployas.`,
       '',
-      `Deployas efter godkännande: firebase deploy ${EXCEPT_HOSTING}`,
+      `Deployas: firebase deploy ${EXCEPT_HOSTING}`,
+      '',
+      TARGET_NOTE,
     ],
   };
-}
-
-/**
- * Why the run's approvals do not let it deploy the backend, or `null` when they do: at least
- * one approval for `environment`, and nothing for it in any other state. An approval for
- * another environment does not count.
- */
-export function approvalProblem(raw, environment = BACKEND_ENVIRONMENT) {
-  let approvals;
-  try {
-    approvals = JSON.parse(raw);
-  } catch {
-    return 'GitHub svarade inte med JSON om godkännanden';
-  }
-  if (!Array.isArray(approvals)) return 'GitHub svarade inte med en lista över godkännanden';
-  const mine = approvals.filter(
-    (a) => Array.isArray(a?.environments) && a.environments.some((e) => e?.name === environment),
-  );
-  const other = mine.find((a) => a.state !== 'approved');
-  if (other) return `körningen har svaret '${printable(other.state)}' för ${environment}`;
-  if (mine.length === 0) return `ingen har godkänt ${environment} i den här körningen`;
-  return null;
 }
 
 /** Where main points, as GitHub has it now. */
@@ -775,67 +851,99 @@ export function mainTip(raw) {
 }
 
 /**
- * Why deploying `sha` would roll something back, or `null`. `tip` is main's commit as GitHub
- * has it: `sha` must be in its history, and nothing the backend deploy ships may differ
- * between the two. A re-run of an older run is the case this stops — the run for the newer
- * commit deploys that commit's rules.
+ * The commit the backend job deploys, as `{ target }`, or why nothing may deploy, as
+ * `{ problem }`. The target is main as GitHub has it when the job starts, not the clone's
+ * origin/main: the checkout may have pointed origin/main at this run's own commit. A newer
+ * main than the run's commit is the target, so an older run deploys what is on main now;
+ * the run's commit must be in its history, so the job never deploys a commit main has left
+ * behind. No approval is asked for (Malin, 2026-10-07: "Deploya backend utan mina klick").
  */
-export function staleProblem(sha, tip, { git = runGit } = {}) {
-  if (tip === sha) return null;
-  try {
-    git(['rev-parse', '--verify', '--quiet', `${tip}^{commit}`]);
-  } catch {
-    return `main pekar på ${short(tip)}, som den här körningen inte har hämtat. Kör om jobbet med Re-run failed jobs`;
-  }
-  try {
-    git(['merge-base', '--is-ancestor', sha, tip]);
-  } catch {
-    return `${short(sha)} finns inte på main`;
-  }
-  let real;
-  try {
-    real = findDrift(sha, tip, { git }).filter((c) => c.reason !== null);
-  } catch (error) {
-    return `kan inte jämföra ${short(sha)} med main: ${printable(error.message)}`;
-  }
-  if (real.length === 0) return null;
-  return `main har gått vidare till ${short(tip)}, som ändrar ${real.map((c) => printable(c.path)).join(', ')}. Den här körningen skulle backa det; godkänn körningen för den nyare commiten i stället`;
-}
-
-/**
- * Every check the `backend` job runs before it reads the key: `null` when all pass. Where
- * main points is asked of GitHub, not read from the clone: the checkout may have pointed
- * origin/main at this run's own commit, and then a re-run of an older run looks current.
- */
-export function gateProblem({ env, gh = runGh, git = runGit }) {
-  const { GITHUB_REF: ref, GITHUB_SHA: sha, GITHUB_REPOSITORY: repo, GITHUB_RUN_ID: runId } = env;
-  if (ref !== MAIN_REF) return `körningen gäller ${printable(ref ?? 'ingen ref')}, inte ${MAIN_REF}`;
-  if (!COMMIT_ID.test(sha ?? '')) return 'GITHUB_SHA är inget commit-id';
-  if (!REPOSITORY.test(repo ?? '') || !/^\d+$/.test(runId ?? '')) {
-    return 'GITHUB_REPOSITORY eller GITHUB_RUN_ID saknas';
-  }
+export function gateTarget({ env, gh = runGh, git = runGit }) {
+  const { GITHUB_REF: ref, GITHUB_SHA: sha, GITHUB_REPOSITORY: repo } = env;
+  if (ref !== MAIN_REF) return { problem: `körningen gäller ${printable(ref ?? 'ingen ref')}, inte ${MAIN_REF}` };
+  if (!COMMIT_ID.test(sha ?? '')) return { problem: 'GITHUB_SHA är inget commit-id' };
+  if (!REPOSITORY.test(repo ?? '')) return { problem: 'GITHUB_REPOSITORY saknas' };
   let head;
   try {
     head = git(['rev-parse', 'HEAD']).trim();
   } catch {
-    return 'kan inte läsa den utcheckade commiten';
+    return { problem: 'kan inte läsa den utcheckade commiten' };
   }
-  if (head !== sha) return `den utcheckade commiten ${short(head)} är inte ${short(sha)}`;
-  let raw;
-  try {
-    raw = gh(`repos/${repo}/actions/runs/${runId}/approvals`);
-  } catch (error) {
-    return `frågan till GitHub om godkännanden misslyckades: ${printable(error.message)}`;
-  }
-  const refused = approvalProblem(raw);
-  if (refused) return refused;
+  if (head !== sha) return { problem: `den utcheckade commiten ${short(head)} är inte ${short(sha)}` };
   let tip;
   try {
     tip = mainTip(gh(mainTipPath(repo)));
   } catch (error) {
-    return `frågan till GitHub om main misslyckades: ${printable(error.message)}`;
+    return { problem: `frågan till GitHub om main misslyckades: ${printable(error.message)}` };
   }
-  return staleProblem(sha, tip, { git });
+  if (tip === sha) return { target: sha };
+  const fetched = () => {
+    try {
+      git(['rev-parse', '--verify', '--quiet', `${tip}^{commit}`]);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  if (!fetched()) {
+    try {
+      git(['fetch', '--no-tags', '--quiet', 'origin', tip]);
+    } catch {
+      // Said below.
+    }
+    if (!fetched()) return { problem: `main pekar på ${short(tip)}, som den här körningen inte kunde hämta` };
+  }
+  if (!isAncestor(sha, tip, git)) return { problem: `${short(sha)} finns inte på main` };
+  return { target: tip };
+}
+
+/** The lines the backend gate appends to $GITHUB_OUTPUT. A line break would forge another output. */
+export function gateOutput(target, deploy) {
+  if (!COMMIT_ID.test(target)) throw new Error('the target is not a commit id');
+  if (/[\r\n]/.test(deploy)) throw new Error('the deploy arguments contain a line break');
+  return `target=${target}\ndeploy=${deploy}\n`;
+}
+
+/**
+ * The backend job's run summary: the run's commit, the commit deployed, what differs
+ * between them in rules and functions, the commit compared with, and what deploys.
+ */
+export function gateSummary(sha, target, { deploy, base }, { git = runGit } = {}) {
+  const lines = ['### Regler och funktioner från main', ''];
+  if (target === sha) {
+    lines.push(`Main pekade på körningens egen commit, ${short(sha)}, när jobbet startade.`);
+  } else {
+    let changed;
+    try {
+      changed = findDrift(sha, target, { git })
+        .filter((c) => c.reason !== null)
+        .map((c) => printable(c.path));
+    } catch {
+      changed = null;
+    }
+    lines.push(
+      `Main hade gått vidare från körningens commit ${short(sha)} till ${short(target)} när jobbet startade, så det är ${short(target)} som deployas.`,
+      '',
+      changed === null
+        ? 'Kunde inte läsa vad som skiljer dem åt i regler och funktioner.'
+        : changed.length > 0
+          ? `Skiljer dem åt i regler och funktioner: ${changed.join(', ')}.`
+          : 'De skiljer sig inte åt i regler och funktioner.',
+      '',
+      `Testerna körs på ${short(target)} innan något deployas. Faller ett av dem deployas ingenting, inte heller ${short(sha)}.`,
+    );
+  }
+  lines.push('');
+  if (base === undefined) lines.push('Run workflow med deploy_all_backend: allt utom webbplatsen, oavsett vad som ändrats.');
+  else if (base === null) lines.push(`Hittade ingen tidigare deploy i historiken för ${short(target)}.`);
+  else lines.push(`Jämfört med ${short(base.sha)}, som körning #${printable(base.number)} deployade.`);
+  lines.push(
+    '',
+    deploy === ''
+      ? 'Inget i regler och funktioner skiljer sig från det som redan är deployat, så inget deployas.'
+      : `Deployas: firebase deploy ${deploy}`,
+  );
+  return lines;
 }
 
 /**
@@ -867,7 +975,7 @@ export function siteGateProblem({ env, gh = runGh, git = runGit }) {
 const REPORT_USAGE =
   'usage: check-deploy-drift.mjs --github-output <file> [--github-summary <file>] (--all | --since-last-deploy <after-ref> | <before-ref> <after-ref>)';
 
-function reportMain(argv, { git, log, err, write, env, gh }) {
+function reportMain(argv, { git, log, err, write, env, gh, download }) {
   const [outFile, ...rest] = argv;
   const summaryFile = rest[0] === '--github-summary' ? rest[1] : null;
   const what = summaryFile === null ? rest : rest.slice(2);
@@ -880,7 +988,7 @@ function reportMain(argv, { git, log, err, write, env, gh }) {
     decided = reportAll();
   } else if (what.length === 2 && what[0] === '--since-last-deploy') {
     try {
-      decided = sinceLastDeploy(what[1], { git, gh, env });
+      decided = sinceLastDeploy(what[1], { git, gh, env, download });
     } catch (error) {
       err(`::error::Kunde inte avgöra vad som ska deployas: ${error.message}`);
       return 1;
@@ -903,13 +1011,37 @@ function reportMain(argv, { git, log, err, write, env, gh }) {
   return 0;
 }
 
-function gateMain({ env, gh, git, log, err }) {
-  const problem = gateProblem({ env, gh, git });
+const GATE_USAGE =
+  'usage: check-deploy-drift.mjs --backend-gate --github-output <file> --github-summary <file> [--all]';
+
+function gateMain(argv, { env, gh, git, log, err, write, download }) {
+  const [outFlag, outFile, summaryFlag, summaryFile, ...rest] = argv;
+  const all = rest.length === 1 && rest[0] === '--all';
+  if (outFlag !== '--github-output' || !outFile || summaryFlag !== '--github-summary' || !summaryFile || (rest.length > 0 && !all)) {
+    err(GATE_USAGE);
+    return 1;
+  }
+  const { problem, target } = gateTarget({ env, gh, git });
   if (problem) {
     err(`::error::Regler och funktioner deployas inte: ${problem}.`);
     return 1;
   }
-  log(`Godkänt för ${BACKEND_ENVIRONMENT} i den här körningen, på main, och main har ingen nyare backendändring.`);
+  let decided;
+  try {
+    decided = all ? reportAll() : sinceLastDeploy(target, { git, gh, env, download });
+  } catch (error) {
+    err(`::error::Regler och funktioner deployas inte: kunde inte avgöra vad ${short(target)} ska deploya: ${printable(error.message)}.`);
+    return 1;
+  }
+  const summary = gateSummary(env.GITHUB_SHA, target, decided, { git });
+  try {
+    write(outFile, gateOutput(target, decided.deploy));
+    write(summaryFile, `${summary.join('\n')}\n`);
+  } catch (error) {
+    err(`::error::Kunde inte skriva vad backend-jobbet deployar: ${error.message}`);
+    return 1;
+  }
+  for (const line of summary) log(line);
   return 0;
 }
 
@@ -925,11 +1057,19 @@ function siteGateMain({ env, gh, git, log, err }) {
 
 export function main(
   argv,
-  { git = runGit, log = console.log, err = console.error, env = process.env, gh = runGh, write = appendFileSync } = {},
+  {
+    git = runGit,
+    log = console.log,
+    err = console.error,
+    env = process.env,
+    gh = runGh,
+    write = appendFileSync,
+    download = downloadRecord,
+  } = {},
 ) {
-  if (argv[0] === '--approval-gate') return gateMain({ env, gh, git, log, err });
+  if (argv[0] === '--backend-gate') return gateMain(argv.slice(1), { env, gh, git, log, err, write, download });
   if (argv[0] === '--site-gate') return siteGateMain({ env, gh, git, log, err });
-  if (argv[0] === '--github-output') return reportMain(argv.slice(1), { git, log, err, write, env, gh });
+  if (argv[0] === '--github-output') return reportMain(argv.slice(1), { git, log, err, write, env, gh, download });
 
   const [before, after] = argv;
   if (!before || !after) {
@@ -970,7 +1110,7 @@ export function main(
 }
 
 const HAND_DEPLOY_HOSTING =
-  "deploy.yml's backend job deploys this after approval. After a deploy by hand instead, ship hosting with 'Run workflow' and tick backend_deployed_by_hand.";
+  "deploy.yml's backend job deploys this once the tests pass. After a deploy by hand instead, ship hosting with 'Run workflow' and tick backend_deployed_by_hand.";
 
 // Importing this file from a test must not run the CLI (BIN-802).
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
