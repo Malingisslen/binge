@@ -309,6 +309,8 @@ const HAND_ROLLED: Array<[string, (t: Set<string>) => boolean]> = [
   ['filled saffron button (use Button variant="acc" or buttonClass)', t => t.has('bg-acc-deep') && t.has('text-on-acc') && t.has('rounded-sm') && !t.has('?') && [...t].some(x => /^p[xy]?-/.test(x))],
   ['raw palette colour (use a token)', t => [...t].some(x => /^(?:[a-z]+:)*(?:text|bg|border|ring)-(?:amber|green|blue|gray|slate|zinc|yellow|orange|emerald|sky|neutral|stone|red)-\d/.test(x))],
   ['black scrim (use bg-scrim)', t => t.has('fixed') && t.has('inset-0') && [...t].some(x => x.startsWith('bg-black'))],
+  ['outlined tag (use tagClass)', t => t.has('text-xxs') && t.has('border') && t.has('rounded-sm') && t.has('py-px') && !t.has('cursor-pointer')],
+  ['danger button (use Button variant="danger-ghost")', t => t.has('cursor-pointer') && t.has('text-danger-ink') && t.has('border') && !t.has('?') && [...t].some(x => /^p[xy]?-/.test(x))],
   ['hand-written spacing (use a 4px step: p-1, gap-2, mt-3 …)', t => [...t].some(x => /^(?:[a-z]+:)*-?(?:p[xytblrse]?|m[xytblrse]?|gap(?:-[xy])?|space-[xy])-\[\d+(?:\.\d+)?px\]$/.test(x))],
 ];
 
@@ -325,6 +327,10 @@ describe('design consistency — parts, not hand-rolled classes (paket N)', () =
     expect(hit('px-3 py-1 bg-acc-deep text-on-acc rounded-sm text-xs')).toHaveLength(1);
     expect(hit('topbar-icon-btn text-ink-3 uppercase')).toHaveLength(0);
     expect(hit('bg-surface border-b border-rule')).toHaveLength(0);
+    expect(hit('text-xxs px-1 py-px border border-rule-2 text-ink-3 rounded-sm inline-block')).toHaveLength(1);
+    expect(hit('px-1.5 py-px rounded-sm border text-xxs cursor-pointer')).toHaveLength(0);
+    expect(hit('px-3 py-1.5 border border-danger/40 text-danger-ink rounded-sm text-xs bg-surface cursor-pointer')).toHaveLength(1);
+    expect(hit('text-xs text-danger-ink bg-danger-soft border border-danger/30 rounded-sm px-3 py-2')).toHaveLength(0);
   });
 
   it('no .tsx under src writes an eyebrow as an inline style (use eyebrowClass)', () => {

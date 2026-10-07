@@ -24,6 +24,7 @@ import { buttonClass, Button } from '@/components/ui/Button';
 import { thClass } from '@/components/ui/tableHead';
 import { fieldClass } from '@/components/ui/Field';
 import { cardClass } from '@/components/ui/Card';
+import { tagClass } from '@/components/ui/Badge';
 
 export default function TillsammansSessionPageClient({ id }: { id: string }) {
   const { session, participants, swipes, loading, notFound, expired } = useSession(id);
@@ -367,9 +368,7 @@ function SessionMain({
             return (
               <span
                 key={p.id}
-                className={`inline-flex items-center gap-1 px-1.5 py-px border rounded-sm text-xxs ${
-                  isMe ? 'border-acc-deep text-acc-deep font-semibold' : 'border-rule text-ink-2'
-                }`}
+                className={isMe ? tagClass('acc', 'font-semibold') : tagClass('ink')}
                 title={`${prog.done}/${prog.total} svepningar${isLive ? ' · aktiv nu' : ''}`}
               >
                 {isLive && <span className="w-[5px] h-[5px] rounded-full bg-season-done" />}
@@ -513,13 +512,13 @@ function SwipeCard({
             <Check size={14} /> Ja
           </Button>
           {me.vetoRemaining > 0 && (
-            <button
+            <Button
               onClick={() => onVote(cand, 'veto')}
-              className="px-3 py-2 border border-danger bg-surface text-danger-ink rounded-sm text-xs font-semibold cursor-pointer flex items-center justify-center gap-1"
+              variant="danger-ghost" size="sm" className="justify-center"
               title="Dödar denna titel definitivt"
             >
               <Ban size={14} /> Veto
-            </button>
+            </Button>
           )}
         </div>
       )}

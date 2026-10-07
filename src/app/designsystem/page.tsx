@@ -8,7 +8,7 @@ import DuotonePoster from '@/components/ui/DuotonePoster';
 import { DUOTONES } from '@/lib/duotone';
 import { cardClass } from '@/components/ui/Card';
 import { fieldClass } from '@/components/ui/Field';
-import { badgeClass } from '@/components/ui/Badge';
+import { badgeClass, tagClass } from '@/components/ui/Badge';
 import { thClass } from '@/components/ui/tableHead';
 
 // The living component page: every piece is the real component or CSS class, so the
@@ -106,6 +106,15 @@ function Specimen({ theme }: { theme: 'light' | 'dark' }) {
           <span className={badgeClass('acc')}>Du är här</span>
           <span className={badgeClass('success')}>Gratis</span>
           <span className={badgeClass()}>Premiär</span>
+        </div>
+      </Section>
+
+      <Section title="Taggar">
+        <div className="flex flex-wrap gap-2">
+          <span className={tagClass('acc')}>Netflix</span>
+          <span className={tagClass()}>Max</span>
+          <span className={tagClass('ink')}>Anna</span>
+          <span className={tagClass('faint')}>Ej på SE</span>
         </div>
       </Section>
 

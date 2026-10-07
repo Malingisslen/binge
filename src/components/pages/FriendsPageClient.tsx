@@ -242,18 +242,14 @@ function Row({ user, tab }: { user: FollowListUser; tab: Tab }) {
         {user.username && <div className="text-xxs text-ink-3">@{user.username}</div>}
       </div>
       {!isMe && (
-        <button
+        <Button
           onClick={() => iAmFollowing ? unfollowUser(user.uid) : followUser(user.uid)}
-          className={`px-2 py-0.5 text-xxs border rounded-sm cursor-pointer font-[inherit] ${
-            iAmFollowing
-              ? 'bg-surface text-ink-2 border-rule hover:bg-bg-2'
-              : 'bg-acc-deep text-on-acc border-acc-deep'
-          }`}
+          variant={iAmFollowing ? 'ghost' : 'acc'} size="xs"
         >
           {iAmFollowing
             ? 'Slutar följa'
             : tab === 'followers' ? 'Följ tillbaka' : 'Följ'}
-        </button>
+        </Button>
       )}
     </li>
   );

@@ -21,6 +21,7 @@ import { Eyebrow } from '@/components/ui/Eyebrow';
 import { Button } from '@/components/ui/Button';
 import { fieldClass } from '@/components/ui/Field';
 import { cardClass } from '@/components/ui/Card';
+import { tagClass } from '@/components/ui/Badge';
 import {
   inviteTokenAgeDays,
   inviteTokenAgeLabel,
@@ -81,12 +82,7 @@ export function ProviderPills({ ids, highlight = false }: { ids: number[]; highl
         const p = getProvider(id);
         if (!p) return null;
         return (
-          <span
-            key={id}
-            className={`inline-flex items-center gap-1 px-1.5 py-px text-xxs border rounded-sm ${
-              highlight ? 'border-acc-deep text-acc-deep' : 'border-rule text-ink-3'
-            }`}
-          >
+          <span key={id} className={tagClass(highlight ? 'acc' : 'muted')}>
             <span className="w-[5px] h-[5px] rounded-full" style={{ background: p.color }} />
             {p.shortName}
           </span>

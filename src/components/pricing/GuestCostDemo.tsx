@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { buttonClass } from '@/components/ui/Button';
 import { getProvider } from '@/lib/tmdb/providers';
 import { computeGuestCost } from '@/lib/advisor/guestCost';
 import { loadGuestSelection, saveGuestSelection, type GuestSelection } from '@/lib/guestProviders';
@@ -72,10 +73,7 @@ export default function GuestCostDemo() {
               </button>
             );
           })}
-          <Link
-            href="/streamingkostnad/"
-            className="px-3 py-1.5 text-sm rounded border border-rule text-ink-2 no-underline"
-          >
+          <Link href="/streamingkostnad/" className={buttonClass({ variant: 'ghost', size: 'sm' })}>
             Fler
           </Link>
         </div>

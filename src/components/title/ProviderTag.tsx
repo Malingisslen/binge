@@ -3,6 +3,7 @@ import { getProvider, canonicalProviderId, affiliateWrap } from '@/lib/tmdb/prov
 import { useAuth } from '@/hooks/useAuth';
 import { type Offer, isLeavingSoon, formatLeaving } from '@/lib/streaming/offers';
 import { trackEvent } from '@/lib/analytics';
+import { tagClass } from '@/components/ui/Badge';
 
 interface ProviderTagProps {
   provider: TMDBProvider;
@@ -28,11 +29,7 @@ export default function ProviderTag({ provider, size = 'sm', offer, nowMs, media
 
   const chip =
     size === 'sm' ? (
-      <span
-        className={`text-xxs px-1 py-px border rounded-sm inline-block mr-0.5 ${
-          isMine ? 'border-acc-deep text-acc-deep' : 'border-rule text-ink-3'
-        }`}
-      >
+      <span className={tagClass(isMine ? 'acc' : 'muted', 'mr-0.5')}>
         {label}
       </span>
     ) : (

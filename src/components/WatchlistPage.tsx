@@ -606,12 +606,12 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
               Avbryt
             </Button>
           )}
-          <button
+          <Button
             onClick={() => { if (selected.size > 0) setConfirmDelete(displayItems.filter(i => selected.has(keyOf(i)))); }}
-            className="px-2 py-0.5 text-xs border border-danger rounded-sm cursor-pointer bg-surface text-danger-ink font-[inherit]"
+            variant="danger-ghost" size="xs"
           >
             Ta bort
-          </button>
+          </Button>
           <Button
             onClick={() => setSelected(new Set())}
             variant="ghost" size="sm" className="ml-auto"
