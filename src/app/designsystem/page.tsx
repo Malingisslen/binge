@@ -114,7 +114,7 @@ function Specimen({ theme }: { theme: 'light' | 'dark' }) {
           <span className={tagClass('acc')}>Netflix</span>
           <span className={tagClass()}>Max</span>
           <span className={tagClass('ink')}>Anna</span>
-          <span className={tagClass('faint')}>Ej på SE</span>
+          <span className={tagClass('faint')}>Finns inte i Sverige</span>
         </div>
       </Section>
 

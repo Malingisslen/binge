@@ -12,15 +12,17 @@ import { countEntries, summarizeCounts } from '@/lib/calendar/summary';
 
 const WEEKDAY_HEADERS = ['mån', 'tis', 'ons', 'tor', 'fre', 'lör', 'sön'] as const;
 
+// What each poster tone stands for, in the words a viewer uses. The tone names
+// themselves (terra, slate…) are palette names and never reach the page.
 const TONE_LABELS: Record<Duotone, string> = {
-  terra: 'drama',
-  slate: 'noir',
-  moss: 'natur',
-  clay: 'komedi',
-  plum: 'mystik',
-  steel: 'sci-fi',
-  olive: 'reality',
-  oxblood: 'skräck',
+  terra: 'drama, familj, romantik',
+  slate: 'kriminal, thriller',
+  moss: 'dokumentär, animerat',
+  clay: 'komedi, barn',
+  plum: 'fantasy, mysterium',
+  steel: 'science fiction',
+  olive: 'reality, musik, talkshow',
+  oxblood: 'action, äventyr, skräck, krig',
 };
 
 interface Props {
@@ -86,13 +88,13 @@ export default function MonthStrip({ anchor, entries, onJumpToWeek }: Props) {
   }, [entries]);
 
   return (
-    <section className="month-strip" aria-label="Månadskontext">
+    <section className="month-strip" aria-label="Månadsöverblick">
       <div className="head">
         <div>
-          <h3>{anchorMonth} — kontext</h3>
-          <div className="sub">Klicka en vecka för att hoppa dit.</div>
+          <h3>{anchorMonth} i överblick</h3>
+          <div className="sub">Klicka på en vecka för att visa den ovanför.</div>
         </div>
-        <div className="meta">5 veckor · v{weeks[0].num}—v{weeks[weeks.length - 1].num}</div>
+        <div className="meta">Vecka {weeks[0].num}–{weeks[weeks.length - 1].num}</div>
       </div>
 
       <div className="month-grid">
@@ -118,10 +120,11 @@ export default function MonthStrip({ anchor, entries, onJumpToWeek }: Props) {
       </div>
 
       <div className="legend">
+        {usedTones.size > 0 && <div className="item">Färgen visar genre:</div>}
         {DUOTONES.filter(t => usedTones.has(t)).map(t => (
           <div key={t} className="item">
             <span className={`sw`} style={{ background: `var(--duo-${t})` }} />
-            {t} · {TONE_LABELS[t]}
+            {TONE_LABELS[t]}
           </div>
         ))}
         {usedTones.size > 0 && (

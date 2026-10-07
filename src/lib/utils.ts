@@ -9,6 +9,18 @@ export function localIsoDate(d: Date): string {
   return `${d.getFullYear()}-${m}-${day}`;
 }
 
+/**
+ * The library's one date style: "7 okt", with the year added only when it is not
+ * this year ("7 okt 2024"). The table and the diary used to print the same
+ * date three different ways.
+ */
+export function formatLibraryDate(d: Date, now: Date = new Date()): string {
+  const sameYear = d.getFullYear() === now.getFullYear();
+  return d
+    .toLocaleDateString('sv-SE', sameYear ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: 'numeric' })
+    .replace('.', '');
+}
+
 export function formatSwedishDate(dateStr: string | null, fallback = 'Okänt datum'): string {
   if (!dateStr) return fallback;
   const today = localIsoDate(new Date());

@@ -499,7 +499,7 @@ describe('MoviePageClient — what a crawler reads without clicking (SEO-2/SEO-4
     // next/link drops the trailing slash outside the build (no trailingSlash config
     // here); the export's `trailingSlash: true` puts it back.
     expect(screen.getByRole('link', { name: 'Filmer' }).getAttribute('href')).toMatch(/^\/films\/?$/);
-    expect(screen.getByRole('link', { name: 'Science Fiction' }).getAttribute('href')).toMatch(/^\/genre\/sci-fi\/?$/);
+    expect(screen.getByRole('link', { name: 'Science fiction' }).getAttribute('href')).toMatch(/^\/genre\/sci-fi\/?$/);
     expect(screen.getByRole('link', { name: 'Netflix' }).getAttribute('href')).toMatch(/^\/provider\/8\/?$/);
   });
 

@@ -10,6 +10,7 @@ import { canonicalProviderId } from '@/lib/tmdb/providers';
 import type { TMDBSearchResult, TMDBProvider, MediaType } from '@/types';
 import QuickAddButton from '@/components/title/QuickAddButton';
 import NotInterestedButton from '@/components/title/NotInterestedButton';
+import { Film, Tv } from 'lucide-react';
 
 // Direction H recommendation card: duotone 2:3 poster (genre-mapped) +
 // title + sub line (mono). On hover, the poster border darkens and the
@@ -52,7 +53,26 @@ export default function RecCard({ item, providers }: Props) {
               decoding="async"
               onError={() => setImgError(true)}
             />
-          ) : null}
+          ) : (
+            // Same placeholder as the search cards: a title without a TMDB poster
+            // still says what it is instead of showing an empty tile.
+            <div style={{
+              position: 'absolute', inset: 0,
+              display: 'flex', flexDirection: 'column',
+              alignItems: 'center', justifyContent: 'center',
+              padding: 8, gap: 4,
+              background: 'var(--bg-2)',
+            }}>
+              {item.media_type === 'tv'
+                ? <Tv size={20} style={{ color: 'var(--ink-3)', opacity: 0.4 }} aria-hidden />
+                : <Film size={20} style={{ color: 'var(--ink-3)', opacity: 0.4 }} aria-hidden />}
+              <span style={{
+                fontSize: 'var(--fs-xxs)', color: 'var(--ink-3)', textAlign: 'center',
+                lineHeight: 1.2, overflow: 'hidden',
+                display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical',
+              }}>{title}</span>
+            </div>
+          )}
           {isTracked && (
             <span className="corner-badge in-lib" aria-label="I ditt bibliotek">
               i biblioteket

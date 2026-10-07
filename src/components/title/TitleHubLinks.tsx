@@ -2,6 +2,7 @@ import { Fragment } from 'react';
 import Link from 'next/link';
 import { genreHubHref, providerHubHref } from '@/lib/seo/hubLinks';
 import { getProvider } from '@/lib/tmdb/providers';
+import { GENRE_LABELS } from '@/lib/tmdb/genreLabels';
 
 // SEO-4 — the title pages are most of the crawlable HTML, so they are where the
 // curated hubs get their internal links from. Every href comes from hubLinks,
@@ -30,10 +31,12 @@ export function GenreLinks({ kind, genres }: { kind: 'movie' | 'tv'; genres: { i
     <span className="kind">
       {genres.map((g, i) => {
         const href = genreHubHref(kind, g.id);
+        // TMDB leaves some genres untranslated; every page names a genre the same way.
+        const name = GENRE_LABELS[g.id] ?? g.name;
         return (
           <Fragment key={g.id}>
             {i > 0 && ', '}
-            {href ? <Link href={href} style={inlineLink}>{g.name}</Link> : g.name}
+            {href ? <Link href={href} style={inlineLink}>{name}</Link> : name}
           </Fragment>
         );
       })}

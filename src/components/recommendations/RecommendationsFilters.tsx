@@ -1,9 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { getMovieGenres, getTVGenres } from '@/lib/tmdb/client';
-import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
+import { GENRE_OPTIONS } from '@/lib/tmdb/genreLabels';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import type { FilterState } from '@/types';
 import { fieldClass } from '@/components/ui/Field';
@@ -29,25 +27,6 @@ export default function RecommendationsFilters({ filters, onChange, hasMyProvide
     }
   }, [debouncedSearch, onChange, filters]);
 
-  const { data: movieGenres } = useQuery({
-    queryKey: ['genres-movie'],
-    queryFn: getMovieGenres,
-    staleTime: TMDB_STALE.GENRES,
-  });
-  const { data: tvGenres } = useQuery({
-    queryKey: ['genres-tv'],
-    queryFn: getTVGenres,
-    staleTime: TMDB_STALE.GENRES,
-  });
-
-  const allGenres = (() => {
-    const merged = [...(movieGenres?.genres ?? []), ...(tvGenres?.genres ?? [])];
-    const seen = new Set<number>();
-    return merged
-      .filter(g => { if (seen.has(g.id)) return false; seen.add(g.id); return true; })
-      .sort((a, b) => a.name.localeCompare(b.name, 'sv'));
-  })();
-
   return (
     <div className="flex flex-wrap items-center gap-2 mb-4">
       <select
@@ -57,7 +36,7 @@ export default function RecommendationsFilters({ filters, onChange, hasMyProvide
         aria-label="Filtrera på genre"
       >
         <option value="">Alla genrer</option>
-        {allGenres.map(g => <option key={g.id} value={String(g.id)}>{g.name}</option>)}
+        {GENRE_OPTIONS.map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
       </select>
       <select
         value={filters.country}
