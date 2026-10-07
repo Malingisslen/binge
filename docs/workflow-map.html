@@ -540,6 +540,12 @@
       "path": "src/components/pages/ForsvinnerListClient.tsx"
     },
     {
+      "id": "vart-det-page",
+      "label": "Värt det month page",
+      "context": "web-app",
+      "path": "src/app/vart-det/[month]/page.tsx"
+    },
+    {
       "id": "cineasterna-api",
       "label": "Cineasterna backend (RapidAPI-less scrape)",
       "context": "external-api",
@@ -2279,6 +2285,38 @@
           "from": "forsvinner-page",
           "to": "web-app",
           "payload": "renders dated 'lämnar {date}' list, links to /movie/{id}/ or /tv/{id}/",
+          "transport": "React render",
+          "verified": true
+        }
+      ],
+      "area": "data pipelines"
+    },
+    {
+      "id": "flow-vart-det",
+      "label": "Värt det month page",
+      "description": "/vart-det/[month] (BIN-1449) is pre-rendered once per listed month (VART_DET_MONTHS). At build it reads the static price catalog and PRICE_CHANGES and asks TMDB what premieres on each paid service that month; in the browser it counts what leaves each service from the public leaving rollup. Kept noindex and out of the sitemap until Malin has seen the month.",
+      "covers": [
+        "/vart-det/[month]"
+      ],
+      "steps": [
+        {
+          "from": "vart-det-page",
+          "to": "tmdb-api",
+          "payload": "build time: fetchMonthPremieres — discoverMovies by primary_release_date and discoverTV by air_date in the month, per paid SEO provider (with_watch_providers, flatrate), plus getTVShowLite on running series to find a season premiering that month; a failed read leaves the service without a level",
+          "transport": "fetch (TMDB)",
+          "verified": true
+        },
+        {
+          "from": "vart-det-page",
+          "to": "firestore",
+          "payload": "browser: VartDetLeavingCount → useStreamingLeaving(providerId) reads streamingLeaving/current and counts titles leaving inside the month",
+          "transport": "Firestore read",
+          "verified": true
+        },
+        {
+          "from": "vart-det-page",
+          "to": "web-app",
+          "payload": "renders one row per paid service: list price (cheapestEntertainmentTier), first premiere and count, price change in the month or Oförändrat, leaving count, level badge (newLevel: ≥3 Mycket nytt, 1–2 Lite nytt, 0 Inget nytt) and the printed rule",
           "transport": "React render",
           "verified": true
         }
