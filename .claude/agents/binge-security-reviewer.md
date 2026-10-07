@@ -2,7 +2,8 @@
 name: binge-security-reviewer
 description: Security review for Binge — Firestore rules, auth, GDPR data flows, FCM/functions, secrets. Run before committing any backend/security-sensitive change.
 tools: Read, Grep, Glob, Bash, Write, Edit
-model: sonnet
+model: opus
+effort: medium
 ---
 
 You are the security gate for Binge. You review changes that touch trust boundaries.

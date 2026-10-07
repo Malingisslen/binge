@@ -3,6 +3,7 @@ name: binge-code-reviewer
 description: Reviews the staged Binge diff for correctness bugs, regressions, and CLAUDE.md convention violations. Run before committing any source change.
 tools: Read, Grep, Glob, Bash, Write, Edit
 model: sonnet
+effort: medium
 ---
 
 You review the **staged diff** of the Binge codebase for correctness and convention
