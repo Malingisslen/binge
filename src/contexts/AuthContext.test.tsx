@@ -2818,6 +2818,245 @@ describe('AuthContext — reconsent gate for a returning account (BIN-909)', () 
   });
 });
 
+// BIN-1422 del 2, Malin's decision 2 (2026-10-07): an account restored from a backup comes
+// back WITHOUT `termsAcceptedAt`/`ageConfirmedAt` and WITH `restoredAt`, so its owner must
+// answer both questions again. Unlike BIN-909 the document exists and holds their data, so
+// the click stamps three fields onto it rather than creating it.
+describe('återställt konto godkänner villkoren igen (BIN-1422)', () => {
+  function markAborted(uid = 'u1') {
+    window.localStorage.setItem(`binge:deletionStarted:${uid}`, JSON.stringify({ startedAt: 1 }));
+  }
+
+  // What the restore script writes: the person's data, the restore bookkeeping, and no
+  // consent stamps.
+  function restoredDoc(extra: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      displayName: 'Malin Återställd',
+      username: 'malin',
+      bio: 'Tittar på allt',
+      myProviders: [8, 337],
+      restoredAt: { toDate: () => new Date('2026-10-07T10:00:00Z') },
+      restoreBasis: 'support-ärende',
+      restoreRequestedBy: 'malin',
+      restoreSourceDb: 'backup-2026-10-06',
+      ...extra,
+    };
+  }
+
+  // The harness's setDoc normally records and forgets. Here the read-back after the stamp
+  // is part of the behaviour under test, so a merge write lands in the profile mirror the
+  // way Firestore's would.
+  beforeEach(() => {
+    setDoc.mockImplementation(async (...args: unknown[]) => {
+      const [ref, data, opts] = args as [{ _path: string }, Record<string, unknown>, { merge?: boolean } | undefined];
+      if (ref._path !== 'users/u1') return;
+      profileDocData.current = opts?.merge && profileDocData.current
+        ? { ...profileDocData.current, ...data }
+        : { ...data };
+    });
+  });
+
+  function payloadKeys(call: unknown[]) {
+    return Object.keys(call[1] as Record<string, unknown>).sort();
+  }
+
+  it('ett återställt konto utan samtycke grindas, och INGENTING skrivs före klicket', async () => {
+    renderAuth();
+    await login(restoredDoc());
+    await act(async () => {}); // let every provider effect settle
+
+    expect(ctx!.pendingReconsent).toBe(true);
+    expect(ctx!.reconsentRestored).toBe(true);
+    expect(ctx!.user).toBeNull();
+    // No write of any kind: not the profile, not a transaction, not a username claim.
+    expect(setDoc).not.toHaveBeenCalled();
+    expect(runTransaction).not.toHaveBeenCalled();
+    expect(claimUsername).not.toHaveBeenCalled();
+  });
+
+  // Without a username the profile load would reserve one (tryAutoClaimUsername), so this is
+  // the fixture where a gate placed after the load would show up as a write before consent.
+  it('ett återställt konto UTAN användarnamn reserverar inget namn före klicket', async () => {
+    const noUsername = restoredDoc();
+    delete noUsername.username;
+    renderAuth();
+    await login(noUsername);
+    await act(async () => {});
+
+    expect(ctx!.pendingReconsent).toBe(true);
+    expect(claimUsername).not.toHaveBeenCalled();
+    expect(setDoc).not.toHaveBeenCalled();
+  });
+
+  it('kontroll: samma profil MED samtycke laddas och reserverar ett namn, så fixturen når anspråket', async () => {
+    const noUsername = restoredDoc({
+      termsAcceptedAt: { toDate: () => new Date() },
+      ageConfirmedAt: { toDate: () => new Date() },
+    });
+    delete noUsername.username;
+    renderAuth();
+    await login(noUsername);
+    await act(async () => {});
+
+    expect(ctx!.pendingReconsent).toBe(false);
+    expect(claimUsername).toHaveBeenCalled();
+  });
+
+  it('en stämpel som saknas räcker — termsAcceptedAt satt men ageConfirmedAt null grindas också', async () => {
+    renderAuth();
+    await login(restoredDoc({ termsAcceptedAt: { toDate: () => new Date() }, ageConfirmedAt: null }));
+
+    expect(ctx!.pendingReconsent).toBe(true);
+    expect(ctx!.reconsentRestored).toBe(true);
+    expect(ctx!.user).toBeNull();
+    expect(setDoc).not.toHaveBeenCalled();
+  });
+
+  it('spegelfallet: ageConfirmedAt satt men termsAcceptedAt saknas grindas också', async () => {
+    renderAuth();
+    await login(restoredDoc({ ageConfirmedAt: { toDate: () => new Date() } }));
+
+    expect(ctx!.pendingReconsent).toBe(true);
+    expect(ctx!.reconsentRestored).toBe(true);
+    expect(ctx!.user).toBeNull();
+    expect(setDoc).not.toHaveBeenCalled();
+  });
+
+  // The flag is a repair trigger: once consent is given, the BIN-587 retry must run and,
+  // in this harness where the re-marking succeeds, clear the flag with its own write.
+  it('en återställd reparationsflagga för synligheten sätter igång reparationen efter klicket (BIN-587)', async () => {
+    renderAuth();
+    await login(restoredDoc({ visibilitySyncPending: true }));
+    expect(setDoc).not.toHaveBeenCalled();
+
+    await act(async () => { await ctx!.completeReconsent(); });
+    await act(async () => {});
+
+    expect(ctx!.pendingReconsent).toBe(false);
+    const cleared = userDocWrites().some(c => (c[1] as Record<string, unknown>).visibilitySyncPending === '__delete__');
+    expect(cleared).toBe(true);
+    expect(ctx!.visibilitySyncPending).toBe(false);
+  });
+
+  it('klicket stämplar BARA de tre samtyckesfälten, och profilen laddas med allt annat kvar', async () => {
+    renderAuth();
+    await login(restoredDoc());
+    expect(setDoc).not.toHaveBeenCalled();
+
+    await act(async () => { await ctx!.completeReconsent(); });
+
+    expect(setDoc).toHaveBeenCalledTimes(1);
+    const call = setDoc.mock.calls[0];
+    expect((call[0] as { _path: string })._path).toBe('users/u1');
+    expect(payloadKeys(call)).toEqual(['ageConfirmedAt', 'termsAcceptedAt', 'termsVersion', 'updatedAt']);
+    const payload = call[1] as Record<string, unknown>;
+    expect(payload.termsAcceptedAt).toBe('ts');
+    expect(payload.ageConfirmedAt).toBe('ts');
+    expect(payload.termsVersion).toBe(CURRENT_TERMS_VERSION);
+    // merge, not a create: anything else would wipe what the restore brought back.
+    expect(call[2]).toEqual({ merge: true });
+    expect(runTransaction).not.toHaveBeenCalled();
+
+    expect(ctx!.pendingReconsent).toBe(false);
+    expect(ctx!.reconsentRestored).toBe(false);
+    expect(ctx!.user?.displayName).toBe('Malin Återställd');
+    expect(ctx!.user?.username).toBe('malin');
+    expect(ctx!.user?.bio).toBe('Tittar på allt');
+    expect(ctx!.user?.myProviders).toEqual([8, 337]);
+    expect(ctx!.user?.termsVersion).toBe(CURRENT_TERMS_VERSION);
+    // The restore bookkeeping is left on the document untouched.
+    expect(profileDocData.current?.restoreBasis).toBe('support-ärende');
+    expect(profileDocData.current?.restoreSourceDb).toBe('backup-2026-10-06');
+  });
+
+  it('en profil UTAN restoredAt och utan samtyckesfält grindas inte av den här regeln', async () => {
+    // The control: without it every case above passes on a provider that gates every
+    // profile missing a stamp, which would lock out accounts that predate the stamps.
+    renderAuth();
+    await login({ username: 'malin', bio: 'gammal' });
+
+    expect(ctx!.pendingReconsent).toBe(false);
+    expect(ctx!.reconsentRestored).toBe(false);
+    expect(ctx!.user?.username).toBe('malin');
+  });
+
+  it('ett återställt konto som redan har båda stämplarna laddas som vanligt', async () => {
+    renderAuth();
+    await login(restoredDoc({
+      termsAcceptedAt: { toDate: () => new Date() },
+      ageConfirmedAt: { toDate: () => new Date() },
+    }));
+
+    expect(ctx!.pendingReconsent).toBe(false);
+    expect(ctx!.reconsentRestored).toBe(false);
+    expect(ctx!.user?.username).toBe('malin');
+    expect(setDoc).not.toHaveBeenCalled();
+  });
+
+  it('en raderingsmarkör vid inloggningen vinner över återställningsgrinden', async () => {
+    markAborted();
+    renderAuth();
+    await login(restoredDoc());
+
+    expect(ctx!.deletionInProgress).toBe(true);
+    expect(ctx!.pendingReconsent).toBe(false);
+    expect(ctx!.reconsentRestored).toBe(false);
+    expect(setDoc).not.toHaveBeenCalled();
+  });
+
+  it('completeReconsent vägrar med binge/deletion-in-progress och skriver ingenting', async () => {
+    renderAuth();
+    await login(restoredDoc());
+    expect(reconsentFlagRenders.at(-1), 'förutsättningen: grinden är uppe').toBe(true);
+
+    markAborted();
+
+    await act(async () => {
+      await expect(ctx!.completeReconsent()).rejects.toThrow('binge/deletion-in-progress');
+    });
+
+    expect(setDoc).not.toHaveBeenCalled();
+    expect(runTransaction).not.toHaveBeenCalled();
+    expect(ctx!.user).toBeNull();
+  });
+
+  it('två flikar som båda klickar skriver bara de tre fälten, och slutläget är ogrindat', async () => {
+    renderAuth();
+    await login(restoredDoc());
+
+    await act(async () => {
+      await Promise.all([ctx!.completeReconsent(), ctx!.completeReconsent()]);
+    });
+
+    expect(setDoc).toHaveBeenCalledTimes(2);
+    for (const call of setDoc.mock.calls) {
+      expect((call[0] as { _path: string })._path).toBe('users/u1');
+      expect(payloadKeys(call)).toEqual(['ageConfirmedAt', 'termsAcceptedAt', 'termsVersion', 'updatedAt']);
+      expect(call[2]).toEqual({ merge: true });
+    }
+    expect(runTransaction).not.toHaveBeenCalled();
+    expect(ctx!.pendingReconsent).toBe(false);
+    expect(ctx!.user?.username).toBe('malin');
+    expect(profileDocData.current?.myProviders).toEqual([8, 337]);
+  });
+
+  it('ett kontobyte mitt i klicket adopterar ingenting', async () => {
+    renderAuth();
+    await login(restoredDoc());
+
+    // The switch lands DURING the stamp write, so the guard compares the user captured on
+    // the way in with a different one on the way out.
+    setDoc.mockImplementationOnce(async () => {
+      authObj.currentUser = { ...fakeUser, uid: 'someone-else' };
+    });
+    await act(async () => { await ctx!.completeReconsent(); });
+
+    expect(ctx!.user).toBeNull();
+    expect(ctx!.pendingReconsent).toBe(true);
+    expect(ctx!.reconsentRestored).toBe(true);
+  });
+});
+
 // BIN-1154: visningsnamnet far en redigeringsyta, och den ror flera lagringar av
 // samma personuppgift. Ordningen mellan dem ar ett beslut - Firestore forst,
 // Auth-posten bara om den gick igenom - och den ordningen ar vad de har fallen

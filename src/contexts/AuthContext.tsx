@@ -126,6 +126,12 @@ interface AuthState {
   deletionInProgress: boolean;
   /** BIN-909 — see ProfileLoad. Blocks the whole shell, never a banner (#6 condition 4). */
   pendingReconsent: boolean;
+  /**
+   * BIN-1422 del 2 — the gate is up because an admin restore brought `users/{uid}` back
+   * without its consent stamps, not because the profile is gone. Only meaningful while
+   * `pendingReconsent` is true; ReconsentGate reads it to choose its copy.
+   */
+  reconsentRestored: boolean;
   /** BIN-909 — creates `users/{uid}` with freshly GIVEN consent. Only ReconsentGate calls it. */
   completeReconsent: () => Promise<void>;
   markNotificationsSeen: () => Promise<void>;
@@ -170,6 +176,7 @@ const AuthContext = createContext<AuthState>({
   visibilitySyncPending: false,
   deletionInProgress: false,
   pendingReconsent: false,
+  reconsentRestored: false,
   completeReconsent: async () => {},
   markNotificationsSeen: async () => {},
   updateNotificationSettings: async () => {},
@@ -404,6 +411,19 @@ interface ProfileLoad {
    * durable marker is exactly what those decisions foreclosed.
    */
   pendingReconsent: boolean;
+  /**
+   * BIN-1422 del 2 — `pendingReconsent` was set by the restored-account rule below, so the
+   * document EXISTS and `completeReconsent` must stamp consent on it rather than create it.
+   */
+  reconsentRestored: boolean;
+}
+
+// BIN-1422 del 2, Malin's decision 2 (2026-10-07): an account brought back from a backup is
+// written without `termsAcceptedAt`/`ageConfirmedAt`, so its owner answers both questions
+// again. `restoredAt` is what the restore script stamps; a profile without it never reaches
+// this rule, so an ordinary profile with a missing stamp keeps loading as it always has.
+function restoredWithoutConsent(data: Record<string, unknown>): boolean {
+  return data.restoredAt != null && (data.termsAcceptedAt == null || data.ageConfirmedAt == null);
 }
 
 async function ensureUserProfile(firebaseUser: User): Promise<ProfileLoad> {
@@ -418,7 +438,7 @@ async function ensureUserProfile(firebaseUser: User): Promise<ProfileLoad> {
   // before the read too: an aborted deletion leaves nothing to read, so the
   // create branch is precisely where such a session lands.
   if (isDeletionStarted(firebaseUser.uid)) {
-    return { profile: null, visibilitySyncPending: false, deletionInProgress: true, pendingReconsent: false };
+    return { profile: null, visibilitySyncPending: false, deletionInProgress: true, pendingReconsent: false, reconsentRestored: false };
   }
 
   const { db, doc, getDoc } = await fsdb();
@@ -427,11 +447,18 @@ async function ensureUserProfile(firebaseUser: User): Promise<ProfileLoad> {
 
   if (snap.exists()) {
     const data = snap.data();
+    // BIN-1422 del 2 — before `buildExistingProfile`, because that is where
+    // `tryAutoClaimUsername` writes. Nothing is written for a restored account until it
+    // has consented, the same rule the BIN-909 gate below follows.
+    if (restoredWithoutConsent(data)) {
+      return { profile: null, visibilitySyncPending: false, deletionInProgress: false, pendingReconsent: true, reconsentRestored: true };
+    }
     return {
       profile: await buildExistingProfile(data, firebaseUser),
       visibilitySyncPending: data.visibilitySyncPending === true,
       deletionInProgress: false,
       pendingReconsent: false,
+      reconsentRestored: false,
     };
   }
 
@@ -449,7 +476,7 @@ async function ensureUserProfile(firebaseUser: User): Promise<ProfileLoad> {
   const creationTime = firebaseUser.metadata?.creationTime;
   const accountAgeMs = creationTime ? Date.now() - new Date(creationTime).getTime() : 0;
   if (accountAgeMs > RETURNING_ACCOUNT_MIN_AGE_MS) {
-    return { profile: null, visibilitySyncPending: false, deletionInProgress: false, pendingReconsent: true };
+    return { profile: null, visibilitySyncPending: false, deletionInProgress: false, pendingReconsent: true, reconsentRestored: false };
   }
 
   return createProfileWithConsent(firebaseUser);
@@ -538,6 +565,7 @@ async function createProfileWithConsent(firebaseUser: User): Promise<ProfileLoad
       visibilitySyncPending: racedData.visibilitySyncPending === true,
       deletionInProgress: false,
       pendingReconsent: false,
+      reconsentRestored: false,
     };
   }
 
@@ -546,7 +574,7 @@ async function createProfileWithConsent(firebaseUser: User): Promise<ProfileLoad
   const claimed = await tryAutoClaimUsername(firebaseUser);
   if (claimed) profile.username = claimed;
 
-  return { profile, visibilitySyncPending: false, deletionInProgress: false, pendingReconsent: false };
+  return { profile, visibilitySyncPending: false, deletionInProgress: false, pendingReconsent: false, reconsentRestored: false };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -568,6 +596,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // BIN-909 — same shape as the line above, deliberately (#14 Software Architect's call:
   // reuse the mechanism, do not invent a third "don't write right now" idiom).
   const [pendingReconsent, setPendingReconsent] = useState(false);
+  // BIN-1422 del 2 — which kind of gate is up. Mirrored in a ref because `completeReconsent`
+  // must act on the verdict `ensureUserProfile` reached, not derive a second one.
+  const [reconsentRestored, setReconsentRestored] = useState(false);
+  const reconsentRestoredRef = useRef(false);
   // BIN-559 — profilen gick inte att läsa för att enheten saknar anslutning.
   const [profileLoadError, setProfileLoadError] = useState<'offline' | null>(null);
   // Vilket uid vi redan gjort ett reparations-försök för i den här sessionen.
@@ -642,7 +674,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loadProfile = useCallback((firebaseUser: User): Promise<void> => {
     setProfileLoading(true);
     return ensureUserProfile(firebaseUser)
-      .then(({ profile, visibilitySyncPending: pending, deletionInProgress: deleting, pendingReconsent: reconsent }) => {
+      .then(({ profile, visibilitySyncPending: pending, deletionInProgress: deleting, pendingReconsent: reconsent, reconsentRestored: restored }) => {
         // Account-switch-skydd: skriv bara om samma användare
         // fortfarande är inloggad när profilen landar.
         if (auth.currentUser?.uid !== firebaseUser.uid) return;
@@ -664,6 +696,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // marker is what ADR 0019/0022 forbid. Tab B stays gated until its own auth
         // state re-evaluates, which self-heals on reload (#14's first concern).
         setPendingReconsent(reconsent);
+        reconsentRestoredRef.current = restored;
+        setReconsentRestored(restored);
         // BIN-587: en tidigare misslyckad synlighets-stämpling plockas
         // upp här och driver både varningen och omförsöks-effekten.
         visibilitySyncPendingRef.current = pending;
@@ -760,6 +794,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // session. Leaving it set would show "Välkommen tillbaka" to the next, unrelated
           // account on a shared device until its own profile load resolved.
           setPendingReconsent(false);
+          reconsentRestoredRef.current = false;
+          setReconsentRestored(false);
           setProfileLoadError(null);
           visibilitySyncPendingRef.current = false;
           setVisibilitySyncPending(false);
@@ -1616,10 +1652,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // BIN-909 — the only thing that creates `users/{uid}` for a returning account, and it
   // runs ONLY from `ReconsentGate`'s submit handler, after the user has ticked both boxes.
   //
-  // The consent stamps are written by `createProfileWithConsent` with `serverTimestamp()`
-  // at this moment — never backdated from `metadata.creationTime`, which would reproduce
-  // the manufactured record this ticket exists to remove (#6 Data Protection Officer's
-  // condition 2). `termsVersion` comes from `CURRENT_TERMS_VERSION`.
+  // The consent stamps are written with `serverTimestamp()` at this moment — never
+  // backdated from `metadata.creationTime`, which would reproduce the manufactured record
+  // this ticket exists to remove (#6 Data Protection Officer's condition 2). `termsVersion` comes from `CURRENT_TERMS_VERSION`.
   //
   // Nothing here re-checks the age threshold: reaching this function at all means
   // `ensureUserProfile` already decided, and re-deriving the decision at a second site is
@@ -1639,6 +1674,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // It THROWS rather than returning quietly: `ReconsentGate.onSubmit` catches, so a
     // silent return would leave the person looking at a form that did nothing.
     assertProfileWritable(firebaseUser.uid);
+    if (reconsentRestoredRef.current) {
+      // BIN-1422 del 2 — the restored document already holds the person's data, so only
+      // the three consent fields are stamped onto it. Creating it again would overwrite
+      // what the restore brought back.
+      await mergeUserDoc(firebaseUser.uid, kit => ({
+        termsAcceptedAt: kit.serverTimestamp(),
+        ageConfirmedAt: kit.serverTimestamp(),
+        termsVersion: CURRENT_TERMS_VERSION,
+      }));
+      const { db, doc, getDoc } = await fsdb();
+      const snap = await getDoc(doc(db, 'users', firebaseUser.uid));
+      if (auth.currentUser?.uid !== firebaseUser.uid) return;
+      const data = snap.data() ?? {};
+      const restoredProfile = await buildExistingProfile(data, firebaseUser);
+      if (auth.currentUser?.uid !== firebaseUser.uid) return;
+      setUser(restoredProfile);
+      visibilitySyncPendingRef.current = data.visibilitySyncPending === true;
+      setVisibilitySyncPending(visibilitySyncPendingRef.current);
+      reconsentRestoredRef.current = false;
+      setReconsentRestored(false);
+      setPendingReconsent(false);
+      return;
+    }
     const { profile } = await createProfileWithConsent(firebaseUser);
     // Account-switch guard, same shape as the profile-load path above: only adopt the
     // result if the same person is still signed in when it lands.
@@ -1775,7 +1833,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn, signInEmail, register, resendEmailVerification, signOut,
       updateProviders, updateDefaultView, updateHomeMunicipality, updateRotationSchedule, setProviderCost, setProviderRenewalDay, updateProviderTier, updateProviderTiers, setProviderCampaign,
       pauseProvider, setPauseReminder, resumeProvider,
-      updateUsername, updateDisplayName, updateBio, updateDefaultVisibility, visibilitySyncPending, deletionInProgress, pendingReconsent, completeReconsent, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
+      updateUsername, updateDisplayName, updateBio, updateDefaultVisibility, visibilitySyncPending, deletionInProgress, pendingReconsent, reconsentRestored, completeReconsent, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
       setCalibrationGenres, deleteAccount,
     }),
     [
@@ -1783,7 +1841,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn, signInEmail, register, resendEmailVerification, signOut,
       updateProviders, updateDefaultView, updateHomeMunicipality, updateRotationSchedule, setProviderCost, setProviderRenewalDay, updateProviderTier, updateProviderTiers, setProviderCampaign,
       pauseProvider, setPauseReminder, resumeProvider,
-      updateUsername, updateDisplayName, updateBio, updateDefaultVisibility, visibilitySyncPending, deletionInProgress, pendingReconsent, completeReconsent, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
+      updateUsername, updateDisplayName, updateBio, updateDefaultVisibility, visibilitySyncPending, deletionInProgress, pendingReconsent, reconsentRestored, completeReconsent, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
       setCalibrationGenres, deleteAccount,
     ]
   );
