@@ -589,6 +589,9 @@ describe('AuthContext — setProviderCost/setProviderCampaign rollback vid write
     await act(async () => {
       await expect(ctx!.setProviderCost(76, 129)).rejects.toThrow('permission-denied');
     });
+    // BIN-1435: the write is per key now, so the next payload can no longer carry 76;
+    // the local profile is where a leaked rejected value would show.
+    expect(ctx!.user?.providerCosts).toEqual({ 8: 100 });
 
     // Nästa lyckade edit (annan provider) får INTE bära med sig 76:an.
     await act(async () => {
@@ -610,6 +613,7 @@ describe('AuthContext — setProviderCost/setProviderCampaign rollback vid write
     await act(async () => {
       await expect(ctx!.setProviderCampaign(8, rejected)).rejects.toThrow('unavailable');
     });
+    expect(ctx!.user?.providerCampaigns).toEqual({});
 
     const accepted = { monthlyCost: 59, endDate: '2026-12-01' };
     await act(async () => {
@@ -633,8 +637,10 @@ describe('AuthContext — setProviderCost/setProviderCampaign rollback vid write
       await ctx!.setProviderCost(337, 109);
     });
 
-    const [, payload] = setDoc.mock.calls.at(-1)! as [unknown, Record<string, unknown>];
-    expect(payload.providerCosts).toEqual({ 8: 100, 76: 129, 337: 109 });
+    // BIN-1435: each write carries only its own key; the local profile holds all three.
+    const payloads = userDocWrites().map(c => (c[1] as Record<string, unknown>).providerCosts);
+    expect(payloads.slice(-2)).toEqual([{ 76: 129 }, { 337: 109 }]);
+    expect(ctx!.user?.providerCosts).toEqual({ 8: 100, 76: 129, 337: 109 });
   });
 });
 
@@ -742,6 +748,7 @@ describe('AuthContext — setProviderRenewalDay rollback vid write-fel (BIN-531)
     await act(async () => {
       await expect(ctx!.setProviderRenewalDay(76, 20)).rejects.toThrow('permission-denied');
     });
+    expect(ctx!.user?.providerRenewalDays).toEqual({ 8: 5 });
 
     await act(async () => {
       await ctx!.setProviderRenewalDay(8, 12);
@@ -762,8 +769,122 @@ describe('AuthContext — setProviderRenewalDay rollback vid write-fel (BIN-531)
       await ctx!.setProviderRenewalDay(337, 1);
     });
 
-    const [, payload] = setDoc.mock.calls.at(-1)! as [unknown, Record<string, unknown>];
-    expect(payload.providerRenewalDays).toEqual({ 8: 5, 76: 20, 337: 1 });
+    const payloads = userDocWrites().map(c => (c[1] as Record<string, unknown>).providerRenewalDays);
+    expect(payloads.slice(-2)).toEqual([{ 76: 20 }, { 337: 1 }]);
+    expect(ctx!.user?.providerRenewalDays).toEqual({ 8: 5, 76: 20, 337: 1 });
+  });
+});
+
+// BIN-1435: a merge of the whole map never removed a key, so a cleared cost, campaign
+// or renewal day came back on the next load. Mocked: these pin the SHAPE of the write
+// (deleteField per key); the emulator test in firestore-rules.test.ts proves the key
+// actually leaves the stored document.
+describe('AuthContext — rensade kostnadsfält tas bort på servern (BIN-1435)', () => {
+  it('att rensa en egen kostnad skickar deleteField för just den nyckeln', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerCosts: { 8: 100, 76: 129 } });
+    setDoc.mockClear();
+
+    await act(async () => { await ctx!.setProviderCost(8, null); });
+
+    const writes = userDocWrites();
+    expect(writes).toHaveLength(1);
+    expect((writes[0][1] as Record<string, unknown>).providerCosts).toEqual({ 8: '__delete__' });
+    expect(ctx!.user?.providerCosts).toEqual({ 76: 129 });
+  });
+
+  it('att ta bort en kampanj skickar deleteField, och den sista ger en tom karta lokalt', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerCampaigns: { 8: { monthlyCost: 29, endDate: '2026-12-01' } } });
+    setDoc.mockClear();
+
+    await act(async () => { await ctx!.setProviderCampaign(8, null); });
+
+    expect((userDocWrites()[0][1] as Record<string, unknown>).providerCampaigns).toEqual({ 8: '__delete__' });
+    // The household fan-out reads this map, so an empty one is what it sends on.
+    expect(ctx!.user?.providerCampaigns).toEqual({});
+  });
+
+  it('en kampanj rensad via ett alias-id tas bort på det kanoniska id:t', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerCampaigns: { 384: { monthlyCost: 59, endDate: '2026-12-01' } } });
+    setDoc.mockClear();
+
+    // 1899 är ett alias för Max (384).
+    await act(async () => { await ctx!.setProviderCampaign(1899, null); });
+
+    expect((userDocWrites()[0][1] as Record<string, unknown>).providerCampaigns).toEqual({ 384: '__delete__' });
+    expect(ctx!.user?.providerCampaigns).toEqual({});
+  });
+
+  it('en kampanj satt via ett alias-id skrivs på det kanoniska id:t', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerCampaigns: {} });
+    setDoc.mockClear();
+    const campaign = { monthlyCost: 59, endDate: '2026-12-01' };
+
+    await act(async () => { await ctx!.setProviderCampaign(1899, campaign); });
+
+    expect((userDocWrites()[0][1] as Record<string, unknown>).providerCampaigns).toEqual({ 384: campaign });
+    expect(ctx!.user?.providerCampaigns).toEqual({ 384: campaign });
+  });
+
+  it.each([0, -8, 1.5, Number.NaN])('ett ogiltigt tjänst-id (%s) nekas utan skrivning', async (badId) => {
+    renderAuth();
+    await login({ username: 'malin', providerCosts: { 8: 100 }, providerRenewalDays: { 8: 5 } });
+    setDoc.mockClear();
+
+    await act(async () => {
+      await expect(ctx!.setProviderCost(badId, 5)).rejects.toThrow('ogiltigt tjänst-id');
+      await expect(ctx!.setProviderRenewalDay(badId, 5)).rejects.toThrow('ogiltigt tjänst-id');
+    });
+
+    expect(userDocWrites()).toHaveLength(0);
+    expect(ctx!.user?.providerCosts).toEqual({ 8: 100 });
+    expect(ctx!.user?.providerRenewalDays).toEqual({ 8: 5 });
+  });
+
+  it('att rensa en förnyelsedag skickar deleteField för just den nyckeln', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerRenewalDays: { 8: 5, 76: 20 } });
+    setDoc.mockClear();
+
+    await act(async () => { await ctx!.setProviderRenewalDay(8, null); });
+
+    expect((userDocWrites()[0][1] as Record<string, unknown>).providerRenewalDays).toEqual({ 8: '__delete__' });
+    expect(ctx!.user?.providerRenewalDays).toEqual({ 76: 20 });
+  });
+
+  it('två skrivningar som blir klara i omvänd ordning behåller båda värdena lokalt', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerCosts: {} });
+    let releaseFirst!: () => void;
+    setDoc.mockImplementationOnce(() => new Promise<void>(r => { releaseFirst = r; }));
+
+    let first!: Promise<void>;
+    await act(async () => {
+      first = ctx!.setProviderCost(76, 129);
+      await ctx!.setProviderCost(337, 109); // finishes before the first
+    });
+    await act(async () => { releaseFirst(); await first; });
+
+    expect(ctx!.user?.providerCosts).toEqual({ 76: 129, 337: 109 });
+  });
+
+  it('en nekad rensning lämnar värdet kvar, och nästa ändring skickar bara sin egen nyckel', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerCosts: { 8: 100 } });
+    setDoc.mockClear();
+    setDoc.mockRejectedValueOnce(new Error('permission-denied'));
+
+    await act(async () => {
+      await expect(ctx!.setProviderCost(8, null)).rejects.toThrow('permission-denied');
+    });
+    expect(ctx!.user?.providerCosts).toEqual({ 8: 100 });
+
+    await act(async () => { await ctx!.setProviderCost(76, 129); });
+    expect((userDocWrites().at(-1)![1] as Record<string, unknown>).providerCosts).toEqual({ 76: 129 });
+    expect(ctx!.user?.providerCosts).toEqual({ 8: 100, 76: 129 });
   });
 });
 
@@ -2122,6 +2243,10 @@ describe('AuthContext — an aborted deletion is not resurrected (BIN-816)', () 
       ['updateDefaultVisibility', () => ctx!.updateDefaultVisibility('public')],
       ['updateProviderTier', () => ctx!.updateProviderTier(8, null)],
       ['updateProviderTiers', () => ctx!.updateProviderTiers({ 8: 'basic' })],
+      // BIN-1435: the three per-key map writers, setting and clearing.
+      ['setProviderCost (clear)', () => ctx!.setProviderCost(8, null)],
+      ['setProviderCampaign (clear)', () => ctx!.setProviderCampaign(8, null)],
+      ['setProviderRenewalDay', () => ctx!.setProviderRenewalDay(8, 12)],
       // BIN-1154: den har skrivaren har en ANDRA lagring utanfor chokepointen,
       // sa den pinnar ocksa att en markerad session inte nar Auth-posten.
       // Ordningen mellan de tva skrivningarna ar hela skalet.

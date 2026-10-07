@@ -27,28 +27,28 @@ function park<T>(p: Promise<T>): Promise<T> {
 describe('useOptimisticMirrorField', () => {
   it('commits the source map plus the new key', async () => {
     const source: Costs = { 8: 99 };
-    const commit = vi.fn<(next: Costs) => Promise<void>>().mockResolvedValue(undefined);
+    const commit = vi.fn<(next: Costs, changed: { key: number; value: number | null }) => Promise<void>>().mockResolvedValue(undefined);
     const { result } = renderHook(() => useOptimisticMirrorField<number>(UID_A, source, commit));
 
     await act(async () => { await result.current(119, 139); });
 
-    expect(commit).toHaveBeenCalledWith({ 8: 99, 119: 139 });
+    expect(commit).toHaveBeenCalledWith({ 8: 99, 119: 139 }, { key: 119, value: 139 });
     // The caller's map is never mutated — the mirror always spreads a fresh object.
     expect(source).toEqual({ 8: 99 });
   });
 
   it('treats an undefined source as an empty map', async () => {
-    const commit = vi.fn<(next: Costs) => Promise<void>>().mockResolvedValue(undefined);
+    const commit = vi.fn<(next: Costs, changed: { key: number; value: number | null }) => Promise<void>>().mockResolvedValue(undefined);
     const { result } = renderHook(() => useOptimisticMirrorField<number>(UID_A, undefined, commit));
 
     await act(async () => { await result.current(8, 99); });
 
-    expect(commit).toHaveBeenCalledWith({ 8: 99 });
+    expect(commit).toHaveBeenCalledWith({ 8: 99 }, { key: 8, value: 99 });
   });
 
   it('a null value DELETES the key rather than writing undefined', async () => {
     const source: Costs = { 8: 99, 119: 139 };
-    const commit = vi.fn<(next: Costs) => Promise<void>>().mockResolvedValue(undefined);
+    const commit = vi.fn<(next: Costs, changed: { key: number; value: number | null }) => Promise<void>>().mockResolvedValue(undefined);
     const { result } = renderHook(() => useOptimisticMirrorField<number>(UID_A, source, commit));
 
     await act(async () => { await result.current(8, null); });
@@ -59,22 +59,25 @@ describe('useOptimisticMirrorField', () => {
     // because an undefined field is rejected by Firestore's setDoc/merge write.
     expect(Object.keys(written)).toEqual(['119']);
     expect('8' in written).toBe(false);
+    // BIN-1435: the caller learns WHICH key was cleared, so it can delete that key on
+    // the server; a merge of the map above would leave 8 stored.
+    expect(commit.mock.calls[0][1]).toEqual({ key: 8, value: null });
   });
 
   it('deleting a key that is not in the map is a no-op write, not a throw', async () => {
     const source: Costs = { 8: 99 };
-    const commit = vi.fn<(next: Costs) => Promise<void>>().mockResolvedValue(undefined);
+    const commit = vi.fn<(next: Costs, changed: { key: number; value: number | null }) => Promise<void>>().mockResolvedValue(undefined);
     const { result } = renderHook(() => useOptimisticMirrorField<number>(UID_A, source, commit));
 
     await act(async () => { await result.current(1899, null); });
 
-    expect(commit).toHaveBeenCalledWith({ 8: 99 });
+    expect(commit).toHaveBeenCalledWith({ 8: 99 }, { key: 1899, value: null });
   });
 
   it('updates the mirror SYNCHRONOUSLY, so a second edit before the first settles keeps both (BIN-40/BIN-46)', async () => {
     const source: Costs = { 8: 99 };
     const first = deferredCommit();
-    const commit = vi.fn<(next: Costs) => Promise<void>>()
+    const commit = vi.fn<(next: Costs, changed: { key: number; value: number | null }) => Promise<void>>()
       .mockReturnValueOnce(first.pending)
       .mockResolvedValue(undefined);
     const { result } = renderHook(() => useOptimisticMirrorField<number>(UID_A, source, commit));
@@ -88,15 +91,15 @@ describe('useOptimisticMirrorField', () => {
       b = park(result.current(76, 109));
     });
 
-    expect(commit).toHaveBeenNthCalledWith(1, { 8: 99, 119: 139 });
-    expect(commit).toHaveBeenNthCalledWith(2, { 8: 99, 119: 139, 76: 109 });
+    expect(commit).toHaveBeenNthCalledWith(1, { 8: 99, 119: 139 }, { key: 119, value: 139 });
+    expect(commit).toHaveBeenNthCalledWith(2, { 8: 99, 119: 139, 76: 109 }, { key: 76, value: 109 });
 
     await act(async () => { first.resolve(); await a; await b; });
   });
 
   it('rolls the mirror back when the write is rejected, so the rejected value never rides along on the next edit (BIN-516/BIN-531)', async () => {
     const source: Costs = { 8: 99 };
-    const commit = vi.fn<(next: Costs) => Promise<void>>()
+    const commit = vi.fn<(next: Costs, changed: { key: number; value: number | null }) => Promise<void>>()
       .mockRejectedValueOnce(new Error('permission-denied'))
       .mockResolvedValue(undefined);
     const { result } = renderHook(() => useOptimisticMirrorField<number>(UID_A, source, commit));
@@ -108,14 +111,14 @@ describe('useOptimisticMirrorField', () => {
 
     await act(async () => { await result.current(76, 109); });
 
-    expect(commit).toHaveBeenLastCalledWith({ 8: 99, 76: 109 });
-    expect(commit).toHaveBeenLastCalledWith(expect.not.objectContaining({ 119: expect.anything() }));
+    expect(commit).toHaveBeenLastCalledWith({ 8: 99, 76: 109 }, { key: 76, value: 109 });
+    expect(commit).toHaveBeenLastCalledWith(expect.not.objectContaining({ 119: expect.anything() }), expect.anything());
   });
 
   it('SKIPS the rollback when a concurrent edit already moved the mirror', async () => {
     const source: Costs = { 8: 99 };
     const first = deferredCommit();
-    const commit = vi.fn<(next: Costs) => Promise<void>>()
+    const commit = vi.fn<(next: Costs, changed: { key: number; value: number | null }) => Promise<void>>()
       .mockReturnValueOnce(first.pending)
       .mockResolvedValue(undefined);
     const { result } = renderHook(() => useOptimisticMirrorField<number>(UID_A, source, commit));
@@ -135,12 +138,12 @@ describe('useOptimisticMirrorField', () => {
 
     // An unconditional rollback would have restored { 8: 99 } and thrown away the
     // second edit; the identity check keeps it.
-    expect(commit).toHaveBeenLastCalledWith({ 8: 100, 119: 139, 76: 109 });
+    expect(commit).toHaveBeenLastCalledWith({ 8: 100, 119: 139, 76: 109 }, { key: 8, value: 100 });
   });
 
   it('SKIPS the rollback when a profile sync already replaced the source', async () => {
     const first = deferredCommit();
-    const commit = vi.fn<(next: Costs) => Promise<void>>()
+    const commit = vi.fn<(next: Costs, changed: { key: number; value: number | null }) => Promise<void>>()
       .mockReturnValueOnce(first.pending)
       .mockResolvedValue(undefined);
     const { result, rerender } = renderHook(
@@ -162,7 +165,7 @@ describe('useOptimisticMirrorField', () => {
     await act(async () => { await result.current(76, 109); });
 
     // The rollback must not resurrect the pre-sync snapshot { 8: 99 }.
-    expect(commit).toHaveBeenLastCalledWith({ 8: 42, 76: 109 });
+    expect(commit).toHaveBeenLastCalledWith({ 8: 42, 76: 109 }, { key: 76, value: 109 });
   });
 
   // NAME CHANGED 2026-07-24. This was called "(account switch, 2026-07-20)" and was
@@ -177,10 +180,10 @@ describe('useOptimisticMirrorField', () => {
   // fails first.
   it('keeps a stable setter identity but always calls the LATEST commit', async () => {
     const source: Costs = { 8: 99 };
-    const commitA = vi.fn<(next: Costs) => Promise<void>>().mockResolvedValue(undefined);
-    const commitB = vi.fn<(next: Costs) => Promise<void>>().mockResolvedValue(undefined);
+    const commitA = vi.fn<(next: Costs, changed: { key: number; value: number | null }) => Promise<void>>().mockResolvedValue(undefined);
+    const commitB = vi.fn<(next: Costs, changed: { key: number; value: number | null }) => Promise<void>>().mockResolvedValue(undefined);
     const { result, rerender } = renderHook(
-      ({ commit }: { commit: (next: Costs) => Promise<void> }) =>
+      ({ commit }: { commit: (next: Costs, changed: { key: number; value: number | null }) => Promise<void> }) =>
         useOptimisticMirrorField<number>(UID_A, source, commit),
       { initialProps: { commit: commitA } },
     );
@@ -195,12 +198,12 @@ describe('useOptimisticMirrorField', () => {
 
     // The write goes to the CURRENT account's commit, never the previous render's.
     expect(commitA).not.toHaveBeenCalled();
-    expect(commitB).toHaveBeenCalledWith({ 8: 99, 119: 139 });
+    expect(commitB).toHaveBeenCalledWith({ 8: 99, 119: 139 }, { key: 119, value: 139 });
   });
 
   // BIN-592 — the regression this file existed to catch and did not.
   it('clears the mirror when the ACCOUNT changes even though source is undefined on both sides', async () => {
-    const commit = vi.fn<(next: Costs) => Promise<void>>().mockResolvedValue(undefined);
+    const commit = vi.fn<(next: Costs, changed: { key: number; value: number | null }) => Promise<void>>().mockResolvedValue(undefined);
     const { result, rerender } = renderHook(
       ({ uid, source }: { uid: string | null; source: Costs | undefined }) =>
         useOptimisticMirrorField<number>(uid, source, commit),
@@ -211,7 +214,7 @@ describe('useOptimisticMirrorField', () => {
     // A enters a Netflix price. It lands in the mirror synchronously; assume the
     // write is still in flight (or A signs out) before the profile echoes back.
     await act(async () => { await result.current(8, 99); });
-    expect(commit).toHaveBeenLastCalledWith({ 8: 99 });
+    expect(commit).toHaveBeenLastCalledWith({ 8: 99 }, { key: 8, value: 99 });
 
     // Sign-out, then user B signs in. B has never saved a price either — so
     // `source` is undefined the whole way through and NEVER changes identity.
@@ -225,25 +228,25 @@ describe('useOptimisticMirrorField', () => {
     // B's write must contain ONLY B's own entry. A leaked Netflix cost here is a
     // real user-visible defect: Streamingrådgivaren bills B for a subscription
     // they never entered.
-    expect(commit).toHaveBeenLastCalledWith({ 76: 109 });
-    expect(commit).not.toHaveBeenLastCalledWith({ 8: 99, 76: 109 });
+    expect(commit).toHaveBeenLastCalledWith({ 76: 109 }, { key: 76, value: 109 });
+    expect(commit).not.toHaveBeenLastCalledWith({ 8: 99, 76: 109 }, { key: 76, value: 109 });
   });
 
   it('rebases the mirror on a new source between edits', async () => {
-    const commit = vi.fn<(next: Costs) => Promise<void>>().mockResolvedValue(undefined);
+    const commit = vi.fn<(next: Costs, changed: { key: number; value: number | null }) => Promise<void>>().mockResolvedValue(undefined);
     const { result, rerender } = renderHook(
       ({ source }: { source: Costs }) => useOptimisticMirrorField<number>(UID_A, source, commit),
       { initialProps: { source: { 8: 99 } as Costs } },
     );
 
     await act(async () => { await result.current(119, 139); });
-    expect(commit).toHaveBeenLastCalledWith({ 8: 99, 119: 139 });
+    expect(commit).toHaveBeenLastCalledWith({ 8: 99, 119: 139 }, { key: 119, value: 139 });
 
     // The committed profile comes back from Firestore and becomes the new source.
     rerender({ source: { 8: 99, 119: 139 } });
     await act(async () => { await result.current(8, null); });
 
-    expect(commit).toHaveBeenLastCalledWith({ 119: 139 });
+    expect(commit).toHaveBeenLastCalledWith({ 119: 139 }, { key: 8, value: null });
   });
 });
 

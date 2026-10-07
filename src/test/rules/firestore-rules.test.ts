@@ -882,6 +882,36 @@ describe('users/{uid} update value bounds + isAdmin escalation (BIN-1145, BIN-11
     expect(stored.providerCosts).toEqual({ 119: 59 });
   });
 
+  // BIN-1435: inställningarnas tre kostnadskartor skrivs per nyckel. Emulatorn visar att
+  // regeln släpper igenom formen, att just den nyckeln försvinner, och att resten av
+  // kartan och profilen står kvar.
+  it('the owner can clear one cost, campaign and renewal day per key with deleteField in a merge', async () => {
+    const campaign = { monthlyCost: 29, endDate: '2026-12-01' };
+    await seedOwnProfile({
+      bio: 'kvar',
+      providerCosts: { 8: 150, 119: 59 },
+      providerCampaigns: { 8: campaign, 337: campaign },
+      providerRenewalDays: { 8: 5, 76: 20 },
+    });
+    const ref = doc(ownerDb(), 'users', OWNER);
+    await assertSucceeds(setDoc(ref, {
+      providerCosts: { 8: deleteField() },
+      providerCampaigns: { 8: deleteField() },
+      providerRenewalDays: { 8: deleteField() },
+    }, { merge: true }));
+    const stored = (await getDoc(ref)).data()!;
+    expect(stored.providerCosts).toEqual({ 119: 59 });
+    expect(stored.providerCampaigns).toEqual({ 337: campaign });
+    expect(stored.providerRenewalDays).toEqual({ 76: 20 });
+    expect(stored.bio).toBe('kvar');
+  });
+  it('a per-key write creates a cost map that did not exist yet', async () => {
+    await seedOwnProfile();
+    const ref = doc(ownerDb(), 'users', OWNER);
+    await assertSucceeds(setDoc(ref, { providerRenewalDays: { 8: 12 } }, { merge: true }));
+    expect((await getDoc(ref)).data()!.providerRenewalDays).toEqual({ 8: 12 });
+  });
+
   // The escalation guard. A client may never grant itself isAdmin, and may never
   // change one it was granted through the Console.
   it('the owner cannot grant themselves isAdmin on update', async () => {

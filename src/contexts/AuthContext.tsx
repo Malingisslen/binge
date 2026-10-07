@@ -75,7 +75,6 @@ interface AuthState {
   signOut: () => Promise<void>;
   updateProviders: (providers: number[]) => Promise<void>;
   updateDefaultView: (view: 'table' | 'grid' | 'cards') => Promise<void>;
-  updateProviderCosts: (costs: Record<number, number>) => Promise<void>;
   updateHomeMunicipality: (kommun: string | null) => Promise<void>;
   updateRotationSchedule: (schedule: NonNullable<UserProfile['rotationSchedule']>) => Promise<void>;
   // Sätt/ta bort EN providers kostnad (null = ta bort). Slår ihop mot senaste
@@ -154,7 +153,6 @@ const AuthContext = createContext<AuthState>({
   signOut: async () => {},
   updateProviders: async () => {},
   updateDefaultView: async () => {},
-  updateProviderCosts: async () => {},
   updateHomeMunicipality: async () => {},
   updateRotationSchedule: async () => {},
   setProviderCost: async () => {},
@@ -1175,7 +1173,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [uid]);
 
   const updateDefaultView = useCallback((view: 'table' | 'grid' | 'cards') => updateUserField('defaultView', view), [updateUserField]);
-  const updateProviderCosts = useCallback((costs: Record<number, number>) => updateUserField('providerCosts', costs), [updateUserField]);
   // BIN-172: hemkommun = "jag har ett lånekort i {kommun}". null rensar fältet.
   const updateHomeMunicipality = useCallback((kommun: string | null) => updateUserField('hemkommun', kommun), [updateUserField]);
   // BIN-181: persist the rotation-calendar snapshot the reminder function reads.
@@ -1184,17 +1181,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // delar spegel-plus-rollback-mönstret via useOptimisticMirrorField — se den
   // hooken för VARFÖR spegeln uppdateras synkront (BIN-40/46) och rullas
   // tillbaka identity-checkat vid write-fel (BIN-516/531).
+  // BIN-1435: servern skrivs per nyckel, med deleteField() för ett rensat värde. En
+  // merge av hela kartan behåller en nyckel som saknas i den, så att rensa en kostnad,
+  // kampanj eller förnyelsedag syntes bara tills sidan laddades om.
+  // Lokalt ändras också bara den nyckeln, på det senaste läget: två skrivningar som blir
+  // klara i omvänd ordning får inte ta bort varandras värden på skärmen.
+  const writeProviderMapKey = useCallback(async (
+    field: 'providerCosts' | 'providerCampaigns' | 'providerRenewalDays',
+    { key, value }: { key: number; value: unknown },
+  ) => {
+    if (!uid) return;
+    if (!Number.isInteger(key) || key <= 0) throw new Error(`ogiltigt tjänst-id: ${key}`);
+    await mergeUserDoc(uid, kit => ({ [field]: { [key]: value ?? kit.deleteField() } }));
+    setUser(prev => {
+      if (!prev) return null;
+      const map: Record<number, unknown> = { ...(prev[field] ?? {}) };
+      if (value == null) delete map[key];
+      else map[key] = value;
+      return { ...prev, [field]: map };
+    });
+  }, [uid]);
   const commitProviderCosts = useCallback(
-    (next: Record<number, number>) => updateUserField('providerCosts', next),
-    [updateUserField],
+    (_next: Record<number, number>, changed: { key: number; value: number | null }) =>
+      writeProviderMapKey('providerCosts', changed),
+    [writeProviderMapKey],
   );
   const setProviderCost = useOptimisticMirrorField(uid, user?.providerCosts, commitProviderCosts);
   // BIN-417: kampanjer lagrar RÅA { monthlyCost, endDate } keyed by CANONICAL
   // id (så ett alias-id och dess kanoniska träffar samma post, i linje med
   // resolveEffectiveMonthlyCost). Kanoniseringen sker här, inte i hooken.
   const commitProviderCampaigns = useCallback(
-    (next: Record<number, ProviderCampaign>) => updateUserField('providerCampaigns', next),
-    [updateUserField],
+    (_next: Record<number, ProviderCampaign>, changed: { key: number; value: ProviderCampaign | null }) =>
+      writeProviderMapKey('providerCampaigns', changed),
+    [writeProviderMapKey],
   );
   const setCampaignByKey = useOptimisticMirrorField(uid, user?.providerCampaigns, commitProviderCampaigns);
   const setProviderCampaign = useCallback(
@@ -1234,8 +1253,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid, hhProviders, hhCosts, hhTiers, hhCampaigns]);
   const commitProviderRenewalDays = useCallback(
-    (next: Record<number, number>) => updateUserField('providerRenewalDays', next),
-    [updateUserField],
+    (_next: Record<number, number>, changed: { key: number; value: number | null }) =>
+      writeProviderMapKey('providerRenewalDays', changed),
+    [writeProviderMapKey],
   );
   const setProviderRenewalDay = useOptimisticMirrorField(uid, user?.providerRenewalDays, commitProviderRenewalDays);
   const updateProviderTiers = useCallback(async (changes: Record<number, string | null>) => {
@@ -1753,7 +1773,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       user, uid, loading, profileLoading, profileLoadError, retryProfileLoad, emailVerified,
       signIn, signInEmail, register, resendEmailVerification, signOut,
-      updateProviders, updateDefaultView, updateProviderCosts, updateHomeMunicipality, updateRotationSchedule, setProviderCost, setProviderRenewalDay, updateProviderTier, updateProviderTiers, setProviderCampaign,
+      updateProviders, updateDefaultView, updateHomeMunicipality, updateRotationSchedule, setProviderCost, setProviderRenewalDay, updateProviderTier, updateProviderTiers, setProviderCampaign,
       pauseProvider, setPauseReminder, resumeProvider,
       updateUsername, updateDisplayName, updateBio, updateDefaultVisibility, visibilitySyncPending, deletionInProgress, pendingReconsent, completeReconsent, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
       setCalibrationGenres, deleteAccount,
@@ -1761,7 +1781,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [
       user, uid, loading, profileLoading, profileLoadError, retryProfileLoad, emailVerified,
       signIn, signInEmail, register, resendEmailVerification, signOut,
-      updateProviders, updateDefaultView, updateProviderCosts, updateHomeMunicipality, updateRotationSchedule, setProviderCost, setProviderRenewalDay, updateProviderTier, updateProviderTiers, setProviderCampaign,
+      updateProviders, updateDefaultView, updateHomeMunicipality, updateRotationSchedule, setProviderCost, setProviderRenewalDay, updateProviderTier, updateProviderTiers, setProviderCampaign,
       pauseProvider, setPauseReminder, resumeProvider,
       updateUsername, updateDisplayName, updateBio, updateDefaultVisibility, visibilitySyncPending, deletionInProgress, pendingReconsent, completeReconsent, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
       setCalibrationGenres, deleteAccount,
