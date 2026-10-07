@@ -192,6 +192,11 @@ export const TOOLING_CODE_FILES = new Set([
   'functions/scripts/backfill-mirror-uid.mjs',
   'functions/scripts/backfill-mirror-uid.helpers.mjs',
   'functions/scripts/backfill-mirror-uid.helpers.test.mjs',
+  // BIN-1422 del 2. Flyttar tillbaka ett raderat konto med Admin SDK, forbi
+  // firestore.rules. Tillagd i SAMMA commit som sitt `reviewGates`-monster, per BIN-830.
+  'functions/scripts/restore-account.mjs',
+  'functions/scripts/restore-account.helpers.mjs',
+  'functions/scripts/restore-account.helpers.test.mjs',
   'docs/org/gen-ownership-map.mjs',
   'docs/org/gen-ownership-map.test.mjs',
   // BIN-1088. The dependency-diff check on the pull_request path. Dependabot merges
