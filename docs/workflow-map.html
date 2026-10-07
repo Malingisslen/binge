@@ -492,6 +492,12 @@
       "path": "functions/src/rotationReminder/index.ts"
     },
     {
+      "id": "cf-monthly-bill",
+      "label": "monthlyBillNotify",
+      "context": "backend-api",
+      "path": "functions/src/monthlyBillNotify/index.ts, functions/src/monthlyBillNotify/logic.ts, functions/src/shared/providerPaid.ts, functions/src/shared/inboxCard.ts"
+    },
+    {
       "id": "cf-price-change",
       "label": "priceChangeNotify",
       "context": "backend-api",
@@ -2084,6 +2090,38 @@
           "to": "cf-sendPush",
           "payload": "per matching user: sendPushToUser(uid, {title: row.title, body: row.body, actionUrl:'/savings/', tag:'price-change-{key}'}, {pushEnabled}) — push-only, no inbox doc",
           "transport": "in-process call",
+          "verified": true
+        }
+      ],
+      "area": "notifications"
+    },
+    {
+      "id": "flow-monthly-bill",
+      "label": "Monthly bill notice",
+      "description": "On the 1st at 09:00 Europe/Stockholm: one bell card \"Din streaming i {månad}\" for every user whose bill in Rådgivaren has something to show for the month that just ended (a service that cost money and was not paused the whole month, and a film or an episode checked off in it). The card names no amount; the bill itself is computed client-side by buildMonthlyBill. Bell only, no push, no setting (BIN-1449).",
+      "covers": [
+        "monthlyBillNotify"
+      ],
+      "steps": [
+        {
+          "from": "cf-monthly-bill",
+          "to": "firestore",
+          "payload": "page users by document id, select(myProviders, providerTiers, providerCosts, providerPauses); per user with one: users/{uid}/pauseHistory → hasPaidService (catalog paid-ness from providerPaid.ts)",
+          "transport": "Firestore read",
+          "verified": true
+        },
+        {
+          "from": "cf-monthly-bill",
+          "to": "firestore",
+          "payload": "users/{uid}/watchlist where watchedAt in the month (movie, sedd); else every users/{uid}/episodeProgress doc for an episode watched:true in the month, whose watchlist/tv_N row exists",
+          "transport": "Firestore read",
+          "verified": true
+        },
+        {
+          "from": "cf-monthly-bill",
+          "to": "firestore",
+          "payload": "create() users/{uid}/notifications/monthly-bill-{yyyy-mm} {kind:'system', title, body, actionUrl:'/savings/', read:false}; an existing card is left alone",
+          "transport": "Firestore write",
           "verified": true
         }
       ],

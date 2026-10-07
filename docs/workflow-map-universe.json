@@ -13,6 +13,7 @@
     "handOverOwnedGroups",
     "leavingRollup",
     "logRecapMiss",
+    "monthlyBillNotify",
     "notifyReportDecided",
     "onFriendRequestCreate",
     "onSessionPickCreate",
