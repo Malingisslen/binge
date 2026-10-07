@@ -52,6 +52,17 @@ export interface CheckedOffEpisode { tmdbId: number; watchedAt: Date }
 /** A pause as stored: an active one has no resumedAt. Dates are yyyy-mm-dd. */
 export interface BillPause { providerId: number; pausedAt: string; resumedAt: string | null }
 
+/** The active pauses on the profile plus the finished ones in pauseHistory. */
+export function billPauses(
+  active: Readonly<Record<string, { pausedAt: string }>>,
+  history: readonly BillPause[],
+): BillPause[] {
+  return [
+    ...Object.entries(active).map(([id, p]) => ({ providerId: Number(id), pausedAt: p.pausedAt, resumedAt: null })),
+    ...history.map(h => ({ providerId: h.providerId, pausedAt: h.pausedAt, resumedAt: h.resumedAt })),
+  ];
+}
+
 export interface BillLine {
   providerId: number;
   /** What the month cost: 0 when the service was paused the whole month. */
