@@ -903,6 +903,24 @@ IP-adress eller webbläsare. Härled ordförrådet:
 - **Läsning:** bara `/api/insights` på servern; `firestore.rules` nekar klienter både
   läsning och skrivning.
 
+### Återställt konto → loggpost i `restoreLog`, 12 månader (BIN-1422, 2026-10-07)
+
+Ett raderat konto kan flyttas tillbaka från en säkerhetskopia, bara när ägaren själv ber om
+det (Malins beslut 2026-10-07; förloppet i `docs/RUNBOOK.md` §5b). En körning med `--apply` lämnar en
+post i `restoreLog/{datum}-{uid}`: uid, grund, vem som bad (e-postadressen), en hänvisning
+till begäran, skälet, vem som körde, källdatabasen, och de andra kontonas uid där en relation
+lades tillbaka.
+
+- **Rättslig grund:** berättigat intresse, art. 6.1.f — att kunna visa att återställningen
+  skedde på ägarens begäran, och vilka andra konton den rörde.
+- **Lagringstid:** 12 månader. Posten bär `expireAt`; Firestores TTL-policy på fältet raderar
+  den.
+- **Läsning:** ingen regel i `firestore.rules` matchar samlingen, så klienten kan varken läsa
+  eller skriva den.
+- **Export och radering:** posten ingår inte i exporten och rörs inte av kontoraderingen;
+  den är ett underlag om själva återställningen.
+- **Kopian:** den återställda databasen raderas samma dag, senast efter 7 dagar.
+
 ### Tillsammans-sessioner och notifikationer — schemalagt svep
 
 `retentionCleanup` raderar dagligen:
@@ -939,6 +957,9 @@ Policy ska omvärderas om:
 - **Moderation-runbook** (`docs/moderation.md`).
 
 ## Ändringslogg
+
+- **2026-10-07 (BIN-1422)** — ett raderat konto kan återställas på ägarens begäran. Se
+  avsnittet "Återställt konto" ovan; integritetssidan v1.11 säger det i §6.
 
 - **2026-10-05 (BIN-1438)** — Malins val "Egen räknare": Plausible är borttaget, och
   Binge räknar själv ett fast urval händelser som summor per dag i `eventStats`. Se

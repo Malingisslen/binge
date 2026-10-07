@@ -85,3 +85,4 @@ headings differ.
 ## BIN-1442: tre nya profilfält är ägarskrivbara utan regelgolv — 2026-10-06
 ## BIN-1426 del 3: en kodändrande commit är skyldig en granskningsrad bara i de känsliga delarna — 2026-10-06
 ## BIN-1450: paket P:s commits utan biljett-id kopplas via sin sha — 2026-10-06
+## BIN-1422 del 2: ett raderat konto kan flyttas tillbaka, och relationerna skrivs hos den andra — 2026-10-07

@@ -215,8 +215,57 @@ gcloud firestore databases delete --database=<nytt-namn> --project=binge-nu
 ```
 
 Appen och molnfunktionerna läser bara `(default)`, så en återställd databas rör
-ingenting förrän data flyttas därifrån för hand. Hur det görs för ett enskilt konto
-är inte provat.
+ingenting förrän data flyttas därifrån.
+
+#### Flytta tillbaka ett enskilt konto (BIN-1422)
+
+Verktyget är `functions/scripts/restore-account.mjs`; vad det flyttar och varför står i
+`restore-account.helpers.mjs`. Malins beslut 2026-10-07: bara när kontots ägare själv ber
+om det, från den e-postadress kontot har. Vänskaper och följningar läggs tillbaka hos båda,
+och den andra får en notis. Recensioner, listor, grupper, Tillsammans-sessioner, notiser,
+pushtokens, vänförfrågningar och gruppinbjudningar kommer inte tillbaka.
+
+Inte provat skarpt: emulatortestet kör flytten, men ingen har ännu kört verktyget mot en
+riktig återställd kopia. Gör det i ett prov innan första skarpa ärendet.
+
+Ordning:
+
+1. En gång per projekt: slå på utgångsdatum för loggen, så att poster i `restoreLog` raderas
+   efter 12 månader.
+
+   ```bash
+   gcloud firestore fields ttls update expireAt --collection-group=restoreLog --enable-ttl --project=binge-nu
+   ```
+
+2. Kontrollera att begäran kommer från kontots ägare: svara på kontots e-postadress (inte
+   bara på avsändaren) och vänta på ett svar därifrån. Verktyget kräver att `--requested-by`
+   är kontots adress, men det kan inte se vem som styr brevlådan.
+3. Återställ säkerhetskopian till en ny databas (ovan). Hämta kontots uid ur kopian.
+4. Torrkör. Den skriver ingenting och visar vad som skulle flyttas och vad som hoppas över.
+
+   ```bash
+   cd functions && node scripts/restore-account.mjs --project binge-nu --source-db <nytt-namn> --uid <uid> --basis owner-request --requested-by <e-post> --evidence <var begäran finns> --reason <varför> --operator <ditt namn> --dry-run
+   ```
+
+   `--evidence` är en hänvisning (ärende, datum), aldrig meddelandets text.
+5. Kör skarpt: samma kommando med `--apply --i-understand-default` i stället för `--dry-run`.
+   Dör körningen halvvägs: kör samma kommando igen samma dag. Allt som redan skrivits står
+   kvar och skrivs inte över, och profilen skrivs sist.
+   Säger den att profilen dök upp under körningen har personen loggat in för tidigt och fått
+   en ny, tom profil. Radera den tomma `users/{uid}` och kör samma kommando igen.
+6. Räkna i kopian och i `(default)` per undersamling innan kopian raderas. Torrkörningens
+   siffror är kopians.
+7. Radera kopian samma dag, senast efter 7 dagar, och kontrollera att den är borta med
+   `gcloud firestore databases list --project=binge-nu`. Verktyget skriver ut båda kommandona
+   och sista dag.
+8. Svara personen: logga in med "Glömt lösenord" och e-postadressen. Inloggning med Google
+   är inte provad efter en återställning.
+
+Kontroll i appen, som den återställda: villkorsskärmen "Ditt konto är återställt" kommer
+först; efter godkännandet syns biblioteket, avsnittsframstegen och vännerna. Som en vän:
+en notis "<namn> är tillbaka på Binge" i klockan, och personen syns bland vännerna.
+Visar appen "Kontot håller på att raderas" på personens gamla enhet: rensa webbplatsdata
+för binge.nu där.
 
 `deleteAccount`-cascaden är designad för att vara irreversibel (GDPR-krav). När
 ingen återställning görs: beklaga och guida användaren till att börja om.

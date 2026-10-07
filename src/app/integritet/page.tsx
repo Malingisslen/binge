@@ -10,8 +10,8 @@ export default function IntegritetPage() {
   return (
     <LegalPageShell
       title="Integritetspolicy"
-      lastUpdated="2026-10-06"
-      version="1.10"
+      lastUpdated="2026-10-07"
+      version="1.11"
       toc={[
         { id: 'ansvarig', label: '1. Vem är ansvarig?' },
         { id: 'uppgifter', label: '2. Vilka uppgifter vi samlar in' },
@@ -160,6 +160,18 @@ export default function IntegritetPage() {
             användare har till ditt konto kan vi av tekniska skäl inte radera i
             samma stund (de ägs av respektive följare) — de städas bort
             automatiskt av en återkommande rutin, normalt en gång i veckan.
+          </li>
+          <li>
+            {/* BIN-1422 del 2: Malins text, godkänd 2026-10-07. */}
+            Om du ångrar en radering och själv ber om det kan ditt konto
+            återställas från en säkerhetskopia. Då kommer din profil,
+            bevakningslista, avsnittsframsteg, anteckningar, egna taggar,
+            blockeringar och vän- och följarrelationer tillbaka, även de som är
+            speglade hos den andra personen. Den personen får en notis och kan ta
+            bort relationen. Recensioner, listor, grupper och Tillsammans-sessioner
+            kommer inte tillbaka. Du godkänner villkoren på nytt innan kontot går
+            att använda. Att kontot återställts, på vems begäran och varför sparas
+            i 12 månader.
           </li>
           <li>
             <strong>Ett undantag från raderingen:</strong> om du har anmält

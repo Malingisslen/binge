@@ -2643,3 +2643,39 @@ git grep -n "BIN-1450" -- docs/org/metrics/check_review_coverage.mjs docs/org/me
 ```
 
 **INTE accepterat:** samma villkor som i BIN-1367-posten, och att rader i efterhand blir standardvägen för en commit utan id.
+
+## BIN-1422 del 2: ett raderat konto kan flyttas tillbaka, och relationerna skrivs hos den andra — 2026-10-07
+
+Malins fyra beslut 2026-10-07: återställning bara på ägarens egen begäran; ny bekräftelse av
+ålder och villkor vid nästa inloggning; kopian raderas samma dag, senast efter 7 dagar;
+vänskaper och följningar läggs tillbaka hos båda, och den andra får en notis med en väg att
+ta bort relationen. Verktyget är `functions/scripts/restore-account.mjs`, förloppet
+`docs/RUNBOOK.md` §5b.
+
+**Det här är beslut, inte brister. Fila dem inte:**
+- **Relationer skrivs i någon annans träd utan att den tillfrågas.** Rättslig grund är
+  berättigat intresse (art. 6.1.f): relationen fanns, båda halvorna finns i kopian, och den
+  andra får en notis och kan ta bort den. #6 Dataskydd föreslog i stället att hoppa över
+  relationer som kan ha avslutats; Malin valde notisen. En relation hoppas över när bara ena
+  halvan finns i kopian, när det andra kontot saknas, eller vid blockering åt något håll.
+- **Återställningen är delvis.** Recensioner, gillningar, kommentarer, listor, grupper,
+  Tillsammans-sessioner, notiser, pushtokens, vänförfrågningar och gruppinbjudningar kommer
+  inte tillbaka. Profilfält utanför `PROFILE_FIELDS` stannar i kopian; skriptet skriver ut
+  deras namn.
+- **Spärren för nytt godkännande finns bara i klienten.** `firestore.rules` hindrar inte en
+  återställd användare utan samtyckesstämplar från att skriva; appen visar spärren före
+  allt annat (`ensureUserProfile`). Samma läge som BIN-909:s spärr.
+- **Klicket i spärren kan i ett smalt fall skapa ett stumt profildokument.** Godkännandet
+  stämplas med `mergeUserDoc` (sammanslagning). Raderas profilen från en annan enhet mellan
+  inloggningen och klicket skapar klicket ett nytt profildokument. Det är fallet med flera
+  enheter som ADR 0022 redan accepterar.
+- **`visibilitySyncPending: true` följer med, trots att #4:s villkor räknade upp fältet bland
+  dem som lämnas kvar.** Säkerhetsgranskningen av skriptet visade att det är en
+  reparationsutlösare (BIN-587): utan den förblir titlar som personen gjort privata läsbara
+  för alla. Fältet kommer tillbaka bara när det var satt.
+- **Loggen `restoreLog` ingår inte i exporten och rörs inte av kontoraderingen.** Den är
+  underlag om själva återställningen och går ut efter 12 månader
+  (`docs/data-retention-policy.md`).
+
+**INTE accepterat:** en återställning utan ägarens begäran, eller utan att kopian raderas
+inom 7 dagar. Ett skarpt prov mot en riktig återställd kopia är inte gjort; det står öppet.
