@@ -156,12 +156,12 @@ export function UgcActionsMenu({
         {triggerLabel && <span className="text-xs">{triggerLabel}</span>}
       </button>
       {open && (
-        <div className={cardClass('absolute right-0 top-full mt-[2px] min-w-[160px] z-20')}>
+        <div className={cardClass('absolute right-0 top-full mt-0.5 min-w-[160px] z-20')}>
           {extraItems.map((item, i) => (
             <button
               key={item.key}
               onClick={() => { setOpen(false); item.onSelect(); }}
-              className={`w-full flex items-center gap-2 px-3 py-[6px] text-xs cursor-pointer hover:bg-bg-2 ${
+              className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer hover:bg-bg-2 ${
                 item.danger ? 'text-danger-ink' : 'text-ink-2'
               } ${i > 0 ? 'border-t border-rule-2' : ''}`}
             >
@@ -170,7 +170,7 @@ export function UgcActionsMenu({
           ))}
           <button
             onClick={() => { setOpen(false); setReporting(true); }}
-            className={`w-full flex items-center gap-2 px-3 py-[6px] text-xs text-ink-2 hover:bg-bg-2 cursor-pointer ${
+            className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs text-ink-2 hover:bg-bg-2 cursor-pointer ${
               extraItems.length > 0 ? 'border-t border-rule-2' : ''
             }`}
           >
@@ -179,7 +179,7 @@ export function UgcActionsMenu({
           {showBlock && (
             <button
               onClick={handleBlock}
-              className="w-full flex items-center gap-2 px-3 py-[6px] text-xs text-ink-2 hover:bg-bg-2 cursor-pointer border-t border-rule-2"
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-ink-2 hover:bg-bg-2 cursor-pointer border-t border-rule-2"
             >
               {blocked ? <UserCheck size={11} /> : <UserX size={11} />}
               {blocked ? 'Avblockera' : 'Blockera användare'}
@@ -291,7 +291,7 @@ function ReportDialog({
               placeholder="Extra kontext för moderationen…"
               className={fieldClass({ size: 'sm', className: 'w-full resize-none' })}
             />
-            <div className="text-xxs text-ink-3 mt-[2px] text-right">
+            <div className="text-xxs text-ink-3 mt-0.5 text-right">
               {note.length}/500
             </div>
           </div>

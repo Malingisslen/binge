@@ -7,6 +7,7 @@ import { pluralSv } from '@/lib/utils';
 import { rankCoverageOptions } from '@/hooks/useSubscriptionAdvisor.helpers';
 import type { WillSeePerProviderRow } from '@/types';
 import { Eyebrow } from '@/components/ui/Eyebrow';
+import { cardClass } from '@/components/ui/Card';
 
 // BIN-87 — coverage optimizer. Inversen av rådgivaren: vilken EJ-tecknad betald
 // flatrate-tjänst låser upp mest av användarens Vill se? "Skaffa Max (149 kr) →
@@ -28,14 +29,14 @@ export default function CoverageOptimizer({ rows }: { rows: WillSeePerProviderRo
   if (options.length === 0) return null;
 
   return (
-    <div className="mb-[14px]">
-      <div className="flex items-baseline justify-between mb-[6px]">
+    <div className="mb-3.5">
+      <div className="flex items-baseline justify-between mb-1.5">
         <Eyebrow as="h2" size="xs">
           Lås upp mest av din Vill se
         </Eyebrow>
         <span className="text-xxs text-ink-3">ej tecknade tjänster</span>
       </div>
-      <div className="bg-surface border border-rule rounded-sm overflow-hidden">
+      <div className={cardClass('overflow-hidden')}>
         <table className="w-full border-collapse">
           <SrOnlyTableHeader columns={['Tjänst', 'Låser upp', 'Månadskostnad', 'Pris per titel']} />
           <tbody>
@@ -45,22 +46,22 @@ export default function CoverageOptimizer({ rows }: { rows: WillSeePerProviderRo
                 <tr key={o.providerId} className="border-b border-rule-2 last:border-b-0">
                   {/* Accent-stripe på första cellen, inte <tr> — border-collapse
                       ignorerar border-left på rader. */}
-                  <td className={`px-3 py-[7px] whitespace-nowrap ${i === 0 ? 'border-l-[3px] border-l-acc-deep' : ''}`}>
-                    <span className="inline-flex items-center gap-[6px]">
+                  <td className={`px-3 py-2 whitespace-nowrap ${i === 0 ? 'border-l-[3px] border-l-acc-deep' : ''}`}>
+                    <span className="inline-flex items-center gap-1.5">
                       <ProviderDot color={o.color} size={7} />
                       <span className={`text-xs ${i === 0 ? 'font-semibold text-ink' : 'text-ink-2'}`}>
                         Skaffa {o.providerName}
                       </span>
                     </span>
                   </td>
-                  <td className="px-3 py-[7px] text-xs text-ink-2">
+                  <td className="px-3 py-2 text-xs text-ink-2">
                     lås upp {pluralSv(o.titleCount, 'titel', 'titlar')}
                     {detail ? <span className="text-ink-3"> ({detail})</span> : null}
                   </td>
-                  <td className="px-3 py-[7px] text-xxs text-ink-3 text-right whitespace-nowrap tabular-nums">
+                  <td className="px-3 py-2 text-xxs text-ink-3 text-right whitespace-nowrap tabular-nums">
                     {formatKr(o.monthlyCost)} kr/mån
                   </td>
-                  <td className="px-3 py-[7px] text-xxs text-ink-3 text-right whitespace-nowrap tabular-nums">
+                  <td className="px-3 py-2 text-xxs text-ink-3 text-right whitespace-nowrap tabular-nums">
                     ≈{formatKr(o.krPerTitle)} kr/titel
                   </td>
                 </tr>

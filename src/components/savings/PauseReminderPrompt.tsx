@@ -5,6 +5,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/contexts/ToastContext';
 import { formatKr } from '@/lib/formatKr';
 import { formatSwedishDate } from '@/lib/utils';
+import { cardClass } from '@/components/ui/Card';
+import { buttonClass } from '@/components/ui/Button';
 
 // BIN-1442 — right after Pausa: "Påminn mig" the day the pause ends. Approved
 // wording (Malin, 2026-10-06). The reminder arrives in the bell, and as a push
@@ -38,16 +40,16 @@ export default function PauseReminderPrompt({ providerId, providerName, resumeAt
   };
 
   return (
-    <div className="bg-surface border border-rule rounded-sm p-3 mb-[14px]" role="status">
+    <div className={cardClass('p-3 mb-3.5')} role="status">
       <p className="text-sm font-semibold text-ink">{providerName} pausad till {date}</p>
       {monthlyCost != null && monthlyCost > 0 && (
-        <p className="text-xs text-ink-2 mt-[2px]">Du sparar <strong>{formatKr(monthlyCost)} kr/mån</strong>.</p>
+        <p className="text-xs text-ink-2 mt-0.5">Du sparar <strong>{formatKr(monthlyCost)} kr/mån</strong>.</p>
       )}
       <div className="flex flex-wrap gap-2 mt-2">
-        <button type="button" className="btn btn-sm" onClick={() => { void remind(); }} disabled={busy}>
+        <button type="button" className={buttonClass({ size: 'sm' })} onClick={() => { void remind(); }} disabled={busy}>
           Påminn mig {date}
         </button>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={onDone} disabled={busy}>
+        <button type="button" className={buttonClass({ variant: 'ghost', size: 'sm' })} onClick={onDone} disabled={busy}>
           Inte nu
         </button>
       </div>

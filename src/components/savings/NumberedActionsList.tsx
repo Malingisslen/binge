@@ -4,6 +4,9 @@ import { formatKr } from '@/lib/formatKr';
 import Link from 'next/link';
 import { addDaysFromToday, pluralSv } from '@/lib/utils';
 import type { AdvisorResult, PrimaryAction } from '@/types';
+import { cardClass } from '@/components/ui/Card';
+import { buttonClass } from '@/components/ui/Button';
+import { badgeClass } from '@/components/ui/Badge';
 
 // "1. Slutför · 2. Pausa när klar · 3. Överväg" — den numrerade rådgivar-
 // listan från mockup E. Steg 1 är aktiv (CTA-knapp), steg 2+3 är passiva
@@ -33,11 +36,11 @@ interface BuildStepsContext {
   onPauseActive: (providerId: number, resumeAt: string | null) => void;
 }
 
-const CARD_BASE = 'bg-surface border border-rule rounded-sm grid grid-cols-[36px_1fr_auto] gap-3 px-4 py-[12px] items-center mb-[6px]';
+const CARD_BASE = cardClass('grid grid-cols-[36px_1fr_auto] gap-3 px-4 py-3 items-center mb-1.5');
 const NUM_BASE = 'text-3xl leading-none text-center font-light';
-const CTA_PRIMARY = 'bg-acc-deep text-on-acc border-none rounded-sm px-3 py-[6px] text-xs font-semibold no-underline whitespace-nowrap hover:bg-acc-deep';
-const CTA_GHOST = 'bg-transparent text-acc-deep border border-acc-deep rounded-sm px-3 py-[5px] text-xs font-semibold no-underline whitespace-nowrap hover:bg-acc-deep hover:text-on-acc';
-const BADGE_GREEN = 'inline-block px-[7px] py-[2px] text-xxs uppercase tracking-[0.4px] font-bold rounded-sm border border-season-done text-season-done whitespace-nowrap';
+const CTA_PRIMARY = buttonClass({ variant: 'acc', size: 'sm', className: 'no-underline whitespace-nowrap' });
+const CTA_GHOST = buttonClass({ variant: 'ghost', size: 'sm', className: 'no-underline whitespace-nowrap' });
+const BADGE_GREEN = badgeClass('success', 'whitespace-nowrap');
 
 function buildSteps(advisor: AdvisorResult, ctx: BuildStepsContext): Step[] {
   const steps: Step[] = [];
@@ -145,7 +148,7 @@ export default function NumberedActionsList({ advisor, onPauseProvider, onShowSu
   const steps = buildSteps(advisor, { onPauseActive: onPauseProvider });
 
   return (
-    <div className="mb-[14px]">
+    <div className="mb-3.5">
       {steps.map((step, idx) => (
         <div
           key={`${step.number}-${idx}`}
@@ -157,7 +160,7 @@ export default function NumberedActionsList({ advisor, onPauseProvider, onShowSu
           <div className="min-w-0">
             <div className="text-base font-semibold text-ink">{step.title}</div>
             {step.desc && (
-              <div className="text-xs text-ink-3 mt-[2px] truncate">{step.desc}</div>
+              <div className="text-xs text-ink-3 mt-0.5 truncate">{step.desc}</div>
             )}
           </div>
           <div className="shrink-0">

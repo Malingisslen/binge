@@ -7,6 +7,7 @@ import { formatSwedishDate } from '@/lib/utils';
 import { useRotationCalendar, useSavingsLedger } from '@/hooks/useRotationCalendar';
 import { useAuth } from '@/hooks/useAuth';
 import { Eyebrow } from '@/components/ui/Eyebrow';
+import { cardClass } from '@/components/ui/Card';
 
 /**
  * BIN-181 — Rotationskalender + sparat-ledger.
@@ -56,8 +57,8 @@ export default function RotationCalendar() {
   if (!hasEntries && !hasLedger) return null;
 
   return (
-    <div className="mb-[14px]">
-      <div className="flex items-baseline justify-between mb-[6px]">
+    <div className="mb-3.5">
+      <div className="flex items-baseline justify-between mb-1.5">
         <Eyebrow as="h2" size="xs">Rotationskalender</Eyebrow>
         {calendar.totalProjectedSavings > 0 && (
           <span className="text-xxs text-season-done font-semibold">
@@ -72,10 +73,10 @@ export default function RotationCalendar() {
             {calendar.entries.map(e => (
               <div
                 key={e.providerId}
-                className="bg-surface border rounded-sm px-3 py-[10px]"
+                className="bg-surface border rounded-sm px-3 py-2.5"
                 style={{ borderColor: 'var(--cal-deep)', background: 'var(--cal-soft)' }}
               >
-                <div className="flex items-center gap-[6px] mb-[4px]">
+                <div className="flex items-center gap-1.5 mb-1">
                   <ProviderDot color={e.color} size={8} />
                   <span className="text-xs font-semibold text-ink">{e.shortName}</span>
                   {e.resume == null ? (
@@ -97,18 +98,18 @@ export default function RotationCalendar() {
                     <> · inget planerat — <span className="text-ink-3">~{formatKr(e.cancel.monthlyCost)} kr/mån sparat</span></>
                   )}
                 </div>
-                <div className="text-xxs text-ink-3 mt-[3px]">{e.cancel.reason}</div>
+                <div className="text-xxs text-ink-3 mt-1">{e.cancel.reason}</div>
               </div>
             ))}
           </div>
-          <p className="text-xxs text-ink-3 mt-[6px]">
+          <p className="text-xxs text-ink-3 mt-1.5">
             Binge kan inte säga upp åt dig — vi påminner, du klickar.
           </p>
         </>
       )}
 
       {hasLedger && (
-        <div className="bg-surface border border-rule rounded-sm px-3 py-[10px] mt-2">
+        <div className={cardClass('px-3 py-2.5 mt-2')}>
           <div className="text-xs text-ink-2">
             Du har sparat{' '}
             <strong className="text-season-done">{formatKr(ledger.savedThisYear)} kr</strong> i år genom rotation
@@ -124,7 +125,7 @@ export default function RotationCalendar() {
             )}
           </div>
           {ledger.byProvider.length > 0 && (
-            <div className="flex flex-wrap gap-x-3 gap-y-1 mt-[6px]">
+            <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1.5">
               {ledger.byProvider.map(p => (
                 <span key={p.providerId} className="inline-flex items-center gap-1 text-xxs text-ink-3">
                   {p.shortName} <span className="text-season-done font-semibold">{formatKr(p.saved)} kr</span>

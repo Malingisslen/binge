@@ -5,6 +5,8 @@ import { useMemo } from 'react';
 import ProviderDot from '@/components/ui/ProviderDot';
 import { rotationPlan, type RotationProviderInput } from '@/lib/advisor/rotationPlan';
 import type { AdvisorResult } from '@/types';
+import { eyebrowClass } from '@/components/ui/Eyebrow';
+import { cardClass } from '@/components/ui/Card';
 
 /**
  * BIN-92 — rotationsplanerare. Visar en månad-för-månad-plan ("ta X i juni,
@@ -73,11 +75,11 @@ export default function RotationPlanner({ advisor, now }: { advisor: AdvisorResu
   const base = now ?? new Date();
 
   return (
-    <div className="bg-surface border border-rule rounded-sm px-[14px] py-[12px] mb-3">
-      <h2 className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-bold mb-[4px]">
+    <div className={cardClass('px-3.5 py-3 mb-3')}>
+      <h2 className={eyebrowClass({ className: 'mb-1' })}>
         Rotationsplan — en tjänst i taget
       </h2>
-      <p className="text-xs text-ink-2 mb-[10px]">
+      <p className="text-xs text-ink-2 mb-2.5">
         Rotera istället för att ha allt samtidigt: {formatKr(plan.totalCost)} kr över {scheduled.length} månader röjer{' '}
         {plan.totalBacklogCleared} titlar/avsnitt i din kö.
       </p>
@@ -86,34 +88,34 @@ export default function RotationPlanner({ advisor, now }: { advisor: AdvisorResu
         {plan.months.map(m => (
           <div
             key={m.monthOffset}
-            className="flex-shrink-0 rounded-sm border px-[10px] py-[8px] min-w-[120px]"
+            className="flex-shrink-0 rounded-sm border px-2.5 py-2 min-w-[120px]"
             style={{
               borderColor: m.provider ? 'var(--cal-deep)' : 'var(--rule)',
               background: m.provider ? 'var(--cal-soft)' : 'var(--bg-2)',
             }}
           >
-            <div className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-bold capitalize">
+            <div className="text-xxs text-ink-3 font-bold capitalize">
               {monthLabel(m.monthOffset, base)}
             </div>
             {m.provider ? (
               <>
-                <div className="flex items-center gap-[6px] mt-[6px]">
+                <div className="flex items-center gap-1.5 mt-1.5">
                   <ProviderDot color={m.provider.color} size={9} />
                   <span className="text-base font-medium text-ink">{m.provider.shortName}</span>
                 </div>
-                <div className="text-xs text-ink-3 mt-[3px]">
+                <div className="text-xs text-ink-3 mt-1">
                   {formatKr(m.cost)} kr · {m.backlogCleared} i kö
                 </div>
               </>
             ) : (
-              <div className="text-sm text-ink-3 mt-[8px]">paus — spara</div>
+              <div className="text-sm text-ink-3 mt-2">paus — spara</div>
             )}
           </div>
         ))}
       </div>
 
       {plan.alwaysFree.length > 0 && (
-        <p className="text-xs text-ink-3 mt-[8px]">
+        <p className="text-xs text-ink-3 mt-2">
           Gratis hela tiden: {plan.alwaysFree.map(f => f.shortName).join(', ')}.
         </p>
       )}

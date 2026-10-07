@@ -5,6 +5,7 @@ import { X } from 'lucide-react';
 import ProviderDot from '@/components/ui/ProviderDot';
 import { useAuth } from '@/hooks/useAuth';
 import { computePriceChangeNudges, priceChangeText } from '@/lib/advisor/priceChangeNudges';
+import { cardClass } from '@/components/ui/Card';
 
 // Prisvakten (paket L): "din tjänst ändrar pris" i Rådgivaren, samma kortform som
 // CampaignExpiryNudges. Ett 'noticed'-datum får aldrig läsas som "från och med" —
@@ -68,12 +69,12 @@ export default function PriceChangeNudges() {
         return (
           <div
             key={r.key}
-            className="flex items-start gap-2 bg-surface border border-rule border-l-[3px] border-l-acc-deep rounded-sm px-3 py-2 text-xs"
+            className={cardClass('flex items-start gap-2 border-l-[3px] border-l-acc-deep px-3 py-2 text-xs')}
           >
-            <span className="mt-[5px]"><ProviderDot color={r.color} size={7} /></span>
+            <span className="mt-1.5"><ProviderDot color={r.color} size={7} /></span>
             <div className="min-w-0 flex-1">
               <p className="text-ink">{text.lead}</p>
-              <p className="text-ink-3 mt-[2px]">
+              <p className="text-ink-3 mt-0.5">
                 {text.note}{' '}
                 <a
                   href={r.change.source.split(' ')[0]}
