@@ -13,7 +13,7 @@ import PriceChangeNudges from '@/components/savings/PriceChangeNudges';
 import NumberedActionsList from '@/components/savings/NumberedActionsList';
 import BundleArbitrageCard from '@/components/savings/BundleArbitrageCard';
 import ProvidersByValue from '@/components/savings/ProvidersByValue';
-import ServiceValueCard from '@/components/savings/ServiceValueCard';
+import MonthlyBillCard from '@/components/savings/MonthlyBillCard';
 import CoverageOptimizer from '@/components/savings/CoverageOptimizer';
 import RotationPlanner from '@/components/savings/RotationPlanner';
 import RotationCalendar from '@/components/savings/RotationCalendar';
@@ -25,6 +25,7 @@ import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useSubscriptionAdvisor } from '@/hooks/useSubscriptionAdvisor';
+import { useMonthlyBill } from '@/hooks/useMonthlyBill';
 import { useAuth } from '@/hooks/useAuth';
 import { trackEvent } from '@/lib/analytics';
 import { useToast } from '@/contexts/ToastContext';
@@ -190,9 +191,10 @@ function SavingsContent() {
   const detailsRef = useRef<HTMLDetailsElement | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   // BIN-208: stamp "now" once per mount (lazy useState initializer) so the month
-  // window is stable and useServiceValue's memo doesn't recompute every render
+  // window is stable and the monthly bill's memo doesn't recompute every render
   // from a fresh Date.now().
   const [valueNowMs] = useState(() => Date.now());
+  const monthlyBill = useMonthlyBill(valueNowMs);
   const handleShowSubscribeRows = () => {
     const el = detailsRef.current;
     if (!el) return;
@@ -416,7 +418,7 @@ function SavingsContent() {
               activePauses={advisor.activePauses}
             />
 
-            <ServiceValueCard nowMs={valueNowMs} />
+            {monthlyBill && <MonthlyBillCard bill={monthlyBill} />}
 
             <CoverageOptimizer rows={advisor.willSeeByProvider} />
 

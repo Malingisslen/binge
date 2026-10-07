@@ -14,12 +14,9 @@ import { attributeProvider } from '@/lib/advisor/serviceValue';
 import { subscriptionProviderIds } from '@/lib/watchlist/subscriptionProviders';
 import { canonicalProviderId } from '@/lib/tmdb/providers';
 import { seenDate } from '@/lib/seenDate';
+import { MONTHS_SV } from '@/lib/diary';
 import type { WatchlistItem } from '@/types';
 
-const MONTHS_SV = [
-  'januari', 'februari', 'mars', 'april', 'maj', 'juni',
-  'juli', 'augusti', 'september', 'oktober', 'november', 'december',
-];
 
 export interface BillMonth {
   startMs: number;
@@ -109,13 +106,18 @@ export function buildMonthlyBill(params: {
     lines.set(id, { providerId: id, costKr: paused ? 0 : costFor(id), pausedWholeMonth: paused, episodes: 0, films: 0, krPerItem: null });
   }
 
+  // A title on several of the user's services is credited among those that were paid
+  // for that month, so neither a paused nor a free service takes the episodes from
+  // the one on the bill.
+  const creditable = [...lines.values()].filter(l => l.costKr > 0).map(l => l.providerId);
+
   let checkedOff = 0;
   for (const item of items) {
     if (item.mediaType !== 'movie') continue;
     const date = seenDate(item);
     if (!date || !inMonth(date)) continue;
     checkedOff += 1;
-    const id = attributeProvider(subscriptionProviderIds(item), owned);
+    const id = attributeProvider(subscriptionProviderIds(item), creditable);
     const line = id == null ? undefined : lines.get(id);
     if (line) line.films += 1;
   }
@@ -128,7 +130,7 @@ export function buildMonthlyBill(params: {
     const show = showById.get(ep.tmdbId);
     if (!show) continue;
     checkedOff += 1;
-    const id = attributeProvider(subscriptionProviderIds(show), owned);
+    const id = attributeProvider(subscriptionProviderIds(show), creditable);
     const line = id == null ? undefined : lines.get(id);
     if (line) line.episodes += 1;
   }
@@ -157,5 +159,41 @@ export function buildMonthlyBill(params: {
     episodes: episodesTotal,
     films: filmsTotal,
     krPerItem: counted > 0 ? Math.round(totalKr / counted) : null,
+  };
+}
+
+// The card's wording, kept beside the numbers it describes so the texts Malin
+// approved (BIN-1449 sketch, 2026-10-07) are tested in one place.
+
+function countText(episodes: number, films: number): string {
+  const ep = `${episodes} avsnitt`;
+  const fi = `${films} ${films === 1 ? 'film' : 'filmer'}`;
+  if (episodes > 0 && films > 0) return `${ep} och ${fi}`;
+  return episodes > 0 ? ep : fi;
+}
+
+function unitText(episodes: number, films: number): string {
+  if (episodes > 0 && films > 0) return 'avsnitt eller film';
+  return episodes > 0 ? 'avsnitt' : 'film';
+}
+
+/** The small line under a service on the card. */
+export function billLineText(line: BillLine, monthName: string): string {
+  if (line.pausedWholeMonth) return `Pausad hela ${monthName}`;
+  const count = line.episodes + line.films;
+  if (count === 0 || line.krPerItem == null) return `Inget sett i ${monthName}`;
+  if (count === 1) {
+    return line.episodes === 1
+      ? `1 avsnitt · ${line.krPerItem} kr för ett avsnitt`
+      : `1 film · ${line.krPerItem} kr för en film`;
+  }
+  return `${countText(line.episodes, line.films)} · ${line.krPerItem} kr per ${unitText(line.episodes, line.films)}`;
+}
+
+/** The two halves of the line under the total. */
+export function billTotalText(bill: MonthlyBill): { count: string; perItem: string | null } {
+  return {
+    count: countText(bill.episodes, bill.films),
+    perItem: bill.krPerItem == null ? null : `${bill.krPerItem} kr per ${unitText(bill.episodes, bill.films)}`,
   };
 }
