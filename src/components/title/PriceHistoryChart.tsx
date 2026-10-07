@@ -140,7 +140,7 @@ export default function PriceHistoryChart(
       )}
 
       {/* caption — wires dropFromHighPct into the "lägsta på X mån" line */}
-      <div className="mt-[6px] text-sm text-ink-3">
+      <div className="mt-1.5 text-sm text-ink-3">
         {atLowest ? (
           <span className="text-acc-deep">▼ Lägsta priset hittills sett</span>
         ) : (

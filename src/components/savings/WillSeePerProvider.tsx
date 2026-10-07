@@ -7,6 +7,7 @@ import SrOnlyTableHeader from '@/components/ui/SrOnlyTableHeader';
 import { pluralSv } from '@/lib/utils';
 import type { WillSeePerProviderRow } from '@/types';
 import { Eyebrow } from '@/components/ui/Eyebrow';
+import { cardClass } from '@/components/ui/Card';
 
 function formatBreakdown(tv: number, movie: number): string {
   const total = pluralSv(tv + movie, 'titel', 'titlar');
@@ -21,8 +22,8 @@ export default function WillSeePerProvider({ rows }: { rows: WillSeePerProviderR
   if (rows.length === 0) return null;
 
   return (
-    <div className="mb-[14px]">
-      <div className="flex items-baseline justify-between mb-[6px]">
+    <div className="mb-3.5">
+      <div className="flex items-baseline justify-between mb-1.5">
         <Eyebrow as="h2" size="xs">
           Din Vill se per tjänst
         </Eyebrow>
@@ -30,34 +31,34 @@ export default function WillSeePerProvider({ rows }: { rows: WillSeePerProviderR
           {pluralSv(rows.length, 'tjänst', 'tjänster')}
         </span>
       </div>
-      <div className="bg-surface border border-rule rounded-sm overflow-hidden">
+      <div className={cardClass('overflow-hidden')}>
         <table className="w-full border-collapse">
           <SrOnlyTableHeader columns={['Prenumererar', 'Tjänst', 'Antal titlar', 'Månadskostnad', 'Status']} />
           <tbody>
             {rows.map(row => (
               <tr key={row.providerId} className="border-b border-rule-2 last:border-b-0">
-                <td className="px-3 py-[6px] whitespace-nowrap w-[24px]">
+                <td className="px-3 py-1.5 whitespace-nowrap w-[24px]">
                   {row.isSubscribed ? (
                     <Check size={12} className="text-season-done" />
                   ) : null}
                 </td>
-                <td className="px-2 py-[6px] whitespace-nowrap">
-                  <span className="inline-flex items-center gap-[6px]">
+                <td className="px-2 py-1.5 whitespace-nowrap">
+                  <span className="inline-flex items-center gap-1.5">
                     <ProviderDot color={row.color} size={7} />
                     <span className={`text-xs ${row.isSubscribed ? 'font-semibold text-ink' : 'text-ink-2'}`}>
                       {row.providerName}
                     </span>
                   </span>
                 </td>
-                <td className="px-3 py-[6px] text-xs text-ink-2">
+                <td className="px-3 py-1.5 text-xs text-ink-2">
                   {formatBreakdown(row.tvCount, row.movieCount)}
                 </td>
-                <td className="px-3 py-[6px] text-xxs text-ink-3 text-right whitespace-nowrap">
+                <td className="px-3 py-1.5 text-xxs text-ink-3 text-right whitespace-nowrap">
                   {row.monthlyCost != null && row.monthlyCost > 0
                     ? `${formatKr(row.monthlyCost)} kr/mån`
                     : '—'}
                 </td>
-                <td className="px-3 py-[6px] text-right whitespace-nowrap w-[80px]">
+                <td className="px-3 py-1.5 text-right whitespace-nowrap w-[80px]">
                   {!row.isSubscribed && (
                     <span className="text-xxs text-acc-deep">Ej tecknad</span>
                   )}

@@ -60,7 +60,7 @@ export function ProfileOfflineBanner() {
   return (
     <div
       role="alert"
-      className="bg-danger-soft border-b border-danger/30 px-3 py-[5px] text-xs text-danger-ink flex items-center gap-3 flex-wrap"
+      className="bg-danger-soft border-b border-danger/30 px-3 py-1.5 text-xs text-danger-ink flex items-center gap-3 flex-wrap"
     >
       <span>Ingen anslutning, försök igen.</span>
       <button

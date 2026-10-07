@@ -37,7 +37,7 @@ export default function PriceTable({ rows = buildPriceRows() }: { rows?: PriceRo
       type="button"
       aria-pressed={sort === mode}
       onClick={() => setSort(mode)}
-      className={`px-2 py-[3px] text-xs rounded-sm border cursor-pointer ${
+      className={`px-2 py-1 text-xs rounded-sm border cursor-pointer ${
         sort === mode ? 'border-ink bg-ink text-bg' : 'border-rule bg-surface text-ink-2'
       }`}
     >
@@ -64,13 +64,13 @@ export default function PriceTable({ rows = buildPriceRows() }: { rows?: PriceRo
           <tbody>
             {sorted.map(r => (
               <tr key={r.key} className="border-t border-rule-2 align-top">
-                <td className="px-3 py-[6px] text-ink">{r.providerName}</td>
-                <td className="px-3 py-[6px] text-ink-2">
+                <td className="px-3 py-1.5 text-ink">{r.providerName}</td>
+                <td className="px-3 py-1.5 text-ink-2">
                   {r.tierName ?? '–'}
                   {r.sport && <span className="chip ml-2">sport</span>}
                 </td>
-                <td className="px-3 py-[6px] text-right tabular-nums font-semibold text-ink">{formatKr(r.kr)}</td>
-                <td className="px-3 py-[6px] text-xs text-ink-2 tabular-nums whitespace-nowrap">
+                <td className="px-3 py-1.5 text-right tabular-nums font-semibold text-ink">{formatKr(r.kr)}</td>
+                <td className="px-3 py-1.5 text-xs text-ink-2 tabular-nums whitespace-nowrap">
                   <CheckedCell date={r.verifiedDate} now={now} />
                 </td>
               </tr>

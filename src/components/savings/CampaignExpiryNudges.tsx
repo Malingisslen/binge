@@ -6,6 +6,7 @@ import ProviderDot from '@/components/ui/ProviderDot';
 import { useAuth } from '@/hooks/useAuth';
 import { computeCampaignNudges } from '@/lib/advisor/campaignNudges';
 import { pluralSv } from '@/lib/utils';
+import { cardClass } from '@/components/ui/Card';
 
 // BIN-417 Phase B — "din kampanj löper ut snart" money nudge on the advisor
 // surface. Same character as the advisor's other nudges: a subtle surface card
@@ -31,7 +32,7 @@ export default function CampaignExpiryNudges() {
       {rows.map(r => (
         <div
           key={r.providerId}
-          className="flex items-center gap-2 bg-surface border border-rule border-l-[3px] border-l-acc-deep rounded-sm px-3 py-2 text-xs"
+          className={cardClass('flex items-center gap-2 border-l-[3px] border-l-acc-deep px-3 py-2 text-xs')}
         >
           <ProviderDot color={r.color} size={7} />
           <span className="text-ink">

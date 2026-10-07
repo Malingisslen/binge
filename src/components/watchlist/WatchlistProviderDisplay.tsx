@@ -40,8 +40,8 @@ export function ProviderChips({
   if (providers.length === 0) {
     if (providersCheckedAt == null) return null;
     return (
-      <div className={`flex flex-wrap gap-[2px] ${className}`}>
-        <span className="text-xxs px-1 py-[1px] border border-rule-2 text-ink-3/70 rounded-sm inline-block">
+      <div className={`flex flex-wrap gap-0.5 ${className}`}>
+        <span className="text-xxs px-1 py-px border border-rule-2 text-ink-3/70 rounded-sm inline-block">
           Ej på SE
         </span>
       </div>
@@ -50,13 +50,13 @@ export function ProviderChips({
   const items = distinctProviders(providers, myProviders);
   if (items.length === 0) return null;
   return (
-    <div className={`flex flex-wrap gap-[2px] ${className}`}>
+    <div className={`flex flex-wrap gap-0.5 ${className}`}>
       {items.map(({ id, isMine }) => {
         const p = getProvider(id)!;
         return (
           <span
             key={id}
-            className={`text-xxs px-1 py-[1px] border rounded-sm inline-block ${
+            className={`text-xxs px-1 py-px border rounded-sm inline-block ${
               isMine ? 'border-acc-deep text-acc-deep' : 'border-rule text-ink-3'
             }`}
           >
@@ -72,7 +72,7 @@ export function PosterProviderDots({ providers, myProviders }: { providers: numb
   const items = distinctProviders(providers, myProviders);
   if (items.length === 0) return null;
   return (
-    <div className="absolute top-1 right-1 flex flex-col gap-[3px]">
+    <div className="absolute top-1 right-1 flex flex-col gap-1">
       {items.map(({ id, isMine }) => {
         const p = getProvider(id)!;
         return (

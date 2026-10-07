@@ -20,7 +20,7 @@ export default function PriceChangeLog() {
         {changes.map(c => (
           <li
             key={`${c.date}-${c.providerId}-${c.tierId ?? ''}`}
-            className="flex flex-wrap items-baseline gap-x-3 px-3 py-[6px] text-sm"
+            className="flex flex-wrap items-baseline gap-x-3 px-3 py-1.5 text-sm"
           >
             <span className="text-xs text-ink-3 w-[8.5rem] shrink-0">
               {c.dateKind === 'effective' ? 'från' : 'upptäckt'} {formatPriceMonth(c.date)}

@@ -43,12 +43,14 @@ vi.mock('@/lib/analytics', () => ({ trackEvent: vi.fn() }));
 vi.mock('@/components/savings/CampaignExpiryNudges', () => ({ default: () => null }));
 vi.mock('@/components/savings/PriceChangeNudges', () => ({ default: () => <div data-testid="price-change-nudges" /> }));
 vi.mock('@/components/savings/ProvidersByValue', () => ({ default: () => null }));
-vi.mock('@/components/savings/ServiceValueCard', () => ({ default: () => null }));
+const monthlyBillMock = vi.fn<() => MonthlyBill | null>(() => null);
+vi.mock('@/hooks/useMonthlyBill', () => ({ useMonthlyBill: () => monthlyBillMock() }));
 vi.mock('@/components/savings/RotationCalendar', () => ({ default: () => null }));
 vi.mock('@/components/savings/SavingsSidebar', () => ({ default: () => null }));
 vi.mock('@/components/savings/UpcomingEpisodes', () => ({ default: () => null }));
 
 import SavingsPage from './page';
+import type { MonthlyBill } from '@/lib/advisor/monthlyBill';
 import { krText, verbatim } from '@/test/krText';
 
 function baseAdvisor(over: Partial<AdvisorResult> = {}): AdvisorResult {
@@ -241,5 +243,36 @@ describe('SavingsPage — pausgolvet', () => {
     expect(screen.getByText('Pausa →')).toBeInTheDocument();
     expect(screen.queryByText(/Lägg till det du följer/)).not.toBeInTheDocument();
     expect(screen.getByTestId('price-change-nudges')).toBeInTheDocument();
+  });
+});
+
+// BIN-1449: the monthly bill takes the place "Behåll eller säg upp?" had.
+describe('SavingsPage — månadsnotan', () => {
+  const PROVIDERS = [
+    { providerId: 8, providerName: 'Netflix', shortName: 'Netflix', color: '#e50914', shows: [], monthlyCost: 169, status: 'active' as const, nextAirDate: null },
+  ];
+  beforeEach(() => {
+    advisorMock.mockReset();
+    monthlyBillMock.mockReset();
+  });
+
+  it('shows last month’s bill when the hook has one', () => {
+    advisorMock.mockReturnValue(baseAdvisor({ providers: PROVIDERS, hasConfiguredProviders: true }));
+    monthlyBillMock.mockReturnValue({
+      month: { startMs: 0, endMs: 1, name: 'september', firstDay: '2026-09-01', lastDay: '2026-09-30' },
+      lines: [{ providerId: 8, costKr: 169, pausedWholeMonth: false, episodes: 4, films: 0, krPerItem: 42 }],
+      totalKr: 169, episodes: 4, films: 0, krPerItem: 42,
+    });
+    render(<SavingsPage />);
+    expect(screen.getByRole('heading', { name: 'Din streaming i september' })).toBeInTheDocument();
+    expect(screen.getByText('4 avsnitt · 42 kr per avsnitt')).toBeInTheDocument();
+  });
+
+  it('shows no bill when there is nothing to bill', () => {
+    advisorMock.mockReturnValue(baseAdvisor({ providers: PROVIDERS, hasConfiguredProviders: true }));
+    monthlyBillMock.mockReturnValue(null);
+    render(<SavingsPage />);
+    expect(screen.queryByTestId('monthly-bill')).toBeNull();
+    expect(screen.queryByText('Behåll eller säg upp?')).toBeNull();
   });
 });

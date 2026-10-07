@@ -492,6 +492,12 @@
       "path": "functions/src/rotationReminder/index.ts"
     },
     {
+      "id": "cf-monthly-bill",
+      "label": "monthlyBillNotify",
+      "context": "backend-api",
+      "path": "functions/src/monthlyBillNotify/index.ts, functions/src/monthlyBillNotify/logic.ts, functions/src/shared/providerPaid.ts, functions/src/shared/inboxCard.ts"
+    },
+    {
       "id": "cf-price-change",
       "label": "priceChangeNotify",
       "context": "backend-api",
@@ -538,6 +544,12 @@
       "label": "ForsvinnerListClient",
       "context": "web-app",
       "path": "src/components/pages/ForsvinnerListClient.tsx"
+    },
+    {
+      "id": "vart-det-page",
+      "label": "Värt det month page",
+      "context": "web-app",
+      "path": "src/app/vart-det/[month]/page.tsx"
     },
     {
       "id": "cineasterna-api",
@@ -2084,6 +2096,38 @@
       "area": "notifications"
     },
     {
+      "id": "flow-monthly-bill",
+      "label": "Monthly bill notice",
+      "description": "On the 1st at 09:00 Europe/Stockholm: one bell card \"Din streaming i {månad}\" for every user whose bill in Rådgivaren has something to show for the month that just ended (a service that cost money and was not paused the whole month, and a film or an episode checked off in it). The card names no amount; the bill itself is computed client-side by buildMonthlyBill. Bell only, no push, no setting (BIN-1449).",
+      "covers": [
+        "monthlyBillNotify"
+      ],
+      "steps": [
+        {
+          "from": "cf-monthly-bill",
+          "to": "firestore",
+          "payload": "page users by document id, select(myProviders, providerTiers, providerCosts, providerPauses); per user with one: users/{uid}/pauseHistory → hasPaidService (catalog paid-ness from providerPaid.ts)",
+          "transport": "Firestore read",
+          "verified": true
+        },
+        {
+          "from": "cf-monthly-bill",
+          "to": "firestore",
+          "payload": "users/{uid}/watchlist where watchedAt in the month (movie, sedd); else every users/{uid}/episodeProgress doc for an episode watched:true in the month, whose watchlist/tv_N row exists",
+          "transport": "Firestore read",
+          "verified": true
+        },
+        {
+          "from": "cf-monthly-bill",
+          "to": "firestore",
+          "payload": "create() users/{uid}/notifications/monthly-bill-{yyyy-mm} {kind:'system', title, body, actionUrl:'/savings/', read:false}; an existing card is left alone",
+          "transport": "Firestore write",
+          "verified": true
+        }
+      ],
+      "area": "notifications"
+    },
+    {
       "id": "flow-rotation",
       "label": "Rotation reminder",
       "description": "Daily scan of users opted into notificationSettings.rotationReminders==true. The rotation calendar itself is computed client-side (watchlist × TMDB × subscription cost) and persisted inline as users/{uid}.rotationSchedule when the user confirms reminders — the scheduled function never talks to TMDB, it only evaluates that persisted schedule against a 1-day due window (Stockholm date) and fires cancel/resume nudges as a bell card plus a push, deduped per event via a marker written AFTER the push. BIN-1442: the same run first sends the \"Påminn mig\" reminders for paused services, found through users/{uid}.pauseReminderNext.",
@@ -2279,6 +2323,38 @@
           "from": "forsvinner-page",
           "to": "web-app",
           "payload": "renders dated 'lämnar {date}' list, links to /movie/{id}/ or /tv/{id}/",
+          "transport": "React render",
+          "verified": true
+        }
+      ],
+      "area": "data pipelines"
+    },
+    {
+      "id": "flow-vart-det",
+      "label": "Värt det month page",
+      "description": "/vart-det/[month] (BIN-1449) is pre-rendered once per listed month (VART_DET_MONTHS). At build it reads the static price catalog and PRICE_CHANGES and asks TMDB what premieres on each paid service that month; in the browser it counts what leaves each service from the public leaving rollup. Kept noindex and out of the sitemap until Malin has seen the month.",
+      "covers": [
+        "/vart-det/[month]"
+      ],
+      "steps": [
+        {
+          "from": "vart-det-page",
+          "to": "tmdb-api",
+          "payload": "build time: fetchMonthPremieres — discoverMovies by primary_release_date and discoverTV by air_date in the month, per paid SEO provider (with_watch_providers, flatrate), plus getTVShowLite on running series to find a season premiering that month; a failed read leaves the service without a level",
+          "transport": "fetch (TMDB)",
+          "verified": true
+        },
+        {
+          "from": "vart-det-page",
+          "to": "firestore",
+          "payload": "browser: VartDetLeavingCount → useStreamingLeaving(providerId) reads streamingLeaving/current and counts titles leaving inside the month",
+          "transport": "Firestore read",
+          "verified": true
+        },
+        {
+          "from": "vart-det-page",
+          "to": "web-app",
+          "payload": "renders one row per paid service: list price (cheapestEntertainmentTier), first premiere and count, price change in the month or Oförändrat, leaving count, level badge (newLevel: ≥3 Mycket nytt, 1–2 Lite nytt, 0 Inget nytt) and the printed rule",
           "transport": "React render",
           "verified": true
         }

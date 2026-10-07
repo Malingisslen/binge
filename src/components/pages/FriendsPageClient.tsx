@@ -121,7 +121,7 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
   return (
     <button
       onClick={onClick}
-      className={`px-3 py-[6px] text-xs cursor-pointer border-b-[2px] bg-transparent font-[inherit] ${
+      className={`px-3 py-1.5 text-xs cursor-pointer border-b-[2px] bg-transparent font-[inherit] ${
         active
           ? 'border-acc-deep text-acc-deep font-semibold'
           : 'border-transparent text-ink-3 hover:text-ink'
@@ -244,7 +244,7 @@ function Row({ user, tab }: { user: FollowListUser; tab: Tab }) {
       {!isMe && (
         <button
           onClick={() => iAmFollowing ? unfollowUser(user.uid) : followUser(user.uid)}
-          className={`px-2 py-[2px] text-xxs border rounded-sm cursor-pointer font-[inherit] ${
+          className={`px-2 py-0.5 text-xxs border rounded-sm cursor-pointer font-[inherit] ${
             iAmFollowing
               ? 'bg-surface text-ink-2 border-rule hover:bg-bg-2'
               : 'bg-acc-deep text-on-acc border-acc-deep'

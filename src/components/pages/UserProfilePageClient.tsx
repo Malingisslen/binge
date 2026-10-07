@@ -122,7 +122,7 @@ export default function UserProfilePageClient({ username }: { username: string }
         }
       />
 
-      <div className="grid grid-cols-4 gap-[10px] mb-4 mt-3">
+      <div className="grid grid-cols-4 gap-2.5 mb-4 mt-3">
         <StatCard label="Totalt" value={(watchlist ?? []).length} />
         <StatCard label="Följer" value={following.length} />
         <StatCard label="Sedd" value={watched.length} />
@@ -133,7 +133,7 @@ export default function UserProfilePageClient({ username }: { username: string }
 
       {!isOwnProfile && (
         <div className={cardClass('px-3 py-2 mb-4')}>
-          <Eyebrow className="mb-[2px]">
+          <Eyebrow className="mb-0.5">
             Smak-match med dig
           </Eyebrow>
           {taste.percent != null ? (
@@ -154,14 +154,14 @@ export default function UserProfilePageClient({ username }: { username: string }
       )}
 
       {following.length > 0 && (
-        <div className={cardClass('mb-[14px]')}>
-          <div className="px-3 py-[6px] border-b border-rule-2">
+        <div className={cardClass('mb-3.5')}>
+          <div className="px-3 py-1.5 border-b border-rule-2">
             <span className="text-sm font-bold text-ink-2">Följer just nu</span>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(100px,1fr))] gap-[7px] px-3 py-2">
+          <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(100px,1fr))] gap-2 px-3 py-2">
             {following.slice(0, 10).map(item => (
               <Link key={item.tmdbId} href={`/${item.mediaType === 'movie' ? 'movie' : 'tv'}/${item.tmdbId}/`} className="no-underline text-ink">
-                <div className={`poster duo-${toneForId(item.tmdbId)} mb-[3px]`}>
+                <div className={`poster duo-${toneForId(item.tmdbId)} mb-1`}>
                   {posterUrl(item.posterPath, 'w342') && (
                     <img src={posterUrl(item.posterPath, 'w342')!} alt={item.title} loading="lazy" decoding="async" width={342} height={513} />
                   )}
@@ -174,14 +174,14 @@ export default function UserProfilePageClient({ username }: { username: string }
       )}
 
       {recentlyWatched.length > 0 && (
-        <div className={cardClass('mb-[14px]')}>
-          <div className="px-3 py-[6px] border-b border-rule-2">
+        <div className={cardClass('mb-3.5')}>
+          <div className="px-3 py-1.5 border-b border-rule-2">
             <span className="text-sm font-bold text-ink-2">Senast sedd</span>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(100px,1fr))] gap-[7px] px-3 py-2">
+          <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(100px,1fr))] gap-2 px-3 py-2">
             {recentlyWatched.map(item => (
               <Link key={item.tmdbId} href={`/${item.mediaType === 'movie' ? 'movie' : 'tv'}/${item.tmdbId}/`} className="no-underline text-ink">
-                <div className={`poster duo-${toneForId(item.tmdbId)} mb-[3px]`}>
+                <div className={`poster duo-${toneForId(item.tmdbId)} mb-1`}>
                   {posterUrl(item.posterPath, 'w342') && (
                     <img src={posterUrl(item.posterPath, 'w342')!} alt={item.title} loading="lazy" decoding="async" width={342} height={513} />
                   )}

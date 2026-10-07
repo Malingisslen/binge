@@ -268,6 +268,21 @@ describe('design consistency — type scale (paket N)', () => {
     expect(decls.filter(d => !/^font-size:\s*var\(--fs-[\w-]+\);$/.test(d))).toEqual([]);
   });
 
+  it('no inline style or SVG attribute in src writes a numeric font size', () => {
+    const files = tsxFilesRecursive(join(process.cwd(), 'src'));
+    expect(files.length).toBeGreaterThan(100);
+    const NUMERIC_FONT_SIZE = /fontSize(?::\s*['"]?[0-9]|=["'{][0-9])/;
+    expect(NUMERIC_FONT_SIZE.test("style={{ fontSize: 11 }}")).toBe(true);
+    expect(NUMERIC_FONT_SIZE.test('<text fontSize="10">')).toBe(true);
+    expect(NUMERIC_FONT_SIZE.test("fontSize: 'var(--fs-xs)'")).toBe(false);
+    const offenders = files.flatMap(f =>
+      readFileSync(f, 'utf8').split('\n')
+        .map((line, i) => (NUMERIC_FONT_SIZE.test(line) ? `${f.replace(process.cwd(), '')}:${i + 1}` : null))
+        .filter((x): x is string => x !== null),
+    );
+    expect(offenders).toEqual([]);
+  }, TREE_SWEEP_TIMEOUT_MS);
+
   it('no .tsx under src uses btn-primary, which globals.css never defined (use <Button variant="acc">)', () => {
     const files = tsxFilesRecursive(join(process.cwd(), 'src'));
     expect(files.length).toBeGreaterThan(0);
@@ -275,5 +290,60 @@ describe('design consistency — type scale (paket N)', () => {
     expect(css).not.toMatch(/\.btn-primary\b/);
     const offenders = files.filter(f => /\bbtn-primary\b/.test(readFileSync(f, 'utf8')));
     expect(offenders.map(f => f.replace(process.cwd(), ''))).toEqual([]);
+  }, TREE_SWEEP_TIMEOUT_MS);
+});
+
+// Paket N, steg 2: the parts in src/components/ui are the only place a button, an
+// eyebrow, a card, a text field or a scrim is spelled out. A call site that writes the
+// classes by hand is the next drift, so each shape is rejected here.
+function stringLiterals(line: string): string[] {
+  return [...line.matchAll(/"([^"]*)"|'([^']*)'|`([^`]*)`/g)].map(m => m[1] ?? m[2] ?? m[3] ?? '');
+}
+function tokens(literal: string): Set<string> {
+  return new Set(literal.split(/\s+/).filter(Boolean));
+}
+const HAND_ROLLED: Array<[string, (t: Set<string>) => boolean]> = [
+  ['eyebrow (use Eyebrow or eyebrowClass)', t => t.has('uppercase') && [...t].some(x => x.startsWith('tracking-'))],
+  ['button classes (use Button or buttonClass)', t => ['btn', 'btn-acc', 'btn-ghost', 'btn-sm', 'btn-xs', 'btn-danger', 'btn-danger-ghost', 'btn-primary'].some(x => t.has(x))],
+  ['card, field or ghost button (use cardClass, fieldClass or Button)', t => t.has('bg-surface') && t.has('border') && t.has('border-rule')],
+  ['filled saffron button (use Button variant="acc" or buttonClass)', t => t.has('bg-acc-deep') && t.has('text-on-acc') && t.has('rounded-sm') && !t.has('?') && [...t].some(x => /^p[xy]?-/.test(x))],
+  ['raw palette colour (use a token)', t => [...t].some(x => /^(?:[a-z]+:)*(?:text|bg|border|ring)-(?:amber|green|blue|gray|slate|zinc|yellow|orange|emerald|sky|neutral|stone|red)-\d/.test(x))],
+  ['black scrim (use bg-scrim)', t => t.has('fixed') && t.has('inset-0') && [...t].some(x => x.startsWith('bg-black'))],
+  ['hand-written spacing (use a 4px step: p-1, gap-2, mt-3 …)', t => [...t].some(x => /^(?:[a-z]+:)*-?(?:p[xytblrse]?|m[xytblrse]?|gap(?:-[xy])?|space-[xy])-\[\d+(?:\.\d+)?px\]$/.test(x))],
+];
+
+describe('design consistency — parts, not hand-rolled classes (paket N)', () => {
+  it('each shape is recognised by its rule', () => {
+    const hit = (s: string) => HAND_ROLLED.filter(([, f]) => f(tokens(s))).map(([n]) => n);
+    expect(hit('text-xxs uppercase tracking-[0.5px] text-ink-3')).toHaveLength(1);
+    expect(hit('btn btn-ghost btn-sm')).toHaveLength(1);
+    expect(hit('bg-surface border border-rule rounded-sm p-3')).toHaveLength(1);
+    expect(hit('text-amber-700 hover:bg-amber-50')).toHaveLength(1);
+    expect(hit('fixed inset-0 bg-black/40 z-50')).toHaveLength(1);
+    expect(hit('flex gap-[6px] sm:py-[3px]')).toHaveLength(1);
+    expect(hit('w-[40px] h-[60px] gap-1.5')).toHaveLength(0);
+    expect(hit('px-3 py-1 bg-acc-deep text-on-acc rounded-sm text-xs')).toHaveLength(1);
+    expect(hit('topbar-icon-btn text-ink-3 uppercase')).toHaveLength(0);
+    expect(hit('bg-surface border-b border-rule')).toHaveLength(0);
+  });
+
+  it('no .tsx under src writes an eyebrow as an inline style (use eyebrowClass)', () => {
+    const files = tsxFilesRecursive(join(process.cwd(), 'src')).filter(f => !/\.test\.tsx$/.test(f));
+    expect(files.length).toBeGreaterThan(100);
+    const offenders = files.filter(f => /textTransform:\s*['"]uppercase['"]/.test(readFileSync(f, 'utf8')));
+    expect(offenders.map(f => f.replace(process.cwd(), ''))).toEqual([]);
+  }, TREE_SWEEP_TIMEOUT_MS);
+
+  it('no .tsx under src writes one of the shapes by hand', () => {
+    const files = tsxFilesRecursive(join(process.cwd(), 'src')).filter(f => !/\.test\.tsx$/.test(f) && !/[\\/]ui[\\/](?:Button|Eyebrow)\.tsx$/.test(f));
+    expect(files.length).toBeGreaterThan(100);
+    const offenders = files.flatMap(f =>
+      readFileSync(f, 'utf8').split('\n').flatMap((line, i) =>
+        stringLiterals(line).flatMap(lit =>
+          HAND_ROLLED.filter(([, rule]) => rule(tokens(lit))).map(([name]) => `${f.replace(process.cwd(), '')}:${i + 1} ${name}`),
+        ),
+      ),
+    );
+    expect(offenders).toEqual([]);
   }, TREE_SWEEP_TIMEOUT_MS);
 });

@@ -429,6 +429,11 @@ export const TICKET_BY_SHA = new Map([
   // 2026-09-30, Malin's decision. Unattended sprint sprint-20260930-135445 wrote this
   // commit's subject without its id.
   ['e318b680bede6a51c460070f88a86731a164e78e', 'BIN-1367'],
+  // 2026-10-06. Package P's thread committed these without an id; the ticket was filed after.
+  ['ab8326d26c08028cc9d9ed4dfef87358e7fe580c', 'BIN-1450'],
+  ['1f3d0025f41408007d69baaf4f2b7b8607cbcf92', 'BIN-1450'],
+  ['f56e539b1c04923aa0c39cba26d5e84eed1c856c', 'BIN-1450'],
+  ['0db25284cc6e075330ec6bea5eaff80f7594ba4d', 'BIN-1450'],
 ]);
 
 /** The BIN-ids a commit subject names, deduplicated and in order. */

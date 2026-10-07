@@ -176,7 +176,7 @@ export default function VillSePickerPage() {
       ) : (
         <>
           <div
-            className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-[10px] md:gap-[7px]"
+            className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-2.5 md:gap-2"
             style={{ marginTop: 18 }}
           >
             {picks.map(({ item, unknownRuntime }) => {
@@ -190,7 +190,7 @@ export default function VillSePickerPage() {
                   title={unknownRuntime ? 'Okänd längd — kan vara längre än din tidsbudget' : undefined}
                 >
                   <Link href={href} className="no-underline text-ink">
-                    <div className={`poster duo-${toneForId(item.tmdbId)} mb-[3px]`}>
+                    <div className={`poster duo-${toneForId(item.tmdbId)} mb-1`}>
                       {poster ? (
                         <img src={poster} alt={item.title} loading="lazy" decoding="async" width={342} height={513} />
                       ) : (
@@ -217,7 +217,7 @@ export default function VillSePickerPage() {
                     <button
                       type="button"
                       onClick={() => void markSeen(item)}
-                      className="chip justify-center w-full mt-[5px]"
+                      className="chip justify-center w-full mt-1.5"
                     >
                       Redan sett
                     </button>

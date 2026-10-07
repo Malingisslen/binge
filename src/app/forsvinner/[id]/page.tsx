@@ -70,7 +70,7 @@ export default async function ForsvinnerPage({ params }: { params: Promise<PageP
   };
 
   return (
-    <div className="canvas">
+    <div>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(collectionPage) }} />
 
       <PageHeader

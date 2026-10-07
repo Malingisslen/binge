@@ -127,7 +127,7 @@ export default function ProviderPageClient({
         icon={provider?.color ? <ProviderDot color={provider.color} size={10} /> : undefined}
       />
       <div className="flex items-center gap-2 mt-3 mb-3">
-        <div className="flex gap-[6px]">
+        <div className="flex gap-1.5">
           {([['new', 'Nytt'], ['movies', 'Filmer'], ['tv', 'Serier']] as const).map(([key, label]) => (
             <button
               key={key}
@@ -152,7 +152,7 @@ export default function ProviderPageClient({
 
       <div className={cardClass()}>
         <TitleGrid items={allResults} loading={isLoading && allResults.length === 0} />
-        <div className="px-3 py-[6px] border-t border-rule">
+        <div className="px-3 py-1.5 border-t border-rule">
           <JustWatchCredit />
         </div>
       </div>

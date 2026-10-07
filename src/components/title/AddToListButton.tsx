@@ -55,7 +55,7 @@ export default function AddToListButton({ tmdbId, mediaType, title, posterPath }
                 <button
                   key={list.id}
                   onClick={() => { void toggle(list.id, isInList); }}
-                  className="w-full text-left px-2 py-[5px] text-xs border-none bg-transparent font-[inherit] cursor-pointer hover:bg-bg-2 flex items-center gap-2"
+                  className="w-full text-left px-2 py-1.5 text-xs border-none bg-transparent font-[inherit] cursor-pointer hover:bg-bg-2 flex items-center gap-2"
                 >
                   <span className={`w-[14px] inline-flex items-center justify-center ${isInList ? 'text-acc-deep' : 'text-ink-3'}`}>
                     {isInList ? <Check size={11} /> : null}

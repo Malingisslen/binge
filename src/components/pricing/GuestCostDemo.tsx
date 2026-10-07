@@ -64,7 +64,7 @@ export default function GuestCostDemo() {
                 type="button"
                 aria-pressed={on}
                 onClick={() => toggle(id)}
-                className={`px-3 py-[6px] text-sm rounded border cursor-pointer ${
+                className={`px-3 py-1.5 text-sm rounded border cursor-pointer ${
                   on ? 'border-acc-deep bg-acc-soft text-ink font-medium' : 'border-rule bg-surface text-ink-2'
                 }`}
               >
@@ -74,7 +74,7 @@ export default function GuestCostDemo() {
           })}
           <Link
             href="/streamingkostnad/"
-            className="px-3 py-[6px] text-sm rounded border border-rule text-ink-2 no-underline"
+            className="px-3 py-1.5 text-sm rounded border border-rule text-ink-2 no-underline"
           >
             Fler
           </Link>

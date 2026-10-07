@@ -113,7 +113,7 @@ export function WatchlistCard({
 
   return (
     <div
-      className={`bg-surface border rounded-sm p-[10px] flex gap-[10px] transition-colors ${
+      className={`bg-surface border rounded-sm p-2.5 flex gap-2.5 transition-colors ${
         selectMode
           ? `cursor-pointer ${selected ? 'border-acc-deep' : 'border-rule hover:border-rule-2'}`
           : 'border-rule hover:border-rule-2'
@@ -150,7 +150,7 @@ export function WatchlistCard({
           <span className="shrink-0">
             {/* B8: obetygsatt = dimmade stjärnor — samma visning som
                 Tabell-vyn, så de två vyerna inte säger olika saker. */}
-            <span className="inline-flex items-center gap-[3px]">
+            <span className="inline-flex items-center gap-1">
               <RatingStars rating={item.rating} readonly size="sm" dim={item.rating === null} />
               {item.rating !== null && (
                 <span className="text-xxs text-ink-3">{item.rating.toFixed(1)}</span>
@@ -158,18 +158,18 @@ export function WatchlistCard({
             </span>
           </span>
         </div>
-        <div className="text-xxs text-ink-3 mt-[1px]">
+        <div className="text-xxs text-ink-3 mt-px">
           {item.releaseYear ?? '—'}
           {item.mediaType === 'tv' && item.totalSeasons ? ` · ${item.totalSeasons} säsong${item.totalSeasons === 1 ? '' : 'er'}` : ''}
         </div>
-        <ProviderChips className="mt-[4px]" providers={item.providers} myProviders={myProviders} providersCheckedAt={item.providersCheckedAt} />
+        <ProviderChips className="mt-1" providers={item.providers} myProviders={myProviders} providersCheckedAt={item.providersCheckedAt} />
         {/* BIN-164: privata taggar — max 2 + "+N" så de inte tränger ut annan info. */}
         {(item.tags?.length ?? 0) > 0 && (
-          <div className="mt-[4px] flex flex-wrap items-center gap-[2px]">
+          <div className="mt-1 flex flex-wrap items-center gap-0.5">
             {item.tags!.slice(0, 2).map(t => (
               <span
                 key={t}
-                className="text-xxs px-1 py-[1px] border border-rule-2 text-ink-3 rounded-sm inline-block max-w-[110px] truncate"
+                className="text-xxs px-1 py-px border border-rule-2 text-ink-3 rounded-sm inline-block max-w-[110px] truncate"
               >
                 {t}
               </span>
@@ -180,7 +180,7 @@ export function WatchlistCard({
           </div>
         )}
         {item.mediaType === 'tv' && (
-          <div className="mt-[5px] flex items-center gap-[6px]">
+          <div className="mt-1.5 flex items-center gap-1.5">
             <div className="flex-1 h-[4px] bg-rule rounded-full overflow-hidden relative">
               <div
                 className={`h-full ${progressLabel.tone === 'done' ? 'bg-season-done' : 'bg-ink'}`}

@@ -45,7 +45,7 @@ export default function FriendButton({ targetUid }: { targetUid: string }) {
   if (!uid || uid === targetUid) return null;
   if (isLoading) return null;
 
-  const baseClass = 'px-3 py-[3px] border rounded-sm text-xs font-[inherit] cursor-pointer';
+  const baseClass = 'px-3 py-1 border rounded-sm text-xs font-[inherit] cursor-pointer';
 
   const alertFor = (action: FriendAction) =>
     failedAction === action ? (

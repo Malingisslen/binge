@@ -13,7 +13,7 @@ import PriceChangeNudges from '@/components/savings/PriceChangeNudges';
 import NumberedActionsList from '@/components/savings/NumberedActionsList';
 import BundleArbitrageCard from '@/components/savings/BundleArbitrageCard';
 import ProvidersByValue from '@/components/savings/ProvidersByValue';
-import ServiceValueCard from '@/components/savings/ServiceValueCard';
+import MonthlyBillCard from '@/components/savings/MonthlyBillCard';
 import CoverageOptimizer from '@/components/savings/CoverageOptimizer';
 import RotationPlanner from '@/components/savings/RotationPlanner';
 import RotationCalendar from '@/components/savings/RotationCalendar';
@@ -25,6 +25,7 @@ import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useSubscriptionAdvisor } from '@/hooks/useSubscriptionAdvisor';
+import { useMonthlyBill } from '@/hooks/useMonthlyBill';
 import { useAuth } from '@/hooks/useAuth';
 import { trackEvent } from '@/lib/analytics';
 import { useToast } from '@/contexts/ToastContext';
@@ -32,8 +33,9 @@ import { captureError } from '@/lib/sentry';
 import { titleHref } from '@/lib/tmdb/client';
 import { formatSwedishDate } from '@/lib/utils';
 import type { AdvisedShow, ActivePause, SubscribeAdvisory } from '@/types';
-import { Eyebrow } from '@/components/ui/Eyebrow';
-import { Button } from '@/components/ui/Button';
+import { Eyebrow, eyebrowClass } from '@/components/ui/Eyebrow';
+import { Button, buttonClass } from '@/components/ui/Button';
+import { cardClass } from '@/components/ui/Card';
 
 const LOOK_AHEAD_DAYS = 60;
 
@@ -70,7 +72,7 @@ interface SubscribeRow {
 
 function SubscribeRowTable({ rows }: { rows: SubscribeRow[] }) {
   return (
-    <div className="bg-surface border border-rule rounded-sm overflow-hidden">
+    <div className={cardClass('overflow-hidden')}>
       <table className="w-full border-collapse">
         <SrOnlyTableHeader columns={['Titel', 'Typ', 'Tjänst', 'Status']} />
         <tbody>
@@ -78,21 +80,21 @@ function SubscribeRowTable({ rows }: { rows: SubscribeRow[] }) {
             const href = titleHref(show.mediaType, show.tmdbId);
             return (
               <tr key={`${provider.providerId}-${show.tmdbId}`} className="border-b border-rule-2 last:border-b-0">
-                <td className="px-3 py-[6px] text-xs font-semibold">
+                <td className="px-3 py-1.5 text-xs font-semibold">
                   <Link href={href} className="no-underline text-ink hover:text-acc-deep">
                     {show.title}
                   </Link>
                 </td>
-                <td className="px-3 py-[6px] text-xxs text-ink-3 whitespace-nowrap">
+                <td className="px-3 py-1.5 text-xxs text-ink-3 whitespace-nowrap">
                   {show.mediaType === 'movie' ? 'Film' : 'Serie'}
                 </td>
-                <td className="px-3 py-[6px] whitespace-nowrap">
+                <td className="px-3 py-1.5 whitespace-nowrap">
                   <span className="inline-flex items-center gap-1">
                     <ProviderDot color={provider.color} size={7} />
                     <span className="text-xs text-ink-2">{provider.shortName}</span>
                   </span>
                 </td>
-                <td className="px-3 py-[6px] text-xxs text-ink-3 text-right whitespace-nowrap">
+                <td className="px-3 py-1.5 text-xxs text-ink-3 text-right whitespace-nowrap">
                   {subscribeRowStatusText(show)}
                 </td>
               </tr>
@@ -112,26 +114,26 @@ function ActivePausesSection({ pauses, onResume }: { pauses: ActivePause[]; onRe
   const now = new Date();
   const totalSaved = pauses.reduce((sum, p) => sum + p.savingsSoFar, 0);
   return (
-    <div className="mb-[14px]">
-      <div className="flex items-baseline justify-between mb-[6px]">
+    <div className="mb-3.5">
+      <div className="flex items-baseline justify-between mb-1.5">
         <Eyebrow as="h2" size="xs">Dina pausade tjänster</Eyebrow>
         {totalSaved > 0 && (
           <span className="text-xxs text-season-done font-semibold">Sparat hittills: {formatKr(totalSaved)} kr</span>
         )}
       </div>
-      <div className="bg-surface border border-rule rounded-sm overflow-hidden">
+      <div className={cardClass('overflow-hidden')}>
         <table className="w-full border-collapse">
           <SrOnlyTableHeader columns={['Tjänst', 'Pausad sedan', 'Sparat', 'Åtgärd']} />
           <tbody>
             {pauses.map(p => (
               <tr key={p.providerId} className="border-b border-rule-2 last:border-b-0">
-                <td className="px-3 py-[6px] whitespace-nowrap">
-                  <span className="inline-flex items-center gap-[6px]">
+                <td className="px-3 py-1.5 whitespace-nowrap">
+                  <span className="inline-flex items-center gap-1.5">
                     <ProviderDot color={p.color} size={7} />
                     <span className="text-xs font-semibold text-ink">{p.providerName}</span>
                   </span>
                 </td>
-                <td className="px-3 py-[6px] text-xxs text-ink-3">
+                <td className="px-3 py-1.5 text-xxs text-ink-3">
                   Pausad {formatSwedishDate(p.pausedAt)}
                   {p.resumeAt ? ` · återuppta ${formatSwedishDate(p.resumeAt)}` : ''}
                   {p.resumeAt && (user?.providerPauses?.[p.providerId]?.remind
@@ -150,10 +152,10 @@ function ActivePausesSection({ pauses, onResume }: { pauses: ActivePause[]; onRe
                     ))}
                   <CancelHint providerId={p.providerId} billingDay={user?.providerRenewalDays?.[p.providerId]} now={now} />
                 </td>
-                <td className="px-3 py-[6px] text-xxs text-season-done font-semibold text-right whitespace-nowrap">
+                <td className="px-3 py-1.5 text-xxs text-season-done font-semibold text-right whitespace-nowrap">
                   +{formatKr(p.savingsSoFar)} kr
                 </td>
-                <td className="px-3 py-[6px] text-right">
+                <td className="px-3 py-1.5 text-right">
                   <button
                     onClick={() => onResume(p.providerId)}
                     className="text-xxs text-acc-deep no-underline font-[inherit] bg-transparent border-none cursor-pointer"
@@ -190,9 +192,10 @@ function SavingsContent() {
   const detailsRef = useRef<HTMLDetailsElement | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   // BIN-208: stamp "now" once per mount (lazy useState initializer) so the month
-  // window is stable and useServiceValue's memo doesn't recompute every render
+  // window is stable and the monthly bill's memo doesn't recompute every render
   // from a fresh Date.now().
   const [valueNowMs] = useState(() => Date.now());
+  const monthlyBill = useMonthlyBill(valueNowMs);
   const handleShowSubscribeRows = () => {
     const el = detailsRef.current;
     if (!el) return;
@@ -291,7 +294,7 @@ function SavingsContent() {
           title="Inga tjänster tillagda än"
           body="Lägg till dina streamingtjänster så räknar vi ut vad du kan pausa och spara på."
           action={
-            <Link href="/settings/" className="btn btn-ghost btn-sm">Lägg till tjänster</Link>
+            <Link href="/settings/" className={buttonClass({ variant: 'ghost', size: 'sm' })}>Lägg till tjänster</Link>
           }
         />
       </>
@@ -313,9 +316,9 @@ function SavingsContent() {
         </header>
         <div style={{ marginTop: 22 }}>
           <DiagnosisCard advisor={advisor} activeProviderCount={activeProviderCount} />
-          <div className="flex flex-wrap gap-2 mb-[14px]">
-            <Link href="/series/" className="btn btn-sm">Utforska serier</Link>
-            <Link href="/films/" className="btn btn-ghost btn-sm">Utforska filmer</Link>
+          <div className="flex flex-wrap gap-2 mb-3.5">
+            <Link href="/series/" className={buttonClass({ size: 'sm' })}>Utforska serier</Link>
+            <Link href="/films/" className={buttonClass({ variant: 'ghost', size: 'sm' })}>Utforska filmer</Link>
           </div>
           <PriceChangeNudges />
           <CampaignExpiryNudges />
@@ -357,7 +360,7 @@ function SavingsContent() {
         {advisor.mostUsedProvider && (
           // BIN-514: den redan-beräknade "mest använda tjänst"-statistiken —
           // vilken tjänst som bär flest av dina anchor-titlar (Följer + Vill se).
-          <div className="mb-[14px] flex items-center gap-[6px] text-xs text-ink-2">
+          <div className="mb-3.5 flex items-center gap-1.5 text-xs text-ink-2">
             <span className="text-ink-3">Mest använda tjänst:</span>
             <ProviderDot color={advisor.mostUsedProvider.color} size={7} />
             <span className="font-semibold text-ink">{advisor.mostUsedProvider.shortName}</span>
@@ -416,7 +419,7 @@ function SavingsContent() {
               activePauses={advisor.activePauses}
             />
 
-            <ServiceValueCard nowMs={valueNowMs} />
+            {monthlyBill && <MonthlyBillCard bill={monthlyBill} />}
 
             <CoverageOptimizer rows={advisor.willSeeByProvider} />
 
@@ -431,7 +434,7 @@ function SavingsContent() {
               className="mb-3 scroll-mt-3 mt-3"
               onToggle={e => setDetailsOpen((e.currentTarget as HTMLDetailsElement).open)}
             >
-              <summary className="text-xs font-bold uppercase tracking-[0.5px] text-ink-3 cursor-pointer select-none list-none">
+              <summary className={eyebrowClass({ size: 'xs', className: 'cursor-pointer select-none list-none' })}>
                 Mer detaljer ›
               </summary>
               <div className="mt-3 flex flex-col gap-3">
@@ -439,7 +442,7 @@ function SavingsContent() {
                 {detailsOpen && <WillSeePerProvider rows={advisor.willSeeByProvider} />}
                 {hasSubscribeDetails && (
                   <div>
-                    <div className="flex items-baseline justify-between mb-[6px]">
+                    <div className="flex items-baseline justify-between mb-1.5">
                       <Eyebrow as="h3" size="xs">
                         Titlar på tjänster du inte har
                       </Eyebrow>

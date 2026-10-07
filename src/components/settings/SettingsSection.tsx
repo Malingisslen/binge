@@ -49,7 +49,7 @@ export function SettingsSection({
           type="button"
           aria-expanded={open}
           onClick={() => setOpen(o => !o)}
-          className="w-full flex items-center justify-between px-3 pt-[10px] pb-2 cursor-pointer text-left rounded-t-md hover:bg-bg-2"
+          className="w-full flex items-center justify-between px-3 pt-2.5 pb-2 cursor-pointer text-left rounded-t-md hover:bg-bg-2"
         >
           {eyebrow}
           {open
@@ -57,7 +57,7 @@ export function SettingsSection({
             : <ChevronDown size={14} className="text-ink-3" />}
         </button>
       ) : (
-        <div className="flex items-center justify-between px-3 pt-[10px] pb-2">
+        <div className="flex items-center justify-between px-3 pt-2.5 pb-2">
           {eyebrow}
           {action}
         </div>

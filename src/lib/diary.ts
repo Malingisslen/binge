@@ -8,7 +8,7 @@ import { seenDate } from '@/lib/seenDate';
 // useAllEpisodeProgress). Both are the payoff of editable watch dates (BIN-91).
 // All assembly is pure + testable; the hook only fetches + normalises.
 
-const MONTHS_SV = [
+export const MONTHS_SV = [
   'januari', 'februari', 'mars', 'april', 'maj', 'juni',
   'juli', 'augusti', 'september', 'oktober', 'november', 'december',
 ];

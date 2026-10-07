@@ -137,4 +137,9 @@ describe('hubLinks — kostnadslänkar', () => {
     const all = hubSections().flatMap((s) => s.links.map((l) => l.href));
     expect(all.some((h) => h.startsWith('/streamingpriser'))).toBe(false);
   });
+
+  it('does NOT link the hidden month page /vart-det/ before Malin publishes it', () => {
+    const all = hubSections().flatMap((s) => s.links.map((l) => l.href));
+    expect(all.some((h) => h.startsWith('/vart-det'))).toBe(false);
+  });
 });
