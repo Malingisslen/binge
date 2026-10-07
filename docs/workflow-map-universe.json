@@ -43,6 +43,7 @@
     "/guider",
     "/streamingkostnad",
     "/streamingpriser",
+    "/vart-det/[month]",
     "/my/all",
     "/my/films",
     "/recommendations",
