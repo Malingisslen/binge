@@ -142,7 +142,7 @@ function CalibrationCard({
 
   return (
     <div className={cardClass('overflow-hidden')}>
-      <div className="text-xxs text-ink-3 px-3 py-[4px] border-b border-rule-2">
+      <div className="text-xxs text-ink-3 px-3 py-1 border-b border-rule-2">
         {progress.current}/{progress.total}
       </div>
       <div className="relative h-[180px] bg-ink overflow-hidden">

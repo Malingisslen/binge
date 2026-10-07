@@ -111,7 +111,7 @@ export default function AddToGroupButton({
                     setWorking(null);
                   }
                 }}
-                className="w-full text-left px-2 py-[5px] text-xs border-none bg-transparent font-[inherit] cursor-pointer hover:bg-bg-2 flex items-center gap-2 disabled:opacity-50"
+                className="w-full text-left px-2 py-1.5 text-xs border-none bg-transparent font-[inherit] cursor-pointer hover:bg-bg-2 flex items-center gap-2 disabled:opacity-50"
               >
                 <span className={`w-[14px] inline-flex items-center justify-center ${isIn ? 'text-acc-deep' : 'text-ink-3'}`}>
                   {isIn ? <Check size={11} /> : null}
@@ -124,10 +124,10 @@ export default function AddToGroupButton({
             );
           })}
           {groupsLoading && (
-            <div className="px-2 py-[5px] text-xs text-ink-3">Hämtar grupper…</div>
+            <div className="px-2 py-1.5 text-xs text-ink-3">Hämtar grupper…</div>
           )}
           {!groupsLoading && groups.length === 0 && (
-            <div className="px-2 py-[5px] text-xs text-ink-3">Du är inte med i någon grupp.</div>
+            <div className="px-2 py-1.5 text-xs text-ink-3">Du är inte med i någon grupp.</div>
           )}
         </div>
       )}

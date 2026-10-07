@@ -115,13 +115,13 @@ function NyContent() {
 
         <FormSection title="Dina streamingtjänster">
           <p className="text-xs text-ink-3 mb-2">Bara titlar från de här tjänsterna (plus deltagarnas, beroende på läge nedan) visas.</p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-[3px]">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
             {flatrate.map(p => {
               const selected = providers.includes(p.id);
               return (
                 <label
                   key={p.id}
-                  className={`flex items-center gap-[6px] px-2 py-[3px] border rounded-sm cursor-pointer text-xs ${
+                  className={`flex items-center gap-1.5 px-2 py-1 border rounded-sm cursor-pointer text-xs ${
                     selected ? 'border-acc-deep bg-acc-deep/[0.08]' : 'border-rule bg-surface'
                   }`}
                 >

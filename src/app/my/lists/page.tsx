@@ -95,7 +95,7 @@ function ListsContent() {
         />
       )}
 
-      <div className="space-y-[6px]">
+      <div className="space-y-1.5">
         {lists.map(list => (
           <div key={list.id} className={cardClass('px-3 py-2 flex items-center justify-between')}>
             <div>
@@ -121,7 +121,7 @@ function ListsContent() {
           <Eyebrow as="h2" className="mb-2">
             Följda listor
           </Eyebrow>
-          <div className="space-y-[6px]">
+          <div className="space-y-1.5">
             {followed.map(list => (
               <Link
                 key={list.id}

@@ -30,7 +30,7 @@ export default function HouseholdPanel({ groupId }: { groupId: string }) {
 
   return (
     <div className={cardClass()}>
-      <Eyebrow className="px-3 py-[6px] border-b border-rule-2">
+      <Eyebrow className="px-3 py-1.5 border-b border-rule-2">
         Hushåll
       </Eyebrow>
 

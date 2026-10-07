@@ -121,7 +121,7 @@ export function HandOverGroupDialog({
           <ul className="mb-3">
             {candidates.map(m => (
               <li key={m.uid} className="border-b border-rule-2 last:border-b-0">
-                <label className="flex items-center gap-2 py-[6px] cursor-pointer text-xs">
+                <label className="flex items-center gap-2 py-1.5 cursor-pointer text-xs">
                   <input
                     type="radio"
                     name="handover-successor"
@@ -160,7 +160,7 @@ export function HandOverGroupDialog({
           <button
             onClick={submit}
             disabled={working || done || !picked}
-            className="ml-auto inline-flex items-center gap-1 px-3 py-[5px] border border-danger/40 text-danger-ink rounded-sm text-xs bg-surface cursor-pointer hover:bg-danger-soft disabled:opacity-50"
+            className="ml-auto inline-flex items-center gap-1 px-3 py-1.5 border border-danger/40 text-danger-ink rounded-sm text-xs bg-surface cursor-pointer hover:bg-danger-soft disabled:opacity-50"
           >
             <UserCheck size={11} />
             {working ? 'Lämnar över…' : `Lämna över till ${pickedName}`}

@@ -200,15 +200,15 @@ function StepWelcome({ onNext }: { onNext: () => void }) {
       </p>
       <ul className="space-y-2 mb-6 text-sm text-ink-2">
         <li className="flex items-start gap-2">
-          <Check size={14} className="text-acc-deep mt-[3px] shrink-0" />
+          <Check size={14} className="text-acc-deep mt-1 shrink-0" />
           <span>Välj vilka streamingtjänster du har</span>
         </li>
         <li className="flex items-start gap-2">
-          <Check size={14} className="text-acc-deep mt-[3px] shrink-0" />
+          <Check size={14} className="text-acc-deep mt-1 shrink-0" />
           <span>Lägg till något du vill se eller redan följer</span>
         </li>
         <li className="flex items-start gap-2">
-          <Check size={14} className="text-acc-deep mt-[3px] shrink-0" />
+          <Check size={14} className="text-acc-deep mt-1 shrink-0" />
           <span>Se vad du betalar och vad du kan pausa</span>
         </li>
       </ul>
@@ -348,7 +348,7 @@ function StepProviders({ onBack, onNext }: { onBack: () => void; onNext: () => v
             const cost = resolveEffectiveMonthlyCost(p.id, costSettings, now);
             const estimated = isEstimatedMonthlyCost(p.id, costSettings, now);
             return (
-              <li key={p.id} className="flex items-center gap-2 py-[6px] text-sm">
+              <li key={p.id} className="flex items-center gap-2 py-1.5 text-sm">
                 <span className="flex-1 min-w-0 truncate">{p.name}</span>
                 {p.tiers && p.tiers.length > 0 && (
                   <select
@@ -523,7 +523,7 @@ function StepFirstTitle({
               return (
                 <li
                   key={r.id}
-                  className={cardClass('flex items-center gap-2 px-2 py-[5px]')}
+                  className={cardClass('flex items-center gap-2 px-2 py-1.5')}
                 >
                   {poster && (
                     <div className={`poster duo-${r.genre_ids?.length ? toneForGenreIds(r.genre_ids) : toneForId(r.id)} w-[28px] h-[42px] shrink-0`}>
@@ -618,7 +618,7 @@ function StepFirstTitle({
 
       {items.length > 0 && (
         <div className="text-xs text-acc-deep mb-3">
-          <Check size={11} className="inline mb-[2px] mr-1" />
+          <Check size={11} className="inline mb-0.5 mr-1" />
           {items.length} titel{items.length === 1 ? '' : 'ar'} tillagd{items.length === 1 ? '' : 'a'}.
         </div>
       )}
@@ -733,7 +733,7 @@ function StepDone({
 
       <div className="bg-acc-deep/[0.06] border border-acc-deep/30 rounded-sm p-3 mb-4">
         <div className="flex items-start gap-2 mb-2">
-          <Target size={14} className="text-acc-deep mt-[2px] shrink-0" />
+          <Target size={14} className="text-acc-deep mt-0.5 shrink-0" />
           <div className="flex-1">
             <div className="text-sm font-bold text-ink">
               Kalibrera smaken

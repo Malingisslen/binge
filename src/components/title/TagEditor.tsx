@@ -58,9 +58,9 @@ export default function TagEditor({ tags, onChange, suggestions }: TagEditorProp
 
   return (
     <div className="mb-3">
-      <div className="flex flex-wrap items-center gap-[6px]">
+      <div className="flex flex-wrap items-center gap-1.5">
         {tags.map(t => (
-          <span key={t} className="chip is-on inline-flex items-center gap-[4px]">
+          <span key={t} className="chip is-on inline-flex items-center gap-1">
             {t}
             <button
               type="button"

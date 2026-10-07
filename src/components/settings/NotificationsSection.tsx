@@ -254,7 +254,7 @@ export function NotificationsSection() {
           className="accent-acc-deep w-[14px] h-[14px]" />
         Notiser när en streamingtjänst jag betalar för ändrar pris
       </label>
-      <p className="text-xs text-ink-3 mt-1 ml-[22px]">
+      <p className="text-xs text-ink-3 mt-1 ml-6">
         Gäller tjänster där du valt vilken nivå du har, och kräver att push-notiser är på.
       </p>
 

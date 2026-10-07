@@ -242,7 +242,7 @@ export default function DiscoverPageClient({
       ) : (
         <div className={cardClass()}>
           <TitleGrid items={items} loading={isLoading && items.length === 0} />
-          <div className="px-3 py-[6px] border-t border-rule-2">
+          <div className="px-3 py-1.5 border-t border-rule-2">
             <JustWatchCredit />
           </div>
         </div>

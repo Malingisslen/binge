@@ -26,9 +26,9 @@ export default function FreeWatchBadge({ free, ads }: { free: ProviderEntry[]; a
   if (free.length === 0 && ads.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-x-[10px] gap-y-[4px] mt-[8px]">
+    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 mt-2">
       {free.length > 0 && (
-        <span className="inline-flex items-center gap-[6px]">
+        <span className="inline-flex items-center gap-1.5">
           <span className={badgeClass('success')}>
             Gratis
           </span>
@@ -36,7 +36,7 @@ export default function FreeWatchBadge({ free, ads }: { free: ProviderEntry[]; a
         </span>
       )}
       {ads.length > 0 && (
-        <span className="inline-flex items-center gap-[6px]">
+        <span className="inline-flex items-center gap-1.5">
           <span className={badgeClass('success')}>
             Gratis med reklam
           </span>

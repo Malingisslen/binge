@@ -51,7 +51,7 @@ export default function NotInterestedButton({ tmdbId, mediaType, title, variant 
     <button
       type="button"
       onClick={handleClick}
-      className={`inline-flex items-center gap-[5px] px-[10px] py-[3px] border rounded-sm text-xs font-[inherit] cursor-pointer font-semibold ${
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 border rounded-sm text-xs font-[inherit] cursor-pointer font-semibold ${
         marked
           ? 'bg-surface border-rule text-ink hover:bg-bg-2'
           : 'bg-surface border-rule text-ink-2 hover:bg-bg-2'

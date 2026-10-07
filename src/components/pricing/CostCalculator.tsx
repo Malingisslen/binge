@@ -87,7 +87,7 @@ export default function CostCalculator() {
           every row (plan round 2, decision 4). On phones the tier gets a row of its own. */}
       <div
         aria-hidden="true"
-        className={`hidden sm:grid ${ROW_COLUMNS} px-3 py-[6px] border-t border-rule-2 ${eyebrowClass({ className: 'bg-bg-2' })}`}
+        className={`hidden sm:grid ${ROW_COLUMNS} px-3 py-1.5 border-t border-rule-2 ${eyebrowClass({ className: 'bg-bg-2' })}`}
       >
         <span>Tjänst</span>
         <span>Nivå</span>
@@ -155,7 +155,7 @@ export default function CostCalculator() {
 
       <div
         data-testid="cost-bar"
-        className={cardClass('sticky bottom-0 max-[980px]:bottom-[calc(64px_+_env(safe-area-inset-bottom,0px))] z-20 mt-6 px-3 py-[10px] flex flex-wrap items-center justify-between gap-3')}
+        className={cardClass('sticky bottom-0 max-[980px]:bottom-[calc(64px_+_env(safe-area-inset-bottom,0px))] z-20 mt-6 px-3 py-2.5 flex flex-wrap items-center justify-between gap-3')}
       >
         <div className="flex-1 min-w-[12rem] max-w-[360px]" aria-live="polite">
           {result.paidCount > 0 ? (

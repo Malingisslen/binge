@@ -171,14 +171,14 @@ export default function ListPageClient({ listId }: { listId: string }) {
         />
       ) : (
         <div className={cardClass('mt-3')}>
-          <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-[10px] md:gap-[7px] px-3 py-2">
+          <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-2.5 md:gap-2 px-3 py-2">
             {list.items.map(item => {
             const poster = posterUrl(item.posterPath, 'w342');
             const href = titleHref(item.mediaType, item.tmdbId);
             return (
               <div key={item.tmdbId} className="relative">
                 <Link href={href} className="no-underline text-ink block">
-                  <div className={`poster duo-${toneForId(item.tmdbId)} mb-[3px]`}>
+                  <div className={`poster duo-${toneForId(item.tmdbId)} mb-1`}>
                     {poster && <img src={poster} alt={item.title} loading="lazy" decoding="async" width={342} height={513} />}
                   </div>
                   <div className="text-xs font-semibold truncate">{item.title}</div>
@@ -261,7 +261,7 @@ function TitlePicker({ existingIds, onAdd, onClose }: TitlePickerProps) {
                 <button
                   onClick={() => !alreadyAdded && onAdd(r)}
                   disabled={alreadyAdded}
-                  className="w-full flex items-center gap-2 px-1 py-[3px] bg-transparent border-none cursor-pointer text-left hover:bg-bg-2 rounded-sm disabled:cursor-default disabled:opacity-60"
+                  className="w-full flex items-center gap-2 px-1 py-1 bg-transparent border-none cursor-pointer text-left hover:bg-bg-2 rounded-sm disabled:cursor-default disabled:opacity-60"
                 >
                   {poster ? (
                     <div className={`poster duo-${toneForId(r.id)} w-[24px] h-[36px] shrink-0`}>
@@ -324,12 +324,12 @@ function EditorsManager({ editors, onAdd, onRemove }: {
     if (!res.ok) setMsg(res.error ?? 'Kunde inte ta bort medredigeraren.');
   };
   return (
-    <div className={cardClass('px-3 py-[10px] mt-3 max-w-[420px]')}>
+    <div className={cardClass('px-3 py-2.5 mt-3 max-w-[420px]')}>
       <Eyebrow className="mb-1">Medredigerare</Eyebrow>
       <p className="text-xxs text-ink-3 mb-2">
         De du lägger till kan lägga till och ta bort titlar — men inte ändra listans namn eller synlighet.
       </p>
-      <div className="flex gap-[6px] items-center mb-1">
+      <div className="flex gap-1.5 items-center mb-1">
         <input
           value={handle}
           onChange={e => setHandle(e.target.value)}
@@ -341,7 +341,7 @@ function EditorsManager({ editors, onAdd, onRemove }: {
       </div>
       {msg && <div className="text-xxs text-ink-3 mb-2">{msg}</div>}
       {editors.length > 0 && (
-        <div className="flex flex-col gap-[4px] mt-2">
+        <div className="flex flex-col gap-1 mt-2">
           {editors.map(uid => <EditorRow key={uid} uid={uid} onRemove={() => handleRemove(uid)} />)}
         </div>
       )}

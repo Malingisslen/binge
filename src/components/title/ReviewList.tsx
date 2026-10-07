@@ -137,7 +137,7 @@ function ReviewCard({ review, isOwn, onDelete }: { review: Review; isOwn?: boole
   const { comments } = useReviewComments(showComments ? review.id : null);
 
   return (
-    <div className={cardClass('px-3 py-2 mb-[6px]')}>
+    <div className={cardClass('px-3 py-2 mb-1.5')}>
       <div className="flex items-center justify-between mb-1">
         <div className="text-xs">
           {review.username ? (
@@ -174,11 +174,11 @@ function ReviewCard({ review, isOwn, onDelete }: { review: Review; isOwn?: boole
         <p className="text-xs text-ink-2 leading-relaxed m-0">{review.text}</p>
       )}
 
-      <div className="flex items-center gap-3 mt-[6px] pt-[5px] border-t border-rule-2">
+      <div className="flex items-center gap-3 mt-1.5 pt-1.5 border-t border-rule-2">
         <button
           onClick={toggle}
           disabled={!uid}
-          className={`inline-flex items-center gap-[4px] bg-transparent border-none cursor-pointer p-0 font-[inherit] text-xxs ${
+          className={`inline-flex items-center gap-1 bg-transparent border-none cursor-pointer p-0 font-[inherit] text-xxs ${
             iLike ? 'text-acc-deep' : 'text-ink-3 hover:text-ink-2'
           } disabled:opacity-50 disabled:cursor-default`}
           title={uid ? (iLike ? 'Ångra gillning' : 'Gilla') : 'Logga in för att gilla'}
@@ -190,7 +190,7 @@ function ReviewCard({ review, isOwn, onDelete }: { review: Review; isOwn?: boole
         </button>
         <button
           onClick={() => setShowComments(v => !v)}
-          className="inline-flex items-center gap-[4px] bg-transparent border-none cursor-pointer p-0 font-[inherit] text-xxs text-ink-3 hover:text-ink-2"
+          className="inline-flex items-center gap-1 bg-transparent border-none cursor-pointer p-0 font-[inherit] text-xxs text-ink-3 hover:text-ink-2"
         >
           <MessageCircle size={11} />
           Kommentera
@@ -242,7 +242,7 @@ function ReviewComments({
       {visibleComments.length === 0 ? (
         <div className="text-xxs text-ink-3 italic">Inga kommentarer än.</div>
       ) : (
-        <ul className="space-y-[4px] mb-2">
+        <ul className="space-y-1 mb-2">
           {visibleComments.map(c => {
             const canDelete = !!uid && (c.uid === uid || reviewAuthorUid === uid);
             return (
@@ -255,8 +255,8 @@ function ReviewComments({
                   ) : (
                     <span className="font-semibold text-ink">{c.displayName}</span>
                   )}
-                  <span className="text-ink-2 ml-[4px]">{c.text}</span>
-                  <span className="text-ink-3 ml-[4px]">· {c.createdAt.toLocaleDateString('sv-SE')}</span>
+                  <span className="text-ink-2 ml-1">{c.text}</span>
+                  <span className="text-ink-3 ml-1">· {c.createdAt.toLocaleDateString('sv-SE')}</span>
                 </div>
                 {canDelete ? (
                   <button

@@ -133,7 +133,7 @@ export function GroupWatchlistTable({
 
   return (
     <div className={cardClass()}>
-      <Eyebrow className="px-3 py-[6px] border-b border-rule-2">
+      <Eyebrow className="px-3 py-1.5 border-b border-rule-2">
         Gemensamt bibliotek ({watchlist.length})
       </Eyebrow>
 
@@ -173,7 +173,7 @@ export function GroupWatchlistTable({
               const removeFailed = failed[failureKey('remove', item)] === true;
               return (
                 <tr key={rowKey} className="border-t border-rule-2 hover:bg-rule-2/30">
-                  <td className="px-3 py-[6px]">
+                  <td className="px-3 py-1.5">
                     <div className="flex items-center gap-2">
                       {item.posterPath && (
                         <div className={`poster duo-${toneForId(item.tmdbId)} w-[28px] h-[42px] shrink-0`}>
@@ -213,7 +213,7 @@ export function GroupWatchlistTable({
                     const r = item.memberRatings[m.uid] ?? null;
                     const mine = m.uid === myUid;
                     return (
-                      <td key={m.uid} className="text-center px-2 py-[6px]">
+                      <td key={m.uid} className="text-center px-2 py-1.5">
                         {mine ? (
                           <>
                             <RatingPicker
@@ -232,10 +232,10 @@ export function GroupWatchlistTable({
                       </td>
                     );
                   })}
-                  <td className="text-right px-3 py-[6px] text-ink-2">
+                  <td className="text-right px-3 py-1.5 text-ink-2">
                     {avg != null ? avg.toFixed(1) : '—'}
                   </td>
-                  <td className="text-right px-2 py-[6px]">
+                  <td className="text-right px-2 py-1.5">
                     {canDelete && (
                       <button
                         onClick={() => setItemToRemove(item)}
@@ -321,7 +321,7 @@ function TvAsymmetryRow({
   points.sort((a, b) => b.sortKey - a.sortKey);
 
   return (
-    <div className="text-xxs text-ink-3 mt-[2px] flex flex-wrap gap-[6px]">
+    <div className="text-xxs text-ink-3 mt-0.5 flex flex-wrap gap-1.5">
       {points.map(p => (
         <span key={p.uid} title={`${p.initial} har sett t.o.m. ${p.code}`}>
           <span className="font-semibold text-ink-2">{p.initial}</span>:{p.code}
@@ -347,7 +347,7 @@ function RatingPicker({
         {value != null ? value : '+'}
       </Button>
       {open && (
-        <div className={cardClass('absolute z-10 right-0 mt-[2px] shadow-none flex flex-wrap gap-[2px] p-1 w-[120px]')}>
+        <div className={cardClass('absolute z-10 right-0 mt-0.5 shadow-none flex flex-wrap gap-0.5 p-1 w-[120px]')}>
           {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
             <Button
               key={n}

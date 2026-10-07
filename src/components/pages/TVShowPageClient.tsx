@@ -350,7 +350,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
               <StatusButton {...statusButtonProps} />
               <div>
                 {watchlistItem && (
-                  <div className={eyebrowClass({ size: 'xs', className: 'mb-[3px]' })}>
+                  <div className={eyebrowClass({ size: 'xs', className: 'mb-1' })}>
                     Ditt betyg
                   </div>
                 )}

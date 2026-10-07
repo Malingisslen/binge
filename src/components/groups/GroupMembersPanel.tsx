@@ -32,7 +32,7 @@ export function GroupMembersPanel({
   const [memberToRemove, setMemberToRemove] = useState<GroupMember | null>(null);
   return (
     <div className={cardClass()}>
-      <div className="px-3 py-[6px] border-b border-rule-2 flex items-center justify-between">
+      <div className="px-3 py-1.5 border-b border-rule-2 flex items-center justify-between">
         <Eyebrow>
           Medlemmar ({members.length})
         </Eyebrow>
@@ -194,7 +194,7 @@ function AddMemberSearch({
             const isInvited = invited.has(u.uid);
             const busy = inviting === u.uid;
             return (
-              <li key={u.uid} className="px-2 py-[5px] flex items-center gap-2">
+              <li key={u.uid} className="px-2 py-1.5 flex items-center gap-2">
                 <SmallAvatar name={u.displayName} photoURL={u.photoURL} />
                 <div className="flex-1 min-w-0">
                   <div className="text-xs text-ink truncate">{u.displayName}</div>

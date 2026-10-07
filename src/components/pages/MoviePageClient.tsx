@@ -455,7 +455,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
               />
               <div>
                 {watchlistItem && (
-                  <div className={eyebrowClass({ size: 'xs', className: 'mb-[3px]' })}>
+                  <div className={eyebrowClass({ size: 'xs', className: 'mb-1' })}>
                     Ditt betyg
                   </div>
                 )}

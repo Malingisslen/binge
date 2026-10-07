@@ -147,7 +147,7 @@ function CanonicalSpecialsSection({
 }) {
   return (
     <div className="border-b border-rule-2 last:border-b-0">
-      <div className="flex items-center justify-between py-[5px] text-sm">
+      <div className="flex items-center justify-between py-1.5 text-sm">
         {/* A11Y-2: a real button, so keyboard and screen-reader users can open the
             season and hear whether it is open. */}
         <button
@@ -307,7 +307,7 @@ function SpoilerProtectionBanner({
   return (
     <>
       <div className="px-3 py-2 bg-acc-soft border-b border-acc-deep/30 flex items-start gap-2">
-        <ShieldAlert size={13} className="text-acc-deep shrink-0 mt-[2px]" />
+        <ShieldAlert size={13} className="text-acc-deep shrink-0 mt-0.5" />
         <div className="text-xxs leading-relaxed flex-1">
           <span className="font-semibold text-acc-deep">Spoiler-skydd aktivt</span>
           <span className="text-ink-2">

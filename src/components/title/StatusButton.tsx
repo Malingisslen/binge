@@ -197,7 +197,7 @@ export default function StatusButton({
         // uid), so they get no tooltip either, which is right: theirs is a normal
         // tappable button now.
         title={holdReason ?? (current ? labelFor(current.status) : undefined)}
-        className={`px-[10px] py-[3px] border rounded-sm text-xs font-[inherit] cursor-pointer font-semibold disabled:opacity-50 disabled:cursor-default ${
+        className={`px-2.5 py-1 border rounded-sm text-xs font-[inherit] cursor-pointer font-semibold disabled:opacity-50 disabled:cursor-default ${
           current
             ? 'bg-acc-deep text-on-acc border-acc-deep'
             : 'bg-acc-deep text-on-acc border-acc-deep hover:bg-acc-deep-hover'
@@ -211,7 +211,7 @@ export default function StatusButton({
             <button
               key={status}
               onClick={() => handleSelect(status)}
-              className={`block w-full text-left px-3 py-[5px] text-xs font-[inherit] border-none cursor-pointer hover:bg-bg-2 ${
+              className={`block w-full text-left px-3 py-1.5 text-xs font-[inherit] border-none cursor-pointer hover:bg-bg-2 ${
                 current?.status === status ? 'text-acc-deep font-semibold' : 'text-ink'
               } bg-transparent`}
             >
@@ -231,7 +231,7 @@ export default function StatusButton({
           {canRewatch && (
             <button
               onClick={() => handleSelect('sedd', true)}
-              className="block w-full text-left px-3 py-[5px] text-xs font-[inherit] border-none cursor-pointer hover:bg-bg-2 text-ink bg-transparent"
+              className="block w-full text-left px-3 py-1.5 text-xs font-[inherit] border-none cursor-pointer hover:bg-bg-2 text-ink bg-transparent"
             >
               Sedd igen
             </button>
@@ -241,7 +241,7 @@ export default function StatusButton({
               <div className="border-t border-rule-2" />
               <button
                 onClick={handleRemove}
-                className="block w-full text-left px-3 py-[5px] text-xs font-[inherit] border-none cursor-pointer hover:bg-bg-2 text-danger-ink bg-transparent"
+                className="block w-full text-left px-3 py-1.5 text-xs font-[inherit] border-none cursor-pointer hover:bg-bg-2 text-danger-ink bg-transparent"
               >
                 Ta bort
               </button>
