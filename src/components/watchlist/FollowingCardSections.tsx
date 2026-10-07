@@ -13,7 +13,7 @@ import { useIncrementalList } from '@/hooks/useIncrementalList';
 import { Eyebrow } from '@/components/ui/Eyebrow';
 import { cardClass } from '@/components/ui/Card';
 
-const CARD_GRID_CLASS = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-[10px]';
+const CARD_GRID_CLASS = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-2.5';
 
 // BIN-560 Phase 4: select callbacks take the whole item (which carries mediaType)
 // so the parent can key its selection state by the composite `mediaTypeDocId`,
@@ -114,7 +114,7 @@ export function FollowingCardSections({
   const countLabel = (n: number) => `${n} av ${total} ${total === 1 ? 'titel' : 'titlar'}`;
 
   return (
-    <div className="mt-[18px] space-y-[14px]">
+    <div className="mt-5 space-y-3.5">
       {LIBRARY_SUB_STATE_ORDER.map(key => {
         const items = sections[key];
         if (items.length === 0) return null;

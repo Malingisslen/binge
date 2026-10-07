@@ -160,7 +160,7 @@ function JoinSessionForm({
       </p>
 
       <form onSubmit={submit} className={cardClass()}>
-        <div className="px-3 py-[10px] border-b border-rule-2">
+        <div className="px-3 py-2.5 border-b border-rule-2">
           <label htmlFor="tillsammans-namn" className="block text-xs text-ink-3 mb-1">Ditt namn</label>
           <input
             id="tillsammans-namn"
@@ -172,15 +172,15 @@ function JoinSessionForm({
             className={fieldClass({ className: 'w-full max-w-[260px]' })}
           />
         </div>
-        <div className="px-3 py-[10px]">
-          <Eyebrow className="mb-[6px]">Dina streamingtjänster</Eyebrow>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-[3px]">
+        <div className="px-3 py-2.5">
+          <Eyebrow className="mb-1.5">Dina streamingtjänster</Eyebrow>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
             {flatrate.map(p => {
               const selected = providers.includes(p.id);
               return (
                 <label
                   key={p.id}
-                  className={`flex items-center gap-[6px] px-2 py-[3px] border rounded-sm cursor-pointer text-xs ${
+                  className={`flex items-center gap-1.5 px-2 py-1 border rounded-sm cursor-pointer text-xs ${
                     selected ? 'border-acc-deep bg-acc-deep/[0.08]' : 'border-rule bg-surface'
                   }`}
                 >
@@ -345,8 +345,8 @@ function SessionMain({
         </div>
       </header>
 
-      <div className={cardClass('mb-[8px]')}>
-        <div className="flex items-center gap-2 px-3 py-[6px] border-b border-rule-2 text-xs">
+      <div className={cardClass('mb-2')}>
+        <div className="flex items-center gap-2 px-3 py-1.5 border-b border-rule-2 text-xs">
           <Share2 size={12} className="text-ink-3" />
           <code className="text-xxs flex-1 truncate text-ink-2">{shareUrl || 'Hämtar länk…'}</code>
           <Button
@@ -358,7 +358,7 @@ function SessionMain({
             {shareCopied ? 'Kopierad!' : 'Kopiera'}
           </Button>
         </div>
-        <div className="px-3 py-[6px] flex items-center gap-2 flex-wrap text-xs">
+        <div className="px-3 py-1.5 flex items-center gap-2 flex-wrap text-xs">
           <Eyebrow as="span">Deltagare:</Eyebrow>
           {participants.map(p => {
             const prog = participantSwipeProgress(swipes, filteredCandidates, p.id);
@@ -367,7 +367,7 @@ function SessionMain({
             return (
               <span
                 key={p.id}
-                className={`inline-flex items-center gap-[4px] px-[6px] py-[1px] border rounded-sm text-xxs ${
+                className={`inline-flex items-center gap-1 px-1.5 py-px border rounded-sm text-xxs ${
                   isMe ? 'border-acc-deep text-acc-deep font-semibold' : 'border-rule text-ink-2'
                 }`}
                 title={`${prog.done}/${prog.total} svepningar${isLive ? ' · aktiv nu' : ''}`}
@@ -378,22 +378,22 @@ function SessionMain({
             );
           })}
         </div>
-        <div className="px-3 py-[5px] border-t border-rule-2 flex items-center justify-between text-xxs text-ink-3">
+        <div className="px-3 py-1.5 border-t border-rule-2 flex items-center justify-between text-xxs text-ink-3">
           <span>
             Läge: {session.config.providerMode === 'intersect' ? 'Alla har' : 'Någon har'} ·
             {' '}{session.config.mediaType === 'movie' ? 'Filmer' : session.config.mediaType === 'tv' ? 'Serier' : 'Blandat'}
             {' · '}Gemensamma tjänster: {effectiveProviders.length}
           </span>
-          <div className="flex gap-[2px]">
+          <div className="flex gap-0.5">
             <button
               onClick={() => setView('card')}
-              className={`px-2 py-[2px] rounded-sm border text-xxs flex items-center gap-1 ${view === 'card' ? 'bg-acc-deep/[0.1] border-acc-deep text-acc-deep' : 'bg-surface border-rule text-ink-2'}`}
+              className={`px-2 py-0.5 rounded-sm border text-xxs flex items-center gap-1 ${view === 'card' ? 'bg-acc-deep/[0.1] border-acc-deep text-acc-deep' : 'bg-surface border-rule text-ink-2'}`}
             >
               <LayoutGrid size={10} /> Kort
             </button>
             <button
               onClick={() => setView('table')}
-              className={`px-2 py-[2px] rounded-sm border text-xxs flex items-center gap-1 ${view === 'table' ? 'bg-acc-deep/[0.1] border-acc-deep text-acc-deep' : 'bg-surface border-rule text-ink-2'}`}
+              className={`px-2 py-0.5 rounded-sm border text-xxs flex items-center gap-1 ${view === 'table' ? 'bg-acc-deep/[0.1] border-acc-deep text-acc-deep' : 'bg-surface border-rule text-ink-2'}`}
             >
               <Table2 size={10} /> Tabell
             </button>
@@ -401,7 +401,7 @@ function SessionMain({
         </div>
       </div>
 
-      <div className="mb-[8px]">
+      <div className="mb-2">
         <JustWatchCredit />
       </div>
 
@@ -466,7 +466,7 @@ function SwipeCard({
         )}
         <div className="flex-1 min-w-0">
           <div className="text-lg font-bold leading-tight">{cand.title}</div>
-          <div className="text-xxs text-ink-3 mt-[2px]">
+          <div className="text-xxs text-ink-3 mt-0.5">
             {cand.year ?? '—'} · {cand.mediaType === 'movie' ? 'Film' : 'Serie'}
             {cand.voteAverage > 0 && <> · <span className="text-acc-deep">★ {cand.voteAverage.toFixed(1)}</span></>}
           </div>
@@ -475,7 +475,7 @@ function SwipeCard({
           </p>
         </div>
       </div>
-      <div className="px-3 py-[6px] border-t border-rule-2 text-xxs text-ink-3 flex items-center justify-between">
+      <div className="px-3 py-1.5 border-t border-rule-2 text-xxs text-ink-3 flex items-center justify-between">
         <span>Svept: <b className="text-ink">{progress.done}</b> / {progress.total}</span>
         <span>Veto kvar: <b className={me.vetoRemaining > 0 ? 'text-ink' : 'text-ink-3'}>{me.vetoRemaining}</b></span>
       </div>
@@ -553,29 +553,29 @@ function CandidateTable({
             const summary = `${r.yesCount} ja · ${r.noCount} nej${r.vetoed ? ' · VETO' : ''}`;
             return (
               <tr key={candidateKey(r.candidate)} className={`border-b border-border-table last:border-b-0 ${r.vetoed ? 'opacity-40' : ''}`}>
-                <td className="px-2 py-[4px] font-semibold truncate max-w-[260px]">{r.candidate.title}</td>
-                <td className="px-2 py-[4px] text-ink-3">{r.candidate.year ?? '—'}</td>
-                <td className="px-2 py-[4px] text-ink-3">{r.candidate.mediaType === 'movie' ? 'Film' : 'Serie'}</td>
-                <td className="px-2 py-[4px] text-acc-deep">{r.candidate.voteAverage > 0 ? r.candidate.voteAverage.toFixed(1) : '—'}</td>
-                <td className="px-2 py-[4px] text-ink-3 whitespace-nowrap">{summary}</td>
-                <td className="px-2 py-[4px] text-right">
-                  <div className="inline-flex gap-[2px]">
+                <td className="px-2 py-1 font-semibold truncate max-w-[260px]">{r.candidate.title}</td>
+                <td className="px-2 py-1 text-ink-3">{r.candidate.year ?? '—'}</td>
+                <td className="px-2 py-1 text-ink-3">{r.candidate.mediaType === 'movie' ? 'Film' : 'Serie'}</td>
+                <td className="px-2 py-1 text-acc-deep">{r.candidate.voteAverage > 0 ? r.candidate.voteAverage.toFixed(1) : '—'}</td>
+                <td className="px-2 py-1 text-ink-3 whitespace-nowrap">{summary}</td>
+                <td className="px-2 py-1 text-right">
+                  <div className="inline-flex gap-0.5">
                     <button
                       onClick={() => onVote(r.candidate, 'no')}
-                      className={`px-[6px] py-[1px] rounded-sm border text-xxs cursor-pointer ${myVote === 'no' ? 'border-acc-deep bg-acc-deep/[0.1] text-acc-deep' : 'border-rule bg-surface text-ink-2'}`}
+                      className={`px-1.5 py-px rounded-sm border text-xxs cursor-pointer ${myVote === 'no' ? 'border-acc-deep bg-acc-deep/[0.1] text-acc-deep' : 'border-rule bg-surface text-ink-2'}`}
                     >
                       Nej
                     </button>
                     <button
                       onClick={() => onVote(r.candidate, 'yes')}
-                      className={`px-[6px] py-[1px] rounded-sm border text-xxs cursor-pointer ${myVote === 'yes' ? 'border-acc-deep bg-acc-deep text-on-acc' : 'border-rule bg-surface text-ink-2'}`}
+                      className={`px-1.5 py-px rounded-sm border text-xxs cursor-pointer ${myVote === 'yes' ? 'border-acc-deep bg-acc-deep text-on-acc' : 'border-rule bg-surface text-ink-2'}`}
                     >
                       Ja
                     </button>
                     {(me.vetoRemaining > 0 || myVote === 'veto') && (
                       <button
                         onClick={() => onVote(r.candidate, 'veto')}
-                        className={`px-[6px] py-[1px] rounded-sm border text-xxs cursor-pointer ${myVote === 'veto' ? 'border-danger bg-danger-soft text-danger-ink' : 'border-rule bg-surface text-ink-3'}`}
+                        className={`px-1.5 py-px rounded-sm border text-xxs cursor-pointer ${myVote === 'veto' ? 'border-danger bg-danger-soft text-danger-ink' : 'border-rule bg-surface text-ink-3'}`}
                       >
                         Veto
                       </button>
@@ -633,8 +633,8 @@ function MatchList({
   };
 
   return (
-    <div className="bg-surface border border-acc-deep rounded-sm mb-[8px]">
-      <div className={eyebrowClass({ tone: 'acc', className: 'px-3 py-[5px] border-b border-acc-deep/30 bg-acc-deep/[0.06]' })}>
+    <div className="bg-surface border border-acc-deep rounded-sm mb-2">
+      <div className={eyebrowClass({ tone: 'acc', className: 'px-3 py-1.5 border-b border-acc-deep/30 bg-acc-deep/[0.06]' })}>
         Matcher ({matches.length})
       </div>
       <div className="divide-y divide-rule-2">
@@ -644,7 +644,7 @@ function MatchList({
           const key = candidateKey(m.candidate);
           const isPicked = pickedKey === key;
           return (
-            <div key={key} className="flex items-center gap-2 px-3 py-[5px] hover:bg-bg-2">
+            <div key={key} className="flex items-center gap-2 px-3 py-1.5 hover:bg-bg-2">
               <Link
                 href={href}
                 className="flex items-center gap-2 flex-1 min-w-0 no-underline text-ink"

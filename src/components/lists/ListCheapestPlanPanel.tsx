@@ -46,9 +46,9 @@ export default function ListCheapestPlanPanel({ items }: { items: ListPlanItem[]
   if (!enabled) return null;
   if (isLoading) {
     return (
-      <div className="mt-3 mb-[14px]">
+      <div className="mt-3 mb-3.5">
         <SectionHeader />
-        <div className={cardClass('px-3 py-[10px] text-xs text-ink-3')}>
+        <div className={cardClass('px-3 py-2.5 text-xs text-ink-3')}>
           Räknar ut billigaste vägen…
         </div>
       </div>
@@ -69,18 +69,18 @@ export default function ListCheapestPlanPanel({ items }: { items: ListPlanItem[]
   const unavailableCount = fullPlan.unavailableCount;
 
   return (
-    <div className="mt-3 mb-[14px]">
+    <div className="mt-3 mb-3.5">
       <SectionHeader />
       <div className={cardClass('overflow-hidden')}>
         {/* Best single — the headline, accent-striped. */}
-        <div className="px-3 py-[9px] border-l-[3px] border-l-acc-deep border-b border-rule-2">
+        <div className="px-3 py-2.5 border-l-[3px] border-l-acc-deep border-b border-rule-2">
           {nothingStreams || bestSingle.providerId == null ? (
             <div className="text-xs text-ink-2">
               Inga av titlarna finns på en streamingtjänst i Sverige just nu.
             </div>
           ) : (
             <div className="flex items-baseline justify-between gap-3">
-              <span className="inline-flex items-center gap-[6px] min-w-0">
+              <span className="inline-flex items-center gap-1.5 min-w-0">
                 <ProviderDot color={getProvider(bestSingle.providerId)?.color ?? '#888'} size={7} />
                 <span className="text-xs text-ink truncate">
                   <span className="font-semibold">{bestSingle.providerName}</span>{' '}
@@ -98,12 +98,12 @@ export default function ListCheapestPlanPanel({ items }: { items: ListPlanItem[]
 
         {/* Cheapest full-coverage bundle + the saving vs subscribing to everything. */}
         {showBundle && (
-          <div className="px-3 py-[9px] border-b border-rule-2 last:border-b-0">
+          <div className="px-3 py-2.5 border-b border-rule-2 last:border-b-0">
             <div className="flex items-baseline justify-between gap-3">
-              <span className="inline-flex items-center gap-[6px] flex-wrap min-w-0">
+              <span className="inline-flex items-center gap-1.5 flex-wrap min-w-0">
                 <span className={eyebrowClass({ className: 'shrink-0' })}>Hela listan</span>
                 {fullPlan.serviceIds.map((id) => (
-                  <span key={id} className="inline-flex items-center gap-[4px]">
+                  <span key={id} className="inline-flex items-center gap-1">
                     <ProviderDot color={getProvider(id)?.color ?? '#888'} size={6} />
                     <span className="text-xs text-ink-2">{providerName(id)}</span>
                   </span>
@@ -112,7 +112,7 @@ export default function ListCheapestPlanPanel({ items }: { items: ListPlanItem[]
               <span className="text-xs text-ink shrink-0 tabular-nums">{formatKr(fullPlan.monthlyKr)} kr/mån</span>
             </div>
             {savingKr > 0 && (
-              <div className="text-xxs text-acc-deep mt-[3px]">
+              <div className="text-xxs text-acc-deep mt-1">
                 Spara {formatKr(savingKr)} kr/mån mot att teckna alla var för sig ({formatKr(naiveMonthlyKr)} kr)
               </div>
             )}
@@ -121,7 +121,7 @@ export default function ListCheapestPlanPanel({ items }: { items: ListPlanItem[]
 
         {/* Honest remainder: counted, never priced. */}
         {(rentCount > 0 || unavailableCount > 0 || uncheckableCount > 0) && (
-          <div className="px-3 py-[7px] text-xxs text-ink-3">
+          <div className="px-3 py-2 text-xxs text-ink-3">
             {[
               rentCount > 0 ? `${pluralSv(rentCount, 'titel', 'titlar')} går att hyra/köpa` : null,
               unavailableCount > 0 ? `${unavailableCount} saknas i Sverige` : null,
@@ -132,14 +132,14 @@ export default function ListCheapestPlanPanel({ items }: { items: ListPlanItem[]
           </div>
         )}
       </div>
-      <JustWatchCredit className="mt-[6px]" />
+      <JustWatchCredit className="mt-1.5" />
     </div>
   );
 }
 
 function SectionHeader() {
   return (
-    <div className="flex items-baseline justify-between mb-[6px]">
+    <div className="flex items-baseline justify-between mb-1.5">
       <Eyebrow as="h2" size="xs">
         Billigaste sättet att se listan
       </Eyebrow>

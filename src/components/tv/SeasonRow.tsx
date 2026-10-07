@@ -29,7 +29,7 @@ export default function SeasonRow({
 
   return (
     <div className="border-b border-rule-2 last:border-b-0">
-      <div className="flex items-center justify-between py-[5px] text-sm">
+      <div className="flex items-center justify-between py-1.5 text-sm">
         {/* A11Y-2: a real button, so keyboard and screen-reader users can open the
             season and hear whether it is open. */}
         <button
@@ -47,7 +47,7 @@ export default function SeasonRow({
           </span>
         </button>
         {episodeCount > 0 ? (
-          <div className="flex items-center gap-[5px] flex-1 max-w-[180px] mx-4">
+          <div className="flex items-center gap-1.5 flex-1 max-w-[180px] mx-4">
             <div className="flex-1 h-[3px] bg-rule rounded-full overflow-hidden">
               <div className="h-full bg-ink rounded-full" style={{ width: `${pct}%` }} />
             </div>
@@ -57,7 +57,7 @@ export default function SeasonRow({
           <span className="text-xxs text-ink-3 mx-4">Kommande</span>
         )}
         {isDone && (
-          <span className="px-[10px] py-[2px] rounded-sm text-xxs font-semibold bg-season-done text-white">
+          <span className="px-2.5 py-0.5 rounded-sm text-xxs font-semibold bg-season-done text-white">
             Sedd
           </span>
         )}

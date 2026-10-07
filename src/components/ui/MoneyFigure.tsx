@@ -23,7 +23,7 @@ export default function MoneyFigure({ monthlyKr, estimated, lines = [], size = '
   return (
     <div className="border-t-2 border-ink pt-2 flex flex-col gap-1 tabular-nums min-w-0" data-testid="money-figure">
       {lines.length > 0 && (
-        <ul className="m-0 p-0 list-none flex flex-col gap-[2px]">
+        <ul className="m-0 p-0 list-none flex flex-col gap-0.5">
           {lines.map(line => (
             <li key={line.label} className="flex justify-between gap-3 text-sm text-ink-2">
               <span className="min-w-0 truncate">{line.label}</span>
@@ -33,7 +33,7 @@ export default function MoneyFigure({ monthlyKr, estimated, lines = [], size = '
         </ul>
       )}
       <p
-        className={`m-0 flex justify-between items-baseline gap-3 ${lines.length > 0 ? 'border-t border-dashed border-rule pt-[6px] mt-[2px]' : ''}`}
+        className={`m-0 flex justify-between items-baseline gap-3 ${lines.length > 0 ? 'border-t border-dashed border-rule pt-1.5 mt-0.5' : ''}`}
       >
         <span className="text-sm font-bold text-ink">Per månad</span>
         <span className={`font-extrabold tracking-[-0.02em] leading-none text-ink ${size === 'lg' ? 'text-5xl' : 'text-4xl'}`}>

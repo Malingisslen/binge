@@ -55,7 +55,7 @@ export function UsernameSection() {
     <SettingsSection title="Publik profil">
       <div className="space-y-2">
         <div>
-          <label htmlFor="username" className="text-xs text-ink-3 block mb-[2px]">Användarnamn</label>
+          <label htmlFor="username" className="text-xs text-ink-3 block mb-0.5">Användarnamn</label>
           <div className="flex gap-2">
             <input
               id="username"
@@ -79,11 +79,11 @@ export function UsernameSection() {
             </Button>
           </div>
           {user.username && (
-            <div id="username-help" className="text-xxs text-ink-3 mt-[2px]">binge.nu/user/{user.username}</div>
+            <div id="username-help" className="text-xxs text-ink-3 mt-0.5">binge.nu/user/{user.username}</div>
           )}
         </div>
         <div>
-          <label htmlFor="bio" className="text-xs text-ink-3 block mb-[2px]">Bio</label>
+          <label htmlFor="bio" className="text-xs text-ink-3 block mb-0.5">Bio</label>
           <textarea
             id="bio"
             value={bioInput}
@@ -107,8 +107,8 @@ export function UsernameSection() {
           />
         </div>
         <div>
-          <span id="defaultVisibility-label" className="text-xs text-ink-3 block mb-[4px]">Standardsynlighet</span>
-          <div role="radiogroup" aria-labelledby="defaultVisibility-label" className="space-y-[6px]">
+          <span id="defaultVisibility-label" className="text-xs text-ink-3 block mb-1">Standardsynlighet</span>
+          <div role="radiogroup" aria-labelledby="defaultVisibility-label" className="space-y-1.5">
             {VISIBILITY_OPTIONS.map(opt => (
               <label key={opt.value} className="flex items-start gap-2 cursor-pointer">
                 <input
@@ -122,7 +122,7 @@ export function UsernameSection() {
                       toast(`Standardsynlighet: ${opt.label.toLowerCase()}`);
                     } catch { toast('Kunde inte spara. Försök igen om en stund.'); }
                   }}
-                  className="accent-acc-deep mt-[2px] w-[13px] h-[13px] shrink-0"
+                  className="accent-acc-deep mt-0.5 w-[13px] h-[13px] shrink-0"
                 />
                 <span className="leading-tight">
                   <span className="text-xs text-ink block">{opt.label}</span>
@@ -133,11 +133,11 @@ export function UsernameSection() {
           </div>
           {/* BIN-1244: juridik- och dataskyddsrollernas villkor — valet ska själv säga vem
               mer som kan se profilen. Malin valde lydelsen 2026-09-18. */}
-          <p className="text-xxs text-ink-3 mt-[6px]">
+          <p className="text-xxs text-ink-3 mt-1.5">
             Administratörer kan se namn, användarnamn, bild och presentation vid en anmälan.
           </p>
           {visibilitySyncPending && (
-            <div className="mt-[6px] border border-danger bg-danger-soft rounded-sm px-2 py-[6px]">
+            <div className="mt-1.5 border border-danger bg-danger-soft rounded-sm px-2 py-1.5">
               <p className="text-xxs text-danger-ink leading-snug">
                 Synligheten är sparad på din profil men hann inte uppdateras på alla dina
                 titlar — några kan fortfarande visas enligt din tidigare inställning.
@@ -146,7 +146,7 @@ export function UsernameSection() {
               <Button
                 onClick={handleRetryVisibility}
                 disabled={retryingVisibility}
-                variant="danger-ghost" size="sm" className="mt-[4px] disabled:opacity-50"
+                variant="danger-ghost" size="sm" className="mt-1 disabled:opacity-50"
               >
                 {retryingVisibility ? 'Försöker…' : 'Försök igen nu'}
               </Button>

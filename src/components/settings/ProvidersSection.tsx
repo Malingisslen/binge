@@ -85,7 +85,7 @@ export function ProvidersSection() {
           <div className={eyebrowClass({ className: 'mb-2' })}>
             Dina tjänster · {selectedProviders.length}
           </div>
-          <div className="grid grid-cols-4 gap-[7px] mb-4">
+          <div className="grid grid-cols-4 gap-2 mb-4">
             {selectedProviders.map(p => tile(p, true))}
             {available.length > 0 && (
               <button
@@ -108,7 +108,7 @@ export function ProvidersSection() {
       {available.length > 0 && (
         <div ref={addMoreRef}>
           <div className={eyebrowClass({ className: 'mb-2' })}>Lägg till fler</div>
-          <div className="grid grid-cols-4 gap-[7px] mb-4">
+          <div className="grid grid-cols-4 gap-2 mb-4">
             {available.map(p => tile(p, false))}
           </div>
         </div>
@@ -121,7 +121,7 @@ export function ProvidersSection() {
             Väljer du en nivå följer priset tjänstens aktuella listpris — det uppdateras automatiskt när tjänsten
             ändrar sitt. Väljer du <span className="whitespace-nowrap">&quot;Egen kostnad…&quot;</span> gäller beloppet du själv skriver in.
           </p>
-          <div className="space-y-[2px]">
+          <div className="space-y-0.5">
             {selectedProviders.map(provider => {
               const selectedTierId = user.providerTiers?.[provider.id];
               const hasTiers = (provider.tiers?.length ?? 0) > 0;
@@ -130,9 +130,9 @@ export function ProvidersSection() {
               const renewalDay = user.providerRenewalDays?.[provider.id];
               return (
                 <div key={provider.id}>
-                <div className="flex items-center gap-[10px] py-[3px]">
+                <div className="flex items-center gap-2.5 py-1">
                   <span
-                    className="rounded-sm px-2 py-[1px] text-xs font-semibold min-w-[54px] text-center"
+                    className="rounded-sm px-2 py-px text-xs font-semibold min-w-[54px] text-center"
                     style={{ background: provider.color, color: fg === 'white' ? 'white' : 'var(--ink)' }}
                   >
                     {provider.shortName}
@@ -210,7 +210,7 @@ export function ProvidersSection() {
               );
             })}
           </div>
-          <div className="flex items-center justify-between mt-3 border-t border-rule-2 pt-[10px]">
+          <div className="flex items-center justify-between mt-3 border-t border-rule-2 pt-2.5">
             <span className="text-xs text-ink-3">
               {pendingSave ? 'Sparar…' : '✓ Sparat automatiskt'}
             </span>
@@ -263,7 +263,7 @@ function ProviderCampaignRow({
 
   if (!editing) {
     return (
-      <div className="flex items-center gap-2 pl-[64px] pb-[4px] text-xs">
+      <div className="flex items-center gap-2 pl-16 pb-1 text-xs">
         {campaign ? (
           <>
             <span className="text-ink-3">
@@ -284,7 +284,7 @@ function ProviderCampaignRow({
   }
 
   return (
-    <div className="flex items-center gap-2 pl-[64px] pb-[5px] text-xs flex-wrap">
+    <div className="flex items-center gap-2 pl-16 pb-1.5 text-xs flex-wrap">
       <span className="text-ink-3">Kampanjpris</span>
       <input
         type="number"

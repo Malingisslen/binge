@@ -207,7 +207,7 @@ export function GroupSettingsModal({
           </Button>
           <button
             onClick={() => setConfirmingDelete(true)}
-            className="inline-flex items-center gap-1 px-3 py-[5px] border border-danger/40 text-danger-ink rounded-sm text-xs bg-surface cursor-pointer hover:bg-danger-soft"
+            className="inline-flex items-center gap-1 px-3 py-1.5 border border-danger/40 text-danger-ink rounded-sm text-xs bg-surface cursor-pointer hover:bg-danger-soft"
           >
             <Trash2 size={11} /> Radera grupp
           </button>

@@ -42,7 +42,7 @@ export default function GuestBundleBox({
     <section
       aria-label="Billigare som paket"
       data-testid="guest-bundle"
-      className={cardClass('border-l-[3px] border-l-acc-deep px-3 py-[10px]')}
+      className={cardClass('border-l-[3px] border-l-acc-deep px-3 py-2.5')}
     >
       <h2 className="text-sm font-semibold text-ink m-0">Billigare som paket</h2>
       <p className="text-sm text-ink mt-1">

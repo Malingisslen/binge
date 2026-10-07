@@ -20,13 +20,13 @@ export default function ContinueWatchingTile({ entries }: { entries: ContinueWat
   if (entries.length === 0) return null;
 
   return (
-    <section className="mt-[18px] mb-[14px]">
-      <div className="flex items-baseline justify-between mb-[8px]">
+    <section className="mt-5 mb-3.5">
+      <div className="flex items-baseline justify-between mb-2">
         <Eyebrow as="h2" size="xs">
           Fortsätt titta
         </Eyebrow>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-[10px]">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
         {entries.map(({ item, seen, behind, next }) => {
           const tone = item.genreIds && item.genreIds.length > 0
             ? toneForGenreIds(item.genreIds)
@@ -35,11 +35,11 @@ export default function ContinueWatchingTile({ entries }: { entries: ContinueWat
           return (
             <div
               key={item.tmdbId}
-              className={cardClass('flex gap-[8px] items-center p-[8px] hover:shadow-lift transition-shadow')}
+              className={cardClass('flex gap-2 items-center p-2 hover:shadow-lift transition-shadow')}
             >
               <Link
                 href={titleHref('tv', item.tmdbId)}
-                className="no-underline flex flex-1 min-w-0 gap-[10px] items-center"
+                className="no-underline flex flex-1 min-w-0 gap-2.5 items-center"
                 style={{ color: 'var(--ink)' }}
               >
                 <span className="shrink-0 w-[40px]">
@@ -49,7 +49,7 @@ export default function ContinueWatchingTile({ entries }: { entries: ContinueWat
                 </span>
                 <span className="min-w-0">
                   <span className="block text-xs font-semibold text-ink truncate">{item.title}</span>
-                  <span className="block text-xxs text-ink-3 mt-[3px]">
+                  <span className="block text-xxs text-ink-3 mt-1">
                     {behind && <span className="text-acc-deep font-semibold">Ligger efter · </span>}
                     {seen ? `senast ${seen}` : 'påbörjad'}
                   </span>

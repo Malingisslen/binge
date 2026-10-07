@@ -21,9 +21,9 @@ import { cardClass } from '@/components/ui/Card';
 
 function StatBox({ value, label }: { value: number; label: string }) {
   return (
-    <div className={cardClass('px-[12px] py-[8px] min-w-[92px]')}>
+    <div className={cardClass('px-3 py-2 min-w-[92px]')}>
       <div className="text-2xl font-bold text-ink leading-none tabular-nums">{value}</div>
-      <div className="text-xxs text-ink-3 mt-[3px]">{label}</div>
+      <div className="text-xxs text-ink-3 mt-1">{label}</div>
     </div>
   );
 }
@@ -69,7 +69,7 @@ export default function DiaryPageClient() {
       {loading || episodesLoading ? (
         <LoadingView variant="grid" />
       ) : total === 0 ? (
-        <div className="mt-[18px]">
+        <div className="mt-5">
           <EmptyState
             icon={<BookOpen size={28} />}
             title="Inga daterade visningar än"
@@ -78,9 +78,9 @@ export default function DiaryPageClient() {
           />
         </div>
       ) : (
-        <div className="mt-[18px] space-y-[18px]">
+        <div className="mt-5 space-y-5">
           {hasStats && (
-            <div className="flex flex-wrap gap-[8px]">
+            <div className="flex flex-wrap gap-2">
               {stats.currentStreakDays > 0 && (
                 <StatBox value={stats.currentStreakDays} label={stats.currentStreakDays === 1 ? 'dag i rad' : 'dagar i rad'} />
               )}
@@ -97,7 +97,7 @@ export default function DiaryPageClient() {
               <Eyebrow as="h2" className="mb-2">
                 {month.label}
               </Eyebrow>
-              <div className="flex flex-col gap-[6px]">
+              <div className="flex flex-col gap-1.5">
                 {month.entries.map(({ item, date, episodeCode }) => {
                   const tone = item.genreIds.length > 0
                     ? toneForGenreIds(item.genreIds)
@@ -107,7 +107,7 @@ export default function DiaryPageClient() {
                     <Link
                       key={`${item.tmdbId}-${episodeCode ?? 'film'}`}
                       href={titleHref(item.mediaType, item.tmdbId)}
-                      className={cardClass('flex items-center gap-[10px] px-[10px] py-[7px] no-underline hover:border-rule-2 transition-colors')}
+                      className={cardClass('flex items-center gap-2.5 px-2.5 py-2 no-underline hover:border-rule-2 transition-colors')}
                     >
                       <div className={`poster duo-${tone} w-[34px] h-[51px] shrink-0`} style={{ aspectRatio: '2 / 3' }}>
                         {poster && (
@@ -122,7 +122,7 @@ export default function DiaryPageClient() {
                         </div>
                       </div>
                       {!episodeCode && item.rating !== null && (
-                        <span className="shrink-0 inline-flex items-center gap-[3px]">
+                        <span className="shrink-0 inline-flex items-center gap-1">
                           <RatingStars rating={item.rating} readonly size="sm" />
                           <span className="text-xxs text-ink-3">{item.rating.toFixed(1)}</span>
                         </span>
@@ -134,7 +134,7 @@ export default function DiaryPageClient() {
             </section>
           ))}
           {shownCount < total && (
-            <div className="flex items-center gap-[10px]">
+            <div className="flex items-center gap-2.5">
               <button type="button" className={buttonClass({ size: 'sm' })} onClick={() => setShownCount(n => n + PAGE_SIZE * 2)}>
                 Visa fler
               </button>

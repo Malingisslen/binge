@@ -178,7 +178,7 @@ export default function QuickAddButton({
             <button
               key={status}
               onClick={() => handleSelect(status)}
-              className={`block w-full text-left px-2 py-[4px] text-xs font-[inherit] border-none cursor-pointer hover:bg-bg-2 ${
+              className={`block w-full text-left px-2 py-1 text-xs font-[inherit] border-none cursor-pointer hover:bg-bg-2 ${
                 current?.status === status ? 'text-acc-deep font-semibold' : 'text-ink'
               } bg-transparent`}
             >
@@ -190,7 +190,7 @@ export default function QuickAddButton({
               <div className="border-t border-rule-2" />
               <button
                 onClick={handleRemove}
-                className="block w-full text-left px-2 py-[4px] text-xs font-[inherit] border-none cursor-pointer hover:bg-bg-2 text-danger-ink bg-transparent"
+                className="block w-full text-left px-2 py-1 text-xs font-[inherit] border-none cursor-pointer hover:bg-bg-2 text-danger-ink bg-transparent"
               >
                 Ta bort
               </button>

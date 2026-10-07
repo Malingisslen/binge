@@ -45,7 +45,7 @@ export function ProviderOverlapPanel({ intersect, union }: { intersect: number[]
 
   return (
     <div className={cardClass()}>
-      <Eyebrow className="px-3 py-[6px] border-b border-rule-2">
+      <Eyebrow className="px-3 py-1.5 border-b border-rule-2">
         Streamingöverlapp
       </Eyebrow>
       <div className="px-3 py-2 space-y-2">
@@ -83,7 +83,7 @@ export function ProviderPills({ ids, highlight = false }: { ids: number[]; highl
         return (
           <span
             key={id}
-            className={`inline-flex items-center gap-1 px-[5px] py-[1px] text-xxs border rounded-sm ${
+            className={`inline-flex items-center gap-1 px-1.5 py-px text-xxs border rounded-sm ${
               highlight ? 'border-acc-deep text-acc-deep' : 'border-rule text-ink-3'
             }`}
           >
@@ -179,7 +179,7 @@ export function InvitePanel({
 
   return (
     <div className={cardClass()}>
-      <Eyebrow className="px-3 py-[6px] border-b border-rule-2">
+      <Eyebrow className="px-3 py-1.5 border-b border-rule-2">
         Inbjudningslänk
       </Eyebrow>
       <div className="px-3 py-2 space-y-2">

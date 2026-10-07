@@ -26,7 +26,7 @@ export default function WatchedDateEditor({
   const id = useId();
   const today = toInputValue(new Date());
   return (
-    <label htmlFor={id} className="inline-flex items-center gap-[6px] text-xs text-ink-2 mt-[6px]">
+    <label htmlFor={id} className="inline-flex items-center gap-1.5 text-xs text-ink-2 mt-1.5">
       <span>Sedd den</span>
       <input
         id={id}

@@ -32,7 +32,7 @@ export function GroupSessionHistoryPanel({
 
   return (
     <div className={cardClass()}>
-      <Eyebrow className="px-3 py-[6px] border-b border-rule-2">
+      <Eyebrow className="px-3 py-1.5 border-b border-rule-2">
         Senaste filmkvällar
       </Eyebrow>
       <ul className="divide-y divide-rule-2">
@@ -44,7 +44,7 @@ export function GroupSessionHistoryPanel({
             .filter((n): n is string => !!n)
             .map(abbrev);
           return (
-            <li key={entry.sessionId} className="px-3 py-[6px] flex items-center gap-2">
+            <li key={entry.sessionId} className="px-3 py-1.5 flex items-center gap-2">
               {poster ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img

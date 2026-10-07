@@ -92,19 +92,19 @@ export default function MediaTypePage({
       <PageHeader crumb={cfg.title} title={cfg.title} standfirst={cfg.standfirst} />
 
       {following.length > 0 ? (
-        <div className={cardClass('mb-[14px]')}>
-          <div className="flex items-center justify-between px-3 py-[6px] border-b border-rule-2">
+        <div className={cardClass('mb-3.5')}>
+          <div className="flex items-center justify-between px-3 py-1.5 border-b border-rule-2">
             <h2 className="text-sm font-bold text-ink-2 m-0">Följer</h2>
             <Link href={mediaType === 'tv' ? '/my/series/' : '/my/films/'} className="text-xs text-acc-deep no-underline">
               Alla {following.length} →
             </Link>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(100px,1fr))] gap-[10px] md:gap-[7px] px-3 py-2">
+          <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(100px,1fr))] gap-2.5 md:gap-2 px-3 py-2">
             {following.slice(0, 10).map(item => {
               const poster = posterUrl(item.posterPath, 'w342');
               return (
                 <Link key={item.tmdbId} href={`${cfg.hrefPrefix}${item.tmdbId}/`} className="no-underline text-ink">
-                  <div className={`poster duo-${toneForId(item.tmdbId)} mb-[3px]`}>
+                  <div className={`poster duo-${toneForId(item.tmdbId)} mb-1`}>
                     {poster && <img src={poster} srcSet={posterSrcSet(item.posterPath, 'w342')} sizes="(max-width: 767px) 45vw, 120px" alt={item.title} loading="lazy" decoding="async" width={342} height={513} />}
                   </div>
                   <div className="text-xs font-semibold overflow-hidden text-ellipsis whitespace-nowrap">{item.title}</div>
@@ -114,13 +114,13 @@ export default function MediaTypePage({
           </div>
         </div>
       ) : (
-        <div className={cardClass('mb-[14px] px-3 py-4 text-center text-sm text-ink-3')}>
+        <div className={cardClass('mb-3.5 px-3 py-4 text-center text-sm text-ink-3')}>
           {cfg.emptyText}
         </div>
       )}
 
       <div className={cardClass()}>
-        <div className="px-3 py-[6px] border-b border-rule-2">
+        <div className="px-3 py-1.5 border-b border-rule-2">
           <h2 className="text-sm font-bold text-ink-2 m-0">{cfg.popularLabel}</h2>
         </div>
         <TitleGrid

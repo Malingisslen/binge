@@ -38,7 +38,7 @@ export default function CinemaCountdownStrip({
 
   return (
     <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-sm border border-rule-2 bg-surface px-3 py-2">
-      <span className="inline-flex items-center gap-[5px] whitespace-nowrap text-sm font-bold text-acc-deep">
+      <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-sm font-bold text-acc-deep">
         <span className="h-[6px] w-[6px] rounded-full bg-acc" />
         På bio nu
       </span>

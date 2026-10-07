@@ -104,7 +104,7 @@ export default function SearchDropdown({ query, onSelect, onActiveOptionChange }
 
       {userResults.length > 0 && (
         <>
-          <div role="presentation" className={eyebrowClass({ className: 'px-3 pt-2 pb-[2px]' })}>
+          <div role="presentation" className={eyebrowClass({ className: 'px-3 pt-2 pb-0.5' })}>
             Användare
           </div>
           {userResults.map((user, i) => {
@@ -117,7 +117,7 @@ export default function SearchDropdown({ query, onSelect, onActiveOptionChange }
                 role="option"
                 id={`search-opt-${rowIndex}`}
                 aria-selected={rowIndex === activeIndex}
-                className={`flex items-center gap-2 px-3 py-[6px] no-underline text-ink-2 ${
+                className={`flex items-center gap-2 px-3 py-1.5 no-underline text-ink-2 ${
                   rowIndex === activeIndex ? 'bg-bg-2' : 'hover:bg-rule-2'
                 }`}
               >
@@ -135,7 +135,7 @@ export default function SearchDropdown({ query, onSelect, onActiveOptionChange }
       {titleResults.length > 0 && (
         <>
           {userResults.length > 0 && (
-            <div role="presentation" className={eyebrowClass({ className: 'px-3 pt-2 pb-[2px] border-t border-rule-2' })}>
+            <div role="presentation" className={eyebrowClass({ className: 'px-3 pt-2 pb-0.5 border-t border-rule-2' })}>
               Titlar
             </div>
           )}
@@ -154,7 +154,7 @@ export default function SearchDropdown({ query, onSelect, onActiveOptionChange }
                 role="option"
                 id={`search-opt-${rowIndex}`}
                 aria-selected={rowIndex === activeIndex}
-                className={`flex items-center gap-2 px-3 py-[6px] no-underline text-ink-2 ${
+                className={`flex items-center gap-2 px-3 py-1.5 no-underline text-ink-2 ${
                   rowIndex === activeIndex ? 'bg-bg-2' : 'hover:bg-rule-2'
                 }`}
               >

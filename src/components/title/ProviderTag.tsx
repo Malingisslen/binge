@@ -29,7 +29,7 @@ export default function ProviderTag({ provider, size = 'sm', offer, nowMs, media
   const chip =
     size === 'sm' ? (
       <span
-        className={`text-xxs px-1 py-[1px] border rounded-sm inline-block mr-[2px] ${
+        className={`text-xxs px-1 py-px border rounded-sm inline-block mr-0.5 ${
           isMine ? 'border-acc-deep text-acc-deep' : 'border-rule text-ink-3'
         }`}
       >
@@ -37,7 +37,7 @@ export default function ProviderTag({ provider, size = 'sm', offer, nowMs, media
       </span>
     ) : (
       <span
-        className={`text-xs px-2 py-[2px] border rounded-sm inline-block mr-1 ${
+        className={`text-xs px-2 py-0.5 border rounded-sm inline-block mr-1 ${
           isMine ? 'border-acc-deep text-acc-deep font-semibold' : 'border-rule text-ink-3'
         }`}
       >

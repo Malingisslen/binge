@@ -47,7 +47,7 @@ export default function ShareButton({ path, title, text, surface }: ShareButtonP
     <Button
       type="button"
       onClick={handleClick}
-      variant="ghost" size="sm" className="inline-flex items-center gap-[5px]"
+      variant="ghost" size="sm" className="inline-flex items-center gap-1.5"
     >
       <Share2 size={11} aria-hidden="true" /> Dela
     </Button>

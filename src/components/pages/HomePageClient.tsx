@@ -63,7 +63,7 @@ function LandingPage({ trending, guestDemo }: { trending?: React.ReactNode; gues
             Binge håller koll på dina serier och säger till när en tjänst inte används, med svenska priser.
           </p>
           <div className="relative max-w-[440px] mx-auto mb-4" ref={searchRef}>
-            <div className="flex items-center gap-[5px] px-3 py-[8px] bg-white/[0.08] border border-white/10 rounded-sm">
+            <div className="flex items-center gap-1.5 px-3 py-2 bg-white/[0.08] border border-white/10 rounded-sm">
               <Search size={14} className="text-white/50 shrink-0" />
               <input
                 type="text"
@@ -106,15 +106,15 @@ function LandingPage({ trending, guestDemo }: { trending?: React.ReactNode; gues
           </button>
           <div className="flex justify-center gap-8 flex-wrap max-w-[520px] mx-auto">
             <div className="text-center">
-              <div className="text-xs font-bold text-acc mb-[3px]">Streaming-koll</div>
+              <div className="text-xs font-bold text-acc mb-1">Streaming-koll</div>
               <div className="text-xxs text-white/50 leading-snug max-w-[140px]">Se direkt vilken tjänst som har titeln.</div>
             </div>
             <div className="text-center">
-              <div className="text-xs font-bold text-acc mb-[3px]">Avsnittskalender</div>
+              <div className="text-xs font-bold text-acc mb-1">Avsnittskalender</div>
               <div className="text-xxs text-white/50 leading-snug max-w-[140px]">Missa aldrig ett nytt avsnitt.</div>
             </div>
             <div className="text-center">
-              <div className="text-xs font-bold text-acc mb-[3px]">Streamingrådgivaren</div>
+              <div className="text-xs font-bold text-acc mb-1">Streamingrådgivaren</div>
               <div className="text-xxs text-white/50 leading-snug max-w-[140px]">Pausa tjänster du inte använder.</div>
             </div>
           </div>
@@ -135,7 +135,7 @@ function TrendingSection({ items }: { items: TMDBSearchResult[] }) {
   return (
     <section className="max-w-[1000px] mx-auto px-4 py-8">
       <div className={cardClass()}>
-        <div className="px-3 py-[6px] border-b border-rule-2">
+        <div className="px-3 py-1.5 border-b border-rule-2">
           <h2 className="text-sm font-bold text-ink-2 m-0">Trendande just nu</h2>
         </div>
         <TitleGrid items={items} />

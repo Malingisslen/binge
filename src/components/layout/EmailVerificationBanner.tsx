@@ -38,7 +38,7 @@ export function EmailVerificationBanner() {
   return (
     <div
       role="status"
-      className="bg-acc-deep/[0.08] border-b border-acc-deep/30 px-3 py-[5px] text-xs text-ink-2 flex items-center gap-3 flex-wrap"
+      className="bg-acc-deep/[0.08] border-b border-acc-deep/30 px-3 py-1.5 text-xs text-ink-2 flex items-center gap-3 flex-wrap"
     >
       <span>
         Bekräfta din e-postadress.

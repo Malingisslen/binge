@@ -108,17 +108,17 @@ function StatsContent() {
       </header>
       <div style={{ marginTop: 28 }}>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-[10px] mb-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 mb-4">
         <StatCard label="Totalt" value={stats.total} />
         <StatCard label="Följer" value={stats.following.length} />
         <StatCard label="Sedd" value={stats.watched.length} />
         <StatCard label="Medelbetyg" value={stats.avgRating > 0 ? stats.avgRating.toFixed(1) : '—'} />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-[14px] mb-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 mb-4">
         {/* Film vs Serier — stacked bar */}
         <div className={cardClass()}>
-          <div className="px-3 py-[6px] border-b border-rule-2">
+          <div className="px-3 py-1.5 border-b border-rule-2">
             <span className="text-sm font-bold text-ink-2">Film vs Serier</span>
           </div>
           <div className="px-3 py-3">
@@ -152,7 +152,7 @@ function StatsContent() {
 
         {/* Betygsfördelning */}
         <div className={cardClass()}>
-          <div className="px-3 py-[6px] border-b border-rule-2">
+          <div className="px-3 py-1.5 border-b border-rule-2">
             <span className="text-sm font-bold text-ink-2">Betygsfördelning</span>
           </div>
           <div className="px-3 py-2">
@@ -160,7 +160,7 @@ function StatsContent() {
               const count = stats.ratingDist[String(n)] ?? 0;
               const maxCount = Math.max(...Object.values(stats.ratingDist), 1);
               return (
-                <div key={n} className="flex items-center gap-2 mb-[2px]">
+                <div key={n} className="flex items-center gap-2 mb-0.5">
                   <span className="text-xs text-ink-3 w-[16px]">{n}</span>
                   <div className="flex-1 h-[6px] bg-rule rounded-full overflow-hidden">
                     <div className="h-full bg-ink rounded-full" style={{ width: `${(count / maxCount) * 100}%` }} />
@@ -176,7 +176,7 @@ function StatsContent() {
       {/* Streamingtjänster — horizontal colored bars */}
       {stats.topProviders.length > 0 && (
         <div className={cardClass('mb-4')}>
-          <div className="px-3 py-[6px] border-b border-rule-2 flex items-baseline justify-between gap-2">
+          <div className="px-3 py-1.5 border-b border-rule-2 flex items-baseline justify-between gap-2">
             <span className="text-sm font-bold text-ink-2">Streamingtjänster</span>
             <span className="text-xxs text-ink-3">
               {/* BIN-845: "med abonnemangstäckning", inte "med streaming-data" — siffran
@@ -191,8 +191,8 @@ function StatsContent() {
           </div>
           <div className="px-3 py-2">
             {stats.topProviders.slice(0, 8).map(p => (
-              <div key={p.id} className="flex items-center gap-2 py-[4px]">
-                <span className="flex items-center gap-[6px] text-xs w-[90px] shrink-0 truncate">
+              <div key={p.id} className="flex items-center gap-2 py-1">
+                <span className="flex items-center gap-1.5 text-xs w-[90px] shrink-0 truncate">
                   <ProviderDot color={p.provider?.color ?? 'var(--ink-3)'} />
                   {p.provider?.name}
                 </span>
@@ -215,11 +215,11 @@ function StatsContent() {
       {/* BIN-164: dina taggar — privata, räknas bara över din egen data */}
       {stats.topTags.length > 0 && (
         <div className={cardClass('mb-4')}>
-          <div className="px-3 py-[6px] border-b border-rule-2 flex items-baseline justify-between gap-2">
+          <div className="px-3 py-1.5 border-b border-rule-2 flex items-baseline justify-between gap-2">
             <span className="text-sm font-bold text-ink-2">Dina taggar</span>
             <span className="text-xxs text-ink-3">Bara synliga för dig</span>
           </div>
-          <div className="px-3 py-2 flex flex-wrap gap-[6px]">
+          <div className="px-3 py-2 flex flex-wrap gap-1.5">
             {stats.topTags.map(t => (
               <span key={t.tag} className="chip is-on">
                 {t.tag} · {t.count}
@@ -232,23 +232,23 @@ function StatsContent() {
       {/* Aktivitet per månad — proper bar chart */}
       {stats.activityMonths.length > 1 && (
         <div className={cardClass('mb-4')}>
-          <div className="px-3 py-[6px] border-b border-rule-2">
+          <div className="px-3 py-1.5 border-b border-rule-2">
             <span className="text-sm font-bold text-ink-2">Aktivitet per månad</span>
           </div>
           <div className="px-3 py-2">
-            <div className="flex items-end gap-[4px]" style={{ height: '100px' }}>
+            <div className="flex items-end gap-1" style={{ height: '100px' }}>
               {stats.activityMonths.map(([month, count]) => {
                 const maxCount = Math.max(...stats.activityMonths.map(([, c]) => c), 1);
                 const monthIdx = parseInt(month.slice(5), 10) - 1;
                 const label = MONTH_NAMES[monthIdx] ?? month.slice(5);
                 return (
                   <div key={month} className="flex-1 flex flex-col items-center justify-end h-full group">
-                    <div className="text-xxs text-ink-3 mb-[2px] opacity-0 group-hover:opacity-100 transition-opacity">{count}</div>
+                    <div className="text-xxs text-ink-3 mb-0.5 opacity-0 group-hover:opacity-100 transition-opacity">{count}</div>
                     <div
                       className="w-full bg-acc-deep rounded-t-[2px] min-h-[2px] transition-all"
                       style={{ height: `${(count / maxCount) * 80}%` }}
                     />
-                    <div className="text-nano text-ink-3 mt-[3px]">{label}</div>
+                    <div className="text-nano text-ink-3 mt-1">{label}</div>
                   </div>
                 );
               })}
