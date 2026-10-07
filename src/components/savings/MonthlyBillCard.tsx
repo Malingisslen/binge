@@ -9,6 +9,7 @@ import { formatKr } from '@/lib/formatKr';
 import ProviderDot from '@/components/ui/ProviderDot';
 import { cardClass } from '@/components/ui/Card';
 import { getProvider, getProviderColor } from '@/lib/tmdb/providers';
+import ShareBillButton from '@/components/savings/ShareBillButton';
 import { billLineText, billTotalText, type MonthlyBill } from '@/lib/advisor/monthlyBill';
 
 export default function MonthlyBillCard({ bill }: { bill: MonthlyBill }) {
@@ -16,7 +17,10 @@ export default function MonthlyBillCard({ bill }: { bill: MonthlyBill }) {
   const total = billTotalText(bill);
   return (
     <section className={cardClass('mb-3.5 p-3 flex flex-col gap-2 min-w-0')} aria-labelledby="monthly-bill-title" data-testid="monthly-bill">
-      <h2 id="monthly-bill-title" className="m-0 text-base font-extrabold text-ink">Din streaming i {month}</h2>
+      <div className="flex items-center justify-between gap-2 min-w-0">
+        <h2 id="monthly-bill-title" className="m-0 text-base font-extrabold text-ink">Din streaming i {month}</h2>
+        <ShareBillButton bill={bill} />
+      </div>
       <div className="border-t-2 border-ink pt-2 flex flex-col gap-2 tabular-nums">
         <ul className="m-0 p-0 list-none flex flex-col gap-2">
           {bill.lines.map(line => (

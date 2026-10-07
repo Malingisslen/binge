@@ -15,6 +15,7 @@ import { subscriptionProviderIds } from '@/lib/watchlist/subscriptionProviders';
 import { canonicalProviderId } from '@/lib/tmdb/providers';
 import { seenDate } from '@/lib/seenDate';
 import { MONTHS_SV } from '@/lib/diary';
+import { formatKr } from '@/lib/formatKr';
 import type { WatchlistItem } from '@/types';
 
 
@@ -196,4 +197,21 @@ export function billTotalText(bill: MonthlyBill): { count: string; perItem: stri
     count: countText(bill.episodes, bill.films),
     perItem: bill.krPerItem == null ? null : `${bill.krPerItem} kr per ${unitText(bill.episodes, bill.films)}`,
   };
+}
+
+/**
+ * A service's row on the shared image: its price per thing checked off. A paused
+ * service is left off, and nothing names what was watched (BIN-1449 sketch, part 2).
+ */
+export function billShareRowText(line: BillLine): string | null {
+  if (line.pausedWholeMonth) return null;
+  const count = line.episodes + line.films;
+  if (count === 0 || line.krPerItem == null) return 'Inget sett';
+  if (count === 1) return line.episodes === 1 ? `${line.krPerItem} kr för ett avsnitt` : `${line.krPerItem} kr för en film`;
+  return `${line.krPerItem} kr per ${unitText(line.episodes, line.films)}`;
+}
+
+/** The line that goes with the image in the phone's share sheet. */
+export function billShareText(bill: MonthlyBill): string {
+  return `Min streaming i ${bill.month.name}: ${formatKr(bill.totalKr)} kr. Räkna på din egen på binge.nu`;
 }
