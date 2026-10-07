@@ -2,11 +2,13 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
+import { Film, Tv } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useSearch } from '@/hooks/useTMDB';
 import { useUserSearch } from '@/hooks/useUserSearch';
 import { posterUrl, getDisplayTitle, getReleaseYear, isAddableMediaType, titleHref } from '@/lib/tmdb/client';
 import { toneForId } from '@/lib/duotone';
+import { rankSearchResults } from '@/lib/searchRanking';
 import type { ResolvedUser } from '@/lib/firebase/username';
 import { eyebrowClass } from '@/components/ui/Eyebrow';
 import { cardClass } from '@/components/ui/Card';
@@ -33,8 +35,8 @@ export default function SearchDropdown({ query, onSelect, onActiveOptionChange }
   const [activeIndex, setActiveIndex] = useState(-1);
 
   const titleResults = useMemo(
-    () => (titleData?.results ?? []).filter(isAddableMediaType).slice(0, 8),
-    [titleData],
+    () => rankSearchResults((titleData?.results ?? []).filter(isAddableMediaType), query).slice(0, 8),
+    [titleData, query],
   );
   const userResults = useMemo(() => userData ?? [], [userData]);
 
@@ -163,7 +165,9 @@ export default function SearchDropdown({ query, onSelect, onActiveOptionChange }
                     <img src={poster} alt="" loading="lazy" decoding="async" width={26} height={39} />
                   </div>
                 ) : (
-                  <div className="w-[26px] h-[39px] rounded-sm bg-rule-2 shrink-0" />
+                  <div className="w-[26px] h-[39px] rounded-sm bg-rule-2 shrink-0 flex items-center justify-center text-ink-3" aria-hidden>
+                    {item.media_type === 'tv' ? <Tv size={12} /> : <Film size={12} />}
+                  </div>
                 )}
                 <div className="min-w-0">
                   <div className="text-sm text-ink font-semibold truncate">{title}</div>

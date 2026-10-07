@@ -349,7 +349,7 @@ describe('TVShowPageClient — what a crawler reads without clicking (SEO-2/SEO-
     render(<TVShowPageClient id="1399" />);
 
     expect(screen.getByRole('link', { name: 'Serier' }).getAttribute('href')).toMatch(/^\/series\/?$/);
-    expect(screen.getByRole('link', { name: 'Sci-Fi & Fantasy' }).getAttribute('href')).toMatch(/^\/genre\/sci-fi\/?$/);
+    expect(screen.getByRole('link', { name: 'Science fiction & fantasy' }).getAttribute('href')).toMatch(/^\/genre\/sci-fi\/?$/);
   });
 });
 

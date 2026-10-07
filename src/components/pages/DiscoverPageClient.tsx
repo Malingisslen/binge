@@ -15,6 +15,7 @@ import { JsonLd, breadcrumbSchema, collectionPageSchema } from '@/components/tit
 import { nordicLanguageParam } from '@/lib/discover/nordic';
 import { Button } from '@/components/ui/Button';
 import { cardClass } from '@/components/ui/Card';
+import { GENRE_LABELS } from '@/lib/tmdb/genreLabels';
 
 const DISCOVER_DESCRIPTION = 'Trendande, populära och nya filmer och serier på Netflix, Viaplay, HBO Max, Disney+, SVT Play och fler svenska streamingtjänster.';
 
@@ -69,7 +70,7 @@ export default function DiscoverPageClient({
     : (() => {
         const all = [...(movieGenres?.genres ?? []), ...(tvGenres?.genres ?? [])];
         const seen = new Set<number>();
-        return all.filter(g => { if (seen.has(g.id)) return false; seen.add(g.id); return true; }).sort((a, b) => a.name.localeCompare(b.name, 'sv'));
+        return all.filter(g => { if (seen.has(g.id)) return false; seen.add(g.id); return true; }).sort((a, b) => (GENRE_LABELS[a.id] ?? a.name).localeCompare(GENRE_LABELS[b.id] ?? b.name, 'sv'));
       })();
 
   const { data: trending, isLoading: trendingLoading } = useTrending('all', 'week');
@@ -185,7 +186,7 @@ export default function DiscoverPageClient({
           >
             <option value="">Alla genrer</option>
             {(genres ?? []).map(g => (
-              <option key={g.id} value={String(g.id)}>{g.name}</option>
+              <option key={g.id} value={String(g.id)}>{GENRE_LABELS[g.id] ?? g.name}</option>
             ))}
           </select>
 

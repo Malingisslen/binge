@@ -18,6 +18,7 @@ import { computeBingeStats } from '@/lib/bingeStats';
 import { Eyebrow } from '@/components/ui/Eyebrow';
 import { buttonClass } from '@/components/ui/Button';
 import { cardClass } from '@/components/ui/Card';
+import { formatLibraryDate } from '@/lib/utils';
 
 function StatBox({ value, label }: { value: number; label: string }) {
   return (
@@ -117,7 +118,7 @@ export default function DiaryPageClient() {
                       <div className="flex-1 min-w-0">
                         <div className="text-xs font-semibold text-ink truncate">{item.title}</div>
                         <div className="text-xxs text-ink-3">
-                          {date.toLocaleDateString('sv-SE', { day: 'numeric', month: 'long' })}
+                          {formatLibraryDate(date)}
                           {episodeCode ? ` · ${episodeCode}` : item.releaseYear ? ` · ${item.releaseYear}` : ''}
                         </div>
                       </div>

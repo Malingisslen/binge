@@ -61,6 +61,7 @@ import type { TMDBMovie } from '@/types';
 import { DELETION_IN_PROGRESS_MESSAGE, isDeletionInProgressError } from '@/lib/deletionInProgressError';
 import { buttonClass } from '@/components/ui/Button';
 import { eyebrowClass } from '@/components/ui/Eyebrow';
+import { GENRE_LABELS } from '@/lib/tmdb/genreLabels';
 
 // Direction H movie-detail page. Same duotone/raw boundary as TV detail:
 //   - Hero poster → duotone (identification)
@@ -228,7 +229,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   // exactly when the meta description falls back to the floor as well).
   const overviewText = movie.overview?.trim() ? movie.overview : null;
   const needsContentFloorParagraph = !hasSubstantialText(movie.overview);
-  const genres = movie.genres.map(g => g.name).join(', ');
+  const genres = movie.genres.map(g => GENRE_LABELS[g.id] ?? g.name).join(', ');
   const cast = movie.credits?.cast?.slice(0, 10) ?? [];
   const directors = movie.credits?.crew?.filter(c => c.job === 'Director') ?? [];
   const writers = movie.credits?.crew?.filter(c => c.job === 'Screenplay' || c.job === 'Writer') ?? [];

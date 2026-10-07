@@ -40,12 +40,12 @@ export default function DiagnosisCard({ advisor, activeProviderCount }: Props) {
       suggestion = (
         <>
           {' '}
-          <span className="text-ink-3">Inget kan pausas just nu — men du ligger efter på</span>{' '}
+          <span className="text-ink-3">Du har</span>{' '}
           <strong className="text-ink">
-            {action.unfinishedCount} {action.providerName}-{action.unfinishedCount === 1 ? 'serie' : 'serier'}
+            {action.unfinishedCount} {action.unfinishedCount === 1 ? 'serie' : 'serier'} kvar på {action.providerName}
           </strong>
           .{' '}
-          <span className="text-ink-3">Slutför dem så öppnas ett pausfönster värt</span>{' '}
+          <span className="text-ink-3">Se klart dem, sedan kan du pausa {action.providerName} och spara</span>{' '}
           <strong className="text-ink">{formatKr(action.monthlyCost)} kr/mån</strong>
           <span className="text-ink-3">.</span>
         </>

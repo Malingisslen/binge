@@ -61,7 +61,7 @@ export default function VillkorPage() {
           <li>Använda Binge för kommersiell vidareförsäljning av data.</li>
         </ul>
         <p>
-          Läs även våra <Link href="/community-guidelines">community-regler</Link>
+          Läs även våra <Link href="/community-guidelines">community-regler</Link>{' '}
           för detaljerade riktlinjer kring innehåll.
         </p>
       </section>

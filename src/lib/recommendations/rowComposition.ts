@@ -1,5 +1,6 @@
 import { hasNonLatinTitle, isFromHiddenCountry } from '@/lib/utils/titleFilter';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
+import { parseGenreFilter } from '@/lib/tmdb/genreLabels';
 import type { RowTitle, FilterState } from '@/types';
 
 /**
@@ -69,7 +70,7 @@ export function applyClientFilters(
   items: readonly RowTitle[],
   filters: FilterState,
 ): RowTitle[] {
-  const genreId = filters.genre ? Number(filters.genre) : null;
+  const genreIds = parseGenreFilter(filters.genre);
   return items.filter(t => {
     if (filters.mediaType !== 'all' && t.media_type !== filters.mediaType) return false;
     if (filters.hideNonLatinTitles) {
@@ -77,7 +78,7 @@ export function applyClientFilters(
       if (hasNonLatinTitle(t.title ?? tn.name, t.original_title ?? tn.original_name)) return false;
     }
     if (filters.hiddenCountries.length && isFromHiddenCountry(t.origin_country, [...filters.hiddenCountries])) return false;
-    if (genreId !== null && !(t.genre_ids ?? []).includes(genreId)) return false;
+    if (genreIds.length > 0 && !(t.genre_ids ?? []).some(id => genreIds.includes(id))) return false;
     if (filters.country) {
       const oc = t.origin_country ?? [];
       if (!oc.includes(filters.country)) return false;
