@@ -39,9 +39,9 @@ export const yearCeiling = (now: Date = new Date()): number => now.getFullYear()
 
 export const LENGTH_OPTIONS: ReadonlyArray<{ value: LengthFilter; label: string }> = [
   { value: '', label: 'Alla längder' },
-  { value: 'film-90', label: 'Film under 90 min' },
-  { value: 'film-120', label: 'Film under 2 timmar' },
-  { value: 'short-episodes', label: 'Serie, avsnitt under 30 min' },
+  { value: 'film-90', label: 'Film högst 90 min' },
+  { value: 'film-120', label: 'Film högst 2 timmar' },
+  { value: 'short-episodes', label: 'Serie, avsnitt högst 30 min' },
 ];
 
 export const STAR_STEPS = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5] as const;
@@ -93,9 +93,10 @@ export function passesLength(
   length: LengthFilter,
 ): boolean {
   if (!length) return true;
-  if (length === 'short-episodes') return mediaType === 'tv' && runtime != null && runtime > 0 && runtime < 30;
+  // Inclusive bounds: a film of exactly 90 minutes is what someone asking for "90 min" means.
+  if (length === 'short-episodes') return mediaType === 'tv' && runtime != null && runtime > 0 && runtime <= 30;
   if (mediaType !== 'movie' || runtime == null || runtime <= 0) return false;
-  return runtime < (length === 'film-90' ? 90 : 120);
+  return runtime <= (length === 'film-90' ? 90 : 120);
 }
 
 /** The provider ids a title must be on, or null when availability does not filter. */
