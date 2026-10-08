@@ -1,6 +1,7 @@
 import { fsdb } from './db';
 import { getPublicProfileCards } from './publicProfile';
 import { relationshipDocsToClear } from '@/lib/blockRelationship';
+import { shownFriendName } from '@/lib/friendName';
 
 // Friend-system: mutuell relation som kompletterar ensidiga follow.
 // Vänner får läsa privata watchlist-items (visibility='friends').
@@ -213,7 +214,7 @@ export async function listFriends(myUid: string): Promise<FriendUser[]> {
     const sinceTs = friendDoc.data().since;
     friends.push({
       uid: friendDoc.id,
-      displayName: card?.displayName || 'Användare',
+      displayName: shownFriendName(card?.displayName, card?.username),
       photoURL: card?.photoURL ?? null,
       username: card?.username ?? null,
       since: sinceTs?.toDate?.() ?? new Date(),
@@ -230,10 +231,10 @@ export async function listFriendRequests(myUid: string): Promise<FriendRequest[]
     const data = d.data();
     return {
       fromUid: d.id,
-      // BIN-1126: `||`, så både null och en tom sträng får reservnamnet. Fältet är
+      // BIN-1126: både null och en tom sträng får reservnamnet. Fältet är
       // numera nullbart på skrivvägen, och äldre dokument kan bära en tom sträng
       // från tiden då klienten skickade profilens värde rakt av.
-      fromDisplayName: (data.fromDisplayName as string) || 'Användare',
+      fromDisplayName: shownFriendName(data.fromDisplayName, data.fromUsername),
       fromPhotoURL: (data.fromPhotoURL as string | null) ?? null,
       fromUsername: (data.fromUsername as string | null) ?? null,
       sentAt: data.sentAt?.toDate?.() ?? new Date(),

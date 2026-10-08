@@ -152,7 +152,7 @@ function FriendRow({ friend }: { friend: FriendUser }) {
         ) : (
           <div className="text-xs font-semibold text-ink-3 truncate">{friend.displayName}</div>
         )}
-        {friend.username && <div className="text-xxs text-ink-3">@{friend.username}</div>}
+        {friend.username && friend.username !== friend.displayName && <div className="text-xxs text-ink-3">@{friend.username}</div>}
       </div>
       {!isMe && (
         <div className="flex flex-col items-end gap-1">
@@ -177,7 +177,8 @@ function RequestRow({ request }: { request: FriendRequest }) {
   const { data: sender } = useSenderProfile(request.fromUid);
   // Föredra namn/användarnamn från avsändarens egen profil; fall tillbaka till
   // de denormaliserade request-fälten om profilen inte är läsbar.
-  const displayName = sender?.displayName ?? request.fromDisplayName;
+  // `||`, not `??`: a profile with a blank name must fall through to the username.
+  const displayName = sender?.displayName?.trim() || sender?.username || request.fromDisplayName;
   const username = sender?.username ?? request.fromUsername;
   const profileLink = username ? `/user/${username}/` : null;
   return (
@@ -191,7 +192,7 @@ function RequestRow({ request }: { request: FriendRequest }) {
         ) : (
           <div className="text-xs font-semibold text-ink-3 truncate">{displayName}</div>
         )}
-        {username && <div className="text-xxs text-ink-3">@{username}</div>}
+        {username && username !== displayName && <div className="text-xxs text-ink-3">@{username}</div>}
       </div>
       {/* Both buttons are live at once, unlike FriendButton's single mode. The alert
           names the action of the LATEST click: every click clears the flag first, so a

@@ -277,6 +277,21 @@ describe('listFriends', () => {
       since: new Date('2026-01-01'),
     }]);
   });
+
+  it('visar användarnamnet för en vän utan visningsnamn', async () => {
+    getDocsMock.mockResolvedValueOnce({
+      empty: false,
+      docs: [
+        { id: 'namnlos', data: () => ({ since: { toDate: () => new Date('2026-01-01') } }) },
+      ],
+    });
+    getDocMock.mockResolvedValueOnce({
+      exists: () => true,
+      data: () => ({ displayName: '', photoURL: null, username: 'namnlos' }),
+    });
+    const [friend] = await listFriends('me');
+    expect(friend.displayName).toBe('namnlos');
+  });
 });
 
 // BIN-1126: the rules bind the stored name to the sender's own profile, and null is
@@ -329,6 +344,25 @@ describe('listFriendRequests', () => {
     });
     const [request] = await listFriendRequests('me');
     expect(request.fromDisplayName).toBe('Användare');
+  });
+
+  it('visar avsändarens användarnamn när namnet saknas', async () => {
+    getDocsMock.mockResolvedValueOnce({
+      docs: [
+        {
+          id: 'namnlos',
+          data: () => ({
+            fromUid: 'namnlos',
+            fromDisplayName: '',
+            fromPhotoURL: null,
+            fromUsername: 'namnlos',
+            sentAt: { toDate: () => new Date('2026-01-01') },
+          }),
+        },
+      ],
+    });
+    const [request] = await listFriendRequests('me');
+    expect(request.fromDisplayName).toBe('namnlos');
   });
 
   it('lämnar ett riktigt namn orört', async () => {

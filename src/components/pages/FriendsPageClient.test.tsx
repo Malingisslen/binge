@@ -31,7 +31,10 @@ const data = vi.hoisted(() => ({
 
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ uid: 'me' }) }));
 vi.mock('@/hooks/usePageMeta', () => ({ usePageMeta: () => {} }));
-vi.mock('@/hooks/useSenderProfile', () => ({ useSenderProfile: () => ({ data: null }) }));
+const senders = vi.hoisted(() => new Map<string, { displayName: string | null; username: string | null }>());
+vi.mock('@/hooks/useSenderProfile', () => ({
+  useSenderProfile: (uid: string) => ({ data: senders.get(uid) ?? null }),
+}));
 vi.mock('@/hooks/useFollowList', () => ({
   useFollowList: () => ({ following: data.following, followers: data.followers, isLoading: false }),
 }));
@@ -82,6 +85,7 @@ beforeEach(() => {
   data.following = [];
   data.followers = [];
   data.blocked = new Set();
+  senders.clear();
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 
@@ -243,5 +247,40 @@ describe('FriendsPageClient — a blocked person is left out of every tab', () =
     expect(view.getByText('Xerxes')).toBeTruthy();
     const tab = view.getAllByRole('button').find((b) => b.textContent?.startsWith(label));
     expect(tab?.textContent).toBe(`${label} (2)`);
+  });
+});
+
+// A friend without a display name is shown by their username (friendName.ts), and the
+// @-line under it would then repeat the same word. The line stays whenever it adds
+// something, since it is what tells two similar names apart.
+describe('FriendsPageClient — the @username line', () => {
+  it('is left out when the name shown is the username', async () => {
+    data.friends = [{ uid: 'j', displayName: 'jonatan', photoURL: null, username: 'jonatan' }];
+    const view = await open('Vänner');
+    expect(within(rowFor(view, 'jonatan')).queryByText('@jonatan')).toBeNull();
+  });
+
+  it('stays when the name differs from the username', async () => {
+    data.friends = [{ uid: 'j', displayName: 'Jonatan', photoURL: null, username: 'jonatan' }];
+    const view = await open('Vänner');
+    expect(within(rowFor(view, 'Jonatan')).getByText('@jonatan')).toBeTruthy();
+  });
+});
+
+describe('FriendsPageClient — a request from a sender whose profile has no name', () => {
+  it('shows the username from the profile, once', async () => {
+    data.requests = [request('s', 'Användare')];
+    senders.set('s', { displayName: '  ', username: 'sara' });
+    const view = await open('Förfrågningar');
+    const row = rowFor(view, 'sara');
+    expect(within(row).queryByText('Användare')).toBeNull();
+    expect(within(row).queryByText('@sara')).toBeNull();
+  });
+
+  it('keeps the @-line when the name and username differ', async () => {
+    data.requests = [request('s', 'Sara')];
+    senders.set('s', { displayName: 'Sara', username: 'sara' });
+    const view = await open('Förfrågningar');
+    expect(within(rowFor(view, 'Sara')).getByText('@sara')).toBeTruthy();
   });
 });
