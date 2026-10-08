@@ -920,6 +920,9 @@ lades tillbaka.
 - **Export och radering:** posten ingår inte i exporten och rörs inte av kontoraderingen;
   den är ett underlag om själva återställningen.
 - **Kopian:** den återställda databasen raderas samma dag, senast efter 7 dagar.
+- **Anteckningen på profilen:** `restoredAt`, `restoreBasis`, `restoreRequestedBy` och
+  `restoreSourceDb` på `users/{uid}` står kvar så länge kontot finns och följer med exporten
+  och kontoraderingen. Ingen egen gallringstid (Malins beslut 2026-10-08).
 
 ### Tillsammans-sessioner och notifikationer — schemalagt svep
 
