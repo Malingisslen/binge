@@ -11,6 +11,8 @@ import RecCard from './RecCard';
 import { LoadingView } from '@/components/ui/LoadingView';
 import type { RowResult } from '@/types';
 import { whyForRow } from './RecRow.helpers';
+import { MyServicesFilterContext } from './myServicesContext';
+import { useMyServicesFilter } from '@/hooks/useMyServicesFilter';
 
 const ROW_VISIBLE = 6;
 const ROTATION_KEY_PREFIX = 'binge:rec-rotation:';
@@ -41,7 +43,8 @@ export default function RecRow({ result, index }: Props) {
   const { rowSpec, visible, backingPool, isLoading } = result;
   const [seed, setSeed] = useState<number>(() => readSeed(rowSpec.rowKey));
 
-  const merged = [...visible, ...backingPool];
+  const myServices = useContext(MyServicesFilterContext);
+  const merged = useMyServicesFilter([...visible, ...backingPool], myServices);
   const items = rotatePool(merged, seed, ROW_VISIBLE);
   const canRotate = merged.length > ROW_VISIBLE;
   // "Tapped out" = rotated through the whole pool at least once. Further blanda
