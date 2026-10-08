@@ -48,7 +48,7 @@ export default function CommunityGuidelinesPage() {
         <h2>Användarnamn</h2>
         <p>
           Ditt användarnamn kan vara 3–30 tecken (lägre-case bokstäver,
-          siffror, understreck). Vi reserverar oss rätten att neka eller
+          siffror, understreck). Vi förbehåller oss rätten att neka eller
           ta bort användarnamn som bryter mot reglerna ovan (t.ex.
           stötande, varumärkesintrång, namn på kända personer).
         </p>
