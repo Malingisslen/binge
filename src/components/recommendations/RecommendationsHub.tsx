@@ -28,6 +28,7 @@ import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import { DEFAULT_FILTERS } from '@/types';
 import type { FilterState, RowSpec, MediaTypeFilter } from '@/types';
 import { Button } from '@/components/ui/Button';
+import { MyServicesFilterContext } from './myServicesContext';
 
 const INITIAL_VISIBLE_ROWS = 5;
 
@@ -119,6 +120,7 @@ export default function RecommendationsHub() {
   const visibleRows = orderedRows.slice(0, visibleRowCount);
   const hiddenCountries = user?.hiddenCountries ?? [];
   const myProviders = user?.myProviders ?? [];
+  const myServicesFilter = filters.myProvidersOnly && myProviders.length > 0 ? myProviders : null;
 
   // R1: prioritizeRows körs om för varje detail/keyword-query som löser —
   // person-rader dyker upp och numreringen skiftar mitt under laddning.
@@ -161,6 +163,7 @@ export default function RecommendationsHub() {
         <>
           <EmptyState ratingCount={cascade.ratingCount} onOpenQuickRate={() => setQuickRateOpen(true)} />
 
+          <MyServicesFilterContext.Provider value={myServicesFilter}>
           <RowExhaustionContext.Provider value={reportExhaustion}>
             {visibleRows.map((spec, idx) => (
               <RowDispatch
@@ -177,6 +180,7 @@ export default function RecommendationsHub() {
               />
             ))}
           </RowExhaustionContext.Provider>
+          </MyServicesFilterContext.Provider>
 
           {visibleRowCount < filteredRows.length && (
             <Button

@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { getMovieGenres, getTVGenres } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
+import { GENRE_LABELS } from '@/lib/tmdb/genreLabels';
 
 export function useGenreMap(): Map<number, string> {
   const { data: movieGenres } = useQuery({
@@ -17,7 +18,9 @@ export function useGenreMap(): Map<number, string> {
   });
 
   const map = new Map<number, string>();
-  for (const g of movieGenres?.genres ?? []) map.set(g.id, g.name);
-  for (const g of tvGenres?.genres ?? []) map.set(g.id, g.name);
+  // TMDB leaves the series-only genres in English even in Swedish ("Kids"), so
+  // the app's own Swedish name wins wherever there is one.
+  for (const g of movieGenres?.genres ?? []) map.set(g.id, GENRE_LABELS[g.id] ?? g.name);
+  for (const g of tvGenres?.genres ?? []) map.set(g.id, GENRE_LABELS[g.id] ?? g.name);
   return map;
 }

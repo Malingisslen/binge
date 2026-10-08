@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useContext } from 'react';
 import { ChevronLeft } from 'lucide-react';
 import { useRecommendationsCascade } from '@/hooks/useRecommendationsCascade';
 import { useWatchlist } from '@/hooks/useWatchlist';
@@ -30,6 +30,8 @@ import { useRowFreePublic } from '@/hooks/rows/useRowFreePublic';
 import { useRowCompanion } from '@/hooks/rows/useRowCompanion';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import { Button } from '@/components/ui/Button';
+import { MyServicesFilterContext } from './myServicesContext';
+import { useMyServicesFilter } from '@/hooks/useMyServicesFilter';
 
 interface Props {
   rowKeyParam: string;
@@ -46,8 +48,9 @@ function applySort(items: RowTitle[], sort: SortKey): RowTitle[] {
   return items;
 }
 
-function gridFromResult(result: RowResult, sort: SortKey) {
-  const all = [...result.visible, ...result.backingPool];
+function ResultGrid({ result, sort }: { result: RowResult; sort: SortKey }) {
+  const myServices = useContext(MyServicesFilterContext);
+  const all = useMyServicesFilter([...result.visible, ...result.backingPool], myServices);
   return <TitleGrid items={applySort(all, sort)} loading={result.isLoading && all.length === 0} showNotInterested />;
 }
 
@@ -140,6 +143,7 @@ export default function RecommendationsExpanded({ rowKeyParam }: Props) {
         // blinkar avfärdade titlar in tills snapshotten landat (BIN-37).
         <LoadingView variant="grid" label="Laddar rekommendationer…" />
       ) : (
+        <MyServicesFilterContext.Provider value={filters.myProvidersOnly && (user?.myProviders?.length ?? 0) > 0 ? user!.myProviders : null}>
         <ExpandedDispatch
           spec={spec}
           excludedIds={excludedIds}
@@ -150,6 +154,7 @@ export default function RecommendationsExpanded({ rowKeyParam }: Props) {
           hiddenCountries={user?.hiddenCountries ?? []}
           latestFiveStar={cascade.latestFiveStar}
         />
+        </MyServicesFilterContext.Provider>
       )}
     </>
   );
@@ -182,48 +187,48 @@ function ExpandedDispatch(props: DispatchProps) {
 
 function TrendingExpanded({ spec, excludedIds, filters, sort }: DispatchProps) {
   const r = useRowTrending(spec, excludedIds, filters);
-  return gridFromResult(r, sort);
+  return <ResultGrid result={r} sort={sort} />;
 }
 
 function LatestFavExpanded({ spec, excludedIds, filters, sort, latestFiveStar }: DispatchProps) {
   const seed = latestFiveStar ? { tmdbId: latestFiveStar.tmdbId, mediaType: latestFiveStar.mediaType } : null;
   const r = useRowLatestFav(spec, seed, excludedIds, filters);
-  return gridFromResult(r, sort);
+  return <ResultGrid result={r} sort={sort} />;
 }
 
 function SimilarExpanded({ spec, excludedIds, filters, sort }: DispatchProps) {
   const r = useRowSimilar(spec, excludedIds, filters);
-  return gridFromResult(r, sort);
+  return <ResultGrid result={r} sort={sort} />;
 }
 
 function PersonExpanded({ spec, excludedIds, filters, sort }: DispatchProps) {
   const r = useRowPerson(spec, excludedIds, filters);
-  return gridFromResult(r, sort);
+  return <ResultGrid result={r} sort={sort} />;
 }
 
 function GenreExpanded({ spec, excludedIds, filters, sort }: DispatchProps) {
   const r = useRowGenreCanon(spec, excludedIds, filters);
-  return gridFromResult(r, sort);
+  return <ResultGrid result={r} sort={sort} />;
 }
 
 function ThematicExpanded({ spec, excludedIds, filters, sort }: DispatchProps) {
   const r = useRowThematic(spec, excludedIds, filters);
-  return gridFromResult(r, sort);
+  return <ResultGrid result={r} sort={sort} />;
 }
 
 function UpcomingExpanded({ spec, excludedIds, filters, sort, myProviders, topGenreIds }: DispatchProps) {
   const r = useRowUpcoming(spec, myProviders, topGenreIds, excludedIds, filters);
-  return gridFromResult(r, sort);
+  return <ResultGrid result={r} sort={sort} />;
 }
 
 function FreePublicExpanded({ spec, excludedIds, filters, sort }: DispatchProps) {
   const r = useRowFreePublic(spec, excludedIds, filters);
-  return gridFromResult(r, sort);
+  return <ResultGrid result={r} sort={sort} />;
 }
 
 // BIN-583. No cross-row dedup here: the expanded view renders exactly one row,
 // so there is no sibling row for a companion film to collide with.
 function CompanionExpanded({ spec, excludedIds, filters, sort }: DispatchProps) {
   const r = useRowCompanion(spec, excludedIds, filters);
-  return gridFromResult(r, sort);
+  return <ResultGrid result={r} sort={sort} />;
 }

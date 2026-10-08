@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { formatKr } from '@/lib/formatKr';
 import ProviderDot from '@/components/ui/ProviderDot';
 import SrOnlyTableHeader from '@/components/ui/SrOnlyTableHeader';
@@ -49,9 +50,14 @@ export default function CoverageOptimizer({ rows }: { rows: WillSeePerProviderRo
                   <td className={`px-3 py-2 whitespace-nowrap ${i === 0 ? 'border-l-[3px] border-l-acc-deep' : ''}`}>
                     <span className="inline-flex items-center gap-1.5">
                       <ProviderDot color={o.color} size={7} />
-                      <span className={`text-xs ${i === 0 ? 'font-semibold text-ink' : 'text-ink-2'}`}>
+                      {/* Leder till tjänstens sida i Binge, där det syns vad som finns där.
+                          Binge har inga kontrollerade registreringslänkar till tjänsterna. */}
+                      <Link
+                        href={`/provider/${o.providerId}/`}
+                        className={`text-xs no-underline hover:text-acc-deep ${i === 0 ? 'font-semibold text-ink' : 'text-ink-2'}`}
+                      >
                         Skaffa {o.providerName}
-                      </span>
+                      </Link>
                     </span>
                   </td>
                   <td className="px-3 py-2 text-xs text-ink-2">
