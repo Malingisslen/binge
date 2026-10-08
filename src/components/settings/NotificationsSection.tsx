@@ -151,6 +151,19 @@ export function NotificationsSection() {
     }
   }
 
+  async function handleMonthlyBillToggle(next: boolean) {
+    if (busyKeys.has('monthlyBill')) return;
+    setBusyKey('monthlyBill', true);
+    try {
+      await updateNotificationSettings({ monthlyBill: next });
+      toast(next ? 'Månadssammanfattning på' : 'Månadssammanfattning av');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Kunde inte ändra notisinställningar. Försök igen om en stund.');
+    } finally {
+      setBusyKey('monthlyBill', false);
+    }
+  }
+
   async function handleToggle(next: boolean) {
     if (busyKeys.has('push')) return;
     setBusyKey('push', true);
@@ -264,6 +277,16 @@ export function NotificationsSection() {
           className="accent-acc-deep w-[14px] h-[14px]" />
         Veckodigest: titlar som lämnar dina tjänster snart + nytt den här veckan
       </label>
+
+      <label className="flex items-center gap-2 cursor-pointer text-base mt-3">
+        <input type="checkbox" checked={user.notificationSettings.monthlyBill} disabled={busyKeys.has('monthlyBill')}
+          onChange={(e) => { void handleMonthlyBillToggle(e.target.checked); }}
+          className="accent-acc-deep w-[14px] h-[14px]" />
+        Månadssammanfattning: din streaming förra månaden
+      </label>
+      <p className="text-xs text-ink-3 mt-1 ml-6">
+        Visas i appens klocka den 1:a varje månad. Skickas inte som push.
+      </p>
     </SettingsSection>
   );
 }

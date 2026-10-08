@@ -307,6 +307,8 @@ async function buildExistingProfile(data: Record<string, unknown>, firebaseUser:
       rotationReminders: (data.notificationSettings as UserProfile['notificationSettings'])?.rotationReminders ?? false,
       priceChanges: (data.notificationSettings as UserProfile['notificationSettings'])?.priceChanges ?? false,
       weeklyDigest: (data.notificationSettings as UserProfile['notificationSettings'])?.weeklyDigest ?? false,
+      // Same reading as the server: only an explicit false turns the card off.
+      monthlyBill: (data.notificationSettings as UserProfile['notificationSettings'])?.monthlyBill !== false,
     },
     rotationSchedule: (data.rotationSchedule as UserProfile['rotationSchedule']) ?? undefined,
   };

@@ -4,8 +4,9 @@ import { join } from 'node:path';
 import { NEW_ACCOUNT_NOTIFICATION_SETTINGS } from './notificationDefaults';
 
 describe('NEW_ACCOUNT_NOTIFICATION_SETTINGS (BIN-1442)', () => {
-  it('turns the weekly digest on and leaves push off', () => {
+  it('turns the weekly digest and the monthly bill card on and leaves push off', () => {
     expect(NEW_ACCOUNT_NOTIFICATION_SETTINGS.weeklyDigest).toBe(true);
+    expect(NEW_ACCOUNT_NOTIFICATION_SETTINGS.monthlyBill).toBe(true);
     expect(NEW_ACCOUNT_NOTIFICATION_SETTINGS.pushEnabled).toBe(false);
     expect(NEW_ACCOUNT_NOTIFICATION_SETTINGS.priceChanges).toBe(false);
   });
