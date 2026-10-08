@@ -27,6 +27,19 @@ export default function IntegritetPage() {
         { id: 'kontakt', label: '12. Kontakt' },
       ]}
     >
+      {/* Malins godkända sammanfattning (2026-10-08). Den lovar inget utöver
+          avsnitten nedan; ändras något där ska den läsas om. */}
+      <div aria-label="I korthet">
+        <h2>I korthet</h2>
+        <ul>
+          <li>Vi sparar det du själv lägger in: ditt konto, ditt bibliotek och dina betyg, dina streamingtjänster och det du delar i grupper.</li>
+          <li>Vi säljer aldrig dina uppgifter och använder inga reklamnätverk.</li>
+          <li>Databasen ligger inom EU. Några leverantörer är amerikanska, till exempel Google och TMDB.</li>
+          <li>Du kan själv ladda ner eller radera all din data under Inställningar.</li>
+          <li>Har du frågor? Skriv till <a href="mailto:hej@binge.nu">hej@binge.nu</a>.</li>
+        </ul>
+      </div>
+
       <section id="ansvarig">
         <h2>1. Vem är ansvarig?</h2>
         <p>

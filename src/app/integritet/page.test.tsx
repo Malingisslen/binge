@@ -23,3 +23,13 @@ describe('integritetspolicyns innehållsförteckning', () => {
     }
   });
 });
+
+describe('integritetspolicyns sammanfattning', () => {
+  it('står före första avsnittet', () => {
+    const { container } = render(<IntegritetPage />);
+    const summary = screen.getByRole('heading', { name: 'I korthet' });
+    const first = container.querySelector('section#ansvarig')!;
+    expect(summary.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText('Vi säljer aldrig dina uppgifter och använder inga reklamnätverk.')).toBeTruthy();
+  });
+});
