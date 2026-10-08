@@ -17,6 +17,7 @@ import { usePageMeta } from '@/hooks/usePageMeta';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { Button } from '@/components/ui/Button';
 import { cardClass } from '@/components/ui/Card';
+import { shownSenderName } from '@/lib/friendName';
 
 type Tab = 'friends' | 'requests' | 'following' | 'followers';
 
@@ -177,8 +178,7 @@ function RequestRow({ request }: { request: FriendRequest }) {
   const { data: sender } = useSenderProfile(request.fromUid);
   // Föredra namn/användarnamn från avsändarens egen profil; fall tillbaka till
   // de denormaliserade request-fälten om profilen inte är läsbar.
-  // `||`, not `??`: a profile with a blank name must fall through to the username.
-  const displayName = sender?.displayName?.trim() || sender?.username || request.fromDisplayName;
+  const displayName = shownSenderName(sender, request.fromDisplayName);
   const username = sender?.username ?? request.fromUsername;
   const profileLink = username ? `/user/${username}/` : null;
   return (

@@ -6,3 +6,13 @@ export function shownFriendName(displayName: unknown, username: unknown): string
   if (typeof username === 'string' && username) return username;
   return 'Användare';
 }
+
+// The sender's own public profile wins over the name stored on a request or invite,
+// which can be older. A profile with a blank name falls through to its username,
+// and only then to the stored name.
+export function shownSenderName(
+  profile: { displayName: string | null; username: string | null } | null | undefined,
+  storedName: string,
+): string {
+  return profile?.displayName?.trim() || profile?.username || storedName;
+}
