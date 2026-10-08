@@ -10,7 +10,7 @@ _Version: 1.0 (2026-04-24)_
 ## 0. Quick triage
 
 1. **Är det nere?** Testa själv: https://binge.nu + incognito.
-2. **Hur många drabbas?** Kolla Plausible → idag → visitors/timme. Är det 0?
+2. **Hur många drabbas?** Kolla Firebase Console → Functions → `recordEvent` → anrop senaste timmen. Är det 0? (Besökssiffror finns inte sedan BIN-1438.)
 3. **Vad ser Sentry?** https://sentry.io → binge-nu → last 1h.
 4. **Vad säger användaren?** Om rapport via mejl/chat: vilken webbläsare, vilken sida, vad hände?
 
@@ -35,7 +35,7 @@ _Version: 1.0 (2026-04-24)_
 - Förbered DNS-failover: byt nameservers temporärt till Firebase direct
   (binge-nu.web.app alias). Kräver registrar-access.
 - Eller vänta ut incidenten (oftast minuter, inte timmar)
-- Meddela användare via Plausible-banner om det drar ut
+- Meddela användare om det drar ut
 
 ### 1c. Firebase Hosting nere
 
@@ -69,6 +69,11 @@ firebase deploy --only firestore:rules --project binge-nu
 
 Sedan: kör rules-testerna i Firebase Console → Rules Playground innan nästa
 deploy. Dokumentera vad som gick fel i commit-meddelandet.
+
+Det är den snabba vägen mitt i en incident. Committa och pusha sedan återställningen, så
+att `main` säger samma sak som produktionen: deploy.yml jämför med den commit som senast
+deployades, inte med reglerna som är ute, så en regel som bara backats för hand kommer
+tillbaka med nästa regeländring (§6e). Kör aldrig om en gammal körning för att backa.
 
 ### 2c. `resource-exhausted` / rate-limit
 
@@ -177,9 +182,90 @@ raderingsskyldigheterna.
 gcloud firestore backups list --location=eur3 --project=binge-nu
 ```
 
-Något återställningskommando publiceras inte här: inget har körts i projektet, och
-det som stod här pekade på en GCS-export i stället för på de säkerhetskopior
-kommandot ovan listar. Spårat i BIN-1212.
+**Återställ alltid till en NY databas, aldrig över `(default)`.** Provkört
+2026-10-02 (BIN-1212) med säkerhetskopian från 2026-10-01: återställningen tog
+ungefär 15 minuter (mätt på en liten databas), och den nya databasen hade samma
+rotsamlingar och samma antal dokument i `users` och `watchlist` som `(default)`.
+Den raderades efteråt.
+
+```bash
+# <backup-id> är NAME-kolumnen ur listan ovan. Databasnamnet är fritt valt,
+# 4–63 tecken, små bokstäver, siffror och bindestreck.
+gcloud firestore databases restore \
+  --source-backup=projects/binge-nu/locations/eur3/backups/<backup-id> \
+  --destination-database=<nytt-namn> --project=binge-nu
+
+# <operation> står under sourceInfo.operation i utskriften ovan. Klart när
+# done är True och metadata.operationState är SUCCESSFUL.
+gcloud firestore operations describe <operation> --project=binge-nu \
+  --format="value(done,metadata.operationState)"
+```
+
+Provet läste den återställda databasen via Firestores REST-API
+(`https://firestore.googleapis.com/v1/projects/binge-nu/databases/<nytt-namn>/documents`)
+med en token från `gcloud auth print-access-token`. Att läsa den i Firebase Console
+är inte provat.
+
+Kopian bär personuppgifter, också från konton som raderats efter säkerhetskopian.
+Radera den när ärendet är avslutat. `<nytt-namn>` är aldrig `(default)`: kör
+`gcloud firestore databases list --project=binge-nu` först och kopiera namnet därifrån.
+
+```bash
+gcloud firestore databases delete --database=<nytt-namn> --project=binge-nu
+```
+
+Appen och molnfunktionerna läser bara `(default)`, så en återställd databas rör
+ingenting förrän data flyttas därifrån.
+
+#### Flytta tillbaka ett enskilt konto (BIN-1422)
+
+Verktyget är `functions/scripts/restore-account.mjs`; vad det flyttar och varför står i
+`restore-account.helpers.mjs`. Malins beslut 2026-10-07: bara när kontots ägare själv ber
+om det, från den e-postadress kontot har. Vänskaper och följningar läggs tillbaka hos båda,
+och den andra får en notis. Recensioner, listor, grupper, Tillsammans-sessioner, notiser,
+pushtokens, vänförfrågningar och gruppinbjudningar kommer inte tillbaka.
+
+Inte provat skarpt: emulatortestet kör flytten, men ingen har ännu kört verktyget mot en
+riktig återställd kopia. Gör det i ett prov innan första skarpa ärendet.
+
+Ordning:
+
+1. En gång per projekt: slå på utgångsdatum för loggen, så att poster i `restoreLog` raderas
+   efter 12 månader.
+
+   ```bash
+   gcloud firestore fields ttls update expireAt --collection-group=restoreLog --enable-ttl --project=binge-nu
+   ```
+
+2. Kontrollera att begäran kommer från kontots ägare: svara på kontots e-postadress (inte
+   bara på avsändaren) och vänta på ett svar därifrån. Verktyget kräver att `--requested-by`
+   är kontots adress, men det kan inte se vem som styr brevlådan.
+3. Återställ säkerhetskopian till en ny databas (ovan). Hämta kontots uid ur kopian.
+4. Torrkör. Den skriver ingenting och visar vad som skulle flyttas och vad som hoppas över.
+
+   ```bash
+   cd functions && node scripts/restore-account.mjs --project binge-nu --source-db <nytt-namn> --uid <uid> --basis owner-request --requested-by <e-post> --evidence <var begäran finns> --reason <varför> --operator <ditt namn> --dry-run
+   ```
+
+   `--evidence` är en hänvisning (ärende, datum), aldrig meddelandets text.
+5. Kör skarpt: samma kommando med `--apply --i-understand-default` i stället för `--dry-run`.
+   Dör körningen halvvägs: kör samma kommando igen samma dag. Allt som redan skrivits står
+   kvar och skrivs inte över, och profilen skrivs sist.
+   Säger den att profilen dök upp under körningen har personen loggat in för tidigt och fått
+   en ny, tom profil. Radera den tomma `users/{uid}` och kör samma kommando igen.
+6. Räkna i kopian och i `(default)` per undersamling innan kopian raderas. Torrkörningens
+   siffror är kopians.
+7. Radera kopian samma dag, senast efter 7 dagar, och kontrollera att den är borta med
+   `gcloud firestore databases list --project=binge-nu`. Verktyget skriver ut båda kommandona
+   och sista dag.
+8. Svara personen: logga in med "Glömt lösenord" och e-postadressen. Inloggning med Google
+   är inte provad efter en återställning.
+
+Kontroll i appen, som den återställda: villkorsskärmen "Ditt konto är återställt" kommer
+först; efter godkännandet syns biblioteket, avsnittsframstegen och vännerna. Som en vän:
+en notis "<namn> är tillbaka på Binge" i klockan, och personen syns bland vännerna.
+Visar appen "Kontot håller på att raderas" på personens gamla enhet: rensa webbplatsdata
+för binge.nu där.
 
 `deleteAccount`-cascaden är designad för att vara irreversibel (GDPR-krav). När
 ingen återställning görs: beklaga och guida användaren till att börja om.
@@ -302,7 +388,33 @@ Console, i den här ordningen:
   sweeps done` finns: körningen dog i en av de sopningar som kör EFTER den
   raden, inom 300 s-budgeten. De som kör före gick igenom — det är just därför
   raden skrivs separat. Vilka som ligger på vilken sida framgår av
-  `runRetentionCleanup` i `functions/src/retentionCleanup/runCleanup.ts`. Ingen larmar på detta idag (BIN-468 är öppen).
+  `runRetentionCleanup` i `functions/src/retentionCleanup/runCleanup.ts`.
+- **Saknas BÅDA raderna** för en körning som startade: den dog före
+  `scheduled sweeps done` — i de parallella skanningarna eller i raderingarna
+  som kör före den raden. Frånvaron är signalen; härled ordningen med
+  `grep -n "await Promise.all\|scheduled sweeps done\|retentionCleanup done" functions/src/retentionCleanup/runCleanup.ts`.
+- **Larmet (BIN-1317).** Admin-inkorgen får en systemnotis "Rensningen
+  (retentionCleanup) behöver tittas på". Notisen säger vilken av de två
+  signaturerna ovan förra körningen dog med, att en schemalagd körning
+  uteblivit, eller att körningen loggade fel eller kastade. Gränserna och
+  texterna står i `functions/src/retentionCleanup/runHealth.ts`; körningen
+  håller sina tidsstämplar i `retentionCleanupHealth/current`. Döda körningar
+  och uteblivna körningar syns först när NÄSTA körning startar. Slutar schemat
+  köra helt larmar ingenting — funktionen vakar över sig själv. Notisen skickas
+  bara om hemligheten `ADMIN_UID` är bunden; annars står `alert not sent` i
+  loggen.
+- **Säkerhetskopiornas larm (BIN-1422).** Samma körning listar databasens
+  säkerhetskopior. Admin-inkorgen får "Säkerhetskopiorna av databasen behöver
+  tittas på" när den senaste är för gammal, när ingen finns, eller när listan
+  inte gick att läsa. Det sista betyder oftast behörighet, inte saknade kopior.
+  Gränsen och texterna står i `functions/src/retentionCleanup/runHealth.ts`.
+  Notisen kommer varje körning så länge felet består. Larmet körs inuti
+  `retentionCleanup`, så slutar den köra larmar inte heller det här. Kontrollera
+  för hand:
+
+  ```bash
+  gcloud firestore backups list --location=eur3 --project=binge-nu --sort-by=~snapshotTime
+  ```
 
 ### 5e. "Mitt gamla användarnamn är upptaget av ingen"
 
@@ -433,12 +545,43 @@ BIN-1147-posten i `.claude/rules/accepted-deviations.md`.
 5. Be användaren trycka på radera igen i appen. Kör inte kaskaden själv.
 6. Skriv en rad i §12 Loggbok: datum, antal raderade, vem som körde.
 
+### 5h. "Jag ser mig som med i gruppen men syns inte i medlemslistan"
+
+Det är en spöke-medlem: kontots uid står i gruppens medlemslista men medlemsraden saknas.
+Beslutet att inte bygga en egen reparation står i posten `## BIN-1097` i
+`.claude/rules/accepted-deviations.md`.
+
+1. Medlemmen öppnar gruppen, väljer menyn och "Lämna gruppen". Säg till medlemmen först:
+   utträdet raderar också hens tittarprogress i gruppen och "tillagd av" på titlar hen lagt
+   till (BIN-1260). Titlarna står kvar.
+2. Medlemmen går med igen via inbjudningslänken eller en ny inbjudan från ägaren.
+   Medlemsraden skrivs då på nytt. Den raderade progressen kommer inte tillbaka.
+
+Ägaren kan inte ta bort spöket i appen: medlemslistan byggs av medlemsraderna, så spöket har
+ingen rad där (`grep -n -A6 "export function subscribeToGroupMembers" src/lib/firebase/groups.ts`).
+Går steg 1 inte att genomföra: ta bort medlemmens uid ur `memberUids` i `groups/{groupId}` i
+Firebase Console, och fortsätt med steg 2.
+
+### 5i. En raderingsbegäran kommer via mejl (BIN-1294)
+
+1. Be personen radera kontot själv: Inställningar → "Radera konto". Den vägen raderar
+   allt direkt, också spåren i grupper hen bara var medlem i, och visar vad som hände.
+2. Kan personen inte logga in: bekräfta först att begäran kommer från kontoinnehavaren,
+   på samma sätt som en Art. 17-begäran. Radera sedan kontot i Firebase Console →
+   Authentication.
+   `retentionCleanup` raderar sedan resten, men först efter observationsgolvet. Härled
+   golvet i stället för att lita på en siffra här:
+   `git grep -n "ORPHAN_DATA_MIN_OBSERVED_MS =" -- functions/src`
+3. Svara personen att raderingen är påbörjad och när den är klar enligt golvet i steg 2.
+4. Skriv en rad i §12 Loggbok: datum, vem som körde.
+
 ## 6. "Bygget failar i CI"
 
 ### 6a. Lint/typecheck fel
 
-Vanligt, fix lokalt. `.github/workflows/deploy.yml` grindar varje push till main.
-Faller något där blir sajten inte uppdaterad; besökare får kvar förra bygget.
+Vanligt, fix lokalt. `.github/workflows/deploy.yml` grindar pushar till main, utom de
+som bara rör `docs/` (arbetsflödeskartan undantagen), `tasks/`, `.claude/` eller
+Markdown. Faller något där blir sajten inte uppdaterad; besökare får kvar förra bygget.
 `pr-checks.yml` grindar pull requests — hamnar du här från en röd PR är det den.
 Vilka steg respektive workflow kör står i workflow-filen, inte här:
 `grep -n "name:" .github/workflows/deploy.yml .github/workflows/pr-checks.yml`.
@@ -480,13 +623,9 @@ längre kunna fälla bygget efter 2026-06 (AbortSignal.timeout i
 5. **RÖTT bygge med `[selection]` i loggen (BIN-823).** Nytt felläge sedan
    urvals-spärrhaken. Betyder "urvalet blev för tunt", inte "koden är trasig":
    pre-rendren fick färre id:n än täckningsgolvet tillåter och bygget fälls hellre
-   än att ersätta ~31 000 sidor med ~150. Felmeddelandet namnger utvägen.
+   än att ersätta kärnan med fallback-listan. Felmeddelandet namnger utvägen.
    - **Vanligaste orsaken:** `.tmdb-cache` evakuerad ur actions/cache ⇒ urvalet
-     måste härledas om från kallt, under 15-minuters räddningstaket. För `movie`
-     och `tv` krävs att TMDB dessutom stryper; **för `person` är det aritmetik,
-     inte otur** — mätt härledningstid 2 672 s mot ett tak på 900 s, så en kall
-     personhärledning slår ALLTID i taket, lämnar manifestet oskrivet och fäller
-     200-id-golvet. Gäller vid varje kall start, inte bara första deployen: även
+     måste härledas om från kallt, under 15-minuters räddningstaket. Gäller vid varje kall start, inte bara första deployen: även
      en `MANIFEST_VERSION`-bump eller ett korrupt manifest landar här.
      Åtgärd: `gh workflow run deploy.yml -f full_refresh=true` — det ger
      150-minuters härledningstak och 175-minuters steg-tak.
@@ -497,11 +636,10 @@ längre kunna fälla bygget efter 2026-06 (AbortSignal.timeout i
      observerad — deploy.yml hedgar den själv; bekräfta på nästa riktiga
      hängning innan du förlitar dig på den.)
      **Men vänta dig inte att härledningen hoppas över:** `full_refresh` sätter
-     `TMDB_SELECTION_REFRESH`, och det tvingar omhärledning av ALLA tre typerna
-     oavsett hur färska manifesten är. Det som sparas gör två OLIKA saker:
-     manifesten för de typer som HANN klart låter deras täckningsgolv passera
-     nästa gång, och detaljcachen (`.tmdb-cache/movie-*.json`, skriven av
-     `fetchForBuild`) gör personens rollist-fas snabbare. Den typ som slog i
+     `TMDB_SELECTION_REFRESH`, och det tvingar omhärledning av båda typerna
+     oavsett hur färska manifesten är.
+     Manifesten för de typer som HANN klart låter deras täckningsgolv passera
+     nästa gång. Den typ som slog i
      taket har inget manifest alls — `writeSelectionManifest` nås bara när
      härledningen lyckades — så den måste hinna klart för att bygget ska bli
      grönt. Vill du hoppa över härledningen helt: kör en **vanlig** deploy utan
@@ -509,14 +647,8 @@ längre kunna fälla bygget efter 2026-06 (AbortSignal.timeout i
    - **Första deployen efter BIN-823 KAN gå röd, och i så fall är det väntat.**
      Själva push:en till main triggar push-vägen automatiskt — inget
      `TMDB_SELECTION_REFRESH`, 45-minuters steg-tak, 15-minuters räddningstak —
-     och den måste härleda alla tre urvalen innan någon hinner dispatcha.
-     Om den går röd eller inte hänger på `.tmdb-cache`: restoras den varmt
-     (`restore-keys: tmdb-cache-`) serveras personens rollistor från disk och
-     härledningen krymper till ~100 listsidor, och bygget kan mycket väl bli
-     grönt. Citera INTE 2 672-sekundersmätningen här — den gjordes när
-     `collectPersonIds` gick förbi diskcachen, vilket är precis vad den här
-     committen ändrade. Den siffran gäller fortfarande vid evakuerad cache och i
-     preview (som saknar cache-steg helt). Blir den röd: behandla det som väntat,
+     och den måste härleda båda urvalen innan någon hinner dispatcha.
+     Blir den röd: behandla det som väntat,
      inte som en regression — gamla sajten ligger kvar, och åtgärden är att
      direkt köra `gh workflow run deploy.yml -f full_refresh=true`.
      Samma push är också första riktiga provet på att fasordningen
@@ -527,6 +659,77 @@ längre kunna fälla bygget efter 2026-06 (AbortSignal.timeout i
    - Sätt ALDRIG `SELECTION_ALLOW_THIN` i `deploy.yml` för att komma förbi. Den
      stänger av både golvet och sitemapens kast, och `deploy.yml` är den enda
      vägen till produktion — det är hela egenskapen golvet vilar på.
+
+### 6e. Regler och funktioner deployas av sig själva (BIN-1426)
+
+En körning som hittar ändrade regler, index eller funktioner sedan förra deployen
+deployar dem i jobbet `backend`, utan att någon klickar (Malin, 2026-10-07: "Deploya
+backend utan mina klick"), och webbplatsen efter dem. Körningens sammanfattning (Summary)
+säger vad som ändrats och vad som deployas.
+
+- **Vad som går ut:** regler, index och funktioner som de ser ut på main när jobbet
+  startar. Har main gått vidare sedan körningen startade körs testerna, funktionernas
+  typkontroll och regeltesterna på main först, och faller något deployas ingenting.
+  Sammanfattningen säger vilken commit som deployades och vad den jämfördes med.
+- **En körning i taget:** senare pushar, måndagskörningen och *Run workflow* står i kö
+  bakom den som kör. En nyare körning i kö ersätter en äldre i kö.
+- **`backend_deployed_by_hand`** bara när det körningen ville deploya redan är ute för
+  hand. Körningen räknas då som lyckad och nästa körning jämför därifrån.
+- **"main pekar på …, som den här körningen inte kunde hämta":** *Re-run failed jobs*.
+- **"Kunde inte avgöra vad som ska deployas" med "har gått ut":** körningen kan inte läsa
+  vad förra deployen lade ut. *Run workflow* med `deploy_all_backend`.
+- **"Webbplatsen deployas inte: körning #… har redan deployat den nyare commiten":** en
+  omkörning av en äldre körning, som skulle backa webbplatsen. Inget behövs; vill du
+  deploya igen, *Run workflow* på main.
+- **Backend misslyckades:** sammanfattningen visar firebases sista rader och vad du gör.
+  Ett tillfälligt fel: *Re-run failed jobs*. Annars deploya för hand med kommandot där,
+  och kör sedan *Run workflow* med `backend_deployed_by_hand`.
+- **Webbplatsen misslyckades efter backend:** *Re-run failed jobs*. Det kör bara om det
+  som föll.
+- **Varning om utlösare som byter händelsetyp:** körningen är grön men de funktionerna är
+  inte uppdaterade. Deploya dem för hand med kommandot i varningen.
+- **Regler, index och alla funktioner på en gång:** *Run workflow* med
+  `deploy_all_backend`. Webbplatsen går ut efteråt, som i varje körning.
+- **Backa en ändring:** reverta den på main och pusha; nästa körning deployar
+  återställningen. Mitt i en incident: §2b, och committa sedan återställningen.
+
+Inte prövat i en riktig körning ännu: *Re-run failed jobs* ovan, och en körning som
+deployar en nyare main än sin egen commit. Stryk den här raden när båda är sedda.
+
+**Det här ska finnas innan deploy.yml:s `backend`-jobb kör första gången** (en gång):
+
+- Miljön `backend` i GitHub (Settings → Environments): *Required reviewers* avbockad
+  (2026-10-07), och *Deployment branches and tags* bara `main`.
+- Hemligheten `FIREBASE_BACKEND_SERVICE_ACCOUNT` i miljön `backend`, aldrig under
+  Settings → Secrets and variables → Actions, där varje jobb kan läsa den.
+- Kontot `binge-backend-deploy` med rollerna Firebase Rules Admin, Cloud Datastore Index
+  Admin, Cloud Functions Admin, Cloud Run Admin, Cloud Scheduler Admin, Eventarc Admin,
+  Secret Manager Viewer, Service Usage Consumer, Firebase Viewer och Artifact Registry
+  Reader. Service Account User får det bara på funktionernas körkonton, ett i taget
+  (compute-standardkontot, och `binge-nu@appspot.gserviceaccount.com` om det finns),
+  aldrig på hela projektet.
+- Webbplatsnyckelns konto (`FIREBASE_SERVICE_ACCOUNT`) utan roller som deployar regler
+  eller funktioner. IAM-listan hade
+  2026-10-05 inget eget konto för webbplatsen, så det ska vara `binge-hosting-deploy` med
+  bara Firebase Hosting Admin. Deployloggens varning "Unable to find a valid endpoint for
+  function `apiInsights`" fanns redan före nyckelbytet (körning #897, 2026-09-23):
+  firebase lägger då ut `/api/insights` som en vanlig funktionsomskrivning (firebase-tools
+  15.22.3, `lib/deploy/hosting/convertConfig.js`).
+- En städregel för funktionsbilder i europe-west1. Utan den deployar firebase
+  funktionerna och fäller sedan jobbet. Står det `cleanupPolicies` i svaret från det
+  första kommandot finns en regel; annars kör det andra en gång:
+
+```bash
+gcloud artifacts repositories describe gcf-artifacts --location=europe-west1 --project=binge-nu
+firebase functions:artifacts:setpolicy --location europe-west1 --project binge-nu
+```
+
+Efter första körningen med `deploy_all_backend`: läs hur många byggen den startade och hur stort funktionsarkivet blev:
+
+```bash
+gcloud builds list --region=europe-west1 --project=binge-nu --limit=50
+gcloud artifacts repositories describe gcf-artifacts --location=europe-west1 --project=binge-nu
+```
 
 ---
 
@@ -540,6 +743,10 @@ längre kunna fälla bygget efter 2026-06 (AbortSignal.timeout i
 3. Se stack trace — vilken fil+rad?
 4. Samma error förut? Sök på error-message i Sentry
 5. Om nytt: reproducera lokalt, fixa, deploy
+
+`tags.kind` som börjar på `dataExport-` (scope `groups`, BIN-1379) betyder att en användare
+kan ha fått en ofullständig dataexport; grupperna står i filens `skippedGroups`. Matcha mot ett
+mejl till hej@binge.nu och hantera det som en Art. 20-begäran.
 
 ### 7b. Noise-errors att ignorera
 
@@ -600,7 +807,8 @@ Sista kända fungerande commit:
 # Identifiera
 git log --oneline main | head -20
 
-# Rollback = revert + push (deploy.yml bygger om och deployar hosting).
+# Rollback = revert + push (deploy.yml deployar regler och funktioner och bygger
+# om webbplatsen, §6e).
 # OBS: `git checkout <sha> -- out/` funkar INTE — out/ är gitignorerad
 # build-output, inte incheckad, så det blir en no-op. Reverta källan istället:
 git revert <bad-sha>          # enskild commit

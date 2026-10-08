@@ -217,10 +217,10 @@ describe('detectRecurringKeywords', () => {
   it('returns keywords in ≥3 distinct titles', () => {
     const seeds = [1, 2, 3, 4].map(id => mkSeed({ tmdbId: id, rating: id <= 2 ? 5 : 3 }));
     const keywords = new Map([
-      [mk(1), [{ id: 10, name: 'cult-classic' }, { id: 20, name: 'small-town' }]],
-      [mk(2), [{ id: 10, name: 'cult-classic' }]],
-      [mk(3), [{ id: 10, name: 'cult-classic' }, { id: 20, name: 'small-town' }]],
-      [mk(4), [{ id: 20, name: 'small-town' }]],
+      [mk(1), [{ id: 10, name: 'revenge' }, { id: 20, name: 'small town' }]],
+      [mk(2), [{ id: 10, name: 'revenge' }]],
+      [mk(3), [{ id: 10, name: 'revenge' }, { id: 20, name: 'small town' }]],
+      [mk(4), [{ id: 20, name: 'small town' }]],
     ]);
     const r = detectRecurringKeywords(seeds, keywords, 3);
     expect(r.map(k => k.id)).toContain(10);
@@ -229,10 +229,22 @@ describe('detectRecurringKeywords', () => {
   it('caps at 3 keyword rows', () => {
     const seeds = Array.from({ length: 4 }, (_, i) => mkSeed({ tmdbId: i + 1 }));
     const keywords = new Map(seeds.map(s => [mediaTypeDocId(s.mediaType, s.tmdbId), [
-      { id: 1, name: 'a' }, { id: 2, name: 'b' }, { id: 3, name: 'c' },
-      { id: 4, name: 'd' }, { id: 5, name: 'e' },
+      { id: 1, name: 'zombie' }, { id: 2, name: 'vampire' }, { id: 3, name: 'witch' },
+      { id: 4, name: 'dragon' }, { id: 5, name: 'magic' },
     ]]));
     expect(detectRecurringKeywords(seeds, keywords, 3)).toHaveLength(3);
+  });
+
+  it('låter inte oöversatta teman ta platserna från ett översatt längre ned', () => {
+    const seeds = Array.from({ length: 5 }, (_, i) => mkSeed({ tmdbId: i + 1 }));
+    const all = [{ id: 1, name: 'woman director' }, { id: 2, name: 'duringcreditsstinger' }, { id: 3, name: 'aftercreditsstinger' }];
+    const keywords = new Map(seeds.map((s, i) => [mediaTypeDocId(s.mediaType, s.tmdbId), [
+      ...all,
+      ...(i < 3 ? [{ id: 818, name: 'based on novel or book' }] : []),
+    ]]));
+    expect(detectRecurringKeywords(seeds, keywords, 3)).toEqual([
+      { id: 818, name: 'based on novel or book', recurrence: 3 },
+    ]);
   });
 });
 

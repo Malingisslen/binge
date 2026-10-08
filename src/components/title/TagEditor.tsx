@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { X } from 'lucide-react';
 import { normalizeTags } from '@/lib/watchlistWrites';
 import { GENRE_LABELS } from '@/lib/tmdb/genreLabels';
+import { fieldClass } from '@/components/ui/Field';
 
 // Reserved folds: a user tag must not masquerade as a real genre/rating chip.
 const RESERVED = new Set<string>([
@@ -57,9 +58,9 @@ export default function TagEditor({ tags, onChange, suggestions }: TagEditorProp
 
   return (
     <div className="mb-3">
-      <div className="flex flex-wrap items-center gap-[6px]">
+      <div className="flex flex-wrap items-center gap-1.5">
         {tags.map(t => (
-          <span key={t} className="chip is-on inline-flex items-center gap-[4px]">
+          <span key={t} className="chip is-on inline-flex items-center gap-1">
             {t}
             <button
               type="button"
@@ -84,7 +85,7 @@ export default function TagEditor({ tags, onChange, suggestions }: TagEditorProp
           onBlur={() => { if (draft.trim()) commit(draft); }}
           placeholder="Lägg till tagg…"
           maxLength={24}
-          className="text-xs bg-surface border border-rule rounded px-[8px] py-[3px] text-ink placeholder:text-ink-3 outline-none focus:border-acc-deep min-w-[120px]"
+          className={fieldClass({ size: 'sm', className: 'min-w-[120px]' })}
         />
         {remaining.length > 0 && (
           <datalist id="tag-suggestions">

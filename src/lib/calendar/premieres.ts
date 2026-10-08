@@ -121,13 +121,16 @@ export function derivePremierePills(
 /**
  * Kvartalets händelser: i fönstret OCH (filmsläpp ∨ premiär ∨ final). Deduplicerar
  * på entryKey — anropa med [...liveEntries, ...pills] så en live-entry vinner
- * över en pill för samma avsnitt. Sorterar på airDate stigande, sedan sv titel.
+ * över en pill för samma avsnitt. En serie som släpper premiären och finalen
+ * samma dag (hela säsongen på en gång) blir EN rad: premiären, eftersom det är
+ * den som är nyheten. Sorterar på airDate stigande, sedan sv titel.
  */
 export function selectQuarterEvents(
   entries: readonly CalendarEntry[],
   window: PremiereWindow,
 ): CalendarEntry[] {
   const seen = new Set<string>();
+  const sameDay = new Map<string, number>();
   const out: CalendarEntry[] = [];
   for (const e of entries) {
     if (!inWindow(e.airDate, window)) continue;
@@ -136,6 +139,16 @@ export function selectQuarterEvents(
     const key = entryKey(e);
     if (seen.has(key)) continue;
     seen.add(key);
+    if (e.kind === 'episode') {
+      const dayKey = `${e.tmdbId}-${e.airDate}`;
+      const at = sameDay.get(dayKey);
+      if (at !== undefined) {
+        const kept = out[at];
+        if (e.isPremiere && kept.kind === 'episode' && !kept.isPremiere) out[at] = e;
+        continue;
+      }
+      sameDay.set(dayKey, out.length);
+    }
     out.push(e);
   }
   out.sort((a, b) =>

@@ -9,6 +9,9 @@ import { useAuth } from '@/hooks/useAuth';
 import { createGroup, GROUP_WRITE_REFUSED } from '@/lib/firebase/groups';
 import { cacheInviteToken } from '@/lib/groupInviteCache';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { Button } from '@/components/ui/Button';
+import { fieldClass } from '@/components/ui/Field';
+import { cardClass } from '@/components/ui/Card';
 import type {
   AggregationStrategy,
   GroupDefaults,
@@ -75,7 +78,7 @@ function NyGruppContent() {
         standfirst="Skapa en permanent konstellation — bjud in via länk eller @handle. Era streamingtjänster och inställningar lever vidare mellan kvällar, så ni kan starta en ny session utan att ställa in allt på nytt."
       />
 
-      <form onSubmit={onSubmit} className="bg-surface border border-rule rounded-sm">
+      <form onSubmit={onSubmit} className={cardClass()}>
         <FormSection title="Gruppnamn">
           <input
             type="text"
@@ -83,11 +86,11 @@ function NyGruppContent() {
             onChange={e => setName(e.target.value)}
             placeholder="T.ex. Fredagsgänget, Familjen, Filmklubben"
             maxLength={48}
-            className="w-full max-w-[360px] px-2 py-1 text-base border border-rule rounded-sm bg-white"
+            className={fieldClass({ className: 'w-full max-w-[360px]' })}
           />
         </FormSection>
 
-        <FormSection title="Default: vad?">
+        <FormSection title="Standard: vad?">
           <FormRadioGroup
             name="mediaType"
             value={mediaType}
@@ -100,7 +103,7 @@ function NyGruppContent() {
           />
         </FormSection>
 
-        <FormSection title="Default: provider-läge">
+        <FormSection title="Standard: vilka tjänster räknas">
           <FormRadioGroup
             name="providerMode"
             value={providerMode}
@@ -112,7 +115,7 @@ function NyGruppContent() {
           />
         </FormSection>
 
-        <FormSection title="Default: aggregering">
+        <FormSection title="Standard: hur en match väljs">
           <FormRadioGroup
             name="aggregation"
             value={aggregation}
@@ -126,8 +129,8 @@ function NyGruppContent() {
         </FormSection>
 
         <p className="px-3 py-2 text-xxs text-ink-3 border-t border-rule-2">
-          Defaults används när du startar en ny session med gruppen — du kan
-          alltid ändra per session.
+          Standardvalen används när du startar en ny session med gruppen. Du kan
+          alltid ändra dem per session.
         </p>
 
         {error && (
@@ -135,20 +138,20 @@ function NyGruppContent() {
         )}
 
         <div className="px-3 py-2 border-t border-rule-2 flex items-center gap-2">
-          <button
+          <Button
             type="submit"
             disabled={submitting}
-            className="px-3 py-[5px] bg-acc-deep text-white border-none rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
+            variant="acc" size="sm" className="disabled:opacity-50"
           >
             {submitting ? 'Skapar…' : 'Skapa grupp'}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={() => router.push('/grupper')}
-            className="px-3 py-[5px] border border-rule rounded-sm text-xs bg-white cursor-pointer"
+            variant="ghost" size="sm"
           >
             Avbryt
-          </button>
+          </Button>
         </div>
       </form>
     </div>

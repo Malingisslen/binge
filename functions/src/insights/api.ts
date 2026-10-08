@@ -5,25 +5,24 @@
  *   1. Authorization: Bearer <firebaseIdToken>  → verified, then users/{uid}.isAdmin must be true.
  *   2. Authorization: Bearer <INSIGHTS_TOKEN>    → matches the secret (URL-token fallback).
  *
- * On success: reads insights/daily (1 read), fetches Plausible live, merges into
- * an InsightsData JSON response. Never does heavy Firestore work per request.
+ * On success: reads insights/daily (1 read), the askBingeStats and eventStats day docs in
+ * the range, and merges them into an InsightsData JSON response. Never does heavy
+ * Firestore work per request.
  */
 
 import * as crypto from 'crypto';
-import { getFirestore, FieldPath } from 'firebase-admin/firestore';
+import { getFirestore } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import { onRequest } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import { logger } from 'firebase-functions/v2';
-import { fetchPlausible } from './plausible';
 import { readAskBingeStats } from './askbinge';
-import { computeWindowDeltas } from './window';
+import { readEventStats } from './eventStats';
+import { computeWindowDeltas, pickBaselineId } from './window';
 import { stockholmDayId } from '../askbinge/logic';
 import type { InsightsData, RangeInfo, RollupData } from './types';
 
 const INSIGHTS_TOKEN = defineSecret('INSIGHTS_TOKEN');
-const PLAUSIBLE_API_KEY = defineSecret('PLAUSIBLE_API_KEY');
-const PLAUSIBLE_SITE_ID = defineSecret('PLAUSIBLE_SITE_ID');
 
 function safeEqual(a: string, b: string): boolean {
   const bufA = Buffer.from(a);
@@ -93,27 +92,21 @@ async function readRollup(): Promise<RollupData | null> {
 }
 
 /**
- * Baseline snapshot for the window: newest dated snapshot on or before `from`.
- * Date ids ("2026-…") sort before the live "daily" doc ("d"), so a `<= {date}`
- * bound excludes "daily" naturally. If history doesn't reach `from`, fall back
- * to the oldest dated snapshot (the dashboard then shows a "sedan {datum}" note).
+ * Baseline snapshot for the window (`pickBaselineId`), chosen from listDocuments() ids,
+ * the call the rollup's retention sweep already makes. Not an `orderBy(documentId,
+ * 'desc')` query: that needs a __name__ DESCENDING index, and without it every call
+ * failed with FAILED_PRECONDITION in production.
  */
 async function readBaseline(
   from: string,
 ): Promise<{ data: RollupData; date: string } | null> {
   const col = getFirestore().collection('insights');
   try {
-    let snap = await col
-      .where(FieldPath.documentId(), '<=', from)
-      .orderBy(FieldPath.documentId(), 'desc')
-      .limit(1)
-      .get();
-    if (snap.empty) {
-      snap = await col.orderBy(FieldPath.documentId(), 'asc').limit(1).get();
-    }
-    if (snap.empty) return null;
-    const doc = snap.docs[0];
-    if (doc.id === 'daily') return null; // only the live doc exists — no history yet
+    const refs = await col.listDocuments();
+    const id = pickBaselineId(refs.map((r) => r.id), from);
+    if (!id) return null; // no dated history yet
+    const doc = await col.doc(id).get();
+    if (!doc.exists) return null;
     return { data: doc.data() as RollupData, date: doc.id };
   } catch (err) {
     logger.error('readBaseline failed', err);
@@ -124,7 +117,7 @@ async function readBaseline(
 export const apiInsights = onRequest(
   {
     region: 'europe-west1',
-    secrets: [INSIGHTS_TOKEN, PLAUSIBLE_API_KEY, PLAUSIBLE_SITE_ID],
+    secrets: [INSIGHTS_TOKEN],
     cors: false,
   },
   async (req, res) => {
@@ -138,9 +131,9 @@ export const apiInsights = onRequest(
 
     const range = parseRange(req.query as Record<string, unknown>);
 
-    const [rollup, plausible, baseline, askBinge] = await Promise.all([
+    const [rollup, eventStats, baseline, askBinge] = await Promise.all([
       readRollup(),
-      fetchPlausible(range),
+      readEventStats(range),
       readBaseline(range.from),
       readAskBingeStats(range),
     ]);
@@ -153,10 +146,13 @@ export const apiInsights = onRequest(
       generatedAt: new Date().toISOString(),
       range,
       rollup,
-      plausible,
+      events: eventStats.events,
+      eventsSince: eventStats.eventsSince,
       askBinge,
       window,
-      partial: rollup === null || rollup.partial || plausible === null,
+      // Ett intervall utan eventStats-dokument är "inte mätt", inget fel — bara ett läsfel
+      // gör svaret partiellt.
+      partial: rollup === null || rollup.partial || eventStats.failed,
     };
 
     res.set('Cache-Control', 'private, max-age=300');

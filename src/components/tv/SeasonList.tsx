@@ -147,10 +147,14 @@ function CanonicalSpecialsSection({
 }) {
   return (
     <div className="border-b border-rule-2 last:border-b-0">
-      <div className="flex items-center justify-between py-[5px] text-sm">
-        <div
-          className="flex items-center gap-1 cursor-pointer flex-1 min-w-0"
+      <div className="flex items-center justify-between py-1.5 text-sm">
+        {/* A11Y-2: a real button, so keyboard and screen-reader users can open the
+            season and hear whether it is open. */}
+        <button
+          type="button"
+          className="flex items-center gap-1 cursor-pointer flex-1 min-w-0 min-h-[32px] text-left bg-transparent border-0 p-0 font-[inherit] focus-visible:outline focus-visible:outline-2 focus-visible:outline-acc-deep"
           onClick={onToggle}
+          aria-expanded={expanded}
         >
           <ChevronRight
             size={12}
@@ -160,7 +164,7 @@ function CanonicalSpecialsSection({
             {specials.label}{' '}
             <span className="font-normal text-ink-3 text-xs">({specials.episodeNumbers.length} avs)</span>
           </span>
-        </div>
+        </button>
         <span className="text-xxs text-ink-3 mx-4">
           {watchedCount}/{specials.episodeNumbers.length}
         </span>
@@ -303,7 +307,7 @@ function SpoilerProtectionBanner({
   return (
     <>
       <div className="px-3 py-2 bg-acc-soft border-b border-acc-deep/30 flex items-start gap-2">
-        <ShieldAlert size={13} className="text-acc-deep shrink-0 mt-[2px]" />
+        <ShieldAlert size={13} className="text-acc-deep shrink-0 mt-0.5" />
         <div className="text-xxs leading-relaxed flex-1">
           <span className="font-semibold text-acc-deep">Spoiler-skydd aktivt</span>
           <span className="text-ink-2">

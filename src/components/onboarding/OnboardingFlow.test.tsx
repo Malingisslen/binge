@@ -20,6 +20,8 @@ const auth = vi.hoisted(() => ({
   uid: 'u1' as string | null,
   user: { uid: 'u1', myProviders: [] as number[] } as Record<string, unknown> | null,
   updateProviders: vi.fn<(providers: number[]) => Promise<void>>(async () => {}),
+  updateProviderTiers: vi.fn<(changes: Record<number, string | null>) => Promise<void>>(async () => {}),
+  updateNotificationSettings: vi.fn<(patch: Record<string, unknown>) => Promise<void>>(async () => {}),
 }));
 const watchlist = vi.hoisted(() => ({
   items: [] as WatchlistItem[],
@@ -82,6 +84,7 @@ beforeEach(() => {
   auth.uid = 'u1';
   auth.user = { uid: 'u1', myProviders: [] };
   auth.updateProviders.mockResolvedValue(undefined);
+  auth.updateProviderTiers.mockResolvedValue(undefined);
   watchlist.items = [];
   watchlist.upsertTitle.mockResolvedValue(undefined);
   watchlist.snapshotSettled = true;
@@ -133,7 +136,7 @@ describe('BIN-659 — a failed write is visible and retry-able', () => {
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Nästa/ })); });
     expect(screen.getByRole('alert')).toHaveTextContent(/Kunde inte spara dina tjänster/);
     // Not advanced — the step 2 heading is still the one on screen.
-    expect(screen.getByRole('heading', { name: 'Vilka tjänster har du?' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Vilka tjänster betalar du för?' })).toBeInTheDocument();
 
     // Same button is the retry, and a success clears the message.
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Nästa/ })); });
@@ -426,7 +429,7 @@ describe('OnboardingFlow — the PROFILE write path says the same thing (BIN-104
     expect(toast).toHaveBeenCalledWith(DELETION_IN_PROGRESS_MESSAGE);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     // Still on step 2 — the save did not land, so the step must not advance.
-    expect(screen.getByRole('heading', { name: 'Vilka tjänster har du?' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Vilka tjänster betalar du för?' })).toBeInTheDocument();
   });
 
   it('StepProviders.save() control — an ordinary failure still gets the retry banner', async () => {
@@ -438,5 +441,210 @@ describe('OnboardingFlow — the PROFILE write path says the same thing (BIN-104
 
     expect(screen.getByRole('alert')).toHaveTextContent(/Kunde inte spara dina tjänster/);
     expect(toast).not.toHaveBeenCalledWith(DELETION_IN_PROGRESS_MESSAGE);
+  });
+});
+
+// Paket I (2026-10-05): inget förvalt, nivåval, "uppskattat", import och ett besked i kr.
+describe('Paket I — tjänster och pengar i introduktionen', () => {
+  async function toProviders() {
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Börja/ })); });
+  }
+
+  it('förväljer ingen tjänst för ett nytt konto', async () => {
+    render(<OnboardingFlow />);
+    await toProviders();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Nästa/ })); });
+    expect(auth.updateProviders).toHaveBeenCalledWith([]);
+    expect(auth.updateProviderTiers).not.toHaveBeenCalled();
+  });
+
+  it('behåller tjänster som redan är sparade', async () => {
+    auth.user = { uid: 'u1', myProviders: [8] };
+    render(<OnboardingFlow />);
+    await toProviders();
+    expect(screen.getByRole('combobox', { name: 'Nivå för Netflix' })).toBeInTheDocument();
+  });
+
+  it('skriver inte om en sparad nivå som lämnas orörd', async () => {
+    auth.user = { uid: 'u1', myProviders: [8], providerTiers: { 8: 'premium' } };
+    render(<OnboardingFlow />);
+    await toProviders();
+    expect(screen.getByRole('combobox', { name: 'Nivå för Netflix' })).toHaveValue('premium');
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Nästa/ })); });
+    expect(auth.updateProviders).toHaveBeenCalledWith([8]);
+    expect(auth.updateProviderTiers).not.toHaveBeenCalled();
+  });
+
+  it('märker listpriset uppskattat tills en nivå väljs, och sparar nivån', async () => {
+    render(<OnboardingFlow />);
+    await toProviders();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Netflix' })); });
+    expect(screen.getByText('169 kr')).toBeInTheDocument();
+    expect(screen.getByText('uppskattat')).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.change(screen.getByRole('combobox', { name: 'Nivå för Netflix' }), { target: { value: 'basic' } });
+    });
+    expect(screen.getByText('129 kr')).toBeInTheDocument();
+    expect(screen.queryByText('uppskattat')).not.toBeInTheDocument();
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Nästa/ })); });
+    expect(auth.updateProviders).toHaveBeenCalledWith([8]);
+    expect(auth.updateProviderTiers).toHaveBeenCalledWith({ 8: 'basic' });
+  });
+
+  it('sparar nivåer på flera tjänster i en skrivning', async () => {
+    render(<OnboardingFlow />);
+    await toProviders();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Netflix' })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Viaplay' })); });
+    await act(async () => {
+      fireEvent.change(screen.getByRole('combobox', { name: 'Nivå för Netflix' }), { target: { value: 'basic' } });
+      fireEvent.change(screen.getByRole('combobox', { name: 'Nivå för Viaplay' }), { target: { value: 'reklam' } });
+    });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Nästa/ })); });
+    expect(auth.updateProviderTiers).toHaveBeenCalledTimes(1);
+    expect(auth.updateProviderTiers).toHaveBeenCalledWith({ 8: 'basic', 76: 'reklam' });
+  });
+
+  it('"Vet inte" på en tidigare vald nivå rensar den', async () => {
+    auth.user = { uid: 'u1', myProviders: [8], providerTiers: { 8: 'premium' } };
+    render(<OnboardingFlow />);
+    await toProviders();
+    await act(async () => {
+      fireEvent.change(screen.getByRole('combobox', { name: 'Nivå för Netflix' }), { target: { value: '' } });
+    });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Nästa/ })); });
+    expect(auth.updateProviderTiers).toHaveBeenCalledWith({ 8: null });
+  });
+
+  it('importlänken avslutar introduktionen och går till importen', async () => {
+    render(<OnboardingFlow />);
+    await toProviders();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Nästa/ })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Importera den' })); });
+    expect(setDoc).toHaveBeenCalled();
+    expect(push).toHaveBeenCalledWith('/settings/import/');
+  });
+
+  describe('beskedet i sista steget', () => {
+    beforeEach(() => { watchlist.items = [item(1399, 'tv')]; });
+
+    it('säger "ungefär" när något belopp är listpriset', async () => {
+      auth.user = { uid: 'u1', myProviders: [8, 76] };
+      render(<OnboardingFlow />);
+      await goToLastStep();
+      // BIN-1442: the sum stands on its own line, large.
+      expect(screen.getByText('Du betalar ungefär')).toBeInTheDocument();
+      expect(screen.getByText('338 kr/mån')).toBeInTheDocument();
+      expect(screen.getByText(/för 2 tjänster/)).toHaveTextContent('för 2 tjänster, alltså 4 056 kr om året.');
+      expect(screen.getByText(/räknar vi med tjänstens listpris/)).toBeInTheDocument();
+    });
+
+    it('utan "ungefär" när alla belopp är användarens egna, och gratistjänster räknas inte', async () => {
+      auth.user = { uid: 'u1', myProviders: [8, 520], providerTiers: { 8: 'standard' } };
+      render(<OnboardingFlow />);
+      await goToLastStep();
+      expect(screen.getByText('Du betalar')).toBeInTheDocument();
+      expect(screen.getByText('169 kr/mån')).toBeInTheDocument();
+      expect(screen.getByText(/för 1 tjänst/)).toHaveTextContent('för 1 tjänst, alltså 2 028 kr om året.');
+      expect(screen.queryByText(/räknar vi med tjänstens listpris/)).not.toBeInTheDocument();
+    });
+
+    it('visar inget besked när inga betalda tjänster är valda', async () => {
+      auth.user = { uid: 'u1', myProviders: [520] };
+      render(<OnboardingFlow />);
+      await goToLastStep();
+      expect(screen.queryByText(/Du betalar/)).not.toBeInTheDocument();
+    });
+
+    it('länken till Streamingrådgivaren avslutar introduktionen först', async () => {
+      auth.user = { uid: 'u1', myProviders: [8] };
+      render(<OnboardingFlow />);
+      await goToLastStep();
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Öppna Rådgivaren' })); });
+      expect(setDoc).toHaveBeenCalled();
+      expect(push).toHaveBeenCalledWith('/savings/');
+    });
+
+    // BIN-1442 — the onboarding ends on "Påminn mig när jag kan pausa".
+    it('"Påminn mig" turns the pause reminders on, then finishes to the advisor', async () => {
+      auth.user = { uid: 'u1', myProviders: [8] };
+      auth.updateNotificationSettings.mockClear();
+      render(<OnboardingFlow />);
+      await goToLastStep();
+      expect(screen.getByText(/Binge säger till när en tjänst du betalar för inte har något du följer/)).toBeInTheDocument();
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Påminn mig när jag kan pausa' })); });
+      expect(auth.updateNotificationSettings).toHaveBeenCalledWith({ rotationReminders: true });
+      expect(setDoc).toHaveBeenCalled();
+      expect(push).toHaveBeenCalledWith('/savings/');
+    });
+
+    it('"Påminn mig" stays on the step and says so when the setting cannot be saved', async () => {
+      auth.user = { uid: 'u1', myProviders: [8] };
+      auth.updateNotificationSettings.mockRejectedValueOnce(new Error('Kunde inte spara.'));
+      render(<OnboardingFlow />);
+      await goToLastStep();
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Påminn mig när jag kan pausa' })); });
+      expect(screen.getByRole('alert')).toHaveTextContent('Kunde inte spara.');
+      expect(push).not.toHaveBeenCalled();
+    });
+  });
+});
+
+// #26:s villkor 6 (pengakollen publikt): the calculator's guest selection prefills
+// step 2 ONLY when the account has no providers, never overwrites one that does, and
+// the guest copy is cleared once the step has saved.
+describe('guest calculator prefill on step 2', () => {
+  const GUEST_KEY = 'binge:guestProviders';
+  const toStep2 = async () => {
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Börja/ })); });
+  };
+
+  it('prefills providers and tiers from the calculator when the account has none, saves them, then clears the key', async () => {
+    window.sessionStorage.setItem(GUEST_KEY, JSON.stringify({ 8: 'basic', 76: null }));
+    render(<OnboardingFlow />);
+    await toStep2();
+
+    expect(screen.getByText('Ifyllt med det du valde i kalkylatorn.')).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Nivå för Netflix' })).toHaveValue('basic');
+    expect(screen.getByRole('combobox', { name: 'Nivå för Viaplay' })).toHaveValue('');
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Nästa/ })); });
+    expect(auth.updateProviders).toHaveBeenCalledWith([8, 76]);
+    // Only changed tiers are written; Viaplay's "Vet inte" equals the account's (none).
+    expect(auth.updateProviderTiers).toHaveBeenCalledWith({ 8: 'basic' });
+    expect(window.sessionStorage.getItem(GUEST_KEY)).toBeNull();
+  });
+
+  it('never overwrites an account that already has providers', async () => {
+    auth.user = { uid: 'u1', myProviders: [337], providerTiers: { 337: 'ads' } };
+    window.sessionStorage.setItem(GUEST_KEY, JSON.stringify({ 8: 'basic' }));
+    render(<OnboardingFlow />);
+    await toStep2();
+
+    expect(screen.queryByText('Ifyllt med det du valde i kalkylatorn.')).toBeNull();
+    expect(screen.queryByRole('combobox', { name: 'Nivå för Netflix' })).toBeNull();
+    expect(screen.getByRole('combobox', { name: 'Nivå för Disney+' })).toHaveValue('ads');
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Nästa/ })); });
+    expect(auth.updateProviders).toHaveBeenCalledWith([337]);
+    expect(auth.updateProviderTiers).not.toHaveBeenCalled();
+  });
+
+  it('keeps the guest key when the save fails, so the retry still has it', async () => {
+    window.sessionStorage.setItem(GUEST_KEY, JSON.stringify({ 8: null }));
+    auth.updateProviders.mockRejectedValueOnce(new Error('offline'));
+    render(<OnboardingFlow />);
+    await toStep2();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Nästa/ })); });
+    expect(window.sessionStorage.getItem(GUEST_KEY)).not.toBeNull();
+  });
+
+  it('shows nothing extra without a guest selection', async () => {
+    render(<OnboardingFlow />);
+    await toStep2();
+    expect(screen.queryByText('Ifyllt med det du valde i kalkylatorn.')).toBeNull();
   });
 });

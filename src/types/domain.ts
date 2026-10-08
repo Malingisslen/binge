@@ -130,6 +130,9 @@ export interface EpisodeProgress {
 export interface ProviderPauseState {
   pausedAt: string;
   resumeAt: string | null;
+  // BIN-1442 — "Påminn mig": a reminder in the bell (and as push, if on) the day
+  // the pause ends. Sent by rotationReminderNotify, which then clears it.
+  remind?: boolean;
 }
 
 export interface UserProfile {
@@ -160,12 +163,18 @@ export interface UserProfile {
   // BIN-46: valfri faktureringsdag (1–28) per provider för förnyelse-nedräkning.
   providerRenewalDays: Record<number, number>;
   providerPauses: Record<number, ProviderPauseState>;
+  // BIN-1442 — the earliest resumeAt among reminded pauses (nextPauseReminderDay),
+  // so the server finds due users with one query. Written with every pause change.
+  pauseReminderNext?: string | null;
   calibrationGenres: Record<number, number> | null;
   // BIN-172: användarens hemkommun (= "jag har ett lånekort"). Gatar
   // biblioteks-lagret (Cineasterna/Viddla gratis-via-bibliotek). null = ej satt.
   hemkommun: string | null;
   createdAt: Date;
   updatedAt: Date;
+  // BIN-1442 — first visit on Stockholm day 7..13 after createdAt, stamped once by
+  // the client. Insikter only reads it as a sum (secondWeekReturn).
+  secondWeekVisitAt?: Date;
   // Timestamp + version of the Terms/Privacy version the user accepted at
   // sign-up. Optional because accounts created before the acceptance flow
   // shipped won't have it set.
@@ -205,10 +214,18 @@ export interface UserProfile {
     // BIN-181 — opt-in (default false): push när ett paus/återkom-datum i din
     // rotationskalender förfaller (rotationReminderNotify läser rotationSchedule).
     rotationReminders: boolean;
-    // BIN-163 — opt-in (default false): veckovis digest (mån morgon) som rullar
-    // upp titlar som lämnar dina tjänster snart + nytt på dina tjänster den här
-    // veckan (weeklyDigestNotify). ETT push + ETT inbox-kort, inte per titel.
+    // BIN-1444 — opt-in (default false): push när en tjänst och nivå du har ändrar
+    // pris (priceChangeNotify läser sajtens /prisandringar.json).
+    priceChanges: boolean;
+    // BIN-163 — veckovis digest (mån morgon) som rullar upp titlar som lämnar
+    // dina tjänster snart + nytt på dina tjänster den här veckan
+    // (weeklyDigestNotify). ETT inbox-kort, inte per titel, och ingen push
+    // (BIN-1442). På för nya konton, se NEW_ACCOUNT_NOTIFICATION_SETTINGS.
     weeklyDigest: boolean;
+    // Månadskortet "Din streaming i <månad>" i klockan den 1:a (monthlyBillNotify).
+    // Ingen push. På som standard; bara ett uttryckligt false stänger av det, så
+    // ett konto som saknar nyckeln får kortet.
+    monthlyBill: boolean;
   };
   // BIN-181 — klient-persistad rotationskalender-snapshot (paus/återkom-datum)
   // som rotationReminderNotify läser. Skrivs när användaren slår på påminnelser.

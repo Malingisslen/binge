@@ -1,5 +1,6 @@
 'use client';
 
+import { formatKr } from '@/lib/formatKr';
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import AuthGuard from '@/components/AuthGuard';
@@ -8,24 +9,33 @@ import SrOnlyTableHeader from '@/components/ui/SrOnlyTableHeader';
 import dynamic from 'next/dynamic';
 import DiagnosisCard from '@/components/savings/DiagnosisCard';
 import CampaignExpiryNudges from '@/components/savings/CampaignExpiryNudges';
+import PriceChangeNudges from '@/components/savings/PriceChangeNudges';
 import NumberedActionsList from '@/components/savings/NumberedActionsList';
 import BundleArbitrageCard from '@/components/savings/BundleArbitrageCard';
 import ProvidersByValue from '@/components/savings/ProvidersByValue';
-import ServiceValueCard from '@/components/savings/ServiceValueCard';
+import MonthlyBillCard from '@/components/savings/MonthlyBillCard';
 import CoverageOptimizer from '@/components/savings/CoverageOptimizer';
 import RotationPlanner from '@/components/savings/RotationPlanner';
 import RotationCalendar from '@/components/savings/RotationCalendar';
 import SavingsSidebar from '@/components/savings/SavingsSidebar';
 import UpcomingEpisodes from '@/components/savings/UpcomingEpisodes';
+import CancelHint from '@/components/savings/CancelHint';
+import PauseReminderPrompt from '@/components/savings/PauseReminderPrompt';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useSubscriptionAdvisor } from '@/hooks/useSubscriptionAdvisor';
+import { useMonthlyBill } from '@/hooks/useMonthlyBill';
 import { useAuth } from '@/hooks/useAuth';
 import { trackEvent } from '@/lib/analytics';
+import { useToast } from '@/contexts/ToastContext';
+import { captureError } from '@/lib/sentry';
 import { titleHref } from '@/lib/tmdb/client';
 import { formatSwedishDate } from '@/lib/utils';
 import type { AdvisedShow, ActivePause, SubscribeAdvisory } from '@/types';
+import { Eyebrow, eyebrowClass } from '@/components/ui/Eyebrow';
+import { Button, buttonClass } from '@/components/ui/Button';
+import { cardClass } from '@/components/ui/Card';
 
 const LOOK_AHEAD_DAYS = 60;
 
@@ -62,7 +72,7 @@ interface SubscribeRow {
 
 function SubscribeRowTable({ rows }: { rows: SubscribeRow[] }) {
   return (
-    <div className="bg-surface border border-rule rounded-sm overflow-hidden">
+    <div className={cardClass('overflow-hidden')}>
       <table className="w-full border-collapse">
         <SrOnlyTableHeader columns={['Titel', 'Typ', 'Tjänst', 'Status']} />
         <tbody>
@@ -70,21 +80,21 @@ function SubscribeRowTable({ rows }: { rows: SubscribeRow[] }) {
             const href = titleHref(show.mediaType, show.tmdbId);
             return (
               <tr key={`${provider.providerId}-${show.tmdbId}`} className="border-b border-rule-2 last:border-b-0">
-                <td className="px-3 py-[6px] text-xs font-semibold">
+                <td className="px-3 py-1.5 text-xs font-semibold">
                   <Link href={href} className="no-underline text-ink hover:text-acc-deep">
                     {show.title}
                   </Link>
                 </td>
-                <td className="px-3 py-[6px] text-xxs text-ink-3 whitespace-nowrap">
+                <td className="px-3 py-1.5 text-xxs text-ink-3 whitespace-nowrap">
                   {show.mediaType === 'movie' ? 'Film' : 'Serie'}
                 </td>
-                <td className="px-3 py-[6px] whitespace-nowrap">
+                <td className="px-3 py-1.5 whitespace-nowrap">
                   <span className="inline-flex items-center gap-1">
                     <ProviderDot color={provider.color} size={7} />
                     <span className="text-xs text-ink-2">{provider.shortName}</span>
                   </span>
                 </td>
-                <td className="px-3 py-[6px] text-xxs text-ink-3 text-right whitespace-nowrap">
+                <td className="px-3 py-1.5 text-xxs text-ink-3 text-right whitespace-nowrap">
                   {subscribeRowStatusText(show)}
                 </td>
               </tr>
@@ -99,36 +109,53 @@ function SubscribeRowTable({ rows }: { rows: SubscribeRow[] }) {
 // ---- Återanvänd: ActivePausesSection (oförändrad) ----
 
 function ActivePausesSection({ pauses, onResume }: { pauses: ActivePause[]; onResume: (id: number) => void }) {
+  const { user, setPauseReminder } = useAuth();
   if (pauses.length === 0) return null;
+  const now = new Date();
   const totalSaved = pauses.reduce((sum, p) => sum + p.savingsSoFar, 0);
   return (
-    <div className="mb-[14px]">
-      <div className="flex items-baseline justify-between mb-[6px]">
-        <h2 className="text-[11px] font-bold uppercase tracking-[0.5px] text-ink-3">Dina pausade tjänster</h2>
+    <div className="mb-3.5">
+      <div className="flex items-baseline justify-between mb-1.5">
+        <Eyebrow as="h2" size="xs">Dina pausade tjänster</Eyebrow>
         {totalSaved > 0 && (
-          <span className="text-xxs text-season-done font-semibold">Sparat hittills: {totalSaved} kr</span>
+          <span className="text-xxs text-season-done font-semibold">Sparat hittills: {formatKr(totalSaved)} kr</span>
         )}
       </div>
-      <div className="bg-surface border border-rule rounded-sm overflow-hidden">
+      <div className={cardClass('overflow-hidden')}>
         <table className="w-full border-collapse">
           <SrOnlyTableHeader columns={['Tjänst', 'Pausad sedan', 'Sparat', 'Åtgärd']} />
           <tbody>
             {pauses.map(p => (
               <tr key={p.providerId} className="border-b border-rule-2 last:border-b-0">
-                <td className="px-3 py-[6px] whitespace-nowrap">
-                  <span className="inline-flex items-center gap-[6px]">
+                <td className="px-3 py-1.5 whitespace-nowrap">
+                  <span className="inline-flex items-center gap-1.5">
                     <ProviderDot color={p.color} size={7} />
                     <span className="text-xs font-semibold text-ink">{p.providerName}</span>
                   </span>
                 </td>
-                <td className="px-3 py-[6px] text-xxs text-ink-3">
+                <td className="px-3 py-1.5 text-xxs text-ink-3">
                   Pausad {formatSwedishDate(p.pausedAt)}
                   {p.resumeAt ? ` · återuppta ${formatSwedishDate(p.resumeAt)}` : ''}
+                  {p.resumeAt && (user?.providerPauses?.[p.providerId]?.remind
+                    ? ` · påminnelse ${formatSwedishDate(p.resumeAt)}`
+                    : (
+                      <>
+                        {' · '}
+                        <button
+                          type="button"
+                          onClick={() => { void setPauseReminder(p.providerId, true).catch(() => {}); }}
+                          className="text-xxs text-acc-deep underline font-[inherit] bg-transparent border-none p-0 cursor-pointer"
+                        >
+                          Påminn mig
+                        </button>
+                      </>
+                    ))}
+                  <CancelHint providerId={p.providerId} billingDay={user?.providerRenewalDays?.[p.providerId]} now={now} />
                 </td>
-                <td className="px-3 py-[6px] text-xxs text-season-done font-semibold text-right whitespace-nowrap">
-                  +{p.savingsSoFar} kr
+                <td className="px-3 py-1.5 text-xxs text-season-done font-semibold text-right whitespace-nowrap">
+                  +{formatKr(p.savingsSoFar)} kr
                 </td>
-                <td className="px-3 py-[6px] text-right">
+                <td className="px-3 py-1.5 text-right">
                   <button
                     onClick={() => onResume(p.providerId)}
                     className="text-xxs text-acc-deep no-underline font-[inherit] bg-transparent border-none cursor-pointer"
@@ -148,10 +175,13 @@ function ActivePausesSection({ pauses, onResume }: { pauses: ActivePause[]; onRe
 function SavingsContent() {
   const advisor = useSubscriptionAdvisor(LOOK_AHEAD_DAYS);
   const { pauseProvider, resumeProvider, profileLoading } = useAuth();
+  // BIN-1442: the pause just made, so its "Påminn mig" can be offered right away.
+  const [justPaused, setJustPaused] = useState<{ providerId: number; resumeAt: string } | null>(null);
+  const { show: toast } = useToast();
   const hasAdvisorProviders = advisor.providers.length > 0;
   // En-skott per sidladd: fyr 'advisor_viewed' bara första gången rådgivaren
   // är klar med providers. Utan guarden skulle providerCount-ändringar (t.ex.
-  // efter en pausning) re-fyra eventet och blåsa upp räkningen i Plausible.
+  // efter en pausning) re-fyra eventet och blåsa upp räkningen.
   const advisorViewedRef = useRef(false);
   useEffect(() => {
     if (!advisor.isLoading && hasAdvisorProviders && !advisorViewedRef.current) {
@@ -162,9 +192,10 @@ function SavingsContent() {
   const detailsRef = useRef<HTMLDetailsElement | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   // BIN-208: stamp "now" once per mount (lazy useState initializer) so the month
-  // window is stable and useServiceValue's memo doesn't recompute every render
+  // window is stable and the monthly bill's memo doesn't recompute every render
   // from a fresh Date.now().
   const [valueNowMs] = useState(() => Date.now());
+  const monthlyBill = useMonthlyBill(valueNowMs);
   const handleShowSubscribeRows = () => {
     const el = detailsRef.current;
     if (!el) return;
@@ -239,15 +270,15 @@ function SavingsContent() {
           </header>
           <EmptyState
             title="Kunde inte räkna på dina tjänster just nu"
-            body="Vi når inte streamingdatan för tillfället. Det är oftast tillfälligt — försök igen om en stund."
+            body="Streamingdatan går inte att nå just nu. Det är oftast tillfälligt, försök igen om en stund."
             action={
-              <button
+              <Button
                 type="button"
                 onClick={() => window.location.reload()}
-                className="btn btn-ghost btn-sm"
+                variant="ghost" size="sm"
               >
                 Försök igen
-              </button>
+              </Button>
             }
           />
         </>
@@ -263,7 +294,7 @@ function SavingsContent() {
           title="Inga tjänster tillagda än"
           body="Lägg till dina streamingtjänster så räknar vi ut vad du kan pausa och spara på."
           action={
-            <Link href="/settings/" className="btn btn-ghost btn-sm">Lägg till tjänster</Link>
+            <Link href="/settings/" className={buttonClass({ variant: 'ghost', size: 'sm' })}>Lägg till tjänster</Link>
           }
         />
       </>
@@ -271,6 +302,40 @@ function SavingsContent() {
   }
 
   const activeProviderCount = advisor.providers.length;
+
+  // Pausgolvet: med för få titlar i biblioteket ser varje tjänst oanvänd ut, så
+  // allt som räknar på pauser (stegen, värdelistan, rotationen och kalendern som
+  // sparar ett rotationsschema) väntar tills biblioteket räcker. Det som inte
+  // beror på biblioteket — kostnaden, prisändringar, paketen och egna pauser — visas ändå.
+  if (!advisor.pauseAdviceReady) {
+    return (
+      <>
+        <header>
+          <div className="crumb">Streamingrådgivaren · {activeProviderCount} tjänster</div>
+          <h1 className="page-h1">Streamingrådgivaren</h1>
+        </header>
+        <div style={{ marginTop: 22 }}>
+          <DiagnosisCard advisor={advisor} activeProviderCount={activeProviderCount} />
+          <div className="flex flex-wrap gap-2 mb-3.5">
+            <Link href="/series/" className={buttonClass({ size: 'sm' })}>Utforska serier</Link>
+            <Link href="/films/" className={buttonClass({ variant: 'ghost', size: 'sm' })}>Utforska filmer</Link>
+          </div>
+          <PriceChangeNudges />
+          <CampaignExpiryNudges />
+          {advisor.activePauses.length > 0 && (
+            <ActivePausesSection
+              pauses={advisor.activePauses}
+              onResume={(id) => { resumeProvider(id); trackEvent('advisor_action_taken', { action: 'resume', providerId: id }); }}
+            />
+          )}
+          <BundleArbitrageCard suggestions={advisor.bundleSuggestions} />
+          <div style={{ marginTop: 16 }}>
+            <JustWatchCredit />
+          </div>
+        </div>
+      </>
+    );
+  }
 
   const allSubscribeRows = advisor.subscribeAdvice
     .flatMap(sa => sa.shows.map(show => ({ show, provider: sa })))
@@ -295,7 +360,7 @@ function SavingsContent() {
         {advisor.mostUsedProvider && (
           // BIN-514: den redan-beräknade "mest använda tjänst"-statistiken —
           // vilken tjänst som bär flest av dina anchor-titlar (Följer + Vill se).
-          <div className="mb-[14px] flex items-center gap-[6px] text-xs text-ink-2">
+          <div className="mb-3.5 flex items-center gap-1.5 text-xs text-ink-2">
             <span className="text-ink-3">Mest använda tjänst:</span>
             <ProviderDot color={advisor.mostUsedProvider.color} size={7} />
             <span className="font-semibold text-ink">{advisor.mostUsedProvider.shortName}</span>
@@ -306,7 +371,22 @@ function SavingsContent() {
         )}
         <DiagnosisCard advisor={advisor} activeProviderCount={activeProviderCount} />
 
+        <PriceChangeNudges />
+
         <CampaignExpiryNudges />
+
+        {justPaused && (() => {
+          const paused = advisor.providers.find(p => p.providerId === justPaused.providerId);
+          return (
+            <PauseReminderPrompt
+              providerId={justPaused.providerId}
+              providerName={paused?.providerName ?? 'Tjänsten'}
+              resumeAt={justPaused.resumeAt}
+              monthlyCost={paused?.monthlyCost ?? null}
+              onDone={() => setJustPaused(null)}
+            />
+          );
+        })()}
 
         {advisor.activePauses.length > 0 && (
           <ActivePausesSection
@@ -319,7 +399,16 @@ function SavingsContent() {
           <div className="min-w-0">
             <NumberedActionsList
               advisor={advisor}
-              onPauseProvider={(id, resumeAt) => { pauseProvider(id, resumeAt); trackEvent('advisor_action_taken', { action: 'pause', providerId: id }); }}
+              onPauseProvider={(id, resumeAt) => {
+                pauseProvider(id, resumeAt)
+                  .then(() => { if (resumeAt) setJustPaused({ providerId: id, resumeAt }); })
+                  .catch((err: unknown) => {
+                    console.error('Pause failed:', err);
+                    captureError(err, { scope: 'advisor', kind: 'pauseProvider' });
+                    toast('Kunde inte pausa tjänsten. Försök igen.');
+                  });
+                trackEvent('advisor_action_taken', { action: 'pause', providerId: id });
+              }}
               onShowSubscribeRows={handleShowSubscribeRows}
             />
 
@@ -330,7 +419,7 @@ function SavingsContent() {
               activePauses={advisor.activePauses}
             />
 
-            <ServiceValueCard nowMs={valueNowMs} />
+            {monthlyBill && <MonthlyBillCard bill={monthlyBill} />}
 
             <CoverageOptimizer rows={advisor.willSeeByProvider} />
 
@@ -345,7 +434,7 @@ function SavingsContent() {
               className="mb-3 scroll-mt-3 mt-3"
               onToggle={e => setDetailsOpen((e.currentTarget as HTMLDetailsElement).open)}
             >
-              <summary className="text-[11px] font-bold uppercase tracking-[0.5px] text-ink-3 cursor-pointer select-none list-none">
+              <summary className={eyebrowClass({ size: 'xs', className: 'cursor-pointer select-none list-none' })}>
                 Mer detaljer ›
               </summary>
               <div className="mt-3 flex flex-col gap-3">
@@ -353,10 +442,10 @@ function SavingsContent() {
                 {detailsOpen && <WillSeePerProvider rows={advisor.willSeeByProvider} />}
                 {hasSubscribeDetails && (
                   <div>
-                    <div className="flex items-baseline justify-between mb-[6px]">
-                      <h3 className="text-[11px] font-bold uppercase tracking-[0.5px] text-ink-3">
+                    <div className="flex items-baseline justify-between mb-1.5">
+                      <Eyebrow as="h3" size="xs">
                         Titlar på tjänster du inte har
-                      </h3>
+                      </Eyebrow>
                       <span className="text-xxs text-ink-3">
                         {subscribeRows.length + datelessSubscribeRows.length} totalt
                       </span>

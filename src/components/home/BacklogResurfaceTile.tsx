@@ -8,6 +8,8 @@ import { toneForGenreIds, toneForId } from '@/lib/duotone';
 import DuotonePoster from '@/components/ui/DuotonePoster';
 import ProviderDot from '@/components/ui/ProviderDot';
 import type { WatchlistItem } from '@/types';
+import { Eyebrow } from '@/components/ui/Eyebrow';
+import { cardClass } from '@/components/ui/Card';
 
 // BIN-88 — "ville se — finns nu på din tjänst". A small Home tile that
 // resurfaces forgotten vill_se titles streamable on a service the user already
@@ -34,13 +36,13 @@ export default function BacklogResurfaceTile({
   const mine = new Set(myProviders);
 
   return (
-    <section className="mt-[18px] mb-[14px]">
-      <div className="flex items-baseline justify-between mb-[8px]">
-        <h2 className="text-[11px] font-bold uppercase tracking-[0.5px] text-ink-3">
+    <section className="mt-5 mb-3.5">
+      <div className="flex items-baseline justify-between mb-2">
+        <Eyebrow as="h2" size="xs">
           Ville se — finns nu på din tjänst
-        </h2>
+        </Eyebrow>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-[10px]">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
         {items.map(item => {
           const prov = matchedProvider(item, mine);
           const tone = item.genreIds && item.genreIds.length > 0
@@ -51,7 +53,7 @@ export default function BacklogResurfaceTile({
             <Link
               key={item.tmdbId}
               href={titleHref(item.mediaType, item.tmdbId)}
-              className="no-underline flex gap-[10px] items-center bg-surface border border-rule rounded-sm p-[8px] hover:shadow-lift transition-shadow"
+              className={cardClass('no-underline flex gap-2.5 items-center p-2 hover:shadow-lift transition-shadow')}
               style={{ color: 'var(--ink)' }}
             >
               <span className="shrink-0 w-[40px]">
@@ -62,7 +64,7 @@ export default function BacklogResurfaceTile({
               <span className="min-w-0">
                 <span className="block text-xs font-semibold text-ink truncate">{item.title}</span>
                 {prov && (
-                  <span className="inline-flex items-center gap-[5px] mt-[3px]">
+                  <span className="inline-flex items-center gap-1.5 mt-1">
                     <ProviderDot color={prov.color} size={6} />
                     <span className="text-xxs text-ink-3">finns på {prov.shortName}</span>
                   </span>

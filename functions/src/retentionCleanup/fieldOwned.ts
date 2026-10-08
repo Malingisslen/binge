@@ -31,6 +31,10 @@
  * `groups` only because `groups` must be last; nothing here depends on the
  * handover, and `followers` is not in it (`reclaimOrphanFollows` owns that).
  *
+ * BIN-1279: `rotationReminders` erases the `rotationReminderState` dedup markers,
+ * found on their `uid` field. Each id names a streaming service the person was
+ * reminded to pause. Nothing here depends on the handover either.
+ *
  * Which categories are world-readable is not asserted here: it is a property of
  * `firestore.rules`, and a sentence about it goes stale the next time a match
  * block changes. Read the rules.
@@ -46,6 +50,7 @@ export const FIELD_OWNED_CATEGORIES = [
   'sessions',
   'friendMirrors',
   'groupInvitesSent',
+  'rotationReminders',
   'groups',
 ] as const;
 

@@ -1,5 +1,7 @@
 import { fsdb } from './db';
 import { getPublicProfileCards } from './publicProfile';
+import { relationshipDocsToClear } from '@/lib/blockRelationship';
+import { shownFriendName } from '@/lib/friendName';
 
 // Friend-system: mutuell relation som kompletterar ensidiga follow.
 // Vänner får läsa privata watchlist-items (visibility='friends').
@@ -65,6 +67,37 @@ export async function sendFriendRequest(
   await batch.commit();
 }
 
+// BIN-1174: tak på hur många av mina obesvarade förfrågningar ett namnbyte skriver om.
+// Över taket behåller resten det gamla namnet tills mottagaren svarar — den resten är
+// en daterad post i `.claude/rules/accepted-deviations.md`.
+export const SENT_REQUESTS_IDENTITY_LIMIT = 50;
+
+// BIN-1174: skriver om mitt namn på förfrågningar jag skickat och som ingen svarat på.
+// Körs av `publishIdentityChange` i AuthContext, efter att namnet sparats.
+//
+// `updateDoc`, aldrig set/merge: en förfrågan mottagaren redan besvarat är raderad, och
+// en merge hade återskapat den med nytt namn. Varje misslyckad skrivning returneras så
+// anroparen kan rapportera den; ingenting kastas och ingenting sväljs.
+export async function updateSentFriendRequestIdentity(
+  myUid: string,
+  identity: { displayName: string; username: string | null },
+): Promise<unknown[]> {
+  const { db, collection, doc, getDocs, query, limit, updateDoc } = await fsdb();
+  const sent = await getDocs(query(collection(db, 'users', myUid, 'friendRequestsSent'), limit(SENT_REQUESTS_IDENTITY_LIMIT)));
+  const failures: unknown[] = [];
+  await Promise.all(sent.docs.map(async (d) => {
+    try {
+      await updateDoc(doc(db, 'users', d.id, 'friendRequests', myUid), {
+        fromDisplayName: identity.displayName,
+        fromUsername: identity.username,
+      });
+    } catch (err) {
+      failures.push(err);
+    }
+  }));
+  return failures;
+}
+
 // Avbryt egen utgående förfrågan (innan den accepteras).
 export async function cancelFriendRequest(myUid: string, toUid: string): Promise<void> {
   const { db, doc, writeBatch } = await fsdb();
@@ -117,6 +150,29 @@ export async function removeFriend(myUid: string, targetUid: string): Promise<vo
   await batch.commit();
 }
 
+// BIN-1349 (Malins beslut 2026-09-28): en blockering avslutar också vänskapen, så den
+// blockerade tappar direkt åtkomsten till det man delat med vänner. Blockdokumentet,
+// båda vänskapsspeglarna och väntande förfrågningar åt båda hållen skrivs i SAMMA batch,
+// så en blockering landar aldrig utan att vänskapen går. Raderingsreglerna låter båda
+// parter radera varje spegel. En avblockering återställer ingenting.
+//
+// Läsningen före batchen väljer bara vilket besked användaren får; den styr inte vad
+// som raderas.
+export async function blockUserAndEndFriendship(
+  myUid: string,
+  targetUid: string,
+): Promise<{ endedFriendship: boolean }> {
+  const { db, doc, getDoc, writeBatch, serverTimestamp } = await fsdb();
+  const friendship = await getDoc(doc(db, 'users', myUid, 'friends', targetUid));
+  const batch = writeBatch(db);
+  batch.set(doc(db, 'users', myUid, 'blocked', targetUid), { blockedAt: serverTimestamp() });
+  for (const [root, ...rest] of relationshipDocsToClear(myUid, targetUid)) {
+    batch.delete(doc(db, root, ...rest));
+  }
+  await batch.commit();
+  return { endedFriendship: friendship.exists() };
+}
+
 // Härleder relation-status mellan myUid och targetUid genom att kolla:
 // 1. friends/{targetUid} på min sida → 'friends'
 // 2. friendRequestsSent/{targetUid} på min sida → 'sent'
@@ -158,7 +214,7 @@ export async function listFriends(myUid: string): Promise<FriendUser[]> {
     const sinceTs = friendDoc.data().since;
     friends.push({
       uid: friendDoc.id,
-      displayName: card?.displayName || 'Användare',
+      displayName: shownFriendName(card?.displayName, card?.username),
       photoURL: card?.photoURL ?? null,
       username: card?.username ?? null,
       since: sinceTs?.toDate?.() ?? new Date(),
@@ -175,10 +231,10 @@ export async function listFriendRequests(myUid: string): Promise<FriendRequest[]
     const data = d.data();
     return {
       fromUid: d.id,
-      // BIN-1126: `||`, så både null och en tom sträng får reservnamnet. Fältet är
+      // BIN-1126: både null och en tom sträng får reservnamnet. Fältet är
       // numera nullbart på skrivvägen, och äldre dokument kan bära en tom sträng
       // från tiden då klienten skickade profilens värde rakt av.
-      fromDisplayName: (data.fromDisplayName as string) || 'Användare',
+      fromDisplayName: shownFriendName(data.fromDisplayName, data.fromUsername),
       fromPhotoURL: (data.fromPhotoURL as string | null) ?? null,
       fromUsername: (data.fromUsername as string | null) ?? null,
       sentAt: data.sentAt?.toDate?.() ?? new Date(),

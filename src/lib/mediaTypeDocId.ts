@@ -52,8 +52,8 @@ export function normalizeMediaType(raw: string | null | undefined): MediaType {
  * at `movie_42` — so the row is invisible to the app and shadows the genuine one
  * to every Cloud Function that reads it. That is the alias-collision class of
  * BIN-618/624: BIN-618 closed it on the client read path only, so the write side
- * is where it is introduced and the server read sites are where it still lands,
- * which is BIN-624's remaining scope. Pass a number unless a Firestore path param
+ * is where it is introduced and the server read sites are where it still lands.
+ * Pass a number unless a Firestore path param
  * forces otherwise.
  */
 export function mediaTypeDocId(mediaType: string | null | undefined, tmdbId: number | string): string {
@@ -117,9 +117,8 @@ export function parseTmdbIdFromDocId(docId: string): number {
  * mirror of its twin in `functions/src/shared/mediaTypeDocId.ts` — keep those
  * two in sync. The claim stops at this function: the two MODULES are no longer
  * mirrors (`parseTmdbIdFromDocId` above is strict here and permissive there
- * since BIN-618), so this line is not a licence to resync the pair — not
- * without BIN-624's decision, which is what audits the server read sites and
- * says whether the split closes.
+ * since BIN-618), so this line is not a licence to resync the pair: `## BIN-624`
+ * in .claude/rules/accepted-deviations.md.
  */
 export function parseMediaTypeFromDocId(docId: string): MediaType | null {
   if (docId.startsWith('movie_')) return 'movie';

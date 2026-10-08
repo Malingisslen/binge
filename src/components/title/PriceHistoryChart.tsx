@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { usePriceHistory } from '@/hooks/usePriceHistory';
 import { computePriceStats, priceChartGeometry } from '@/lib/streaming/priceStats';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
+import { eyebrowClass } from '@/components/ui/Eyebrow';
 
 // BIN-359 — the full price chart (date x-axis, price y-axis, hover tooltips) over
 // the captured priceHistory/{tmdbId} points, the richer visual the parent BIN-354
@@ -69,7 +70,7 @@ export default function PriceHistoryChart(
                   x={geo.plotLeft - 6}
                   y={t.cy + 3}
                   textAnchor="end"
-                  fontSize="10"
+                  fontSize="var(--fs-xxs)"
                   fill="var(--ink-3)"
                 >
                   {t.amount}
@@ -90,7 +91,7 @@ export default function PriceHistoryChart(
                 x={t.cx}
                 y={geo.height - 6}
                 textAnchor={i === 0 ? 'start' : i === geo.dateTicks.length - 1 ? 'end' : 'middle'}
-                fontSize="10"
+                fontSize="var(--fs-xxs)"
                 fill="var(--ink-3)"
               >
                 {dateFmt.format(t.at)}
@@ -122,7 +123,7 @@ export default function PriceHistoryChart(
           {/* hover tooltip — positioned by percent so it tracks any rendered size */}
           {hover != null && geo.points[hover] && (
             <div
-              className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-sm border border-rule bg-bg-2 px-2 py-1 text-[11px] text-ink shadow-pop"
+              className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-sm border border-rule bg-bg-2 px-2 py-1 text-xs text-ink shadow-pop"
               style={{
                 left: `${(geo.points[hover].cx / geo.width) * 100}%`,
                 top: `${(geo.points[hover].cy / geo.height) * 100}%`,
@@ -139,7 +140,7 @@ export default function PriceHistoryChart(
       )}
 
       {/* caption — wires dropFromHighPct into the "lägsta på X mån" line */}
-      <div className="mt-[6px] text-[12px] text-ink-3">
+      <div className="mt-1.5 text-sm text-ink-3">
         {atLowest ? (
           <span className="text-acc-deep">▼ Lägsta priset hittills sett</span>
         ) : (
@@ -158,8 +159,8 @@ export default function PriceHistoryChart(
 function Stat({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
   return (
     <div className="flex flex-col">
-      <span className="text-[10.5px] uppercase tracking-[0.04em] text-ink-3">{label}</span>
-      <span className={`text-[17px] font-bold ${accent ? 'text-acc-deep' : 'text-ink'}`}>{value}</span>
+      <span className={eyebrowClass({ size: 'xs' })}>{label}</span>
+      <span className={`text-xl font-bold ${accent ? 'text-acc-deep' : 'text-ink'}`}>{value}</span>
     </div>
   );
 }

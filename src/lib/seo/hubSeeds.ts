@@ -4,7 +4,7 @@
  * Hub pages (home guest-landing, /films, /series, /discover) render their
  * grids from client fetches, so the exported static HTML carried zero
  * crawlable <a href> to title pages — the domain's highest-authority pages
- * passed no link equity to the ~25k pre-rendered titles. The fix (proven by
+ * passed no link equity to the pre-rendered titles. The fix (proven by
  * /provider/[id], whose build-seeded grid ships 40 crawlable links): fetch
  * one list page at build and seed the client grid's initial state.
  *
@@ -15,8 +15,7 @@
  *  - drops person results (trending/all includes them)
  *  - drops titles where EITHER display or original title is non-Latin
  *    (`hasNonLatinTitle` — strictly stricter than the SEO pre-render filter
- *    `latinDisplayIds`, so a seeded grid can never link a de-indexed title;
- *    it also matches what home's client-side trending already does)
+ *    `latinDisplayIds`; it also matches what home's client-side trending already does)
  *  - caps the list (hubs need ~20 links, not a dump)
  *
  * Pure and network-free on purpose: unit-testable without Firebase/Next.

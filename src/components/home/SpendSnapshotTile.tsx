@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
 import { computeSpendSnapshot } from '@/lib/spendSnapshot';
+import { formatKr } from '@/lib/formatKr';
 import { pluralSv } from '@/lib/utils';
 
 // BIN-99 — whole-watchlist spend snapshot. One headline: total monthly streaming
@@ -27,12 +28,12 @@ export default function SpendSnapshotTile() {
         <Link href="/savings/" className="more">öppna →</Link>
       </div>
       <div className="val tnum">
-        {snap.totalKr}<span className="unit">kr/mån</span>
+        {formatKr(snap.totalKr)}<span className="unit">kr/mån</span>
       </div>
       {snap.idleKr > 0 ? (
         <p className="note">
           {/* idleKr > 0 ⇒ at least one idle provider, so the names always render. */}
-          varav <strong>{snap.idleKr} kr</strong> går till {pluralSv(snap.idleProviders.length, 'tjänst', 'tjänster')} utan
+          varav <strong>{formatKr(snap.idleKr)} kr</strong> går till {pluralSv(snap.idleProviders.length, 'tjänst', 'tjänster')} utan
           aktiv backlog ({snap.idleProviders.map(p => p.name).join(', ')}).
         </p>
       ) : (

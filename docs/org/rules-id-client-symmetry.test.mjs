@@ -1,8 +1,7 @@
 // firestore.rules and the CLIENT's id builder must agree about which doc ids exist (BIN-1002).
 //
-// Run: npm test (this file is in vitest.config.ts's `include` via
-// 'docs/org/**/*.{test,spec}.mjs' — the same glob route.test.mjs, gate-symmetry.test.mjs and
-// rules-doc-id-symmetry.test.mjs rely on). Deliberately NOT under src/test/rules/, which
+// Run: npm test (this file is named in vitest.config.ts's RULES_PARITY, which the
+// `product` project includes). Deliberately NOT under src/test/rules/, which
 // vitest.config.ts excludes outright: that directory runs only under `npm run test:rules`,
 // behind the Firestore emulator and a Java install, and this check needs neither.
 //

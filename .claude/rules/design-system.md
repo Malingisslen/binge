@@ -13,8 +13,9 @@ Direction H · "Schemat" — den shippade designen. Se `globals.css :root` och
 ## Layout
 
 Sticky, horisontell toppkrom — **ingen sidebar**:
-- `AppTopbar` (brand-logotyp · WeekStrip · sökfält · avatar) — `position: sticky; top: 0; z-index: 30`
-- `Subnav` (Hem · Bibliotek · Kalender · Rekommendationer · Streamingrådgivaren · Vänner · Grupper) — horisontell länkrad direkt under topbar
+- `AppTopbar` (logga `BrandMark` · WeekStrip · sökfält · avatar) — `position: sticky; top: 0; z-index: 30`
+- `Subnav` — horisontell länkrad direkt under topbar; länkarna står i `Subnav.tsx`
+- Utloggade får gästmenyn i stället för veckoremsa, subnav och appens flikar (`chromeMode.ts`)
 - Huvudinnehållet i `.canvas` — `max-width: 1320px`, `margin: 0 auto`, `padding: 32px 40px 48px`
 - Mobil: `MobileTabBar` (5-tabs, `position: fixed; bottom: 0`) ersätter subnav på smala skärmar
 
@@ -24,6 +25,9 @@ Sticky, horisontell toppkrom — **ingen sidebar**:
 - **Sans:** Albert Sans (primär) → `system-ui, -apple-system, Segoe UI, sans-serif` som fallback
 - **Mono:** `--mono` är alias för `--sans` — monospace-typsnittet (JetBrains Mono) fasas ut. Koda inte nytt med `font-mono`/`var(--mono)` — städas bort mekaniskt
 - **Täthetskänsla:** verktyg, inte marknadsföringssida. Håll textstorlekar och marginaler kompakta
+- **Typskala:** `--fs-*` i `globals.css :root`, speglad som `text-nano` … `text-6xl` i `tailwind.config.ts`. Ingen px-storlek någon annanstans — testet fäller den
+- **Delar att ta från hyllan** (`src/components/ui/`): `Button`/`buttonClass`, `Eyebrow`/`eyebrowClass`, `cardClass`, `fieldClass` (+ `.select`), `badgeClass`, `tagClass`, `thClass`, `bg-scrim`. `consistency.test.ts` fäller handskrivna varianter. Allt syns på `/designsystem/`
+- **Avstånd:** Tailwinds steg i px, 4px per steg (`p-1` = 4px, `gap-2` = 8px), satt i `tailwind.config.ts`. Handskrivet `p-[6px]` fälls av testet. Sidans kant är `.canvas`; sidfoten använder `.page-frame`
 
 ## Färgsystem
 
@@ -38,6 +42,7 @@ Alla färgvärden är oklch CSS-variabler i `globals.css :root`, speglade som Ta
 
 **Tvåaccentregel (bryt den inte):**
 - `--acc` / `acc`, `--acc-deep` / `acc-deep`, `--acc-soft` / `acc-soft` — **saffran** = "nu / live / avgörande" (CTA-knappar, live-indikatorer, veto, brand-mark)
+- `--on-acc` / `on-acc` — text på en `acc-deep`-fyllning. Aldrig `text-white` där: i mörkt läge är `on-acc` mörk (BIN-1434).
 - `--cal-deep` / `cal-deep`, `--cal-soft` / `cal-soft` — **plum** = "idag / tidpositionering" (WeekStrip today-cell, kalender today-kolumn)
 
 Blanda dem inte. Saffran är inte "kalender" och plum är inte "CTA".
@@ -53,7 +58,7 @@ Allt annat är platt. Inga `drop-shadow`-, `filter: blur`- eller godtyckliga box
 ## Kantradie
 
 - `rounded-sm` = 3px, `rounded` / `rounded-md` = 6px, `rounded-lg` = 8px
-- Poster-thumbnails: 3px. Knappar: 6px. Modaler/kort: 6-8px. Aldrig mer än 8px.
+- Poster-thumbnails: 3px. Knappar: 6px. Aldrig mer än 8px.
 
 ## Posters och duotone
 

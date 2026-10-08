@@ -1,10 +1,11 @@
 /**
  * The Admin-SDK implementation of `HandoverIo` (BIN-1063 steg 3).
  *
- * Its own module because BOTH doors use it: the `handOverOwnedGroups` callable
- * and `retentionCleanup`'s field-owned sweep. Two implementations that merely
+ * Its own module because every door uses it. Two implementations that merely
  * looked equivalent would be the drift this whole ticket exists to prevent —
- * one door handing a group to a different member than the other.
+ * one door handing a group to a different member than the other. Derive the
+ * doors rather than trusting a list here:
+ *   git grep -n "adminHandoverIo(" -- functions src
  *
  * `db` and `log` are injected rather than reached for, so a caller that already
  * holds them does not open a second handle.
@@ -12,11 +13,55 @@
 
 import { FieldValue, Timestamp, type Firestore } from 'firebase-admin/firestore';
 
-import { type HandoverIo } from './runHandover';
-import { chunkWrites, memberTraceWrites } from './logic';
+import { type HandoverIo, type HandoverNotifyIo, type LeaverIo, type MemberGroupsIo, type MemberStripIo } from './runHandover';
+import { chunkWrites, leaverChunkMayCommit, memberTraceWrites, planClaim } from './logic';
 
 /** Writes per batch, under Firestore's own 500 ceiling. */
 const BATCH_LIMIT = 450;
+
+/**
+ * BIN-1118: the notification half of the owner-picked handover, as its own port
+ * so the two doors that never notify do not have to implement it.
+ *
+ * `kind: 'system'` is an existing inbox card that the client already renders with
+ * a title, a body and a link — reusing it means no client change and no second
+ * card shape to keep in sync. Derive the reader rather than trusting this:
+ *   grep -n "data.kind === 'system'" src/hooks/useNotifications.ts
+ */
+export function adminHandoverNotifyIo(db: Firestore): HandoverNotifyIo {
+  return {
+    readGroupName: async (groupId) => {
+      const snap = await db.doc(`groups/${groupId}`).get();
+      const name = snap.exists ? snap.get('name') : undefined;
+      return typeof name === 'string' && name.length > 0 ? name : null;
+    },
+
+    readMemberName: async (groupId, uid) => {
+      const snap = await db.doc(`groups/${groupId}/members/${uid}`).get();
+      const name = snap.exists ? snap.get('displayName') : undefined;
+      return typeof name === 'string' && name.length > 0 ? name : null;
+    },
+
+    notifyMembers: async (recipientUids, card) => {
+      // One batch. The recipients are a group's members, a set the create rules
+      // already bound well under the batch ceiling — unlike a watchlist, it
+      // cannot grow unbounded.
+      if (recipientUids.length === 0) return;
+      const batch = db.batch();
+      for (const uid of recipientUids) {
+        batch.set(db.collection('users').doc(uid).collection('notifications').doc(), {
+          kind: 'system',
+          title: card.title,
+          body: card.body,
+          actionUrl: card.actionUrl,
+          read: false,
+          createdAt: FieldValue.serverTimestamp(),
+        });
+      }
+      await batch.commit();
+    },
+  };
+}
 
 /** One Admin-SDK operation per method, no decisions. */
 export function adminHandoverIo(db: Firestore, log: HandoverIo['log']): HandoverIo {
@@ -60,7 +105,11 @@ export function adminHandoverIo(db: Firestore, log: HandoverIo['log']): Handover
 
     readWatchlist: async (groupId) => {
       const snap = await db.collection(`groups/${groupId}/watchlist`).get();
-      return snap.docs.map((d) => ({ id: d.id, addedBy: d.get('addedBy') }));
+      return snap.docs.map((d) => ({
+        id: d.id,
+        addedBy: d.get('addedBy'),
+        memberRatings: d.get('memberRatings'),
+      }));
     },
 
     readSessionHistory: async (groupId) => {
@@ -79,13 +128,18 @@ export function adminHandoverIo(db: Firestore, log: HandoverIo['log']): Handover
         // transaction: a retry must find its own earlier handover already done
         // rather than hold a second election naming a different member.
         const fresh = await tx.get(groupRef);
-        if (!fresh.exists || fresh.get('ownerUid') !== expectedOwnerUid) return false;
-        tx.update(groupRef, {
-          ownerUid: write.ownerUid,
-          memberUids: write.memberUids,
-          updatedAt: FieldValue.serverTimestamp(),
-        });
-        return true;
+        const claim = planClaim(fresh.exists ? {
+          ownerUid: (fresh.get('ownerUid') as string | undefined) ?? '',
+          memberUids: (fresh.get('memberUids') as string[] | undefined) ?? [],
+        } : null, expectedOwnerUid, write);
+        if (claim.kind === 'claimed') {
+          tx.update(groupRef, {
+            ownerUid: claim.ownerUid,
+            memberUids: claim.memberUids,
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+        }
+        return claim;
       });
     },
 
@@ -114,6 +168,59 @@ export function adminHandoverIo(db: Firestore, log: HandoverIo['log']): Handover
         }
         await batch.commit();
       }
+    },
+  };
+}
+
+/**
+ * BIN-1260 + BIN-1278: the two ports the leaver's erasure and the account-delete
+ * door's member-group step need, built on the same reads as `adminHandoverIo`.
+ */
+export function adminLeaverIo(db: Firestore, log: HandoverIo['log']): LeaverIo & MemberGroupsIo & MemberStripIo {
+  const base = adminHandoverIo(db, log);
+  return {
+    log,
+    readGroup: base.readGroup,
+    readWatchlist: base.readWatchlist,
+    readSessionHistory: base.readSessionHistory,
+
+    memberGroups: async (uid) => {
+      const snap = await db.collection('groups').where('memberUids', 'array-contains', uid).select('ownerUid').get();
+      return snap.docs.map((d) => ({ id: d.id, ownerUid: (d.get('ownerUid') as string | undefined) ?? '' }));
+    },
+
+    // BIN-1294: `update`, not a merge — it throws on a group that is gone rather than
+    // resurrecting one holding nothing but a member list.
+    stripMemberUid: async (groupId, uid) => {
+      await db.doc('groups/' + groupId).update({ memberUids: FieldValue.arrayRemove(uid) });
+    },
+
+    eraseLeaverTraces: async (groupId, uid, erasure, requiredOwner) => {
+      const groupRef = db.doc(`groups/${groupId}`);
+      for (const chunk of chunkWrites(memberTraceWrites(uid, erasure), BATCH_LIMIT)) {
+        // The group read and the chunk's writes are one transaction: see
+        // `leaverChunkMayCommit` for the rejoin (and, BIN-1296, the ownership
+        // change) it guards against.
+        const wrote = await db.runTransaction(async (tx) => {
+          const fresh = await tx.get(groupRef);
+          const group = fresh.exists
+            ? {
+                memberUids: (fresh.get('memberUids') as string[] | undefined) ?? [],
+                ownerUid: (fresh.get('ownerUid') as string | undefined) ?? '',
+              }
+            : null;
+          if (!leaverChunkMayCommit(group, uid, requiredOwner)) return false;
+          for (const w of chunk) {
+            const ref = groupRef.collection(w.collection).doc(w.doc);
+            if (w.op === 'delete') tx.delete(ref);
+            else if (w.op === 'clear') tx.update(ref, { [w.field as string]: FieldValue.delete() });
+            else tx.update(ref, { [w.field as string]: FieldValue.arrayRemove(uid) });
+          }
+          return true;
+        });
+        if (!wrote) return { kind: 'stopped' };
+      }
+      return { kind: 'done' };
     },
   };
 }

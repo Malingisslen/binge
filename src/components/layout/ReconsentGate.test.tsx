@@ -17,6 +17,7 @@ import { ReconsentGate } from './ReconsentGate';
 const auth = vi.hoisted(() => ({
   completeReconsent: vi.fn<() => Promise<void>>(async () => {}),
   signOut: vi.fn<() => Promise<void>>(async () => {}),
+  reconsentRestored: false,
 }));
 
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => auth }));
@@ -26,6 +27,7 @@ beforeEach(() => {
   auth.completeReconsent.mockResolvedValue(undefined);
   auth.signOut.mockReset();
   auth.signOut.mockResolvedValue(undefined);
+  auth.reconsentRestored = false;
 });
 
 function boxes() {
@@ -164,6 +166,14 @@ describe('ReconsentGate', () => {
     expect(submitButton().disabled).toBe(false);
   });
 
+  it('stödraden och uppmaningen är oförändrade för en vanlig återkommande användare', () => {
+    render(<ReconsentGate />);
+
+    const body = document.body.textContent ?? '';
+    expect(body).toContain('Hittade du hit av misstag? Mejla hej@binge.nu innan du skapar profilen.');
+    expect(body).toContain('Godkänn villkoren för att fortsätta.');
+  });
+
   it('utloggning är alltid nåbar', () => {
     // Samma skäl som på DeletionLimbo: skärmen ersätter hela appen, så en delad enhet
     // vore fångad av en skärm med bara en knapp.
@@ -173,5 +183,94 @@ describe('ReconsentGate', () => {
 
     expect(auth.signOut).toHaveBeenCalledTimes(1);
     expect(auth.completeReconsent).not.toHaveBeenCalled();
+  });
+});
+
+// BIN-1422 del 2 (Malin's decision 2, 2026-10-07): an account restored from a backup is
+// gated too, but its data is there. "Tomt konto" would tell that person their library is
+// gone when it is not, so the restored gate carries its own copy and its own button.
+describe('ReconsentGate — återställt konto (BIN-1422)', () => {
+  beforeEach(() => {
+    auth.reconsentRestored = true;
+  });
+
+  function continueButton() {
+    return screen.getByRole('button', { name: 'Fortsätt' }) as HTMLButtonElement;
+  }
+
+  it('säger att kontot är återställt och lovar inget tomt konto', () => {
+    render(<ReconsentGate />);
+
+    const body = document.body.textContent ?? '';
+    expect(screen.getByText('Välkommen tillbaka')).toBeTruthy();
+    expect(body).toContain('Ditt konto är återställt. Bekräfta din ålder och godkänn villkoren igen innan du fortsätter.');
+    expect(body).toContain('Bevakningslistan, avsnittsframstegen och vännerna är tillbaka.');
+    expect(body).not.toContain('tomt konto');
+    expect(body).not.toContain('Din profil är borta');
+    expect(screen.queryByRole('button', { name: 'Skapa profil' })).toBeNull();
+  });
+
+  it('stödraden talar om återställningen, inte om att skapa en profil', () => {
+    render(<ReconsentGate />);
+
+    const body = document.body.textContent ?? '';
+    expect(body).toContain('Frågor om återställningen? Mejla hej@binge.nu.');
+    expect(body).not.toContain('skapar profilen');
+    expect(body).not.toContain('Godkänn villkoren för att fortsätta.');
+  });
+
+  it('samma två rutor, inga förkryssade, och knappen spärrad tills båda är ikryssade', async () => {
+    render(<ReconsentGate />);
+
+    expect(boxes()).toHaveLength(2);
+    expect(boxes().every(b => b.checked)).toBe(false);
+    fireEvent.click(boxes()[0]);
+    fireEvent.click(continueButton());
+    expect(auth.completeReconsent).not.toHaveBeenCalled();
+
+    fireEvent.click(boxes()[1]);
+    await act(async () => { fireEvent.click(continueButton()); });
+
+    expect(auth.completeReconsent).toHaveBeenCalledTimes(1);
+  });
+
+  it('visar "Sparar…" medan sparningen pågår', async () => {
+    let release!: () => void;
+    auth.completeReconsent.mockImplementationOnce(() => new Promise<void>(r => { release = r; }));
+    render(<ReconsentGate />);
+
+    fireEvent.click(boxes()[0]);
+    fireEvent.click(boxes()[1]);
+    await act(async () => { fireEvent.click(continueButton()); });
+
+    expect(screen.getByRole('button', { name: 'Sparar…' })).toBeTruthy();
+    await act(async () => { release(); });
+  });
+
+  it('ett nätverksfel säger att det inte gick att spara, inte att profilen inte kunde skapas', async () => {
+    auth.completeReconsent.mockRejectedValueOnce(new Error('offline'));
+    render(<ReconsentGate />);
+
+    fireEvent.click(boxes()[0]);
+    fireEvent.click(boxes()[1]);
+    await act(async () => { fireEvent.click(continueButton()); });
+
+    expect(screen.getByRole('alert').textContent).toBe(
+      'Det gick inte att spara. Kontrollera anslutningen och försök igen. Hjälper det inte, mejla hej@binge.nu.',
+    );
+    expect(continueButton().disabled).toBe(false);
+  });
+
+  it('ett VÄGRAT skrivförsök får samma raderingsbesked som det vanliga fallet', async () => {
+    auth.completeReconsent.mockRejectedValueOnce(new Error(`${DELETION_IN_PROGRESS}: refused`));
+    render(<ReconsentGate />);
+
+    fireEvent.click(boxes()[0]);
+    fireEvent.click(boxes()[1]);
+    await act(async () => { fireEvent.click(continueButton()); });
+
+    expect(screen.getByRole('alert').textContent).toBe(
+      'Kontot håller på att raderas. Profilen kan inte skapas nu. Hör av dig till hej@binge.nu om det inte var meningen.',
+    );
   });
 });

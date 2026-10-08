@@ -33,3 +33,24 @@ export function countAiredEpisodes(
 ): number {
   return episodes.filter(ep => !!ep.air_date && ep.air_date <= todayIso).length;
 }
+
+/**
+ * Nästa avsnitt, eller null när dess datum redan passerat. TMDB:s
+ * `next_episode_to_air` kan ligga kvar efter sändningen, och en förrenderad
+ * sida bär värdet från byggdagen.
+ */
+export function upcomingEpisode<T extends { air_date: string | null }>(
+  ep: T | null | undefined,
+  todayIso: string,
+): T | null {
+  if (!ep) return null;
+  return !ep.air_date || ep.air_date >= todayIso ? ep : null;
+}
+
+/** "2019–2023", "2026–" för en pågående serie, och bara "2026" när den slutade samma år. */
+export function seriesYearSpan(firstAirDate: string | undefined, lastAirDate: string | undefined, ended: boolean): string {
+  const start = firstAirDate?.substring(0, 4) || '—';
+  if (!ended) return `${start}–`;
+  const end = lastAirDate?.substring(0, 4) ?? '';
+  return !end || end === start ? start : `${start}–${end}`;
+}

@@ -8,10 +8,14 @@ import { jsonLd } from '@/lib/seo/jsonLd';
 import { withRetry } from '@/lib/seo/withRetry';
 import { canonicalProviderId, getProvider } from '@/lib/tmdb/providers';
 import { fetchForBuild } from '@/lib/tmdb/buildFetch';
+import { formatKr } from '@/lib/formatKr';
 import type { TMDBCollectionPart } from '@/types/tmdb';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/ui/EmptyState';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
+import { buttonClass } from '@/components/ui/Button';
+import { eyebrowClass } from '@/components/ui/Eyebrow';
+import { cardClass } from '@/components/ui/Card';
 
 export const dynamic = 'force-static';
 export const dynamicParams = false;
@@ -68,7 +72,7 @@ function providerNames(ids: number[]): string {
     if (seen.has(cid)) continue;
     seen.add(cid);
     const p = getProvider(cid);
-    if (p) names.push(p.shortName || p.name);
+    if (p) names.push(p.name);
   }
   return names.join(', ');
 }
@@ -114,7 +118,7 @@ export default async function BilligastePage({ params }: { params: Promise<PageP
   }
 
   // BIN-460 — zero released rows means either a flaked build-time TMDB fetch
-  // (collection/movie-lite miss under the 25k-page export concurrency) OR a
+  // (collection/movie-lite miss under the export concurrency) OR a
   // franchise whose films aren't out/mapped in SE yet. The URL is already in the
   // sitemap + generateStaticParams, so notFound() here would advertise a soft-404.
   // Instead ship a resilient, indexable "kommer snart" page: it stays a valid 200
@@ -130,7 +134,7 @@ export default async function BilligastePage({ params }: { params: Promise<PageP
       isPartOf: { '@type': 'WebSite', name: 'Binge.nu', url: `${SITE}/` },
     };
     return (
-      <div className="canvas">
+      <div>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(emptyCollectionPage) }} />
         <PageHeader
           crumb="Billigaste vägen"
@@ -139,12 +143,12 @@ export default async function BilligastePage({ params }: { params: Promise<PageP
         />
         <EmptyState
           title={`${franchise.name} — streamingläget uppdateras`}
-          body={`Vi kartlägger just nu var ${franchise.name} går att streama i Sverige. Titta in snart — sidan fylls på så fort tillgänglighetsdatan är klar.`}
-          action={<Link href="/guider/" className="btn btn-acc btn-sm">Utforska fler streamingguider</Link>}
+          body={`Var ${franchise.name} går att streama i Sverige kartläggs just nu. Titta in snart, sidan fylls på så fort tillgänglighetsdatan är klar.`}
+          action={<Link href="/guider/" className={buttonClass({ variant: 'acc', size: 'sm' })}>Utforska fler streamingguider</Link>}
         />
         <div className="mt-6">
           <JustWatchCredit />
-          <span className="text-ink-3 text-[11px]">{' · '}Tillgänglighet via Movie of the Night · Data från TMDB</span>
+          <span className="text-ink-3 text-xs">{' · '}Tillgänglighet via Movie of the Night · Data från TMDB</span>
         </div>
       </div>
     );
@@ -155,7 +159,7 @@ export default async function BilligastePage({ params }: { params: Promise<PageP
   const best = plan.bestProviderId != null ? getProvider(plan.bestProviderId) : null;
 
   const verdict = best
-    ? `${best.name}${best.defaultMonthlyCost ? ` (${best.defaultMonthlyCost} kr/mån)` : ''} täcker ${plan.coveredCount} av ${plan.totalFilms} ${plan.totalFilms === 1 ? 'film' : 'filmer'}`
+    ? `${best.name}${best.defaultMonthlyCost ? ` (${formatKr(best.defaultMonthlyCost)} kr/mån)` : ''} täcker ${plan.coveredCount} av ${plan.totalFilms} ${plan.totalFilms === 1 ? 'film' : 'filmer'}`
     : `Ingen enskild streamingtjänst täcker ${franchise.name} i Sverige just nu`;
   const remainderLine = [
     plan.rentCount > 0 ? `${plan.rentCount} att hyra eller köpa` : '',
@@ -184,7 +188,7 @@ export default async function BilligastePage({ params }: { params: Promise<PageP
   };
 
   return (
-    <div className="canvas">
+    <div>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(collectionPage) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(itemList) }} />
 
@@ -194,9 +198,9 @@ export default async function BilligastePage({ params }: { params: Promise<PageP
         standfirst={`${plan.totalFilms} ${plan.totalFilms === 1 ? 'film' : 'filmer'}. Vilken tjänst som täcker flest, vad du behöver hyra, och var du ser resten.`}
       />
 
-      <section className="bg-surface rounded-lg p-4 mb-5 border border-rule">
-        <div className="text-[11px] uppercase tracking-wide text-ink-3 mb-1">Billigaste vägen</div>
-        <div className="text-[17px] font-semibold text-ink">{verdict}</div>
+      <section className={cardClass('p-4 mt-6 mb-5')}>
+        <div className={eyebrowClass({ size: 'xs', className: 'mb-1' })}>Billigaste vägen</div>
+        <div className="text-xl font-semibold text-ink">{verdict}</div>
         {remainderLine && <div className="text-base text-ink-2 mt-1">{remainderLine}</div>}
         <div className="text-xs text-ink-3 mt-2">
           Exakta hyrpriser varierar — öppna en filmsida för det aktuella priset och länk till tjänsten.
@@ -207,14 +211,14 @@ export default async function BilligastePage({ params }: { params: Promise<PageP
         {rows.map((r) => {
           const onPlan = plan.bestProviderId != null && r.canonicalSubs.includes(plan.bestProviderId);
           let status: string;
-          if (onPlan && best) status = `Ingår i ${best.shortName || best.name}`;
+          if (onPlan && best) status = `Ingår i ${best.name}`;
           else if (r.canonicalSubs.length > 0) status = `Streamas på ${providerNames(r.canonicalSubs)}`;
           else if (r.rentable) status = 'Hyr eller köp';
           else status = 'Saknas i Sverige';
           const poster = posterUrl(r.posterPath, 'w92');
           return (
             <li key={r.tmdbId}>
-              <Link href={`/movie/${r.tmdbId}/`} className="flex items-center gap-3 bg-surface rounded p-2 border border-rule hover:shadow-lift transition-shadow">
+              <Link href={`/movie/${r.tmdbId}/`} className={cardClass('flex items-center gap-3 p-2 hover:shadow-lift transition-shadow')}>
                 {poster ? (
                   <img src={poster} alt="" width={46} height={69} loading="lazy" decoding="async" className="rounded-sm shrink-0" />
                 ) : (
@@ -233,7 +237,7 @@ export default async function BilligastePage({ params }: { params: Promise<PageP
       </ol>
 
       <JustWatchCredit />
-      <span className="text-ink-3 text-[11px]">{' · '}Tillgänglighet via Movie of the Night · Data från TMDB</span>
+      <span className="text-ink-3 text-xs">{' · '}Tillgänglighet via Movie of the Night · Data från TMDB</span>
     </div>
   );
 }

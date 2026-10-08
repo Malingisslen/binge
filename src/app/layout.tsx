@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from 'next';
-import Script from 'next/script';
 import { Albert_Sans } from 'next/font/google';
 import './globals.css';
 import Providers from '@/components/Providers';
@@ -7,8 +6,8 @@ import AppShell from '@/components/layout/AppShell';
 
 const SITE_URL = 'https://binge.nu';
 // PNG, inte SVG: Twitter/X-card-validatorn och LinkedIn avvisar SVG og:image
-// och renderar då ingen förhandsvisning alls (BIN-306). og-image.svg är kvar
-// som källkonst; PNG:n rastreras från den (1200×630).
+// och renderar då ingen förhandsvisning alls (BIN-306). PNG:n ritas av
+// scripts/gen-app-icons.mjs (1200×630).
 const OG_IMAGE = `${SITE_URL}/og-image.png`;
 
 // Albert Sans är den enda typografin i designen. --mono-tokenen finns kvar i
@@ -33,10 +32,10 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: 'Binge.nu — Håll koll på vad du tittar på',
+    default: 'Binge.nu – dina serier och vad de kostar',
     template: '%s — Binge.nu',
   },
-  description: 'Håll koll på film och TV-serier och se var varje titel finns att streama i Sverige — Netflix, Viaplay, HBO Max, Disney+, SVT Play och fler tjänster.',
+  description: 'Se vad du betalar för streaming och vad du kan pausa. Håll koll på film och serier och se var de streamas i Sverige, med svenska priser för Netflix, Viaplay, HBO Max, Disney+ och fler.',
   // Defensiv default-canonical → undersidor som inte sätter egen alternates.canonical
   // får root som fallback. movie/[id]/tv/[id]/person/[id] skriver över med egen URL
   // i sina generateMetadata-hooks; här skyddar vi mot dubletter på catch-all-shellet
@@ -60,7 +59,7 @@ export const metadata: Metadata = {
   appleWebApp: { capable: true, title: 'Binge', statusBarStyle: 'default' },
   openGraph: {
     title: 'Binge.nu',
-    description: 'Håll koll på vad du tittar på — se var film och serier finns att streama i Sverige.',
+    description: 'Se vad du betalar för streaming, och vad du kan pausa.',
     url: SITE_URL,
     siteName: 'Binge.nu',
     type: 'website',
@@ -70,14 +69,14 @@ export const metadata: Metadata = {
         url: OG_IMAGE,
         width: 1200,
         height: 630,
-        alt: 'Binge.nu — håll koll på vad du tittar på',
+        alt: 'binge.nu – Se vad du betalar för streaming, och vad du kan pausa',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Binge.nu',
-    description: 'Håll koll på vad du tittar på — se var film och serier finns att streama i Sverige.',
+    description: 'Se vad du betalar för streaming, och vad du kan pausa.',
     images: [OG_IMAGE],
   },
   robots: {
@@ -156,15 +155,6 @@ export default function RootLayout({
           }}
         />
 
-        <Script
-          defer
-          strategy="afterInteractive"
-          data-domain="binge.nu"
-          src="https://plausible.io/js/script.js"
-        />
-        <Script id="plausible-shim" strategy="afterInteractive">
-          {`window.plausible=window.plausible||function(){(window.plausible.q=window.plausible.q||[]).push(arguments)};`}
-        </Script>
         <Providers>
           <AppShell>{children}</AppShell>
         </Providers>

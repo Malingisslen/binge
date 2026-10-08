@@ -10,8 +10,10 @@ import {
 import type { WatchlistItem } from '@/types';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import { useIncrementalList } from '@/hooks/useIncrementalList';
+import { Eyebrow } from '@/components/ui/Eyebrow';
+import { cardClass } from '@/components/ui/Card';
 
-const CARD_GRID_CLASS = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-[10px]';
+const CARD_GRID_CLASS = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-2.5';
 
 // BIN-560 Phase 4: select callbacks take the whole item (which carries mediaType)
 // so the parent can key its selection state by the composite `mediaTypeDocId`,
@@ -100,7 +102,7 @@ export function FollowingCardSections({
 
   if (total === 0) {
     return (
-      <div className="bg-surface border border-rule rounded-sm px-3 py-4 text-center text-sm text-ink-3">
+      <div className={cardClass('px-3 py-4 text-center text-sm text-ink-3')}>
         Inga serier i Följer än. Lägg till en serie via Rekommendationer eller sök.
       </div>
     );
@@ -112,7 +114,7 @@ export function FollowingCardSections({
   const countLabel = (n: number) => `${n} av ${total} ${total === 1 ? 'titel' : 'titlar'}`;
 
   return (
-    <div className="mt-[18px] space-y-[14px]">
+    <div className="mt-5 space-y-3.5">
       {LIBRARY_SUB_STATE_ORDER.map(key => {
         const items = sections[key];
         if (items.length === 0) return null;
@@ -125,12 +127,12 @@ export function FollowingCardSections({
                 onClick={() => setAvslutadOpen(!avslutadOpen)}
                 className="w-full flex items-center justify-between mb-2 bg-transparent border-none p-0 cursor-pointer text-left"
               >
-                <h2 className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold flex items-center gap-1">
+                <Eyebrow as="h2" className="flex items-center gap-1">
                   {heading}
-                  <span className="text-[9px] text-ink-3/70">
+                  <span className="text-micro text-ink-3/70">
                     {avslutadOpen ? '▾' : '▸'}
                   </span>
-                </h2>
+                </Eyebrow>
                 <span className="text-xxs text-ink-3">{countLabel(items.length)}</span>
               </button>
               {avslutadOpen && (
@@ -143,9 +145,9 @@ export function FollowingCardSections({
         return (
           <section key={key}>
             <div className="flex items-center justify-between mb-2">
-              <h2 className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold">
+              <Eyebrow as="h2">
                 {heading}
-              </h2>
+              </Eyebrow>
               <span className="text-xxs text-ink-3">{countLabel(items.length)}</span>
             </div>
             <SectionGrid items={items} nextAirByTmdbId={nextAirByTmdbId} subState={key} selectMode={selectMode} isSelected={isSelected} onToggleSelect={onToggleSelect} />

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Users, ChevronLeft, Play, Settings } from 'lucide-react';
+import { Users, ChevronLeft, Play, Settings, LogOut, Copy } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import { useAuth } from '@/hooks/useAuth';
 import { useGroup } from '@/hooks/useGroups';
@@ -24,9 +24,10 @@ import { GroupWatchlistTable } from '@/components/groups/GroupWatchlistTable';
 import ListCheapestPlanPanel from '@/components/lists/ListCheapestPlanPanel';
 import type { ListPlanItem } from '@/hooks/useListCheapestPlan';
 import { GroupSessionHistoryPanel } from '@/components/groups/GroupSessionHistoryPanel';
+import { UgcActionsMenu } from '@/components/moderation/UgcActionsMenu';
 import {
   InvitePanel,
-  LeavePanel,
+  LeaveGroupDialog,
   ProviderOverlapPanel,
 } from '@/components/groups/GroupSidePanels';
 import HouseholdPanel from '@/components/groups/HouseholdPanel';
@@ -37,9 +38,10 @@ import { NotFound } from '@/components/ui/NotFound';
 import type {
   Group,
   GroupMember,
-  GroupWatchlistItem,
   SessionConfig,
 } from '@/types';
+import type { GroupWatchlistRow } from '@/lib/firebase/groups';
+import { Button, buttonClass } from '@/components/ui/Button';
 
 const GroupSettingsModal = dynamic(
   () => import('@/components/groups/GroupSettingsModal').then(m => m.GroupSettingsModal),
@@ -58,6 +60,7 @@ export default function GroupPageClient({ id }: { id: string }) {
 }
 
 function GroupContent({ id }: { id: string }) {
+  const router = useRouter();
   const { user, uid } = useAuth();
   const { group, members, watchlist, loading, notFound, denied, publicName, resubscribe } = useGroup(id);
   // X5: gruppnamnet i dokumenttiteln när det laddats (rör inte indexability —
@@ -76,6 +79,18 @@ function GroupContent({ id }: { id: string }) {
   const [joinFailed, setJoinFailed] = useState(false);
   const [joining, setJoining] = useState(false);
   const joinAttemptsRef = useRef(0);
+  // SEC-2 (2026-10-05): en inbjudningslänk går inte längre med på egen hand. Joinet
+  // skriver namn, användarnamn, profilbild och streamingtjänster in i gruppen, och en
+  // länk kan komma från vem som helst — så besökaren tackar ja först.
+  //
+  // Jat och utfallet sparas per TOKEN, inte som flaggor som nollas i en effekt: en
+  // nollning i en effekt landar först i nästa rendering, och join-effekten i samma
+  // commit hade då sett det gamla jat och gått med på en ny länk utan fråga.
+  // `settledToken` sätts bara vid ett avslutat misslyckande, så kortet står kvar
+  // genom omförsöken och efter ett lyckat join tills medlemskapet syns.
+  const [confirmedToken, setConfirmedToken] = useState<string | null>(null);
+  const [settledToken, setSettledToken] = useState<string | null>(null);
+  const joinConfirmed = !!inviteParam && confirmedToken === inviteParam;
   // En NY inbjudningslänk förtjänar en ny budget. Utan det här ignorerades en
   // färsk, giltig länk tyst om en tidigare (roterad) länk redan bränt försöken
   // — klick på den nya länken är bara en SPA-navigering, komponenten monteras
@@ -87,10 +102,12 @@ function GroupContent({ id }: { id: string }) {
   // alltså hade auto-joinet aldrig fyrat för någon som faktiskt behöver det.
   useEffect(() => {
     if (!inviteParam || !uid || !user || joining) return;
+    if (!joinConfirmed) return;
     if (!group && !denied) return;
     if (isMember) return;
     if (joinAttemptsRef.current >= MAX_JOIN_ATTEMPTS) return;
     const attempt = joinAttemptsRef.current;
+    const token = inviteParam;
     joinAttemptsRef.current = attempt + 1;
     setJoining(true);
     joinGroupViaToken({
@@ -116,13 +133,14 @@ function GroupContent({ id }: { id: string }) {
       // inbjudningslank" kvar ovanfor en ruta som sager at en att ladda om.
       setJoinFailed(joinAttemptFailed(res));
       if (!res.ok && res.reason === 'transient') {
-        if (exhausted) { setJoining(false); return; }
+        if (exhausted) { setSettledToken(token); setJoining(false); return; }
         setTimeout(() => setJoining(false), joinBackoffMs(attempt));
         return;
       }
       // Övriga resolved-utfall är terminala: en trasig token förblir trasig och en
       // saknad grupp förblir saknad. Bränn budgeten så effekten inte återfyrar.
       joinAttemptsRef.current = MAX_JOIN_ATTEMPTS;
+      if (!res.ok && res.reason !== 'already_member') setSettledToken(token);
       setJoining(false);
 
       // BIN-1152: ett lyckat join måste STARTA OM grupp-prenumerationen. Den här
@@ -147,10 +165,10 @@ function GroupContent({ id }: { id: string }) {
       setJoinError(exhausted
         ? 'Kunde inte gå med i gruppen. Ladda om sidan och försök igen.'
         : 'Kunde inte gå med i gruppen. Försöker igen…');
-      if (exhausted) { setJoining(false); return; }
+      if (exhausted) { setSettledToken(token); setJoining(false); return; }
       setTimeout(() => setJoining(false), joinBackoffMs(attempt));
     });
-  }, [inviteParam, uid, user, group, denied, isMember, joining, id, resubscribe]);
+  }, [inviteParam, uid, user, group, denied, isMember, joining, joinConfirmed, id, resubscribe]);
 
   if (loading) {
     return <LoadingView variant="detail" label="Laddar grupp…" />;
@@ -167,6 +185,24 @@ function GroupContent({ id }: { id: string }) {
   // "du är inte medlem" för varje gissat id hade bekräftat att id:t existerar,
   // vilket är precis den uppräkning biljetten stänger.
   const nonMemberName = denied ? publicName : (group && !isMember ? group.name : null);
+
+  // SEC-2: kortet står FÖRE båda skärmarna nedan, så att också en grupp utan publikt
+  // namn får frågan. Det står kvar medan joinet pågår och under BIN-557:s omförsök;
+  // ett avslutat misslyckande faller igenom till skärmarna nedan, som visar felet.
+  if (inviteParam && uid && user && !isMember && (group || denied) && settledToken !== inviteParam) {
+    return (
+      <JoinInviteCard
+        groupName={nonMemberName}
+        joining={joinConfirmed}
+        status={joinConfirmed ? joinError : null}
+        onJoin={() => { setJoinError(null); setConfirmedToken(inviteParam); }}
+        // replace, inte push: token ska inte ligga kvar i historiken och erbjuda
+        // kortet igen via bakåtknappen.
+        onDecline={() => router.replace('/grupper')}
+      />
+    );
+  }
+
   if (nonMemberName !== null) {
     return (
       <div>
@@ -181,7 +217,7 @@ function GroupContent({ id }: { id: string }) {
           body={joinFailed
             ? 'Du är inte medlem i den här gruppen, och försöket att gå med gick inte igenom.'
             : 'Du är inte medlem i den här gruppen. Be ägaren om en inbjudningslänk.'}
-          action={<Link href="/grupper" className="btn btn-acc btn-sm no-underline">Mina grupper</Link>}
+          action={<Link href="/grupper" className={buttonClass({ variant: 'acc', size: 'sm', className: 'no-underline' })}>Mina grupper</Link>}
         />
         {joinError && (
           <div className="px-3 py-2 text-xs text-danger-ink bg-danger-soft border border-danger/30 rounded-sm mt-3">
@@ -198,7 +234,7 @@ function GroupContent({ id }: { id: string }) {
         crumb="Grupp"
         title="Gruppen hittades inte"
         body="Länken kan vara felaktig eller så har gruppen tagits bort."
-        action={<Link href="/grupper" className="btn btn-acc btn-sm no-underline">Mina grupper</Link>}
+        action={<Link href="/grupper" className={buttonClass({ variant: 'acc', size: 'sm', className: 'no-underline' })}>Mina grupper</Link>}
       />
     );
   }
@@ -215,21 +251,79 @@ function GroupContent({ id }: { id: string }) {
   );
 }
 
+function JoinInviteCard({
+  groupName, joining, status, onJoin, onDecline,
+}: {
+  groupName: string | null;
+  joining: boolean;
+  status: string | null;
+  onJoin: () => void;
+  onDecline: () => void;
+}) {
+  return (
+    <div>
+      <PageHeader
+        crumb="Grupp"
+        title={groupName ?? 'Inbjudan till en grupp'}
+        standfirst="Du har bjudits in till den här gruppen. Om du går med ser medlemmarna ditt namn, ditt användarnamn, din profilbild och vilka streamingtjänster du har, och hur långt du kommit i gruppens titlar. Du kan lämna gruppen när du vill."
+        actions={
+          <div className="flex gap-2">
+            <Button type="button" variant="acc" size="sm" onClick={onJoin} disabled={joining}>
+              {joining ? 'Går med…' : 'Gå med'}
+            </Button>
+            <Button type="button" size="sm" onClick={onDecline} disabled={joining}>
+              Nej tack
+            </Button>
+          </div>
+        }
+      />
+      {status && (
+        <div className="px-3 py-2 text-xs text-ink-2 rounded-sm mt-3" role="status">
+          {status}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function GroupView({
   groupId, group, members, watchlist, myUid, isOwner,
 }: {
   groupId: string;
   group: Group;
   members: GroupMember[];
-  watchlist: GroupWatchlistItem[];
+  watchlist: GroupWatchlistRow[];
   myUid: string;
   isOwner: boolean;
 }) {
   const router = useRouter();
   const { items: myLibrary } = useWatchlist();
   const [showSettings, setShowSettings] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [startingSession, setStartingSession] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // origin + pathname, ALDRIG `href`. En medlem som kom hit via en
+  // inbjudningslänk har `?invite=<token i klartext>` kvar i adressen — sidan
+  // läser parametern men tar aldrig bort den. Att kopiera hela adressen hade
+  // delat ut ett levande join-token till vem som helst, och därmed gett varje
+  // medlem den inbjudningsrätt som `InvitePanel` medvetet håller hos ägaren.
+  //
+  // Formen — await, catch, en kort bekräftelse — är `InvitePanel`s. Ett
+  // `void`-anrop gav ingen bekräftelse alls och gjorde ett nekat urklipp till en
+  // ohanterad rejection med ingenting på skärmen.
+  const copyGroupLink = async () => {
+    try {
+      await navigator.clipboard.writeText(
+        `${window.location.origin}${window.location.pathname}`,
+      );
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* urklippet kan nekas; knappen säger då bara ingenting */
+    }
+  };
 
   const intersectProviders = useMemo(
     () => computeSessionProviders(members, 'intersect'),
@@ -299,25 +393,58 @@ function GroupView({
         icon={<Users size={20} className="text-acc-deep shrink-0" />}
         actions={
           <>
-            <button
+            <Button
               type="button"
               onClick={startSession}
               disabled={startingSession || members.length === 0}
-              className="btn btn-acc btn-sm"
+              variant="acc" size="sm"
             >
               <Play size={11} />
               {startingSession ? 'Startar…' : 'Starta session'}
-            </button>
+            </Button>
             {isOwner && (
-              <button
+              <Button
                 type="button"
                 onClick={() => setShowSettings(true)}
-                className="btn btn-ghost btn-sm"
+                variant="ghost" size="sm"
               >
                 <Settings size={11} />
                 Inställningar
-              </button>
+              </Button>
             )}
+            {/* BIN-1120: kopiera-länken står UTANFÖR menyn. Menyn nedan döljer
+                sig själv för den som äger det anmälda — det är rätt för en
+                moderingsåtgärd, men det hade tagit bort ägarens enda väg att
+                kopiera en länk till sin egen grupp. */}
+            <Button
+              type="button"
+              onClick={copyGroupLink}
+              variant="ghost" size="sm"
+            >
+              <Copy size={11} />
+              {copied ? 'Kopierad.' : 'Kopiera länk'}
+            </Button>
+            {/* BIN-1120: gruppens sällan-åtgärder ligger i samma meny som
+                recensioner och profiler redan använder — utträdet flyttades hit
+                ur vänsterkolumnen. Menyn döljer sig själv för ägaren, som i
+                stället når överlämningen via Inställningar; ägaren har alltså
+                ingen väg att anmäla sin egen grupp, vilket är avsikten. */}
+            <UgcActionsMenu
+              targetType="group"
+              targetId={groupId}
+              targetOwnerUid={group.ownerUid}
+              triggerLabel="Mer"
+              showBlock={false}
+              extraItems={[
+                {
+                  key: 'leave',
+                  label: 'Lämna gruppen',
+                  icon: <LogOut size={11} />,
+                  danger: true,
+                  onSelect: () => setLeaving(true),
+                },
+              ]}
+            />
           </>
         }
       />
@@ -342,7 +469,6 @@ function GroupView({
           {/* BIN-184: opt-in hushållsvy — aggregatet av delade kostnadsdata. */}
           <HouseholdPanel groupId={groupId} />
           {isOwner && <InvitePanel groupId={groupId} group={group} isOwner={isOwner} />}
-          {!isOwner && <LeavePanel groupId={groupId} myUid={myUid} onLeft={() => router.push('/grupper')} />}
         </div>
 
         <div className="space-y-3">
@@ -358,12 +484,25 @@ function GroupView({
         </div>
       </div>
 
+      {leaving && (
+        <LeaveGroupDialog
+          groupId={groupId}
+          myUid={myUid}
+          onLeft={() => router.push('/grupper')}
+          onCancel={() => setLeaving(false)}
+        />
+      )}
+
       {showSettings && (
         <GroupSettingsModal
           groupId={groupId}
           name={group.name}
           defaults={group.defaults}
+          members={members}
+          memberUids={group.memberUids}
+          myUid={myUid}
           onClose={() => setShowSettings(false)}
+          onHandedOver={() => router.push('/grupper')}
           onDelete={() => {
             void deleteGroup(groupId, myUid).then(() => router.push('/grupper'));
           }}

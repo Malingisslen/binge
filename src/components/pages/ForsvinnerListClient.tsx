@@ -3,11 +3,13 @@
 import Link from 'next/link';
 import { useQueries } from '@tanstack/react-query';
 import { useStreamingLeaving } from '@/hooks/useStreamingLeaving';
-import { getMovieLite, getTVShowLite, posterUrl } from '@/lib/tmdb/client';
+import { getEnglishTitle, getMovieLite, getTVShowLite, posterUrl } from '@/lib/tmdb/client';
+import { hasNonLatinTitle } from '@/lib/utils/titleFilter';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { EmptyState } from '@/components/ui/EmptyState';
 import type { TMDBMovie, TMDBTVShow } from '@/types/tmdb';
+import { cardClass } from '@/components/ui/Card';
 
 const MAX_SHOWN = 30;
 
@@ -44,13 +46,30 @@ export default function ForsvinnerListClient({
     })),
   });
 
+  // TMDB faller tillbaka på originaltiteln när en svensk saknas. Står den i ett
+  // annat skriftsystem hämtas den engelska titeln, bara för just den raden.
+  const swedishTitles = shown.map((_, i) => {
+    const data = titleQueries[i]?.data as TMDBMovie | TMDBTVShow | undefined;
+    return data
+      ? ('title' in data ? data.title : data.name) || ('original_title' in data ? data.original_title : data.original_name)
+      : undefined;
+  });
+  const englishQueries = useQueries({
+    queries: shown.map((e, i) => ({
+      queryKey: ['title-en', e.mediaType, e.tmdbId],
+      queryFn: ({ signal }: { signal: AbortSignal }) => getEnglishTitle(e.mediaType, e.tmdbId, { signal }),
+      enabled: hasNonLatinTitle(swedishTitles[i]),
+      staleTime: TMDB_STALE.LITE_DETAIL,
+    })),
+  });
+
   if (loading) return <LoadingView label={`Hämtar vad som försvinner från ${providerName}…`} />;
 
   if (shown.length === 0) {
     return (
       <EmptyState
         title={`Inget känt försvinner från ${providerName} just nu`}
-        body="Vi vet inte om några titlar som lämnar den här tjänsten den närmaste tiden. Datumen kommer från Movie of the Night och uppdateras löpande — titta in igen."
+        body="Inga kända titlar lämnar den här tjänsten den närmaste tiden. Datumen kommer från Movie of the Night och uppdateras löpande, så titta in igen."
       />
     );
   }
@@ -59,14 +78,13 @@ export default function ForsvinnerListClient({
     <ol className="flex flex-col gap-2">
       {shown.map((e, i) => {
         const data = titleQueries[i]?.data as TMDBMovie | TMDBTVShow | undefined;
-        const title = data
-          ? ('title' in data ? data.title : data.name) || ('original_title' in data ? data.original_title : data.original_name)
-          : '…';
+        const english = englishQueries[i]?.data;
+        const title = (english && (english.title || english.name)) || swedishTitles[i] || '…';
         const poster = posterUrl(data?.poster_path ?? null, 'w92');
         const href = `/${e.mediaType === 'movie' ? 'movie' : 'tv'}/${e.tmdbId}/`;
         return (
           <li key={`${e.tmdbId}-${e.mediaType}`}>
-            <Link href={href} className="flex items-center gap-3 bg-surface rounded p-2 border border-rule hover:shadow-lift transition-shadow">
+            <Link href={href} className={cardClass('flex items-center gap-3 p-2 hover:shadow-lift transition-shadow')}>
               {poster ? (
                 <img src={poster} alt="" width={46} height={69} loading="lazy" decoding="async" className="rounded-sm shrink-0" />
               ) : (

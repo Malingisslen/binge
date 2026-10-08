@@ -53,7 +53,15 @@ vi.mock('@/lib/firebase/db', () => ({
   },
 }));
 vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ uid: 'u1', user: null }) }));
-vi.mock('@/hooks/useFriends', () => ({ useFriendRequests: () => ({ data: [] }) }));
+// BIN-1345: vanskapsforfragningarna och blockeringarna hooken ser.
+const social = vi.hoisted(() => ({
+  requests: [] as { fromUid: string; fromDisplayName: string }[],
+  blocked: new Set<string>(),
+}));
+vi.mock('@/hooks/useFriends', () => ({ useFriendRequests: () => ({ data: social.requests }) }));
+vi.mock('@/hooks/useBlockedUsers', () => ({
+  useBlockedUsers: () => ({ isBlocked: (uid: string) => social.blocked.has(uid) }),
+}));
 vi.mock('@/lib/firebase/groups', () => ({ getRecentSessionPicksAcrossGroups: vi.fn(async () => []) }));
 vi.mock('@tanstack/react-query', () => ({ useQuery: () => ({ data: [] }) }));
 
@@ -64,6 +72,8 @@ beforeEach(() => {
   setDoc.mockClear();
   writeBatch.mockClear();
   seeded.rows = [];
+  social.requests = [];
+  social.blocked = new Set();
 });
 
 describe('useNotifications write path (BIN-1170)', () => {
@@ -121,5 +131,31 @@ describe('useNotifications write path (BIN-1170)', () => {
       'users/u1/notifications/n3',
     ]);
     updateDoc.mockReset();
+  });
+});
+
+describe('useNotifications and blocked people (BIN-1345)', () => {
+  it('leaves a request from someone I blocked out of the list and the bell count', () => {
+    social.requests = [
+      { fromUid: 'anna', fromDisplayName: 'Anna' },
+      { fromUid: 'blockad', fromDisplayName: 'Blockad' },
+    ];
+    social.blocked = new Set(['blockad']);
+    const { result } = renderHook(() => useNotifications());
+
+    expect(result.current.friendRequests.map(r => r.fromUid)).toEqual(['anna']);
+    expect(result.current.friendRequestsCount).toBe(1);
+    expect(result.current.unreadCount).toBe(1);
+  });
+
+  it('counts every request when nobody is blocked', () => {
+    social.requests = [
+      { fromUid: 'anna', fromDisplayName: 'Anna' },
+      { fromUid: 'bo', fromDisplayName: 'Bo' },
+    ];
+    const { result } = renderHook(() => useNotifications());
+
+    expect(result.current.friendRequestsCount).toBe(2);
+    expect(result.current.unreadCount).toBe(2);
   });
 });

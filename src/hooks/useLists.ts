@@ -175,30 +175,6 @@ export function useListEditors() {
   return { addEditor, removeEditor };
 }
 
-// Lists shared WITH me (I'm an editor, not owner). array-contains only (no
-// orderBy → uses the automatic single-field array index, no composite needed);
-// sorted client-side.
-export function useEditableLists() {
-  const { uid } = useAuth();
-  const [lists, setLists] = useState<UserList[]>([]);
-  useEffect(() => {
-    if (!uid) { setLists([]); return; }
-    return lazySubscribe(({ db, collection, query, where, limit, onSnapshot }) =>
-      onSnapshot(query(
-        collection(db, 'lists'),
-        where('editors', 'array-contains', uid),
-        limit(100),
-      ), snap => {
-        setLists(
-          snap.docs
-            .map(d => docToList(d.id, d.data()))
-            .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()),
-        );
-      }));
-  }, [uid]);
-  return lists;
-}
-
 export function usePublicList(listId: string) {
   return useQuery({
     queryKey: ['public-list', listId],

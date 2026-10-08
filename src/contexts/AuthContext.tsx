@@ -14,6 +14,7 @@ import {
   deleteUser,
   getIdTokenResult,
   GoogleAuthProvider,
+  getAdditionalUserInfo,
   type User,
 } from 'firebase/auth';
 import { auth } from '@/lib/firebase/config';
@@ -26,20 +27,24 @@ import { syncMyPublicProfile, clearPublicProfileSignature } from '@/lib/firebase
 import { captureError } from '@/lib/sentry';
 import { disablePushForUser, clearLocalPushTokenId, hasLocalPushToken } from '@/lib/firebase/messaging';
 import { clearAllInviteTokens } from '@/lib/groupInviteCache';
+import { nextPauseReminderDay } from '@/lib/pauseReminder';
+import { isSecondWeekVisit } from '@/lib/secondWeek';
+import { NEW_ACCOUNT_NOTIFICATION_SETTINGS } from '@/lib/notificationDefaults';
 import { CURRENT_TERMS_VERSION } from '@/lib/legal';
 import { getProvider, canonicalProviderId } from '@/lib/tmdb/providers';
 import { resolveEffectiveMonthlyCost } from '@/lib/advisor/effectiveCost';
 import type { ProviderCampaign } from '@/lib/advisor/campaignPricing';
 import { daysBetween, todayIso } from '@/lib/utils';
 import { clearNextPath } from '@/lib/nextPath';
+import { clearPendingAdd } from '@/lib/pendingAdd';
 import { markTabSession } from '@/lib/tabSession';
 import { markDeletionStarted, clearDeletionStarted, isDeletionStarted, deletionMarkerKey } from '@/lib/deletionMarker';
 import { mergeUserDoc, assertProfileWritable } from '@/lib/firebase/userDocWrite';
-import { REQUIRES_RECENT_LOGIN, STALE_SESSION_PREFLIGHT, markHandedOff, markCascadePartial } from '@/lib/authErrors';
+import { REQUIRES_RECENT_LOGIN, STALE_SESSION_PREFLIGHT, markHandedOff, markCascadePartial, isOfflineProfileError } from '@/lib/authErrors';
 import { useOptimisticMirrorField } from '@/hooks/useOptimisticMirrorField';
-import { clampToCodeUnits, MAX_DISPLAY_NAME } from '@/lib/clampText';
+import { clampToCodeUnits, MAX_BIO, MAX_DISPLAY_NAME } from '@/lib/clampText';
 import { openProfileIdentityChannel, type ProfileIdentityChannel } from '@/lib/profileIdentityChannel';
-import type { ItemVisibility, UserProfile } from '@/types';
+import type { ItemVisibility, ProviderPauseState, UserProfile } from '@/types';
 
 
 interface AuthState {
@@ -53,17 +58,23 @@ interface AuthState {
    * på loading || profileLoading.
    */
   profileLoading: boolean;
+  /**
+   * BIN-559: 'offline' när profilen inte gick att läsa för att enheten saknar
+   * anslutning. Visas som en remsa i appskalet; `retryProfileLoad` försöker igen.
+   */
+  profileLoadError: 'offline' | null;
+  retryProfileLoad: () => Promise<void>;
   // Firebase Auth email-verification-state. Gör inte gating idag men UI:t
   // kan visa en banner när emailVerified=false (och resend därifrån).
   emailVerified: boolean;
-  signIn: () => Promise<void>;
+  // Svarar om Google-inloggningen skapade ett nytt konto, så att registreringen kan räknas.
+  signIn: () => Promise<{ isNewUser: boolean }>;
   signInEmail: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, name: string, termsVersion: string) => Promise<void>;
   resendEmailVerification: () => Promise<void>;
   signOut: () => Promise<void>;
   updateProviders: (providers: number[]) => Promise<void>;
   updateDefaultView: (view: 'table' | 'grid' | 'cards') => Promise<void>;
-  updateProviderCosts: (costs: Record<number, number>) => Promise<void>;
   updateHomeMunicipality: (kommun: string | null) => Promise<void>;
   updateRotationSchedule: (schedule: NonNullable<UserProfile['rotationSchedule']>) => Promise<void>;
   // Sätt/ta bort EN providers kostnad (null = ta bort). Slår ihop mot senaste
@@ -73,11 +84,16 @@ interface AuthState {
   // funktionella-merge-härdning som setProviderCost (BIN-46, jfr BIN-40).
   setProviderRenewalDay: (providerId: number, day: number | null) => Promise<void>;
   updateProviderTier: (providerId: number, tierId: string | null) => Promise<void>;
+  // Paket I: flera nivåer i EN skrivning (null = ta bort). Introduktionen sparar
+  // alla valda nivåer på en gång; en loop över updateProviderTier läste samma
+  // inaktuella `user` i varje anrop, så bara den sista nivån fanns kvar lokalt.
+  updateProviderTiers: (changes: Record<number, string | null>) => Promise<void>;
   // BIN-417: sätt/ta bort EN providers tidsbegränsade kampanj (null = ta bort).
   // Lagrar RÅTT { monthlyCost, endDate } (aldrig ett resolvat pris), keyat på
   // kanoniskt id. Samma funktionella-merge-härdning som setProviderCost.
   setProviderCampaign: (providerId: number, campaign: ProviderCampaign | null) => Promise<void>;
   pauseProvider: (providerId: number, resumeAt?: string | null) => Promise<void>;
+  setPauseReminder: (providerId: number, remind: boolean) => Promise<void>;
   resumeProvider: (providerId: number) => Promise<void>;
   updateUsername: (username: string) => Promise<void>;
   /**
@@ -90,8 +106,9 @@ interface AuthState {
    * slapper igenom, se accepted-deviations. Anroparen gatar sin bekraftelse pa
    * att await:en inte kastade.
    */
-  updateDisplayName: (name: string) => Promise<void>;
-  updateBio: (bio: string) => Promise<void>;
+  updateDisplayName: (name: string) => Promise<string>;
+  /** Resolvar med det LAGRADE vardet, som kan vara klampat (BIN-1253). */
+  updateBio: (bio: string) => Promise<string>;
   updateDefaultVisibility: (visibility: ItemVisibility) => Promise<void>;
   /**
    * BIN-587: true när profilens defaultVisibility ÄR sparad men stämplingen av
@@ -109,6 +126,12 @@ interface AuthState {
   deletionInProgress: boolean;
   /** BIN-909 — see ProfileLoad. Blocks the whole shell, never a banner (#6 condition 4). */
   pendingReconsent: boolean;
+  /**
+   * BIN-1422 del 2 — the gate is up because an admin restore brought `users/{uid}` back
+   * without its consent stamps, not because the profile is gone. Only meaningful while
+   * `pendingReconsent` is true; ReconsentGate reads it to choose its copy.
+   */
+  reconsentRestored: boolean;
   /** BIN-909 — creates `users/{uid}` with freshly GIVEN consent. Only ReconsentGate calls it. */
   completeReconsent: () => Promise<void>;
   markNotificationsSeen: () => Promise<void>;
@@ -126,30 +149,34 @@ const AuthContext = createContext<AuthState>({
   uid: null,
   loading: true,
   profileLoading: false,
+  profileLoadError: null,
+  retryProfileLoad: async () => {},
   emailVerified: false,
-  signIn: async () => {},
+  signIn: async () => ({ isNewUser: false }),
   signInEmail: async () => {},
   register: async () => {},
   resendEmailVerification: async () => {},
   signOut: async () => {},
   updateProviders: async () => {},
   updateDefaultView: async () => {},
-  updateProviderCosts: async () => {},
   updateHomeMunicipality: async () => {},
   updateRotationSchedule: async () => {},
   setProviderCost: async () => {},
   setProviderRenewalDay: async () => {},
   updateProviderTier: async () => {},
+  updateProviderTiers: async () => {},
   setProviderCampaign: async () => {},
   pauseProvider: async () => {},
+  setPauseReminder: async () => {},
   resumeProvider: async () => {},
   updateUsername: async () => {},
-  updateDisplayName: async () => {},
-  updateBio: async () => {},
+  updateDisplayName: async (name: string) => name,
+  updateBio: async (bio: string) => bio,
   updateDefaultVisibility: async () => {},
   visibilitySyncPending: false,
   deletionInProgress: false,
   pendingReconsent: false,
+  reconsentRestored: false,
   completeReconsent: async () => {},
   markNotificationsSeen: async () => {},
   updateNotificationSettings: async () => {},
@@ -264,6 +291,7 @@ async function buildExistingProfile(data: Record<string, unknown>, firebaseUser:
     hemkommun: (data.hemkommun as string | null) ?? null,
     createdAt: (data.createdAt as { toDate?: () => Date } | undefined)?.toDate?.() ?? new Date(),
     updatedAt: (data.updatedAt as { toDate?: () => Date } | undefined)?.toDate?.() ?? new Date(),
+    secondWeekVisitAt: (data.secondWeekVisitAt as { toDate?: () => Date } | undefined)?.toDate?.(),
     termsAcceptedAt: (data.termsAcceptedAt as { toDate?: () => Date } | undefined)?.toDate?.(),
     termsVersion: data.termsVersion as string | undefined,
     ageConfirmedAt: (data.ageConfirmedAt as { toDate?: () => Date } | undefined)?.toDate?.(),
@@ -277,7 +305,10 @@ async function buildExistingProfile(data: Record<string, unknown>, firebaseUser:
       episodeReleases: (data.notificationSettings as UserProfile['notificationSettings'])?.episodeReleases ?? true,
       priceDrops: (data.notificationSettings as UserProfile['notificationSettings'])?.priceDrops ?? false,
       rotationReminders: (data.notificationSettings as UserProfile['notificationSettings'])?.rotationReminders ?? false,
+      priceChanges: (data.notificationSettings as UserProfile['notificationSettings'])?.priceChanges ?? false,
       weeklyDigest: (data.notificationSettings as UserProfile['notificationSettings'])?.weeklyDigest ?? false,
+      // Same reading as the server: only an explicit false turns the card off.
+      monthlyBill: (data.notificationSettings as UserProfile['notificationSettings'])?.monthlyBill !== false,
     },
     rotationSchedule: (data.rotationSchedule as UserProfile['rotationSchedule']) ?? undefined,
   };
@@ -382,6 +413,19 @@ interface ProfileLoad {
    * durable marker is exactly what those decisions foreclosed.
    */
   pendingReconsent: boolean;
+  /**
+   * BIN-1422 del 2 — `pendingReconsent` was set by the restored-account rule below, so the
+   * document EXISTS and `completeReconsent` must stamp consent on it rather than create it.
+   */
+  reconsentRestored: boolean;
+}
+
+// BIN-1422 del 2, Malin's decision 2 (2026-10-07): an account brought back from a backup is
+// written without `termsAcceptedAt`/`ageConfirmedAt`, so its owner answers both questions
+// again. `restoredAt` is what the restore script stamps; a profile without it never reaches
+// this rule, so an ordinary profile with a missing stamp keeps loading as it always has.
+function restoredWithoutConsent(data: Record<string, unknown>): boolean {
+  return data.restoredAt != null && (data.termsAcceptedAt == null || data.ageConfirmedAt == null);
 }
 
 async function ensureUserProfile(firebaseUser: User): Promise<ProfileLoad> {
@@ -396,7 +440,7 @@ async function ensureUserProfile(firebaseUser: User): Promise<ProfileLoad> {
   // before the read too: an aborted deletion leaves nothing to read, so the
   // create branch is precisely where such a session lands.
   if (isDeletionStarted(firebaseUser.uid)) {
-    return { profile: null, visibilitySyncPending: false, deletionInProgress: true, pendingReconsent: false };
+    return { profile: null, visibilitySyncPending: false, deletionInProgress: true, pendingReconsent: false, reconsentRestored: false };
   }
 
   const { db, doc, getDoc } = await fsdb();
@@ -405,11 +449,18 @@ async function ensureUserProfile(firebaseUser: User): Promise<ProfileLoad> {
 
   if (snap.exists()) {
     const data = snap.data();
+    // BIN-1422 del 2 — before `buildExistingProfile`, because that is where
+    // `tryAutoClaimUsername` writes. Nothing is written for a restored account until it
+    // has consented, the same rule the BIN-909 gate below follows.
+    if (restoredWithoutConsent(data)) {
+      return { profile: null, visibilitySyncPending: false, deletionInProgress: false, pendingReconsent: true, reconsentRestored: true };
+    }
     return {
       profile: await buildExistingProfile(data, firebaseUser),
       visibilitySyncPending: data.visibilitySyncPending === true,
       deletionInProgress: false,
       pendingReconsent: false,
+      reconsentRestored: false,
     };
   }
 
@@ -427,7 +478,7 @@ async function ensureUserProfile(firebaseUser: User): Promise<ProfileLoad> {
   const creationTime = firebaseUser.metadata?.creationTime;
   const accountAgeMs = creationTime ? Date.now() - new Date(creationTime).getTime() : 0;
   if (accountAgeMs > RETURNING_ACCOUNT_MIN_AGE_MS) {
-    return { profile: null, visibilitySyncPending: false, deletionInProgress: false, pendingReconsent: true };
+    return { profile: null, visibilitySyncPending: false, deletionInProgress: false, pendingReconsent: true, reconsentRestored: false };
   }
 
   return createProfileWithConsent(firebaseUser);
@@ -485,15 +536,7 @@ async function createProfileWithConsent(firebaseUser: User): Promise<ProfileLoad
     termsAcceptedAt: new Date(),
     termsVersion: CURRENT_TERMS_VERSION,
     ageConfirmedAt: new Date(),
-    notificationSettings: {
-      newEpisodes: true,
-      availableOnMyServices: true,
-      pushEnabled: false,
-      episodeReleases: true,
-      priceDrops: false,
-      rotationReminders: false,
-      weeklyDigest: false,
-    },
+    notificationSettings: { ...NEW_ACCOUNT_NOTIFICATION_SETTINGS },
   };
 
   // BIN-535: the getDoc above is NOT atomic with register()'s own setDoc —
@@ -524,6 +567,7 @@ async function createProfileWithConsent(firebaseUser: User): Promise<ProfileLoad
       visibilitySyncPending: racedData.visibilitySyncPending === true,
       deletionInProgress: false,
       pendingReconsent: false,
+      reconsentRestored: false,
     };
   }
 
@@ -532,7 +576,7 @@ async function createProfileWithConsent(firebaseUser: User): Promise<ProfileLoad
   const claimed = await tryAutoClaimUsername(firebaseUser);
   if (claimed) profile.username = claimed;
 
-  return { profile, visibilitySyncPending: false, deletionInProgress: false, pendingReconsent: false };
+  return { profile, visibilitySyncPending: false, deletionInProgress: false, pendingReconsent: false, reconsentRestored: false };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -554,6 +598,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // BIN-909 — same shape as the line above, deliberately (#14 Software Architect's call:
   // reuse the mechanism, do not invent a third "don't write right now" idiom).
   const [pendingReconsent, setPendingReconsent] = useState(false);
+  // BIN-1422 del 2 — which kind of gate is up. Mirrored in a ref because `completeReconsent`
+  // must act on the verdict `ensureUserProfile` reached, not derive a second one.
+  const [reconsentRestored, setReconsentRestored] = useState(false);
+  const reconsentRestoredRef = useRef(false);
+  // BIN-559 — profilen gick inte att läsa för att enheten saknar anslutning.
+  const [profileLoadError, setProfileLoadError] = useState<'offline' | null>(null);
   // Vilket uid vi redan gjort ett reparations-försök för i den här sessionen.
   // Ett försök per app-load — annars skulle en cascade som failar konstant
   // loopa mot Firestore (och kosta reads) hela sessionen.
@@ -620,6 +670,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // A ref, not state: it is read inside the auth callback, which never re-binds.
   const hadSessionRef = useRef(false);
 
+  // BIN-559. Profilladdningen, en väg för både inloggningen och "Försök igen". Den går
+  // alltid genom `ensureUserProfile`, så raderingsmarkören och återkommande-konto-
+  // grinden prövas vid varje försök. Löftet rejectar aldrig.
+  const loadProfile = useCallback((firebaseUser: User): Promise<void> => {
+    setProfileLoading(true);
+    return ensureUserProfile(firebaseUser)
+      .then(({ profile, visibilitySyncPending: pending, deletionInProgress: deleting, pendingReconsent: reconsent, reconsentRestored: restored }) => {
+        // Account-switch-skydd: skriv bara om samma användare
+        // fortfarande är inloggad när profilen landar.
+        if (auth.currentUser?.uid !== firebaseUser.uid) return;
+        setUser(profile);
+        // BIN-816: en påbörjad radering är inte ett laddningsfel — appen
+        // ska visa limbo-skärmen, inte sitt vanliga skal.
+        //
+        // Markören läses OM här, inte bara vidare från `deleting`.
+        // `ensureUserProfile` samplade den för hundratals millisekunder
+        // sedan, och startar en annan flik en radering under tiden hinner
+        // storage-lyssnaren nedan sätta flaggan till true — som det här
+        // svaret sedan skrev tillbaka till false, permanent, eftersom
+        // inget nytt storage-event kommer förrän markören ändras igen.
+        // Fliken blev då fullt skrivbar mitt i en pågående radering
+        // (integrationsgranskningen 2026-08-13).
+        setDeletionInProgress(deleting || isDeletionStarted(firebaseUser.uid));
+        // BIN-909. Not re-read from anywhere: unlike the deletion marker there is no
+        // cross-tab signal for this state, and there deliberately is none — a durable
+        // marker is what ADR 0019/0022 forbid. Tab B stays gated until its own auth
+        // state re-evaluates, which self-heals on reload (#14's first concern).
+        setPendingReconsent(reconsent);
+        reconsentRestoredRef.current = restored;
+        setReconsentRestored(restored);
+        // BIN-587: en tidigare misslyckad synlighets-stämpling plockas
+        // upp här och driver både varningen och omförsöks-effekten.
+        visibilitySyncPendingRef.current = pending;
+        setVisibilitySyncPending(pending);
+        // BIN-559: felflaggan nollställs här för både första laddningen och ett omförsök.
+        setProfileLoadError(null);
+      })
+      .catch((err) => {
+        console.error('Failed to load user profile:', err);
+        // uid behålls — auth är giltig även om profil-läsningen
+        // failade; user-beroende ytor null-hanterar redan.
+        if (auth.currentUser?.uid !== firebaseUser.uid) return;
+        setUser(null);
+        // BIN-559: bara ett anslutningsfel får remsan. Ett nekande eller något annat
+        // stannar i dagens beteende och göms inte bakom ett omförsök.
+        setProfileLoadError(isOfflineProfileError(err) ? 'offline' : null);
+      })
+      .finally(() => {
+        if (auth.currentUser?.uid === firebaseUser.uid) setProfileLoading(false);
+      });
+  }, []);
+
   useEffect(() => {
     // App Check måste vara initierad innan onAuthStateChanged subscribar —
     // Auth attachar App Check-tokens till alla Identity Toolkit-calls (inkl.
@@ -656,45 +758,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // i en lazy useState-init innan hydration.
           try { window.localStorage.setItem('binge:wasLoggedIn', '1'); } catch { /* private mode */ }
 
-          void ensureUserProfile(firebaseUser)
-            .then(({ profile, visibilitySyncPending: pending, deletionInProgress: deleting, pendingReconsent: reconsent }) => {
-              // Account-switch-skydd: skriv bara om samma användare
-              // fortfarande är inloggad när profilen landar.
-              if (auth.currentUser?.uid !== firebaseUser.uid) return;
-              setUser(profile);
-              // BIN-816: en påbörjad radering är inte ett laddningsfel — appen
-              // ska visa limbo-skärmen, inte sitt vanliga skal.
-              //
-              // Markören läses OM här, inte bara vidare från `deleting`.
-              // `ensureUserProfile` samplade den för hundratals millisekunder
-              // sedan, och startar en annan flik en radering under tiden hinner
-              // storage-lyssnaren nedan sätta flaggan till true — som det här
-              // svaret sedan skrev tillbaka till false, permanent, eftersom
-              // inget nytt storage-event kommer förrän markören ändras igen.
-              // Fliken blev då fullt skrivbar mitt i en pågående radering
-              // (integrationsgranskningen 2026-08-13). Filen egen regel är att
-              // markören läses färskt vid varje grindat ställe; det här var det
-              // enda stället som cachade den.
-              setDeletionInProgress(deleting || isDeletionStarted(firebaseUser.uid));
-              // BIN-909. Not re-read from anywhere: unlike the deletion marker there is no
-              // cross-tab signal for this state, and there deliberately is none — a durable
-              // marker is what ADR 0019/0022 forbid. Tab B stays gated until its own auth
-              // state re-evaluates, which self-heals on reload (#14's first concern).
-              setPendingReconsent(reconsent);
-              // BIN-587: en tidigare misslyckad synlighets-stämpling plockas
-              // upp här och driver både varningen och omförsöks-effekten.
-              visibilitySyncPendingRef.current = pending;
-              setVisibilitySyncPending(pending);
-            })
-            .catch((err) => {
-              console.error('Failed to load user profile:', err);
-              // uid behålls — auth är giltig även om profil-läsningen
-              // failade; user-beroende ytor null-hanterar redan.
-              if (auth.currentUser?.uid === firebaseUser.uid) setUser(null);
-            })
-            .finally(() => {
-              if (auth.currentUser?.uid === firebaseUser.uid) setProfileLoading(false);
-            });
+          void loadProfile(firebaseUser);
         } else {
           // BIN-732 — the sign-out itself, not the tab that asked for it.
           // Firebase broadcasts a sign-out to every tab on the origin, but the
@@ -716,6 +780,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (hadSessionRef.current) {
             hadSessionRef.current = false;
             clearNextPath();
+            clearPendingAdd();
           }
           setUser(null);
           setUid(null);
@@ -731,6 +796,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // session. Leaving it set would show "Välkommen tillbaka" to the next, unrelated
           // account on a shared device until its own profile load resolved.
           setPendingReconsent(false);
+          reconsentRestoredRef.current = false;
+          setReconsentRestored(false);
+          setProfileLoadError(null);
           visibilitySyncPendingRef.current = false;
           setVisibilitySyncPending(false);
           // BIN-617: the auto-repair is latched to one attempt per uid per app
@@ -751,7 +819,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       unsubscribe?.();
     };
-  }, []);
+  }, [loadProfile]);
 
   // BIN-748 — keep a record of which page this tab is showing a session on,
   // somewhere a RELOAD of the tab can still read it. `hadSessionRef` dies with
@@ -869,6 +937,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, [uid, deletionInProgress, user?.displayName, user?.username, user?.photoURL, user?.bio, user?.isPublic, user?.createdAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // BIN-1442: stamp the first visit in the account's second week, once. The ref
+  // keeps a re-render (or a failed write) from writing again this session; the
+  // field itself keeps later sessions from writing at all. Best effort: a missed
+  // stamp only lowers an Insikter sum.
+  const secondWeekStampedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!uid || !user || deletionInProgress) return;
+    if (user.secondWeekVisitAt || secondWeekStampedFor.current === uid) return;
+    if (!isSecondWeekVisit(user.createdAt, new Date())) return;
+    secondWeekStampedFor.current = uid;
+    mergeUserDoc(uid, kit => ({ secondWeekVisitAt: kit.serverTimestamp() })).catch(err => {
+      console.error('[secondWeekVisitAt]', err);
+      captureError(err, { scope: 'auth', kind: 'secondWeekVisit-stamp' });
+    });
+  }, [uid, user, deletionInProgress]);
+
   // BIN-587: reparera en cascade som failade. Profilen kan säga 'private'
   // medan items fortfarande bär effectiveVisibility:'public' — och läs-regeln
   // litar på item-fältet utan att slå upp profilen, så läckan består tills
@@ -899,7 +983,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(async () => {
     const provider = new GoogleAuthProvider();
-    await signInWithPopup(auth, provider);
+    const cred = await signInWithPopup(auth, provider);
+    return { isNewUser: getAdditionalUserInfo(cred)?.isNewUser === true };
   }, []);
 
   const signInEmail = useCallback(async (email: string, password: string) => {
@@ -945,7 +1030,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       providerPauses: {},
       calibrationGenres: null,
       hemkommun: null,
-      notificationSettings: { newEpisodes: true, availableOnMyServices: true, pushEnabled: false, episodeReleases: true, priceDrops: false, rotationReminders: false, weeklyDigest: false },
+      notificationSettings: { ...NEW_ACCOUNT_NOTIFICATION_SETTINGS },
       termsAcceptedAt: kit.serverTimestamp(),
       termsVersion,
       ageConfirmedAt: kit.serverTimestamp(), // BIN-348: the register form gates on the 13+ checkbox; record it.
@@ -974,6 +1059,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // what reaches the OTHER tabs, but it lands a network round-trip later and
     // never lands at all if `firebaseSignOut` throws.
     clearNextPath();
+    clearPendingAdd();
     // BIN-844: unregister push BEFORE the sign-out, and capture the uid first.
     //
     // Two orderings are load-bearing and neither is obvious:
@@ -1109,10 +1195,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error('namnbytet nådde inga gruppmedlemsrader:', err);
       captureError(err, { scope: 'auth', kind: 'identityFanOut-query' });
     }
+    // BIN-1174: förfrågningar jag skickat och som ingen svarat på. Grupp-inbjudningar
+    // skrivs INTE om — det är en daterad post i accepted-deviations.
+    try {
+      const { updateSentFriendRequestIdentity } = await import('@/lib/firebase/friends');
+      const failures = await updateSentFriendRequestIdentity(uid, identity);
+      for (const err of failures) {
+        console.error('en vänförfrågan behöll det gamla namnet:', err);
+        captureError(err, { scope: 'auth', kind: 'identityFanOut-friendRequest' });
+      }
+    } catch (err) {
+      console.error('namnbytet nådde inga vänförfrågningar:', err);
+      captureError(err, { scope: 'auth', kind: 'identityFanOut-friendRequest' });
+    }
   }, [uid]);
 
   const updateDefaultView = useCallback((view: 'table' | 'grid' | 'cards') => updateUserField('defaultView', view), [updateUserField]);
-  const updateProviderCosts = useCallback((costs: Record<number, number>) => updateUserField('providerCosts', costs), [updateUserField]);
   // BIN-172: hemkommun = "jag har ett lånekort i {kommun}". null rensar fältet.
   const updateHomeMunicipality = useCallback((kommun: string | null) => updateUserField('hemkommun', kommun), [updateUserField]);
   // BIN-181: persist the rotation-calendar snapshot the reminder function reads.
@@ -1121,17 +1219,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // delar spegel-plus-rollback-mönstret via useOptimisticMirrorField — se den
   // hooken för VARFÖR spegeln uppdateras synkront (BIN-40/46) och rullas
   // tillbaka identity-checkat vid write-fel (BIN-516/531).
+  // BIN-1435: servern skrivs per nyckel, med deleteField() för ett rensat värde. En
+  // merge av hela kartan behåller en nyckel som saknas i den, så att rensa en kostnad,
+  // kampanj eller förnyelsedag syntes bara tills sidan laddades om.
+  // Lokalt ändras också bara den nyckeln, på det senaste läget: två skrivningar som blir
+  // klara i omvänd ordning får inte ta bort varandras värden på skärmen.
+  const writeProviderMapKey = useCallback(async (
+    field: 'providerCosts' | 'providerCampaigns' | 'providerRenewalDays',
+    { key, value }: { key: number; value: unknown },
+  ) => {
+    if (!uid) return;
+    if (!Number.isInteger(key) || key <= 0) throw new Error(`ogiltigt tjänst-id: ${key}`);
+    await mergeUserDoc(uid, kit => ({ [field]: { [key]: value ?? kit.deleteField() } }));
+    setUser(prev => {
+      if (!prev) return null;
+      const map: Record<number, unknown> = { ...(prev[field] ?? {}) };
+      if (value == null) delete map[key];
+      else map[key] = value;
+      return { ...prev, [field]: map };
+    });
+  }, [uid]);
   const commitProviderCosts = useCallback(
-    (next: Record<number, number>) => updateUserField('providerCosts', next),
-    [updateUserField],
+    (_next: Record<number, number>, changed: { key: number; value: number | null }) =>
+      writeProviderMapKey('providerCosts', changed),
+    [writeProviderMapKey],
   );
   const setProviderCost = useOptimisticMirrorField(uid, user?.providerCosts, commitProviderCosts);
   // BIN-417: kampanjer lagrar RÅA { monthlyCost, endDate } keyed by CANONICAL
   // id (så ett alias-id och dess kanoniska träffar samma post, i linje med
   // resolveEffectiveMonthlyCost). Kanoniseringen sker här, inte i hooken.
   const commitProviderCampaigns = useCallback(
-    (next: Record<number, ProviderCampaign>) => updateUserField('providerCampaigns', next),
-    [updateUserField],
+    (_next: Record<number, ProviderCampaign>, changed: { key: number; value: ProviderCampaign | null }) =>
+      writeProviderMapKey('providerCampaigns', changed),
+    [writeProviderMapKey],
   );
   const setCampaignByKey = useOptimisticMirrorField(uid, user?.providerCampaigns, commitProviderCampaigns);
   const setProviderCampaign = useCallback(
@@ -1171,42 +1291,90 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid, hhProviders, hhCosts, hhTiers, hhCampaigns]);
   const commitProviderRenewalDays = useCallback(
-    (next: Record<number, number>) => updateUserField('providerRenewalDays', next),
-    [updateUserField],
+    (_next: Record<number, number>, changed: { key: number; value: number | null }) =>
+      writeProviderMapKey('providerRenewalDays', changed),
+    [writeProviderMapKey],
   );
   const setProviderRenewalDay = useOptimisticMirrorField(uid, user?.providerRenewalDays, commitProviderRenewalDays);
-  const updateProviderTier = useCallback(async (providerId: number, tierId: string | null) => {
+  const updateProviderTiers = useCallback(async (changes: Record<number, string | null>) => {
     if (!uid || !user) return;
     const { getProvider } = await import('@/lib/tmdb/providers');
-    const provider = getProvider(providerId);
-    const tier = tierId ? provider?.tiers?.find(t => t.id === tierId) : null;
+    // Keyed by the CANONICAL id, which is what resolveProviderMonthlyCost reads; an
+    // id the catalog does not know is dropped. A tier id the catalog does not know
+    // clears the tier, as before.
+    const resolved = Object.entries(changes).flatMap(([key, tierId]) => {
+      const provider = getProvider(Number(key));
+      if (!provider) return [];
+      const known = tierId != null && provider.tiers?.some(t => t.id === tierId);
+      return [{ providerId: provider.id, tierId: known ? tierId : null }];
+    });
+    if (resolved.length === 0) return;
 
-    const nextTiers = { ...(user.providerTiers ?? {}) };
-    const nextCosts = { ...(user.providerCosts ?? {}) };
-
-    if (tierId && tier) {
-      nextTiers[providerId] = tierId;
-      // Live tier pricing: the cost derives from the chosen tier at read time
-      // (resolveProviderMonthlyCost), so we no longer freeze tier.cost into
-      // providerCosts. Deleting any stale frozen snapshot here IS the lazy
-      // migration — providerCosts now means "egen inskriven kostnad" only, so a
-      // tier user + a providerCosts entry is a leftover we clean on next touch.
-      delete nextCosts[providerId];
-    } else {
-      delete nextTiers[providerId];
-    }
-
-    await mergeUserDoc(uid, { providerTiers: nextTiers, providerCosts: nextCosts });
-    setUser(prev => prev ? { ...prev, providerTiers: nextTiers, providerCosts: nextCosts } : null);
+    // Per-key writes, not whole maps: a merge write leaves an OMITTED nested key
+    // in place on the server, so removing a key from a full map never removed it.
+    // deleteField() does. Live tier pricing: the cost derives from the chosen tier
+    // at read time (resolveProviderMonthlyCost), so a chosen tier deletes any
+    // frozen providerCosts entry — providerCosts means "egen inskriven kostnad" only.
+    await mergeUserDoc(uid, kit => {
+      const tiers: Record<number, unknown> = {};
+      const costs: Record<number, unknown> = {};
+      for (const { providerId, tierId } of resolved) {
+        tiers[providerId] = tierId ?? kit.deleteField();
+        if (tierId) costs[providerId] = kit.deleteField();
+      }
+      return Object.keys(costs).length > 0
+        ? { providerTiers: tiers, providerCosts: costs }
+        : { providerTiers: tiers };
+    });
+    // Functional update, so two writers in flight cannot overwrite each other locally.
+    setUser(prev => {
+      if (!prev) return null;
+      const nextTiers = { ...(prev.providerTiers ?? {}) };
+      const nextCosts = { ...(prev.providerCosts ?? {}) };
+      for (const { providerId, tierId } of resolved) {
+        if (tierId) {
+          nextTiers[providerId] = tierId;
+          delete nextCosts[providerId];
+        } else {
+          delete nextTiers[providerId];
+        }
+      }
+      return { ...prev, providerTiers: nextTiers, providerCosts: nextCosts };
+    });
   }, [uid, user]);
+  const updateProviderTier = useCallback(
+    (providerId: number, tierId: string | null) => updateProviderTiers({ [providerId]: tierId }),
+    [updateProviderTiers],
+  );
+  // BIN-1442: providerPauses and pauseReminderNext are always written together,
+  // so the server's due-query can never point at a reminder that is not there.
+  const writePauses = useCallback(async (next: Record<number, ProviderPauseState>) => {
+    if (!uid) return;
+    const pauseReminderNext = nextPauseReminderDay(next);
+    await mergeUserDoc(uid, { providerPauses: next, pauseReminderNext });
+    setUser(prev => prev ? { ...prev, providerPauses: next, pauseReminderNext } : null);
+  }, [uid]);
   const pauseProvider = useCallback((providerId: number, resumeAt: string | null = null) => {
     const current = user?.providerPauses ?? {};
     const existing = current[providerId];
     if (existing && existing.resumeAt === resumeAt) return Promise.resolve();
     const pausedAt = existing?.pausedAt ?? todayIso();
-    const next = { ...current, [providerId]: { pausedAt, resumeAt } };
-    return updateUserField('providerPauses', next);
-  }, [updateUserField, user?.providerPauses]);
+    // A reminder follows the pause to its new end date; an open-ended pause has none.
+    // A dropped reminder is written as false: the merge write would keep the old key.
+    const remind = existing?.remind === true && resumeAt != null;
+    const entry: ProviderPauseState = existing?.remind !== undefined ? { pausedAt, resumeAt, remind } : { pausedAt, resumeAt };
+    const next = { ...current, [providerId]: entry };
+    return writePauses(next);
+  }, [writePauses, user?.providerPauses]);
+  // BIN-1442 — "Påminn mig" after Pausa. `false` is written rather than the key
+  // removed: a merge write keeps map keys it is not given.
+  const setPauseReminder = useCallback((providerId: number, remind: boolean) => {
+    const current = user?.providerPauses ?? {};
+    const existing = current[providerId];
+    if (!existing || (existing.remind === true) === remind) return Promise.resolve();
+    if (remind && existing.resumeAt == null) return Promise.resolve();
+    return writePauses({ ...current, [providerId]: { ...existing, remind } });
+  }, [writePauses, user?.providerPauses]);
   const resumeProvider = useCallback(async (providerId: number) => {
     if (!uid) return;
     const current = user?.providerPauses ?? {};
@@ -1243,7 +1411,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // users/{uid} här ingår i en större atomisk batch. Grinden anropas direkt
     // i stället — samma implementation, en annan ingång (userDocWrite.ts).
     assertProfileWritable(uid);
-    const { db, doc, collection, writeBatch, serverTimestamp } = await fsdb();
+    const { db, doc, collection, writeBatch, serverTimestamp, deleteField } = await fsdb();
     const batch = writeBatch(db);
     const historyRef = doc(collection(db, 'users', uid, 'pauseHistory'));
     batch.set(historyRef, {
@@ -1256,13 +1424,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       savedAmount,
       createdAt: serverTimestamp(),
     });
+    const pauseReminderNext = nextPauseReminderDay(next);
+    // BIN-1442: deleteField(), not the map without the key. A merge write keeps an
+    // omitted nested key on the server (see updateProviderTiers), so the resumed pause
+    // used to stay stored, and a "Påminn mig" on it would still have been sent.
     batch.set(
       doc(db, 'users', uid),
-      { providerPauses: next, updatedAt: serverTimestamp() },
+      { providerPauses: { [providerId]: deleteField() }, pauseReminderNext, updatedAt: serverTimestamp() },
       { merge: true },
     );
     await batch.commit();
-    setUser(prev => prev ? { ...prev, providerPauses: next } : null);
+    setUser(prev => prev ? { ...prev, providerPauses: next, pauseReminderNext } : null);
   }, [uid, user]);
   // BIN-1154: visningsnamnet far en redigeringsyta. Den ror flera lagringar av
   // samma personuppgift, och ordningen mellan dem ar ett beslut, inte en slump.
@@ -1309,9 +1481,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Vardet ar det KLAMPADE, samma strang som gick till dokumentet - aldrig ett
     // omharlett eller omlast (#27 DBA).
     await publishIdentityChange({ displayName: clamped, username: user?.username ?? null });
+    // BIN-1275: det lagrade vardet, sa namnfaltet kan visa det som faktiskt sparades.
+    return clamped;
   }, [updateUserField, publishIdentityChange, user?.username]);
 
-  const updateBio = useCallback((bio: string) => updateUserField('bio', bio), [updateUserField]);
+  // BIN-1253: samma klampning som den publika projektionen redan gor, sa den privata
+  // kopian och projektionen aldrig bar olika text.
+  const updateBio = useCallback(async (bio: string) => {
+    const clamped = clampToCodeUnits(bio, MAX_BIO);
+    await updateUserField('bio', clamped);
+    return clamped;
+  }, [updateUserField]);
 
   const updateDefaultVisibility = useCallback(async (visibility: ItemVisibility) => {
     if (!uid) return;
@@ -1414,9 +1594,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // grupp andra fortfarande är med i, och en avbruten radering som går att
     // göra om är det bättre utfallet.
     // A failure that already WROTE must not fall through to the message promising
-    // nothing was deleted. The server marks its refusal when it attempted a write;
-    // ownership has moved, the uid has left `memberUids` and rows are gone, and
-    // getting back in needs a fresh invite. Same class as BIN-876, one layer up.
+    // nothing was deleted. The server marks its refusal when it attempted a write.
+    // Same class as BIN-876, one layer up.
     try {
       await handOverOwnedGroups();
     } catch (err) {
@@ -1475,10 +1654,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // BIN-909 — the only thing that creates `users/{uid}` for a returning account, and it
   // runs ONLY from `ReconsentGate`'s submit handler, after the user has ticked both boxes.
   //
-  // The consent stamps are written by `createProfileWithConsent` with `serverTimestamp()`
-  // at this moment — never backdated from `metadata.creationTime`, which would reproduce
-  // the manufactured record this ticket exists to remove (#6 Data Protection Officer's
-  // condition 2). `termsVersion` comes from `CURRENT_TERMS_VERSION`.
+  // The consent stamps are written with `serverTimestamp()` at this moment — never
+  // backdated from `metadata.creationTime`, which would reproduce the manufactured record
+  // this ticket exists to remove (#6 Data Protection Officer's condition 2). `termsVersion` comes from `CURRENT_TERMS_VERSION`.
   //
   // Nothing here re-checks the age threshold: reaching this function at all means
   // `ensureUserProfile` already decided, and re-deriving the decision at a second site is
@@ -1498,6 +1676,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // It THROWS rather than returning quietly: `ReconsentGate.onSubmit` catches, so a
     // silent return would leave the person looking at a form that did nothing.
     assertProfileWritable(firebaseUser.uid);
+    if (reconsentRestoredRef.current) {
+      // BIN-1422 del 2 — the restored document already holds the person's data, so only
+      // the three consent fields are stamped onto it. Creating it again would overwrite
+      // what the restore brought back.
+      await mergeUserDoc(firebaseUser.uid, kit => ({
+        termsAcceptedAt: kit.serverTimestamp(),
+        ageConfirmedAt: kit.serverTimestamp(),
+        termsVersion: CURRENT_TERMS_VERSION,
+      }));
+      const { db, doc, getDoc } = await fsdb();
+      const snap = await getDoc(doc(db, 'users', firebaseUser.uid));
+      if (auth.currentUser?.uid !== firebaseUser.uid) return;
+      const data = snap.data() ?? {};
+      const restoredProfile = await buildExistingProfile(data, firebaseUser);
+      if (auth.currentUser?.uid !== firebaseUser.uid) return;
+      setUser(restoredProfile);
+      visibilitySyncPendingRef.current = data.visibilitySyncPending === true;
+      setVisibilitySyncPending(visibilitySyncPendingRef.current);
+      reconsentRestoredRef.current = false;
+      setReconsentRestored(false);
+      setPendingReconsent(false);
+      return;
+    }
     const { profile } = await createProfileWithConsent(firebaseUser);
     // Account-switch guard, same shape as the profile-load path above: only adopt the
     // result if the same person is still signed in when it lands.
@@ -1620,21 +1821,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [runDeletionCascade]);
 
 
+  // BIN-559: omförsöket efter ett anslutningsfel. Samma väg som inloggningen,
+  // och det skriver bara tillstånd om samma användare fortfarande är inloggad.
+  const retryProfileLoad = useCallback(async () => {
+    const current = auth.currentUser;
+    if (!current) return;
+    await loadProfile(current);
+  }, [loadProfile]);
+
   const value = useMemo(
     () => ({
-      user, uid, loading, profileLoading, emailVerified,
+      user, uid, loading, profileLoading, profileLoadError, retryProfileLoad, emailVerified,
       signIn, signInEmail, register, resendEmailVerification, signOut,
-      updateProviders, updateDefaultView, updateProviderCosts, updateHomeMunicipality, updateRotationSchedule, setProviderCost, setProviderRenewalDay, updateProviderTier, setProviderCampaign,
-      pauseProvider, resumeProvider,
-      updateUsername, updateDisplayName, updateBio, updateDefaultVisibility, visibilitySyncPending, deletionInProgress, pendingReconsent, completeReconsent, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
+      updateProviders, updateDefaultView, updateHomeMunicipality, updateRotationSchedule, setProviderCost, setProviderRenewalDay, updateProviderTier, updateProviderTiers, setProviderCampaign,
+      pauseProvider, setPauseReminder, resumeProvider,
+      updateUsername, updateDisplayName, updateBio, updateDefaultVisibility, visibilitySyncPending, deletionInProgress, pendingReconsent, reconsentRestored, completeReconsent, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
       setCalibrationGenres, deleteAccount,
     }),
     [
-      user, uid, loading, profileLoading, emailVerified,
+      user, uid, loading, profileLoading, profileLoadError, retryProfileLoad, emailVerified,
       signIn, signInEmail, register, resendEmailVerification, signOut,
-      updateProviders, updateDefaultView, updateProviderCosts, updateHomeMunicipality, updateRotationSchedule, setProviderCost, setProviderRenewalDay, updateProviderTier, setProviderCampaign,
-      pauseProvider, resumeProvider,
-      updateUsername, updateDisplayName, updateBio, updateDefaultVisibility, visibilitySyncPending, deletionInProgress, pendingReconsent, completeReconsent, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
+      updateProviders, updateDefaultView, updateHomeMunicipality, updateRotationSchedule, setProviderCost, setProviderRenewalDay, updateProviderTier, updateProviderTiers, setProviderCampaign,
+      pauseProvider, setPauseReminder, resumeProvider,
+      updateUsername, updateDisplayName, updateBio, updateDefaultVisibility, visibilitySyncPending, deletionInProgress, pendingReconsent, reconsentRestored, completeReconsent, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
       setCalibrationGenres, deleteAccount,
     ]
   );

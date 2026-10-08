@@ -1,13 +1,16 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { Play } from 'lucide-react';
+import { backdropUrl } from '@/lib/tmdb/client';
 
-// M1: trailer-sektionen renderade en trasig-bild-låda när YouTube-videon var
-// borttagen/otillgänglig. Vi visar nu en klick-för-att-spela-facade med
-// YouTube-thumbnailen; först vid klick laddas iframen. Om thumbnailen 404:ar
-// (onError) eller YouTube returnerar sin grå 120×90-placeholder (videon finns
-// inte längre) döljer vi hela sektionen — hellre ingen trailer än en trasig.
+// Ingenting hämtas från YouTube förrän besökaren trycker på spela: ingen
+// YouTube-miniatyr. Platshållaren visar titelns bakgrundsbild från TMDB, som
+// sidan redan hämtar bilder från (integritetspolicyns avsnitt 4). Först vid
+// klick laddas spelaren från youtube-nocookie.com. Det är så integritetspolicyn
+// beskriver flödet (avsnitt 4 och 8 i src/app/integritet/page.tsx) — ändra
+// båda tillsammans.
 
 interface TrailerVideo {
   key: string;
@@ -15,11 +18,17 @@ interface TrailerVideo {
   type: string;
 }
 
-export default function TrailerSection({ video }: { video: TrailerVideo | undefined }) {
+export default function TrailerSection({
+  video,
+  backdropPath = null,
+}: {
+  video: TrailerVideo | undefined;
+  backdropPath?: string | null;
+}) {
   const [playing, setPlaying] = useState(false);
-  const [failed, setFailed] = useState(false);
 
-  if (!video || failed) return null;
+  if (!video) return null;
+  const still = backdropUrl(backdropPath, 'w780');
 
   return (
     <section className="detail-section">
@@ -30,7 +39,7 @@ export default function TrailerSection({ video }: { video: TrailerVideo | undefi
       <div className="raw ratio-16-9" style={{ maxWidth: 720 }}>
         {playing ? (
           <iframe
-            src={`https://www.youtube.com/embed/${video.key}?autoplay=1`}
+            src={`https://www.youtube-nocookie.com/embed/${video.key}?autoplay=1`}
             title={video.name}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowFullScreen
@@ -50,24 +59,20 @@ export default function TrailerSection({ video }: { video: TrailerVideo | undefi
               border: 0,
               cursor: 'pointer',
               background: 'var(--placeholder-fill)',
+              overflow: 'hidden',
             }}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={`https://i.ytimg.com/vi/${video.key}/hqdefault.jpg`}
-              alt=""
-              width={480}
-              height={270}
-              loading="lazy"
-              decoding="async"
-              onError={() => setFailed(true)}
-              onLoad={e => {
-                // YouTube svarar 200 med en grå 120×90-default när videon
-                // saknas — behandla det som "ingen användbar trailer".
-                if (e.currentTarget.naturalWidth <= 120) setFailed(true);
-              }}
-              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-            />
+            {still && (
+              <img
+                src={still}
+                alt=""
+                width={780}
+                height={439}
+                loading="lazy"
+                decoding="async"
+                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+              />
+            )}
             <span
               aria-hidden="true"
               style={{
@@ -96,6 +101,12 @@ export default function TrailerSection({ video }: { video: TrailerVideo | undefi
           </button>
         )}
       </div>
+      {!playing && (
+        <p className="text-xxs text-ink-3 mt-1">
+          När du trycker på spela laddas spelaren från YouTube. Google får då din IP-adress och kan lagra
+          uppgifter i din webbläsare. <Link href="/integritet/" className="text-acc-deep underline">Läs mer</Link>
+        </p>
+      )}
     </section>
   );
 }

@@ -10,23 +10,21 @@ import { useEffect } from 'react';
  * Sätter:
  * - document.title (browser-flik)
  * - meta[name=description]
- * - og:title / og:description (social-share — Slack/Twitter/LinkedIn renderar JS)
+ * - og:title / og:description
  * - link[rel=canonical]
  * - meta[name=robots] om `indexable` anges (annars rörs den inte)
  *
  * **Indexable-flaggan**: catch-all-routens statiska HTML har noindex som default
- * (se src/app/[...path]/page.tsx). Page-clients som *vet* att deras content
- * ska vara indexerbart (MoviePageClient/TVShowPageClient/PersonPageClient med
- * giltig TMDB-data) sätter `indexable: true` så vi tar bort noindex efter
- * hydration. När data är undefined (loading/error) lämnar vi noindex orörd —
- * defensiv default.
+ * (se src/app/[...path]/page.tsx). En page-client som *vet* att sidan ska vara
+ * indexerbar sätter `indexable: true` så vi tar bort noindex efter hydration.
+ * Härled vilka som gör det: `git grep -n "indexable" -- src/components/pages`.
+ * Titel- och personsidorna gör det inte längre (ADR 0024).
  *
  * Använd i klient-komponenten direkt efter att data är hämtad:
  *
  *   usePageMeta({
- *     title: `${movie.title} (${year}) — var streamar jag?`,
- *     description: `Se var du kan streama ${movie.title} i Sverige...`,
- *     indexable: !!movie,
+ *     title: `Streama på ${provider.name} i Sverige`,
+ *     indexable,
  *   });
  *
  * Vid unmount återställs defaulten från layout.tsx så nästa sida startar rent.
@@ -38,7 +36,7 @@ import { useEffect } from 'react';
  * server-rendering — som ligger utanför scope givet static-export-upplägget.
  */
 
-const DEFAULT_TITLE = 'Binge.nu — Håll koll på vad du tittar på';
+const DEFAULT_TITLE = 'Binge.nu – dina serier och vad de kostar';
 const DEFAULT_DESCRIPTION = 'Svensk mediatracker för film och TV-serier. Se var titlar finns att streama i Sverige.';
 // Matchar layout.tsx OG-default — återställs vid unmount så en titelsidas poster
 // inte läcker till nästa sidas share-preview (BIN-30).

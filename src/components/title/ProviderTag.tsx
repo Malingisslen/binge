@@ -2,6 +2,8 @@ import type { TMDBProvider } from '@/types';
 import { getProvider, canonicalProviderId, affiliateWrap } from '@/lib/tmdb/providers';
 import { useAuth } from '@/hooks/useAuth';
 import { type Offer, isLeavingSoon, formatLeaving } from '@/lib/streaming/offers';
+import { trackEvent } from '@/lib/analytics';
+import { tagClass } from '@/components/ui/Badge';
 
 interface ProviderTagProps {
   provider: TMDBProvider;
@@ -10,9 +12,10 @@ interface ProviderTagProps {
   // BIN-145: obligatorisk — en default på epoch-0 (1970) dolde tyst "lämnar
   // snart"-badgen om en anropare glömde proppen. Krävs nu, ingen tyst fallback.
   nowMs: number;
+  mediaType: 'movie' | 'tv';
 }
 
-export default function ProviderTag({ provider, size = 'sm', offer, nowMs }: ProviderTagProps) {
+export default function ProviderTag({ provider, size = 'sm', offer, nowMs, mediaType }: ProviderTagProps) {
   const { user } = useAuth();
   const mapped = getProvider(provider.provider_id);
   const isMine = user?.myProviders.includes(canonicalProviderId(provider.provider_id)) ?? false;
@@ -26,16 +29,12 @@ export default function ProviderTag({ provider, size = 'sm', offer, nowMs }: Pro
 
   const chip =
     size === 'sm' ? (
-      <span
-        className={`text-xxs px-1 py-[1px] border rounded-sm inline-block mr-[2px] ${
-          isMine ? 'border-acc-deep text-acc-deep' : 'border-rule text-ink-3'
-        }`}
-      >
+      <span className={tagClass(isMine ? 'acc' : 'muted', 'mr-0.5')}>
         {label}
       </span>
     ) : (
       <span
-        className={`text-xs px-2 py-[2px] border rounded-sm inline-block mr-1 ${
+        className={`text-xs px-2 py-0.5 border rounded-sm inline-block mr-1 ${
           isMine ? 'border-acc-deep text-acc-deep font-semibold' : 'border-rule text-ink-3'
         }`}
       >
@@ -46,9 +45,9 @@ export default function ProviderTag({ provider, size = 'sm', offer, nowMs }: Pro
   const body = (
     <span className="inline-flex items-center gap-1">
       {chip}
-      {price && <span className="text-ink-2 text-[12px]">{price}</span>}
+      {price && <span className="text-ink-2 text-sm">{price}</span>}
       {leaving && (
-        <span className="rounded-sm bg-acc-soft text-acc-deep px-1 text-[11px]">
+        <span className="rounded-sm bg-acc-soft text-acc-deep px-1 text-xs">
           {formatLeaving(offer!)}
         </span>
       )}
@@ -58,7 +57,12 @@ export default function ProviderTag({ provider, size = 'sm', offer, nowMs }: Pro
   return offer?.link ? (
     // BIN-173: route the outbound deeplink through affiliateWrap — a no-op
     // passthrough until an AFFILIATE_PROGRAMS entry exists for this provider.
-    <a href={affiliateWrap(provider.provider_id, offer.link)} target="_blank" rel="noopener noreferrer">
+    <a
+      href={affiliateWrap(provider.provider_id, offer.link)}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={() => trackEvent('provider_clicked', { providerId: canonicalProviderId(provider.provider_id), offerType: offer.type, mediaType })}
+    >
       {body}
     </a>
   ) : (

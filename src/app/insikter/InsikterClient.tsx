@@ -9,6 +9,8 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { useDateRange } from './state/useDateRange';
 import { useInsightsData } from './state/useInsightsData';
 import { InsightsProvider } from './state/InsightsContext';
+import { Button } from '@/components/ui/Button';
+import { eyebrowClass } from '@/components/ui/Eyebrow';
 import {
   Toolbar, MetricGrid, MetricTile, TimeSeriesChart, Donut, Funnel,
   Histogram, TopList, ExplainDrawer,
@@ -17,7 +19,7 @@ import {
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="mt-7">
-      <h2 className="text-[13px] font-semibold uppercase tracking-wide text-ink-3 mb-2">{title}</h2>
+      <h2 className={eyebrowClass({ size: 'xs', className: 'mb-2' })}>{title}</h2>
       {children}
     </section>
   );
@@ -59,12 +61,12 @@ export default function InsikterClient() {
 
   // ── Access / loading / error gates ─────────────────────────────────────────
   if (authLoading || profileLoading) {
-    return <div className="canvas">{header}<LoadingView label="Kontrollerar behörighet…" /></div>;
+    return <div>{header}<LoadingView label="Kontrollerar behörighet…" /></div>;
   }
 
   if (!hasAccess) {
     return (
-      <div className="canvas">
+      <div>
         {header}
         <div className="mt-6">
           <EmptyState
@@ -77,21 +79,21 @@ export default function InsikterClient() {
   }
 
   if (isFirstLoad && loading) {
-    return <div className="canvas">{header}<LoadingView label="Laddar insikter…" variant="detail" /></div>;
+    return <div>{header}<LoadingView label="Laddar insikter…" variant="detail" /></div>;
   }
 
   if (error && !data) {
     return (
-      <div className="canvas">
+      <div>
         {header}
         <div className="mt-6">
           <EmptyState
             title="Kunde inte ladda insikter"
             body={error}
             action={
-              <button type="button" onClick={() => window.location.reload()} className="btn btn-acc">
+              <Button type="button" onClick={() => window.location.reload()} variant="acc">
                 Försök igen
-              </button>
+              </Button>
             }
           />
         </div>
@@ -100,20 +102,20 @@ export default function InsikterClient() {
   }
 
   if (!data) {
-    return <div className="canvas">{header}<LoadingView label="Ingen data ännu." /></div>;
+    return <div>{header}<LoadingView label="Ingen data ännu." /></div>;
   }
 
   // ── Dashboard ───────────────────────────────────────────────────────────────
   return (
     <InsightsProvider value={data}>
-      <div className={`canvas ${loading ? 'opacity-70 transition-opacity' : ''}`}>
+      <div className={loading ? 'opacity-70 transition-opacity' : undefined}>
         {header}
 
         {(error || data.partial) && (
           <div className="mt-3 rounded-md border border-danger bg-danger-soft text-danger-ink px-3 py-2 text-sm" role="alert">
             {error
               ? <>{error} — <button type="button" onClick={() => window.location.reload()} className="underline">Försök igen</button></>
-              : 'Visar delvis data — någon datakälla var otillgänglig (t.ex. Plausible eller rollupen har inte körts än).'}
+              : 'Visar delvis data — någon datakälla var otillgänglig (t.ex. händelseräkningen eller rollupen har inte körts än).'}
           </div>
         )}
 
@@ -125,23 +127,35 @@ export default function InsikterClient() {
           <MetricGrid>
             <MetricTile metricKey="totalUsers" />
             <MetricTile metricKey="newUsers" />
-            <MetricTile metricKey="activeVisitors" />
             <MetricTile metricKey="totalTitlesTracked" />
             <MetricTile metricKey="totalReviews" />
             <MetricTile metricKey="titlesAdded" />
+            <MetricTile metricKey="activeUsers7d" />
+            <MetricTile metricKey="activeUsers30d" />
           </MetricGrid>
         </Section>
 
         <Section title="Tillväxt">
+          <p className="text-base text-ink-3 mb-2">
+            Registreringar och inloggningsmetod räknar händelser, inte personer.
+          </p>
           <div className="grid lg:grid-cols-2 gap-3">
             <TimeSeriesChart metricKey="signupsTrend" />
             <Funnel metricKey="onboardingFunnel" />
             <Donut metricKey="signinMethodSplit" />
+            <Donut metricKey="secondWeekReturn" />
             <div className="self-start">
               <MetricGrid>
                 <MetricTile metricKey="donateClicks" />
+                <MetricTile metricKey="providerClicks" />
+                <MetricTile metricKey="shareClicks" />
+                <MetricTile metricKey="priceCheckTotals" />
+                <MetricTile metricKey="priceCheckSaves" />
               </MetricGrid>
             </div>
+            <TopList metricKey="signupLandingPages" />
+            <Donut metricKey="providerClicksByType" />
+            <Donut metricKey="shareClicksBySurface" />
           </div>
         </Section>
 
@@ -177,9 +191,11 @@ export default function InsikterClient() {
         </Section>
 
         <Section title="Trafik">
+          <p className="text-base text-ink-3 mb-2">
+            Ingen källa: Binge räknar händelser, inte besök. Besökare, sidvisningar och hänvisare mäts inte.
+          </p>
           <MetricGrid>
             <MetricTile metricKey="pageViews" />
-            <MetricTile metricKey="visitors" />
             <MetricTile metricKey="avgSessionDuration" />
           </MetricGrid>
           <div className="grid lg:grid-cols-2 gap-3 mt-3">

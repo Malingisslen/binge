@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import DynamicRouter from '@/components/pages/DynamicRouter';
 import { NotFound } from '@/components/ui/NotFound';
+import { buttonClass } from '@/components/ui/Button';
 
 export default function CatchAllClient() {
   return (
@@ -13,7 +14,7 @@ export default function CatchAllClient() {
           crumb="404"
           title="Sidan hittades inte"
           body="Länken kan vara felaktig eller så har sidan flyttats."
-          action={<Link href="/" className="btn btn-acc btn-sm no-underline">Till startsidan</Link>}
+          action={<Link href="/" className={buttonClass({ variant: 'acc', size: 'sm', className: 'no-underline' })}>Till startsidan</Link>}
         />
       }
     />

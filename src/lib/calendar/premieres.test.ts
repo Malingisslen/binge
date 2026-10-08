@@ -261,6 +261,26 @@ describe('selectQuarterEvents', () => {
     expect((events[0] as EpisodeEntry).provider).toBe('Live');
   });
 
+  it('collapses a premiere and a finale of the same series on the same day into the premiere', () => {
+    const finale = episode({ tmdbId: 8, episodeCode: 'S2E8', airDate: '2026-08-02', isFinale: true });
+    const premiere = episode({ tmdbId: 8, episodeCode: 'S2E1', airDate: '2026-08-02', isPremiere: true });
+    for (const order of [[finale, premiere], [premiere, finale]]) {
+      const events = selectQuarterEvents(order, WINDOW);
+      expect(events).toHaveLength(1);
+      expect((events[0] as EpisodeEntry).episodeCode).toBe('S2E1');
+    }
+  });
+
+  it('keeps a finale on a different day, and another series on the same day', () => {
+    const entries: CalendarEntry[] = [
+      episode({ tmdbId: 9, episodeCode: 'S1E1', airDate: '2026-08-03', isPremiere: true }),
+      episode({ tmdbId: 9, episodeCode: 'S1E8', airDate: '2026-09-21', isFinale: true }),
+      episode({ tmdbId: 10, episodeCode: 'S4E1', airDate: '2026-08-03', isPremiere: true }),
+    ];
+    const events = selectQuarterEvents(entries, WINDOW) as EpisodeEntry[];
+    expect(events.map(e => `${e.tmdbId}:${e.episodeCode}`)).toEqual(['9:S1E1', '10:S4E1', '9:S1E8']);
+  });
+
   it('sorts by airDate then Swedish title', () => {
     const entries: CalendarEntry[] = [
       movie({ tmdbId: 1, title: 'Örn', airDate: '2026-08-10' }),

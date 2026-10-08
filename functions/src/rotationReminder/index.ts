@@ -1,6 +1,8 @@
 /**
  * BIN-181 — rotation reminder push ("Dags att pausa Viaplay" / "Viaplay är värt
- * det igen").
+ * det igen"). Since BIN-1442 each reminder is also a card in the app's bell, and
+ * the same daily run sends the "Påminn mig" reminders for paused services
+ * (runPauseReminders below).
  *
  * onSchedule('every 24 hours', europe-west1). Queries users who opted into
  * rotation reminders (notificationSettings.rotationReminders == true), reads the
@@ -16,7 +18,7 @@
  * fields. Reads only opted-in users (indexed equality query), so it's cheap.
  */
 
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { logger } from 'firebase-functions/v2';
 import { sendPushToUser } from '../push';
@@ -25,6 +27,83 @@ import { dueRotationEvents, type RotationScheduleItem } from './logic';
 // which are Stockholm wall-clock dates — so today must be the Stockholm day too,
 // not UTC (a 01:00 local reminder would otherwise fire against yesterday's window).
 import { stockholmDayId } from '../util/dayId';
+import { PROVIDER_NAMES } from '../shared/providerNames';
+import { createInboxCard } from '../shared/inboxCard';
+import {
+  countFollowedAiring,
+  duePauseReminders,
+  nextPauseReminderAfter,
+  pauseReminderBody,
+  type FollowedSeries,
+} from './pauseReminder';
+
+/** Users handled per run by the pause-reminder pass; the rest wait a day. */
+const PAUSE_REMINDER_PAGE = 500;
+/** Followed series read per due user; past it the count in the text is a floor. */
+const FOLLOWED_READ_LIMIT = 1000;
+
+/**
+ * BIN-1442 — "Påminn mig" after Pausa. Finds users whose earliest reminded pause
+ * ends today or earlier, and for each due pause writes a bell card and, when push
+ * is on, a push. Nothing in the user's document reaches the text except through
+ * pauseReminder.ts's checks.
+ *
+ * Order per pause: card (create, idempotent) → marker (create; if it exists the
+ * push already went) → push. Then the reminders are cleared with update(), which
+ * fails rather than recreating a profile that was deleted meanwhile.
+ */
+async function runPauseReminders(db: Firestore, today: string): Promise<number> {
+  const snap = await db.collection('users')
+    .where('pauseReminderNext', '<=', today)
+    .select('providerPauses', 'notificationSettings')
+    .limit(PAUSE_REMINDER_PAGE)
+    .get();
+  let sent = 0;
+  for (const doc of snap.docs) {
+    try {
+      const data = doc.data();
+      const pushEnabled = (data.notificationSettings as { pushEnabled?: boolean } | undefined)?.pushEnabled === true;
+      const due = duePauseReminders(data.providerPauses, today);
+      if (due.length > 0) {
+        const followed = await db.collection('users').doc(doc.id).collection('watchlist')
+          .where('status', '==', 'mina')
+          .select('subscriptionProviders', 'nextAirDate')
+          .limit(FOLLOWED_READ_LIMIT)
+          .get();
+        const series = followed.docs.map(d => d.data() as FollowedSeries);
+        for (const r of due) {
+          const body = pauseReminderBody(r.providerName, countFollowedAiring(series, r.providerId, today));
+          await createInboxCard(db, doc.id, `pause-reminder-${r.providerId}-${r.resumeAt}`, { title: r.providerName, body });
+          const markerRef = db.collection('rotationReminderState').doc(`${doc.id}_${r.providerId}_pause_${r.resumeAt}`);
+          try {
+            await markerRef.create({ uid: doc.id, notifiedAt: FieldValue.serverTimestamp() });
+          } catch (err) {
+            if ((err as { code?: unknown }).code === 6) continue; // pushed on an earlier run
+            throw err;
+          }
+          await sendPushToUser(doc.id, {
+            title: r.providerName,
+            body,
+            actionUrl: '/savings/',
+            tag: `pause-reminder-${r.providerId}`,
+          }, { pushEnabled });
+          sent += 1;
+        }
+      }
+      // Clear what was handled, and anything malformed that kept the user in the
+      // query: the next reminder is recomputed from what is still valid.
+      const next = nextPauseReminderAfter(data.providerPauses, due.map(r => r.providerId));
+      // Map keys are numeric provider ids, so the dotted path is unambiguous.
+      const patch: Record<string, unknown> = { pauseReminderNext: next ?? FieldValue.delete() };
+      for (const r of due) patch[`providerPauses.${r.providerId}.remind`] = FieldValue.delete();
+      await doc.ref.update(patch);
+    } catch (err) {
+      logger.error(`rotationReminderNotify: pause reminder for ${doc.id} failed`, err);
+    }
+  }
+  logger.info('rotationReminderNotify pause reminders done', { dueUsers: snap.size, sent });
+  return sent;
+}
 
 function parseSchedule(raw: unknown): RotationScheduleItem[] {
   if (!Array.isArray(raw)) return [];
@@ -51,6 +130,12 @@ export const rotationReminderNotify = onSchedule(
     const db = getFirestore();
     const today = stockholmDayId();
 
+    try {
+      await runPauseReminders(db, today);
+    } catch (err) {
+      logger.error('rotationReminderNotify: pause reminder query failed', err);
+    }
+
     let snap;
     try {
       snap = await db.collection('users').where('notificationSettings.rotationReminders', '==', true).get();
@@ -72,19 +157,22 @@ export const rotationReminderNotify = onSchedule(
           if ((await markerRef.get()).exists) continue; // already reminded
 
           const isCancel = ev.kind === 'cancel';
-          // Push-only (no inbox doc) — the inbox model is tmdbId-shaped and a
-          // rotation reminder has no title; the FCM push carries the message.
+          // BIN-1442: the name comes from the server's list when it knows the
+          // service; the client-written shortName is only the fallback.
+          const name = PROVIDER_NAMES[ev.providerId] ?? ev.shortName;
+          const title = isCancel ? 'Dags att rotera' : 'Värt det igen';
+          const body = isCancel
+            ? `Dags att pausa ${name} — inget du följer sänds just nu`
+            : `${name} är värt det igen — nytt att följa`;
+          // BIN-1442: a bell card as well as the push (a `system` card needs no
+          // title id), so the reminder reaches someone without push turned on.
+          await createInboxCard(db, doc.id, `rotation-${ev.providerId}-${ev.kind}-${ev.date}`, { title, body });
           await sendPushToUser(doc.id, {
-            title: isCancel ? 'Dags att rotera' : 'Värt det igen',
-            body: isCancel
-              ? `Dags att pausa ${ev.shortName} — inget du följer sänds just nu`
-              : `${ev.shortName} är värt det igen — nytt att följa`,
+            title,
+            body,
             actionUrl: '/savings/',
             tag: `rotation-${ev.providerId}`,
           }, { pushEnabled });
-          // uid stored so a future delete-cascade can sweep these markers; until
-          // then they're sealed garbage (default-deny, UIDs never recycled), same
-          // accepted residual as titleRatingsRateLimit.
           await markerRef.set({ uid: doc.id, notifiedAt: FieldValue.serverTimestamp() }, { merge: true });
           totalNotified += 1;
         }

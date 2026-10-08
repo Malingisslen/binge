@@ -8,7 +8,7 @@ import { entryHref, entryBadge, entryMetaLine, canMarkWatched } from '@/lib/cale
 import type { CalendarEntry } from '@/hooks/useCalendar';
 
 // Direction H calendar event card. Vertical layout: 16:9 duotone still on
-// top with a tiny badge (premiär / ny ikväll / säsongsfinal / digital release)
+// top with a tiny badge (premiär / ny ikväll / säsongsfinal / digitalt släpp)
 // overlapping top-left, body below with title (line-clamped 2), meta line, and
 // a 2-line synopsis. Today's event wears a 3px plum inset rule.
 //
@@ -46,7 +46,7 @@ export default function EventCard({ entry, isTonight = false }: Props) {
   const overview = entry.kind === 'episode' ? entry.episodeOverview : entry.overview;
 
   const ariaLabel = entry.kind === 'movie'
-    ? `${entry.title} · digital release`
+    ? `${entry.title} · digitalt släpp`
     : `${entry.title} · ${entry.episodeCode}`;
 
   const handleToggle = async () => {
@@ -70,7 +70,7 @@ export default function EventCard({ entry, isTonight = false }: Props) {
   // card surface (and flip that strip's cursor from pointer to default) for no
   // a11y gain — it stays inside the anchor, with the spacing it always had.
   const footerStyle = { padding: '0 12px 12px', cursor: 'default' } as const;
-  const footerLabelStyle = { fontSize: 10.5, color: 'var(--ink-3)', letterSpacing: 0.04 } as const;
+  const footerLabelStyle = { fontSize: 'var(--fs-xs)', color: 'var(--ink-3)', letterSpacing: 0.04 } as const;
 
   return (
     <div className={`ev${isTonight ? ' is-tonight' : ''}${watched ? ' is-watched' : ''}`}>

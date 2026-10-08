@@ -18,6 +18,7 @@ import { DELETION_IN_PROGRESS, DELETION_IN_PROGRESS_MESSAGE } from '@/lib/deleti
 const watchlist = vi.hoisted(() => ({
   getItem: vi.fn<(mediaType: MediaType, tmdbId: number) => WatchlistItem | null>(() => null),
   upsertTitle: vi.fn(),
+  items: [] as WatchlistItem[],
   removeItem: vi.fn(),
   // BIN-596: the two readiness facts `loading` cannot express. Seeded to the
   // settled state so the BIN-641 cases below exercise a normal, usable button;
@@ -53,6 +54,8 @@ const push = vi.hoisted(() => vi.fn());
 // ?next= param) untested here.
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push }) }));
 vi.mock('@/hooks/useWatchlist', () => ({ useWatchlist: () => watchlist }));
+const confirmFirstFollow = vi.hoisted(() => vi.fn());
+vi.mock('@/hooks/useFollowConfirmation', () => ({ useFirstFollowConfirmation: () => confirmFirstFollow }));
 vi.mock('@/hooks/useMarkSeen', () => ({ useMarkSeen: () => markSeen }));
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => auth }));
 vi.mock('@/contexts/ToastContext', () => ({ useToast: () => ({ show: toast }) }));
@@ -152,6 +155,44 @@ describe('StatusButton — "Sedd igen" (BIN-641)', () => {
 // Every case here asserts the TOAST as well as the write. A gate that blocks the
 // write but still says "The Matrix — Vill se" is worse than no gate: the user
 // walks away believing it was saved.
+describe('StatusButton — the menu answers a keyboard (A11Y-2)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    watchlist.getItem.mockReturnValue(null);
+    watchlist.snapshotSettled = true;
+    watchlist.listenerFailed = false;
+    auth.uid = 'u1';
+    auth.user = { uid: 'u1' };
+    auth.loading = false;
+  });
+
+  it('says it is open, closes on Escape and hands focus back to the button', () => {
+    render(film());
+    const trigger = screen.getByRole('button', { name: '+ Lägg till' });
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('button', { name: 'Vill se' })).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('button', { name: 'Vill se' })).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
+  it('ignores other keys', () => {
+    render(film());
+    const trigger = screen.getByRole('button', { name: '+ Lägg till' });
+    fireEvent.click(trigger);
+
+    fireEvent.keyDown(document, { key: 'Enter' });
+
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  });
+});
+
 describe('StatusButton — the write waits for auth AND the watchlist snapshot (BIN-596)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -259,6 +300,8 @@ describe('StatusButton — the write waits for auth AND the watchlist snapshot (
     // sessionStorage, NEVER a ?next= param — that would ride along to Firebase's
     // Google-hosted auth handler. `?from=` is not on the return allowlist.
     expect(window.sessionStorage.getItem('binge:nextAfterLogin')).toBe('/movie/603/');
+    // BIN-1442: the film itself rides along and is added after sign-in.
+    expect(JSON.parse(window.sessionStorage.getItem('binge:pendingAdd') ?? 'null')).toMatchObject({ tmdbId: 603, mediaType: 'movie' });
     // And still no write, no menu, no success toast.
     expect(watchlist.upsertTitle).not.toHaveBeenCalled();
     expect(markSeen).not.toHaveBeenCalled();
@@ -432,5 +475,55 @@ describe('StatusButton — a refused write SAYS so (BIN-1038)', () => {
     } finally {
       process.off('unhandledRejection', onUnhandled);
     }
+  });
+});
+
+// BIN-1442 — following the FIRST series swaps the plain confirmation for the
+// notification question; every other add keeps the plain toast.
+describe('StatusButton — first follow (BIN-1442)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    watchlist.getItem.mockReturnValue(null);
+    watchlist.upsertTitle.mockResolvedValue('written');
+    watchlist.items = [];
+    watchlist.snapshotSettled = true;
+    watchlist.listenerFailed = false;
+    auth.uid = 'u1';
+    auth.user = { uid: 'u1' };
+    auth.loading = false;
+  });
+
+  const followSeries = async () => {
+    render(<StatusButton tmdbId={1399} mediaType="tv" title="Game of Thrones" posterPath={null} releaseYear={2011} />);
+    fireEvent.click(screen.getAllByRole('button')[0]);
+    await act(async () => { fireEvent.click(screen.getByText('Följ')); });
+  };
+
+  it('asks about notifications after the first followed series', async () => {
+    await followSeries();
+    expect(confirmFirstFollow).toHaveBeenCalledWith('Game of Thrones', 'Game of Thrones — Följer');
+    expect(toast).not.toHaveBeenCalled();
+  });
+
+  // #28's condition: `items` is empty before the first snapshot, so an existing
+  // user would look brand new. The library gate must stop the write first.
+  it('asks nothing before the library has loaded', async () => {
+    watchlist.snapshotSettled = false;
+    render(<StatusButton tmdbId={1399} mediaType="tv" title="Game of Thrones" posterPath={null} releaseYear={2011} />);
+    const trigger = screen.getAllByRole('button')[0];
+    if (!(trigger as HTMLButtonElement).disabled) {
+      fireEvent.click(trigger);
+      const follow = screen.queryByText('Följ');
+      if (follow) await act(async () => { fireEvent.click(follow); });
+    }
+    expect(watchlist.upsertTitle).not.toHaveBeenCalled();
+    expect(confirmFirstFollow).not.toHaveBeenCalled();
+  });
+
+  it('keeps the plain confirmation when another series is already followed', async () => {
+    watchlist.items = [{ tmdbId: 1, mediaType: 'tv', status: 'mina' } as WatchlistItem];
+    await followSeries();
+    expect(confirmFirstFollow).not.toHaveBeenCalled();
+    expect(toast).toHaveBeenCalledWith('Game of Thrones — Följer');
   });
 });

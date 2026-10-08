@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   localIsoDate, toIsoDate, todayIso, addDaysFromToday,
-  formatSwedishDate, formatEpisodeCode, pluralSv, daysBetween,
+  formatSwedishDate, formatLibraryDate, formatEpisodeCode, pluralSv, daysBetween,
 } from './utils';
 
 describe('localIsoDate / toIsoDate — local calendar, not UTC', () => {
@@ -88,5 +88,17 @@ describe('formatEpisodeCode / pluralSv / daysBetween', () => {
     const future = new Date();
     future.setDate(future.getDate() + 5);
     expect(daysBetween(today, future)).toBe(5);
+  });
+});
+
+describe('formatLibraryDate', () => {
+  const now = new Date(2026, 9, 7);
+
+  it('leaves out the year for a date this year', () => {
+    expect(formatLibraryDate(new Date(2026, 9, 7), now)).toBe('7 okt');
+  });
+
+  it('adds the year for a date in another year', () => {
+    expect(formatLibraryDate(new Date(2024, 2, 15), now)).toBe('15 mars 2024');
   });
 });

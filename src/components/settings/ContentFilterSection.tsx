@@ -61,18 +61,18 @@ export function ContentFilterSection() {
           />
           Dölj titlar med icke-latinska alfabet
         </label>
-        <p className="text-xs text-ink-3 mt-1 ml-[22px] mb-3">
+        <p className="text-xs text-ink-3 mt-1 ml-6 mb-3">
           Filtrerar bort titlar på t.ex. koreanska, ryska eller thailändska från utforska och rekommendationer.
         </p>
 
-        <div className="text-xs font-semibold text-ink-2 mb-[6px]">Dölj innehåll från länder</div>
+        <div className="text-xs font-semibold text-ink-2 mb-1.5">Dölj innehåll från länder</div>
         <p className="text-xs text-ink-3 mb-2">
           Filtrera bort filmer och serier från specifika länder i utforska, trender och rekommendationer.
         </p>
 
-        <div className="grid grid-cols-3 gap-x-2 gap-y-[2px] mb-2">
+        <div className="grid grid-cols-3 gap-x-2 gap-y-0.5 mb-2">
           {COMMON_FILTER_COUNTRIES.map(code => (
-            <label key={code} className="flex items-center gap-[6px] cursor-pointer text-base py-[2px]">
+            <label key={code} className="flex items-center gap-1.5 cursor-pointer text-base py-0.5">
               <input
                 type="checkbox"
                 checked={hiddenSet.has(code)}
@@ -85,7 +85,7 @@ export function ContentFilterSection() {
         </div>
 
         <div className="border-t border-rule-2 pt-2">
-          <div className="flex items-center gap-[5px] px-2 py-[3px] bg-bg border border-rule rounded-sm mb-[6px]">
+          <div className="flex items-center gap-1.5 px-2 py-1 bg-bg border border-rule rounded-sm mb-1.5">
             <Search size={12} className="text-ink-3 shrink-0" />
             <input
               type="text"
@@ -95,9 +95,9 @@ export function ContentFilterSection() {
               className="bg-transparent border-none text-ink text-xs font-[inherit] outline-none w-full placeholder:text-ink-3"
             />
           </div>
-          <div className="max-h-[200px] overflow-y-auto space-y-[1px]">
+          <div className="max-h-[200px] overflow-y-auto space-y-px">
             {remainingCountries.map(c => (
-              <label key={c.code} className="flex items-center gap-[6px] cursor-pointer text-base py-[2px]">
+              <label key={c.code} className="flex items-center gap-1.5 cursor-pointer text-base py-0.5">
                 <input
                   type="checkbox"
                   checked={hiddenSet.has(c.code)}

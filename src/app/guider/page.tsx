@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { hubSections } from '@/lib/seo/hubLinks';
 import { jsonLd } from '@/lib/seo/jsonLd';
+import { cardClass } from '@/components/ui/Card';
 
 export const dynamic = 'force-static';
 
@@ -71,7 +72,7 @@ export default function GuiderPage() {
   };
 
   return (
-    <div className="canvas">
+    <div>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(collectionPage) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(itemList) }} />
 
@@ -81,10 +82,10 @@ export default function GuiderPage() {
         standfirst="Var du ser filmer och serier på varje tjänst, bästa titlarna per genre, billigaste vägen att se hela filmserier, och vad som snart försvinner."
       />
 
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-6 mt-6">
         {sections.map((section) => (
           <section key={section.id} aria-labelledby={`hub-${section.id}`}>
-            <h2 id={`hub-${section.id}`} className="text-[17px] font-semibold text-ink mb-1">
+            <h2 id={`hub-${section.id}`} className="text-xl font-semibold text-ink mb-1">
               {section.heading}
             </h2>
             <p className="text-sm text-ink-2 mb-3">{section.blurb}</p>
@@ -93,7 +94,7 @@ export default function GuiderPage() {
                 <li key={l.href}>
                   <Link
                     href={l.href}
-                    className="inline-block bg-surface rounded border border-rule px-3 py-1.5 text-base text-ink hover:shadow-lift transition-shadow"
+                    className={cardClass('inline-block px-3 py-1.5 text-base text-ink hover:shadow-lift transition-shadow')}
                   >
                     {l.label}
                   </Link>

@@ -90,6 +90,22 @@ describe('SeasonList — curated season-0 specials (BIN-580)', () => {
     groupState.progress = new Map();
   });
 
+  it('opens seasons from real buttons that say whether they are open (A11Y-2)', () => {
+    // The season and specials headers were click-only <div>s: no tab stop, and nothing
+    // for a screen reader to announce. aria-expanded has to FOLLOW the click, so both
+    // states are read, from the same element.
+    renderList(DW_REVIVAL);
+    const specials = screen.getByRole('button', { name: /Specialavsnitt/ });
+    const season1 = screen.getByRole('button', { name: /Säsong 1/ });
+    expect(specials).toHaveAttribute('aria-expanded', 'false');
+    expect(season1).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(specials);
+
+    expect(specials).toHaveAttribute('aria-expanded', 'true');
+    expect(season1).toHaveAttribute('aria-expanded', 'false');
+  });
+
   it('shows the specials section for a curated show and lists ONLY the allow-listed episodes', () => {
     renderList(DW_REVIVAL);
     // Collapsed first: the section header is there, the episodes are not.
@@ -296,5 +312,32 @@ describe('SeasonList — curated season-0 specials (BIN-580)', () => {
     renderList(DW_REVIVAL);
     expect(screen.getByText(/Säsong 1/)).toBeTruthy();
     expect(screen.getByText(/Säsong 2/)).toBeTruthy();
+  });
+});
+
+describe('SeasonList — en kommande säsong utan avsnitt', () => {
+  beforeEach(() => {
+    useTVSeason.mockReset();
+    useTVSeason.mockReturnValue({ data: undefined, isLoading: false });
+    groupState.group = null;
+  });
+
+  it('visar "Kommande" i stället för "(0 avs)"', () => {
+    const upcoming = [
+      { id: 3, name: 'Säsong 3', season_number: 3, episode_count: 0, air_date: null, overview: '', poster_path: null },
+    ] as unknown as TMDBSeason[];
+    render(
+      <SeasonList
+        tmdbId={BREAKING_BAD}
+        seasons={upcoming}
+        isWatched={() => false}
+        markEpisodeWatched={markEpisodeWatched}
+        markSeasonWatched={async () => {}}
+        markSeasonUnwatched={async () => {}}
+        getSeasonProgress={() => ({ watched: 0, total: 0 })}
+      />
+    );
+    expect(screen.getByText('Kommande')).toBeTruthy();
+    expect(screen.queryByText(/avs\)/)).toBeNull();
   });
 });

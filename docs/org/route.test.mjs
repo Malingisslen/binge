@@ -1,14 +1,14 @@
 // Tests for the blast-radius router (docs/org/route.mjs).
 //
-// Run: npm test (this file is in vitest.config.ts's `include`, deliberately — a test
-// file outside the runner's globs is silently never run by `npm test` while passing
-// when invoked by hand, so being in the globs is the whole point. BIN-802.)
+// Run: npm run test:process (this file is in vitest.config.ts's `include`, deliberately —
+// a test file outside the runner's globs is silently never run while passing when invoked
+// by hand, so being in the globs is the whole point. BIN-802.)
 //
 // The clause that used to stand here — that route.mjs's `--selftest` flag "is wired to
 // nothing" — was struck 2026-08-25 (BIN-833). It stopped being true in 851696d, which
 // added `docs/org/gate-symmetry.test.mjs`'s "the router's own golden cases are wired to
 // something that runs (BIN-880)" case; that case spawns `node docs/org/route.mjs
-// --selftest` and requires exit 0, under this same `npm test`.
+// --selftest` and requires exit 0, under this same `npm run test:process`.
 //
 // Why this file exists: the router decides BOTH whether a stakeholder panel is
 // convened before a change is built AND — since BIN-776 — whether a sprint may
@@ -21,10 +21,12 @@
 // contract should fail here, which is the point.
 
 import { describe, it, expect } from 'vitest';
-import { existsSync, globSync, readFileSync, readdirSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, globSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { route, isCodePath, TOOLING_CODE_FILES, mdBlock } from './route.mjs';
+import { route, isCodePath, TOOLING_CODE_FILES, mdBlock, readReviewGates, gateCovers } from './route.mjs';
 // The REAL config object, imported the way vitest itself loads it — never scraped as text.
 // A routine reformat of vitest.config.ts would make a regex-scraped copy silently green,
 // which is the "a shrink reads as a pass" failure this whole family exists to stop
@@ -78,6 +80,8 @@ describe('the gates this file interrogates exist (BIN-906)', () => {
   });
 });
 
+// The ownership cases below route with `{ feature: true }`: under the default policy an
+// ungated path is an ordinary skip whoever owns it, so only a feature still shows the seat.
 describe('folder-ownership inheritance (BIN-788)', () => {
   it('seats the directory owner for an unlisted sibling file', () => {
     // The fixture is deliberately a path that does not exist: the branch under test is
@@ -87,7 +91,7 @@ describe('folder-ownership inheritance (BIN-788)', () => {
     // Before BIN-788 this matched nothing and routed `skip` — an unreviewed change
     // in a heavily-owned directory.
     const unlisted = 'src/lib/tmdb/__unlisted-sibling.ts';
-    const r = route([unlisted]);
+    const r = route([unlisted], { feature: true });
 
     expect(r.tier).toBe('medium');
     expect(r.reasonCode).toBe('owned');
@@ -114,7 +118,7 @@ describe('folder-ownership inheritance (BIN-788)', () => {
 
 describe('unmapped code is not cleared code (BIN-788)', () => {
   it('routes an unowned code path medium and seats #14 Software Architect', () => {
-    const r = route(['src/lib/no-such-dir/brandNew.ts']);
+    const r = route(['src/lib/no-such-dir/brandNew.ts'], { feature: true });
 
     expect(r.tier).toBe('medium');
     expect(r.reasonCode).toBe('unmapped-code');
@@ -127,7 +131,7 @@ describe('unmapped code is not cleared code (BIN-788)', () => {
   it('still names an unowned code path when another file carries the tier', () => {
     // The gap must survive being mixed with owned code — otherwise it is only
     // reported in the one case where it is already obvious.
-    const r = route(['src/lib/mediaTypeDocId.ts', 'src/lib/no-such-dir/brandNew.ts']);
+    const r = route(['src/lib/mediaTypeDocId.ts', 'src/lib/no-such-dir/brandNew.ts'], { feature: true });
 
     expect(r.tier).toBe('medium');
     expect(r.reasonCode).toBe('owned');
@@ -265,7 +269,7 @@ describe('the longest matching pattern wins', () => {
     // Taking the FIRST matching pattern instead of the longest gives #1 the
     // directory's specificity (18 chars) — a tie with #2's inherited 18 — which the
     // weight tie-break then hands to #2. So this assertion fails on that mutant.
-    const r = route(['src/components/ui/DuotonePoster.tsx']);
+    const r = route(['src/components/ui/DuotonePoster.tsx'], { feature: true });
 
     expect(r.tier).toBe('medium');
     expect(r.panel).toEqual([1]);
@@ -331,8 +335,8 @@ describe('the router and the gate scripts cannot clear themselves (BIN-805)', ()
     // Pinning either specific answer HERE would defeat the point: the router's own
     // failure text tells you to fix an unowned path by naming it in
     // docs/role-responsibilities.md, and a `[14]` pin would make following that advice
-    // fail `npm test`, which gates deploy.yml. Improving ownership must never break the
-    // deploy; the same trap is refused for the gap baseline in gen-ownership-map.test.mjs.
+    // fail `npm run test:process`. Improving ownership must never turn the check red; the
+    // same trap is refused for the gap baseline in gen-ownership-map.test.mjs.
     // Both specific answers ARE pinned, each in its own named test below, so flipping one
     // reddens exactly one assertion, by name.
     //
@@ -509,13 +513,15 @@ describe('the file that decides who reviews everything else (BIN-851)', () => {
     expect(r.panel).toEqual([25]);
   });
 
-  it('seats the same owner for the decided-deviations ledger', () => {
-    // The mirror image: this file decides what a reviewer is FORBIDDEN to flag, so
-    // appending to it silently retires a finding class.
-    const r = route(['.claude/rules/accepted-deviations.md']);
+  it('seats the same owner for the decided-deviations index and ledger', () => {
+    // The mirror image: these files decide what a reviewer is FORBIDDEN to flag, so
+    // appending to them silently retires a finding class.
+    for (const path of ['.claude/rules/accepted-deviations.md', '.claude/accepted-deviations.md']) {
+      const r = route([path]);
 
-    expect(r.tier).toBe('medium');
-    expect(r.panel).toEqual([25]);
+      expect(r.tier).toBe('medium');
+      expect(r.panel).toEqual([25]);
+    }
   });
 
   it('names both files in the BLOCKING gate list too, not just here', () => {
@@ -524,6 +530,7 @@ describe('the file that decides who reviews everything else (BIN-851)', () => {
     // assertions above green and still reopen the hole.
     expect(integrationGateMatches('.claude/shared-plugin.json')).toBe(true);
     expect(integrationGateMatches('.claude/rules/accepted-deviations.md')).toBe(true);
+    expect(integrationGateMatches('.claude/accepted-deviations.md')).toBe(true);
     // Reached by a `keyed` rule, not a pattern (BIN-990). Without this the keyed arm in
     // gateMatches() is pinned by nothing in this file.
     expect(integrationGateMatches('.claude/settings.json')).toBe(true);
@@ -631,8 +638,9 @@ describe("the reviewers' own instructions and the hooks reach a gate (BIN-869)",
 // TOOLING_CODE_FILES and already matched by the blocking gate — so weakening the check
 // itself cannot slip past a reviewer, the hole BIN-869 closed one file over.
 // `fs.globSync` needs Node >= 22 (still flagged experimental there, hence the one-line
-// warning in the run output); every workflow that runs `npm test` pins node-version 22 —
-// derive them rather than trusting this: grep -l "npm test" .github/workflows/*.yml
+// warning in the run output); every workflow that runs `npm run test:process` pins
+// node-version 22 — derive them rather than trusting this:
+// grep -l "test:process" .github/workflows/*.yml
 const TOOLING_MJS = globSync(['docs/**/*.mjs', 'scripts/**/*.mjs'], { cwd: REPO_ROOT }).map(posix);
 
 // Files that a `.test.mjs` sibling nominates as candidates but that are deliberately NOT
@@ -652,11 +660,13 @@ const NOT_REVIEW_MACHINERY = {
 };
 
 // The candidate set, derived — test file plus the sibling it tests, when that exists.
-const MJS_TEST_FILES = globSync(vitestConfig.test.include, {
-  cwd: REPO_ROOT,
-  exclude: vitestConfig.test.exclude,
-})
-  .map(posix)
+// vitest.config.ts keeps its globs per project (BIN-1426), so the set is every project's.
+const VITEST_PROJECTS = vitestConfig.test.projects.map(({ test }) => test);
+const MJS_TEST_FILES = [
+  ...new Set(
+    VITEST_PROJECTS.flatMap(({ include, exclude }) => globSync(include, { cwd: REPO_ROOT, exclude }).map(posix)),
+  ),
+]
   .filter((p) => /\.(test|spec)\.mjs$/.test(p))
   .sort();
 const REVIEW_CANDIDATES = [
@@ -670,12 +680,8 @@ const REVIEW_CANDIDATES = [
 
 // BIN-906 #1 — the block used to be called "the advising list and the blocking gate
 // cannot drift apart", which promises the whole repo while the cases below only walk
-// tooling `.mjs` under docs/ and scripts/. Two whole pattern classes sit outside that
-// glob and this block is blind to both: the repo-wide `\.(ts|tsx)$` entry and
-// `^\.github/(workflows|actions)/` — deleting either from reviewGates left the suite at
-// 837/837 green. Those belong to BIN-880, whose docs/org/gate-symmetry.test.mjs walks
-// every git-TRACKED path and compares the ownership map against the gate; both deletions
-// redden it. The name here now says what this block actually covers.
+// tooling `.mjs` under docs/ and scripts/. The name here now says what this block actually
+// covers.
 // BIN-906 #3 — and the DISCOVERY half below is keyed on a `.test.mjs` sibling, so a
 // tooling `.mjs` that nobody wrote a test for is nominated by nothing and stays invisible
 // to it. That is a stated limit of the word "mechanical", NOT a request to widen:
@@ -729,7 +735,7 @@ describe('the advising list and the blocking gate cannot drift apart for tooling
     // resolving to something else — would delete both blocks above in total silence.
     // Anti-vacuity floors: they exist to make a list that stopped matching fail loudly,
     // not to pin today's length.
-    expect(vitestConfig.test.include.length).toBeGreaterThanOrEqual(5);
+    expect(VITEST_PROJECTS.flatMap(({ include }) => include).length).toBeGreaterThanOrEqual(5);
     expect(MJS_TEST_FILES.length).toBeGreaterThanOrEqual(6);
     expect(REVIEW_CANDIDATES.length).toBeGreaterThanOrEqual(11);
     // TOOLING_MJS is the exception: its floor is NOT the measured value. The glob is
@@ -766,7 +772,7 @@ describe('input handling', () => {
 
 describe('mdBlock — the `--md` form every tool actually consumes (BIN-832)', () => {
   // `.claude/shared-plugin.json` sets `delivery.router.command` to
-  // `node docs/org/route.mjs --md`, so the markdown block — not the JSON — is what the
+  // `node docs/org/route.mjs --md --feature`, so the markdown block — not the JSON — is what the
   // sprint skill and /linear paste into a ticket. It had no coverage at all: 24f6612
   // moved its warning line from `unmappedCode` to `unownedCode`, which fires on a
   // different set of cases, and nothing in this file would have failed.
@@ -842,8 +848,244 @@ describe('mdBlock — the `--md` form every tool actually consumes (BIN-832)', (
   it('is wired to route(): code nobody owns carries its warning all the way out', () => {
     // A path under a directory that does not exist can never acquire an owner, so this
     // anchor cannot rot the way a real repo path can.
-    const md = mdBlock(route(['src/lib/no-such-dir/brandNew.ts']));
+    const md = mdBlock(route(['src/lib/no-such-dir/brandNew.ts'], { feature: true }));
     expect(md).toContain('Tier **medium**');
     expect(md).toContain('⚠ Unowned code path(s): src/lib/no-such-dir/brandNew.ts');
+  });
+
+  it('…and so does a gated path nobody owns under the default policy', () => {
+    // Under `^functions/` in the gates, under a directory that does not exist.
+    const md = mdBlock(route(['functions/no-such-dir/brandNew.ts']));
+    expect(md).toContain('Tier **medium**');
+    expect(md).toContain('#14 Software Architect');
+    expect(md).toContain('⚠ Unowned code path(s): functions/no-such-dir/brandNew.ts');
+  });
+
+  it('says an ordinary change has no review tier, and why', () => {
+    const md = mdBlock({ tier: 'skip', reasonCode: 'ordinary', reason: 'ordinary change', panel: [], roles: [] });
+    expect(md).toContain('ordinary change outside the review gates');
+    expect(md).toContain('no review tier');
+    expect(md).not.toContain('Tier **');
+    expect(md).not.toMatch(/#\d/);
+    // Wired: an owned file no gate covers takes that branch, not the trivial one.
+    expect(mdBlock(route(['src/components/ui/DuotonePoster.tsx']))).toContain('ordinary change outside the review gates');
+  });
+});
+
+// ── Decision 1 (BIN-1426, Malin 2026-10-05) ──────────────────────────────────────────
+// "Rollkritik och granskaragenter bara för databasregler, inloggning, persondata,
+// serverfunktioner och nya funktioner." The default policy reads that set from the review
+// gates; these cases pin it with literal paths, so a gate that stops covering one of the
+// areas fails here by name instead of quietly turning its critiques off.
+const DECISION_1_AREAS = {
+  'database rules': ['firestore.rules', 'firestore.indexes.json', 'src/test/rules/firestore-rules.test.ts'],
+  'sign-in': [
+    'src/contexts/AuthContext.tsx',
+    'src/app/login/page.tsx',
+    'src/lib/passwordStrength.ts',
+    'src/hooks/useAuth.ts',
+    'src/components/AuthGuard.tsx',
+    'src/lib/authErrors.ts',
+  ],
+  'personal data': [
+    'src/lib/firebase/friends.ts',
+    'src/lib/blockRelationship.ts',
+    'src/lib/sentry.ts',
+    'src/hooks/useFcmToken.ts',
+    'src/contexts/WatchlistContext.tsx',
+    'src/lib/analytics.ts',
+    'src/lib/deletionMarker.ts',
+    'src/lib/taste/backfill.ts',
+    'src/app/settings/import/page.tsx',
+    'src/app/integritet/page.tsx',
+    'src/app/admin/reports/page.tsx',
+    'src/components/settings/DataExportSection.tsx',
+    'src/components/settings/DeleteAccountSection.tsx',
+    'src/components/layout/DeletionLimbo.tsx',
+    'src/components/layout/ReconsentGate.tsx',
+  ],
+  'server functions': ['functions/src/index.ts', 'functions/package.json'],
+};
+// The review machinery stays reviewed (Malin chose "Kör" on 2026-10-06): one path per class.
+const MACHINERY = [
+  'docs/org/route.mjs',
+  'docs/org/metrics/check_review_coverage.mjs',
+  'docs/org/route.test.mjs',
+  '.claude/shared-plugin.json',
+  '.claude/settings.json',
+  '.claude/rules/accepted-deviations.md',
+  '.claude/accepted-deviations.md',
+  '.claude/rules/code-style.md',
+  '.claude/agents/binge-code-reviewer.md',
+  '.claude/hooks/freshness.mjs',
+  '.github/workflows/deploy.yml',
+  'lefthook.yml',
+  'CLAUDE.md',
+  'package.json',
+  'package-lock.json',
+  'vitest.config.ts',
+  'eslint.config.mjs',
+  'firebase.json',
+  'next.config.mjs',
+  'tsconfig.json',
+  'scripts/check-deploy-drift.mjs',
+];
+// Ordinary fixes: owned code no gate covers. Each one routes `skip` with `ordinary`.
+const ORDINARY = [
+  'src/components/ui/DuotonePoster.tsx',
+  'src/components/layout/AppShell.tsx',
+  'src/lib/watchStatus.ts',
+  'src/hooks/useLists.ts',
+  'src/app/page.tsx',
+  'src/app/globals.css',
+  'tailwind.config.ts',
+];
+
+describe('decision 1 (BIN-1426): who owes a critique by default', () => {
+  const sensitive = [...Object.values(DECISION_1_AREAS).flat(), ...MACHINERY];
+
+  it('names real files, so a rename cannot leave the roster pinning nothing', () => {
+    for (const path of [...sensitive, ...ORDINARY]) {
+      expect(existsSync(join(REPO_ROOT, path)), `${path} does not exist`).toBe(true);
+    }
+  });
+
+  it.each(sensitive)('%s still owes a critique', (path) => {
+    const r = route([path]);
+    expect(r.policy).toBe('default');
+    expect(r.tier).not.toBe('skip');
+    expect(r.panel).not.toEqual([]);
+  });
+
+  it.each(ORDINARY)('%s is an ordinary change', (path) => {
+    const r = route([path]);
+    expect(r.policy).toBe('default');
+    expect(r.tier).toBe('skip');
+    expect(r.reasonCode).toBe('ordinary');
+    expect(r.panel).toEqual([]);
+    // …and still routes as before when it is part of a new feature.
+    expect(route([path], { feature: true }).tier).toBe('medium');
+  });
+
+  it('seats the owner of the gated file, not of the ordinary one beside it', () => {
+    // DuotonePoster's owner (#1) wins the seat on specificity when both files are routed as
+    // a feature; the critique the default owes is for friends.ts, so its owner sits.
+    const pair = ['src/components/ui/DuotonePoster.tsx', 'src/lib/firebase/friends.ts'];
+    expect(route(pair).panel).toEqual(route(['src/lib/firebase/friends.ts']).panel);
+    expect(route(pair, { feature: true }).panel).toEqual([1]);
+    expect(route(pair).sensitive).toEqual(['src/lib/firebase/friends.ts']);
+  });
+
+  it('reads the real gates when none are passed', () => {
+    // If route() stopped finding the config it would fail closed and critique everything,
+    // which is safe but silently undoes the decision. This makes that loud.
+    expect(readReviewGates()?.length).toBeGreaterThan(0);
+    expect(route(['src/components/ui/DuotonePoster.tsx']).policy).toBe('default');
+  });
+});
+
+describe('gateCovers matches the way the commit gate does (BIN-1426)', () => {
+  // Every live caller asks whether ANY gate covers a path, and today each path one gate
+  // excludes is matched by another, so only a single-gate fixture can see each arm.
+  const gate = { patterns: ['^src/'], exclude: ['\\.test\\.ts$'] };
+
+  it('a pattern match minus an exclude', () => {
+    expect(gateCovers(gate, 'src/a.ts')).toBe(true);
+    expect(gateCovers(gate, 'src/a.test.ts')).toBe(false);
+    expect(gateCovers(gate, 'docs/a.ts')).toBe(false);
+  });
+
+  it('an exact name, minus an exclude', () => {
+    expect(gateCovers({ exact: ['lefthook.yml'] }, 'lefthook.yml')).toBe(true);
+    expect(gateCovers({ exact: ['a.test.ts'], exclude: ['\\.test\\.ts$'] }, 'a.test.ts')).toBe(false);
+  });
+
+  it('a keyed path counts as covered', () => {
+    expect(gateCovers({ keyed: [{ path: '.claude/settings.json', key: 'hooks' }] }, '.claude/settings.json')).toBe(true);
+  });
+});
+
+describe('fail closed (BIN-1426): gates that cannot be read route every change as a feature', () => {
+  it.each([
+    ['null', null],
+    ['an empty list', []],
+  ])('gates = %s', (_label, gates) => {
+    const r = route(['src/components/ui/DuotonePoster.tsx'], { gates });
+    expect(r.policy).toBe('fail-closed');
+    expect(r.tier).toBe('medium');
+    expect(r.panel).toEqual([1]);
+    expect(r.sensitive).toBeNull();
+    expect(r.reason).toContain('could not be read');
+  });
+
+  it('readReviewGates answers null for every config it cannot use', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'route-gates-'));
+    try {
+      const write = (name, text) => {
+        const path = join(dir, name);
+        writeFileSync(path, text);
+        return path;
+      };
+      expect(readReviewGates(join(dir, 'missing.json'))).toBeNull();
+      expect(readReviewGates(write('broken.json', '{ "reviewGates": ['))).toBeNull();
+      expect(readReviewGates(write('nokey.json', '{}'))).toBeNull();
+      expect(readReviewGates(write('empty.json', '{ "reviewGates": [] }'))).toBeNull();
+      expect(readReviewGates(write('notalist.json', '{ "reviewGates": { "patterns": ["^x"] } }'))).toBeNull();
+      // The positive case, so a reader that always answers null fails here.
+      expect(readReviewGates(write('ok.json', '{ "reviewGates": [{ "patterns": ["^x"] }] }'))).toEqual([
+        { patterns: ['^x'] },
+      ]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('a feature is a feature whether or not the gates can be read', () => {
+    const r = route(['src/components/ui/DuotonePoster.tsx'], { feature: true, gates: null });
+    expect(r.policy).toBe('feature');
+    expect(r.tier).toBe('medium');
+  });
+});
+
+describe('the command line (BIN-1426)', () => {
+  const run = (args, input) =>
+    spawnSync(process.execPath, ['docs/org/route.mjs', ...args], { cwd: REPO_ROOT, encoding: 'utf8', input });
+  const ordinary = 'src/components/ui/DuotonePoster.tsx';
+
+  it('routes an ordinary path as a skip by default and as medium with --feature', () => {
+    const plain = JSON.parse(run([ordinary]).stdout);
+    expect(plain).toMatchObject({ tier: 'skip', reasonCode: 'ordinary', policy: 'default' });
+    const feature = JSON.parse(run(['--feature', ordinary]).stdout);
+    expect(feature).toMatchObject({ tier: 'medium', policy: 'feature', panel: [1] });
+  });
+
+  it('reads its flags in any order, before or after the paths', () => {
+    const outputs = [
+      run(['--md', '--feature', ordinary]),
+      run(['--feature', '--md', ordinary]),
+      run([ordinary, '--md', '--feature']),
+    ].map((r) => {
+      expect(r.status).toBe(0);
+      return r.stdout;
+    });
+    expect(outputs[0]).toContain('Tier **medium**');
+    expect(new Set(outputs).size).toBe(1);
+  });
+
+  it('applies --feature to paths read from stdin', () => {
+    const r = run(['--feature'], `${ordinary}\n`);
+    expect(JSON.parse(r.stdout)).toMatchObject({ policy: 'feature', tier: 'medium' });
+  });
+
+  it('the command the sprint engine runs still critiques an ordinary code change', () => {
+    // The engine cannot tell a feature from a fix, so `delivery.router.command` routes as a
+    // feature (#25's condition, R2-2). Run the exact string from the config, the way the
+    // engine appends paths to it.
+    const cfg = JSON.parse(readFileSync(join(REPO_ROOT, '.claude', 'shared-plugin.json'), 'utf8'));
+    const command = cfg.delivery.router.command;
+    const r = spawnSync(`${command} ${ordinary}`, { cwd: REPO_ROOT, encoding: 'utf8', shell: true });
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain('Tier **medium**');
+    expect(r.stdout).toContain('#1 ');
   });
 });

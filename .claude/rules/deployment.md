@@ -11,11 +11,11 @@ paths:
 
 `next build` (med `NODE_OPTIONS=--max-old-space-size=4096`) → static export
 till `out/` → Firebase Hosting (`public: "out"`) → Cloudflare proxy.
-SPA-rewrite `**` → `/index.html`.
 
-**Byggtids-TMDB (SEO-pre-rendering):** `/{tv,movie,person}/[id]` pre-renderas
-för ~25k populära titlar (`generateStaticParams`). Varje sida gör ett
-TMDB-anrop vid byggtid. Två skydd (se `src/lib/tmdb/buildFetch.ts` +
+**Byggtids-TMDB (SEO-pre-rendering):** `/{tv,movie}/[id]` pre-renderas för en
+kärna av titlar med svensk tjänst (ADR 0024; taken står i `SELECTION_CEILING`).
+`/person/[id]` bygger bara `SEO_FALLBACK_PERSON_IDS`, med noindex. Varje sida gör
+ett TMDB-anrop vid byggtid. Två skydd (se `src/lib/tmdb/buildFetch.ts` +
 `buildCache.ts`):
 - **AbortSignal.timeout (20s)** på alla byggtids-anrop → ingen sida når Next
   60s-tak; exporten kan aldrig avbrytas av en strypt fetch (otursdrabbade
@@ -30,7 +30,7 @@ TMDB-anrop vid byggtid. Två skydd (se `src/lib/tmdb/buildFetch.ts` +
   och hämtar färsk metadata för alla stale titlar.
 
 **`.tmdb-cache/` bär sedan BIN-823 även URVALET, inte bara metadatan.**
-`selection-{movie,tv,person}.json` är listan över vilka id:n som pre-renderas, och
+`selection-{movie,tv}.json` är listan över vilka id:n som pre-renderas, och
 den är en SPÄRRHAKE: kod-deployer läser den och gör noll listanrop, veckobygget
 härleder om och unionerar. Två regimflaggor sätts under samma villkor i
 `deploy.yml` och måste följas åt — `TMDB_BUILD_REFRESH_BUDGET` (hur mycket
@@ -44,15 +44,16 @@ verktyg. `deploy.yml` sätter den ALDRIG, och det är den egenskapen hela skydde
 vilar på. Hela resonemanget: ADR 0018, vars beskrivning av de två raderade
 workflowsen är historik.
 
-Skär **inte** ner pre-render-antalet för att fixa byggtid — catch-all-skalet är
-`noindex` by default, så en icke-pre-renderad titel indexeras opålitligt
-(endast efter JS-hydrering). Mekaniken är fixad; täckningen ska behållas.
+Ändra inte pre-render-antalet för att fixa byggtid. Antalet är ett SEO-beslut
+(ADR 0024): sidor utanför kärnan är `noindex`, också efter hydrering, och det är
+avsikten.
 
 Workflows ligger i `.github/workflows/`. Det som inte syns av filnamnen: **`deploy.yml`
-deployar BARA hosting** — rules och functions kräver alltid en manuell `firebase deploy`
-först. `pr-checks.yml` grindar pull requests (dit dependabot-bumpar landar) och
-`secret-scan.yml` läcksöker. Vilka steg pr-checks kör står i filen själv,
-inte här: `grep -n "name:" .github/workflows/pr-checks.yml`. Ingen
+deployar regler, index och funktioner** i jobbet `backend`, utan godkännande, och
+webbplatsen efter dem (BIN-1426, `docs/RUNBOOK.md` §6e). `pr-checks.yml`
+grindar pull requests (dit dependabot-bumpar landar) och `secret-scan.yml` läcksöker.
+Vilka steg pr-checks kör står i filen själv, inte här:
+`grep -n "name:" .github/workflows/pr-checks.yml`. Ingen
 av dem bygger — bara `deploy.yml` gör det, och därmed är den enda som ser en nyckel.
 Härled listan i stället för att lita på den här meningen: `ls .github/workflows/`.
 

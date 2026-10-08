@@ -1,6 +1,7 @@
 // src/components/pages/TVShowPageClient.test.tsx
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { renderToStaticMarkup } from 'react-dom/server';
 
 // The TV sibling of MoviePageClient.test.tsx, and it needs to exist separately.
 // The provider derivation the two effects used to duplicate is now one shared
@@ -51,10 +52,13 @@ const SHORT_OVERVIEW = 'En serie om ätten Stark.';
 const LONG_OVERVIEW =
   'Sju ätter slåss om järntronen medan en äldre fiende vaknar bortom muren i norr.';
 
-// The generated content-floor sentence for this fixture ends with its
-// availability lead; that clause is unique to the floor, so its presence or
-// absence answers "was the floor rendered?" (contentFloor.test.ts owns wording).
+// The availability lead for this fixture. Since SEO-2 it is on EVERY page: inside
+// the floor paragraph (`p.syn`) on a thin page, as its own line otherwise. So
+// "was the floor rendered?" is asked of the `p.syn` paragraphs, and the lead
+// must appear exactly once either way (contentFloor.test.ts owns the wording).
 const FLOOR_TAIL = /Game of Thrones streamas just nu på Netflix i Sverige\./;
+const floorParagraphs = () =>
+  [...document.querySelectorAll('p.syn')].filter(p => FLOOR_TAIL.test(p.textContent ?? ''));
 
 const show = {
   id: 1399,
@@ -253,8 +257,10 @@ describe('TVShowPageClient — the content floor adds text, it never replaces it
     // The show's own words survive — the whole of BIN-735. A revert to the
     // either/or render drops this line.
     expect(screen.getByText(SHORT_OVERVIEW)).toBeTruthy();
-    // …and the thin page still gains the extra prose it was written for.
-    expect(screen.getByText(FLOOR_TAIL)).toBeTruthy();
+    // …and the thin page still gains the extra prose it was written for, with
+    // the availability lead once — not repeated by the SEO-2 line.
+    expect(floorParagraphs()).toHaveLength(1);
+    expect(screen.getAllByText(FLOOR_TAIL)).toHaveLength(1);
   });
 
   it('does not add the generated sentence when the overview already carries the page', () => {
@@ -265,7 +271,9 @@ describe('TVShowPageClient — the content floor adds text, it never replaces it
     // hasSubstantialText for a bare truthiness check and the floor stops
     // appearing for the short overview above; drop the check entirely and it
     // appears here, duplicating a synopsis that needed no help.
-    expect(screen.queryByText(FLOOR_TAIL)).toBeNull();
+    expect(floorParagraphs()).toHaveLength(0);
+    // SEO-2: the availability answer is still on the page, as its own line.
+    expect(screen.getAllByText(FLOOR_TAIL)).toHaveLength(1);
   });
 
   it('falls back to the generated sentence alone when TMDB has no Swedish overview', () => {
@@ -309,5 +317,87 @@ describe('TVShowPageClient — the add control gets both provider answers (BIN-8
     expect(props.providers).toEqual(expect.arrayContaining([8, 76]));
     expect(props.subscriptionProviders).toEqual([8]);
     expect(props.subscriptionProviders).not.toContain(76);
+  });
+});
+
+describe('TVShowPageClient — what a crawler reads without clicking (SEO-2/SEO-4)', () => {
+  beforeEach(() => {
+    watchlist.loading = false;
+    watchlist.snapshotSettled = true;
+    tmdb.isLoading = false;
+  });
+
+  it('renders rent/buy inside a collapsed <details>, not behind a click', () => {
+    tmdb.show = {
+      ...show,
+      'watch/providers': { results: { SE: {
+        flatrate: [{ provider_id: 8, provider_name: 'Netflix' }],
+        buy: [{ provider_id: 2, provider_name: 'Apple TV' }],
+      } } },
+    };
+    render(<TVShowPageClient id="1399" />);
+
+    const details = document.querySelector('details');
+    expect(details).not.toBeNull();
+    expect(details!.open).toBe(false);
+    expect(details!.textContent).toContain('Köp:');
+  });
+
+  it('links the crumb to /series/ and a TV genre id to its hub', () => {
+    // 10765 Sci-Fi & Fantasy is the TV id of the sci-fi hub; as a movie id it maps nowhere.
+    tmdb.show = { ...show, genres: [{ id: 10765, name: 'Sci-Fi & Fantasy' }] };
+    render(<TVShowPageClient id="1399" />);
+
+    expect(screen.getByRole('link', { name: 'Serier' }).getAttribute('href')).toMatch(/^\/series\/?$/);
+    expect(screen.getByRole('link', { name: 'Science fiction & fantasy' }).getAttribute('href')).toMatch(/^\/genre\/sci-fi\/?$/);
+  });
+});
+
+// BIN-1439 steg 2. renderToStaticMarkup kör inga effekter, så `mounted` är falsk
+// och ClientOnly renderar ingenting — samma läge som den förrenderade HTML:en
+// Google läser.
+function staticAvailabilitySection(html: string): Element | null {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const h2 = [...doc.querySelectorAll('h2')].find(h => h.textContent?.startsWith('Så ser du'));
+  return h2?.closest('section') ?? null;
+}
+
+describe('TVShowPageClient — tabellen "Så ser du X i Sverige" finns i den statiska HTML:en (BIN-1439)', () => {
+  beforeEach(() => {
+    watchlist.loading = false;
+    watchlist.snapshotSettled = true;
+    tmdb.isLoading = false;
+  });
+
+  it('renderas i första renderingen, före mounted, med tjänst och hubblänk', () => {
+    tmdb.show = show;
+    const section = staticAvailabilitySection(renderToStaticMarkup(<TVShowPageClient id="1399" />));
+
+    expect(section?.querySelector('h2')?.textContent).toBe('Så ser du Game of Thrones i Sverige');
+    expect(section?.querySelector('th[scope="row"]')?.textContent).toBe('Netflix');
+    const hub = [...(section?.querySelectorAll('a') ?? [])].find(a => a.textContent === 'Mer på Netflix');
+    expect(hub?.getAttribute('href')).toMatch(/^\/provider\/8\/?$/);
+  });
+
+  it('visar ingen tabell för en serie utan svenska tjänster', () => {
+    tmdb.show = { ...show, 'watch/providers': { results: { SE: {} } } };
+    const html = renderToStaticMarkup(<TVShowPageClient id="1399" />);
+
+    expect(html).toContain('Game of Thrones');
+    expect(staticAvailabilitySection(html)).toBeNull();
+  });
+
+  it('visar TV4 Plays två id som en rad', () => {
+    tmdb.show = {
+      ...show,
+      'watch/providers': { results: { SE: {
+        flatrate: [{ provider_id: 1944, provider_name: 'TV4 Play' }],
+        buy: [{ provider_id: 489, provider_name: 'TV4 Play' }],
+      } } },
+    };
+    const section = staticAvailabilitySection(renderToStaticMarkup(<TVShowPageClient id="1399" />));
+
+    const names = [...(section?.querySelectorAll('th[scope="row"]') ?? [])].map(th => th.textContent);
+    expect(names).toEqual(['TV4 Play']);
   });
 });

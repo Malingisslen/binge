@@ -71,6 +71,32 @@ describe('ConfirmDialog', () => {
     expect(screen.getByRole('button', { name: 'Avbryt' })).toBeDisabled();
   });
 
+  // BIN-1261: `busy` stänger av knapparna, inte Escape och bakgrunden. Skälet står
+  // i posten `## BIN-1261` i `.claude/rules/accepted-deviations.md`.
+  it('busy lämnar Escape och bakgrundsklick öppna', () => {
+    const onCancel = vi.fn();
+    render(
+      <ConfirmDialog title="Radera?" confirmLabel="Radera" busy onConfirm={() => {}} onCancel={onCancel} />,
+    );
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    const backdrop = screen.getByTestId('confirm-backdrop');
+    fireEvent.mouseDown(backdrop, { target: backdrop });
+    fireEvent.click(backdrop, { target: backdrop });
+    expect(onCancel).toHaveBeenCalledTimes(2);
+  });
+
+  it('Escape når inte en underliggande dokumentlyssnare', () => {
+    const underlying = vi.fn();
+    document.addEventListener('keydown', underlying);
+    render(
+      <ConfirmDialog title="Säker?" confirmLabel="Ja" onConfirm={() => {}} onCancel={() => {}} />,
+    );
+    fireEvent.keyDown(document, { key: 'Escape' });
+    document.removeEventListener('keydown', underlying);
+    expect(underlying).not.toHaveBeenCalled();
+  });
+
   it('återlämnar fokus till föregående element vid avmontering', () => {
     // Sätt upp ett element som har fokus innan dialogen monteras
     document.body.innerHTML = '<button id="trigger">Öppna</button>';

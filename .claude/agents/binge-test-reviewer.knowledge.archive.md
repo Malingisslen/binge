@@ -29300,3 +29300,711 @@ per collection, reasoned for the rest by identical rule idiom. All four rounds' 
 independently re-confirmed as holding. Lesson folded into
 `binge-test-reviewer.rules.knowledge.md`'s "Field OMISSION is distinct from wrong-TYPE"
 bullet: omission and wrong-type are ALSO distinct per field, not just per collection.
+
+## 2026-09-22 — BIN-1118/1120/1259, re-review: the Escape defect's sibling is a SHADOWED guard pair
+
+Diff reviewed: staged `git diff --cached` for BIN-1118/1120/1259 — the twelve gated test
+files (`functions/src/{groupHandover,reportDecided,submitReport}/logic.test.ts`,
+`src/components/groups/{GroupSettingsModal,HandOverGroupDialog}.test.tsx`,
+`src/components/layout/TopbarActions.test.tsx`,
+`src/components/moderation/UgcActionsMenu.test.tsx`,
+`src/components/pages/GroupPageClient.{groupActions,joinResubscribe}.test.tsx`,
+`src/lib/firebase/groups.test.ts`, `src/lib/moderation/reportTargetLink.test.ts`,
+`src/test/rules/group-handover-orchestrator.test.ts`) plus their production neighbours.
+
+Brief: the coordinator had fixed a real defect (HandOverGroupDialog's Escape handler sat on
+the overlay, so no real keypress reached it; now a `document` listener) and asked whether any
+OTHER fixture-driven assertion in the batch is green for the wrong reason — an event driven
+from a place a real user's event could never originate. Named candidates: the backdrop-click
+cases and the settings-modal Escape cases.
+
+Mutations run (snapshots in the session scratchpad; every restore verified by
+`git hash-object` — `GroupSettingsModal.tsx` back to `0dda1cc9a99ae4e05b43981e9d1cb14549fb2fd9`,
+`HandOverGroupDialog.tsx` back to `a07f6bdf9943928e00ed14f02bf7ca8b541b5a95`, and
+`git status --porcelain` showing no worktree-dirty entries afterwards):
+
+1. `GroupSettingsModal.tsx` document handler, `&& !handingOver` removed →
+   `npx vitest run src/components/groups/GroupSettingsModal.test.tsx` = **10 passed (10)**.
+   SURVIVED. The test named `stänger INTE modalen medan överlämningen är öppen —
+   dokumentvägen` cannot fail on the term it is named for.
+2. `HandOverGroupDialog.tsx`, `e.stopImmediatePropagation()` removed → both component files
+   = **34 passed (34)**. SURVIVED.
+3. Both mutants together → **2 failed | 8 passed (10)**; the two reddened are the
+   document-path and the backdrop-path negative cases. So the PAIR is jointly load-bearing
+   and neither half is pinned alone.
+4. `GroupSettingsModal.tsx` backdrop `onKeyDown`, `&& !handingOver` removed →
+   **1 failed | 9 passed**, exactly `bakgrundsvägen`. PINNED alone. The test file's own
+   comment about firing the key on the trigger BUTTON (a sibling of the child overlay, so
+   the event really does bubble to the host backdrop) is correct and load-bearing.
+5. `HandOverGroupDialog.tsx` Escape working-gate `if (!workingRef.current)` → unconditional
+   `onCancelRef.current()` → **1 failed | 23 passed**. PINNED alone.
+6. `HandOverGroupDialog.tsx` backdrop `if (!working) onCancel()` → unconditional →
+   **1 failed | 23 passed**. PINNED alone.
+
+Mechanism behind (1)+(2): React flushes the CHILD's passive effect before the parent's
+re-registered one (the parent's deps include `handingOver`), so `HandOverGroupDialog`'s
+document listener is installed first and its unconditional `stopImmediatePropagation()` runs
+ahead of `GroupSettingsModal`'s. Behaviour today is correct in both directions; what is
+missing is that either guard can be deleted with the suite green. A two-step removal is still
+caught at step 2 (mutation 3), so this is not a shipped defect and not blocking.
+
+Also checked and cleared: every backdrop-click case drives the event from the element a real
+click would target (`role="presentation"` overlay, or `confirm-backdrop` with
+`target === currentTarget`); `ConfirmDialog`'s Escape is fired on `document` and its handler
+is a capture-phase `document` listener; `UgcActionsMenu` adds no Escape/backdrop test.
+`ConfirmDialog`'s ungated cancel paths while `busy` are the accepted deviation dated
+2026-09-21 (BIN-1261) and were not filed.
+
+Verdict: pass (0 blocking). One Medium, non-blocking finding — the shadowed guard pair above.
+Agreed with the coordinator's decision to LEAVE `\b(note|reason|adminNote)\b` case-sensitive
+in `functions/src/reportDecided/logic.test.ts`: widening it would assert something unmeasured
+about future field names, and the structural protection is that the trigger reads only
+`status` and `reporterUid`. No assertion in the batch was weakened — every removed line
+(`logic.test.ts`'s single-`exec` timeout pairing, `submitReport`'s `resolveTargetRef` shapes)
+was replaced by a strictly stronger one.
+
+Lesson folded into `binge-test-reviewer.ui.knowledge.md`'s defense-in-depth
+double-validation bullet.
+
+## 2026-09-22 — BIN-1259: the reports roster's brace-walk, and what its bound does NOT survive
+
+**Diff reviewed.** Narrow re-check of the staged BIN-1118/1120/1259 bundle. Only
+`functions/src/reportDecided/logic.test.ts` (`209c79b1f11654729c92a8fba5aaefd29db78e33`)
+had moved since the prior pass. `firestore.rules` at `cb246e1157b6ee84394d57cc16976e8a4e26ad84`;
+`git diff --name-only` empty (worktree == index) and no live mutant in the tree — the only
+`MUTANT` hit in the repo is the word inside a comment in the untouched `src/lib/clampText.test.ts`.
+
+**What the file now does.** `REPORT_STATUSES` is derived from `firestore.rules` by
+brace-matching the `match /reports/{reportId}` block, opening the walk AFTER the header
+string (the path's own `{reportId}` is a brace pair that closed the block on its first
+character in the first draft; two tests caught it), and pulling the quoted tokens out of
+`request.resource.data.status in [...]`. Backed by a floor (`>= 4`), a quote-count
+completeness check, and an exact partition against `DECIDED_STATUSES + ['open','reviewed']`.
+
+**Mutations run — read-only probes over in-memory copies of `firestore.rules`, the tree
+never touched.** Script kept at the session scratchpad; the walk was reimplemented verbatim
+from the test file and fed mutated copies.
+
+    BASE                                   {"n":4,"lit":"'open', 'reviewed', 'actioned', 'dismissed'","blkLines":33}
+    header renamed away                    {"n":0,"lit":"","blkLines":0}        -> floor RED
+    extra } in a comment, before clause     {"n":0,"lit":"","blkLines":2}        -> floor RED
+    extra } in a comment, after clause      {"n":4,"lit":"'open', ...","blkLines":32}  benign
+    extra { in a comment inside the block   {"n":4,"lit":"'open', ...","blkLines":497} benign (clause still first)
+    block-closing } removed                 {"n":4,"lit":"'open', ...","blkLines":495} benign (parent brace closes it)
+    clause DELETED + foreign clause planted
+      in a later match /sessions block      {"n":0,"lit":"","blkLines":32}       -> floor + partition RED
+    ...the same, PLUS a stray { inside the
+      reports block                         {"n":4,"lit":"'alpha', 'beta', 'gamma', 'delta'","blkLines":497}
+
+The founder's own measured run of the second-to-last row: `2 failed | 21 passed` (the floor
+and the partition), clean tree `27 passed`.
+
+**Verdict: pass, 0 blocking.** Two Info, neither a reason to fail.
+
+1. The bound holds for the case the earlier Info named, and the two brace directions fail
+   DIFFERENTLY: a stray `}` truncates and the floor reddens; a stray `{` over-extends and
+   restores the exact borrowing the bound was added to stop, with the floor AND the
+   quote-count completeness check both still green. The only assertion that survives it is
+   the exact PARTITION — which did redden on the compound row above. This is not
+   hypothetical here: `firestore.rules` carries an unbalanced-brace comment today at
+   line 1307 (`// sed -n '/addDoc(collection(db, .sessions.)/,/});/p' ...`), outside the
+   reports block, and BIN-1155 shipped one inside the groups block that shrank that roster
+   to three. Same class, caught there by the floor because the direction was `}`.
+
+2. The double-quote residual the security reviewer raised is real and is NOT backstopped by
+   the partition: a status written `"needs_info"` is dropped from the roster, contributes
+   zero to the `match(/'/g).length / 2` divisor, and leaves the four single-quoted names
+   partitioning exactly — silent in all three assertions. Filing it rather than fixing it
+   is a defensible call (every literal in the file is single-quoted today), and the fix is
+   one alternation wider on both the roster regex and the divisor. Non-blocking either way.
+
+**Lesson folded** into `binge-test-reviewer.rules.knowledge.md`'s brace-walk bullet, in
+place: open the walk after the header string; the bound dies to one unbalanced brace and
+the two directions differ; require the exact partition, never the floor alone; a roster
+regex matching one quote style is silent on the other.
+
+## 2026-09-22 — BIN-1118 re-check: the refs are gone, the Escape listener re-registers on `working`
+
+**Diff reviewed.** One production file changed since the pass: `src/components/groups/HandOverGroupDialog.tsx`
+at `e603665a1ca613af8e65bacd2f6b5ff414c13985` (staged blob == worktree). The gate's eslint
+run rejected `react-hooks/refs` on a render-phase `workingRef.current = working` assignment; both
+refs were removed and the `document` keydown listener now carries `[working, onCancel]` and
+re-registers. Question put to this gate: can `Escape avbryter INTE medan anropet ligger ute` be
+green because the listener is momentarily ABSENT rather than because the guard bit, and do the
+`document`-fired and overlay-fired cases still test different things?
+
+**Mutations run** (own snapshot at the sha above; restored and hash-verified after each; tree back
+to 51 staged entries):
+
+| mutant | edit | result |
+| --- | --- | --- |
+| M1 | `if (!working) onCancel();` → `onCancel();` | 1 failed / 23 passed — exactly `Escape avbryter INTE medan anropet ligger ute` |
+| M3 | dep array `[working, onCancel]` → `[]` (stale closure, `working` frozen false) | 1 failed / 23 passed — same test |
+| M2 | cleanup `return () => document.removeEventListener(...)` disabled | 3 failed / 35 passed across `HandOverGroupDialog.test.tsx` + `GroupSettingsModal.test.tsx` |
+| M4 | `if (e.target === document) return;` — handler reachable only from inside the dialog, i.e. the pre-fix overlay placement | 1 failed / 23 passed — ONLY `Escape avbryter aven nar fokus star utanfor dialogen` |
+
+Clean control after restore: 24/24 on the dialog file, 38/38 across the three group dialog suites.
+
+**Answers.** M1 settles the absent-listener worry directly: with the guard deleted the SAME test
+reddens, which is only possible if the listener is attached at that moment — the test is green
+because the guard bit. M3 shows the `working` dep term is pinned, not decorative. M2 shows the
+cleanup is load-bearing (a leaked listener from an unmounted dialog reddens three cases). M4 shows
+the two Escape reach-paths are not one test twice: the `document`-fired case fails ALONE under the
+regression it was written for, while the overlay-fired case stays green.
+
+**Ordering, and what it changes.** The ui chapter's nested-dialog bullet said React flushes the
+child's effect first, so the child's `stopImmediatePropagation()` runs before the host's handler.
+That is now only true at MOUNT: when `working` flips, only the child re-registers, so the child's
+listener lands AFTER `GroupSettingsModal`'s. During an in-flight call the host's handler therefore
+runs FIRST and is stopped by its own `!handingOver` clause — which is pinned alone in
+`GroupSettingsModal.escape.test.tsx` (the child stubbed). No gap; the bullet's operative
+instruction (mutate each guard alone, stub the child) is unchanged and is what these runs
+re-verified. Folded in place into that bullet.
+
+**Verdict: pass, 0 blocking.**
+
+## 2026-09-23 — BIN-1275: updateDisplayName returns the stored name, ProfileSection shows it
+
+**Diff reviewed (staged):** `src/contexts/AuthContext.tsx` (`updateDisplayName` now `Promise<string>`,
+returns `clamped`; default context stub echoes its argument), `src/contexts/AuthContext.test.tsx`
+(authSync test `resolves.toBeUndefined()` -> `resolves.toBe('Nytt namn')`; clamp test captures the
+return and asserts `stored === payload.displayName`), `src/components/settings/ProfileSection.tsx`
+(`const sent = nameInput; ... setNameInput(prev => (prev === sent ? stored : prev))`, same shape as
+the bio field in UsernameSection), `src/components/settings/ProfileSection.test.tsx` (mock echoes its
+argument; two new tests: stored value shown, typing during the save not overwritten).
+
+**Rig:** isolated worktree under the session scratchpad, staged blobs copied in, own `npm ci`,
+torn down with `node scripts/shared-guard.mjs worktree-cleanup` (shared node_modules 452 -> 452).
+Clean control: 120/120 across the two files. Each mutant: anchor checked to land, `.vite` cache
+removed, run, restored from the in-memory original.
+
+| Mutant | Result |
+|---|---|
+| P1 drop `setNameInput` write-back | 1 red — "fältet visar det lagrade namnet efter sparningen" |
+| P2 unconditional `setNameInput(stored)` | 1 red — "skriver inte över det användaren hunnit skriva under sparningen" |
+| P3 `prev === next` (trimmed) for `prev === sent` | 7/7 GREEN — survivor |
+| P4 write back `next` instead of `stored` | 1 red — "fältet visar det lagrade namnet" |
+| A1 `return name` | 1 red — "namnet skrivs klampat till Firestore-kopian" |
+| A2 `return trimmed` | 1 red — same test |
+| A3 `return clampToCodeUnits(name, MAX_DISPLAY_NAME)` (untrimmed) | 15/15 GREEN — survivor |
+| T1 old `resolves.toBeUndefined()` against new code | 1 red — authSync test |
+| New tests against HEAD production code | 3 red (clamp return, authSync return, stored-value field); the overwrite guard test is green on HEAD by construction (HEAD never writes back) and is reddened by P2 |
+
+**Verdict:** pass, 0 blocking. The authSync change is a strict-to-strict contract update, red on
+HEAD, not a weakening. Two non-blocking fixture gaps: P3 (no whitespace in the ProfileSection
+fixture, so `sent` vs `next` is indistinguishable) and A3 (no whitespace in the clamp fixture).
+Lesson folded into the core card's fixture-ordering bullet: a trim-then-clamp write has three
+candidate strings, and the fixture needs padding AND over-cap length.
+
+## 2026-10-05 — BIN-1426 part 2: the approval gate and the site gate (check-deploy-drift.test.mjs)
+
+**Diff reviewed.** Staged on `claude/project-thread-01w0zn` over HEAD 8443e2a6. Index blobs:
+`scripts/check-deploy-drift.mjs` 205879fa, `scripts/check-deploy-drift.test.mjs` 81f4f3b0,
+`scripts/scripts-self-tests-present.test.mjs` a1706740, `.github/workflows/deploy.yml` 71015b6b.
+The test diff removes no assertion: its only `-` lines are the header comment and two import
+lines. The self-tests-present change is comment-only (REQUIRED and MIN unchanged).
+
+**Rig.** `git worktree add --detach <scratchpad>/rig HEAD`, then `git apply` of
+`git diff --cached --binary`; all four rig blobs hash-equal to the index. `npm --prefix rig ci`
+(a real directory, no symlink leaving the rig). Harness: `node_modules/.vite/vitest` removed
+before every run; clean control first as an abort condition: 168/168 in the drift file
+(172/172 with self-tests-present). Each mutant: exact anchor matched once, landing proven by a
+changed `git hash-object`, restored from a snapshot and hash-verified against the index.
+
+**Mutants and the tests that failed** (`npx vitest run --project product <file> --reporter=json`):
+- M1 `gateMain` `return 1`→`return 0`: SURVIVED, 168/168.
+- M2 `siteGateMain` `return 1`→`return 0`: SURVIVED, 168/168.
+- M3 deploy.yml `if: false` on the Approval gate step: SURVIVED.
+- M4 deploy.yml `if: always()` on "Deploy rules and functions": SURVIVED.
+- M5 `shallow !== 'false'`→`shallow === 'true'`: SURVIVED.
+- M6 `if (run.head_sha === sha) continue;` deleted: 1 failed, the real-git "the site gate
+  refuses a commit older than one a successful run deployed". The `newerDeployedRun` unit
+  stub answers `merge-base --is-ancestor A A` with a throw, where real git exits 0.
+- M7 deploy.yml `- if: false` as the Site gate step's first key: SURVIVED
+  (`not.toMatch(/^\s*if:/m)` does not see `- if:`).
+- M8 Approval gate `run:` + `|| true`: SURVIVED. M9 Site gate `run:` + `|| true`: SURVIVED.
+- A1 gate reads `origin/main`: 4 failed (real-git re-run test, 2 gateProblem, wiring).
+- A2 shallow check deleted: 1 failed. A3 stale ancestry reversed: 4 failed. A4 site gate
+  always null: 1 failed (real-git). A5 unfetched-tip try/catch deleted: 1 failed.
+  A6 hosting checkout `fetch-depth: 1`: 1 failed.
+- B1 rejection beside approval ignored: 1. B2 `if (refused) return refused;` deleted: 1.
+  B3 mainTip type check deleted: 1. B4 COMMIT_ID filter deleted: 1 (lastDeployedRun only).
+  B5 sort deleted: 3. B6 newer ancestry swapped: 2. B7 stale filter on `reason` deleted: 1.
+  B8 `approvalProblem(raw, 'production')`: 5. B9 head check deleted: 1.
+  B10 stale ancestry try/catch deleted: 2. B11 stale drift ignored: 2.
+
+**Probes** (rig-only test files, deleted before teardown):
+- `main(['--approval-gate'], {env, git, gh, log, err})` → 1 with `[]` approvals, 0 with an
+  approval; `main(['--site-gate'], …)` → 0 with no runs, 1 with a newer successful run.
+  Clean 2/2; M1 killed by the approval probe only; M2 by the site probe only.
+- The staged describe's own parse, plus: gate `run:` by equality, `/^\s*(- )?if:/m` absent
+  on both gate steps and on the key step. Clean 2/2; M3, M4, M7, M8, M9 each killed.
+
+**Verdict:** fail, 1 blocking. Neither gate mode's exit code is executed by any test, and #25's
+binding condition says both gates refuse and are tested. Non-blocking: the deploy.yml
+refusal routes above; the shallow check's fail-closed direction (M5); the `newerDeployedRun`
+stub's non-reflexive ancestry (M6).
+
+**Teardown.** `node scripts/shared-guard.mjs worktree-cleanup <rig>` failed open (the
+workflow-guards plugin is not installed in this container). The rig's `node_modules` was a
+real directory with no outward symlink, so `git worktree remove --force` plus
+`git worktree prune`; the shared `node_modules` held 449 entries before and after.
+
+**Knowledge fold:** two existing bullets in `binge-test-reviewer.tooling.knowledge.md`, the
+text-level wiring bullet (workflow refusal routes) and the CLI exit-code bullet.
+
+## 2026-10-05 — BIN-1426 part 2, round 2: round-1 findings closed; job-level routes in deploy.yml unpinned
+
+**Diff reviewed.** Same branch over HEAD 8443e2a6. Index blobs: `scripts/check-deploy-drift.mjs`
+983b56f8 (round 1: 205879fa), `scripts/check-deploy-drift.test.mjs` 709ade0b (round 1: 81f4f3b0),
+`scripts/scripts-self-tests-present.test.mjs` a1706740 and `.github/workflows/deploy.yml` 71015b6b
+(both unchanged since round 1). Prod delta, `git diff 205879fa 983b56f8`: `RUNS_PER_PAGE = 100`;
+`deployedRunsPath` drops `branch=main&status=success` for `per_page=${RUNS_PER_PAGE}`;
+`successfulRuns` filters `head_branch === 'main'` itself; the no-run fallback sentence names the
+page size. Test delta, `git diff 81f4f3b0 709ade0b`: its `-` lines are round 1's weaker forms
+(`toContain('Hittade ingen lyckad körning')`, a lone `/^\s*if:/m`, one shallow answer, the
+non-reflexive stub, the old path), each replaced by a stricter one. Against HEAD the test diff
+still removes no assertion.
+
+**Rig.** `git worktree add --detach <scratchpad>/tr2rig HEAD`, `git apply` of
+`git diff --cached --binary`; all four blobs hash-equal to the index. `npm ci --ignore-scripts`
+(lefthook is a devDependency; skipping scripts keeps its postinstall away from the shared
+`.git/hooks`, whose sha1s matched before and after). `node_modules/.vite` removed before every
+run; a clean control first as an abort condition, 175/175 (171 drift + 4 self-tests) in each of
+three passes. Each mutant: anchor matched exactly once (M1's first anchor matched both gate mains
+and was re-anchored as M1b), landing proven by content and a changed `git hash-object`, still in
+place after the run, restored and hash-verified against the index.
+
+**Mutants** (`npx vitest run --project product scripts/check-deploy-drift.test.mjs --reporter=json`),
+failed tests per mutant:
+- Round 1's survivors, all killed now: M1b `gateMain` `return 1`→`0`: 2 (real-git re-run test,
+  gateProblem through main). M2 `siteGateMain`: 2 (real-git site test, siteGateProblem through
+  main). M3 `if: false` on Approval gate: 1. M4 `if: always()` on Deploy rules and functions: 1.
+  M5 `shallow === 'true'`: 1. M6 own-commit skip deleted: 3 (real-git site test and both
+  newerDeployedRun unit tests). M7 `- if: false` first key on Site gate: 1. M8, M9 `|| true` on
+  either gate `run:`: 1 each.
+- New pins: M10 `if: always()` on the hosting deploy step: 1. M11 hosting deploy step moved
+  before Build: 1. M12 `continue-on-error` on Deploy rules and functions: 1. M14
+  `continue-on-error` on Site gate: 1.
+- This change: N1 path filtered again: 3. N2 `head_branch` filter dropped: 3. N3
+  `RUNS_PER_PAGE = 50`: 4. Also A4 site gate always null: 2. B5 sort deleted: 3. X7 GITHUB_REF
+  check disabled: 4. X8 shallow compared with an untrimmed `'true\n'`: 1.
+- SURVIVED, 171/171: X1 `(run?.head_branch ?? 'main') === 'main'` (inert: every trigger of
+  deploy.yml sets `head_branch`; not filed). X2 job-level `continue-on-error: true` on `backend`.
+  X3 the same on `rules-tests`. X6 the same on `deploy`. X4 hosting job `if:` with
+  `needs.checks.result == 'success' &&` turned into `||`. X5 hosting job `if:` prefixed
+  `always() ||`.
+
+**Full product project in the rig:** 4867 tests, 4862 passed, 5 skipped, 0 failed. The process
+project was not re-run.
+
+**Verdict:** pass, 0 blocking. Non-blocking: the hosting job's `if:` is pinned conjunct by
+conjunct with `toContain`, so X4/X5 let the site deploy past a red `checks` job with the suite
+green; pin the line by equality. X2/X3: GitHub's workflow-syntax docs say job-level
+`continue-on-error` keeps the run from failing when the job fails, and `lastDeployedRun` then
+takes that commit as the next base, so a refused or untested rules change is neither deployed nor
+named again; the step-level form (M12) is pinned, the job-level form is not. X6: a refused site
+gate or a failed build ends in a green run. What `needs.<job>.result` reads for such a job was not
+verified here. Info, wording: three test names say the code asks GitHub "for the successful runs";
+since this change the request is unfiltered.
+
+**Teardown.** `node scripts/shared-guard.mjs worktree-cleanup <rig>` failed open (plugin absent).
+The rig's `node_modules` was a real directory and no symlink in it resolved outside the rig, so
+`git worktree remove --force` plus `git worktree prune`; the shared `node_modules` held 449
+entries before and after.
+
+**Knowledge fold:** the tooling chapter's workflow-text bullet gained the job-level twins (a job
+`if:` pinned by equality; job-level `continue-on-error` once a later run reads this run's
+conclusion).
+
+## 2026-10-05 — BIN-1426 part 2, round 3: the runner buffer pin, and the ENOBUFS my round-2 pass missed
+
+**Diff reviewed.** Same branch over HEAD 8443e2a6. Index blobs: `scripts/check-deploy-drift.mjs`
+93fe3615 (round 2: 983b56f8), `scripts/check-deploy-drift.test.mjs` 0f353fa4 (round 2: 709ade0b),
+`.github/workflows/deploy.yml` 172f686c (round 2: 71015b6b; its delta is a comment beside the
+backend deploy step), `scripts/scripts-self-tests-present.test.mjs` a1706740 (unchanged). The
+round's delta came from the coordinator as an index-to-index diff. Prod: `RUN_OPTIONS` (utf8,
+piped stdio, `maxBuffer` 64 MiB) exported and passed verbatim by `runGit` and `runGh`; `runGh`
+had no `maxBuffer` before. Tests: new "both runners read an answer past the default buffer"
+(a 2 MiB answer from a node child through `RUN_OPTIONS`, plus a text pin of each runner's call);
+the hosting job's `if:` pinned by one equality on the whole line, replacing the per-conjunct
+`toContain`s (each old substring is inside the new expected line, so strictly stronger); new
+"no job is marked continue-on-error" (`/^ {4}continue-on-error:/` per job); four renames, the
+backend-job one narrowed to "its npm installs run no install script" with its assertions
+unchanged. Against HEAD the test diff still removes no assertion (`git diff --cached` `-` lines:
+the header comment and two import lines).
+
+**Measured.** `gh api "repos/Malingisslen/binge/actions/workflows/deploy.yml/runs?per_page=100"`
+written to a file, then `wc -c`: 1265359 bytes. `execFileSync('cat', [that file], { encoding: 'utf8', stdio })`
+without `maxBuffer` threw ENOBUFS; with `RUN_OPTIONS` it read the answer and parsed 100 runs.
+The test's 2 MiB fixture is larger than the real answer.
+
+**Rig.** `git worktree add --detach <scratchpad>/tr3rig HEAD`, `git apply` of
+`git diff --cached --binary`; the four blobs hash-equal to the index, and the rig's diff stat
+against HEAD equal to the index's. `npm ci --ignore-scripts`; `.git/hooks` sha1s equal before and
+after. `node_modules/.vite` removed before every run; clean control 173/173 first (abort
+condition) and again after each pass. Each mutant: anchor matched once, landing proven by
+content and a changed `git hash-object`, still in place after the run, restored and
+hash-verified against the index.
+
+**Mutants** (`npx vitest run --project product scripts/check-deploy-drift.test.mjs --reporter=json`):
+- M1 `RUN_OPTIONS` without `maxBuffer`: 1 failed, "both runners read an answer past the default
+  buffer". M2 `maxBuffer` 1.5 MiB: 1, same test. M4 `runGh` with the pre-fix inline options: 1,
+  same test. M5 `runGit` with its own inline options: 1, same test.
+- M3 `RUN_OPTIONS` without `encoding`: SURVIVED 173/173 — `toHaveLength` also passes a Buffer.
+  Live against real git with a stub `gh` answering an empty run list: clean, `--site-gate` exit 0
+  and `--since-last-deploy` exit 0 writing its output file; M3, `--site-gate` exit 1 "kan inte
+  läsa om klonen har hela historiken" and `--since-last-deploy` exit 1 "git(...).trim is not a
+  function" with no output file. Fails closed.
+- M6 hosting `if:` prefixed `always() ||`: 1 failed, "the report step fails the checks job when
+  it fails, and the site requires its answer". M7 the `&&` after `needs.checks.result == 'success'` turned into `||`: 1, same test. (Round 2's
+  X4/X5 survivors.)
+- M8–M11 job-level `continue-on-error: true` on checks, rules-tests, backend, deploy: 1 failed
+  each, "no job is marked continue-on-error". (Round 2's X2/X3/X6 and the checks twin.)
+- M12 the same on backend with a quoted key, `"continue-on-error": true`: SURVIVED. js-yaml
+  parses it to the same `continue-on-error` key.
+- S1 step-level `continue-on-error: true` on the checks job's `Test` step: SURVIVED. S2 the same
+  on `Rules tests (Firestore emulator)`: SURVIVED. Either lets failing tests end in a green job
+  that the backend job's `needs` and the hosting `if:` accept. Not introduced this round.
+
+**Also in the rig:** full product project 4869 tests, 4864 passed, 5 skipped, 0 failed; process
+project 447/447; `node scripts/check-workflow-map.mjs` exit 0 with one baseline-staleness warning
+on flow2, which the staged map change does not touch.
+
+**Verdict:** pass, 0 blocking. Non-blocking: M3 (assert the answer is a string); M12/S1/S2 (the
+`continue-on-error` pins are per form and per step — one allowlist over every job and step would
+close all three).
+
+**My round-2 miss.** Round 2 passed the unfiltered `per_page=100` request with every `gh` call
+injected. The real answer outgrew `execFileSync`'s default buffer, so `--since-last-deploy` and
+`--site-gate` would have died ENOBUFS on the first real run. The coordinator found it, not me.
+
+**Teardown.** `node scripts/shared-guard.mjs worktree-cleanup <rig>` failed open (plugin absent).
+The rig's `node_modules` was a real directory and no symlink in the rig resolved outside it, so
+`git worktree remove --force` plus `git worktree prune`; the shared `node_modules` held 449
+entries before and after, and the reviewed files' worktree blobs still equal the index.
+
+**Knowledge fold:** the tooling chapter's Extract-then-test bullet gained the injected-runner
+blind spot (measure the real answer; one execution through the exported options with a bigger
+fixture, asserted as a string).
+
+## 2026-10-06 — BIN-1426 part 3 (PR A): decision 1 narrows reviewGates; route.mjs default/feature/fail-closed policies
+
+**Diff reviewed (staged):** `.claude/shared-plugin.json` (reviewGates and productionGlobs narrowed to the decision-1 src list), `docs/org/route.mjs` (POLICIES: default reads sensitivity from the gates via `gateCovers`; `--feature`/`{feature:true}` keeps legacy routing; unreadable/empty gates -> `fail-closed`; output gains `policy`, `sensitive`; flags in any order), `docs/org/route.test.mjs`, `docs/org/gate-symmetry.test.mjs`, `docs/org/metrics/check_review_coverage(.test).mjs` (`reviewOwedFor`/`owesReview`, `TYPE_FREE`, `REVIEW_SCOPE_EFFECTIVE_FROM`, per-commit gates, name-status parsing), `docs/org/metrics/check_staged_routing(.test).mjs`, CLAUDE.md, code-style.md, DESIGN.md §1.3, lefthook.yml.
+
+**Reading list:** the reading-list command failed (`ENOENT` on `/root/.claude/plugins/cache/malin-plugins/workflow-guards`); review-core.md was read from `/home/claude/claude-plugins/plugins/workflow-guards/shared/review-core.md`, plus the core card and the tooling chapter (the only chapter whose paths the staged diff touches).
+
+**Clean control:** `npx vitest run --project process` over the four staged test files: 4 files, 389/389 passed, vite cache cleared first.
+
+**Floors measured live** (scratchpad script modelling the file's own procedure): tracked 1226; default non-skip 320 (floor 280); gated 320 (280); feature non-skip 1123 (1000); #25-owned 73 (60, raised from 15); default unmapped-code 41 (30); feature unmapped-code 275 (230); high-stakes 9 (7); src security-gated files 41 (35), not 521 (450); src tests test-gated 31 (25), not 266 (230). Every lowered floor carries a dated reason and sits within ~13-27% of its live value.
+
+**Mutations** (in place, each snapshotted to scratchpad, mutant asserted present before and after the run, restored, `git hash-object` == `git rev-parse :<f>`):
+- route.mjs drop `|| sensitiveSet.has(path)` from unownedCode: 2 failed (gate-symmetry "decision 1 only narrows", `--selftest`).
+- route.mjs seat from `resolveOwners(map, clean)` instead of `sensitive`: 2 failed (route.test "seats the owner of the gated file", selftest).
+- route.mjs empty gates array counted readable: 2 failed ("gates = an empty list", selftest).
+- route.mjs `--feature` read only from argv[0]/[1]: 1 failed ("reads its flags in any order").
+- route.mjs stdin path ignores `--feature`: 1 failed ("applies --feature to paths read from stdin").
+- route.mjs `gateCovers` without the `exclude` subtraction: SURVIVED 389/389. Every consumer asks `gates.some(gateCovers)`, and every path the code gate excludes is matched by another gate, so no consumer can see the arm today.
+- route.mjs `gateCovers` without the `keyed` arm: 3 failed (`.claude/settings.json still owes a critique`, gate-symmetry B, agreement case).
+- check_staged_routing.mjs owesReview early return -> `if (false)`: 2 failed (decision-1 block).
+- check_staged_routing.mjs `routed.length === 0` branch -> `ok: false`: SURVIVED 389/389.
+- check_staged_routing.mjs `paths.length === 0` branch -> `ok: false`: SURVIVED 389/389.
+- check_staged_routing.mjs no-ticket branch -> `ok: false`: 1 failed.
+- check_staged_routing.mjs route without `feature`: 2 failed.
+- check_review_coverage.mjs history walk passes `added: []`: 1 failed ("agrees with the history rule").
+- check_review_coverage.mjs TYPE_FREE `<` -> `<=`: 2 failed (both epoch boundary cases).
+- check_review_coverage.mjs scope epoch `<` -> `<=`: 1 failed.
+
+**Hand-traced, not run:** at HEAD `gradeStagedRouting` had no `owesReview` early return, so "a doc-only stage routes to no role and is not blocked" (`docs:` + README.md) reached the `routed.length === 0` branch and "the reviewer notebook alone cannot make a commit owe a panel" (`docs:` + a knowledge file) reached the `paths.length === 0` branch; both inversions above would have failed there. The diff's new early return answers both fixtures first.
+
+**Verdict:** fail, 1 blocking: the two pre-existing staged-routing tests now pass through the new gate and no longer reach the branches they name. Non-blocking: `gateCovers`' exclude arm unpinned; check_review_coverage.test.mjs "mainMessage refuses by the STAGED files" reads live `stagedAddedFiles()`/`stagedReviewGates()` defaults, so a staged new page in the checkout running the suite flips its second assertion.
+
+**Knowledge fold:** core card, the sequential-exclusion-guards bullet: a new early return ahead of old branches strands old fixtures; re-mutate each downstream branch.
+
+## 2026-10-06 — BIN-1426 part 3 (PR A), re-review: stranded staged-routing branches fixed; findGaps narrowed to gated files
+
+**Diff reviewed (staged):** same batch as the entry above, plus: `check_staged_routing.test.mjs` (the doc-only and notebook cases now use a `feat:` subject and assert `v.reason`), `route.test.mjs` (new describe "gateCovers matches the way the commit gate does (BIN-1426)"), `check_review_coverage.test.mjs` ("mainMessage refuses by the STAGED files" passes `{ added: [], gatesRead }`), `gate-symmetry.test.mjs` header strike, and `docs/org/gen-ownership-map.mjs` `findGaps(tracked, { gates })` reporting only gate-covered files (unreadable or empty gates count every file) with its tests.
+
+**Reading list:** the reading-list command failed again (`ENOENT` on `/root/.claude/plugins/cache/malin-plugins/workflow-guards`); review-core.md read from `/home/claude/claude-plugins/plugins/workflow-guards/shared/review-core.md`, plus the core card and the tooling chapter.
+
+**Clean control:** `npx vitest run --project process` over the five staged test files, vite cache cleared: 405 tests, 2 failed, both in gen-ownership-map.test.mjs ("holds the baseline in the shrinking direction only", "--check ... passes on an in-sync tree"), both on `src/lib/firebase/pendingAddServerCheck.ts` — the caller's declared out-of-scope gap from another PR on main.
+
+**Mutations** (harness in scratchpad: anchor count 1, mutant asserted before and after the run, restored from a scratchpad snapshot, `git hash-object` == `git rev-parse :<f>` every time):
+- check_staged_routing.mjs `routed.length === 0` branch -> `ok: false`: 1 failed ("a doc-only stage routes to no role and is not blocked"). Previously SURVIVED.
+- same branch -> `if (false)`: 1 failed (same test).
+- `paths.length === 0` branch -> `ok: false`: 1 failed ("the reviewer notebook alone cannot make a commit owe a panel"). Previously SURVIVED.
+- same branch -> `if (false)`: 1 failed (same test).
+- route.mjs `gateCovers` without `exclude`: 2 failed beyond control (both new gateCovers cases). Previously SURVIVED.
+- route.mjs `gateCovers` without the `exact` arm: 1 failed ("an exact name, minus an exclude").
+- route.mjs `gateCovers` with `exact` returning before `exclude`: 1 failed (same).
+- gen-ownership-map.mjs drop `&& sensitive(f)`: 2 failed beyond control ("does not ask an ordinary file", "counts every file as sensitive when the gates cannot be read").
+- `sensitive` fail-open (`!!gates?.some(...)`): 1 failed beyond control (fail-closed case).
+- `!gates?.length` -> `!gates`: 1 failed beyond control (fail-closed case, the `[]` assertion).
+- default `gates = readReviewGates()` -> `null`: 1 failed beyond control ("does not ask an ordinary file").
+- `main()` calling `findGaps(tracked, { gates: null })`: only the 2 control failures — undetectable today because both pins that read `main()` are already red on the unrelated gap.
+
+**Verdict:** pass, 0 blocking. Info: `main()`'s call into `findGaps` is unpinned while the control is red; it re-arms once the other PR's owner lands.
+
+**Knowledge fold:** tooling chapter, Extract-then-test bullet: a pin red in the clean control kills nothing; credit only control-green tests.
+
+## 2026-10-06 — BIN-1426 part 3 (PR A), third pass: the sprint-routing fallback and the _note33 gate widening
+
+**Diff reviewed (staged):** since the previous pass: `check_staged_routing.mjs` `gradeStagedRouting` gains a fallback that routes the same union `--feature` when the default panel has a missing role and passes when every role of that routing is logged; `check_staged_routing.test.mjs` new describe "a fix logged the way a sprint routes it (as a feature) is not refused"; `.claude/shared-plugin.json` adds `src/lib/(authErrors|blockRelationship|sentry)`, `src/hooks/(useAuth|useFcmToken)`, `src/components/AuthGuard` to all four gates and productionGlobs (`_note33`); struck sentences and an accepted-deviations successor entry.
+
+**Reading list:** the command failed (`ENOENT` on `/root/.claude/plugins/cache/malin-plugins/workflow-guards`); review-core.md read from `/home/claude/claude-plugins/plugins/workflow-guards/shared/review-core.md`, plus the core card and the tooling chapter.
+
+**Clean control:** check_staged_routing.test.mjs 36/36; gate-symmetry.test.mjs 15/15; `vitest run docs/org` 451/452, the one failure the live "every feat/fix commit since the epoch carries a review row" (1f3d002, ab8326d from another thread; red without this batch).
+
+**Mutations** (anchor count 1, mutant asserted before and after, restored from scratchpad snapshot, `git hash-object` == `git rev-parse :<f>` each time):
+- fallback `.every` -> `.some`: 1 failed ("a declined row that leaves out one routed role is still REFUSED (BIN-1368)").
+- fallback `if (false)`: 1 failed ("passes with the default panel and with the feature panel").
+- fallback `feature: true` -> `feature`: 1 failed (same).
+- drop `asFeature.length > 0 &&`: SURVIVED — equivalent: a default routing with a seat implies a non-empty feature routing (high-stakes is identical in both; a gated path is either code-owned or in `unownedCode`, both medium in the feature policy).
+- fallback `route(paths, …)` -> `route(stagedPaths, …)`: SURVIVED, observable. With a reviewer knowledge file staged beside the pair, the feature routing becomes [25] instead of [1]; probe: current code `ok: true`, mutant `ok: false, missing [18]`.
+- shared-plugin.json, one gate's src entry dropped (code: useAuth|useFcmToken; test: sentry; test: AuthGuard; integration: blockRelationship): each 1 failed in gate-symmetry's "the gates agree with each other over src/".
+- shared-plugin.json, the whole _note33 widening reverted from all five lists: `vitest run docs/org` 451/452, only the control failure — SURVIVED.
+- route.mjs `resolveOwners(map, sensitive)` -> `clean`; `gatesReadable` without the length check; default branch `&& false`; check_review_coverage.mjs `<` -> `<=` on REVIEW_SCOPE_EFFECTIVE_FROM; `if (!codeType) return null` deleted; `gates.some` -> `gates.every`: all killed by control-green tests.
+
+**Verdict:** fail, 2 blocking — the fallback's union input is unpinned (the knowledge-file case), and the _note33 widening is revertible green (DECISION_1_AREAS names none of the six added files).
+
+**Knowledge fold:** tooling chapter — union-floor bullet extended to lists held in step (all copies retreating together is green); two-call-site bullet extended to a second call on the same filtered input.
+
+## 2026-10-06 — BIN-1426 part 3 (PR B): the deviations index check
+
+Scope: `ea90e495..HEAD` — scripts/check-deviations-index.mjs (new), its test, lefthook.yml, vitest.config.ts, scripts-self-tests-present, route.test.mjs, gen-ownership-map.test.mjs.
+
+Mutants killed: fence handling dropped or not toggled, floor disabled, lengths-only compare, `main()` 0 on mismatch, read error 0, ledger-only loop, set compare, entry pattern widened, CR strip dropped, ledger compared with itself. Survived: `FLOOR = 5`; `readStaged` reading `HEAD:`; the lefthook block deleted; `process.exit(0)` at the entry point (no test spawned the script).
+
+A CRLF-converted index turned "keeps the trigger on the index and none on the ledger" red (`^---\n`), and the `not.toMatch(/^---\n/)` twin cannot fail on CRLF.
+
+**Verdict:** fail, 2 blocking — the CRLF-blind live assertion, and no pin on the lefthook wiring or on reading the staged copies. Fixed by the author: `\r?\n` in both regexes, a lefthook block pin, and a throwaway-repo spawn test (staged mismatch exits 1, working-tree-only mismatch exits 0) that kills the `HEAD:` and `process.exit(0)` mutants; a literal floor pin; the route test now covers index and ledger.
+
+**Knowledge fold:** tooling chapter, vacuous oracles — the CRLF live-tree assertion bullet.
+
+## 2026-10-06 — BIN-1426 part 3 (PR B), round 2: the fixes in 8a60f847
+
+Scope: `ea90e495..HEAD`, fixes in `8a60f847` — scripts/check-deviations-index.test.mjs (CRLF-tolerant frontmatter regexes, literal floor pin, lefthook block pin, throwaway-repo spawn test), docs/org/route.test.mjs (index and ledger routed). Read in full: scripts/check-deviations-index.mjs, its test, lefthook.yml, docs/org/route.test.mjs, both accepted-deviations files.
+
+Method: each file snapshotted to the scratchpad; each mutant asserted landed (bytes differ), still in place after the run, restored from the snapshot and `git hash-object` equal to `HEAD:<f>`; `node_modules/.vite/vitest` removed before every run. Clean control: 270/270 across the two files.
+
+Mutants, `npx vitest run scripts/check-deviations-index.test.mjs` (16 tests):
+- lefthook.yml: block deleted, 1 failed ("is wired into pre-commit, on both files"); block `#`-commented, 1 failed, same; `run:` with `|| true`, 1 failed, same; block moved under `commit-msg:`, 1 failed, same. `skip: true` added to the block: SURVIVED 16/16. `exclude: [".claude/**"]` added: SURVIVED 16/16.
+- check-deviations-index.mjs: `HEAD:` read, 1 failed ("judges the staged copies"); `process.exit(0)`, same; `main();` without exit, same; working-tree read (`readFileSync`), same, failing at the working-tree-only step, not by crashing; entry guard `if (false)`, same; `FLOOR = 5` and `FLOOR = 59`, 1 failed each ("keeps the floor near the ledger size"); read-error branch `return 0`, 1 failed ("exits 1 when a file cannot be read").
+- CRLF: index, ledger and lefthook.yml all CRLF, 16/16 green. CRLF plus `---\r\npaths:` frontmatter on the ledger, 1 failed ("keeps the trigger…"); CRLF index with `paths:` renamed, 1 failed, same; LF ledger with `---\n` prefix, 1 failed, same.
+- docs/org/route.test.mjs: `.claude/accepted-deviations.md` dropped from role 25's patterns in docs/org/ownership-map.json, 1 failed of 254 ("seats the same owner for the decided-deviations index and ledger").
+
+Hermeticity of the throwaway-repo test (`-t 'judges the staged'`): `GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1`, pass; global `core.autocrlf=true`, pass; global `init.templateDir` + `core.hooksPath` to a failing pre-commit + `commit.gpgsign=true` with `gpg.program=/bin/false`, pass (the local settings override them); global `autocrlf=true` + `safecrlf=true`, FAIL ("fatal: LF would be replaced by CRLF in .claude/accepted-deviations.md" at `git add .`). `GIT_INDEX_FILE=<repo>/.git/index`, PASS, and the fixture's `git add` rewrote this repo's real index to the two fixture files: `git status` showed the whole tree staged for deletion. Restored with `git read-tree HEAD` + `git update-index --refresh`; HEAD unchanged at 8a60f847, porcelain empty, the reviewed files' index and worktree blobs equal HEAD. No lefthook hook runs vitest (lefthook.yml has pre-commit and commit-msg commands only), so no current runner leaks `GIT_*` into the suite.
+
+**Verdict:** pass, 0 blocking. Both round-1 blocking findings and both optional ones are closed by mutants that now die. Non-blocking: `skip:`/`exclude:` on the lefthook block survive; the fixture helper inherits `GIT_*` env and global `safecrlf`.
+
+**Knowledge fold:** tooling chapter, Extract-then-test & layering — the injected-runner bullet gained the real-git throwaway-repo hermeticity check and the scratch-clone rule for probing it.
+
+## 2026-10-07 — BIN-1426: the backend gate without the approval click (check-deploy-drift.test.mjs)
+
+**Diff reviewed.** Staged on `claude/project-thread-01w0zn` over HEAD b4a8b2c8. Index blobs:
+`scripts/check-deploy-drift.mjs` 1a1d5894, `scripts/check-deploy-drift.test.mjs` 83ede84c,
+`scripts/scripts-self-tests-present.test.mjs` 88749e1f (comment-only: REQUIRED and MIN unchanged),
+`.github/workflows/deploy.yml` fb562274. `--approval-gate`/`approvalProblem`/`gateProblem`/
+`staleProblem`/`lastDeployedRun` are gone from script, workflow and tests; their removed tests are
+the decided removal (Malin 2026-10-07), and the gate's surviving refusals were ported to
+`gateTarget` tests. Report-mode `toContain` strings lost their approval sentences because the
+production strings did. `git grep -i "approval-gate|approvalProblem|Approval gate"` hits only this
+archive and `events.jsonl`.
+
+**Reading list.** The reading-list command failed (`ENOENT` on the plugin cache);
+review-core.md was read from `/home/claude/claude-plugins/plugins/workflow-guards/shared/`, plus
+the core card and the tooling chapter.
+
+**Rig.** `git worktree add --detach <scratchpad>/trrig HEAD`, `git apply` of
+`git diff --cached --binary`; the four blobs hash-equal to the index. `npm ci --ignore-scripts`
+(real directory, no outward symlink). Harness: `node_modules/.vite` removed before every run; clean
+control 189/189 (185 drift + 4 self-tests). Each mutant: anchor matched once, landing proven by a
+changed `git hash-object`, still in place after the run, restored and hash-verified.
+
+**Mutants** (`npx vitest run --project product scripts/check-deploy-drift.test.mjs --reporter=json`):
+- Killed. C1 backend `needs: [checks]`: 1. W1 `environment: backend` deleted: 1. W4 `if: false` on
+  Test the newer commit: 1. W5 Rules tests step deleted: 1. W6 `npm test || true`: 2. W7
+  `continue-on-error` on Test the newer commit: 2. W9 its condition `==`: 1. W11 key step
+  `DEPLOY_ARGS` from `needs.checks.outputs.deploy`: 1. W14 `if: always()` on Deploy rules and
+  functions: 1. W15 job-level `continue-on-error` on backend: 1. R2 `always() &&` on the upload:
+  1. R5 Write-down step without the `clean` term: 1. G1 ref check off: 5. G2 head check off: 1.
+  G3 ancestry check off: 3. G4 `gateMain` refusal `return 0`: 2 (both through `main()`). G5
+  GITHUB_SHA check off: 1. G6 repository check off: 1. G7 `sinceLastDeploy(env.GITHUB_SHA…)`: 3.
+  G8 `gateOutput(env.GITHUB_SHA…)`: 5. G10 fetch deleted: 1. G11 second fetched() check off: 1.
+  G12 `if (problem)` off: 2. R6 expired check off: 1. R7 record-content check off: 2. R9 page
+  check off: 1.
+- SURVIVED 185/185: R1 `set -o pipefail` deleted from Deploy rules and functions (no `shell:` or
+  `defaults:` in deploy.yml, so the step runs `bash -e`: a failing `npx … | tee` exits 0, reaches
+  the else, writes `clean=true`, uploads the record and ends the job green). R8 the else-branch
+  `clean=true` moved after `fi`, so a deploy where firebase skipped functions writes the record:
+  the test's `deploy.indexOf('else', skipped)` lands on the `else` inside "händelsetyp" in the
+  warning text, 330 characters before the real `else`, so its not-in-branch slice holds nothing.
+  P1 backend `actions: read` deleted. P2 checks `actions: read` deleted. P3 backend checkout
+  `fetch-depth: 0` deleted. P1–P3 fail closed (403 or no ancestry → the gate or the report step
+  exits 1, or deploys everything but hosting).
+- Probe (rig-only file, deleted before teardown): pipefail matched as a whole line before
+  `| tee`; the skipped branch sliced up to `'\n          else\n'` holds no `clean=true` and the
+  real else branch holds it. Clean 2/2; R1 killed by the pipefail probe alone, R8 by the branch
+  probe alone.
+
+**Verdict:** fail, 2 blocking (R1 and R8: #8's condition 6, the record only after a clean deploy,
+is not proven). Non-blocking: P1/P2 (#8's condition 8 has no pin on backend or checks; fail
+closed), P3.
+
+**Teardown.** `WORKTREE_GUARD_ROOT=/home/claude/claude-plugins/plugins/workflow-guards node
+scripts/shared-guard.mjs worktree-cleanup <rig>`: removed, shared `node_modules` intact. The four
+reviewed files' worktree blobs still equal the index.
+
+**Knowledge fold:** the tooling chapter's workflow-text bullet gained the pipefail route and the
+bare-keyword anchor.
+
+## 2026-10-07 — BIN-1426 round 2: the record test re-cut, pipefail and permissions pinned (check-deploy-drift.test.mjs)
+
+**Diff reviewed.** Same branch over HEAD b4a8b2c8. Index blobs: `scripts/check-deploy-drift.test.mjs`
+07c78fb1 (was 83ede84c), `scripts/check-deploy-drift.mjs` 1a1d5894 and `.github/workflows/deploy.yml`
+fb562274 (both unchanged since round 1), `scripts/scripts-self-tests-present.test.mjs` 88749e1f
+(comment-only). `git diff 83ede84c 07c78fb1`: the record test now cuts the skipped-functions
+branch at `'\n          else\n'` and `'\n          fi\n'`, asserts both found, the skipped branch
+without `clean=true`, the else branch with it, no `clean=true` after `fi`, and
+`^ {10}set -o pipefail$` before `| tee`; a new test pins `actions: read` on backend and checks and
+the backend checkout's `fetch-depth: 0`. Nothing else in the file changed.
+
+**Reading list.** The command failed again (`ENOENT` on `/root/.claude/plugins/cache/...`);
+review-core.md read from `/home/claude/claude-plugins/plugins/workflow-guards/shared/`, plus the
+core card and the tooling chapter.
+
+**Rig.** `git worktree add --detach <scratchpad>/rig HEAD`, the four index blobs written in with
+`git show :<f>`, `npm ci --ignore-scripts` (own `node_modules`). Clean control 190/190 (186 drift
++ 4 self-tests). Harness `mut.mjs`: anchor once, landing by changed hash, still in place after the
+run, restored and hash-verified, `node_modules/.vite` removed per run, `--project product`.
+
+**Mutants.**
+- Round-1 survivors now killed, each by exactly the named test: R1 (pipefail deleted) 1, R8 (else
+  `clean=true` moved after `fi`) 1 — both "the record is uploaded only after a clean deploy…";
+  P1, P2, P3 1 each — "the backend and checks jobs keep actions: read…".
+- New, killed by the record test: N4 (`clean=true` swapped into the skipped branch), N5 (added to
+  the skipped branch too), N6 (pipefail moved below the tee line), N17 (`else` → `elif true; then`).
+- Round-1 killed set re-run, all still killed: C1 1, W1 1, W4 1, W5 1, W6 2, W7 2, W9 1, W11 1,
+  W14 1, W15 1, R2 1, R5 1, G1 5, G2 1, G3 3, G4 2, G5 1, G6 1, G7 3, G8 5, G10 1, G11 1, G12 2,
+  R6 1, R7 2, R9 1.
+- SURVIVED 186/186: N1 `|| true` after `| tee "$RUNNER_TEMP/backend-deploy.log"`; N2 `set +o
+  pipefail` inserted before the npx line; N3 `set +e` inserted before the npx line (the hosting
+  step's own capture idiom). Each lets a failed `firebase deploy` reach the else, write
+  `clean=true`, upload the record and end the step green. N15 tee to `backend-deploy-full.log`;
+  N16 grep reads `backend-deploy.txt`: grep exits 2, the `if` reads it as "nothing skipped", so a
+  deploy where firebase skipped functions writes the record.
+- Probe (rig-only, deleted before teardown): the step's whole `run:` block compared by equality
+  with a snapshot of the staged one. Clean 1/1; N1, N2, N3, N15, N16 each 0/1.
+
+**Verdict:** fail, 1 blocking: the "Deploy rules and functions" `run:` is not pinned by equality,
+so #8's condition 6 still falls to N1–N3 and N15/N16. I did not run these in round 1; they belong
+to the route class my tooling chapter already named (`|| true` in a `run:`).
+
+**Teardown.** `WORKTREE_GUARD_ROOT=… node scripts/shared-guard.mjs worktree-cleanup <rig>`:
+removed, shared `node_modules` 452 → 452. The four reviewed files' worktree blobs equal the index.
+
+**Knowledge fold:** tooling chapter, the `cmd | tee log` sentence now names the sibling routes a
+pipefail pin leaves open and asks for the whole `run:` by equality.
+
+## 2026-10-07 — BIN-1426 round 3: the deploy step's whole script pinned; its shell is not (check-deploy-drift.test.mjs)
+
+**Diff reviewed.** Same branch over HEAD b4a8b2c8. Index blobs: `scripts/check-deploy-drift.test.mjs`
+9f1772c9 (was 07c78fb1), `scripts/check-deploy-drift.mjs` 1a1d5894 and `.github/workflows/deploy.yml`
+fb562274 (unchanged since round 1), `scripts/scripts-self-tests-present.test.mjs` 88749e1f (comment
+only; REQUIRED and MIN unchanged). New test "the deploy step runs exactly its script": `scripts(...)`
+of the "Deploy rules and functions" step equals the full literal script (comment lines dropped by
+the extractor). `git grep -i -E "approval-gate|approvalProblem|Approval gate"` in the staged tree,
+excluding `events.jsonl` and this archive: no hits.
+
+**Reading list.** The command failed again (`ENOENT` on `/root/.claude/plugins/cache/...`);
+review-core.md read from `/home/claude/claude-plugins/plugins/workflow-guards/shared/`, plus the
+core card and the tooling chapter. Ledger `.claude/accepted-deviations.md`: no entry covers the
+deploy workflow.
+
+**Rig.** `git worktree add --detach <scratchpad>/rig3 HEAD`, `git apply` of `git diff --cached
+--binary`; the four blobs hash-equal to the index. `npm ci --ignore-scripts` (own directory).
+Harness `mut.mjs`: anchor once, landing by changed `git hash-object`, still in place after the run,
+restored and hash-verified, `node_modules/.vite` removed per run, `--project product` over the two
+test files. Clean control 191/191 (187 drift + 4 self-tests).
+
+**Mutants (failed/191, failing tests).**
+- Round-2 survivors, each killed by "the deploy step runs exactly its script" alone: N1 `|| true`
+  after tee 1, N2 `set +o pipefail` before npx 1, N3 `set +e` before npx 1, N15 tee to
+  `backend-deploy-full.log` 1, N16 grep on `backend-deploy.txt` 1. KEY1 missing-key `exit 1`→`exit 0`
+  1 (same test).
+- Re-run, still killed: R1 2, R8 2 (equality test + record test), R2 1, R5 1, W14 1, W15 1, W4 1,
+  W6 2, W16 (`npm run typecheck || true` on Typecheck functions) 2, C1 1, K1 (`environment: backend`
+  deleted) 1, K2 (key env on Test the newer commit) 2, K3 (key as job-level env) 1, P1 1, P2 1, G1 5,
+  G2 1, G3 3, G4 2, G5 1, G6 1, G9 (failed main lookup returns `{ target: sha }`) 1, G11 1.
+- SURVIVED 191/191: SH1 `shell: bash {0}` on the deploy step; SH2 the same as job `defaults.run.shell`
+  on backend; SH3 the same as workflow-level `defaults`; SH4 `shell: sh {0}` on the step. Simulated
+  the extracted step script with a failing `npx` stub: under `bash -e` exit 1 and no output; under
+  plain `bash` exit 0 and `clean=true` in GITHUB_OUTPUT. So a failed deploy ends the step and job
+  green and, when main moved on, uploads the record (#8 condition 6).
+- SURVIVED 191/191, non-blocking: G13 `gateMain`'s comparison-failure branch `return 1`→`return 0`
+  (no test drives the gate with a failing `sinceLastDeploy`). Fail-closed in the workflow: no outputs
+  are written, `target` is '', the pinned checkout step runs and `git checkout -q --detach ""` dies
+  (exit 128, measured), so nothing deploys.
+- ENV1 (`SHELLOPTS: braceexpand` in the step env) survived but is not a route: bash imports SHELLOPTS
+  options without clearing `-e`. Discarded.
+- Probe (rig-only, removed and hash-restored to 9f1772c9): `expect(lines.filter((l) =>
+  /^\s*(shell|defaults):/.test(l))).toEqual([])` inside the workflow describe. Clean 192/192; SH1,
+  SH2, SH3 each 1/192, the probe alone.
+
+**Verdict:** fail, 1 blocking (SH1–SH4: #8 condition 6 still falls to a shell override, the premise
+the equality pin rests on). Non-blocking: G13.
+
+**Teardown.** `WORKTREE_GUARD_ROOT=… node scripts/shared-guard.mjs worktree-cleanup <rig3>`: removed,
+shared `node_modules` 452 → 452. The four reviewed files' worktree blobs equal the index.
+
+**Knowledge fold:** tooling chapter, the `cmd | tee log` sentence now also asks for `shell:`/
+`defaults:` pinned absent beside the equality pin.
+
+## 2026-10-07 — BIN-1426 round 4: the shell pin and the gate's comparison-failure exit (check-deploy-drift.test.mjs)
+
+**Diff reviewed.** Same branch over HEAD b4a8b2c8. Index blobs: `scripts/check-deploy-drift.test.mjs`
+56c572c3 (was 9f1772c9), `scripts/check-deploy-drift.mjs` 1a1d5894 and `.github/workflows/deploy.yml`
+fb562274 (unchanged since round 1), `scripts/scripts-self-tests-present.test.mjs` 88749e1f (comment
+only; REQUIRED and MIN unchanged). New in the test file: "the deploy step runs exactly its script"
+first asserts `lines.filter((l) => /^\s*(shell|defaults):/.test(l))` equals `[]` over the whole
+workflow (comment lines dropped); new test "through main, a comparison that throws exits 1 and
+writes nothing" drives `--backend-gate` with main at the run's own commit and a `git` stub that
+answers only `rev-parse HEAD`, so `sinceLastDeploy` throws at its `rev-parse --verify` (before any
+gh call on the runs path) and lands in `gateMain`'s comparison catch. `git grep --cached -i -E
+"approval-gate|approvalProblem|Approval gate"` excluding `events.jsonl` and this archive: no hits.
+
+**Reading list.** The command failed again (`ENOENT` on `/root/.claude/plugins/cache/...`);
+review-core.md read from `/home/claude/claude-plugins/plugins/workflow-guards/shared/`, plus the core
+card and the tooling chapter. Index `.claude/rules/accepted-deviations.md` and the ledger's BIN-1426
+entry: nothing covers the deploy workflow.
+
+**Rig.** `git worktree add --detach <scratchpad>/rig4 HEAD`, `git apply` of `git diff --cached
+--binary`; the four blobs hash-equal to the index. `npm ci --ignore-scripts` (own directory, not a
+link). Harness `tools/mut.mjs`: anchor matched once, landing checked, hash unchanged after the run,
+restored, `node_modules/.vite` removed per run, `--project product` over the two test files. Clean
+control 192/192 (188 drift + 4 self-tests).
+
+**Mutants (failed/192, failing tests).**
+- Round-3 survivors, each killed by "the deploy step runs exactly its script" alone: SH1 `shell: bash
+  {0}` on the deploy step 1, SH2 the same as backend job `defaults.run.shell` 1, SH3 workflow-level
+  `defaults` 1, SH4 `shell: sh {0}` on the step 1. SH8 `- shell: bash {0}` as the step's first key 1
+  (killed only because the step lookup on `- name: Deploy rules and functions` then misses).
+- G13 `gateMain` comparison catch `return 1`→`return 0`: 1, the new test alone. G13b the catch also
+  writing `gateOutput(target, EXCEPT_HOSTING)`: 1, the same test.
+- Re-run, still killed: G4 2, G1 5, G3 3, G2 1, C1 1, K1 1, K2 2, K3 1, W5 1, W4 1, W17 (a new step
+  between gate and key) 1, R1 2, N1 1, R5 1, P1 1, P2 1, GATE-after-key (gate step's id renamed) 1.
+- SURVIVED 192/192, non-blocking: SH7 `"shell": bash {0}` (quoted key) on the deploy step; SH9
+  `'defaults': {run: {shell: 'bash {0}'}}` at workflow level. Valid YAML keys the regex does not
+  match; whether GitHub's parser honours them was not verified. No quoted key exists in deploy.yml.
+- SURVIVED 192/192, non-blocking: APPROVAL-readd, a `- name: Approval gate` step running
+  `node scripts/check-deploy-drift.mjs --approval-gate` before the backend gate. #8 condition 7 is
+  held by the grep above, not by a test; the step would fail closed (`main(['--approval-gate'])`
+  falls to the before/after path and exits 1 on the missing second ref), so nothing deploys.
+
+**Verdict:** pass, 0 blocking. Non-blocking: SH7/SH9 (quoted-key evasion of the shell pin),
+APPROVAL-readd (condition 7 is a grep, not a test; fails closed).
+
+**Teardown.** `WORKTREE_GUARD_ROOT=… node scripts/shared-guard.mjs worktree-cleanup <rig4>`: removed,
+shared `node_modules` 452 → 452. The four reviewed files' worktree blobs equal the index.
+
+**Knowledge fold:** tooling chapter, the shell/defaults sentence now asks for a quoted-key probe.

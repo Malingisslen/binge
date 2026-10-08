@@ -1,8 +1,12 @@
 'use client';
 
+import { formatKr } from '@/lib/formatKr';
 import Link from 'next/link';
 import { addDaysFromToday, pluralSv } from '@/lib/utils';
 import type { AdvisorResult, PrimaryAction } from '@/types';
+import { cardClass } from '@/components/ui/Card';
+import { buttonClass } from '@/components/ui/Button';
+import { badgeClass } from '@/components/ui/Badge';
 
 // "1. Slutför · 2. Pausa när klar · 3. Överväg" — den numrerade rådgivar-
 // listan från mockup E. Steg 1 är aktiv (CTA-knapp), steg 2+3 är passiva
@@ -32,11 +36,11 @@ interface BuildStepsContext {
   onPauseActive: (providerId: number, resumeAt: string | null) => void;
 }
 
-const CARD_BASE = 'bg-surface border border-rule rounded-sm grid grid-cols-[36px_1fr_auto] gap-3 px-4 py-[12px] items-center mb-[6px]';
-const NUM_BASE = 'text-[22px] leading-none text-center font-light';
-const CTA_PRIMARY = 'bg-acc-deep text-white border-none rounded-sm px-3 py-[6px] text-xs font-semibold no-underline whitespace-nowrap hover:bg-acc-deep';
-const CTA_GHOST = 'bg-transparent text-acc-deep border border-acc-deep rounded-sm px-3 py-[5px] text-xs font-semibold no-underline whitespace-nowrap hover:bg-acc-deep hover:text-white';
-const BADGE_GREEN = 'inline-block px-[7px] py-[2px] text-[10px] uppercase tracking-[0.4px] font-bold rounded-sm border border-season-done text-season-done whitespace-nowrap';
+const CARD_BASE = cardClass('grid grid-cols-[36px_1fr_auto] gap-3 px-4 py-3 items-center mb-1.5');
+const NUM_BASE = 'text-3xl leading-none text-center font-light';
+const CTA_PRIMARY = buttonClass({ variant: 'acc', size: 'sm', className: 'no-underline whitespace-nowrap' });
+const CTA_GHOST = buttonClass({ variant: 'ghost', size: 'sm', className: 'no-underline whitespace-nowrap' });
+const BADGE_GREEN = badgeClass('success', 'whitespace-nowrap');
 
 function buildSteps(advisor: AdvisorResult, ctx: BuildStepsContext): Step[] {
   const steps: Step[] = [];
@@ -54,7 +58,7 @@ function buildSteps(advisor: AdvisorResult, ctx: BuildStepsContext): Step[] {
       title: `Pausa ${primary.providerName} när du är klar`,
       desc: 'Inga andra serier från din Följer eller Vill se ligger där de närmaste 60 dagarna.',
       active: false,
-      badge: { label: `Spar ${primary.monthlyCost} kr/mån` },
+      badge: { label: `Spar ${formatKr(primary.monthlyCost)} kr/mån` },
     });
   } else if (primary.kind === 'pause' && advisor.secondaryAction?.kind === 'catchup') {
     // Vid pause-primary kan secondaryAction vara catchup — vi visar den
@@ -94,7 +98,7 @@ function stepFromPrimary(action: PrimaryAction, ctx: BuildStepsContext): Step {
       const defaultResume = action.nextAirDate ?? addDaysFromToday(30);
       return {
         number: 1,
-        title: `Pausa ${action.providerName} — spar ${action.monthlyCost} kr/mån`,
+        title: `Pausa ${action.providerName} — spar ${formatKr(action.monthlyCost)} kr/mån`,
         desc: action.nextAirDate
           ? 'Inget från din Följer eller Vill se ligger där tills återupptags-datumet.'
           : 'Inget från din Följer eller Vill se ligger där de närmaste 60 dagarna.',
@@ -121,12 +125,20 @@ function stepFromPrimary(action: PrimaryAction, ctx: BuildStepsContext): Step {
         active: true,
         cta: { label: 'Visa titlar' },
       };
+    case 'needs-library':
+      return {
+        number: 1,
+        title: 'Lägg till det du följer',
+        desc: `Binge behöver minst ${action.minTitles} titlar i Följer eller Vill se för att räkna.`,
+        active: true,
+        cta: { label: 'Utforska serier', href: '/series/' },
+      };
     case 'idle':
     default:
       return {
         number: 1,
         title: 'Inget att göra just nu',
-        desc: 'Allt är välbalanserat — vi hör av oss när något ändras.',
+        desc: 'Allt är välbalanserat just nu.',
         active: true,
       };
   }
@@ -136,7 +148,7 @@ export default function NumberedActionsList({ advisor, onPauseProvider, onShowSu
   const steps = buildSteps(advisor, { onPauseActive: onPauseProvider });
 
   return (
-    <div className="mb-[14px]">
+    <div className="mb-3.5">
       {steps.map((step, idx) => (
         <div
           key={`${step.number}-${idx}`}
@@ -146,9 +158,9 @@ export default function NumberedActionsList({ advisor, onPauseProvider, onShowSu
             {step.number}
           </div>
           <div className="min-w-0">
-            <div className="text-[13px] font-semibold text-ink">{step.title}</div>
+            <div className="text-base font-semibold text-ink">{step.title}</div>
             {step.desc && (
-              <div className="text-[11px] text-ink-3 mt-[2px] truncate">{step.desc}</div>
+              <div className="text-xs text-ink-3 mt-0.5 truncate">{step.desc}</div>
             )}
           </div>
           <div className="shrink-0">

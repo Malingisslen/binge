@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { BookOpen } from 'lucide-react';
 import { useWatchlist } from '@/hooks/useWatchlist';
@@ -13,17 +13,25 @@ import { posterUrl, titleHref } from '@/lib/tmdb/client';
 import { toneForGenreIds, toneForId } from '@/lib/duotone';
 import { seenDate } from '@/lib/seenDate';
 import RatingStars from '@/components/title/RatingStars';
-import { buildDiary, diaryEntryCount } from '@/lib/diary';
+import { buildDiary, diaryEntryCount, firstEntries } from '@/lib/diary';
 import { computeBingeStats } from '@/lib/bingeStats';
+import { Eyebrow } from '@/components/ui/Eyebrow';
+import { buttonClass } from '@/components/ui/Button';
+import { cardClass } from '@/components/ui/Card';
+import { formatLibraryDate } from '@/lib/utils';
 
 function StatBox({ value, label }: { value: number; label: string }) {
   return (
-    <div className="bg-surface border border-rule rounded-md px-[12px] py-[8px] min-w-[92px]">
-      <div className="text-[20px] font-bold text-ink leading-none tabular-nums">{value}</div>
-      <div className="text-xxs text-ink-3 mt-[3px]">{label}</div>
+    <div className={cardClass('px-3 py-2 min-w-[92px]')}>
+      <div className="text-2xl font-bold text-ink leading-none tabular-nums">{value}</div>
+      <div className="text-xxs text-ink-3 mt-1">{label}</div>
     </div>
   );
 }
+
+// Ett bibliotek med hundratals serier har tusentals sedda avsnitt, och att rita alla
+// rader på en gång låste fliken. Dagboken visar de senaste först och fler på begäran.
+const PAGE_SIZE = 150;
 
 // BIN-103 — activity diary. Reverse-chron list of watched films (by watchedAt)
 // merged with watched TV episodes (per-show episodeProgress), grouped by month.
@@ -34,6 +42,8 @@ export default function DiaryPageClient() {
   const { episodes, episodesLoading } = useAllEpisodeProgress();
   const months = useMemo(() => buildDiary(items, episodes), [items, episodes]);
   const total = diaryEntryCount(months);
+  const [shownCount, setShownCount] = useState(PAGE_SIZE);
+  const shownMonths = useMemo(() => firstEntries(months, shownCount), [months, shownCount]);
 
   const films = useMemo(
     () => items.flatMap(i => {
@@ -60,18 +70,18 @@ export default function DiaryPageClient() {
       {loading || episodesLoading ? (
         <LoadingView variant="grid" />
       ) : total === 0 ? (
-        <div className="mt-[18px]">
+        <div className="mt-5">
           <EmptyState
             icon={<BookOpen size={28} />}
             title="Inga daterade visningar än"
             body="När du markerar en film som sedd eller bockar av ett avsnitt sparas datumet här. Filmers datum kan du backdatera i efterhand — avsnitt stämplas med dagens datum när du bockar av dem."
-            action={<Link href="/my/films/" className="btn btn-sm">Till dina filmer</Link>}
+            action={<Link href="/my/films/" className={buttonClass({ size: 'sm' })}>Till dina filmer</Link>}
           />
         </div>
       ) : (
-        <div className="mt-[18px] space-y-[18px]">
+        <div className="mt-5 space-y-5">
           {hasStats && (
-            <div className="flex flex-wrap gap-[8px]">
+            <div className="flex flex-wrap gap-2">
               {stats.currentStreakDays > 0 && (
                 <StatBox value={stats.currentStreakDays} label={stats.currentStreakDays === 1 ? 'dag i rad' : 'dagar i rad'} />
               )}
@@ -83,12 +93,12 @@ export default function DiaryPageClient() {
               )}
             </div>
           )}
-          {months.map(month => (
+          {shownMonths.map(month => (
             <section key={month.key}>
-              <h2 className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold mb-2">
+              <Eyebrow as="h2" className="mb-2">
                 {month.label}
-              </h2>
-              <div className="flex flex-col gap-[6px]">
+              </Eyebrow>
+              <div className="flex flex-col gap-1.5">
                 {month.entries.map(({ item, date, episodeCode }) => {
                   const tone = item.genreIds.length > 0
                     ? toneForGenreIds(item.genreIds)
@@ -98,7 +108,7 @@ export default function DiaryPageClient() {
                     <Link
                       key={`${item.tmdbId}-${episodeCode ?? 'film'}`}
                       href={titleHref(item.mediaType, item.tmdbId)}
-                      className="flex items-center gap-[10px] bg-surface border border-rule rounded-sm px-[10px] py-[7px] no-underline hover:border-rule-2 transition-colors"
+                      className={cardClass('flex items-center gap-2.5 px-2.5 py-2 no-underline hover:border-rule-2 transition-colors')}
                     >
                       <div className={`poster duo-${tone} w-[34px] h-[51px] shrink-0`} style={{ aspectRatio: '2 / 3' }}>
                         {poster && (
@@ -108,12 +118,12 @@ export default function DiaryPageClient() {
                       <div className="flex-1 min-w-0">
                         <div className="text-xs font-semibold text-ink truncate">{item.title}</div>
                         <div className="text-xxs text-ink-3">
-                          {date.toLocaleDateString('sv-SE', { day: 'numeric', month: 'long' })}
+                          {formatLibraryDate(date)}
                           {episodeCode ? ` · ${episodeCode}` : item.releaseYear ? ` · ${item.releaseYear}` : ''}
                         </div>
                       </div>
                       {!episodeCode && item.rating !== null && (
-                        <span className="shrink-0 inline-flex items-center gap-[3px]">
+                        <span className="shrink-0 inline-flex items-center gap-1">
                           <RatingStars rating={item.rating} readonly size="sm" />
                           <span className="text-xxs text-ink-3">{item.rating.toFixed(1)}</span>
                         </span>
@@ -124,6 +134,14 @@ export default function DiaryPageClient() {
               </div>
             </section>
           ))}
+          {shownCount < total && (
+            <div className="flex items-center gap-2.5">
+              <button type="button" className={buttonClass({ size: 'sm' })} onClick={() => setShownCount(n => n + PAGE_SIZE * 2)}>
+                Visa fler
+              </button>
+              <span className="text-xxs text-ink-3 tabular-nums">{shownCount} av {total} visas</span>
+            </div>
+          )}
         </div>
       )}
     </div>

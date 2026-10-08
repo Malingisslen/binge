@@ -81,7 +81,7 @@ export default function TitleCard({ item, providers, showNotInterested }: TitleC
             }}>
               <Icon size={20} style={{ color: 'var(--ink-3)', opacity: 0.4 }} />
               <span style={{
-                fontSize: 10, color: 'var(--ink-3)', textAlign: 'center',
+                fontSize: 'var(--fs-xxs)', color: 'var(--ink-3)', textAlign: 'center',
                 lineHeight: 1.2, overflow: 'hidden',
                 display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical',
               }}>{title}</span>
@@ -104,13 +104,13 @@ export default function TitleCard({ item, providers, showNotInterested }: TitleC
                     key={p.provider_id}
                     className={isFree ? 'bg-season-done text-white' : undefined}
                     style={{
-                      fontSize: 8,
+                      fontSize: 'var(--fs-nano)',
                       padding: '1px 4px',
                       borderRadius: 1,
                       letterSpacing: 0.04,
                       ...(isFree ? {} : {
                         background: isMine ? 'var(--acc-deep)' : 'oklch(0 0 0 / 0.65)',
-                        color: isMine ? 'white' : 'oklch(0.85 0 0)',
+                        color: isMine ? 'var(--on-acc)' : 'oklch(0.85 0 0)',
                       }),
                     }}
                   >
@@ -120,7 +120,7 @@ export default function TitleCard({ item, providers, showNotInterested }: TitleC
               })}
               {extraCount > 0 && (
                 <span style={{
-                  fontSize: 8,
+                  fontSize: 'var(--fs-nano)',
                   padding: '1px 4px',
                   borderRadius: 1,
                   background: 'oklch(0 0 0 / 0.65)',
@@ -164,7 +164,7 @@ export default function TitleCard({ item, providers, showNotInterested }: TitleC
       <Link href={href} className="no-underline" style={{ color: 'var(--ink)' }}>
         <div style={{
           fontFamily: 'var(--sans)',
-          fontSize: 13.5,
+          fontSize: 'var(--fs-base)',
           fontWeight: 600,
           letterSpacing: -0.015,
           marginTop: 6,
@@ -175,12 +175,13 @@ export default function TitleCard({ item, providers, showNotInterested }: TitleC
           {title}
         </div>
         <div style={{
-          fontSize: 11,
+          fontSize: 'var(--fs-xs)',
           color: 'var(--ink-3)',
           marginTop: 2,
           letterSpacing: 0.02,
         }}>
-          {year ?? '—'} · {item.vote_average.toFixed(1)}
+          {/* 0 betyder att ingen har röstat än (ofta osläppt), inte betyget noll. */}
+          {year ?? '—'} · {item.vote_average > 0 ? item.vote_average.toFixed(1) : '—'}
         </div>
       </Link>
     </div>

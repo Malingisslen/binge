@@ -6,11 +6,13 @@ import {
   MANIFEST_VERSION,
   MANIFEST_HARD_TTL_MS,
   type SelectionManifest,
+  SELECTION_ABSOLUTE_FLOOR,
   resolveSelection,
   readSelectionManifest,
   writeSelectionManifest,
 } from './selectionManifest';
-import { RESCUE_DERIVE_TIMEOUT_MS, REFRESH_DERIVE_TIMEOUT_MS } from './buildFetch';
+import { RESCUE_DERIVE_TIMEOUT_MS, REFRESH_DERIVE_TIMEOUT_MS, trackBuildCall, __resetBuildFetchState } from './buildFetch';
+import { SEO_TITLE_TARGET_IDS } from './seoCoverage';
 
 /**
  * resolveSelection är hela vinsten i BIN-823: den avgör OM de ~8 200 dyra
@@ -159,15 +161,15 @@ describe('resolveSelection — regimen', () => {
 });
 
 describe('resolveSelection — fastaket', () => {
-  // BIN-815 igen: per-anrops-aborten räckte inte, `params:person-ids` satt i
+  // BIN-815 igen: per-anrops-aborten räckte inte, en härledning satt i
   // 2 672 sekunder. Utan fasnivå-tak vore räddningsvägen samma hängning.
   it('ger upp härledningen efter räddningstaket och behåller befintligt urval', async () => {
     vi.useFakeTimers();
-    seedManifest('person', [1, 2, 3, 4, 5], NOW - MANIFEST_HARD_TTL_MS - 1);
+    seedManifest('movie', [1, 2, 3, 4, 5], NOW - MANIFEST_HARD_TTL_MS - 1);
     const derive = vi.fn(() => new Promise<number[]>(() => {})); // återvänder aldrig
 
     const promise = resolveSelection({
-      type: 'person',
+      type: 'movie',
       seedIds: [],
       fallbackIds: [],
       derive,
@@ -276,13 +278,13 @@ describe('resolveSelection — de tre grenar rond 2 införde', () => {
 
     // Bygge 2: kod-deploy, ingen refresh-flagga. Manifestet ÄR färskt — utan
     // tooThin hade `derive` inte körts och bygget dött på golvet igen.
-    const derive = vi.fn(async () => Array.from({ length: 6_000 }, (_, i) => i + 1));
+    const derive = vi.fn(async () => Array.from({ length: SEO_TITLE_TARGET_IDS }, (_, i) => i + 1));
     const ids = await resolveSelection({
       type: 'movie', seedIds: [], fallbackIds: [], derive, now: NOW + 1000,
     });
 
     expect(derive).toHaveBeenCalledTimes(1);
-    expect(ids).toHaveLength(6_000);
+    expect(ids).toHaveLength(SEO_TITLE_TARGET_IDS);
   });
 
   // En härledning som KASTAR måste behandlas som en som tar för lång tid.
@@ -325,27 +327,30 @@ describe('resolveSelection — de tre grenar rond 2 införde', () => {
   });
 
   // previousCount räknas SEED-INKLUDERAT, och det avgör om `tooThin` fyrar.
-  //
-  // Den föregående versionen av det här testet påstod sig pinna samma sak via
-  // 80 %-regeln men var icke-diskriminerande (testgranskningen 2026-08-08:
-  // `previous.ids.length` i stället för `resolvedIds(...).length` överlevde
-  // 26/26). Skälet: absolutgolvet dominerar alltid `max()`, och 80 %-termen kan
-  // dessutom aldrig fyra härifrån — spärrhaken garanterar att urvalet inte
-  // krymper. `tooThin` är den enda levande konsumenten av talet, så den ska
-  // testas direkt, precis vid gränsen.
-  it('räknar fröna i previousCount — 1 950 + 100 frön är INTE ett tunt manifest', async () => {
+  // Testas direkt vid golvet: manifestet når det bara tillsammans med fröna.
+  it('räknar fröna i previousCount — 450 manifest-id + 100 frön når golvet', async () => {
     delete process.env.SELECTION_ALLOW_THIN;
     const seeds = Array.from({ length: 100 }, (_, i) => 900_000 + i);
-    // Färskt manifest, ingen refresh-flagga ⇒ det ENDA som kan tvinga fram en
-    // härledning är tooThin. 1 950 + 100 = 2 050 ≥ absolutgolvet 2 000.
-    seedManifest('movie', Array.from({ length: 1_950 }, (_, i) => i + 1), NOW);
+    // Färskt manifest, ingen refresh-flagga, så tooThin är det som avgör.
+    seedManifest('movie', Array.from({ length: 450 }, (_, i) => i + 1), NOW);
     const derive = vi.fn(async () => [1, 2]);
 
     await resolveSelection({ type: 'movie', seedIds: seeds, fallbackIds: [], derive, now: NOW });
 
-    // Räknades fröna inte med vore föregående urval 1 950 < 2 000, manifestet
-    // skulle bedömas tunt och varje kod-deploy betala en räddningshärledning.
+    expect(450).toBeLessThan(SELECTION_ABSOLUTE_FLOOR.movie);
+    expect(450 + seeds.length).toBeGreaterThanOrEqual(SELECTION_ABSOLUTE_FLOOR.movie);
     expect(derive).not.toHaveBeenCalled();
+  });
+
+  // Tvillingen: samma manifest utan frön är tunt, så härledningen körs.
+  it('samma manifest utan frön är tunt och härleds om', async () => {
+    delete process.env.SELECTION_ALLOW_THIN;
+    seedManifest('movie', Array.from({ length: 450 }, (_, i) => i + 1), NOW);
+    const derive = vi.fn(async () => Array.from({ length: 600 }, (_, i) => i + 1));
+
+    await resolveSelection({ type: 'movie', seedIds: [], fallbackIds: [], derive, now: NOW });
+
+    expect(derive).toHaveBeenCalled();
   });
 });
 
@@ -356,12 +361,12 @@ describe('resolveSelection — golvet och fröna', () => {
   });
 
   // Den tysta katastrofen planen finns för att stänga: härledningen ger nästan
-  // inget, bygget blir GRÖNT och firebase deploy ersätter ~31 000 sidor med en
+  // inget, bygget blir GRÖNT och firebase deploy ersätter kärnan med en
   // handfull. Golvet gör det till ett rött bygge i stället.
   it('kastar när manifestet saknas OCH härledningen ger nästan inget', async () => {
     // Den verkliga katastrofvägen: actions/cache evakuerad + TMDB nere. Utan
-    // golvet blir bygget grönt och firebase deploy ersätter ~31 000 sidor med
-    // frö + fallback. Spärrhaken kan inte rädda det — det finns inget att
+    // golvet blir bygget grönt och firebase deploy ersätter kärnan med
+    // fallback-listan. Spärrhaken kan inte rädda det — det finns inget att
     // ratcheta mot.
     await expect(
       resolveSelection({
@@ -375,7 +380,7 @@ describe('resolveSelection — golvet och fröna', () => {
   });
 
   it('släpper igenom en frisk härledning på kallt manifest', async () => {
-    const fresh = Array.from({ length: 11_000 }, (_, i) => i + 1);
+    const fresh = Array.from({ length: SEO_TITLE_TARGET_IDS }, (_, i) => i + 1);
 
     await expect(
       resolveSelection({
@@ -385,7 +390,7 @@ describe('resolveSelection — golvet och fröna', () => {
         derive: async () => fresh,
         now: NOW,
       }),
-    ).resolves.toHaveLength(11_000);
+    ).resolves.toHaveLength(SEO_TITLE_TARGET_IDS);
   });
 
   it('unionerar in fröna även när manifestet saknas', async () => {
@@ -393,7 +398,7 @@ describe('resolveSelection — golvet och fröna', () => {
     process.env.SELECTION_ALLOW_THIN = '1';
 
     const ids = await resolveSelection({
-      type: 'person',
+      type: 'movie',
       seedIds: [42, 43],
       fallbackIds: [],
       derive: async () => [7],
@@ -441,8 +446,8 @@ describe('resolveSelection — utbytesraden och de två varningarna (BIN-826)', 
       type: 'movie',
       seedIds: [],
       fallbackIds: [],
-      // 2 och 3 härleds om, 1 gör det inte, 4 är ny. Inget evakueras — taket är
-      // 15 000 och det här är fyra id.
+      // 2 och 3 härleds om, 1 gör det inte, 4 är ny. Inget evakueras — taket
+      // rymmer dem.
       derive: async () => [2, 3, 4],
       now: NOW + 1,
     });
@@ -472,7 +477,8 @@ describe('resolveSelection — utbytesraden och de två varningarna (BIN-826)', 
     // Pinnas på den avgränsade uppräkningen SJÄLV, inte på frånvaron av "12":
     // det talet står ändå kvar i räknarna ("nytillkomna 12", "gav 12 id"), så en
     // frånvaro-assertion hade varit falsk av rätt skäl och sann av fel.
-    expect(line.split('Nytillkomna: ')[1].trim()).toBe('1, 2, 3, 4, 5 … och 7 till.');
+    // BIN-1423 lade "Övergivna anrop …" efter uppräkningen; skär av där.
+    expect(line.split('Nytillkomna: ')[1].split(' Övergivna anrop')[0].trim()).toBe('1, 2, 3, 4, 5 … och 7 till.');
   });
 
   it('räknar EVAKUERADE när taket faktiskt trycker ut poster', async () => {
@@ -484,15 +490,15 @@ describe('resolveSelection — utbytesraden och de två varningarna (BIN-826)', 
     // lika med `before` — så att en verklig evakuering för alltid rapporteras som noll —
     // lämnade hela filen grön. Den här fixturen driver en riktig evakuering i stället.
     process.env.TMDB_SELECTION_REFRESH = '1';
-    // Taket för person är 1 000, litet nog att fylla i ett test.
+    // Taket för film är 1 000, litet nog att fylla i ett test.
     const sitting = Array.from({ length: 1_000 }, (_, i) => i + 1);
-    seedManifest('person', sitting, NOW - 1000);
+    seedManifest('movie', sitting, NOW - 1000);
 
     // 200 HELT nya id ⇒ sammanslaget 1 200 mot ett tak på 1 000 ⇒ 200 måste ut. De som går
     // är de äldsta, alltså sittande som inte härleddes om — ingen av de färska bär `NOW`.
     const fresh = Array.from({ length: 200 }, (_, i) => 2_001 + i);
     await resolveSelection({
-      type: 'person',
+      type: 'movie',
       seedIds: [],
       fallbackIds: [],
       derive: async () => fresh,
@@ -535,13 +541,13 @@ describe('resolveSelection — utbytesraden och de två varningarna (BIN-826)', 
 
   it('varnar när härledningen når taket — spärrhaken har då ingen luft kvar', async () => {
     process.env.TMDB_SELECTION_REFRESH = '1';
-    seedManifest('person', []);
+    seedManifest('movie', []);
 
-    // Taket för person är 1 000, litet nog att fylla i ett test. Villkoret är `>=`,
+    // Taket för film är 1 000, litet nog att fylla i ett test. Villkoret är `>=`,
     // så exakt taket ska räcka.
     const atCeiling = Array.from({ length: 1_000 }, (_, i) => i + 1);
     await resolveSelection({
-      type: 'person',
+      type: 'movie',
       seedIds: [],
       fallbackIds: [],
       derive: async () => atCeiling,
@@ -556,11 +562,11 @@ describe('resolveSelection — utbytesraden och de två varningarna (BIN-826)', 
 
   it('varnar INTE om taket när härledningen ligger under det', async () => {
     process.env.TMDB_SELECTION_REFRESH = '1';
-    seedManifest('person', []);
+    seedManifest('movie', []);
 
     const belowCeiling = Array.from({ length: 999 }, (_, i) => i + 1);
     await resolveSelection({
-      type: 'person',
+      type: 'movie',
       seedIds: [],
       fallbackIds: [],
       derive: async () => belowCeiling,
@@ -570,5 +576,155 @@ describe('resolveSelection — utbytesraden och de två varningarna (BIN-826)', 
     expect(written().some(l => l.includes('ingen luft kvar'))).toBe(false);
     // Men utbytesraden skrivs ändå — den är inte ett larm.
     expect(written().some(l => l.includes('utbyte:'))).toBe(true);
+  });
+});
+
+// BIN-1423: varje härledning säger hur många av dess egna anrop som övergavs.
+// `trackBuildCall` är den riktiga — det är dess räknare raden läser.
+describe('resolveSelection — övergivna anrop i raden (BIN-1423)', () => {
+  const lines = (): string[] => stderr.mock.calls.map((c: unknown[]) => String(c[0]));
+  const hang = () => new Promise<never>(() => {});
+  // En härledning med tre listsidor där `stuck` aldrig svarar, som collectIds gör den.
+  const deriveWith = (group: 'movie' | 'tv', stuck: number[]) => async () => {
+    const results = await Promise.allSettled([1, 2, 3].map(p =>
+      trackBuildCall(`params:test/p${p}`, () => (stuck.includes(p) ? hang() : Promise.resolve(p * 10)), { group })));
+    return results.flatMap(r => (r.status === 'fulfilled' ? [r.value] : []));
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    __resetBuildFetchState();
+    process.env.TMDB_SELECTION_REFRESH = '1';
+  });
+  afterEach(() => {
+    __resetBuildFetchState();
+  });
+
+  it('en lyckad härledning som tappade ett anrop blir en varning med antal, nämnare och etikett', async () => {
+    seedManifest('movie', [7]);
+    const p = resolveSelection({ type: 'movie', seedIds: [], fallbackIds: [], derive: deriveWith('movie', [2]), now: NOW + 1 });
+    await vi.advanceTimersByTimeAsync(60_000);
+    await p;
+    const line = lines().find(l => l.includes('utbyte:'))!;
+    expect(line.startsWith('::warning::')).toBe(true);
+    expect(line).toContain('Övergivna anrop 1 av 3 (params:test/p2).');
+  });
+
+  it('etiketterna på raden kortas av som de andra uppräkningarna', async () => {
+    seedManifest('movie', [7]);
+    const derive = async () => {
+      const results = await Promise.allSettled([1, 2, 3, 4, 5, 6, 7].map(p =>
+        trackBuildCall(`params:test/p${p}`, () => (p <= 6 ? hang() : Promise.resolve(70)), { group: 'movie' })));
+      return results.flatMap(r => (r.status === 'fulfilled' ? [r.value] : []));
+    };
+    const p = resolveSelection({ type: 'movie', seedIds: [], fallbackIds: [], derive, now: NOW + 1 });
+    await vi.advanceTimersByTimeAsync(60_000);
+    await p;
+    const line = lines().find(l => l.includes('utbyte:'))!;
+    expect(line).toContain(
+      'Övergivna anrop 6 av 7 (params:test/p1, params:test/p2, params:test/p3, params:test/p4, params:test/p5 … och 1 till).',
+    );
+  });
+
+  it('ett anrop som övergavs innan härledningen startade räknas inte', async () => {
+    void trackBuildCall('params:test/earlier', hang, { group: 'movie' }).catch(() => {});
+    await vi.advanceTimersByTimeAsync(31_000);
+    seedManifest('movie', [7]);
+    // One call is also lost DURING the derivation, so the label list is printed.
+    const p = resolveSelection({ type: 'movie', seedIds: [], fallbackIds: [], derive: deriveWith('movie', [2]), now: NOW + 1 });
+    await vi.advanceTimersByTimeAsync(60_000);
+    await p;
+    const line = lines().find(l => l.includes('utbyte:'))!;
+    expect(line).toContain('Övergivna anrop 1 av 3 (params:test/p2).');
+    expect(line).not.toContain('params:test/earlier');
+  });
+
+  it('utan övergivna anrop förblir raden en notis och säger noll', async () => {
+    seedManifest('movie', [7]);
+    const p = resolveSelection({ type: 'movie', seedIds: [], fallbackIds: [], derive: deriveWith('movie', []), now: NOW + 1 });
+    await vi.advanceTimersByTimeAsync(60_000);
+    await p;
+    const line = lines().find(l => l.includes('utbyte:'))!;
+    expect(line.startsWith('::notice::')).toBe(true);
+    expect(line).toContain('Övergivna anrop 0 av 3.');
+  });
+
+  it('antalet står också på raden när härledningen når sitt tak', async () => {
+    seedManifest('movie', [7]);
+    const derive = async () => {
+      await deriveWith('movie', [3])();
+      return hang();
+    };
+    const p = resolveSelection({ type: 'movie', seedIds: [], fallbackIds: [], derive, now: NOW + 1 });
+    await vi.advanceTimersByTimeAsync(REFRESH_DERIVE_TIMEOUT_MS + 1);
+    await p;
+    const line = lines().find(l => l.includes('nådde sitt tak'))!;
+    expect(line).toContain('Övergivna anrop 1 av 3 (params:test/p3).');
+  });
+
+  it('antalet står också på raden när härledningen kastar', async () => {
+    seedManifest('movie', [7]);
+    const derive = async () => {
+      await deriveWith('movie', [1])();
+      throw new Error('oväntad form');
+    };
+    const p = resolveSelection({ type: 'movie', seedIds: [], fallbackIds: [], derive, now: NOW + 1 });
+    await vi.advanceTimersByTimeAsync(60_000);
+    await p;
+    const line = lines().find(l => l.includes('kastade'))!;
+    expect(line).toContain('Övergivna anrop 1 av 3 (params:test/p1).');
+  });
+
+  it('antalet står också på raden när härledningen ger tom lista', async () => {
+    seedManifest('movie', [7]);
+    const p = resolveSelection({ type: 'movie', seedIds: [], fallbackIds: [], derive: deriveWith('movie', [1, 2, 3]), now: NOW + 1 });
+    await vi.advanceTimersByTimeAsync(60_000);
+    await p;
+    const line = lines().find(l => l.includes('TOM lista'))!;
+    expect(line).toContain('Övergivna anrop 3 av 3');
+  });
+
+  it('räknar bara anrop som övergavs medan härledningen pågick, och bara den egna typens', async () => {
+    seedManifest('movie', [7]);
+    const derive = async () => {
+      // En annan typs anrop som överges MEDAN härledningen pågår (vid 30 s).
+      await trackBuildCall('params:other/p1', hang, { group: 'tv' }).catch(() => {});
+      // Startas sist och inväntas inte: överges först 30 s efter att härledningen svarat.
+      void trackBuildCall('params:test/late', hang, { group: 'movie' }).catch(() => {});
+      return [10];
+    };
+    const p = resolveSelection({ type: 'movie', seedIds: [], fallbackIds: [], derive, now: NOW + 1 });
+    await vi.advanceTimersByTimeAsync(31_000);
+    await p;
+    const line = lines().find(l => l.includes('movie utbyte:'))!;
+    expect(line).toContain('Övergivna anrop 0 av 1.');
+    await vi.advanceTimersByTimeAsync(60_000);
+    // The late call WAS abandoned — just outside the window the line counts.
+    expect(lines().some(l => l.includes('ABANDONED params:test/late'))).toBe(true);
+  });
+
+  it('ett antal över noll ändrar inte vilka id som behålls, evakueras eller tillkommer', async () => {
+    const run = async (loseOne: boolean) => {
+      __resetBuildFetchState();
+      seedManifest('movie', [7, 8]);
+      const p = resolveSelection({
+        type: 'movie', seedIds: [], fallbackIds: [], now: NOW + 1,
+        derive: async () => {
+          if (loseOne) await trackBuildCall('params:test/lost', hang, { group: 'movie' }).catch(() => {});
+          return [10, 20, 30];
+        },
+      });
+      await vi.advanceTimersByTimeAsync(60_000);
+      const ids = await p;
+      const line = lines().filter(l => l.includes('movie utbyte:')).pop()!;
+      return { ids, manifest: readSelectionManifest('movie')!.ids.map(e => e.id), counts: line.split(' Evakuerade:')[0] };
+    };
+    const withLoss = await run(true);
+    const withoutLoss = await run(false);
+    expect(lines().filter(l => l.includes('movie utbyte:')).some(l => l.includes('Övergivna anrop 1 av 1'))).toBe(true);
+    expect(withLoss.ids).toEqual(withoutLoss.ids);
+    expect(withLoss.manifest).toEqual(withoutLoss.manifest);
+    // The counts before "Evakuerade:" match exactly; only the level prefix (warning vs notice) differs.
+    expect(withLoss.counts.replace(/^::\w+::/, '')).toEqual(withoutLoss.counts.replace(/^::\w+::/, ''));
   });
 });

@@ -32,8 +32,9 @@
 //    behåller sitt antal och ingenting någonstans säger det. En enstaka träff är
 //    väntad och godartad; återkommande träffar är signalen. `BENIGN_KIND_*`
 //    nedan är därför egna `kind`-värden, inte samma som felvägens — de ska gå
-//    att skilja åt i Sentry. Öppen fråga, filad som BIN-1254: om
-//    raderingskapplöpningen och den utloggade sessionen ska skiljas åt här.
+//    att skilja åt i Sentry. Att raderingskapplöpningen och den utloggade
+//    sessionen INTE skiljs åt här är avgjort: posten `## BIN-1254` i
+//    `.claude/rules/accepted-deviations.md`.
 //
 // 3. "Markera alla som lästa" skrev tidigare en atomisk `writeBatch`. En
 //    uppdatering av ett dokument som hunnit raderas faller på regelutvärderingen,

@@ -63,6 +63,7 @@ import {
   type TmdbReleaseDatesCountry,
 } from '../releaseNotify/logic';
 import { resolveTmdbId } from '../shared/mediaTypeDocId';
+import { isUserWatchlistDocPath } from '../shared/watchlistPath';
 
 /** One scanned watchlist document, flattened to path + fields. */
 export interface ScanDoc {
@@ -176,12 +177,6 @@ export interface NotifySummary {
 export const skipKey = (uid: string, mediaType: string, tmdbId: number): string =>
   `${uid}:${mediaType}:${tmdbId}`;
 
-/** The uid that owns `users/{uid}/watchlist/{docId}`, or '' if the path is not that shape. */
-function uidFromWatchlistPath(path: string): string {
-  const parts = path.split('/');
-  return parts.length >= 4 && parts[0] === 'users' ? parts[1] : '';
-}
-
 /** The document id of any Firestore path. */
 function docIdFromPath(path: string): string {
   const parts = path.split('/');
@@ -207,9 +202,13 @@ async function readWatchlistTitles(io: NotifyIo): Promise<WatchlistTitleLite[]> 
     const page = await io.scanWatchlistPage(cursor, io.pageSize);
     if (page.length === 0) break;
     for (const d of page) {
+      // BIN-1291: a group row would map to uid '' and still cost TMDB calls and
+      // state writes. The cursor below still comes from the unfiltered page.
+      if (!isUserWatchlistDocPath(d.path)) continue;
       const x = d.data;
       out.push({
-        uid: uidFromWatchlistPath(d.path),
+        // BIN-1299: the guard above is the one shape check; after it, segment 1 IS the uid.
+        uid: d.path.split('/')[1],
         tmdbId: resolveTmdbId(x.tmdbId as number | string | null | undefined, docIdFromPath(d.path)),
         mediaType: String(x.mediaType ?? ''),
         status: String(x.status ?? ''),

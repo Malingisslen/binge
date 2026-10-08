@@ -48,7 +48,11 @@ export function NotInterestedProvider({ children }: { children: ReactNode }) {
           mediaType: d.data().mediaType as MediaType,
         })));
         setLoading(false);
-      }));
+      },
+      // Utan felgren stod Rekommendationer kvar på "Laddar…" för alltid när
+      // lyssnaren nekades. Listan är bara ett filter: hellre visa förslagen
+      // ofiltrerade än ingenting.
+      () => setLoading(false)));
   }, [uid]);
 
   const add = useCallback(async (mediaType: MediaType, tmdbId: number) => {

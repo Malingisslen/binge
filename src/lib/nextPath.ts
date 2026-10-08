@@ -3,7 +3,7 @@
  *
  * Tapping the "+" badge on a poster grid sends them to `/login/`, and afterwards
  * should land back on that title rather than the home page — it is the funnel
- * for the 25k prerendered pages.
+ * for the prerendered pages.
  *
  * The path is carried in `sessionStorage`, NOT in a `?next=` query param. Three
  * reasons, all found by review of the query-param version:
@@ -68,7 +68,7 @@ const KEY = 'binge:nextAfterLogin';
  * BIN-668: the topbar's "Logga in" button renders on `/login` itself — AppShell
  * only drops the chrome on `/`. Tapping it there stored `/login/` as the return
  * path, which then (a) overwrote a path the poster badge had already stored,
- * defeating the funnel from the 25k prerendered title pages, and (b) made
+ * defeating the funnel from the prerendered title pages, and (b) made
  * LoginPage push ITSELF after sign-in with `redirectedRef` already latched — a
  * signed-in visitor parked on the login form, with a Google button that looked
  * dead. `/onboarding` is here for the same reason: LoginPage sends brand-new

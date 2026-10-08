@@ -11,12 +11,18 @@
  * `adminIo.ts`. Neither re-derives who inherits.
  */
 
-import { buildHandoverUpdate, clearsAddedBy, refusalForSentInvites, type MemberRow } from './logic';
+import {
+  buildHandoverUpdate, buildOwnerPickedHandover, buildTraceErasure, memberTraceWrites,
+  HandoverRefusal, LEAVER_ERASURE_REFUSALS, OWNER_REMOVAL_REFUSALS, planLeaverErasure,
+  planOwnerRemovalErasure, refusalForSentInvites,
+  type ClaimResult, type MemberRow,
+} from './logic';
 
 /** One `groups/{gid}/watchlist/{id}` row, narrowed to what the handover reads. */
 export interface WatchlistRow {
   readonly id: string;
   readonly addedBy: unknown;
+  readonly memberRatings: unknown;
 }
 
 /** One `groups/{gid}/sessionHistory/{id}` row, narrowed the same way. */
@@ -32,10 +38,14 @@ export interface GroupRow {
   readonly memberUids: readonly string[];
 }
 
-/** The `groups/{gid}` ownership swap. Bounded: one document. */
+/**
+ * The `groups/{gid}` ownership swap. Bounded: one document. Carries WHO leaves,
+ * not the resulting member list — the port derives that from its own
+ * transactional read through `planClaim` (BIN-1266).
+ */
 export interface HandoverWrite {
   readonly ownerUid: string;
-  readonly memberUids: readonly string[];
+  readonly leavingUid: string;
 }
 
 /**
@@ -49,10 +59,12 @@ export interface HandoverWrite {
  * holds a plaintext invite token (BIN-329).
  *
  * The uid-bearing FIELDS are cleared rather than deleting the row they sit on:
- * `watchlist.addedBy`, and `sessionHistory`'s `pickedByUid` and `participantUids`.
+ * `watchlist.addedBy` and the member's own key in `watchlist.memberRatings`, and
+ * `sessionHistory`'s `pickedByUid` and `participantUids`.
  * Malin's decision of 2026-09-06 was about `addedBy` — the title stays, the note
  * saying who added it goes — and the others are the same shape one collection
- * over. Derive the set rather than trusting this list:
+ * over. The rating is Malin's decision of 2026-09-26 (BIN-1306). Derive the set
+ * rather than trusting this list:
  *   grep -n "Uid" src/types/social.ts src/lib/firebase/groups.ts
  */
 export interface TraceErasure {
@@ -60,6 +72,8 @@ export interface TraceErasure {
   readonly itemIds: readonly string[];
   /** The subset whose `addedBy` names the departing member. */
   readonly clearAddedByIds: readonly string[];
+  /** The subset whose `memberRatings` holds a rating keyed by the departing member (BIN-1306). */
+  readonly clearRatingIds: readonly string[];
   /** Session-history row ids whose `pickedByUid` names the departing member. */
   readonly clearPickedByIds: readonly string[];
   /** Session-history row ids whose `participantUids` contains the departing member. */
@@ -83,8 +97,9 @@ export interface HandoverIo {
   /** Every `groups/{gid}/sessionHistory/{id}` row. */
   readSessionHistory(groupId: string): Promise<readonly SessionHistoryRow[]>;
   /**
-   * Swap the owner, but ONLY if `ownerUid` is still `expectedOwnerUid`; return
-   * false when it had already moved.
+   * Swap the owner, but ONLY if `ownerUid` is still `expectedOwnerUid` and the
+   * successor is still a member. What to write, or why not, is `planClaim`'s
+   * decision on the port's own read.
    *
    * The check and the write MUST be one atomic unit. That is what makes a retry a
    * no-op rather than a second election — two runs must never be able to name two
@@ -100,7 +115,7 @@ export interface HandoverIo {
     groupId: string,
     expectedOwnerUid: string,
     write: HandoverWrite,
-  ): Promise<boolean>;
+  ): Promise<ClaimResult>;
 
   /**
    * Erase the departing member's traces from a group that survives.
@@ -227,24 +242,22 @@ export async function runGroupHandover(
       // Before the first write, not after the last: a chunked erasure can commit
       // some rows and then throw, and the caller must not report that as untouched.
       summary.attempted += 1;
-      await io.eraseMemberTraces(groupId, leavingUid, {
-        itemIds: watchlist.map((row) => row.id),
-        clearAddedByIds: watchlist
-          .filter((row) => clearsAddedBy(row.addedBy, leavingUid))
-          .map((row) => row.id),
-        clearPickedByIds: history
-          .filter((row) => clearsAddedBy(row.pickedByUid, leavingUid))
-          .map((row) => row.id),
-        dropParticipantIds: history
-          .filter((row) => row.participantUids.includes(leavingUid))
-          .map((row) => row.id),
-      });
+      await io.eraseMemberTraces(groupId, leavingUid, buildTraceErasure(watchlist, history, leavingUid));
 
-      const claimed = await io.claimOwnership(groupId, group.ownerUid, {
+      // A lost claim writes nothing. `owner-changed`: the group is someone else's
+      // now. `successor-left`: the group is STILL the leaver's, with other members in
+      // it, so it counts as failed — both doors must stop there rather than go on to
+      // delete or orphan a group other people are still in.
+      const claim = await io.claimOwnership(groupId, group.ownerUid, {
         ownerUid: outcome.ownerUid,
-        memberUids: outcome.memberUids,
+        leavingUid,
       });
-      if (!claimed) { summary.raced += 1; continue; }
+      if (claim.kind === 'owner-changed') { summary.raced += 1; continue; }
+      if (claim.kind === 'successor-left') {
+        io.log.error('groupHandover: successor left before the claim, group still owned', { groupId });
+        summary.failed += 1;
+        continue;
+      }
       summary.handedOver += 1;
     } catch (err) {
       io.log.error('groupHandover: group failed, others continue', { groupId, err });
@@ -254,6 +267,123 @@ export async function runGroupHandover(
 
   io.log.info('groupHandover done', { leavingUid, ...summary });
   return summary;
+}
+
+
+/**
+ * BIN-1118: the extra port the owner-picked handover needs, kept OFF `HandoverIo`.
+ *
+ * The sweep and the account-delete door build a `HandoverIo` each. Adding a
+ * required method there would have forced both to grow a notification they never
+ * send — the automatic handover happens because an account is going away, and
+ * telling the remaining members would be announcing a deletion they were not told
+ * about. This path is the one a human chose, so it is the one that announces.
+ */
+export interface HandoverNotifyIo {
+  /** `groups/{gid}.name`, or null when the document has none. */
+  readGroupName(groupId: string): Promise<string | null>;
+  /** The successor's display name, or null when unreadable. */
+  readMemberName(groupId: string, uid: string): Promise<string | null>;
+  /**
+   * Write one inbox card into each recipient's `users/{uid}/notifications`.
+   *
+   * Admin SDK only: the collection is `allow create: if false` for clients, so
+   * no browser session can write into another member's tree. Derive it rather
+   * than trusting this comment:
+   *   grep -n -A 6 "match /users/{uid}/notifications" firestore.rules
+   */
+  notifyMembers(
+    recipientUids: readonly string[],
+    card: { title: string; body: string; actionUrl: string },
+  ): Promise<void>;
+}
+
+/** Why an owner-picked handover did not happen. Surfaced to the caller verbatim. */
+export const OWNER_PICK_REFUSALS: Record<'not-owner' | 'not-a-member' | 'self' | 'owner-changed' | 'successor-left', string> = {
+  'not-owner': 'Du äger inte den här gruppen.',
+  'not-a-member': 'Personen du valde är inte medlem i gruppen.',
+  self: 'Du kan inte lämna över gruppen till dig själv.',
+  'owner-changed': 'Gruppen bytte ägare medan du höll på. Ladda om sidan.',
+  'successor-left': 'Personen du valde har lämnat gruppen. Välj någon annan.',
+};
+
+/**
+ * Hand ONE group to a successor the owner named, then leave it.
+ *
+ * Mirrors `runGroupHandover`'s order exactly — erase the departing owner's traces
+ * FIRST, swap second — and for the same reason: a throw after a committed swap
+ * would strand those rows outside every retry, because both doors find a group by
+ * `ownerUid` or `memberUids`, and the swap moves both at once.
+ *
+ * Unlike that function this one THROWS on refusal. It handles a single group that
+ * a person is looking at, so a silent no-op would show them a success and leave
+ * them the owner.
+ *
+ * Refusals throw `HandoverRefusal`; everything else throws whatever failed. The
+ * callable reads that distinction to decide which messages may be shown to the
+ * owner, so a new refusal added here must use the class too. Derive the throw
+ * sites: `git grep -n "HandoverRefusal(" -- functions/src`
+ *
+ * The notification is sent AFTER the swap and is best-effort: it is the last step
+ * and nothing depends on it, so a failure there must not turn a completed
+ * handover into a reported failure. It is logged instead.
+ */
+export async function runOwnerPickedHandover(
+  io: HandoverIo & HandoverNotifyIo,
+  groupId: string,
+  leavingUid: string,
+  successorUid: string,
+): Promise<void> {
+  // The group is read AFTER the rows the erasure needs, so the membership check
+  // below is the last read before the first write. A successor who leaves in the
+  // window that remains is caught by `planClaim` and refused, but the erasure has
+  // run by then — see `## BIN-1267` in .claude/rules/accepted-deviations.md.
+  const watchlist = await io.readWatchlist(groupId);
+  const history = await io.readSessionHistory(groupId);
+  const group = await io.readGroup(groupId);
+  if (!group) throw new HandoverRefusal('Gruppen finns inte längre.');
+
+  const outcome = buildOwnerPickedHandover(group, leavingUid, successorUid);
+  if (outcome.kind === 'refused') throw new HandoverRefusal(OWNER_PICK_REFUSALS[outcome.reason]);
+
+  await io.eraseMemberTraces(groupId, leavingUid, buildTraceErasure(watchlist, history, leavingUid));
+
+  // Reads the successor's name BEFORE the swap: the departing owner's own member
+  // row is erased above, but the successor's is not, and reading it here keeps
+  // the notification off the critical path afterwards.
+  const successorName = await io.readMemberName(groupId, successorUid);
+  const groupName = await io.readGroupName(groupId);
+
+  const claim = await io.claimOwnership(groupId, group.ownerUid, {
+    ownerUid: outcome.ownerUid,
+    leavingUid,
+  });
+  // The same optimistic guard the automatic door uses, now with two ways to lose.
+  switch (claim.kind) {
+    case 'owner-changed': throw new HandoverRefusal(OWNER_PICK_REFUSALS['owner-changed']);
+    case 'successor-left': throw new HandoverRefusal(OWNER_PICK_REFUSALS['successor-left']);
+    case 'claimed': break;
+  }
+
+  // BIN-1271, Malins beslut 2026-09-23: the invitations the departing owner sent
+  // for THIS group go with them. After the swap and best-effort, like the
+  // notification below: a failure must not turn a completed handover into a
+  // reported failure.
+  try {
+    await eraseSentInvites(io, leavingUid, groupId);
+  } catch (err) {
+    io.log.error('groupHandover: sent-invite erasure after owner-picked handover failed, handover stands', { groupId, err });
+  }
+
+  try {
+    await io.notifyMembers(claim.memberUids, {
+      title: 'Gruppen har ny ägare',
+      body: `${successorName ?? 'En medlem'} tog över ${groupName ?? 'gruppen'}.`,
+      actionUrl: `/grupper/${groupId}/`,
+    });
+  } catch (err) {
+    io.log.error('groupHandover: owner-picked notification failed, handover stands', { groupId, err });
+  }
 }
 
 
@@ -275,20 +405,191 @@ export async function runGroupHandover(
  * Derive the callers rather than trusting a sentence:
  * git grep -n "eraseSentInvites(" -- functions/src
  *
- * Returns how many were found and erased. Throws the refusal string when the
+ * Returns how many were found and erased. Throws a HandoverRefusal when the
  * count exceeds what one atomic batch can carry.
  */
 export async function eraseSentInvites(
   io: Pick<HandoverIo, 'sentInvitePaths' | 'deleteSentInvites' | 'log'>,
   uid: string,
+  /** BIN-1271: only the invitations for this group. The document id IS the group id. */
+  groupId?: string,
 ): Promise<{ found: number }> {
-  const paths = await io.sentInvitePaths(uid);
+  const all = await io.sentInvitePaths(uid);
+  const paths = groupId === undefined ? all : all.filter((p) => p.endsWith(`/groupInvites/${groupId}`));
   const refusal = refusalForSentInvites(paths.length);
   if (refusal) {
     io.log.error('groupHandover: sent-invite erasure refused', { uid, found: paths.length });
-    throw new Error(refusal);
+    throw new HandoverRefusal(refusal);
   }
   if (paths.length > 0) await io.deleteSentInvites(paths);
   io.log.info('groupHandover: sent invites erased', { uid, found: paths.length });
   return { found: paths.length };
+}
+
+/**
+ * BIN-1260: the port a LEAVER's erasure needs, kept off `HandoverIo` so the sweep's
+ * port and the test ports that never run it do not have to grow it.
+ */
+export interface LeaverIo {
+  readGroup: HandoverIo['readGroup'];
+  readWatchlist: HandoverIo['readWatchlist'];
+  readSessionHistory: HandoverIo['readSessionHistory'];
+  /**
+   * Apply `memberTraceWrites(uid, erasure)` in chunks, each in its own
+   * transaction that first re-reads the group and writes only when
+   * `leaverChunkMayCommit(group, uid, requiredOwner)` says so. Returns `stopped`
+   * at the first chunk it declined, without writing that chunk or any after it.
+   * `requiredOwner` is set on an owner's removal (BIN-1296), never on a leave.
+   */
+  eraseLeaverTraces(
+    groupId: string,
+    uid: string,
+    erasure: TraceErasure,
+    requiredOwner?: string,
+  ): Promise<{ kind: 'done' } | { kind: 'stopped' }>;
+  log: HandoverIo['log'];
+}
+
+/**
+ * BIN-1260: erase what a person who has left a group still has in it.
+ *
+ * The group is read FIRST and the refusal decided on it, before the two
+ * unbounded reads (#4's condition): any signed-in caller can name any group id,
+ * and a caller who is still a member should cost one document read, not the
+ * group's whole watchlist and history.
+ *
+ * Refusals throw `HandoverRefusal`; everything else throws whatever failed.
+ */
+export async function runLeaverErasure(io: LeaverIo, groupId: string, uid: string): Promise<void> {
+  const group = await io.readGroup(groupId);
+  const plan = planLeaverErasure(group, uid);
+  if (plan.kind === 'refused') throw new HandoverRefusal(LEAVER_ERASURE_REFUSALS[plan.reason]);
+  if (plan.kind === 'nothing') return;
+
+  const watchlist = await io.readWatchlist(groupId);
+  const history = await io.readSessionHistory(groupId);
+  const result = await io.eraseLeaverTraces(groupId, uid, buildTraceErasure(watchlist, history, uid));
+  if (result.kind === 'stopped') {
+    io.log.info('groupHandover: leaver erasure stopped, caller is back in the group or it is gone', { groupId });
+  }
+}
+
+/**
+ * BIN-1296: erase what a member the OWNER removed still has in the group.
+ *
+ * Same order as `runLeaverErasure`: the group is read and the plan decided on it
+ * before the two unbounded reads, so a non-owner naming any group id costs one
+ * read. A non-owner and a missing group get the same silent return.
+ */
+export async function runOwnerRemovalErasure(
+  io: LeaverIo,
+  groupId: string,
+  callerUid: string,
+  memberUid: string,
+): Promise<void> {
+  const group = await io.readGroup(groupId);
+  const plan = planOwnerRemovalErasure(group, callerUid, memberUid);
+  if (plan.kind === 'refused') throw new HandoverRefusal(OWNER_REMOVAL_REFUSALS[plan.reason]);
+  if (plan.kind === 'nothing') return;
+
+  const watchlist = await io.readWatchlist(groupId);
+  const history = await io.readSessionHistory(groupId);
+  const result = await io.eraseLeaverTraces(groupId, memberUid, buildTraceErasure(watchlist, history, memberUid), callerUid);
+  if (result.kind === 'stopped') {
+    io.log.info('groupHandover: owner removal erasure stopped, member is back, group is gone or ownership moved', { groupId });
+  }
+}
+
+/** BIN-1278: the one extra read the account-delete door needs for groups it only belongs to. */
+export interface MemberGroupsIo {
+  /**
+   * Every group whose `memberUids` contains the uid, with its owner. ONE filter
+   * (`array-contains`): #27's condition, since a second one would need a
+   * composite index that is not deployed. The owner is filtered by the caller.
+   */
+  memberGroups(uid: string): Promise<readonly { id: string; ownerUid: string }[]>;
+}
+
+/**
+ * BIN-1278: erase the account's traces from every group it is only a MEMBER of.
+ *
+ * Runs in the account-delete door AFTER `runGroupHandover`. It leaves `memberUids`
+ * alone: the client cascade removes the uid from it next, as it always has, so
+ * between the two the account is briefly a member without a member row.
+ *
+ * `progress.attempted` is set before the first write of the first group and never
+ * cleared, so a caller that catches a throw can tell "wrote nothing" from "wrote
+ * something" (#4's condition). It is an argument rather than a return value
+ * because the answer is needed exactly when this throws.
+ */
+export async function runMemberGroupErasure(
+  io: MemberGroupsIo & Pick<HandoverIo, 'readWatchlist' | 'readSessionHistory' | 'eraseMemberTraces' | 'log'>,
+  uid: string,
+  progress: { attempted: boolean },
+): Promise<{ groups: number }> {
+  const groups = (await io.memberGroups(uid)).filter((g) => g.ownerUid !== uid);
+  for (const { id } of groups) {
+    const watchlist = await io.readWatchlist(id);
+    const history = await io.readSessionHistory(id);
+    progress.attempted = true;
+    await io.eraseMemberTraces(id, uid, buildTraceErasure(watchlist, history, uid));
+  }
+  io.log.info('groupHandover: member-group traces erased', { uid, groups: groups.length });
+  return { groups: groups.length };
+}
+
+/** BIN-1294: the sweep has no client cascade to take the uid out of `memberUids`. */
+export interface MemberStripIo {
+  /** Remove `uid` from `groups/{groupId}.memberUids`. */
+  stripMemberUid(groupId: string, uid: string): Promise<void>;
+}
+
+type SweptMemberGroupIo = MemberGroupsIo
+  & Pick<HandoverIo, 'readWatchlist' | 'readSessionHistory' | 'eraseMemberTraces' | 'log'>;
+
+/**
+ * BIN-1294: READ-ONLY — how many writes the sweep's member-group step would make
+ * for `uid`, so the all-or-nothing document budget can see it before anything is
+ * written. Per group: the trace writes `memberTraceWrites` produces, plus the
+ * `memberUids` strip.
+ */
+export async function planSweptMemberGroupErasure(io: SweptMemberGroupIo, uid: string): Promise<number> {
+  const groups = (await io.memberGroups(uid)).filter((g) => g.ownerUid !== uid);
+  let writes = 0;
+  for (const { id } of groups) {
+    const watchlist = await io.readWatchlist(id);
+    const history = await io.readSessionHistory(id);
+    writes += memberTraceWrites(uid, buildTraceErasure(watchlist, history, uid)).length + 1;
+  }
+  return writes;
+}
+
+/**
+ * BIN-1294: the retention sweep's version of `runMemberGroupErasure`, for an
+ * account deleted in Firebase Console.
+ *
+ * The button's door leaves `memberUids` to the client cascade; the sweep has none,
+ * so it strips the uid itself — LAST per group, after that group's traces. A
+ * failure before the strip leaves the uid in `memberUids`, so the next run finds
+ * the group again and converges.
+ *
+ * `progress.written` is credited per group BEFORE the next write can throw
+ * (#27's condition).
+ */
+export async function runSweptMemberGroupErasure(
+  io: SweptMemberGroupIo & MemberStripIo,
+  uid: string,
+  progress: { written: number },
+): Promise<{ groups: number }> {
+  const groups = (await io.memberGroups(uid)).filter((g) => g.ownerUid !== uid);
+  for (const { id } of groups) {
+    const watchlist = await io.readWatchlist(id);
+    const history = await io.readSessionHistory(id);
+    await io.eraseMemberTraces(id, uid, buildTraceErasure(watchlist, history, uid));
+    progress.written += memberTraceWrites(uid, buildTraceErasure(watchlist, history, uid)).length;
+    await io.stripMemberUid(id, uid);
+    progress.written += 1;
+  }
+  io.log.info('groupHandover: swept member-group traces erased', { uid, groups: groups.length });
+  return { groups: groups.length };
 }

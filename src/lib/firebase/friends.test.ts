@@ -14,7 +14,9 @@ const mocks = vi.hoisted(() => {
   }));
   const getDocMock = vi.fn();
   const getDocsMock = vi.fn();
-  return { setMock, deleteMock, commitMock, writeBatchMock, getDocMock, getDocsMock };
+  const updateDocMock = vi.fn();
+  const limitMock = vi.fn((n: number) => ({ _limit: n }));
+  return { setMock, deleteMock, commitMock, writeBatchMock, getDocMock, getDocsMock, updateDocMock, limitMock };
 });
 
 // friends.ts hämtar firestore-fns via fsdb() (lazy-laddningen i ./db) —
@@ -27,11 +29,14 @@ vi.mock('firebase/firestore', () => ({
   doc: vi.fn((_db, ...path) => ({ _path: path.join('/') })),
   getDoc: (...args: unknown[]) => mocks.getDocMock(...args),
   getDocs: (...args: unknown[]) => mocks.getDocsMock(...args),
+  updateDoc: (...args: unknown[]) => mocks.updateDocMock(...args),
+  query: vi.fn((ref, ...cs) => ({ ...ref, _constraints: cs })),
+  limit: (n: number) => mocks.limitMock(n),
   serverTimestamp: vi.fn(() => 'SERVER_TIMESTAMP'),
   writeBatch: mocks.writeBatchMock,
 }));
 
-const { setMock, deleteMock, commitMock, writeBatchMock, getDocMock, getDocsMock } = mocks;
+const { setMock, deleteMock, commitMock, writeBatchMock, getDocMock, getDocsMock, updateDocMock, limitMock } = mocks;
 
 import {
   sendFriendRequest,
@@ -42,6 +47,9 @@ import {
   getFriendStatus,
   listFriends,
   listFriendRequests,
+  updateSentFriendRequestIdentity,
+  SENT_REQUESTS_IDENTITY_LIMIT,
+  blockUserAndEndFriendship,
 } from './friends';
 
 beforeEach(() => {
@@ -51,6 +59,8 @@ beforeEach(() => {
   writeBatchMock.mockClear();
   getDocMock.mockReset();
   getDocsMock.mockReset();
+  updateDocMock.mockReset();
+  limitMock.mockClear();
 });
 
 describe('sendFriendRequest', () => {
@@ -143,6 +153,43 @@ describe('removeFriend', () => {
   });
 });
 
+// BIN-1349: en blockering avslutar vänskapen och drar tillbaka förfrågningar åt båda
+// hållen, i SAMMA batch. Vägarna står utskrivna, inte räknade: ett byte av en väg mot en
+// dubblett ska också fälla testet.
+describe('blockUserAndEndFriendship', () => {
+  it('skriver blocket och raderar båda speglarna och alla förfrågningar i en batch', async () => {
+    getDocMock.mockResolvedValueOnce({ exists: () => true });
+    await blockUserAndEndFriendship('me', 'kim');
+    expect(writeBatchMock).toHaveBeenCalledTimes(1);
+    expect(setMock).toHaveBeenCalledTimes(1);
+    expect(setMock.mock.calls[0][0]._path).toBe('users/me/blocked/kim');
+    expect(setMock.mock.calls[0][1]).toEqual({ blockedAt: 'SERVER_TIMESTAMP' });
+    expect(deleteMock.mock.calls.map(c => c[0]._path).sort()).toEqual([
+      'users/kim/friendRequests/me',
+      'users/kim/friendRequestsSent/me',
+      'users/kim/friends/me',
+      'users/me/friendRequests/kim',
+      'users/me/friendRequestsSent/kim',
+      'users/me/friends/kim',
+    ]);
+    expect(commitMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('svarar endedFriendship efter om vänskapsdokumentet fanns', async () => {
+    getDocMock.mockResolvedValueOnce({ exists: () => true });
+    expect(await blockUserAndEndFriendship('me', 'kim')).toEqual({ endedFriendship: true });
+    getDocMock.mockResolvedValueOnce({ exists: () => false });
+    expect(await blockUserAndEndFriendship('me', 'kim')).toEqual({ endedFriendship: false });
+    expect(getDocMock.mock.calls[0][0]._path).toBe('users/me/friends/kim');
+  });
+
+  it('en nekad batch kastar vidare, så anroparen inte bekräftar något', async () => {
+    getDocMock.mockResolvedValueOnce({ exists: () => true });
+    commitMock.mockRejectedValueOnce(new Error('permission-denied'));
+    await expect(blockUserAndEndFriendship('me', 'kim')).rejects.toThrow('permission-denied');
+  });
+});
+
 describe('getFriendStatus', () => {
   function mockGetDocResults(opts: { friends: boolean; sent: boolean; received: boolean }) {
     getDocMock
@@ -230,6 +277,21 @@ describe('listFriends', () => {
       since: new Date('2026-01-01'),
     }]);
   });
+
+  it('visar användarnamnet för en vän utan visningsnamn', async () => {
+    getDocsMock.mockResolvedValueOnce({
+      empty: false,
+      docs: [
+        { id: 'namnlos', data: () => ({ since: { toDate: () => new Date('2026-01-01') } }) },
+      ],
+    });
+    getDocMock.mockResolvedValueOnce({
+      exists: () => true,
+      data: () => ({ displayName: '', photoURL: null, username: 'namnlos' }),
+    });
+    const [friend] = await listFriends('me');
+    expect(friend.displayName).toBe('namnlos');
+  });
 });
 
 // BIN-1126: the rules bind the stored name to the sender's own profile, and null is
@@ -284,6 +346,25 @@ describe('listFriendRequests', () => {
     expect(request.fromDisplayName).toBe('Användare');
   });
 
+  it('visar avsändarens användarnamn när namnet saknas', async () => {
+    getDocsMock.mockResolvedValueOnce({
+      docs: [
+        {
+          id: 'namnlos',
+          data: () => ({
+            fromUid: 'namnlos',
+            fromDisplayName: '',
+            fromPhotoURL: null,
+            fromUsername: 'namnlos',
+            sentAt: { toDate: () => new Date('2026-01-01') },
+          }),
+        },
+      ],
+    });
+    const [request] = await listFriendRequests('me');
+    expect(request.fromDisplayName).toBe('namnlos');
+  });
+
   it('lämnar ett riktigt namn orört', async () => {
     getDocsMock.mockResolvedValueOnce({
       docs: [
@@ -306,5 +387,44 @@ describe('listFriendRequests', () => {
       fromUsername: 'jonatan',
       sentAt: new Date('2026-01-01'),
     }]);
+  });
+});
+
+// BIN-1174: a rename rewrites the name on requests I sent and nobody has answered.
+describe('updateSentFriendRequestIdentity', () => {
+  const sentRows = (...ids: string[]) => ({ docs: ids.map((id) => ({ id })) });
+
+  it('skriver om namnet på mottagarens förfrågan, med updateDoc och bara de två fälten', async () => {
+    getDocsMock.mockResolvedValueOnce(sentRows('anna', 'bo'));
+    updateDocMock.mockResolvedValue(undefined);
+    const failures = await updateSentFriendRequestIdentity('me', { displayName: 'Nytt', username: 'nytt' });
+    expect(failures).toEqual([]);
+    expect(getDocsMock.mock.calls[0][0]._path).toBe('users/me/friendRequestsSent');
+    expect(updateDocMock.mock.calls.map((c) => c[0]._path)).toEqual([
+      'users/anna/friendRequests/me',
+      'users/bo/friendRequests/me',
+    ]);
+    expect(updateDocMock.mock.calls[0][1]).toEqual({ fromDisplayName: 'Nytt', fromUsername: 'nytt' });
+    expect(setMock).not.toHaveBeenCalled();
+  });
+
+  it('läser utgående förfrågningar med taket', async () => {
+    getDocsMock.mockResolvedValueOnce(sentRows());
+    await updateSentFriendRequestIdentity('me', { displayName: 'Nytt', username: null });
+    expect(limitMock).toHaveBeenCalledWith(SENT_REQUESTS_IDENTITY_LIMIT);
+    expect(getDocsMock.mock.calls[0][0]._constraints).toContainEqual({ _limit: SENT_REQUESTS_IDENTITY_LIMIT });
+  });
+
+  it('returnerar varje misslyckad skrivning, inklusive ett nekande, och fortsätter med resten', async () => {
+    getDocsMock.mockResolvedValueOnce(sentRows('anna', 'bo', 'cia'));
+    const denied = Object.assign(new Error('denied'), { code: 'permission-denied' });
+    const down = Object.assign(new Error('down'), { code: 'unavailable' });
+    updateDocMock
+      .mockRejectedValueOnce(denied)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(down);
+    const failures = await updateSentFriendRequestIdentity('me', { displayName: 'Nytt', username: 'nytt' });
+    expect(updateDocMock).toHaveBeenCalledTimes(3);
+    expect(failures).toEqual([denied, down]);
   });
 });

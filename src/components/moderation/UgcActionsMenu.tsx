@@ -1,10 +1,16 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, type ReactNode } from 'react';
 import { MoreHorizontal, Flag, UserX, UserCheck } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useBlockedUsers } from '@/hooks/useBlockedUsers';
+import { useFriendActions } from '@/hooks/useFriends';
 import { useToast } from '@/contexts/ToastContext';
+import { captureError } from '@/lib/sentry';
+import { eyebrowClass } from '@/components/ui/Eyebrow';
+import { Button } from '@/components/ui/Button';
+import { fieldClass } from '@/components/ui/Field';
+import { cardClass } from '@/components/ui/Card';
 import {
   createReport,
   REPORT_REASON_LABELS,
@@ -22,21 +28,69 @@ import {
  *
  * Rapporter skrivs till top-level reports/ collection.
  */
+/**
+ * BIN-1120: menyraden och dialogrubriken namnger MÅLET, eftersom en grupp inte
+ * är "innehåll" på det sätt en recension är. Ordet "Anmäl" är det Malin valde i
+ * riktningsgenomgången 2026-09-20; recensioner och profiler behåller "Rapportera",
+ * som de haft sedan BIN-49.
+ */
+function reportItemLabel(targetType: ReportTargetType): string {
+  return targetType === 'group' ? 'Anmäl gruppen' : 'Rapportera';
+}
+
+function reportDialogTitle(targetType: ReportTargetType): string {
+  if (targetType === 'group') return 'Anmäl gruppen';
+  return targetType === 'user' ? 'Rapportera användare' : 'Rapportera innehåll';
+}
+
+/**
+ * BIN-1120: en post som anroparen lägger till i menyn ovanför "Rapportera".
+ * Finns för att gruppsidan ska kunna samla sina egna sällan-åtgärder i SAMMA
+ * meny i stället för att få en andra. Att menyn och rapportdialogen inte forkas
+ * var panelens villkor; derivera implementationerna:
+ *   git grep -ln "ReportDialog" -- src
+ */
+export interface UgcMenuItem {
+  key: string;
+  label: string;
+  icon: ReactNode;
+  onSelect: () => void;
+  danger?: boolean;
+}
+
 export function UgcActionsMenu({
   targetType,
   targetId,
   targetOwnerUid,
   targetOwnerName,
   className = '',
+  triggerLabel,
+  showBlock = true,
+  extraItems = [],
 }: {
   targetType: ReportTargetType;
   targetId: string;
   targetOwnerUid: string;
   targetOwnerName?: string;
   className?: string;
+  /**
+   * Text bredvid "…"-ikonen. BIN-1120: på gruppsidan går utträdet genom menyn,
+   * och en naken ikon läses som dekoration snarare än som en meny — #18 Community
+   * Manager band den där. Utelämnad förblir knappen den diskreta ikon som review-
+   * och kommentarskorten redan bär.
+   */
+  triggerLabel?: string;
+  /**
+   * BIN-1120: "Blockera användare" hör inte hemma i en gruppmeny — målet är
+   * gruppen, och blockeringen hade träffat dess ägare, vilket varken döljer
+   * gruppen eller löser det anmälaren är ute efter.
+   */
+  showBlock?: boolean;
+  extraItems?: UgcMenuItem[];
 }) {
   const { uid } = useAuth();
   const { isBlocked, blockUser, unblockUser } = useBlockedUsers();
+  const { refreshFriendship } = useFriendActions();
   const { show: toast } = useToast();
   const [open, setOpen] = useState(false);
   const [reporting, setReporting] = useState(false);
@@ -73,8 +127,20 @@ export function UgcActionsMenu({
       await unblockUser(targetOwnerUid);
       toast(`Avblockerade ${targetOwnerName ?? 'användaren'}.`);
     } else {
-      await blockUser(targetOwnerUid);
-      toast(`Blockerade ${targetOwnerName ?? 'användaren'}. Du ser inte deras innehåll längre.`);
+      // BIN-1349: blockeringen kan nu nekas eller falla utan anslutning, så beskedet
+      // kedjas på skrivningen i stället för att visas ovillkorligt.
+      const name = targetOwnerName ?? 'användaren';
+      try {
+        const { endedFriendship } = await blockUser(targetOwnerUid);
+        refreshFriendship(targetOwnerUid);
+        toast(endedFriendship
+          ? `Blockerade ${name}. Ni är inte vänner längre, och du ser inte deras innehåll.`
+          : `Blockerade ${name}. Du ser inte deras innehåll längre.`);
+      } catch (err) {
+        console.error('blockUser failed', err);
+        captureError(err, { scope: 'social', kind: 'blockUser' });
+        toast(`Kunde inte blockera ${name}. Försök igen.`);
+      }
     }
   };
 
@@ -82,27 +148,43 @@ export function UgcActionsMenu({
     <div ref={menuRef} className={`relative inline-block ${className}`}>
       <button
         onClick={() => setOpen(v => !v)}
-        className="text-ink-3 hover:text-ink-2 p-1 cursor-pointer"
+        className="inline-flex items-center gap-1 text-ink-3 hover:text-ink-2 p-1 cursor-pointer"
         aria-label="Åtgärder"
         title="Åtgärder"
       >
         <MoreHorizontal size={14} />
+        {triggerLabel && <span className="text-xs">{triggerLabel}</span>}
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-[2px] bg-surface border border-rule rounded-sm min-w-[160px] z-20">
+        <div className={cardClass('absolute right-0 top-full mt-0.5 min-w-[160px] z-20')}>
+          {extraItems.map((item, i) => (
+            <button
+              key={item.key}
+              onClick={() => { setOpen(false); item.onSelect(); }}
+              className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer hover:bg-bg-2 ${
+                item.danger ? 'text-danger-ink' : 'text-ink-2'
+              } ${i > 0 ? 'border-t border-rule-2' : ''}`}
+            >
+              {item.icon} {item.label}
+            </button>
+          ))}
           <button
             onClick={() => { setOpen(false); setReporting(true); }}
-            className="w-full flex items-center gap-2 px-3 py-[6px] text-xs text-ink-2 hover:bg-bg-2 cursor-pointer"
+            className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs text-ink-2 hover:bg-bg-2 cursor-pointer ${
+              extraItems.length > 0 ? 'border-t border-rule-2' : ''
+            }`}
           >
-            <Flag size={11} /> Rapportera
+            <Flag size={11} /> {reportItemLabel(targetType)}
           </button>
-          <button
-            onClick={handleBlock}
-            className="w-full flex items-center gap-2 px-3 py-[6px] text-xs text-ink-2 hover:bg-bg-2 cursor-pointer border-t border-rule-2"
-          >
-            {blocked ? <UserCheck size={11} /> : <UserX size={11} />}
-            {blocked ? 'Avblockera' : 'Blockera användare'}
-          </button>
+          {showBlock && (
+            <button
+              onClick={handleBlock}
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-ink-2 hover:bg-bg-2 cursor-pointer border-t border-rule-2"
+            >
+              {blocked ? <UserCheck size={11} /> : <UserX size={11} />}
+              {blocked ? 'Avblockera' : 'Blockera användare'}
+            </button>
+          )}
         </div>
       )}
       {reporting && (
@@ -163,14 +245,14 @@ function ReportDialog({
 
   return (
     <div
-      className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 bg-scrim z-50 flex items-center justify-center p-4"
       onClick={onClose}
       role="presentation"
     >
       <form
         onSubmit={submit}
         onClick={e => e.stopPropagation()}
-        className="bg-surface border border-rule rounded-sm max-w-[440px] w-full"
+        className={cardClass('max-w-[440px] w-full')}
         role="dialog"
         aria-modal="true"
         aria-labelledby="report-dialog-title"
@@ -179,12 +261,12 @@ function ReportDialog({
           {/* BIN-1211: rubriken följer måltypen. "Rapportera innehåll" är fel ord när målet
               är en person, och profilen är den första ytan som skickar `user`. */}
           <h2 id="report-dialog-title" className="text-sm font-bold">
-            {targetType === 'user' ? 'Rapportera användare' : 'Rapportera innehåll'}
+            {reportDialogTitle(targetType)}
           </h2>
         </div>
         <div className="px-3 py-3 space-y-3">
           <div>
-            <label className="block text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold mb-1">
+            <label className={eyebrowClass({ className: 'block mb-1' })}>
               Anledning
             </label>
             <select
@@ -198,7 +280,7 @@ function ReportDialog({
             </select>
           </div>
           <div>
-            <label className="block text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold mb-1">
+            <label className={eyebrowClass({ className: 'block mb-1' })}>
               Kommentar (valfritt)
             </label>
             <textarea
@@ -207,29 +289,29 @@ function ReportDialog({
               maxLength={500}
               rows={3}
               placeholder="Extra kontext för moderationen…"
-              className="w-full px-2 py-1 text-xs border border-rule rounded-sm bg-white font-[inherit] resize-none"
+              className={fieldClass({ size: 'sm', className: 'w-full resize-none' })}
             />
-            <div className="text-xxs text-ink-3 mt-[2px] text-right">
+            <div className="text-xxs text-ink-3 mt-0.5 text-right">
               {note.length}/500
             </div>
           </div>
           {error && <div className="text-xxs text-danger-ink">{error}</div>}
         </div>
         <div className="px-3 py-2 border-t border-rule-2 flex items-center gap-2">
-          <button
+          <Button
             type="submit"
             disabled={submitting}
-            className="px-3 py-[5px] bg-acc-deep text-white rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
+            variant="acc" size="sm" className="disabled:opacity-50"
           >
             {submitting ? 'Skickar…' : 'Skicka rapport'}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={onClose}
-            className="px-3 py-[5px] border border-rule rounded-sm text-xs bg-white cursor-pointer"
+            variant="ghost" size="sm"
           >
             Avbryt
-          </button>
+          </Button>
         </div>
       </form>
     </div>

@@ -6,14 +6,19 @@ import { useAuth } from '@/hooks/useAuth';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useMarkSeen } from '@/hooks/useMarkSeen';
 import { useClickOutside } from '@/hooks/useClickOutside';
+import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useToast } from '@/contexts/ToastContext';
 import { statusLabel, statusMenuLabel, statusOptionsFor } from '@/lib/watchStatus';
-import { clearEpisodeProgress } from '@/lib/firebase/episodeProgress';
+import { useRemoveWithUndo } from '@/hooks/useRemoveWithUndo';
+import { useFirstFollowConfirmation } from '@/hooks/useFollowConfirmation';
+import { isFirstFollow } from '@/hooks/useFollowConfirmation.helpers';
 import { buildWatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
 import { rewatchFields } from '@/lib/watchlistWrites';
 import { LIBRARY_UNAVAILABLE } from './libraryHold';
 import { useSignedOutRedirect } from '@/hooks/useSignedOutRedirect';
 import { DELETION_IN_PROGRESS_MESSAGE, isDeletionInProgressError } from '@/lib/deletionInProgressError';
+import { cardClass } from '@/components/ui/Card';
+import { buttonClass } from '@/components/ui/Button';
 
 interface StatusButtonProps {
   tmdbId: number;
@@ -42,7 +47,9 @@ export default function StatusButton({
   tmdbStatus,
 }: StatusButtonProps) {
   const { uid, loading: authLoading } = useAuth();
-  const { getItem, upsertTitle, removeItem, listenerFailed, libraryKnown } = useWatchlist();
+  const { items, getItem, upsertTitle, listenerFailed, libraryKnown } = useWatchlist();
+  const confirmFirstFollow = useFirstFollowConfirmation();
+  const removeWithUndo = useRemoveWithUndo();
   const markSeen = useMarkSeen();
   const goToLogin = useSignedOutRedirect();
   const { show: toast } = useToast();
@@ -106,6 +113,10 @@ export default function StatusButton({
   const labelFor = (s: WatchStatus) => statusLabel(s, mediaType);
   const close = useCallback(() => setOpen(false), []);
   useClickOutside(ref, close);
+  // A11Y-2: Escape closes the menu and puts focus back on the button that opened it.
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const closeAndRefocus = useCallback(() => { setOpen(false); triggerRef.current?.focus(); }, []);
+  useEscapeKey(open, closeAndRefocus);
 
   async function handleSelect(status: WatchStatus, countsAsViewing = false) {
     setOpen(false);
@@ -128,6 +139,8 @@ export default function StatusButton({
     // (which returned above via markSeen), so it can never be a viewing.
     // BIN-1038, the same answer QuickAddButton gives: the refusal was silent, never false.
     // Only the refusal is caught; everything else propagates exactly as before.
+    // Read before the write: the add itself lands in `items` optimistically.
+    const firstFollow = isFirstFollow(items, mediaType, status, current != null);
     try {
       await upsertTitle(buildWatchlistAddPayload({
         tmdbId, mediaType, status, title, posterPath, releaseYear,
@@ -140,7 +153,8 @@ export default function StatusButton({
       if (isDeletionInProgressError(err)) { toast(DELETION_IN_PROGRESS_MESSAGE); return; }
       throw err;
     }
-    toast(`${title} — ${labelFor(status)}`);
+    if (firstFollow) confirmFirstFollow(title, `${title} — ${labelFor(status)}`);
+    else toast(`${title} — ${labelFor(status)}`);
   }
 
   function handleRemove() {
@@ -148,33 +162,26 @@ export default function StatusButton({
     // Same gate, same reason as handleSelect: no write, and therefore no
     // "borttagen" toast about a removal that did not happen.
     if (!ready) return;
-    // Serie med påbörjad historik: per-avsnitt-historiken sparas medvetet
-    // (återtillägg återupptar där man var) — säg det och erbjud full
-    // rensning. Se clearEpisodeProgress + docs/data-retention-policy.md.
     const ownerUid = uid;
     const hadProgress =
       mediaType === 'tv' && ownerUid != null && current?.lastWatchedSeason != null;
-    void removeItem(mediaType, tmdbId);
-    if (hadProgress && ownerUid) {
-      toast(`${title} borttagen. Avsnittshistoriken sparas.`, {
-        label: 'Rensa helt',
-        onClick: () => {
-          void clearEpisodeProgress(ownerUid, tmdbId)
-            .then(() => toast('Historiken rensad.'))
-            .catch(() => toast('Kunde inte rensa historiken. Försök igen om en stund.'));
-        },
-      });
-    } else {
-      toast(`${title} borttagen`);
-    }
+    removeWithUndo({ mediaType, tmdbId, title, progressOwnerUid: hadProgress ? ownerUid : null });
   }
 
   return (
     <div className="relative" ref={ref}>
       <button
+        ref={triggerRef}
+        aria-expanded={open}
         onClick={() => {
           // BIN-714: first, and before every library gate — see the hook.
-          if (signedOut) { goToLogin(); return; }
+          if (signedOut) {
+            goToLogin({
+              tmdbId, mediaType, title, posterPath, releaseYear,
+              totalSeasons, providers, subscriptionProviders, genreIds, tmdbStatus,
+            });
+            return;
+          }
           // A dead listener answers on tap instead of going inert — the tooltip
           // below is hover-only, and this hold has no end. See libraryHold.ts.
           if (libraryDead) { toast(LIBRARY_UNAVAILABLE); return; }
@@ -191,21 +198,17 @@ export default function StatusButton({
         // uid), so they get no tooltip either, which is right: theirs is a normal
         // tappable button now.
         title={holdReason ?? (current ? labelFor(current.status) : undefined)}
-        className={`px-[10px] py-[3px] border rounded-sm text-xs font-[inherit] cursor-pointer font-semibold disabled:opacity-50 disabled:cursor-default ${
-          current
-            ? 'bg-acc-deep text-white border-acc-deep'
-            : 'bg-acc-deep text-white border-acc-deep hover:bg-acc-deep/90'
-        }`}
+        className={buttonClass({ variant: 'acc', size: 'sm', className: 'disabled:opacity-50 disabled:cursor-default' })}
       >
         {current ? labelFor(current.status) : '+ Lägg till'}
       </button>
       {open && (
-        <div className="absolute top-full left-0 mt-1 bg-surface border border-rule rounded-sm z-40 min-w-[130px]">
+        <div className={cardClass('absolute top-full left-0 mt-1 z-40 min-w-[130px]')}>
           {options.map(status => (
             <button
               key={status}
               onClick={() => handleSelect(status)}
-              className={`block w-full text-left px-3 py-[5px] text-xs font-[inherit] border-none cursor-pointer hover:bg-bg-2 ${
+              className={`block w-full text-left px-3 py-1.5 text-xs font-[inherit] border-none cursor-pointer hover:bg-bg-2 ${
                 current?.status === status ? 'text-acc-deep font-semibold' : 'text-ink'
               } bg-transparent`}
             >
@@ -225,7 +228,7 @@ export default function StatusButton({
           {canRewatch && (
             <button
               onClick={() => handleSelect('sedd', true)}
-              className="block w-full text-left px-3 py-[5px] text-xs font-[inherit] border-none cursor-pointer hover:bg-bg-2 text-ink bg-transparent"
+              className="block w-full text-left px-3 py-1.5 text-xs font-[inherit] border-none cursor-pointer hover:bg-bg-2 text-ink bg-transparent"
             >
               Sedd igen
             </button>
@@ -235,7 +238,7 @@ export default function StatusButton({
               <div className="border-t border-rule-2" />
               <button
                 onClick={handleRemove}
-                className="block w-full text-left px-3 py-[5px] text-xs font-[inherit] border-none cursor-pointer hover:bg-bg-2 text-danger-ink bg-transparent"
+                className="block w-full text-left px-3 py-1.5 text-xs font-[inherit] border-none cursor-pointer hover:bg-bg-2 text-danger-ink bg-transparent"
               >
                 Ta bort
               </button>

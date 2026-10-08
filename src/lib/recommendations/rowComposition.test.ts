@@ -137,6 +137,15 @@ describe('applyClientFilters', () => {
     expect(applyClientFilters(items, { ...base, genre: '53' }).map(t => t.id)).toEqual([1]);
   });
 
+  it('a merged genre option matches a film and a series filed under different TMDB ids', () => {
+    const items = [
+      mkTitle({ id: 1, genre_ids: [28] }),     // film: Action
+      mkTitle({ id: 2, genre_ids: [10759] }),  // series: Action & Adventure
+      mkTitle({ id: 3, genre_ids: [18] }),     // Drama
+    ];
+    expect(applyClientFilters(items, { ...base, genre: '28,10759' }).map(t => t.id)).toEqual([1, 2]);
+  });
+
   it('filters by search text on title or original_title', () => {
     const items = [
       mkTitle({ id: 1, title: 'Parasite', original_title: 'Gisaengchung' }),

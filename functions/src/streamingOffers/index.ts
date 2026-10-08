@@ -8,6 +8,7 @@ import { fetchOffers, RATE_LIMITED, REQUEST_REJECTED } from './motn';
 import { cheapestRent, appendPricePoint, type PricePoint } from './priceHistory';
 import { runIdBackfill, type BackfillIo, type BackfillScanDoc } from './backfillIds';
 import { mediaTypeDocId, parseMediaTypeFromDocId, resolveTmdbId } from '../shared/mediaTypeDocId';
+import { onlyUserWatchlistDocs } from '../shared/watchlistPath';
 import { motnBillingCycleId } from '../util/dayId';
 import { applyThrottleObservation, notifyOnceForCycle, reserveMotnSlot, sendAdminSystemNotification } from '../util/notifyOnce';
 import type { IntentItem, ExistingOffer, Offer, WorkItem } from './types';
@@ -45,15 +46,15 @@ async function readWorkSet(): Promise<WorkItem[]> {
   let cursor: FirebaseFirestore.QueryDocumentSnapshot | undefined;
   for (;;) {
     // orderBy('status') — not orderBy('__name__') — so Firestore only returns docs
-    // that HAVE a 'status' field; this naturally excludes groups/{id}/watchlist docs
-    // (which have no status) while keeping all user watchlist docs (even legacy-status ones).
+    // that HAVE a 'status' field, keeping all user watchlist docs (even legacy-status ones).
     let q = db.collectionGroup('watchlist')
       .select('mediaType', 'status', 'tmdbId', 'providers')
       .orderBy('status').limit(PAGE_SIZE);
     if (cursor) q = q.startAfter(cursor);
     const snap = await q.get();
     if (snap.empty) break;
-    for (const d of snap.docs) {
+    // BIN-1291: group rows are skipped by path — a member can write a `status` into one.
+    for (const d of onlyUserWatchlistDocs(snap.docs)) {
       const x = d.data();
       const it: IntentItem = {
         tmdbId: resolveTmdbId(x.tmdbId as number | string | null | undefined, d.id),

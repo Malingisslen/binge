@@ -17,15 +17,20 @@
 // The copy is Malin's, approved 2026-08-27, with one change she made in the same breath:
 // the first draft read "…så vi behöver skapa den på nytt". #19 Customer Support caught
 // that `docs/voice-and-tone.md` rule 1 bans "vi" outside legal text. She struck it.
+//
+// BIN-1422 del 2 (Malin's decision 2, 2026-10-07): an account restored from a backup lands
+// here too, with its data intact but its consent stamps left off. That visitor gets their
+// own copy, since "tomt konto" would be false for them.
 
 import { useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { isDeletionInProgressError } from '@/lib/deletionInProgressError';
+import { Button } from '@/components/ui/Button';
 
 export function ReconsentGate() {
-  const { completeReconsent, signOut } = useAuth();
+  const { completeReconsent, signOut, reconsentRestored } = useAuth();
   const [ageConfirmed, setAgeConfirmed] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -63,7 +68,9 @@ export function ReconsentGate() {
       setError(
         isDeletionInProgressError(err)
           ? 'Kontot håller på att raderas. Profilen kan inte skapas nu. Hör av dig till hej@binge.nu om det inte var meningen.'
-          : 'Profilen kunde inte skapas. Kontrollera anslutningen och försök igen.',
+          : reconsentRestored
+            ? 'Det gick inte att spara. Kontrollera anslutningen och försök igen. Hjälper det inte, mejla hej@binge.nu.'
+            : 'Profilen kunde inte skapas. Kontrollera anslutningen och försök igen.',
       );
       setSubmitting(false);
     }
@@ -77,7 +84,11 @@ export function ReconsentGate() {
       <PageHeader
         crumb="Ditt konto"
         title="Välkommen tillbaka"
-        standfirst="Din profil är borta och behöver skapas på nytt. Det du sparat tidigare finns inte kvar."
+        standfirst={
+          reconsentRestored
+            ? 'Ditt konto är återställt. Bekräfta din ålder och godkänn villkoren igen innan du fortsätter.'
+            : 'Din profil är borta och behöver skapas på nytt. Det du sparat tidigare finns inte kvar.'
+        }
       />
 
       {/*
@@ -86,12 +97,21 @@ export function ReconsentGate() {
         their library; letting them click "Skapa profil" believing it brings the library
         back is how this screen generates the support mail the next paragraph invites.
       */}
-      <p className="text-sm text-ink-2 mt-6">
-        Att skapa profilen igen ger dig ett tomt konto. Det återställer inte listor,
-        betyg eller anteckningar.
-      </p>
+      {/* #19: the first thing a restored person fears is a second wipe. */}
+      {reconsentRestored && (
+        <p className="text-sm text-ink-2 mt-6">
+          Bevakningslistan, avsnittsframstegen och vännerna är tillbaka.
+        </p>
+      )}
+      {!reconsentRestored && (
+        <p className="text-sm text-ink-2 mt-6">
+          Att skapa profilen igen ger dig ett tomt konto. Det återställer inte listor,
+          betyg eller anteckningar.
+        </p>
+      )}
 
-      <p className="text-sm text-ink mt-6">Godkänn villkoren för att fortsätta.</p>
+      {/* The restored standfirst already asks for this; saying it twice reads as a second step. */}
+      {!reconsentRestored && <p className="text-sm text-ink mt-6">Godkänn villkoren för att fortsätta.</p>}
 
       {/*
         #2 Accessibility, condition 2: the two boxes gate ONE action, so they are a group
@@ -141,18 +161,20 @@ export function ReconsentGate() {
       )}
 
       <div className="mt-4 flex flex-wrap gap-3">
-        <button
+        <Button
           type="button"
           onClick={onSubmit}
           disabled={!ready || submitting}
           aria-describedby={ready ? undefined : 'reconsent-hint'}
-          className="btn-primary"
+          variant="acc"
         >
-          {submitting ? 'Skapar…' : 'Skapa profil'}
-        </button>
-        <button type="button" onClick={() => void signOut()} className="btn">
+          {reconsentRestored
+            ? (submitting ? 'Sparar…' : 'Fortsätt')
+            : (submitting ? 'Skapar…' : 'Skapa profil')}
+        </Button>
+        <Button type="button" onClick={() => void signOut()}>
           Logga ut
-        </button>
+        </Button>
       </div>
 
       {error && (
@@ -170,9 +192,18 @@ export function ReconsentGate() {
         already names it, and art. 12 puts the duty to answer on us.
       */}
       <p className="text-sm text-ink-2 mt-6">
-        Hittade du hit av misstag? Mejla{' '}
-        <a href="mailto:hej@binge.nu" className="text-acc-deep">hej@binge.nu</a>
-        {' '}innan du skapar profilen.
+        {reconsentRestored ? (
+          <>
+            Frågor om återställningen? Mejla{' '}
+            <a href="mailto:hej@binge.nu" className="text-acc-deep">hej@binge.nu</a>.
+          </>
+        ) : (
+          <>
+            Hittade du hit av misstag? Mejla{' '}
+            <a href="mailto:hej@binge.nu" className="text-acc-deep">hej@binge.nu</a>
+            {' '}innan du skapar profilen.
+          </>
+        )}
       </p>
     </main>
   );

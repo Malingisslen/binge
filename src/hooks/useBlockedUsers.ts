@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { fsdb, lazySubscribe } from '@/lib/firebase/db';
 import { useAuth } from '@/hooks/useAuth';
+import { blockUserAndEndFriendship } from '@/lib/firebase/friends';
 
 /**
  * Block-system för UGC-moderering.
@@ -12,14 +13,15 @@ import { useAuth } from '@/hooks/useAuth';
  *
  * Filtrering sker klient-side i review/feed/follow-listor eftersom vi
  * inte vill att Firestore ska behöva joina block-data i varje query.
- * Det är en hygien-nivå som räcker för v1 — inte en säkerhetsgräns.
+ * Den filtreringen är en hygien-nivå som räcker för v1 — inte en säkerhetsgräns.
+ * En vänförfrågan från den blockerade nekas däremot av firestore.rules (BIN-1129).
  * En hård gräns kräver server-side filter, vilket vi gör när vi flyttar
  * review-läsning till en Cloud Function.
  *
  * Returnerar:
  * - blockedUids: Set<string> — snabb lookup
  * - isBlocked(uid): helper
- * - blockUser(uid): skapar blockdoc
+ * - blockUser(uid): skapar blockdoc och avslutar vänskapen (BIN-1349)
  * - unblockUser(uid): tar bort blockdoc
  */
 export function useBlockedUsers() {
@@ -42,13 +44,11 @@ export function useBlockedUsers() {
     [blockedUids],
   );
 
+  // BIN-1349: blockeringen avslutar också vänskapen — se blockUserAndEndFriendship.
   const blockUser = useCallback(
-    async (targetUid: string) => {
-      if (!uid || targetUid === uid) return;
-      const { db, doc, setDoc, serverTimestamp } = await fsdb();
-      await setDoc(doc(db, 'users', uid, 'blocked', targetUid), {
-        blockedAt: serverTimestamp(),
-      });
+    async (targetUid: string): Promise<{ endedFriendship: boolean }> => {
+      if (!uid || targetUid === uid) return { endedFriendship: false };
+      return blockUserAndEndFriendship(uid, targetUid);
     },
     [uid],
   );

@@ -28,10 +28,15 @@ let eslint;
 // Loading the repo's flat config (Next's presets + the TypeScript parser) costs several
 // seconds ONCE. Paid here rather than by whichever case happens to run first, which
 // otherwise blows the default per-test timeout and fails a rule that works.
+//
+// BIN-1263: the hook's own clock is set against a full-suite run on a loaded machine, where
+// the warm-up was measured past the previous 120 s ceiling and every case in this file was
+// then reported SKIPPED rather than failed.
+const WARMUP_TIMEOUT_MS = 300_000;
 beforeAll(async () => {
   eslint = new ESLint({ cwd: process.cwd() });
   await eslint.lintText('const warmup = 1;\nexport default warmup;\n', { filePath: PROBE });
-}, 120_000);
+}, WARMUP_TIMEOUT_MS);
 
 async function messagesFor(code) {
   const [result] = await eslint.lintText(code, { filePath: PROBE });

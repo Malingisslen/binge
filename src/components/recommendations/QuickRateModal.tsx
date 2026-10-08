@@ -13,6 +13,8 @@ import { buildWatchlistAddPayload, type WatchlistAddPayload } from '@/lib/watchl
 import { planQuickRateWrite } from '@/lib/watchlistWrites';
 import { useToast } from '@/contexts/ToastContext';
 import { DELETION_IN_PROGRESS_MESSAGE, isDeletionInProgressError } from '@/lib/deletionInProgressError';
+import { Button } from '@/components/ui/Button';
+import { cardClass } from '@/components/ui/Card';
 import {
   LIBRARY_UNREACHABLE_TITLE,
   LIBRARY_UNREACHABLE_BODY,
@@ -133,8 +135,8 @@ export default function QuickRateModal({ open, onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-surface border border-rule rounded-sm w-full max-w-3xl max-h-[80vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-scrim z-50 flex items-center justify-center p-4">
+      <div className={cardClass('w-full max-w-3xl max-h-[80vh] overflow-y-auto')}>
         <header className="flex items-center justify-between p-3 border-b border-rule sticky top-0 bg-surface">
           <h2 className="text-sm font-bold">Snabb-betyg ({rated.size} markerade)</h2>
           <button onClick={onClose} className="text-ink-3" aria-label="Stäng"><X size={16} /></button>
@@ -147,9 +149,9 @@ export default function QuickRateModal({ open, onClose }: Props) {
             <div role="alert" className="m-3 bg-danger-soft border border-danger/30 rounded-sm px-3 py-2">
               <p className="text-xs font-semibold text-danger-ink">{LIBRARY_UNREACHABLE_TITLE}</p>
               <p className="text-xs text-ink-2 mt-1">{LIBRARY_UNREACHABLE_BODY}</p>
-              <button type="button" onClick={retryListener} className="btn btn-acc btn-sm mt-2">
+              <Button type="button" onClick={retryListener} variant="acc" size="sm" className="mt-2">
                 {LIBRARY_RETRY_LABEL}
-              </button>
+              </Button>
             </div>
           ) : (
             <p className="px-3 pt-3 text-xs text-ink-3">{LIBRARY_LOADING}</p>
@@ -178,10 +180,10 @@ export default function QuickRateModal({ open, onClose }: Props) {
                       disabling it would strand the visitor in a modal whose only
                       exit is the footer. */}
                   <div className="grid grid-cols-2 gap-1">
-                    <button onClick={() => markRated(t, 5)} disabled={!libraryKnown} className="bg-acc-deep/10 text-acc-deep text-[10px] py-1 rounded-sm disabled:opacity-50">Sett 5★</button>
-                    <button onClick={() => markRated(t, 4)} disabled={!libraryKnown} className="bg-acc-deep/10 text-acc-deep text-[10px] py-1 rounded-sm disabled:opacity-50">Sett 4★</button>
-                    <button onClick={() => markRated(t, 3)} disabled={!libraryKnown} className="bg-surface border border-rule text-[10px] py-1 rounded-sm disabled:opacity-50">Sett 3★</button>
-                    <button onClick={() => skip(t.id)} className="bg-surface border border-rule text-[10px] py-1 rounded-sm">Hoppa över</button>
+                    <button onClick={() => markRated(t, 5)} disabled={!libraryKnown} className="bg-acc-deep/10 text-acc-deep text-xxs py-1 rounded-sm disabled:opacity-50">Sett 5★</button>
+                    <button onClick={() => markRated(t, 4)} disabled={!libraryKnown} className="bg-acc-deep/10 text-acc-deep text-xxs py-1 rounded-sm disabled:opacity-50">Sett 4★</button>
+                    <Button onClick={() => markRated(t, 3)} disabled={!libraryKnown} variant="ghost" size="xs" className="disabled:opacity-50">Sett 3★</Button>
+                    <Button onClick={() => skip(t.id)} variant="ghost" size="xs">Hoppa över</Button>
                   </div>
                 </div>
               );
@@ -189,9 +191,9 @@ export default function QuickRateModal({ open, onClose }: Props) {
           </div>
         )}
         <footer className="p-3 border-t border-rule flex justify-end sticky bottom-0 bg-surface">
-          <button onClick={onClose} disabled={rated.size < MIN_QUICK_RATES} className="bg-acc-deep text-white text-xs px-4 py-2 rounded-sm disabled:opacity-50">
+          <Button onClick={onClose} disabled={rated.size < MIN_QUICK_RATES} variant="acc" size="sm" className="disabled:opacity-50">
             Klar ({rated.size}/{MIN_QUICK_RATES})
-          </button>
+          </Button>
         </footer>
       </div>
     </div>

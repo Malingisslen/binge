@@ -4,6 +4,8 @@ import type { MetricKey } from '../metrics/types';
 import { DATA_RESOLVERS } from '../metrics/resolvers';
 import { METRICS } from '../metrics/catalog';
 import { useInsightsContext } from '../state/InsightsContext';
+import { eyebrowClass } from '@/components/ui/Eyebrow';
+import { cardClass } from '@/components/ui/Card';
 
 /** Vertical-bar histogram for a breakdown metric (e.g. ratings 1–10). */
 export function Histogram({ metricKey }: { metricKey: MetricKey }) {
@@ -16,10 +18,10 @@ export function Histogram({ metricKey }: { metricKey: MetricKey }) {
   const hasData = entries.some((e) => e.value > 0);
 
   return (
-    <div className="bg-surface border border-rule rounded-md p-3">
-      <div className="text-[11px] uppercase tracking-wide text-ink-3 mb-2">{label}</div>
+    <div className={cardClass('p-3')}>
+      <div className={eyebrowClass({ size: 'xs', className: 'mb-2' })}>{label}</div>
       {!hasData ? (
-        <div className="text-sm text-ink-3 py-2">Ingen data</div>
+        <div className="text-sm text-ink-3 py-2">{value.missing ?? 'Ingen data'}</div>
       ) : (
         <div className="flex items-end gap-1 h-28">
           {entries.map((e) => (
@@ -28,7 +30,7 @@ export function Histogram({ metricKey }: { metricKey: MetricKey }) {
                 className="w-full bg-acc rounded-sm min-h-[2px]"
                 style={{ height: `${max === 0 ? 0 : (e.value / max) * 100}%` }}
               />
-              <span className="text-[10px] text-ink-3 tabular-nums">{e.label}</span>
+              <span className="text-xxs text-ink-3 tabular-nums">{e.label}</span>
             </div>
           ))}
         </div>

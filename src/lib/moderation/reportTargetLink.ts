@@ -8,8 +8,6 @@ import type { Report } from '@/lib/firebase/reports';
  * inte" för ett konto som finns (BIN-1233). Användarnamnet kommer ur den publika
  * projektionen `publicProfiles/{uid}`. Finns inget användarnamn blir det ingen länk alls,
  * hellre än en som säger att kontot saknas.
- *
- * Recensioner och kommentarer har ingen direktlänk: rapporten bär inget titel-id.
  */
 export function buildTargetLink(
   report: Pick<Report, 'targetType' | 'targetId'>,

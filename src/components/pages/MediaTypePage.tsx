@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { posterUrl } from '@/lib/tmdb/client';
+import { posterUrl, posterSrcSet } from '@/lib/tmdb/client';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
 import { usePopularTV, usePopularMovies } from '@/hooks/useTMDB';
@@ -12,11 +12,13 @@ import { toneForId } from '@/lib/duotone';
 import type { MediaType, TMDBSearchResult } from '@/types';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { JsonLd, breadcrumbSchema, collectionPageSchema } from '@/components/title/JsonLd';
+import { Button } from '@/components/ui/Button';
+import { cardClass } from '@/components/ui/Card';
 
 const CONFIG = {
   tv: {
     title: 'Serier',
-    standfirst: 'Alla TV-serier du följer — pågående, avslutade och kommande. Se var varje serie går att streama i Sverige.',
+    standfirst: 'Populära TV-serier just nu och var de går att streama i Sverige. Följ det du tittar på, så håller Binge koll på nya avsnitt och var serien finns.',
     popularLabel: 'Populära serier',
     emptyText: 'Du tittar inte på några serier ännu. Lägg till nedan!',
     hrefPrefix: '/tv/',
@@ -24,7 +26,7 @@ const CONFIG = {
   },
   movie: {
     title: 'Filmer',
-    standfirst: 'Alla filmer du följer — sedda, sparade och kommande. Se var varje film går att streama i Sverige.',
+    standfirst: 'Populära filmer just nu och var de går att streama i Sverige. Spara det du vill se, så håller Binge koll på när det dyker upp på dina tjänster.',
     popularLabel: 'Populära filmer',
     emptyText: 'Du tittar inte på några filmer ännu. Lägg till nedan!',
     hrefPrefix: '/movie/',
@@ -90,20 +92,20 @@ export default function MediaTypePage({
       <PageHeader crumb={cfg.title} title={cfg.title} standfirst={cfg.standfirst} />
 
       {following.length > 0 ? (
-        <div className="bg-surface border border-rule rounded-sm mb-[14px]">
-          <div className="flex items-center justify-between px-3 py-[6px] border-b border-rule-2">
+        <div className={cardClass('mb-3.5')}>
+          <div className="flex items-center justify-between px-3 py-1.5 border-b border-rule-2">
             <h2 className="text-sm font-bold text-ink-2 m-0">Följer</h2>
             <Link href={mediaType === 'tv' ? '/my/series/' : '/my/films/'} className="text-xs text-acc-deep no-underline">
               Alla {following.length} →
             </Link>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(100px,1fr))] gap-[10px] md:gap-[7px] px-3 py-2">
+          <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(100px,1fr))] gap-2.5 md:gap-2 px-3 py-2">
             {following.slice(0, 10).map(item => {
               const poster = posterUrl(item.posterPath, 'w342');
               return (
                 <Link key={item.tmdbId} href={`${cfg.hrefPrefix}${item.tmdbId}/`} className="no-underline text-ink">
-                  <div className={`poster duo-${toneForId(item.tmdbId)} mb-[3px]`}>
-                    {poster && <img src={poster} alt={item.title} loading="lazy" decoding="async" width={342} height={513} />}
+                  <div className={`poster duo-${toneForId(item.tmdbId)} mb-1`}>
+                    {poster && <img src={poster} srcSet={posterSrcSet(item.posterPath, 'w342')} sizes="(max-width: 767px) 45vw, 120px" alt={item.title} loading="lazy" decoding="async" width={342} height={513} />}
                   </div>
                   <div className="text-xs font-semibold overflow-hidden text-ellipsis whitespace-nowrap">{item.title}</div>
                 </Link>
@@ -112,13 +114,13 @@ export default function MediaTypePage({
           </div>
         </div>
       ) : (
-        <div className="bg-surface border border-rule rounded-sm mb-[14px] px-3 py-4 text-center text-sm text-ink-3">
+        <div className={cardClass('mb-3.5 px-3 py-4 text-center text-sm text-ink-3')}>
           {cfg.emptyText}
         </div>
       )}
 
-      <div className="bg-surface border border-rule rounded-sm">
-        <div className="px-3 py-[6px] border-b border-rule-2">
+      <div className={cardClass()}>
+        <div className="px-3 py-1.5 border-b border-rule-2">
           <h2 className="text-sm font-bold text-ink-2 m-0">{cfg.popularLabel}</h2>
         </div>
         <TitleGrid
@@ -130,13 +132,13 @@ export default function MediaTypePage({
       </div>
 
       {hasMore && (
-        <button
+        <Button
           onClick={() => setPage(p => p + 1)}
           disabled={isLoading}
-          className="btn btn-ghost btn-sm mt-3 disabled:opacity-50"
+          variant="ghost" size="sm" className="mt-3 disabled:opacity-50"
         >
           {isLoading ? 'Laddar…' : 'Visa fler'}
-        </button>
+        </Button>
       )}
     </div>
   );

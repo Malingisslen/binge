@@ -10,6 +10,9 @@ import { useAuth } from '@/hooks/useAuth';
 import { UgcActionsMenu } from '@/components/moderation/UgcActionsMenu';
 import { JsonLd, reviewSchema } from './JsonLd';
 import type { MediaType, Review } from '@/types';
+import { Button } from '@/components/ui/Button';
+import { fieldClass } from '@/components/ui/Field';
+import { cardClass } from '@/components/ui/Card';
 
 interface ReviewListProps {
   tmdbId: number;
@@ -67,36 +70,36 @@ export default function ReviewList({ tmdbId, mediaType, title, posterPath }: Rev
       <div className="flex items-center gap-2 mb-2">
         <h2 className="text-sm font-bold text-ink-2">Recensioner ({reviews.length})</h2>
         {uid && !myReview && (
-          <button
+          <Button
             onClick={() => setShowForm(true)}
-            className="px-[7px] py-[2px] text-xs rounded-sm cursor-pointer bg-acc-deep text-white border-none font-[inherit]"
+            variant="acc" size="sm"
           >
             Skriv
-          </button>
+          </Button>
         )}
       </div>
 
       {showForm && (
-        <div className="bg-surface border border-rule rounded-sm p-3 mb-2">
+        <div className={cardClass('p-3 mb-2')}>
           <textarea
             value={text}
             onChange={e => setText(e.target.value)}
             placeholder="Skriv din recension…"
             maxLength={2000}
             rows={3}
-            className="w-full px-2 py-1 text-xs border border-rule rounded-sm bg-white font-[inherit] resize-none outline-none mb-2"
+            className={fieldClass({ size: 'sm', className: 'w-full resize-none mb-2' })}
           />
           <div className="flex items-center gap-2">
             <label className="flex items-center gap-1 text-xs text-ink-3 cursor-pointer">
               <input type="checkbox" checked={spoiler} onChange={e => setSpoiler(e.target.checked)} className="accent-acc-deep" />
               Spoiler
             </label>
-            <button onClick={handleSubmit} className="px-3 py-[3px] text-xs border-none rounded-sm cursor-pointer bg-acc-deep text-white font-[inherit]">
+            <Button onClick={handleSubmit} variant="acc" size="sm">
               Publicera
-            </button>
-            <button onClick={() => setShowForm(false)} className="px-3 py-[3px] text-xs border border-rule rounded-sm cursor-pointer bg-surface text-ink-3 font-[inherit]">
+            </Button>
+            <Button onClick={() => setShowForm(false)} variant="ghost" size="sm">
               Avbryt
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -109,14 +112,14 @@ export default function ReviewList({ tmdbId, mediaType, title, posterPath }: Rev
       ))}
 
       {hasNextPage && (
-        <button
+        <Button
           type="button"
           onClick={() => fetchNextPage()}
           disabled={isFetchingNextPage}
-          className="btn btn-ghost"
+          variant="ghost"
         >
           {isFetchingNextPage ? 'Laddar…' : 'Visa fler recensioner'}
-        </button>
+        </Button>
       )}
 
       {reviews.length === 0 && !showForm && (
@@ -134,7 +137,7 @@ function ReviewCard({ review, isOwn, onDelete }: { review: Review; isOwn?: boole
   const { comments } = useReviewComments(showComments ? review.id : null);
 
   return (
-    <div className="bg-surface border border-rule rounded-sm px-3 py-2 mb-[6px]">
+    <div className={cardClass('px-3 py-2 mb-1.5')}>
       <div className="flex items-center justify-between mb-1">
         <div className="text-xs">
           {review.username ? (
@@ -171,11 +174,11 @@ function ReviewCard({ review, isOwn, onDelete }: { review: Review; isOwn?: boole
         <p className="text-xs text-ink-2 leading-relaxed m-0">{review.text}</p>
       )}
 
-      <div className="flex items-center gap-3 mt-[6px] pt-[5px] border-t border-rule-2">
+      <div className="flex items-center gap-3 mt-1.5 pt-1.5 border-t border-rule-2">
         <button
           onClick={toggle}
           disabled={!uid}
-          className={`inline-flex items-center gap-[4px] bg-transparent border-none cursor-pointer p-0 font-[inherit] text-xxs ${
+          className={`inline-flex items-center gap-1 bg-transparent border-none cursor-pointer p-0 font-[inherit] text-xxs ${
             iLike ? 'text-acc-deep' : 'text-ink-3 hover:text-ink-2'
           } disabled:opacity-50 disabled:cursor-default`}
           title={uid ? (iLike ? 'Ångra gillning' : 'Gilla') : 'Logga in för att gilla'}
@@ -187,7 +190,7 @@ function ReviewCard({ review, isOwn, onDelete }: { review: Review; isOwn?: boole
         </button>
         <button
           onClick={() => setShowComments(v => !v)}
-          className="inline-flex items-center gap-[4px] bg-transparent border-none cursor-pointer p-0 font-[inherit] text-xxs text-ink-3 hover:text-ink-2"
+          className="inline-flex items-center gap-1 bg-transparent border-none cursor-pointer p-0 font-[inherit] text-xxs text-ink-3 hover:text-ink-2"
         >
           <MessageCircle size={11} />
           Kommentera
@@ -239,7 +242,7 @@ function ReviewComments({
       {visibleComments.length === 0 ? (
         <div className="text-xxs text-ink-3 italic">Inga kommentarer än.</div>
       ) : (
-        <ul className="space-y-[4px] mb-2">
+        <ul className="space-y-1 mb-2">
           {visibleComments.map(c => {
             const canDelete = !!uid && (c.uid === uid || reviewAuthorUid === uid);
             return (
@@ -252,8 +255,8 @@ function ReviewComments({
                   ) : (
                     <span className="font-semibold text-ink">{c.displayName}</span>
                   )}
-                  <span className="text-ink-2 ml-[4px]">{c.text}</span>
-                  <span className="text-ink-3 ml-[4px]">· {c.createdAt.toLocaleDateString('sv-SE')}</span>
+                  <span className="text-ink-2 ml-1">{c.text}</span>
+                  <span className="text-ink-3 ml-1">· {c.createdAt.toLocaleDateString('sv-SE')}</span>
                 </div>
                 {canDelete ? (
                   <button
@@ -287,21 +290,22 @@ function ReviewComments({
             onKeyDown={e => { if (e.key === 'Enter') void submit(); }}
             placeholder="Skriv en kommentar…"
             maxLength={500}
-            className="flex-1 px-2 py-1 text-xxs border border-rule rounded-sm bg-white"
+            className={fieldClass({ size: 'sm', className: 'flex-1' })}
           />
-          <button
+          <Button
             onClick={submit}
             disabled={posting || !text.trim()}
-            className="px-2 py-1 bg-acc-deep text-white rounded-sm text-xxs cursor-pointer disabled:opacity-50"
+            aria-label="Skicka"
+            variant="acc" size="xs" className="inline-flex items-center justify-center min-w-[24px] min-h-[24px] disabled:opacity-50"
           >
-            <Send size={10} />
-          </button>
-          <button
+            <Send size={12} aria-hidden />
+          </Button>
+          <Button
             onClick={onClose}
-            className="px-2 py-1 border border-rule rounded-sm text-xxs bg-white cursor-pointer text-ink-3"
+            variant="ghost" size="xs"
           >
             Stäng
-          </button>
+          </Button>
         </div>
       ) : (
         <div className="text-xxs text-ink-3">Logga in för att kommentera.</div>

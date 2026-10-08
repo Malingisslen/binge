@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { buildCalendarEntries, buildMovieEntries, type SeasonDatum } from './buildEntries';
 import type { TMDBTVShow, TMDBEpisode, TMDBMovie } from '@/types';
 import type { EpisodeEntry, MovieEntry } from './types';
+import { latestAiredEpisodeByShow } from '@/lib/continueWatching';
 
 function ep(partial: Partial<TMDBEpisode>): TMDBEpisode {
   return {
@@ -221,5 +222,57 @@ describe('buildMovieEntries', () => {
     expect(entry.kind === 'movie' && entry.overview).toBe('En film.');
     expect(entry.kind === 'movie' && entry.runtime).toBe(120);
     expect(entry.genreIds).toEqual([28]);
+  });
+});
+
+describe('buildCalendarEntries — last_episode_to_air seed (PERF-1)', () => {
+  it('seeds the last aired episode of a show whose season was not fetched', () => {
+    const last = ep({ season_number: 3, episode_number: 8, air_date: '2024-03-01' });
+    const out = eps(buildCalendarEntries([{ showId: 100, show: show({ last_episode_to_air: last }), season: null }]));
+    expect(out.map(e => e.episodeCode)).toEqual(['S03E08']);
+  });
+
+  it('does not seed a special (season 0) as the last episode', () => {
+    const last = ep({ season_number: 0, episode_number: 2, air_date: '2024-03-01' });
+    const out = buildCalendarEntries([{ showId: 100, show: show({ last_episode_to_air: last }), season: null }]);
+    expect(out).toEqual([]);
+  });
+
+  it('does not duplicate the last episode when the fetched season already lists it', () => {
+    const last = ep({ season_number: 1, episode_number: 2, air_date: '2026-05-25' });
+    const season = { episodes: [ep({ episode_number: 1, air_date: '2026-05-18' }), last] };
+    const out = eps(buildCalendarEntries([{ showId: 100, show: show({ last_episode_to_air: last }), season }]));
+    expect(out.map(e => e.episodeCode)).toEqual(['S01E01', 'S01E02']);
+  });
+
+  it('flags the seeded last episode as finale when it completes the season', () => {
+    const last = ep({ season_number: 2, episode_number: 10, air_date: '2024-03-01' });
+    const s = show({
+      last_episode_to_air: last,
+      seasons: [{ season_number: 2, episode_count: 10 }] as TMDBTVShow['seasons'],
+    });
+    const out = eps(buildCalendarEntries([{ showId: 100, show: s, season: null }]));
+    expect(out[0].isFinale).toBe(true);
+  });
+});
+
+describe('Fortsätt titta reads the last-episode seed (PERF-1)', () => {
+  it('reports the seeded last episode as the latest aired position for an unfetched show', () => {
+    const last = ep({ season_number: 3, episode_number: 8, air_date: '2024-03-01' });
+    const entries = buildCalendarEntries([{ showId: 100, show: show({ last_episode_to_air: last }), season: null }]);
+    expect(latestAiredEpisodeByShow(entries, new Date(2026, 9, 5)).get(100)).toEqual({ season: 3, episode: 8 });
+  });
+});
+
+describe('finale badge stays in its own season (PERF-1)', () => {
+  it('does not flag the previous season\'s last episode as the new season\'s finale', () => {
+    const s = show({
+      next_episode_to_air: ep({ season_number: 3, episode_number: 1, air_date: '2026-11-01' }),
+      last_episode_to_air: ep({ season_number: 2, episode_number: 1, air_date: '2025-03-01' }),
+      seasons: [{ season_number: 3, episode_count: 1 }] as TMDBTVShow['seasons'],
+    });
+    const out = eps(buildCalendarEntries([{ showId: 100, show: s, season: null }]));
+    expect(out.find(e => e.season === 2)?.isFinale).toBe(false);
+    expect(out.find(e => e.season === 3)?.isFinale).toBe(true);
   });
 });

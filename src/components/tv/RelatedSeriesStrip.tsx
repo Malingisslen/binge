@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { titleHref } from '@/lib/tmdb/client';
 import type { SeriesEntry } from '@/lib/tv/relatedSeries';
+import { eyebrowClass } from '@/components/ui/Eyebrow';
 
 /**
  * "Samma serie" — a small strip of links to the OTHER TMDB entries of the same
@@ -18,7 +19,7 @@ export default function RelatedSeriesStrip({ entries }: { entries: SeriesEntry[]
       {/* Standalone eyebrow style — do NOT reuse the `.kind` class: its CSS rule is
           scoped to `.detail-hero .chips-line .kind`, so it is inert here (and it pulls
           the phased-out --mono font). Mirrors the file's "Ditt betyg" label look. */}
-      <span style={{ fontSize: 10.5, color: 'var(--ink-3)', letterSpacing: 0.12, textTransform: 'uppercase', fontWeight: 500 }}>
+      <span className={eyebrowClass({ size: 'xs' })}>
         Samma serie
       </span>
       {entries.map((e) => (

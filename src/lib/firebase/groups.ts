@@ -58,12 +58,46 @@ function getFreshMyGroups(uid: string): string[] | null {
 // nya grupp-id-listan (skulle kräva att känna till hela den gamla listan
 // eller ett extra read) — river bara cachen så nästa getFreshMyGroups-läsning
 // (t.ex. nästa syncProgressToGroups-anrop) tvingar en färsk bounded query.
-// Medlemskaps-BORTTAG (removeMember/deleteGroup) river inte cachen med
-// avsikt: en stale post där gör högst att syncProgressToGroups försöker
-// skriva progress till en grupp man precis lämnat — det failar tyst
-// (per-grupp try/catch, se syncProgressToGroups) och är ofarligt.
+// PERF-6: medlemskaps-BORTTAG (removeMember/deleteGroup) river den också, sedan
+// titelsidans gruppknapp läser cachen för att avgöra om den ska synas.
 function invalidateMyGroupsCache(uid: string): void {
   myGroupsCache.delete(uid);
+  // A read started before the change must not refill the cache with the old answer.
+  myGroupIdsInFlight.delete(uid);
+}
+
+const myGroupIdsInFlight = new Map<string, { promise: Promise<string[]> }>();
+
+/**
+ * PERF-6: användarens grupp-id:n — ur TTL-cachen om den är färsk, annars EN bounded
+ * query som fyller den. Samtidiga anrop delar samma läsning. Ett misslyckat svar
+ * cachas aldrig (som tom lista), det kastas till anroparen.
+ */
+export function getMyGroupIds(uid: string): Promise<string[]> {
+  const fresh = getFreshMyGroups(uid);
+  if (fresh != null) return Promise.resolve(fresh);
+  const pending = myGroupIdsInFlight.get(uid);
+  if (pending) return pending.promise;
+  // `read` identifies THIS read; an invalidation removes it, and a removed read must
+  // not cache its (pre-change) answer.
+  const read = {} as { promise: Promise<string[]> };
+  read.promise = (async () => {
+    const { db, collection, getDocs, query, where, limit: queryLimit } = await fsdb();
+    const snap = await getDocs(
+      query(
+        collection(db, 'groups'),
+        where('memberUids', 'array-contains', uid),
+        queryLimit(MY_GROUPS_LIMIT),
+      ),
+    );
+    const groupIds = snap.docs.map(d => d.id);
+    if (myGroupIdsInFlight.get(uid) === read) cacheMyGroups(uid, groupIds);
+    return groupIds;
+  })().finally(() => {
+    if (myGroupIdsInFlight.get(uid) === read) myGroupIdsInFlight.delete(uid);
+  });
+  myGroupIdsInFlight.set(uid, read);
+  return read.promise;
 }
 
 // Skapar en grupp och returnerar både groupId och plaintext-tokenet. Tokenet
@@ -738,10 +772,35 @@ export async function removeMember(groupId: string, uid: string): Promise<void> 
   // (no-op när medlemmen aldrig opt:at in; rules tillåter self + owner).
   batch.delete(doc(db, 'groups', groupId, 'household', uid));
   await batch.commit();
+  invalidateMyGroupsCache(uid);
 }
 
+/**
+ * Utträdet är klientskrivningen i `removeMember`, oförändrad (#12:s villkor, se
+ * `## BIN-1120` i .claude/rules/accepted-deviations.md). BIN-1260: EFTER den ber
+ * klienten servern radera användarens egna spår i gruppen. Det steget är
+ * bäst-möjligt och inväntas inte — ett fel där rapporteras men gör aldrig ett
+ * lyckat utträde till ett misslyckat (BIN-1166).
+ */
 export async function leaveGroup(groupId: string, uid: string): Promise<void> {
-  return removeMember(groupId, uid);
+  await removeMember(groupId, uid);
+  void import('./groupHandover')
+    .then(({ eraseMyGroupTraces }) => eraseMyGroupTraces(groupId))
+    .catch((err) => reportGroupWriteError('leaveGroup-traceErasure', err));
+}
+
+/**
+ * BIN-1296: the owner removes a member. Same shape as `leaveGroup`: the client
+ * write in `removeMember` first, awaited, so a failure there still reaches the
+ * caller; THEN the server erases the removed member's traces, not awaited, and a
+ * failure there is reported but never turns a removal that went through into one
+ * that failed (BIN-1166).
+ */
+export async function removeMemberAsOwner(groupId: string, memberUid: string): Promise<void> {
+  await removeMember(groupId, memberUid);
+  void import('./groupHandover')
+    .then(({ eraseMyGroupTraces }) => eraseMyGroupTraces(groupId, memberUid))
+    .catch((err) => reportGroupWriteError('removeMember-traceErasure', err));
 }
 
 export async function deleteGroup(groupId: string, currentUid: string): Promise<void> {
@@ -756,7 +815,9 @@ export async function deleteGroup(groupId: string, currentUid: string): Promise<
     getDocs(collection(db, 'groups', groupId, 'sessionHistory')),
     // G8: top-level sessions/{id} bär groupId och blir annars föräldralösa
     // — kvar som "aktiva" i sessionslistor med den raderade gruppens namn.
-    getDocs(query(collection(db, 'sessions'), where('groupId', '==', groupId))),
+    // SEC-1: `hostUid`-filtret krävs av firestore.rules, som bara låter en inloggad
+    // lista sessioner hen själv är värd för.
+    getDocs(query(collection(db, 'sessions'), where('groupId', '==', groupId), where('hostUid', '==', currentUid))),
   ]);
 
   // Firestore-rules tillåter bara sessionens host (hostUid == auth.uid) att
@@ -828,6 +889,7 @@ export async function deleteGroup(groupId: string, currentUid: string): Promise<
     refs.slice(i, i + CHUNK).forEach(ref => batch.delete(ref));
     await batch.commit();
   }
+  invalidateMyGroupsCache(currentUid);
 }
 
 export async function updateMemberProviders(
@@ -1114,19 +1176,7 @@ export async function syncProgressToGroups(params: {
   status?: string | null;
 }): Promise<void> {
   try {
-    let groupIds = getFreshMyGroups(params.uid);
-    if (groupIds == null) {
-      const { db, collection, getDocs, query, where, limit: queryLimit } = await fsdb();
-      const groupsSnap = await getDocs(
-        query(
-          collection(db, 'groups'),
-          where('memberUids', 'array-contains', params.uid),
-          queryLimit(MY_GROUPS_LIMIT),
-        ),
-      );
-      groupIds = groupsSnap.docs.map(d => d.id);
-      cacheMyGroups(params.uid, groupIds);
-    }
+    const groupIds = await getMyGroupIds(params.uid);
     if (groupIds.length === 0) return;
     const { db, doc, getDoc } = await fsdb();
     await Promise.all(groupIds.map(async groupId => {
@@ -1181,10 +1231,23 @@ export function memberDocToObject(id: string, data: Record<string, unknown>): Gr
     photoURL: (data.photoURL as string | null) ?? null,
     providers: (data.providers as number[]) ?? [],
     joinedAt: toDate(data.joinedAt),
+    // Read the RAW field, not the converted one: `toDate` answers `new Date()`
+    // for anything it cannot parse, so the converted value cannot tell a real
+    // stamp from a missing one.
+    joinedAtKnown: typeof (data.joinedAt as { toDate?: unknown } | undefined)?.toDate === 'function'
+      || data.joinedAt instanceof Date,
   };
 }
 
-export function watchlistDocToObject(id: string, data: Record<string, unknown>): GroupWatchlistItem {
+/**
+ * BIN-1354: `addedAtKnown` is false when the doc carries no parseable `addedAt` — an
+ * older row saved without one, or a fresh add whose server stamp has not arrived yet.
+ * `addedAt` is then `toDate`'s stand-in `new Date()`, which moves on every snapshot, so
+ * it must not be compared across snapshots.
+ */
+export type GroupWatchlistRow = GroupWatchlistItem & { addedAtKnown: boolean };
+
+export function watchlistDocToObject(id: string, data: Record<string, unknown>): GroupWatchlistRow {
   return {
     // Prefer the stored field; parse the doc id as fallback. Once group watchlist
     // ids are namespaced (movie_123) in Phase 5, a bare Number(id) would be NaN.
@@ -1195,6 +1258,9 @@ export function watchlistDocToObject(id: string, data: Record<string, unknown>):
     releaseYear: (data.releaseYear as number | null) ?? null,
     addedBy: (data.addedBy as string) ?? '',
     addedAt: toDate(data.addedAt),
+    // Read the RAW field, as `memberDocToObject` does for `joinedAt`.
+    addedAtKnown: typeof (data.addedAt as { toDate?: unknown } | undefined)?.toDate === 'function'
+      || data.addedAt instanceof Date,
     memberRatings: (data.memberRatings as Record<string, number>) ?? {},
   };
 }
@@ -1248,7 +1314,7 @@ export function subscribeToGroupMembers(
 
 export function subscribeToGroupWatchlist(
   groupId: string,
-  cb: (items: GroupWatchlistItem[]) => void,
+  cb: (items: GroupWatchlistRow[]) => void,
 ): () => void {
   return lazySubscribe(({ db, collection, onSnapshot }) =>
     onSnapshot(collection(db, 'groups', groupId, 'watchlist'), snap => {

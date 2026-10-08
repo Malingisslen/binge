@@ -52,7 +52,7 @@ vi.mock('@/components/title/TitleGrid', () => ({ default: () => null }));
 import HomePageClient from './HomePageClient';
 
 const STORAGE_KEY = 'binge:nextAfterLogin';
-const cta = () => screen.getAllByRole('button', { name: 'Logga in med Google' })[0];
+const cta = () => screen.getAllByRole('button', { name: 'Skapa konto gratis' })[0];
 
 describe('HomePageClient — the landing sign-in CTA (BIN-668)', () => {
   beforeEach(() => {
@@ -110,6 +110,59 @@ describe('HomePageClient — the landing sign-in CTA (BIN-668)', () => {
     auth.user = null;
     await act(async () => { render(<HomePageClient />); });
 
-    expect(screen.queryByRole('button', { name: 'Logga in med Google' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Skapa konto gratis' })).toBeNull();
+  });
+});
+
+// #26:s villkor 5 (pengakollen publikt): the guest cost demo sits under the hero and
+// above "Trendande", and ONLY once auth has resolved to signed-out. The loading branch
+// is also what a returning signed-in visitor gets on first paint (hidden by CSS), so
+// the demo must not be in it; and it never renders for a uid.
+describe('HomePageClient — guest cost demo (3B)', () => {
+  const demoHeading = () => screen.queryByRole('heading', { name: 'Vad betalar du för streaming?' });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    window.sessionStorage.clear();
+    auth.user = null;
+    auth.uid = null;
+    auth.loading = false;
+  });
+
+  it('is absent while auth is loading, and appears once auth resolves signed-out', async () => {
+    auth.loading = true;
+    let view!: ReturnType<typeof render>;
+    await act(async () => { view = render(<HomePageClient />); });
+    expect(demoHeading()).toBeNull();
+
+    auth.loading = false;
+    await act(async () => { view.rerender(<HomePageClient />); });
+    expect(demoHeading()).not.toBeNull();
+  });
+
+  it('never renders for a signed-in visitor', async () => {
+    auth.uid = 'u1';
+    await act(async () => { render(<HomePageClient />); });
+    expect(demoHeading()).toBeNull();
+  });
+
+  it('sits directly after the hero and before the trending section', async () => {
+    await act(async () => { render(<HomePageClient initialTrending={[{ id: 1, media_type: 'movie', title: 'X' } as never]} />); });
+    const demo = demoHeading()!.closest('section')!;
+    const trending = screen.getByRole('heading', { name: 'Trendande just nu' }).closest('section')!;
+    const hero = screen.getAllByRole('button', { name: 'Skapa konto gratis' })[0].closest('section')!;
+    expect(hero.nextElementSibling).toBe(demo);
+    expect(demo.compareDocumentPosition(trending) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('a tap gives a total and shares the selection with the calculator', async () => {
+    await act(async () => { render(<HomePageClient />); });
+    fireEvent.click(screen.getByRole('button', { name: 'Netflix' }));
+    const figure = screen.getByTestId('money-figure');
+    expect(figure).toHaveTextContent(/Per månad\s*169 kr/);
+    expect(figure).toHaveTextContent(/Per år, uppskattat\s*2 028 kr/);
+    expect(JSON.parse(window.sessionStorage.getItem('binge:guestProviders')!)).toEqual({ 8: null });
+    expect(screen.getByRole('link', { name: 'Visa mer' })).toHaveAttribute('href', expect.stringMatching(/^\/streamingkostnad\/?$/));
+    expect(screen.getByRole('link', { name: 'Fler' })).toHaveAttribute('href', expect.stringMatching(/^\/streamingkostnad\/?$/));
   });
 });

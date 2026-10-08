@@ -7,6 +7,7 @@ import { useFollowList, type FollowListUser } from '@/hooks/useFollowList';
 import { useFollowing } from '@/hooks/useFollow';
 import { useFriends, useFriendRequests, useFriendActions } from '@/hooks/useFriends';
 import { useAuth } from '@/hooks/useAuth';
+import { useBlockedUsers } from '@/hooks/useBlockedUsers';
 import { useSenderProfile } from '@/hooks/useSenderProfile';
 import { useFriendActionAlert } from '@/hooks/useFriendActionAlert';
 import { FRIEND_FAILURE_TEXT } from '@/lib/friendActionText';
@@ -14,16 +15,28 @@ import type { FriendRequest, FriendUser } from '@/lib/firebase/friends';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { usePageMeta } from '@/hooks/usePageMeta';
 import { LoadingView } from '@/components/ui/LoadingView';
+import { Button } from '@/components/ui/Button';
+import { cardClass } from '@/components/ui/Card';
+import { shownSenderName } from '@/lib/friendName';
 
 type Tab = 'friends' | 'requests' | 'following' | 'followers';
 
 export default function FriendsPageClient() {
   // X5: 'Vänner' saknade — Binge.nu-suffix i dokumenttiteln.
   usePageMeta({ title: 'Vänner' });
-  const { following, followers, isLoading: followLoading } = useFollowList();
-  const { data: friends = [], isLoading: friendsLoading } = useFriends();
-  const { data: requests = [], isLoading: requestsLoading } = useFriendRequests();
+  const { following: allFollowing, followers: allFollowers, isLoading: followLoading } = useFollowList();
+  const { data: allFriends = [], isLoading: friendsLoading } = useFriends();
+  const { data: allRequests = [], isLoading: requestsLoading } = useFriendRequests();
   const [tab, setTab] = useState<Tab>('friends');
+
+  // BIN-1341. Someone I blocked is left out of every tab, the same client-side
+  // hygiene filter the feed and reviews use. The tab counts read the filtered lists,
+  // so a count never promises a row that is not rendered.
+  const { isBlocked } = useBlockedUsers();
+  const friends = allFriends.filter(f => !isBlocked(f.uid));
+  const requests = allRequests.filter(r => !isBlocked(r.fromUid));
+  const following = allFollowing.filter(u => !isBlocked(u.uid));
+  const followers = allFollowers.filter(u => !isBlocked(u.uid));
 
   const isLoading = followLoading || friendsLoading || requestsLoading;
   const list = tab === 'following' ? following : tab === 'followers' ? followers : [];
@@ -85,19 +98,19 @@ export default function FriendsPageClient() {
       )}
 
       {!empty && tab === 'friends' && (
-        <ul className="bg-surface border border-rule rounded-sm divide-y divide-rule-2">
+        <ul className={cardClass('divide-y divide-rule-2')}>
           {friends.map(f => <FriendRow key={f.uid} friend={f} />)}
         </ul>
       )}
 
       {!empty && tab === 'requests' && (
-        <ul className="bg-surface border border-rule rounded-sm divide-y divide-rule-2">
+        <ul className={cardClass('divide-y divide-rule-2')}>
           {requests.map(r => <RequestRow key={r.fromUid} request={r} />)}
         </ul>
       )}
 
       {!empty && (tab === 'following' || tab === 'followers') && (
-        <ul className="bg-surface border border-rule rounded-sm divide-y divide-rule-2">
+        <ul className={cardClass('divide-y divide-rule-2')}>
           {list.map(u => <Row key={u.uid} user={u} tab={tab} />)}
         </ul>
       )}
@@ -109,7 +122,7 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
   return (
     <button
       onClick={onClick}
-      className={`px-3 py-[6px] text-xs cursor-pointer border-b-[2px] bg-transparent font-[inherit] ${
+      className={`px-3 py-1.5 text-xs cursor-pointer border-b-[2px] bg-transparent font-[inherit] ${
         active
           ? 'border-acc-deep text-acc-deep font-semibold'
           : 'border-transparent text-ink-3 hover:text-ink'
@@ -140,16 +153,16 @@ function FriendRow({ friend }: { friend: FriendUser }) {
         ) : (
           <div className="text-xs font-semibold text-ink-3 truncate">{friend.displayName}</div>
         )}
-        {friend.username && <div className="text-xxs text-ink-3">@{friend.username}</div>}
+        {friend.username && friend.username !== friend.displayName && <div className="text-xxs text-ink-3">@{friend.username}</div>}
       </div>
       {!isMe && (
         <div className="flex flex-col items-end gap-1">
-          <button
+          <Button
             onClick={run('remove', () => removeFriend(friend.uid))}
-            className="px-2 py-[2px] text-xxs border border-rule bg-surface text-ink-2 rounded-sm cursor-pointer font-[inherit] hover:bg-bg-2"
+            variant="ghost" size="xs"
           >
             Ta bort
-          </button>
+          </Button>
           {failedAction === 'remove' && (
             <span role="alert" className="text-xs text-danger-ink">{FRIEND_FAILURE_TEXT.remove}</span>
           )}
@@ -165,7 +178,7 @@ function RequestRow({ request }: { request: FriendRequest }) {
   const { data: sender } = useSenderProfile(request.fromUid);
   // Föredra namn/användarnamn från avsändarens egen profil; fall tillbaka till
   // de denormaliserade request-fälten om profilen inte är läsbar.
-  const displayName = sender?.displayName ?? request.fromDisplayName;
+  const displayName = shownSenderName(sender, request.fromDisplayName);
   const username = sender?.username ?? request.fromUsername;
   const profileLink = username ? `/user/${username}/` : null;
   return (
@@ -179,7 +192,7 @@ function RequestRow({ request }: { request: FriendRequest }) {
         ) : (
           <div className="text-xs font-semibold text-ink-3 truncate">{displayName}</div>
         )}
-        {username && <div className="text-xxs text-ink-3">@{username}</div>}
+        {username && username !== displayName && <div className="text-xxs text-ink-3">@{username}</div>}
       </div>
       {/* Both buttons are live at once, unlike FriendButton's single mode. The alert
           names the action of the LATEST click: every click clears the flag first, so a
@@ -187,18 +200,18 @@ function RequestRow({ request }: { request: FriendRequest }) {
           racing it for the banner. */}
       <div className="flex flex-col items-end gap-1">
         <div className="flex gap-1">
-          <button
+          <Button
             onClick={run('accept', () => acceptFriendRequest(request.fromUid))}
-            className="px-2 py-[2px] text-xxs border border-acc-deep bg-acc-deep text-white rounded-sm cursor-pointer font-[inherit]"
+            variant="acc" size="xs"
           >
             Acceptera
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={run('decline', () => declineFriendRequest(request.fromUid))}
-            className="px-2 py-[2px] text-xxs border border-rule bg-surface text-ink-2 rounded-sm cursor-pointer font-[inherit] hover:bg-bg-2"
+            variant="ghost" size="xs"
           >
             Avböj
-          </button>
+          </Button>
         </div>
         {failedAction && (
           <span role="alert" className="text-xs text-danger-ink">{FRIEND_FAILURE_TEXT[failedAction]}</span>
@@ -230,18 +243,14 @@ function Row({ user, tab }: { user: FollowListUser; tab: Tab }) {
         {user.username && <div className="text-xxs text-ink-3">@{user.username}</div>}
       </div>
       {!isMe && (
-        <button
+        <Button
           onClick={() => iAmFollowing ? unfollowUser(user.uid) : followUser(user.uid)}
-          className={`px-2 py-[2px] text-xxs border rounded-sm cursor-pointer font-[inherit] ${
-            iAmFollowing
-              ? 'bg-surface text-ink-2 border-rule hover:bg-bg-2'
-              : 'bg-acc-deep text-white border-acc-deep'
-          }`}
+          variant={iAmFollowing ? 'ghost' : 'acc'} size="xs"
         >
           {iAmFollowing
             ? 'Slutar följa'
             : tab === 'followers' ? 'Följ tillbaka' : 'Följ'}
-        </button>
+        </Button>
       )}
     </li>
   );
@@ -249,7 +258,7 @@ function Row({ user, tab }: { user: FollowListUser; tab: Tab }) {
 
 function EmptyState({ headline, body }: { headline: string; body: string }) {
   return (
-    <div className="bg-surface border border-rule rounded-sm px-4 py-6 text-center">
+    <div className={cardClass('px-4 py-6 text-center')}>
       <Search size={18} className="mx-auto text-ink-3 mb-2" />
       <div className="text-sm font-semibold text-ink mb-1">{headline}</div>
       <p className="text-xs text-ink-3 leading-relaxed">{body}</p>

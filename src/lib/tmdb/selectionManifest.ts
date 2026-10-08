@@ -1,4 +1,4 @@
-// Persisterat URVAL av vilka titel-/person-id:n som pre-renderas (BIN-823).
+// Persisterat URVAL av vilka titel-id:n som pre-renderas (BIN-823).
 //
 // buildCache.ts cachar SVAREN för ett id. Den här modulen cachar frågan innan
 // den: VILKA id:n bygget överhuvudtaget ska rendera. Fram till nu härleddes den
@@ -16,36 +16,32 @@
 // urvalet först när taket tvingar fram evakuering, och då går det äldsta först
 // — långsamt, vid marginalen, i stället för veckovis rotation genom hela listan.
 //
-// Taken är oförändrade (15k/15k/1k). Det är #3 Financial Controllers bindande
-// villkor 1: spärrhake-mekaniken (stoppa avindexeringen) och takets storlek
-// (Hosting-lagring mot 25 SEK/mån-taket) är två separata beslut.
-//
-// Men taket var aldrig realiserat — rotationen nollställde urvalet varje bygge,
-// så sajten byggde ~20 800 URL:er av de ~31 000 taket tillåter. Spärrhaken gör
-// taket nåbart, och det KOSTAR: ~8,3 → ~12 SEK/mån över 2–3 månader. Malin fick
-// siffran och godkände den 2026-08-09. Räkna alltid per sida mot den mätta
-// punkten — ~22 900 sidkataloger = ~10 GB/deploy — aldrig genom att skala taket
-// mot taket; hela ADR 0018 Fork B fick skrivas om för det felet.
-//
-// Frö-id:na (selectionSeed.ts) lagras ALDRIG här. De unioneras in vid läsning,
-// så de kan inte evakueras och överlever även ett raderat manifest. De räknas
-// därmed utanför taket (villkor 4): resolvedIds kan ge upp till tak + antal frön.
+// Taken sänktes 2026-10-05 (ADR 0024, Malins "Banta"): Google valde bort de
+// ~29 000 tunna titelsidorna och lät dem dra ned hela domänen. Urvalet är nu en
+// kärna av titlar som går att se på en svensk tjänst. Personsidorna har inget
+// urval längre; de förrenderas inte för Google.
 
 import { readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildCacheDir } from './buildCache';
 import {
+  buildCallStats,
   isSelectionRefresh,
   withAggregateTimeout,
   RESCUE_DERIVE_TIMEOUT_MS,
   REFRESH_DERIVE_TIMEOUT_MS,
+  type BuildCallStats,
 } from './buildFetch';
 
-export type SelectionType = 'movie' | 'tv' | 'person';
+export type SelectionType = 'movie' | 'tv';
 
-// Bump:as bara vid inkompatibel schemaändring. En äldre version läses som
-// "saknas" → bygget härleder om i stället för att tolka fält som flyttat.
-export const MANIFEST_VERSION = 1;
+// Bump:as vid inkompatibel schemaändring. En äldre version läses som "saknas" →
+// bygget härleder om i stället för att tolka fält som flyttat.
+//
+// 2 (ADR 0024): urvalets KÄLLA bytte, inte bara schemat. Ett v1-manifest bär
+// ~10 000 id ur topplistorna; att läsa det mot det nya taket hade evakuerat ned
+// till 1 000 av fel titlar, och 80 %-regeln i `floorFor` hade fällt bygget.
+export const MANIFEST_VERSION = 2;
 
 export interface ManifestEntry {
   id: number;
@@ -62,35 +58,27 @@ export interface SelectionManifest {
   ids: ManifestEntry[];
 }
 
-// Ändra INTE utan en kostnadssatt biljett (#3, villkor 2). Räkna PER SIDA mot den
-// mätta punkten — att skala tak-mot-tak underskattar med ~45 % (ADR 0018 Fork B):
-//   sidkataloger / 22 900 × 10 GB × 3 releaser × $0,026/GB/mån
-// Dagens tak ⇒ ~33 100 kataloger ⇒ ~12 SEK/mån. 20k/20k/1,5k ⇒ ~15,8 SEK/mån.
+// Ändra INTE utan ett beslut (ADR 0024). En höjning är en kostnads- OCH en
+// SEO-fråga: räkna lagringen per sida mot den mätta punkten i ADR 0018 Fork B,
+// och mät först om kärnan blivit indexerad.
+//
+// Invarianten TAK > HÄRLEDNING bär spärrhaken: härledningen kapas vid
+// `SEO_TITLE_TARGET_IDS` i seoCoverage.ts, så luften är skillnaden mellan talen.
 export const SELECTION_CEILING: Record<SelectionType, number> = {
-  movie: 15_000,
-  tv: 15_000,
-  person: 1_000,
+  movie: 1_000,
+  tv: 1_000,
 };
 
 // Absolut täckningsgolv. Fångar EN sak: att bygget hamnat på ren fallback
-// (`SEO_FALLBACK_*` ger 10 id per typ, plus 116 frön ⇒ ~150 sidor totalt) och är
-// på väg att ersätta hela sajten med den. Det är inte en kvalitetsribba på
-// härledningen.
+// (`SEO_FALLBACK_*` ger 10 id per typ) och är på väg att ersätta kärnan med den.
+// Det är inte en kvalitetsribba på härledningen.
 //
-// Nivån är satt efter mätning, inte gissning. Ett lokalt bygge 2026-08-08 gav
-// 4 375 film-id mot produktionens ~9 850 (sitemapen hade 20 763 URL:er) — TMDB
-// stryper hårt och `Promise.allSettled` sväljer de sidor som failar. Ett golv på 5 000 fällde
-// det bygget, vilket blandade ihop "fallback-katastrof" med "strypt nätverk"
-// och hade kunnat blockera den allra första produktionsdeployen (som per
-// definition saknar manifest och måste härleda).
-//
-// 2 000 ligger en storleksordning över katastrofen (~150) och långt under även
-// en kraftigt strypt härledning. Spärrhaken skyddar resten: så snart ett
-// manifest finns kan urvalet inte krympa, så en halv härledning är ofarlig.
+// Sänkt med taket i ADR 0024. Golvet ska ligga långt över fallbacken och under en
+// strypt härledning; ett bygge 2026-08-08 fick ungefär hälften av listsidorna
+// genom TMDB:s strypning, och `Promise.allSettled` sväljer resten.
 export const SELECTION_ABSOLUTE_FLOOR: Record<SelectionType, number> = {
-  movie: 2_000,
-  tv: 2_000,
-  person: 200,
+  movie: 500,
+  tv: 500,
 };
 
 /**
@@ -129,7 +117,7 @@ function manifestPath(type: SelectionType): string {
  * KRYMPER (mergen behåller allt under taket), så ett relativt golv kunde per
  * konstruktion aldrig fyra. Den farliga vägen är den motsatta — manifestet
  * borta (evakuerad actions/cache) OCH härledningen misslyckad, alltså
- * previousCount = 0 och ett urval på ~150 frö- och fallback-id. Ett relativt
+ * previousCount = 0 och ett urval av bara fallback-id. Ett relativt
  * golv passerar det glatt; ett absolut fäller det.
  *
  * 80 %-regeln finns kvar som komplement för den dag mergen får en väg att
@@ -162,7 +150,7 @@ export class SelectionFloorError extends Error {
  * en trasig härledning ett RÖTT bygge (hängning → byggstegets tidsgräns) och
  * den gamla sajten låg kvar. Med manifest + fallback finns plötsligt en tyst
  * väg: härledningen misslyckas, `SEO_FALLBACK_*` ger 10 id:n per typ, bygget
- * blir GRÖNT och `firebase deploy` ersätter ~31 000 sidor med ~150. Det vore
+ * blir GRÖNT och `firebase deploy` ersätter kärnan med en handfull sidor. Det vore
  * exakt den skada den här filen finns för att stoppa, fast utan larm.
  */
 export function assertCoverageFloor(
@@ -221,8 +209,7 @@ export function parseManifest(raw: string, expectedType: SelectionType): Selecti
  * 3. Id som bara finns i föregående: behålls orört. Det är hela poängen — det
  *    är rotationen vi vägrar följa. Dess `lastDerived` åldras, vilket gör det
  *    till första evakueringskandidat om taket någon gång tvingar fram ett val.
- * 4. Nya id:n appendas i härledningsordning (popular före topRated — samma
- *    ordningskontrakt som cappedTitleIds redan bar).
+ * 4. Nya id:n appendas i härledningsordning.
  * 5. Över taket: evakuera äldst `lastDerived` först. Vid LIKA ålder evakueras
  *    den SENAST tillkomna först — inte den först insatta. Riktningen är inte en
  *    smaksak, den är hela spärrhaken: en full refresh bumpar alla närvarande
@@ -280,13 +267,11 @@ export function mergeManifest(
  *
  * Frön unioneras vid LÄSNING och lagras aldrig i manifestet. Därför kan de inte
  * evakueras av taket, och de överlever ett raderat, korrupt eller för gammalt
- * manifest — vilket är hela deras uppgift: de 117 sidor Google faktiskt har i
- * sitt index ska aldrig kunna sluta pre-renderas, oavsett vad som händer med
- * actions/cache.
+ * manifest.
  */
 export function resolvedIds(
   manifest: SelectionManifest | null,
-  seedIds: readonly number[],
+  seedIds: readonly number[] = [],
 ): number[] {
   const ids: number[] = [];
   const seen = new Set<number>();
@@ -331,23 +316,47 @@ export function writeSelectionManifest(manifest: SelectionManifest): void {
   } catch {
     // Best-effort: ett skrivfel ska inte fälla bygget HÄR. Nästa bygge härleder
     // om. Men om skrivningen aldrig lyckas fäller sitemapen bygget senare, med
-    // flit — den vägrar publicera en frö-endast-lista som sajtens kanoniska.
+    // flit.
   }
 }
 
 /**
  * Hur många id:n en utbytesrad räknar upp innan den kortar av. Formen är
- * `buildFetch.ts`s (`… och N till`) och finns av samma skäl: taket för movie/tv
- * är 15 000, så en full uppräkning är oläsbar och riskerar loggradsgränsen.
+ * `buildFetch.ts`s (`… och N till`): en full uppräkning är oläsbar och riskerar
+ * loggradsgränsen.
  */
 const EXCHANGE_SAMPLE_LIMIT = 5;
 
-function sample(ids: readonly number[]): string {
+function sample(ids: readonly (number | string)[]): string {
   if (ids.length === 0) return '—';
   const head = ids.slice(0, EXCHANGE_SAMPLE_LIMIT).join(', ');
   return ids.length > EXCHANGE_SAMPLE_LIMIT
     ? `${head} … och ${ids.length - EXCHANGE_SAMPLE_LIMIT} till`
     : head;
+}
+
+/**
+ * BIN-1423: vad härledningen tappade på vägen. Räknas ur buildFetch.ts räknare
+ * mellan att `derive` startar och att den avgörs eller når sitt tak; ett anrop
+ * som överges efter det hör inte till den här härledningen.
+ */
+interface AbandonedDuringDerive {
+  started: number;
+  abandoned: number;
+  labels: string[];
+}
+
+function abandonedSince(type: SelectionType, before: BuildCallStats): AbandonedDuringDerive {
+  const after = buildCallStats(type);
+  return {
+    started: after.started - before.started,
+    abandoned: after.abandoned - before.abandoned,
+    labels: after.abandonedLabels.slice(before.abandonedLabels.length),
+  };
+}
+
+function abandonedNote(a: AbandonedDuringDerive): string {
+  return `Övergivna anrop ${a.abandoned} av ${a.started}${a.abandoned > 0 ? ` (${sample(a.labels)})` : ''}.`;
 }
 
 /**
@@ -359,7 +368,7 @@ function sample(ids: readonly number[]): string {
  * anropas aldrig en andra gång för att "återskapa" det evakuerade, eftersom en
  * andra körning med ett annat `now` inte är samma beräkning.
  *
- * Talet som svarar på hur länge personsidornas andrum räcker är `evicted`, inte
+ * Talet som svarar på hur länge andrummet räcker är `evicted`, inte
  * `refreshed`: en post lämnar urvalet när taket trycker ut den.
  */
 function reportExchange(
@@ -367,6 +376,7 @@ function reportExchange(
   previous: SelectionManifest | null,
   freshIds: readonly number[],
   merged: SelectionManifest,
+  abandoned: AbandonedDuringDerive,
 ): void {
   const before = new Set((previous?.ids ?? []).map(e => e.id));
   const after = new Set(merged.ids.map(e => e.id));
@@ -379,20 +389,21 @@ function reportExchange(
   let refreshed = 0;
   for (const id of before) if (fresh.has(id)) refreshed += 1;
 
+  // En härledning som tappat anrop blir en varning, så en krympt vecka syns i sammanfattningen.
+  const level = abandoned.abandoned > 0 ? 'warning' : 'notice';
   process.stderr.write(
-    `::notice::[selection] ${type} utbyte: behållna ${retained.length}, ` +
+    `::${level}::[selection] ${type} utbyte: behållna ${retained.length}, ` +
       `evakuerade ${evicted.length}, nytillkomna ${added.length}, ` +
       `varav omhärledda ${refreshed} av ${before.size}. ` +
       `Härledningen gav ${freshIds.length} id, manifestet håller ${after.size} ` +
       `(tak ${SELECTION_CEILING[type]}). Evakuerade: ${sample(evicted)}. ` +
-      `Nytillkomna: ${sample(added)}.\n`,
+      `Nytillkomna: ${sample(added)}. ${abandonedNote(abandoned)}\n`,
   );
 
   // Över taket degraderar spärrhaken TYST till rotation: allt som härleds får
   // plats bara om det ryms, och resten evakueras varje vecka — exakt det
   // nederlag modulen finns för att stoppa. Invarianten TAK > HÄRLEDNING är
-  // framtvingad bara för person (800 mot 1 000); för film och serie vilar den
-  // på ett TMDB-överlapp.
+  // framtvingad av `SEO_TITLE_TARGET_IDS` mot `SELECTION_CEILING`.
   if (freshIds.length >= SELECTION_CEILING[type]) {
     process.stderr.write(
       `::warning::[selection] ${type}: härledningen gav ${freshIds.length} id mot taket ` +
@@ -405,12 +416,10 @@ function reportExchange(
 /**
  * Hela urvalsbeslutet för en route, på ett ställe.
  *
- * Ligger här och inte i de tre route-filerna av samma skäl som ADR 0005 gav för
- * `collectPersonIds`: repot bär redan två nästan identiska kopior av
- * `collectIds`, och det är just sådan duplicering som fick sitemap och
- * pre-render att glida isär och producera "Genomsökt – inte indexerad". Den här
- * funktionen har tre anropare (movie-, tv- och person-routens
- * `generateStaticParams`) och får inte kopieras. Sitemapen anropar den INTE —
+ * Ligger här och inte i route-filerna: duplicering är det som fick sitemap och
+ * pre-render att glida isär och producera "Genomsökt – inte indexerad". Härled
+ * anroparna med `git grep -n "resolveSelection(" -- src/app`; funktionen får
+ * inte kopieras. Sitemapen anropar den INTE —
  * den läser samma artefakt via `readSelectionManifest` + `resolvedIds`, vilket
  * är samma id-mängd i samma ordning utan att kunna trigga en härledning.
  *
@@ -424,19 +433,20 @@ function reportExchange(
  *  3. Härledningen körs under fastak — kort i räddningsläget, långt i
  *     veckobygget.
  *  4. Golvet sist, mot antalet id:n i FÖREGÅENDE manifest. Går bygget under det
- *     kastar vi hellre än att låta `firebase deploy` ersätta ~31 000 sidor med
- *     en handfull fallback-id:n.
+ *     kastar vi hellre än att låta `firebase deploy` ersätta kärnan med en
+ *     handfull fallback-id:n.
  */
 export async function resolveSelection(opts: {
   type: SelectionType;
-  seedIds: readonly number[];
+  /** Id som alltid ska med, oavsett manifest. Inga routrar skickar några sedan ADR 0024. */
+  seedIds?: readonly number[];
   /** Den färska härledningen — de dyra listanropen. Körs bara när den behövs. */
   derive: () => Promise<number[]>;
   /** Sista utväg när ingenting annat finns (bygge utan giltig TMDB-nyckel). */
   fallbackIds: readonly number[];
   now?: number;
 }): Promise<number[]> {
-  const { type, seedIds, derive, fallbackIds, now = Date.now() } = opts;
+  const { type, seedIds = [], derive, fallbackIds, now = Date.now() } = opts;
 
   const previous = readSelectionManifest(type);
   // Räknas seed-inkluderat på BÅDA sidor, annars är 80 %-regeln systematiskt
@@ -477,18 +487,22 @@ export async function resolveSelection(opts: {
     // (Den överlappningen gjorde också att ett test på ::warning::-prefixet
     // kunde uppfyllas av grannraden; testgranskningen 2026-08-08.)
     let derived: { ok: true; value: number[] } | { ok: false };
+    const callsBefore = buildCallStats(type);
+    let abandoned: AbandonedDuringDerive;
     try {
       derived = await withAggregateTimeout(derive, budget);
+      abandoned = abandonedSince(type, callsBefore);
       if (!derived.ok) {
         process.stderr.write(
           `::warning::[selection] ${type}: härledningen nådde sitt tak (${budget} ms). ` +
-            `Behåller befintligt urval; täckningsgolvet avgör om bygget får fortsätta.\n`,
+            `Behåller befintligt urval; täckningsgolvet avgör om bygget får fortsätta. ${abandonedNote(abandoned)}\n`,
         );
       }
     } catch (err) {
+      abandoned = abandonedSince(type, callsBefore);
       process.stderr.write(
         `::warning::[selection] ${type}: härledningen kastade (${String(err)}). ` +
-          `Behåller befintligt urval; täckningsgolvet avgör om bygget får fortsätta.\n`,
+          `Behåller befintligt urval; täckningsgolvet avgör om bygget får fortsätta. ${abandonedNote(abandoned)}\n`,
       );
       derived = { ok: false };
     }
@@ -502,26 +516,22 @@ export async function resolveSelection(opts: {
       if (derived.value.length === 0) {
         process.stderr.write(
           `::warning::[selection] ${type}: härledningen returnerade TOM lista utan att ` +
-            `misslyckas. Ingen id-hämtning skedde.\n`,
+            `misslyckas. Ingen id-hämtning skedde. ${abandonedNote(abandoned)}\n`,
         );
       }
       manifest = mergeManifest(previous, type, derived.value, now);
       writeSelectionManifest(manifest);
-      reportExchange(type, previous, derived.value, manifest);
+      reportExchange(type, previous, derived.value, manifest, abandoned);
     }
   }
 
   const ids = resolvedIds(manifest, seedIds);
   assertCoverageFloor(type, ids.length, previousCount);
+  // Slutantalet per typ, så att sitemapens storlek går att stämma av mot bygget.
+  process.stderr.write(`::notice::[selection] ${type}: ${ids.length} id förrenderas.\n`);
 
-  // Next 16 + static export kastar på en tom generateStaticParams, så den här
-  // raden finns kvar som sista utväg. Den är dock i praktiken ONÅBAR: fröna
-  // (74 film / 10 serie / 32 person) unioneras in vid läsning, så `ids` kan bara
-  // bli tom om BÅDE manifestet och frölistan är tomma. Ingen riktig anropare gör
-  // det — bara testerna, som skickar `seedIds: []` med flit.
-  //
-  // Det betyder också att ett nyckellöst bygge pre-renderar FRÖNA, inte
-  // `SEO_FALLBACK_*`. Beskriv inte det som fallback-vägen; en tidigare version
-  // av den här kommentaren gjorde det och pekade ut fel mängd sidor.
+  // Next 16 + static export kastar på en tom generateStaticParams. Ett bygge utan
+  // manifest och utan härledning (ingen TMDB-nyckel, `SELECTION_ALLOW_THIN`)
+  // hamnar här och förrenderar `fallbackIds`.
   return ids.length > 0 ? ids : [...fallbackIds];
 }

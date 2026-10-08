@@ -8,7 +8,6 @@ import type { AskFilter } from './types';
 import { MOODS } from '@/lib/moodLens';
 import { genreLabel } from '@/lib/tmdb/genreLabels';
 import { getProvider } from '@/lib/tmdb/providers';
-import { runtimeBudgetLabel } from '@/lib/runtimeLens';
 
 export interface DiscoverPlan {
   wantMovies: boolean;
@@ -32,7 +31,10 @@ export function askFilterToDiscoverParams(
   opts: { myProviders?: number[] } = {},
 ): DiscoverPlan {
   const wantMovies = filter.mediaType !== 'tv';
-  const wantTV = filter.mediaType !== 'movie';
+  // TMDB reads a series' runtime as minutes per EPISODE, so "under 90 min" let
+  // whole series through. A length limit without "serie" in the question is
+  // read as a film question.
+  const wantTV = filter.mediaType === 'tv' || (filter.mediaType !== 'movie' && !filter.runtimeMax);
 
   const genres = genreSet(filter);
   const providerIds = filter.providerIds?.length
@@ -47,8 +49,8 @@ export function askFilterToDiscoverParams(
   };
   if (genres.length) shared.with_genres = genres.join('|'); // OR
   if (providerIds.length) shared.with_watch_providers = providerIds.join('|');
-  // Note: on /discover/tv this caps EPISODE runtime (min/episode), not total series
-  // length — so it's a meaningful filter for film, looser for TV. Acceptable.
+  // On /discover/tv this caps minutes per episode (only reached when the
+  // question asked for series).
   if (filter.runtimeMax) shared['with_runtime.lte'] = String(filter.runtimeMax);
   if (filter.voteAverageMin) shared['vote_average.gte'] = String(filter.voteAverageMin);
   if (filter.originalLanguage) shared.with_original_language = filter.originalLanguage;
@@ -92,7 +94,12 @@ export function describeFilter(filter: AskFilter): FilterChip[] {
   if (filter.mediaType) chips.push({ key: 'mediaType', label: filter.mediaType === 'movie' ? 'Filmer' : 'Serier' });
   if (filter.genreIds?.length) chips.push({ key: 'genreIds', label: filter.genreIds.map(genreLabel).join(', ') });
   if (filter.mood) chips.push({ key: 'mood', label: MOODS.find((m) => m.id === filter.mood)?.label ?? filter.mood });
-  if (filter.runtimeMax) chips.push({ key: 'runtimeMax', label: runtimeBudgetLabel(filter.runtimeMax) });
+  if (filter.runtimeMax) {
+    chips.push({
+      key: 'runtimeMax',
+      label: filter.mediaType === 'tv' ? `Avsnitt på högst ${filter.runtimeMax} min` : `Filmer på högst ${filter.runtimeMax} min`,
+    });
+  }
   if (filter.providerIds?.length) {
     chips.push({ key: 'providerIds', label: filter.providerIds.map((id) => getProvider(id)?.shortName ?? `#${id}`).join(', ') });
   }

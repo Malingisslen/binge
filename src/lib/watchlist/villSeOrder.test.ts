@@ -65,3 +65,20 @@ describe('orderVillSePicks — "kan ses direkt" means covered by a subscription 
     expect(input.map(p => p.item.tmdbId)).toEqual([1, 2]);
   });
 });
+
+describe('orderVillSePicks — en tjänst under sitt alias räknas som samma tjänst', () => {
+  const HBO = 384;
+  const HBO_LEGACY = 1899;
+
+  it('rankar en titel sparad under aliaset som min när jag valt huvud-id:t', () => {
+    const other = mk({ tmdbId: 1, subscriptionProviders: [NETFLIX], addedAt: new Date(2026, 0, 9) });
+    const hbo = mk({ tmdbId: 2, subscriptionProviders: [HBO_LEGACY], addedAt: new Date(2026, 0, 1) });
+    expect(orderVillSePicks([pick(other), pick(hbo)], new Set([HBO])).map(p => p.item.tmdbId)).toEqual([2, 1]);
+  });
+
+  it('och åt andra hållet, när mina tjänster bär aliaset', () => {
+    const other = mk({ tmdbId: 1, subscriptionProviders: [NETFLIX], addedAt: new Date(2026, 0, 9) });
+    const hbo = mk({ tmdbId: 2, subscriptionProviders: [HBO], addedAt: new Date(2026, 0, 1) });
+    expect(orderVillSePicks([pick(other), pick(hbo)], new Set([HBO_LEGACY])).map(p => p.item.tmdbId)).toEqual([2, 1]);
+  });
+});

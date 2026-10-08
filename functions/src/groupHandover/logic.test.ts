@@ -7,18 +7,32 @@ import { fileURLToPath } from 'node:url';
 import {
   pickGroupSuccessor,
   buildHandoverUpdate,
+  buildOwnerPickedHandover,
+  buildTraceErasure,
   clearsAddedBy,
+  holdsRatingBy,
   isEmptyExcept,
   refusalForHandover,
   refusalForSentInvites,
   SENT_INVITE_BATCH_LIMIT,
   HANDOVER_PARTIAL,
   memberTraceWrites,
+  planClaim,
   chunkWrites,
+  planLeaverErasure,
+  leaverChunkMayCommit,
+  planOwnerRemovalErasure,
+  OWNER_REMOVAL_REFUSALS,
+  refusalAfterHandover,
+  HandoverRefusal,
   type MemberRow,
   type TraceWrite,
 } from './logic';
-import { eraseSentInvites, type TraceErasure } from './runHandover';
+import {
+  eraseSentInvites, runLeaverErasure, runMemberGroupErasure, runOwnerRemovalErasure,
+  planSweptMemberGroupErasure, runSweptMemberGroupErasure, type LeaverIo, type TraceErasure,
+} from './runHandover';
+import { eraseReminderMarkers } from '../rotationReminder/markers';
 
 // Paths from this file rather than from the working directory.
 // It was `process.cwd()` until BIN-1110: the build config compiled test files as
@@ -29,13 +43,22 @@ import { eraseSentInvites, type TraceErasure } from './runHandover';
 // the working directory also means the test cannot pass by reading the wrong tree.
 const HERE = join(fileURLToPath(import.meta.url), '..');
 const REPO = join(HERE, '..', '..', '..');
-/** The callable, with `//` comments stripped, so a scan reads code not prose. */
-const ENTRY = readFileSync(join(HERE, 'index.ts'), 'utf8').replace(/^\s*\/\/.*$/gm, '');
-/** The loop, same treatment — it declares the erasure's field set. */
-const LOOP = readFileSync(join(HERE, 'runHandover.ts'), 'utf8').replace(/^\s*\/\/.*$/gm, '');
-/** The pure logic, same treatment — it builds the group document's own handover write. */
-const LOGIC = readFileSync(join(HERE, 'logic.ts'), 'utf8').replace(/^\s*\/\/.*$/gm, '');
-const RULES = readFileSync(join(REPO, 'firestore.rules'), 'utf8');
+/**
+ * A source file as LF text. The scans below spell a line break as `\n`, and a Windows
+ * checkout with `core.autocrlf` hands them CRLF (BIN-1321, BIN-1316).
+ */
+const readSource = (path: string) => readFileSync(path, 'utf8').replace(/\r\n/g, '\n');
+/** A source file with `//` comments stripped, so a scan reads code not prose. */
+const readCode = (path: string) => readSource(path).replace(/^\s*\/\/.*$/gm, '');
+/** The callable. */
+const ENTRY = readCode(join(HERE, 'index.ts'));
+/** The loop — it declares the erasure's field set. */
+const LOOP = readCode(join(HERE, 'runHandover.ts'));
+/** The pure logic — it builds the group document's own handover write. */
+const LOGIC = readCode(join(HERE, 'logic.ts'));
+/** The Admin port — the production reads and writes the loop is handed. */
+const ADMIN_IO = readCode(join(HERE, 'adminIo.ts'));
+const RULES = readSource(join(REPO, 'firestore.rules'));
 
 const member = (uid: string, joinedAtMs: number | null): MemberRow => ({ uid, joinedAtMs });
 
@@ -192,9 +215,9 @@ describe('pickGroupSuccessor — who inherits the group', () => {
 describe('buildHandoverUpdate — the write, and when there must not be one', () => {
   const members = [member('owner', 100), member('heir', 200), member('other', 300)];
 
-  it('names the successor as owner and shrinks memberUids by exactly the leaver', () => {
+  it('names the successor as owner', () => {
     const update = buildHandoverUpdate('owner', 'owner', members, ['owner', 'heir', 'other']);
-    expect(update).toEqual({ kind: 'handover', ownerUid: 'heir', memberUids: ['heir', 'other'] });
+    expect(update).toEqual({ kind: 'handover', ownerUid: 'heir' });
   });
 
   // The eligibility intersection has to happen INSIDE the builder, not be left to
@@ -203,7 +226,7 @@ describe('buildHandoverUpdate — the write, and when there must not be one', ()
   it('elects from the surviving memberUids, never from the member rows alone', () => {
     const stranded = [member('owner', 100), member('stranded', 150), member('real', 800)];
     const update = buildHandoverUpdate('owner', 'owner', stranded, ['owner', 'real']);
-    expect(update).toEqual({ kind: 'handover', ownerUid: 'real', memberUids: ['real'] });
+    expect(update).toEqual({ kind: 'handover', ownerUid: 'real' });
   });
 
   // The idempotency guard. A retried sweep must find its own earlier handover
@@ -224,7 +247,45 @@ describe('buildHandoverUpdate — the write, and when there must not be one', ()
 
   it('hands over to a ghost rather than deleting the group', () => {
     expect(buildHandoverUpdate('owner', 'owner', members, ['owner', 'ghost']))
-      .toEqual({ kind: 'handover', ownerUid: 'ghost', memberUids: ['ghost'] });
+      .toEqual({ kind: 'handover', ownerUid: 'ghost' });
+  });
+});
+
+describe('buildOwnerPickedHandover — the owner names the successor (BIN-1118)', () => {
+  const group = { ownerUid: 'owner', memberUids: ['owner', 'jonas', 'sara'] };
+
+  it('hands the group to the named member', () => {
+    expect(buildOwnerPickedHandover(group, 'owner', 'jonas')).toEqual({ kind: 'handover', ownerUid: 'jonas' });
+  });
+
+  // The decisive difference from `buildHandoverUpdate`, which returns `noop` here.
+  // A person is looking at this one, so silence would read as success and leave
+  // them the owner.
+  it('REFUSES rather than no-ops when the caller is not the owner', () => {
+    expect(buildOwnerPickedHandover(group, 'jonas', 'sara'))
+      .toEqual({ kind: 'refused', reason: 'not-owner' });
+  });
+
+  it('refuses a successor who is not in memberUids', () => {
+    expect(buildOwnerPickedHandover(group, 'owner', 'stranger'))
+      .toEqual({ kind: 'refused', reason: 'not-a-member' });
+  });
+
+  // The order of the two checks is load-bearing and this is what pins it. The
+  // leaver IS in memberUids, so a membership test alone would accept them — and
+  // the write that followed would strip the owner out of memberUids while naming
+  // them owner, leaving a group owned by a non-member.
+  it('refuses a self-handover, and does not fall through the membership test', () => {
+    const outcome = buildOwnerPickedHandover(group, 'owner', 'owner');
+    expect(outcome).toEqual({ kind: 'refused', reason: 'self' });
+    expect(outcome).not.toMatchObject({ kind: 'handover' });
+  });
+
+  // A two-person group still has somebody to pick, so it must work; a one-person
+  // group never reaches here because the UI has nobody to offer.
+  it('works when exactly one other member remains', () => {
+    expect(buildOwnerPickedHandover({ ownerUid: 'owner', memberUids: ['owner', 'jonas'] }, 'owner', 'jonas'))
+      .toEqual({ kind: 'handover', ownerUid: 'jonas' });
   });
 });
 
@@ -265,6 +326,47 @@ describe('clearsAddedBy — the departed name goes, the title stays', () => {
   });
 });
 
+describe('holdsRatingBy — the departed rating goes, the others stay (BIN-1306)', () => {
+  it('matches only a map that holds the departing uid as a key', () => {
+    expect(holdsRatingBy({ gone: 7, stays: 8 }, 'gone')).toBe(true);
+    expect(holdsRatingBy({ stays: 8 }, 'gone')).toBe(false);
+  });
+
+  it('leaves a row without a usable rating map alone', () => {
+    expect(holdsRatingBy(undefined, 'gone')).toBe(false);
+    expect(holdsRatingBy(null, 'gone')).toBe(false);
+    expect(holdsRatingBy('gone', 'gone')).toBe(false);
+    expect(holdsRatingBy(['gone'], 'gone')).toBe(false);
+  });
+
+  // An inherited key is not the member's rating. Without the own-property check a
+  // uid such as `constructor` would match every map.
+  it('does not read an inherited key as a rating', () => {
+    expect(holdsRatingBy({}, 'constructor')).toBe(false);
+  });
+});
+
+describe('buildTraceErasure — the rating category (BIN-1306)', () => {
+  it('names only the rows where the departing member left a rating', () => {
+    const erasure = buildTraceErasure([
+      { id: 'rated', addedBy: 'other', memberRatings: { gone: 7, stays: 8 } },
+      { id: 'others-only', addedBy: 'gone', memberRatings: { stays: 8 } },
+      { id: 'no-map', addedBy: 'other' },
+    ], [], 'gone');
+    expect(erasure.clearRatingIds).toEqual(['rated']);
+    expect(erasure.clearAddedByIds).toEqual(['others-only']);
+    expect(erasure.itemIds).toEqual(['rated', 'others-only', 'no-map']);
+  });
+
+  it('removes one key inside the map, never the map', () => {
+    const writes = memberTraceWrites('gone', buildTraceErasure(
+      [{ id: 'rated', memberRatings: { gone: 7, stays: 8 } }], [], 'gone',
+    ));
+    expect(writes).toContainEqual({ op: 'clear', collection: 'watchlist', doc: 'rated', field: 'memberRatings.gone' });
+    expect(writes.some((w) => w.field === 'memberRatings')).toBe(false);
+  });
+});
+
 describe('refusalForHandover — the caller must not fall through', () => {
   // The one thing standing between a group that failed to hand over and the
   // account cascade's owner branch, which deletes the WHOLE group — other
@@ -291,10 +393,7 @@ describe('refusalForHandover — the caller must not fall through', () => {
   // divergence is silent: the client's classifier would fall to `untouched` and
   // toast the promise that nothing was deleted.
   it('the client declares the same marker', () => {
-    const client = readFileSync(
-      join(REPO, 'src', 'lib', 'firebase', 'groupHandover.ts'),
-      'utf8',
-    );
+    const client = readSource(join(REPO, 'src', 'lib', 'firebase', 'groupHandover.ts'));
     expect(client).toContain(`export const HANDOVER_PARTIAL = '${HANDOVER_PARTIAL}';`);
   });
 
@@ -308,15 +407,42 @@ describe('refusalForHandover — the caller must not fall through', () => {
     // Comment-stripped like ENTRY: a future comment carrying a `timeout: <n>`
     // form would otherwise be matched first and satisfy this without the call
     // site setting anything.
-    const client = readFileSync(
-      join(REPO, 'src', 'lib', 'firebase', 'groupHandover.ts'),
-      'utf8',
-    ).replace(/^\s*\/\/.*$/gm, '');
-    const clientMs = Number(/timeout:\s*([\d_]+)/.exec(client)?.[1].replace(/_/g, ''));
-    const serverS = Number(/timeoutSeconds:\s*(\d+)/.exec(ENTRY)?.[1]);
-    expect(clientMs, 'the client sets no explicit timeout').toBeGreaterThan(0);
-    expect(serverS, 'the function sets no explicit timeoutSeconds').toBeGreaterThan(0);
-    expect(clientMs).toBeGreaterThanOrEqual(serverS * 1000);
+    const client = readCode(join(REPO, 'src', 'lib', 'firebase', 'groupHandover.ts'));
+    // Every declaration, and paired BY NAME rather than by position.
+    //
+    // A single `exec` covered the first callable only, so the second one's value
+    // was unpinned when this file gained it. Pairing by array index would have
+    // fixed that and left a subtler hole: the two files list their callables in
+    // the same order today, so a third one inserted at different positions would
+    // compare one callable's client timeout against another's server value and
+    // pass by coincidence. The name is what actually joins the two sides.
+    //
+    //   git grep -n "export const .* = onCall(" -- functions/src/groupHandover/index.ts
+    //   git grep -n "httpsCallable" -- src/lib/firebase/groupHandover.ts
+    const serverByName = new Map(
+      [...ENTRY.matchAll(/export const (\w+) = onCall\(([\s\S]*?)\n\)/g)]
+        .map(([, name, body]) => [name, Number(/timeoutSeconds:\s*(\d+)/.exec(body)?.[1])]),
+    );
+    const clientByName = new Map(
+      [...client.matchAll(/httpsCallable<[\s\S]*?>\(\s*functions,\s*'(\w+)'[\s\S]*?timeout:\s*([\d_]+)/g)]
+        .map(([, name, ms]) => [name, Number(ms.replace(/_/g, ''))]),
+    );
+
+    // Against the DECLARATION count, not a bare floor. The server pattern ends on
+    // a closing paren at the start of a line, so a callable written in another
+    // shape would be absent from the map and a `> 0` floor would still pass on its
+    // sibling. Derive the count:
+    //   git grep -c "onCall(" -- functions/src/groupHandover/index.ts
+    const declarations = [...ENTRY.matchAll(/onCall\(/g)].length;
+    expect(declarations, 'the file declares no callable').toBeGreaterThan(0);
+    expect(serverByName.size, 'a callable declares no timeoutSeconds').toBe(declarations);
+    for (const [name, seconds] of serverByName) {
+      expect(seconds, `${name}: the function sets no explicit timeoutSeconds`).toBeGreaterThan(0);
+      const clientMs = clientByName.get(name);
+      expect(clientMs, `${name}: no client wrapper sets an explicit timeout`).toBeGreaterThan(0);
+      expect(clientMs, `${name}: the client must outwait the function`)
+        .toBeGreaterThanOrEqual(seconds * 1000);
+    }
   });
 
   it('marks the refusal partial when a write was already attempted', () => {
@@ -326,18 +452,81 @@ describe('refusalForHandover — the caller must not fall through', () => {
     expect(untouched).not.toContain(HANDOVER_PARTIAL);
   });
 
+  // BIN-1295: the sent invitations are erased before the handover, so a refusal
+  // with no group written is still partial once they are gone.
+  it('marks the refusal partial when sent invitations were erased first', () => {
+    expect(refusalForHandover({ failed: 1, attempted: 0 }, true)).toContain(HANDOVER_PARTIAL);
+    expect(refusalForHandover({ failed: 1, attempted: 0 }, false)).not.toContain(HANDOVER_PARTIAL);
+    expect(refusalForHandover({ failed: 0, attempted: 0 }, true)).toBeNull();
+  });
+
   // "The guard exists" and "the guard runs" are different claims, and the entry
   // point cannot be imported here (firebase-admin does not resolve under the root
   // runner). Anchor the whole block through its throw as ONE regex: an anchor on
   // the condition alone stays green while the body is deleted.
+  // BIN-1304: a throw from the handover itself (the owned-groups query) goes through
+  // the same "was anything written?" rule, with the invitations counted.
+  it('a throw from the handover carries the partial marker once invitations were erased', () => {
+    expect(ENTRY).toMatch(
+      /try \{\s*summary = await runGroupHandover\(io, uid\);\s*\} catch \(err\) \{[\s\S]*?throw new HttpsError\('internal', refusalAfterHandover\(invites\.found > 0\)\);\s*\}/,
+    );
+    expect(refusalAfterHandover(true)).toContain(HANDOVER_PARTIAL);
+    expect(refusalAfterHandover(false)).not.toContain(HANDOVER_PARTIAL);
+  });
+
   it('is wired into the callable, throw and all', () => {
     expect(ENTRY).toMatch(
-      /const refusal = refusalForHandover\(summary\);\s*if \(refusal\) \{\s*throw new HttpsError\('internal', refusal\);/,
+      /const refusal = refusalForHandover\(summary, invites\.found > 0\);\s*if \(refusal\) \{\s*throw new HttpsError\('internal', refusal\);/,
     );
   });
 
   // The uid comes from the authenticated context, never the payload: a caller
   // can only ever hand over their OWN groups.
+  // A `toContain` is satisfied by a single occurrence, so it stops covering the
+  // file as soon as the file declares more than one callable. Count instead: one
+  // auth derivation and one refusal per declaration. Derive the declarations:
+  //   git grep -c "onCall(" -- functions/src/groupHandover/index.ts
+  //
+  // The floor matters: with zero `onCall` the two counts would agree at zero and
+  // the assertion would pass over a file that declares nothing.
+  it('every callable in the file derives its uid from request.auth', () => {
+    const declarations = [...ENTRY.matchAll(/onCall\(/g)].length;
+    expect(declarations).toBeGreaterThan(0);
+    expect([...ENTRY.matchAll(/const uid = request\.auth\?\.uid;/g)].length).toBe(declarations);
+    expect([...ENTRY.matchAll(/if \(!uid\) throw new HttpsError\('unauthenticated'/g)].length)
+      .toBe(declarations);
+    // The payload is never the source of the acting uid. `handOverGroup` does read
+    // `request.data`, but only for the group and the successor.
+    expect(ENTRY).not.toMatch(/uid\s*=\s*[^;]*request\.data/);
+  });
+
+  // The joint the two halves hang on: the emulator suite pins WHAT is thrown, the
+  // dialog test pins what the client renders per code, and this pins the line that
+  // maps one onto the other. It cannot be imported under the root runner, so it is
+  // scanned the same way this file already scans the auth derivation and the
+  // refusal wiring next to it.
+  //
+  // Anchored as ONE pattern on purpose. The dangerous edit is the widening one —
+  // re-pointing the generic branch at `failed-precondition`, which is the exact
+  // regression that shipped once — and two separate assertions would each stay
+  // green while the other half moved.
+  it('only a refusal is marked as reader-facing, everything else is internal', () => {
+    expect(ENTRY).toMatch(
+      /if \(err instanceof HandoverRefusal\) \{\s*throw new HttpsError\('failed-precondition', err\.message\);\s*\}[\s\S]{0,200}?throw new HttpsError\('internal'/,
+    );
+    // And every THROW carrying that code sits inside that guard. BIN-1260 added a
+    // second callable of the same shape, so the count is the guarded pattern's
+    // rather than a literal. Anchored on the call rather than the bare string:
+    // `ENTRY` strips only whole-line `//` comments, so a block comment or a
+    // trailing note naming the code would otherwise turn this red for a reason
+    // that is not the one it guards against.
+    const guarded = [...ENTRY.matchAll(
+      /if \(err instanceof HandoverRefusal\) \{\s*throw new HttpsError\('failed-precondition', err\.message\);\s*\}[\s\S]{0,200}?throw new HttpsError\('internal'/g,
+    )].length;
+    expect(guarded).toBeGreaterThan(0);
+    expect([...ENTRY.matchAll(/HttpsError\('failed-precondition'/g)].length).toBe(guarded);
+  });
+
   it('takes the uid from request.auth and refuses without it', () => {
     expect(ENTRY).toContain('const uid = request.auth?.uid;');
     expect(ENTRY).toMatch(/if \(!uid\) throw new HttpsError\('unauthenticated'/);
@@ -356,32 +545,48 @@ describe('the erasure covers every uid-bearing field the group contracts pin', (
   // test: nothing went red. The set is DERIVED from firestore.rules' own field
   // contracts rather than restated here, so a fifth uid field added to a group
   // subcollection fails this instead of shipping unerased.
-  const uidFieldsInRules = (() => {
+  // BIN-1270. The rules language accepts both quote forms, so the name scan does too;
+  // line comments inside a list are stripped first so a quoted word in one cannot feed
+  // the set.
+  const uidFieldsIn = (rules: string) => {
     // Brace-match the groups tree rather than slicing a guessed window: a window
     // that is too short silently drops subcollections, and the floor below is the
     // only thing that would notice.
     const header = 'match /groups/{groupId}';
-    const start = RULES.indexOf(header);
+    const start = rules.indexOf(header);
     let depth = 0;
     let end = start;
     // Open the scan AFTER the path, whose own `{groupId}` is a brace pair that
     // would close the block on its first character.
-    for (let i = RULES.indexOf('{', start + header.length); i < RULES.length; i += 1) {
-      if (RULES[i] === '{') depth += 1;
-      else if (RULES[i] === '}') {
+    for (let i = rules.indexOf('{', start + header.length); i < rules.length; i += 1) {
+      if (rules[i] === '{') depth += 1;
+      else if (rules[i] === '}') {
         depth -= 1;
         if (depth === 0) { end = i; break; }
       }
     }
-    const groupsTree = RULES.slice(start, end);
+    const groupsTree = rules.slice(start, end);
     const found = new Set<string>();
     for (const block of groupsTree.matchAll(/hasOnly\(\[([^\]]*)\]\)/g)) {
-      for (const name of block[1].matchAll(/'([A-Za-z0-9_]+)'/g)) {
-        if (/uid/i.test(name[1])) found.add(name[1]);
+      const list = block[1].replace(/\/\/.*$/gm, '');
+      for (const name of list.matchAll(/(['"])([A-Za-z0-9_]+)\1/g)) {
+        if (/uid/i.test(name[2])) found.add(name[2]);
       }
     }
     return found;
-  })();
+  };
+  const uidFieldsInRules = uidFieldsIn(RULES);
+
+  it('the scan catches a double-quoted field and ignores one named in a comment (BIN-1270)', () => {
+    const rules = [
+      'match /groups/{groupId} {',
+      '  allow create: if request.resource.data.keys().hasOnly([',
+      `    "doubleUid", 'singleUid', // "commentUid"`,
+      '  ]);',
+      '}',
+    ].join('\n');
+    expect([...uidFieldsIn(rules)].sort()).toEqual(['doubleUid', 'singleUid']);
+  });
 
   // Without a floor the scan can break — a renamed rules block, a changed
   // `hasOnly` spelling — and report an empty set, which every subset assertion
@@ -405,11 +610,13 @@ describe('the erasure covers every uid-bearing field the group contracts pin', (
   const ERASURE_EXPRESSION: Record<string, string> = {
     pickedByUid: 'clearsAddedBy(row.pickedByUid, leavingUid)',
     participantUids: 'row.participantUids.includes(leavingUid)',
-    // Declared rather than derived. The scan reads `hasOnly` field contracts, and
-    // `groups/{gid}/watchlist/{tmdbId}` has none — its create is membership-only —
-    // so that collection is outside the scan's reach entirely, not merely its key.
+    // Declared rather than derived.
     addedBy: 'clearsAddedBy(row.addedBy, leavingUid)',
+    // Declared rather than derived too (BIN-1306): the uid is a KEY inside the map,
+    // not a field value, so the name-based scan cannot see it.
+    memberRatings: 'holdsRatingBy(row.memberRatings, leavingUid)',
   };
+  const DECLARED_NOT_DERIVED = new Set(['addedBy', 'memberRatings']);
 
   // The second way a uid field is dealt with, and the reason this map exists at all.
   // BIN-1140/1128 gave the group DOCUMENT its own `hasOnly`, and the scan above reads
@@ -422,7 +629,9 @@ describe('the erasure covers every uid-bearing field the group contracts pin', (
   // document permanently unwatched.
   const HANDOVER_EXPRESSION: Record<string, string> = {
     ownerUid: 'ownerUid: successorUid',
-    memberUids: 'memberUids: survivors',
+    // BIN-1292: the member list is written by planClaim from its own read, not by
+    // the builders, so the expression pinned is planClaim's filter.
+    memberUids: 'fresh.memberUids.filter((uid) => uid !== write.leavingUid)',
   };
 
   // The third way, added by BIN-1155. `groups/{gid}/members/{uid}` gained its own
@@ -445,8 +654,7 @@ describe('the erasure covers every uid-bearing field the group contracts pin', (
   });
 
   it('the group document\'s own uid fields are handed over, not merely named', () => {
-    // Pinned on the expressions in buildHandoverUpdate, not on the field names: the
-    // names occur in the row types they are read from, so a `toContain(field)` would
+    // Pinned on the expressions, not on the field names: the names occur in the row types they are read from, so a `toContain(field)` would
     // stay green with the handover ripped out.
     for (const expr of Object.values(HANDOVER_EXPRESSION)) {
       expect(LOGIC, `the handover no longer writes \`${expr}\``).toContain(expr);
@@ -465,17 +673,43 @@ describe('the erasure covers every uid-bearing field the group contracts pin', (
         .toContain(field);
     }
     // ← A handler for a field the rules no longer pin is dead weight, except the
-    // one that is deliberately not derivable.
+    // ones that are deliberately not derivable.
     for (const field of declared) {
-      if (field === 'addedBy') continue;
+      if (DECLARED_NOT_DERIVED.has(field)) continue;
       expect([...uidFieldsInRules], `${field} has a handler but nothing pins it`).toContain(field);
     }
   });
 
-  it('each declared handler is actually in the loop', () => {
+  // BIN-1118 moved the construction out of the loop and into `buildTraceErasure`,
+  // so this scan reads the pure function rather than the runner.
+  it('each declared handler is actually in the erasure builder', () => {
     for (const [field, expression] of Object.entries(ERASURE_EXPRESSION)) {
-      expect(LOOP, `${field} is no longer erased`).toContain(expression);
+      expect(LOGIC, `${field} is no longer erased`).toContain(expression);
     }
+  });
+
+  // The reason the scan above can be trusted at all. It reads ONE function, so it
+  // only proves anything while every door's payload comes from that function.
+  //
+  // BIN-1118 briefly re-wrote the enumeration by hand inside the owner-picked
+  // handover, and the scan stayed green on the first copy while the second was
+  // free to drop a category — the same shape the block's own header describes,
+  // one door later. A missed category leaves a departing member's rows in a group
+  // they are no longer in, and after the swap no door's query finds that group
+  // again, so nothing retries it.
+  it('every erasure call site builds its payload with buildTraceErasure', () => {
+    // Anchored on the CALL (`io.`), not on the name: the port's own interface
+    // declaration spells the method too, and counting that would compare a real
+    // call site against a type signature.
+    const callSites = [...LOOP.matchAll(/io\.eraseMemberTraces\(/g)];
+    // Not an absolute: if a door is ever removed this floor drops with it. It is
+    // here so an empty scan cannot be mistaken for a clean one.
+    expect(callSites.length).toBeGreaterThan(0);
+    const viaBuilder = [...LOOP.matchAll(/io\.eraseMemberTraces\([^;]*?buildTraceErasure\(/gs)];
+    expect(
+      viaBuilder.length,
+      'an eraseMemberTraces call builds its payload by hand — hoist it into buildTraceErasure',
+    ).toBe(callSites.length);
   });
 });
 
@@ -488,6 +722,7 @@ describe('memberTraceWrites', () => {
   const erasure = (over: Partial<TraceErasure> = {}): TraceErasure => ({
     itemIds: [],
     clearAddedByIds: [],
+    clearRatingIds: [],
     clearPickedByIds: [],
     dropParticipantIds: [],
     ...over,
@@ -520,11 +755,13 @@ describe('memberTraceWrites', () => {
   it('names the exact field for every clear and drop', () => {
     const writes = memberTraceWrites('U9', erasure({
       clearAddedByIds: ['IT1'],
+      clearRatingIds: ['IT3'],
       clearPickedByIds: ['S1'],
       dropParticipantIds: ['S2'],
     }));
     expect(writes.slice(3)).toEqual([
       { op: 'clear', collection: 'watchlist', doc: 'IT1', field: 'addedBy' },
+      { op: 'clear', collection: 'watchlist', doc: 'IT3', field: 'memberRatings.U9' },
       { op: 'clear', collection: 'sessionHistory', doc: 'S1', field: 'pickedByUid' },
       { op: 'drop', collection: 'sessionHistory', doc: 'S2', field: 'participantUids' },
     ]);
@@ -539,6 +776,7 @@ describe('memberTraceWrites', () => {
     expect(memberTraceWrites('U9', erasure({
       itemIds: ['IT1'],
       clearAddedByIds: ['IT2'],
+      clearRatingIds: ['IT3'],
       clearPickedByIds: ['S1'],
       dropParticipantIds: ['S2'],
     }))).toEqual([
@@ -547,6 +785,7 @@ describe('memberTraceWrites', () => {
       { op: 'delete', collection: 'joinAttempts', doc: 'U9' },
       { op: 'delete', collection: 'watchlist/IT1/progress', doc: 'U9' },
       { op: 'clear', collection: 'watchlist', doc: 'IT2', field: 'addedBy' },
+      { op: 'clear', collection: 'watchlist', doc: 'IT3', field: 'memberRatings.U9' },
       { op: 'clear', collection: 'sessionHistory', doc: 'S1', field: 'pickedByUid' },
       { op: 'drop', collection: 'sessionHistory', doc: 'S2', field: 'participantUids' },
     ]);
@@ -558,10 +797,12 @@ describe('memberTraceWrites', () => {
     const writes = memberTraceWrites('U9', erasure({
       itemIds: ['A', 'B', 'C'],
       clearAddedByIds: ['A'],
+      clearRatingIds: ['B', 'C'],
       clearPickedByIds: ['S1', 'S2'],
       dropParticipantIds: ['S3'],
     }));
-    expect(writes.length).toBe(3 + 3 + 1 + 2 + 1);
+    expect(writes.length).toBe(3 + 3 + 1 + 2 + 2 + 1);
+    expect(writes.filter((w) => w.field === 'memberRatings.U9')).toHaveLength(2);
     expect(writes.filter((w) => w.collection === 'watchlist/B/progress')).toHaveLength(1);
     expect(writes.filter((w) => w.field === 'participantUids')).toHaveLength(1);
   });
@@ -684,7 +925,393 @@ describe('the callable erases sent invites BEFORE it hands over (BIN-1147)', () 
   // either half alone survives the deletion of the other.
   it('awaits the erasure and wraps its refusal as an HttpsError', () => {
     expect(ENTRY).toMatch(
-      /try \{\s*await eraseSentInvites\(io, uid\);\s*\} catch \(err\) \{\s*throw new HttpsError\('internal',/,
+      /try \{\s*invites = await eraseSentInvites\(io, uid\);\s*\} catch \(err\) \{[^}]*?if \(err instanceof HandoverRefusal\) throw new HttpsError\('internal', err\.message\);/,
     );
+  });
+});
+
+// SEC-8: a Firestore error string can carry document paths with uids and group
+// ids. The callables send a reader's refusal or a fixed sentence, never err.message
+// from an arbitrary error.
+describe('the callables never forward a raw error message (SEC-8)', () => {
+  it('has no catch that sends err.message of an unknown error', () => {
+    expect(ENTRY).not.toMatch(/err instanceof Error \? err\.message/);
+    // Other spellings of the same leak. A bare `err.message` stays allowed: the
+    // HandoverRefusal branch sends it after an instanceof check.
+    expect(ENTRY).not.toMatch(/new HttpsError\('internal',\s*(?:\(err as|String\(err|err instanceof)/);
+  });
+
+  it('the sent-invite ceiling throws a HandoverRefusal, so its wording may pass through', async () => {
+    const many = Array.from({ length: SENT_INVITE_BATCH_LIMIT + 1 }, (_, i) => `users/u${i}/groupInvites/g`);
+    const io = {
+      sentInvitePaths: async () => many,
+      deleteSentInvites: async () => {},
+      log: { info: () => {}, error: () => {} },
+    };
+    await expect(eraseSentInvites(io, 'me')).rejects.toBeInstanceOf(HandoverRefusal);
+  });
+});
+
+// BIN-1266. The claim derives memberUids from the group as ITS OWN read sees it,
+// never from the caller's earlier read.
+describe('planClaim — the claim decides on its own read (BIN-1266)', () => {
+  const write = { ownerUid: 'heir', leavingUid: 'owner' };
+
+  it('writes the fresh member list minus the leaver, not a list carried in from before', () => {
+    // 'gone' left between the caller's read and the claim, so it is not in fresh.
+    const claim = planClaim({ ownerUid: 'owner', memberUids: ['owner', 'heir', 'kvar'] }, 'owner', write);
+    expect(claim).toEqual({ kind: 'claimed', ownerUid: 'heir', memberUids: ['heir', 'kvar'] });
+  });
+
+  it('writes nothing when ownership already moved', () => {
+    expect(planClaim({ ownerUid: 'someone', memberUids: ['someone', 'heir'] }, 'owner', write))
+      .toEqual({ kind: 'owner-changed' });
+  });
+
+  it('writes nothing when the group is gone', () => {
+    expect(planClaim(null, 'owner', write)).toEqual({ kind: 'owner-changed' });
+  });
+
+  // BIN-1292. The fixtures above always name the same uid as expected owner and as
+  // leaver, so a filter keyed on the wrong one passed them. Here they differ.
+  it('drops the leaver it was given, not the owner it expected', () => {
+    const claim = planClaim(
+      { ownerUid: 'owner', memberUids: ['owner', 'heir', 'gone'] },
+      'owner',
+      { ownerUid: 'heir', leavingUid: 'gone' },
+    );
+    if (claim.kind !== 'claimed') throw new Error('expected a claim');
+    expect(claim.memberUids).toEqual(['owner', 'heir']);
+  });
+
+  it('writes nothing when the successor has left — never an owner outside memberUids', () => {
+    expect(planClaim({ ownerUid: 'owner', memberUids: ['owner', 'kvar'] }, 'owner', write))
+      .toEqual({ kind: 'successor-left' });
+  });
+});
+
+describe('planLeaverErasure — only someone who has left (BIN-1260)', () => {
+  it('erases for a caller who is no longer in memberUids', () => {
+    expect(planLeaverErasure({ ownerUid: 'o', memberUids: ['o', 'b'] }, 'gone')).toEqual({ kind: 'erase' });
+  });
+
+  it('refuses a caller who is still a member', () => {
+    expect(planLeaverErasure({ ownerUid: 'o', memberUids: ['o', 'me'] }, 'me'))
+      .toEqual({ kind: 'refused', reason: 'still-member' });
+  });
+
+  // Checked on `ownerUid` itself, so it holds even when memberUids is not intact.
+  it('refuses the owner, even one missing from memberUids', () => {
+    expect(planLeaverErasure({ ownerUid: 'me', memberUids: ['me'] }, 'me'))
+      .toEqual({ kind: 'refused', reason: 'owner' });
+    expect(planLeaverErasure({ ownerUid: 'me', memberUids: ['b'] }, 'me'))
+      .toEqual({ kind: 'refused', reason: 'owner' });
+  });
+
+  it('does nothing for a group that is gone', () => {
+    expect(planLeaverErasure(null, 'me')).toEqual({ kind: 'nothing' });
+  });
+});
+
+describe('leaverChunkMayCommit — decided on the read inside each chunk (BIN-1260)', () => {
+  it('lets a chunk through while the caller is out of the group', () => {
+    expect(leaverChunkMayCommit({ memberUids: ['a'] }, 'me')).toBe(true);
+  });
+  it('stops when the caller has rejoined', () => {
+    expect(leaverChunkMayCommit({ memberUids: ['a', 'me'] }, 'me')).toBe(false);
+  });
+  it('stops when the group is gone', () => {
+    expect(leaverChunkMayCommit(null, 'me')).toBe(false);
+  });
+  // BIN-1296: an owner's removal also stops when ownership has moved.
+  it('lets an owner removal through while the caller still owns the group', () => {
+    expect(leaverChunkMayCommit({ memberUids: ['o'], ownerUid: 'o' }, 'gone', 'o')).toBe(true);
+  });
+  it('stops an owner removal once the caller no longer owns the group', () => {
+    expect(leaverChunkMayCommit({ memberUids: ['o', 'n'], ownerUid: 'n' }, 'gone', 'o')).toBe(false);
+  });
+  it('stops an owner removal when the removed member is back', () => {
+    expect(leaverChunkMayCommit({ memberUids: ['o', 'gone'], ownerUid: 'o' }, 'gone', 'o')).toBe(false);
+  });
+});
+
+describe('planOwnerRemovalErasure (BIN-1296)', () => {
+  it('erases for the owner once the member is out', () => {
+    expect(planOwnerRemovalErasure({ ownerUid: 'o', memberUids: ['o'] }, 'o', 'gone')).toEqual({ kind: 'erase' });
+  });
+  it('refuses the owner while the member is still in the group', () => {
+    expect(planOwnerRemovalErasure({ ownerUid: 'o', memberUids: ['o', 'm'] }, 'o', 'm'))
+      .toEqual({ kind: 'refused', reason: 'still-member' });
+  });
+  it('gives a non-owner and a missing group the same answer', () => {
+    const notOwner = planOwnerRemovalErasure({ ownerUid: 'o', memberUids: ['o'] }, 'x', 'gone');
+    const missing = planOwnerRemovalErasure(null, 'x', 'gone');
+    expect(notOwner).toEqual({ kind: 'nothing' });
+    expect(missing).toEqual(notOwner);
+  });
+  it('does not tell a non-owner whether the named person is still a member', () => {
+    expect(planOwnerRemovalErasure({ ownerUid: 'o', memberUids: ['o', 'm'] }, 'x', 'm')).toEqual({ kind: 'nothing' });
+  });
+});
+
+describe('refusalAfterHandover — partial only when something was attempted (BIN-1278)', () => {
+  it('carries the partial marker after an attempted write', () => {
+    expect(refusalAfterHandover(true)).toContain(HANDOVER_PARTIAL);
+  });
+  it('does not when nothing was written', () => {
+    expect(refusalAfterHandover(false)).not.toContain(HANDOVER_PARTIAL);
+  });
+});
+
+function fakeLog() {
+  return { info: () => {}, error: () => {} };
+}
+
+describe('runLeaverErasure — reads the group before anything unbounded (BIN-1260)', () => {
+  function io(group: { ownerUid: string; memberUids: string[] } | null) {
+    const calls: string[] = [];
+    const port: LeaverIo = {
+      log: fakeLog(),
+      readGroup: async () => { calls.push('readGroup'); return group; },
+      readWatchlist: async () => { calls.push('readWatchlist'); return [{ id: 'movie_1', addedBy: 'me', memberRatings: undefined }]; },
+      readSessionHistory: async () => { calls.push('readSessionHistory'); return []; },
+      eraseLeaverTraces: async () => { calls.push('erase'); return { kind: 'done' }; },
+    };
+    return { port, calls };
+  }
+
+  it('refuses a member after one read, and never reads the watchlist', async () => {
+    const { port, calls } = io({ ownerUid: 'o', memberUids: ['o', 'me'] });
+    await expect(runLeaverErasure(port, 'g', 'me')).rejects.toBeInstanceOf(HandoverRefusal);
+    expect(calls).toEqual(['readGroup']);
+  });
+
+  it('does nothing for a group that is gone', async () => {
+    const { port, calls } = io(null);
+    await expect(runLeaverErasure(port, 'g', 'me')).resolves.toBeUndefined();
+    expect(calls).toEqual(['readGroup']);
+  });
+
+  it('erases for a leaver, group first', async () => {
+    const { port, calls } = io({ ownerUid: 'o', memberUids: ['o'] });
+    await runLeaverErasure(port, 'g', 'me');
+    expect(calls).toEqual(['readGroup', 'readWatchlist', 'readSessionHistory', 'erase']);
+  });
+
+  it('resolves the same way when the port stops on a rejoin', async () => {
+    const { port } = io({ ownerUid: 'o', memberUids: ['o'] });
+    port.eraseLeaverTraces = async () => ({ kind: 'stopped' });
+    await expect(runLeaverErasure(port, 'g', 'me')).resolves.toBeUndefined();
+  });
+});
+
+describe('runOwnerRemovalErasure — group first, one answer for strangers (BIN-1296)', () => {
+  function io(group: { ownerUid: string; memberUids: string[] } | null) {
+    const calls: string[] = [];
+    const erased: { uid: string; requiredOwner?: string }[] = [];
+    const port: LeaverIo = {
+      log: fakeLog(),
+      readGroup: async () => { calls.push('readGroup'); return group; },
+      readWatchlist: async () => { calls.push('readWatchlist'); return [{ id: 'movie_1', addedBy: 'gone', memberRatings: undefined }]; },
+      readSessionHistory: async () => { calls.push('readSessionHistory'); return []; },
+      eraseLeaverTraces: async (_g, uid, _e, requiredOwner) => {
+        calls.push('erase');
+        erased.push({ uid, requiredOwner });
+        return { kind: 'done' };
+      },
+    };
+    return { port, calls, erased };
+  }
+
+  it('erases the removed member, bound to the calling owner', async () => {
+    const { port, calls, erased } = io({ ownerUid: 'o', memberUids: ['o'] });
+    await runOwnerRemovalErasure(port, 'g', 'o', 'gone');
+    expect(calls).toEqual(['readGroup', 'readWatchlist', 'readSessionHistory', 'erase']);
+    expect(erased).toEqual([{ uid: 'gone', requiredOwner: 'o' }]);
+  });
+
+  it('a non-owner and a missing group both resolve silently after one read', async () => {
+    for (const group of [{ ownerUid: 'o', memberUids: ['o'] }, null]) {
+      const { port, calls } = io(group);
+      await expect(runOwnerRemovalErasure(port, 'g', 'x', 'gone')).resolves.toBeUndefined();
+      expect(calls).toEqual(['readGroup']);
+    }
+  });
+
+  it('refuses the owner while the member is still in, before anything unbounded', async () => {
+    const { port, calls } = io({ ownerUid: 'o', memberUids: ['o', 'm'] });
+    await expect(runOwnerRemovalErasure(port, 'g', 'o', 'm')).rejects.toThrow(OWNER_REMOVAL_REFUSALS['still-member']);
+    expect(calls).toEqual(['readGroup']);
+  });
+});
+
+describe('the sweep’s member-group step (BIN-1294)', () => {
+  function io(opts: { failStrip?: boolean } = {}) {
+    const calls: string[] = [];
+    const port = {
+      log: fakeLog(),
+      memberGroups: async () => [{ id: 'mine', ownerUid: 'me' }, { id: 'theirs', ownerUid: 'o' }],
+      readWatchlist: async () => [{ id: 'movie_1', addedBy: 'me', memberRatings: { me: 7, other: 8 } }],
+      readSessionHistory: async () => [],
+      eraseMemberTraces: async (groupId: string) => { calls.push(`erase:${groupId}`); },
+      stripMemberUid: async (groupId: string) => {
+        if (opts.failStrip) throw new Error('nere');
+        calls.push(`strip:${groupId}`);
+      },
+    };
+    return { port, calls };
+  }
+  const writesFor = (uid: string) =>
+    memberTraceWrites(uid, { itemIds: ['movie_1'], clearAddedByIds: ['movie_1'], clearRatingIds: ['movie_1'], clearPickedByIds: [], dropParticipantIds: [] }).length;
+
+  it('plans the trace writes plus the memberUids strip, for groups it does not own', async () => {
+    const { port, calls } = io();
+    await expect(planSweptMemberGroupErasure(port, 'me')).resolves.toBe(writesFor('me') + 1);
+    expect(calls).toEqual([]);
+  });
+
+  it('strips memberUids after the traces, and credits what landed', async () => {
+    const { port, calls } = io();
+    const progress = { written: 0 };
+    await expect(runSweptMemberGroupErasure(port, 'me', progress)).resolves.toEqual({ groups: 1 });
+    expect(calls).toEqual(['erase:theirs', 'strip:theirs']);
+    expect(progress.written).toBe(writesFor('me') + 1);
+  });
+
+  it('a failed strip still reports the traces that landed', async () => {
+    const { port } = io({ failStrip: true });
+    const progress = { written: 0 };
+    await expect(runSweptMemberGroupErasure(port, 'me', progress)).rejects.toThrow('nere');
+    expect(progress.written).toBe(writesFor('me'));
+  });
+});
+
+describe('runMemberGroupErasure — what the delete door reports (BIN-1278)', () => {
+  function io(opts: { failQuery?: boolean; failErase?: boolean } = {}) {
+    const erased: string[] = [];
+    const port = {
+      log: fakeLog(),
+      memberGroups: async () => {
+        if (opts.failQuery) throw new Error('query nere');
+        return [{ id: 'mine', ownerUid: 'me' }, { id: 'theirs', ownerUid: 'o' }];
+      },
+      readWatchlist: async () => [],
+      readSessionHistory: async () => [],
+      eraseMemberTraces: async (groupId: string) => {
+        if (opts.failErase) throw new Error('skrivning nere');
+        erased.push(groupId);
+      },
+    };
+    return { port, erased };
+  }
+
+  it('erases only in groups the account does not own', async () => {
+    const { port, erased } = io();
+    await expect(runMemberGroupErasure(port, 'me', { attempted: false })).resolves.toEqual({ groups: 1 });
+    expect(erased).toEqual(['theirs']);
+  });
+
+  it('leaves attempted false when it fails before any write', async () => {
+    const { port } = io({ failQuery: true });
+    const progress = { attempted: false };
+    await expect(runMemberGroupErasure(port, 'me', progress)).rejects.toThrow();
+    expect(progress.attempted).toBe(false);
+  });
+
+  it('sets attempted before the write that fails', async () => {
+    const { port } = io({ failErase: true });
+    const progress = { attempted: false };
+    await expect(runMemberGroupErasure(port, 'me', progress)).rejects.toThrow();
+    expect(progress.attempted).toBe(true);
+  });
+});
+
+describe('eraseReminderMarkers — every marker, in batches (BIN-1279)', () => {
+  it('deletes each returned path once, in batches under the ceiling', async () => {
+    const all = Array.from({ length: 451 }, (_, i) => `rotationReminderState/me_${i}`);
+    const batches: (readonly string[])[] = [];
+    const progress = { attempted: false };
+    const res = await eraseReminderMarkers(
+      { markerPaths: async () => all, deleteMarkers: async (p) => { batches.push(p); } },
+      'me',
+      progress,
+    );
+    expect(res).toEqual({ found: 451 });
+    expect(batches.length).toBe(2);
+    expect(batches.flat()).toEqual(all);
+    expect(progress.attempted).toBe(true);
+  });
+
+  it('writes nothing and leaves attempted alone when there is nothing', async () => {
+    const progress = { attempted: false };
+    let called = false;
+    await eraseReminderMarkers(
+      { markerPaths: async () => [], deleteMarkers: async () => { called = true; } },
+      'me',
+      progress,
+    );
+    expect(called).toBe(false);
+    expect(progress.attempted).toBe(false);
+  });
+});
+
+describe('the delete door runs the new steps after the handover (BIN-1278, BIN-1279)', () => {
+  it('in the order invites, handover, member groups, markers', () => {
+    const order = ['eraseSentInvites(io', 'runGroupHandover(io', 'runMemberGroupErasure(', 'eraseReminderMarkers(']
+      .map((s) => ENTRY.indexOf(s));
+    expect(order.every((i) => i > -1), 'a step is missing from the entry point').toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
+  // One pattern: the counter's seed, both awaited steps, and the throw that reads it.
+  it('reports partial on what was attempted, invites and handover included', () => {
+    expect(ENTRY).toMatch(
+      /const progress = \{ attempted: invites\.found > 0 \|\| summary\.attempted > 0 \};\s*try \{\s*await runMemberGroupErasure\([^;]*uid, progress\);\s*await eraseReminderMarkers\([^;]*uid, progress\);\s*\} catch \(err\) \{[\s\S]{0,200}?throw new HttpsError\('internal', refusalAfterHandover\(progress\.attempted\)\);/,
+    );
+  });
+
+  // #4's condition on the Admin port itself. The emulator suite drives its OWN
+  // client-SDK copy of this method, so without this scan the guard could be
+  // deleted, or the writes moved to a batch outside the transaction, with every
+  // suite green. ONE pattern, so no half can go while the other stays.
+  it('the Admin port re-reads the group inside each chunk transaction and writes through it', () => {
+    const body = /eraseLeaverTraces: async \(groupId, uid, erasure, requiredOwner\) => \{[\s\S]*?\n {4}\},\n/.exec(ADMIN_IO)?.[0] ?? '';
+    expect(body, 'eraseLeaverTraces not found in adminIo.ts').not.toBe('');
+    expect(body).toMatch(
+      /const wrote = await db\.runTransaction\(async \(tx\) => \{\s*const fresh = await tx\.get\(groupRef\);[\s\S]*?if \(!leaverChunkMayCommit\(group, uid, requiredOwner\)\) return false;\s*for \(const w of chunk\) \{[\s\S]*?tx\.delete\(ref\);[\s\S]*?tx\.update\(ref,[\s\S]*?tx\.update\(ref,[\s\S]*?return true;\s*\}\);\s*if \(!wrote\) return \{ kind: 'stopped' \};/,
+    );
+    expect(body).not.toMatch(/batch/);
+    // BIN-1296: the owner check needs the owner from the SAME read.
+    expect(body).toMatch(/const fresh = await tx\.get\(groupRef\);[\s\S]*?ownerUid: \(fresh\.get\('ownerUid'\)/);
+  });
+
+  // BIN-1311. Every loop test hands in its own `readWatchlist` double that already
+  // carries `memberRatings`, so the production read could stop returning the field and
+  // every suite stay green while a leaver's ratings are never found. This pins the
+  // Admin port's read, and that the leaver's port is that same read.
+  it('the Admin port reads each group title with its memberRatings', () => {
+    const read = /readWatchlist: async \(groupId\) => \{[\s\S]*?\n {4}\},\n/.exec(ADMIN_IO)?.[0] ?? '';
+    expect(read, 'readWatchlist not found in adminIo.ts').not.toBe('');
+    expect(read).toMatch(
+      /return snap\.docs\.map\(\(d\) => \(\{[^}]*?\bmemberRatings: d\.get\('memberRatings'\),[^}]*?\}\)\);/,
+    );
+    expect(ADMIN_IO).toMatch(/\n {4}readWatchlist: base\.readWatchlist,\n/);
+  });
+
+  // BIN-1296 (#27's condition): a caller naming themselves takes the unchanged self
+  // path, so an owner naming themselves meets the leaver's 'owner' refusal.
+  it('eraseMyGroupTraces routes a missing or own memberUid to the leaver path', () => {
+    const block = /export const eraseMyGroupTraces = onCall\([\s\S]*?\n\);/.exec(ENTRY)?.[0] ?? '';
+    expect(block).toMatch(
+      /if \(memberUid === undefined \|\| memberUid === uid\) await runLeaverErasure\(io, groupId, uid\);\s*else await runOwnerRemovalErasure\(io, groupId, uid, memberUid\);/,
+    );
+  });
+
+  // #4's condition: nothing about a group reaches a caller who may not be in it.
+  it('eraseMyGroupTraces sends a fixed sentence, never the raw error', () => {
+    const block = /export const eraseMyGroupTraces = onCall\([\s\S]*?\n\);/.exec(ENTRY)?.[0] ?? '';
+    expect(block).not.toBe('');
+    expect(block).toMatch(/throw new HttpsError\('internal', 'Kunde inte radera dina spår i gruppen\.'\);/);
+    expect(block).not.toMatch(/HttpsError\('internal', err/);
   });
 });

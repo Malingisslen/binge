@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useFriendStatus, useFriendActions } from '@/hooks/useFriends';
 import { useFriendActionAlert } from '@/hooks/useFriendActionAlert';
 import { FRIEND_FAILURE_TEXT, type FriendAction } from '@/lib/friendActionText';
+import { Button } from '@/components/ui/Button';
 
 // BIN-1192. Each mode's write can be refused, and each says so next to its own
 // button. The texts differ by ACTION, never by cause: within one action every
@@ -45,8 +46,6 @@ export default function FriendButton({ targetUid }: { targetUid: string }) {
   if (!uid || uid === targetUid) return null;
   if (isLoading) return null;
 
-  const baseClass = 'px-3 py-[3px] border rounded-sm text-xs font-[inherit] cursor-pointer';
-
   const alertFor = (action: FriendAction) =>
     failedAction === action ? (
       <span role="alert" className="text-xs text-danger-ink">{FRIEND_FAILURE_TEXT[action]}</span>
@@ -55,13 +54,9 @@ export default function FriendButton({ targetUid }: { targetUid: string }) {
   if (status === 'friends') {
     return (
       <span className="inline-flex items-center gap-2">
-        <button
-          onClick={run('remove', () => removeFriend(targetUid))}
-          className={`${baseClass} bg-surface text-ink-2 border-rule hover:bg-bg-2 inline-flex items-center gap-1`}
-          title="Ta bort vänskap"
-        >
+        <Button onClick={run('remove', () => removeFriend(targetUid))} variant="ghost" size="sm" title="Ta bort vänskap">
           <Check size={11} /> Vän
-        </button>
+        </Button>
         {alertFor('remove')}
       </span>
     );
@@ -70,13 +65,9 @@ export default function FriendButton({ targetUid }: { targetUid: string }) {
   if (status === 'sent') {
     return (
       <span className="inline-flex items-center gap-2">
-        <button
-          onClick={run('cancel', () => cancelFriendRequest(targetUid))}
-          className={`${baseClass} bg-surface text-ink-3 border-rule-2 hover:text-ink-2`}
-          title="Avbryt förfrågan"
-        >
+        <Button onClick={run('cancel', () => cancelFriendRequest(targetUid))} variant="ghost" size="sm" title="Avbryt förfrågan">
           Förfrågan skickad
-        </button>
+        </Button>
         {alertFor('cancel')}
       </span>
     );
@@ -85,13 +76,9 @@ export default function FriendButton({ targetUid }: { targetUid: string }) {
   if (status === 'received') {
     return (
       <span className="inline-flex items-center gap-2">
-        <button
-          onClick={run('accept', () => acceptFriendRequest(targetUid))}
-          className={`${baseClass} bg-acc-deep text-white border-acc-deep`}
-          title="De skickade en vänskapsförfrågan"
-        >
+        <Button onClick={run('accept', () => acceptFriendRequest(targetUid))} variant="acc" size="sm" title="De skickade en vänskapsförfrågan">
           Acceptera vän
-        </button>
+        </Button>
         {alertFor('accept')}
       </span>
     );
@@ -105,12 +92,9 @@ export default function FriendButton({ targetUid }: { targetUid: string }) {
   // blocked. That reason is specific to the send path; see the note at the top.
   return (
     <span className="inline-flex items-center gap-2">
-      <button
-        onClick={run('send', () => sendFriendRequest(targetUid))}
-        className={`${baseClass} bg-surface text-acc-deep border-acc-deep hover:bg-acc-deep hover:text-white`}
-      >
+      <Button onClick={run('send', () => sendFriendRequest(targetUid))} variant="acc" size="sm">
         Lägg till vän
-      </button>
+      </Button>
       {alertFor('send')}
     </span>
   );

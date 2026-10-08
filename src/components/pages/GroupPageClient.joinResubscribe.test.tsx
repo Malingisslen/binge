@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, waitFor, screen } from '@testing-library/react';
+import { render, waitFor, screen, fireEvent } from '@testing-library/react';
 
 /**
  * BIN-1152, granskningsfynd: sidan måste STARTA OM grupp-prenumerationen när ett
@@ -25,6 +25,8 @@ const hoisted = vi.hoisted(() => ({
   resubscribe: vi.fn(),
   joinGroupViaToken: vi.fn(),
   usePageMeta: vi.fn(),
+  routerReplace: vi.fn(),
+  inviteToken: { value: 'tok123' },
 }));
 
 vi.mock('@/hooks/useGroups', () => ({
@@ -57,9 +59,10 @@ vi.mock('@/components/lists/ListCheapestPlanPanel', () => ({ default: () => null
 vi.mock('@/components/groups/GroupSessionHistoryPanel', () => ({ GroupSessionHistoryPanel: () => null }));
 vi.mock('@/components/groups/GroupSidePanels', () => ({
   InvitePanel: () => null,
-  LeavePanel: () => null,
+  LeaveGroupDialog: () => null,
   ProviderOverlapPanel: () => null,
 }));
+vi.mock('@/components/moderation/UgcActionsMenu', () => ({ UgcActionsMenu: () => null }));
 vi.mock('@/components/groups/HouseholdPanel', () => ({ default: () => null }));
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({
@@ -69,8 +72,8 @@ vi.mock('@/hooks/useAuth', () => ({
 }));
 vi.mock('@/hooks/usePageMeta', () => ({ usePageMeta: hoisted.usePageMeta }));
 vi.mock('next/navigation', () => ({
-  useSearchParams: () => new URLSearchParams('invite=tok123'),
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(`invite=${hoisted.inviteToken.value}`),
+  useRouter: () => ({ push: vi.fn(), replace: hoisted.routerReplace }),
 }));
 // AuthGuard släpper igenom; barnen är inte ämnet här.
 vi.mock('@/components/AuthGuard', () => ({
@@ -93,7 +96,14 @@ function deniedState() {
   };
 }
 
+/** SEC-2: joinet startar först när besökaren tackar ja på inbjudningskortet. */
+async function confirmJoin() {
+  fireEvent.click(await screen.findByRole('button', { name: 'Gå med' }));
+}
+
 beforeEach(() => {
+  hoisted.inviteToken.value = 'tok123';
+  hoisted.routerReplace.mockClear();
   hoisted.resubscribe.mockClear();
   hoisted.joinGroupViaToken.mockReset();
   hoisted.useGroup.mockReset();
@@ -105,6 +115,7 @@ describe('GroupPageClient — ett lyckat join startar om prenumerationen (BIN-11
     hoisted.joinGroupViaToken.mockResolvedValue({ ok: true });
 
     render(<GroupPageClient id="g-1" />);
+    await confirmJoin();
 
     // Utan det har anropet ar den doda lyssnaren kvar och skarmen under fastnar
     // pa "du ar inte medlem" — efter att lanken faktiskt fungerat.
@@ -119,6 +130,7 @@ describe('GroupPageClient — ett lyckat join startar om prenumerationen (BIN-11
     hoisted.joinGroupViaToken.mockResolvedValue({ ok: false, reason: 'invalid_token' });
 
     render(<GroupPageClient id="g-1" />);
+    await confirmJoin();
 
     await waitFor(() => expect(hoisted.joinGroupViaToken).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getByText(/Filmklubben/)).toBeTruthy());
@@ -129,6 +141,7 @@ describe('GroupPageClient — ett lyckat join startar om prenumerationen (BIN-11
     hoisted.joinGroupViaToken.mockResolvedValue({ ok: false, reason: 'transient' });
 
     render(<GroupPageClient id="g-1" />);
+    await confirmJoin();
 
     await waitFor(() => expect(hoisted.joinGroupViaToken).toHaveBeenCalledTimes(1));
     expect(hoisted.resubscribe).not.toHaveBeenCalled();
@@ -144,6 +157,7 @@ describe('GroupPageClient — already_member startar ocksa om prenumerationen (B
     hoisted.joinGroupViaToken.mockResolvedValue({ ok: false, reason: 'already_member' });
 
     const { rerender } = render(<GroupPageClient id="g-1" />);
+    await confirmJoin();
 
     await waitFor(() => expect(hoisted.resubscribe).toHaveBeenCalledTimes(1));
     expect(screen.queryByTestId('group-view')).toBeNull();
@@ -171,5 +185,101 @@ describe('GroupPageClient — already_member startar ocksa om prenumerationen (B
 
     await waitFor(() => expect(screen.getByTestId('group-view')).toBeTruthy());
     expect(screen.queryByText(/Du är inte medlem/)).toBeNull();
+  });
+});
+
+describe('GroupPageClient — inbjudningslänken frågar innan den går med (SEC-2)', () => {
+  it('går inte med när sidan bara öppnas', async () => {
+    hoisted.joinGroupViaToken.mockResolvedValue({ ok: true });
+
+    render(<GroupPageClient id="g-1" />);
+
+    // Kortet står där, med gruppens namn och vad medlemmarna får se.
+    expect(await screen.findByRole('button', { name: 'Gå med' })).toBeTruthy();
+    expect(screen.getByText('Filmklubben')).toBeTruthy();
+    expect(screen.getByText(/vilka streamingtjänster du har/)).toBeTruthy();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(hoisted.joinGroupViaToken).not.toHaveBeenCalled();
+  });
+
+  it('"Nej tack" leder till grupplistan utan token och går inte med', async () => {
+    render(<GroupPageClient id="g-1" />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Nej tack' }));
+
+    expect(hoisted.routerReplace).toHaveBeenCalledWith('/grupper');
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(hoisted.joinGroupViaToken).not.toHaveBeenCalled();
+  });
+
+  it('frågar också när gruppen saknar publikt namn', async () => {
+    hoisted.useGroup.mockImplementation(() => ({ ...deniedState(), publicName: null }));
+
+    render(<GroupPageClient id="g-1" />);
+
+    expect(await screen.findByText('Inbjudan till en grupp')).toBeTruthy();
+    expect(screen.queryByText('Gruppen hittades inte')).toBeNull();
+  });
+
+  it('kortet står kvar medan joinet pågår', async () => {
+    let resolveJoin: (v: unknown) => void = () => {};
+    hoisted.joinGroupViaToken.mockReturnValue(new Promise(r => { resolveJoin = r; }));
+
+    render(<GroupPageClient id="g-1" />);
+    await confirmJoin();
+
+    const busy = await screen.findByRole('button', { name: 'Går med…' });
+    expect((busy as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByText(/Be ägaren om en inbjudningslänk/)).toBeNull();
+    resolveJoin({ ok: true });
+  });
+
+  it('ett avslutat misslyckande visar felet i stället för kortet', async () => {
+    hoisted.joinGroupViaToken.mockResolvedValue({ ok: false, reason: 'invalid_token' });
+
+    render(<GroupPageClient id="g-1" />);
+    await confirmJoin();
+
+    await waitFor(() => expect(screen.getByText(/försöket att gå med gick inte igenom/)).toBeTruthy());
+    expect(screen.queryByRole('button', { name: 'Gå med' })).toBeNull();
+  });
+});
+
+describe('GroupPageClient — en ny länk kräver ett nytt ja (SEC-2)', () => {
+  it('går inte med på en ny länk efter att den förra föll', async () => {
+    hoisted.joinGroupViaToken.mockResolvedValue({ ok: false, reason: 'invalid_token' });
+
+    const { rerender } = render(<GroupPageClient id="g-1" />);
+    await confirmJoin();
+    await waitFor(() => expect(screen.getByText(/försöket att gå med gick inte igenom/)).toBeTruthy());
+    expect(hoisted.joinGroupViaToken).toHaveBeenCalledTimes(1);
+
+    // En ny, roterad länk på samma sida: en SPA-navigering, komponenten ligger kvar.
+    hoisted.inviteToken.value = 'tok456';
+    rerender(<GroupPageClient id="g-1" />);
+
+    expect(await screen.findByRole('button', { name: 'Gå med' })).toBeTruthy();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(hoisted.joinGroupViaToken).toHaveBeenCalledTimes(1);
+  });
+
+  it('kortet står kvar genom ett omförsök', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      hoisted.joinGroupViaToken
+        .mockResolvedValueOnce({ ok: false, reason: 'transient' })
+        .mockReturnValue(new Promise(() => {}));
+
+      render(<GroupPageClient id="g-1" />);
+      await confirmJoin();
+      await waitFor(() => expect(hoisted.joinGroupViaToken).toHaveBeenCalledTimes(1));
+      await vi.advanceTimersByTimeAsync(5_000);
+
+      await waitFor(() => expect(hoisted.joinGroupViaToken).toHaveBeenCalledTimes(2));
+      expect(screen.queryByText(/gick inte igenom/)).toBeNull();
+      expect(screen.getByRole('button', { name: 'Går med…' })).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

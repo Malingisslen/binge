@@ -13,7 +13,7 @@ import {
   floorFor,
   assertCoverageFloor,
 } from './selectionManifest';
-import { SEO_TITLE_TARGET_IDS, SEO_PERSON_TARGET_IDS } from './seoCoverage';
+import { SEO_TITLE_TARGET_IDS } from './seoCoverage';
 
 const T0 = Date.UTC(2026, 7, 1);
 const DAY = 24 * 60 * 60 * 1000;
@@ -93,14 +93,14 @@ describe('mergeManifest — spärrhaken', () => {
 });
 
 describe('mergeManifest — evakuering vid taket', () => {
-  const ceiling = SELECTION_CEILING.person;
+  const ceiling = SELECTION_CEILING.movie;
 
   it('evakuerar äldst lastDerived först', () => {
     // Fyll till taket med gamla poster, lägg sedan till en ny.
     const old = Array.from({ length: ceiling }, (_, i): [number, number] => [i + 1, T0 + i]);
-    const prev = manifest('person', old);
+    const prev = manifest('movie', old);
 
-    const merged = mergeManifest(prev, 'person', [999_999], T0 + DAY);
+    const merged = mergeManifest(prev, 'movie', [999_999], T0 + DAY);
 
     expect(merged.ids).toHaveLength(ceiling);
     // Id 1 hade lägst lastDerived → först ut. Nykomlingen fick plats.
@@ -114,10 +114,10 @@ describe('mergeManifest — evakuering vid taket', () => {
   // ett udda undantag där vilken deterministisk regel som helst duger.
   it('evakuerar den SENAST tillkomna vid lika ålder, aldrig den sittande', () => {
     const sitting = Array.from({ length: ceiling }, (_, i) => i + 1);
-    const prev = manifest('person', sitting.map((id): [number, number] => [id, T0]));
+    const prev = manifest('movie', sitting.map((id): [number, number] => [id, T0]));
     // Härledningen ser BÅDE de sittande och en nykomling ⇒ alla får samma
     // lastDerived. Det är så en refresh ser ut, och därför är oavgjort regel.
-    const merged = mergeManifest(prev, 'person', [...sitting, 999_999], T0 + DAY);
+    const merged = mergeManifest(prev, 'movie', [...sitting, 999_999], T0 + DAY);
 
     expect(merged.ids).toHaveLength(ceiling);
     // Nykomlingen får inte tränga ut en sittande sida som Google redan hittat.
@@ -129,9 +129,9 @@ describe('mergeManifest — evakuering vid taket', () => {
   // härledningen åldras och ska till slut lämna plats åt ett aktuellt.
   it('låter ett åldrat id lämna plats åt ett färskt när taket tvingar', () => {
     const aged = Array.from({ length: ceiling }, (_, i): [number, number] => [i + 1, T0]);
-    const prev = manifest('person', aged);
+    const prev = manifest('movie', aged);
 
-    const merged = mergeManifest(prev, 'person', [999_999], T0 + DAY);
+    const merged = mergeManifest(prev, 'movie', [999_999], T0 + DAY);
 
     expect(merged.ids).toHaveLength(ceiling);
     expect(merged.ids.some(e => e.id === 999_999)).toBe(true);
@@ -144,8 +144,8 @@ describe('mergeManifest — evakuering vid taket', () => {
   it('behåller hela urvalet över två refresher när härledningen överstiger taket', () => {
     const fresh = Array.from({ length: ceiling * 3 }, (_, i) => i + 1);
 
-    const week1 = mergeManifest(null, 'person', fresh, T0);
-    const week2 = mergeManifest(week1, 'person', fresh, T0 + DAY);
+    const week1 = mergeManifest(null, 'movie', fresh, T0);
+    const week2 = mergeManifest(week1, 'movie', fresh, T0 + DAY);
 
     const survivors = week1.ids.filter(e => week2.ids.some(k => k.id === e.id));
     expect(survivors).toHaveLength(ceiling);
@@ -161,7 +161,7 @@ describe('mergeManifest — evakuering vid taket', () => {
   it('emitterar överlevarna i first-seen-ordning, inte i evakueringsordning', () => {
     // Fyll till taket i en ordning där ålder och position går isär.
     const prev = manifest(
-      'person',
+      'movie',
       Array.from({ length: ceiling }, (_, i): [number, number] => [
         i + 1,
         // Första posten är YNGST, resten åldras nedåt: evakueringssorteringen
@@ -170,7 +170,7 @@ describe('mergeManifest — evakuering vid taket', () => {
       ]),
     );
 
-    const merged = mergeManifest(prev, 'person', [999_999], T0 + DAY);
+    const merged = mergeManifest(prev, 'movie', [999_999], T0 + DAY);
 
     expect(merged.ids).toHaveLength(ceiling);
     // Utdata ska vara stigande id (= first-seen-ordning), med exakt ett hål där
@@ -195,8 +195,6 @@ describe('resolvedIds — frön kan aldrig evakueras', () => {
     expect(resolvedIds(m, [2, 3])).toEqual([1, 2, 3]);
   });
 
-  // Frönas hela uppgift: de 117 sidor Google har i sitt index ska byggas även
-  // om actions/cache evakuerats och manifestet är borta.
   it('ger frö-id:na även utan manifest', () => {
     expect(resolvedIds(null, [7, 8])).toEqual([7, 8]);
   });
@@ -257,20 +255,12 @@ describe('isManifestStale', () => {
 });
 
 describe('säkerhetsnätens relation till taken', () => {
-  // ADR 0018 och seoCoverage-kommentaren säger båda att en sänkning av det här
-  // talet till taknivån "besegrar spärrhaken tyst" — id:n som roterat ut ur
-  // TMDB:s listor skulle då kapas bort INNAN mergen och aldrig kunna behållas.
-  // Pinna relationen, inte siffran: taket får höjas utan att testet ändras.
-  it('titel-säkerhetsnätet ligger klart över taket, aldrig på det', () => {
-    expect(SEO_TITLE_TARGET_IDS).toBeGreaterThanOrEqual(2 * SELECTION_CEILING.movie);
-    expect(SEO_TITLE_TARGET_IDS).toBeGreaterThanOrEqual(2 * SELECTION_CEILING.tv);
-  });
-
-  // Personsidan är medvetet ANNORLUNDA: talet är inget säkerhetsnät utan
-  // spärrhakens andningsutrymme. STRIKT under taket — se beteendetestet nedan
-  // för varför likhet gör hela mekaniken till en nolloperation.
-  it('person-härledningen lämnar luft under taket', () => {
-    expect(SEO_PERSON_TARGET_IDS).toBeLessThan(SELECTION_CEILING.person);
+  // ADR 0024: titelhärledningen är spärrhakens andningsutrymme, inte längre ett
+  // säkerhetsnät över taket. STRIKT under taket — se beteendetestet nedan för
+  // varför likhet gör hela mekaniken till en nolloperation.
+  it('titelhärledningen lämnar luft under taket', () => {
+    expect(SEO_TITLE_TARGET_IDS).toBeLessThan(SELECTION_CEILING.movie);
+    expect(SEO_TITLE_TARGET_IDS).toBeLessThan(SELECTION_CEILING.tv);
   });
 
   // INVARIANTEN, prövad som beteende i stället för som olikhet mellan två tal.
@@ -284,16 +274,16 @@ describe('säkerhetsnätens relation till taken', () => {
   // identiska namn. Ett rött fall som inte kan namnge sig självt — eller
   // isoleras med `-t` — besegrar hela poängen med att kontrastera tre storlekar.
   it.each([
-    { derivering: SEO_PERSON_TARGET_IDS, overlever: true },  // shippat läge
-    { derivering: SELECTION_CEILING.person, overlever: false }, // lika ⇒ ingen spärrhake
-    { derivering: 3 * SELECTION_CEILING.person, overlever: false }, // djupare hjälper inte
-  ])('härledning $derivering mot person-taket → ur-roterat id kvar: $overlever',
+    { derivering: SEO_TITLE_TARGET_IDS, overlever: true },  // shippat läge
+    { derivering: SELECTION_CEILING.movie, overlever: false }, // lika ⇒ ingen spärrhake
+    { derivering: 3 * SELECTION_CEILING.movie, overlever: false }, // djupare hjälper inte
+  ])('härledning $derivering mot film-taket → ur-roterat id kvar: $overlever',
     ({ derivering, overlever }) => {
       const vecka1 = Array.from({ length: derivering }, (_, i) => i + 1);
-      const m1 = mergeManifest(null, 'person', vecka1, T0);
+      const m1 = mergeManifest(null, 'movie', vecka1, T0);
       // Vecka 2: id 1 ramlar ur TMDB:s lista, en nykomling tar dess plats.
       const vecka2 = [...vecka1.filter(id => id !== 1), 999_999];
-      const m2 = mergeManifest(m1, 'person', vecka2, T0 + DAY);
+      const m2 = mergeManifest(m1, 'movie', vecka2, T0 + DAY);
 
       expect(m2.ids.some(e => e.id === 1)).toBe(overlever);
     });
@@ -308,14 +298,14 @@ describe('täckningsgolvet', () => {
   // föregående manifest kan per konstruktion aldrig fyra: spärrhaken behåller
   // allt, så urvalet krymper aldrig. Katastrofen är den motsatta — manifestet
   // borta (evakuerad actions/cache) OCH härledningen misslyckad, alltså inget
-  // att jämföra mot och ~150 frö/fallback-id kvar. Det MÅSTE fälla bygget.
+  // att jämföra mot. Det MÅSTE fälla bygget.
   it('fäller ett tunt urval även när det inte finns något tidigare att jämföra mot', () => {
     expect(floorFor('movie', 0)).toBe(SELECTION_ABSOLUTE_FLOOR.movie);
     expect(() => assertCoverageFloor('movie', 150, 0)).toThrow(/\[selection\] movie/);
   });
 
   it('släpper igenom en frisk härledning på ett kallt manifest', () => {
-    expect(() => assertCoverageFloor('movie', 11_000, 0)).not.toThrow();
+    expect(() => assertCoverageFloor('movie', SEO_TITLE_TARGET_IDS, 0)).not.toThrow();
   });
 
   // Komplementet: skulle mergen någon gång få en väg att krympa (sänkt tak,
@@ -327,17 +317,20 @@ describe('täckningsgolvet', () => {
   });
 
   it('använder absolutgolvet när 80 % vore lägre', () => {
-    // 80 % av 1 000 = 800 < absolutgolvet 2 000 för film.
-    expect(floorFor('movie', 1_000)).toBe(SELECTION_ABSOLUTE_FLOOR.movie);
-    expect(() => assertCoverageFloor('movie', 1_999, 1_000)).toThrow();
-    expect(() => assertCoverageFloor('movie', 2_000, 1_000)).not.toThrow();
+    // 80 % av 500 = 400 < absolutgolvet 500 för film.
+    expect(floorFor('movie', 500)).toBe(SELECTION_ABSOLUTE_FLOOR.movie);
+    expect(() => assertCoverageFloor('movie', 499, 500)).toThrow();
+    expect(() => assertCoverageFloor('movie', 500, 500)).not.toThrow();
   });
 
-  // Mätt 2026-08-08: ett strypt lokalt bygge gav 4 375 film-id mot produktionens
-  // ~9 850. Golvet får inte fälla en halverad men fungerande härledning — bara
-  // ren fallback (~150 sidor).
-  it('släpper igenom en kraftigt strypt men verklig härledning', () => {
-    expect(() => assertCoverageFloor('movie', 4_375, 0)).not.toThrow();
+  // Golvet ska fälla ren fallback, inte en härledning som tappat en del sidor.
+  it('släpper igenom en strypt men verklig härledning', () => {
+    expect(() => assertCoverageFloor('movie', 600, 0)).not.toThrow();
+  });
+
+  it('golvet ligger under härledningens mål, annars fälls varje friskt bygge', () => {
+    expect(SELECTION_ABSOLUTE_FLOOR.movie).toBeLessThan(SEO_TITLE_TARGET_IDS);
+    expect(SELECTION_ABSOLUTE_FLOOR.tv).toBeLessThan(SEO_TITLE_TARGET_IDS);
   });
 
   it('fäller ren fallback', () => {
@@ -354,9 +347,9 @@ describe('täckningsgolvet', () => {
   });
 
   it('namnger typ, utfall, golv och utvägen — bygget ska gå att förstå ur loggen', () => {
-    expect(() => assertCoverageFloor('person', 5, 1_000)).toThrow(/person: urvalet gav 5 id:n/);
-    expect(() => assertCoverageFloor('person', 5, 1_000)).toThrow(/golvet är 800/);
-    expect(() => assertCoverageFloor('person', 5, 1_000)).toThrow(/BIN-823/);
-    expect(() => assertCoverageFloor('person', 5, 1_000)).toThrow(/SELECTION_ALLOW_THIN/);
+    expect(() => assertCoverageFloor('tv', 5, 1_000)).toThrow(/tv: urvalet gav 5 id:n/);
+    expect(() => assertCoverageFloor('tv', 5, 1_000)).toThrow(/golvet är 800/);
+    expect(() => assertCoverageFloor('tv', 5, 1_000)).toThrow(/BIN-823/);
+    expect(() => assertCoverageFloor('tv', 5, 1_000)).toThrow(/SELECTION_ALLOW_THIN/);
   });
 });

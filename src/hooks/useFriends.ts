@@ -126,5 +126,9 @@ export function useFriendActions() {
     acceptFriendRequest,
     declineFriendRequest,
     removeFriend,
+    // BIN-1349: en blockering raderar vänskapen och förfrågningarna utan att gå genom
+    // den här hooken (`blockUserAndEndFriendship`), så blockeringsmenyn rensar samma
+    // cache härifrån efteråt. Annars står vänknappen kvar på "Vän".
+    refreshFriendship: invalidate,
   };
 }

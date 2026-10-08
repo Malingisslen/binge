@@ -127,6 +127,7 @@ describe('the refusal is wired into every script that opens a Firestore', () => 
     ['recap-upload.mjs', 'projectRefusal\\(args\\)', 'console\\.error\\(refusal\\); process\\.exit\\(1\\);'],
     ['recap-coverage-manifest.mjs', 'projectRefusal\\(argv\\)', 'console\\.error\\(refusal\\); process\\.exit\\(1\\);'],
     ['backfill-mirror-uid.mjs', 'refusalFor\\(argv\\)', 'console\\.log\\(refusal\\);\\s*return 1;'],
+    ['restore-account.mjs', 'refusalFor\\(argv\\)', 'console\\.log\\(refusal\\);\\s*return 1;'],
   ];
 
   // A roster floor OUTSIDE the loop. `it.each([])` registers nothing and reports PASS, so a
@@ -143,7 +144,7 @@ describe('the refusal is wired into every script that opens a Firestore', () => 
       .map((f) => basename(f))
       .sort();
     expect(callers).toEqual(WIRED.map(([name]) => name).sort());
-    expect(WIRED.length).toBe(3);
+    expect(WIRED.length).toBe(4);
   });
 
   it.each(WIRED)('%s refuses and exits before opening Firestore', (name, call, exit) => {

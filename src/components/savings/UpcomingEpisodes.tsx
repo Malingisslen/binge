@@ -5,6 +5,8 @@ import ProviderDot from '@/components/ui/ProviderDot';
 import { useUpcomingShowsForAdvisor, type UpcomingEpisode, type UpcomingShow } from '@/hooks/useUpcomingShowsForAdvisor';
 import { formatSwedishDate, pluralSv } from '@/lib/utils';
 import { titleHref } from '@/lib/tmdb/client';
+import { Eyebrow } from '@/components/ui/Eyebrow';
+import { cardClass } from '@/components/ui/Card';
 
 // Streamingrådgivaren · "Närmaste avsnitt"-listan (V1 — Per serie).
 // En rad per serie där kommande air-datum visas som klickbara datum-pills.
@@ -87,16 +89,16 @@ function buildTooltip(pill: DatePill, show: UpcomingShow): string {
   return `${show.title}\n${lines.join('\n')}`;
 }
 
-const PILL_BASE = 'text-xxs font-semibold px-[7px] py-[2px] rounded-sm whitespace-nowrap transition-colors tabular-nums';
+const PILL_BASE = 'text-xxs font-semibold px-2 py-0.5 rounded-sm whitespace-nowrap transition-colors tabular-nums';
 
 function pillClass(pill: DatePill): string {
   if (pill.isToday) {
-    return `${PILL_BASE} bg-acc-deep text-white border border-acc-deep hover:bg-acc-deep`;
+    return `${PILL_BASE} bg-acc-deep text-on-acc border border-acc-deep hover:bg-acc-deep`;
   }
   if (pill.isFinale) {
     // Finale-pill: utlinad i accent så slutavsnitt sticker ut utan att
     // konkurrera med "Idag" som är den enda fyllda orange pillen.
-    return `${PILL_BASE} bg-surface text-acc-deep border border-acc-deep hover:bg-acc-deep hover:text-white`;
+    return `${PILL_BASE} bg-surface text-acc-deep border border-acc-deep hover:bg-acc-deep hover:text-on-acc`;
   }
   return `${PILL_BASE} bg-bg-2 text-ink-2 border border-rule hover:border-acc-deep hover:text-acc-deep`;
 }
@@ -115,25 +117,25 @@ export default function UpcomingEpisodes() {
     : `${pluralSv(totalEpisodes, 'avsnitt', 'avsnitt')} fördelade på ${pluralSv(shows.length, 'serie', 'serier')} de närmaste ${weeks} veckorna.`;
 
   return (
-    <div className="mb-[14px]">
-      <div className="flex items-baseline justify-between mb-[6px]">
-        <h2 className="text-[11px] font-bold uppercase tracking-[0.5px] text-ink-3">Närmaste avsnitt</h2>
+    <div className="mb-3.5">
+      <div className="flex items-baseline justify-between mb-1.5">
+        <Eyebrow as="h2" size="xs">Närmaste avsnitt</Eyebrow>
         <span className="text-xxs text-ink-3">{totalEpisodes} avsnitt · {weeks} veckor</span>
       </div>
 
-      <div className="bg-surface border border-rule border-l-[3px] border-l-season-done rounded-sm px-3 py-[10px] mb-[6px]">
+      <div className={cardClass('border-l-[3px] border-l-season-done px-3 py-2.5 mb-1.5')}>
         <p className="text-xs text-ink-2 leading-[1.5]">{summaryText}</p>
       </div>
 
-      <div className="bg-surface border border-rule rounded-sm overflow-hidden">
+      <div className={cardClass('overflow-hidden')}>
         {shows.map(show => {
           const pills = bundleEpisodes(show.episodes);
           return (
             <div
               key={show.tmdbId}
-              className="grid grid-cols-[1fr_auto] gap-3 px-3 py-[8px] items-center border-b border-rule-2 last:border-b-0"
+              className="grid grid-cols-[1fr_auto] gap-3 px-3 py-2 items-center border-b border-rule-2 last:border-b-0"
             >
-              <div className="flex items-center gap-[6px] min-w-0">
+              <div className="flex items-center gap-1.5 min-w-0">
                 <ProviderDot color={show.providerColor} size={7} />
                 <Link
                   href={titleHref('tv', show.tmdbId)}
@@ -143,7 +145,7 @@ export default function UpcomingEpisodes() {
                 </Link>
                 <span className="text-xxs text-ink-3 font-medium truncate">{show.providerShortName}</span>
               </div>
-              <div className="flex gap-[3px] flex-wrap justify-end">
+              <div className="flex gap-1 flex-wrap justify-end">
                 {pills.map(pill => (
                   <Link
                     key={pill.key}
@@ -161,7 +163,7 @@ export default function UpcomingEpisodes() {
       </div>
 
       {trailingQuietWeeks >= 3 && (
-        <div className="bg-surface border border-rule border-l-[3px] border-l-rule rounded-sm px-3 py-[8px] mt-[6px]">
+        <div className={cardClass('border-l-[3px] border-l-rule px-3 py-2 mt-1.5')}>
           <p className="text-xs text-ink-2">
             <strong className="text-ink">
               {pluralSv(trailingQuietWeeks, 'lugn vecka', 'lugna veckor')} framöver

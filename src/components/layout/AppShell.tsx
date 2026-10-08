@@ -10,9 +10,12 @@ import Subnav from '@/components/layout/Subnav';
 import MobileTabBar from '@/components/layout/MobileTabBar';
 import Footer from '@/components/layout/Footer';
 import { EmailVerificationBanner } from '@/components/layout/EmailVerificationBanner';
+import { ProfileOfflineBanner } from '@/components/layout/ProfileOfflineBanner';
 import { DeletionLimbo } from '@/components/layout/DeletionLimbo';
 import { ReconsentGate } from '@/components/layout/ReconsentGate';
 import { ShellChrome } from '@/components/layout/ShellChrome';
+import { chromeMode } from '@/components/layout/chromeMode';
+import ChromePart from '@/components/layout/ChromePart';
 
 // Direction H "Schemat" chrome:
 //   Topbar (brand · week strip · search · avatar) sits above every page.
@@ -100,17 +103,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     );
   }
 
+  const chrome = chromeMode(mounted, loading, uid);
+
   return (
     <>
       <ShellChrome />
       <div className="app-shell">
-        <AppTopbar />
-        <Subnav />
+        <AppTopbar chrome={chrome} />
+        <ChromePart mode={chrome} audience="app"><Subnav /></ChromePart>
         <EmailVerificationBanner />
+        <ProfileOfflineBanner />
         <main id="main" tabIndex={-1} className="canvas outline-none">{children}</main>
         <Footer />
       </div>
-      <MobileTabBar />
+      <MobileTabBar chrome={chrome} />
     </>
   );
 }

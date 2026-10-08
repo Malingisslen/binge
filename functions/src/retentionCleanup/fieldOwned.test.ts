@@ -22,7 +22,7 @@ describe('FIELD_OWNED_CATEGORIES', () => {
   it('names every category the field-owned sweep is responsible for', () => {
     expect([...FIELD_OWNED_CATEGORIES]).toEqual([
       'reviews', 'foreignReviewUgc', 'reactions', 'lists', 'sessions',
-      'friendMirrors', 'groupInvitesSent', 'groups',
+      'friendMirrors', 'groupInvitesSent', 'rotationReminders', 'groups',
     ]);
   });
 

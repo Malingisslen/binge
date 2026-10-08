@@ -9,7 +9,7 @@
  * on Binge's wedge: *where can I stream this in Sweden, and can I rent it?*
  *
  * Two stakeholder reviews shaped this (both APPROVE-WITH-CONDITIONS, folded in):
- *  - Growth Marketer #15: a single fixed sentence grammar across 25k pages is a
+ *  - Growth Marketer #15: a single fixed sentence grammar across the pages is a
  *    doorway-page fingerprint → the descriptive sentence rotates through THREE
  *    structurally distinct templates, chosen deterministically by tmdbId
  *    (stable per title → reproducible builds; Math.random is banned in build
@@ -151,6 +151,20 @@ function availabilityLead(input: ContentFloorInput): string {
     return `${title} går att hyra eller köpa digitalt i Sverige, till exempel via ${providerPhrase(rentBuy)}.`;
   }
   return `${title} finns ännu inte på någon streamingtjänst i Sverige.`;
+}
+
+/**
+ * The availability answer as visible text for EVERY title page (SEO-2), not only
+ * the thin ones that get the full floor paragraph. When the title streams AND can
+ * be rented or bought, the rent/buy services are named in a second sentence; the
+ * lead alone covers the other cases.
+ */
+export function availabilityLine(input: ContentFloorInput): string {
+  const lead = availabilityLead(input);
+  const { stream, rent, buy } = input.providers;
+  const rentBuy = Array.from(new Set([...rent, ...buy]));
+  if (stream.length === 0 || rentBuy.length === 0) return lead;
+  return `${lead} Den går också att hyra eller köpa via ${providerPhrase(rentBuy)}.`;
 }
 
 function capFirst(s: string): string {

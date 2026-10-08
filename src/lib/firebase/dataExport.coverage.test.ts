@@ -1,9 +1,9 @@
-import { describe, it, expect, vi, beforeAll } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DocumentSnapshot, QuerySnapshot } from 'firebase/firestore';
 import type { UserDataSnapshots } from './userData';
-import { buildUserExport, type BingeExport } from './dataExport';
+import { buildUserExport, ownGroupTitleRatings, type BingeExport } from './dataExport';
 import { collectUserDataSnapshots } from './userData';
 
 /**
@@ -126,6 +126,8 @@ const EXPORT_METADATA_KEYS = new Set<keyof BingeExport>([
   'readme',
   'tmdbAttribution',
   'justwatchAttribution',
+  // BIN-1357: which groups' reads failed — a statement about this export, not user data.
+  'skippedGroups',
 ]);
 
 const coverageKeys = Object.keys(COVERAGE) as (keyof UserDataSnapshots)[];
@@ -147,13 +149,20 @@ vi.mock('./userData', () => ({
   collectUserDataSnapshots: vi.fn(),
 }));
 
+// BIN-1379: the export reports a failed group read to Sentry. Mocked so a test can read
+// what was sent; the real `captureError` is a no-op without a DSN and would prove nothing.
+const sentryMock = vi.hoisted(() => ({ captureError: vi.fn() }));
+vi.mock('@/lib/sentry', () => ({ captureError: sentryMock.captureError }));
+
 // BIN-184: buildUserExport fetches group-scoped household contributions inline
 // (dynamic import('./db')) — mock the kit so the export path flows without
 // Firebase and the fake contribution surfaces in the payload.
 // BIN-1172: `getDoc` is hoisted so a test can see WHICH paths were read, and answers
 // by path — the member row carries member-shaped data, everything else the household
 // seed the BIN-184 assertion below expects.
-const dbMock = vi.hoisted(() => ({ getDoc: vi.fn() }));
+// BIN-1337: `getDocs` answers each group's title list; default is an empty list so the
+// earlier suites see no ratings.
+const dbMock = vi.hoisted(() => ({ getDoc: vi.fn(), getDocs: vi.fn() }));
 const MEMBER_ROW = {
   uid: 'test-uid', displayName: 'Malin', username: 'malin', photoURL: null, providers: [8],
 };
@@ -168,8 +177,15 @@ vi.mock('./db', () => ({
     db: {},
     doc: vi.fn((_db: unknown, ...segs: string[]) => ({ path: segs.join('/') })),
     getDoc: dbMock.getDoc,
+    collection: vi.fn((_db: unknown, ...segs: string[]) => ({ path: segs.join('/') })),
+    getDocs: dbMock.getDocs,
   })),
 }));
+
+function titleList(rows: { id: string; data: Record<string, unknown> }[]) {
+  return { docs: rows.map(r => ({ id: r.id, data: () => r.data })) };
+}
+dbMock.getDocs.mockImplementation(async () => titleList([]));
 
 // BIN-184: BingeExport keys that are GROUP-scoped (groups/{gid}/household/{uid})
 // and therefore deliberately NOT backed by a users/{uid}-shaped kernel snap —
@@ -177,7 +193,10 @@ vi.mock('./db', () => ({
 // accountDeletion groups-loop (emulator-asserted in account-deletion.test.ts).
 // Adding a key here is a reviewable widening, same discipline as the skip-sets.
 // BIN-1172 adds `groupMemberRows`: groups/{gid}/members/{uid}, fetched inline.
-const GROUP_SCOPED_EXPORT_KEYS = new Set<keyof BingeExport>(['householdContributions', 'groupMemberRows']);
+// BIN-1337 adds `groupTitleRatings`: own values from groups/{gid}/watchlist, fetched inline.
+const GROUP_SCOPED_EXPORT_KEYS = new Set<keyof BingeExport>([
+  'householdContributions', 'groupMemberRows', 'groupTitleRatings',
+]);
 
 function snapsWithGroups(groupIds: string[]): UserDataSnapshots {
   return Object.fromEntries(
@@ -352,5 +371,284 @@ describe('BIN-1172: your own group member row is in the export', () => {
 
     expect(out.groupMemberRows.map(r => r.id)).toEqual(['has']);
     expect(out.householdContributions.map(r => r.id)).toEqual(['has', 'ghost', 'broken']);
+  });
+});
+
+// BIN-1352: the household read sits in the same Promise.all as the member row and the
+// title list. Without its own catch, one group's denied read rejected the whole export.
+describe('BIN-1352: a group whose household read THROWS is skipped', () => {
+  it('still completes, and the other group’s contribution and every member row arrive', async () => {
+    vi.mocked(collectUserDataSnapshots).mockResolvedValueOnce(snapsWithGroups(['broken', 'ok']));
+    dbMock.getDoc.mockImplementation(async (ref: { path: string }) => {
+      if (ref.path === 'groups/broken/household/test-uid') throw new Error('permission-denied');
+      return answerByPath(ref);
+    });
+
+    const out = await buildUserExport('test-uid');
+
+    expect(out.householdContributions).toEqual([{ id: 'ok', data: { seeded: 'household' } }]);
+    expect(out.groupMemberRows.map(r => r.id)).toEqual(['broken', 'ok']);
+  });
+});
+
+describe('BIN-1337: your own ratings on group titles are in the export', () => {
+  const ROW_MINE = { tmdbId: 603, mediaType: 'movie', title: 'The Matrix', memberRatings: { 'test-uid': 8, other: 3 } };
+  const ROW_OTHERS = { tmdbId: 1399, mediaType: 'tv', title: 'Game of Thrones', memberRatings: { other: 9 } };
+
+  beforeAll(() => {
+    dbMock.getDoc.mockImplementation(async (ref: { path: string }) => answerByPath(ref));
+  });
+  afterAll(() => {
+    dbMock.getDocs.mockImplementation(async () => titleList([]));
+  });
+
+  it('carries only the exporting uid’s own value, never another member’s', async () => {
+    vi.mocked(collectUserDataSnapshots).mockResolvedValueOnce(snapsWithGroups(['g1']));
+    dbMock.getDocs.mockImplementation(async () =>
+      titleList([{ id: 'movie_603', data: ROW_MINE }, { id: 'tv_1399', data: ROW_OTHERS }]));
+
+    const out = await buildUserExport('test-uid');
+
+    expect(out.groupTitleRatings).toEqual([{
+      id: 'g1/movie_603',
+      data: { groupId: 'g1', titleId: 'movie_603', tmdbId: 603, mediaType: 'movie', title: 'The Matrix', rating: 8 },
+    }]);
+    expect(JSON.stringify(out.groupTitleRatings)).not.toContain('memberRatings');
+    expect(JSON.stringify(out.groupTitleRatings)).not.toContain('"other"');
+  });
+
+  it('a row rated only by others produces no entry', () => {
+    expect(ownGroupTitleRatings('g1', [{ id: 'tv_1399', data: ROW_OTHERS }], 'test-uid')).toEqual([]);
+  });
+
+  it('reads each group’s own title list and nothing else', async () => {
+    vi.mocked(collectUserDataSnapshots).mockResolvedValueOnce(snapsWithGroups(['g1', 'g2']));
+    dbMock.getDocs.mockClear();
+    dbMock.getDocs.mockImplementation(async () => titleList([]));
+
+    await buildUserExport('test-uid');
+
+    const paths = dbMock.getDocs.mock.calls.map(([ref]) => (ref as { path: string }).path);
+    expect(paths.sort()).toEqual(['groups/g1/watchlist', 'groups/g2/watchlist']);
+  });
+
+  it('a group whose list read THROWS is skipped, and a sibling group’s rating still arrives', async () => {
+    vi.mocked(collectUserDataSnapshots).mockResolvedValueOnce(snapsWithGroups(['broken', 'ok']));
+    dbMock.getDocs.mockImplementation(async (ref: { path: string }) => {
+      if (ref.path === 'groups/broken/watchlist') throw new Error('permission-denied');
+      return titleList([{ id: 'movie_603', data: ROW_MINE }]);
+    });
+
+    const out = await buildUserExport('test-uid');
+
+    expect(out.groupTitleRatings.map(r => r.id)).toEqual(['ok/movie_603']);
+  });
+
+  it('no groups gives an empty list', async () => {
+    vi.mocked(collectUserDataSnapshots).mockResolvedValueOnce(snapsWithGroups([]));
+    const out = await buildUserExport('test-uid');
+    expect(out.groupTitleRatings).toEqual([]);
+  });
+});
+
+// BIN-1337, test reviewer: a freshly added group title carries NO `memberRatings` field
+// (`addToGroupWatchlist` merge-writes without it), so this is the common shape, not an
+// edge case. Without the type guard the lookup throws and takes the whole export down.
+describe('BIN-1337: an unrated group title does not break the export', () => {
+  afterAll(() => {
+    dbMock.getDocs.mockImplementation(async () => titleList([]));
+  });
+
+  it('a row with no memberRatings field produces no entry, and the export completes', async () => {
+    vi.mocked(collectUserDataSnapshots).mockResolvedValueOnce(snapsWithGroups(['g1']));
+    dbMock.getDoc.mockImplementation(async (ref: { path: string }) => answerByPath(ref));
+    dbMock.getDocs.mockImplementation(async () => titleList([
+      { id: 'movie_1', data: { tmdbId: 1, mediaType: 'movie', title: 'Unrated' } },
+      { id: 'movie_603', data: { tmdbId: 603, mediaType: 'movie', title: 'The Matrix', memberRatings: { 'test-uid': 7 } } },
+    ]));
+
+    const out = await buildUserExport('test-uid');
+
+    expect(out.groupTitleRatings.map(r => r.id)).toEqual(['g1/movie_603']);
+  });
+});
+
+// BIN-1357: a group whose read throws is still skipped (BIN-1352), but the file now says
+// so. A row that merely does not exist is not a failure and must not be marked.
+describe('BIN-1357: a group whose read fails is marked in skippedGroups', () => {
+  beforeAll(() => {
+    dbMock.getDoc.mockImplementation(async (ref: { path: string }) => answerByPath(ref));
+  });
+  afterAll(() => {
+    dbMock.getDoc.mockImplementation(async (ref: { path: string }) => answerByPath(ref));
+    dbMock.getDocs.mockImplementation(async () => titleList([]));
+  });
+
+  it('names each failed group and exactly the fields that lack its data', async () => {
+    vi.mocked(collectUserDataSnapshots).mockResolvedValueOnce(
+      snapsWithGroups(['ok', 'noHousehold', 'noMember', 'noTitles', 'noneReadable']));
+    dbMock.getDoc.mockImplementation(async (ref: { path: string }) => {
+      if (ref.path === 'groups/noHousehold/household/test-uid') throw new Error('permission-denied');
+      if (ref.path === 'groups/noMember/members/test-uid') throw new Error('permission-denied');
+      if (ref.path.startsWith('groups/noneReadable/')) throw new Error('permission-denied');
+      return answerByPath(ref);
+    });
+    dbMock.getDocs.mockImplementation(async (ref: { path: string }) => {
+      if (ref.path === 'groups/noTitles/watchlist' || ref.path === 'groups/noneReadable/watchlist') {
+        throw new Error('permission-denied');
+      }
+      return titleList([]);
+    });
+
+    const out = await buildUserExport('test-uid');
+
+    expect(out.skippedGroups).toEqual([
+      { groupId: 'noHousehold', groupName: 'noHousehold', missing: ['householdContributions'] },
+      { groupId: 'noMember', groupName: 'noMember', missing: ['groupMemberRows'] },
+      { groupId: 'noTitles', groupName: 'noTitles', missing: ['groupTitleRatings'] },
+      {
+        groupId: 'noneReadable',
+        groupName: 'noneReadable',
+        missing: ['householdContributions', 'groupMemberRows', 'groupTitleRatings'],
+      },
+    ]);
+    // BIN-1352 still holds: the readable parts of every group arrive.
+    expect(out.householdContributions.map(r => r.id)).toEqual(['ok', 'noMember', 'noTitles']);
+    expect(out.groupMemberRows.map(r => r.id)).toEqual(['ok', 'noHousehold', 'noTitles']);
+  });
+
+  it('a row that does not exist is not a failure and is not marked', async () => {
+    vi.mocked(collectUserDataSnapshots).mockResolvedValueOnce(snapsWithGroups(['ghost']));
+    dbMock.getDoc.mockImplementation(async () => ({ exists: () => false, data: () => undefined }));
+    dbMock.getDocs.mockImplementation(async () => titleList([]));
+
+    const out = await buildUserExport('test-uid');
+
+    expect(out.skippedGroups).toEqual([]);
+    expect(out.groupMemberRows).toEqual([]);
+    expect(out.householdContributions).toEqual([]);
+  });
+
+  it('a group without a string name is marked with groupName null', async () => {
+    const snaps = snapsWithGroups([]);
+    (snaps as unknown as { groupsSnap: unknown }).groupsSnap =
+      { docs: [{ id: 'nameless', data: () => ({}) }] };
+    vi.mocked(collectUserDataSnapshots).mockResolvedValueOnce(snaps);
+    dbMock.getDoc.mockImplementation(async () => { throw new Error('unavailable'); });
+
+    const out = await buildUserExport('test-uid');
+
+    expect(out.skippedGroups).toEqual([
+      { groupId: 'nameless', groupName: null, missing: ['householdContributions', 'groupMemberRows'] },
+    ]);
+  });
+
+  it('the readme no longer claims completeness and points at skippedGroups', async () => {
+    vi.mocked(collectUserDataSnapshots).mockResolvedValueOnce(snapsWithGroups([]));
+
+    const out = await buildUserExport('test-uid');
+
+    expect(out.readme).not.toMatch(/komplett/i);
+    expect(out.readme).toContain('skippedGroups');
+    expect(out.skippedGroups).toEqual([]);
+  });
+});
+
+// BIN-1379 (Malin 2026-10-01, attended panel): a failed per-group read is reported under
+// its own kind, at most once per kind per export, with no group id, group name or uid in
+// what is sent, and the report can never break the export.
+describe('BIN-1379: a failed group read is reported to Sentry', () => {
+  beforeEach(() => {
+    sentryMock.captureError.mockReset();
+  });
+  afterAll(() => {
+    sentryMock.captureError.mockReset();
+    dbMock.getDoc.mockImplementation(async (ref: { path: string }) => answerByPath(ref));
+    dbMock.getDocs.mockImplementation(async () => titleList([]));
+  });
+
+  function failEveryReadOf(groups: string[]) {
+    const errors = new Map<string, Error>();
+    const fail = (path: string) => {
+      const err = new Error(`permission-denied: ${path}`);
+      errors.set(path, err);
+      throw err;
+    };
+    dbMock.getDoc.mockImplementation(async (ref: { path: string }) =>
+      groups.some(g => ref.path.startsWith(`groups/${g}/`)) ? fail(ref.path) : answerByPath(ref));
+    dbMock.getDocs.mockImplementation(async (ref: { path: string }) =>
+      groups.some(g => ref.path.startsWith(`groups/${g}/`)) ? fail(ref.path) : titleList([]));
+    return errors;
+  }
+
+  it('reports once per read kind, not once per group, with the original error and a count', async () => {
+    vi.mocked(collectUserDataSnapshots).mockResolvedValueOnce(snapsWithGroups(['g1', 'g2', 'ok']));
+    const errors = failEveryReadOf(['g1', 'g2']);
+
+    await buildUserExport('test-uid');
+
+    expect(sentryMock.captureError).toHaveBeenCalledTimes(3);
+    expect(sentryMock.captureError).toHaveBeenCalledWith(
+      errors.get('groups/g1/household/test-uid'),
+      { scope: 'groups', kind: 'dataExport-householdRead', extra: { failedGroups: 2 } },
+    );
+    expect(sentryMock.captureError).toHaveBeenCalledWith(
+      errors.get('groups/g1/members/test-uid'),
+      { scope: 'groups', kind: 'dataExport-memberRowRead', extra: { failedGroups: 2 } },
+    );
+    expect(sentryMock.captureError).toHaveBeenCalledWith(
+      errors.get('groups/g1/watchlist'),
+      { scope: 'groups', kind: 'dataExport-titleListRead', extra: { failedGroups: 2 } },
+    );
+  });
+
+  it('reports only the kind that failed', async () => {
+    vi.mocked(collectUserDataSnapshots).mockResolvedValueOnce(snapsWithGroups(['g1']));
+    dbMock.getDoc.mockImplementation(async (ref: { path: string }) => answerByPath(ref));
+    dbMock.getDocs.mockImplementation(async () => { throw new Error('permission-denied'); });
+
+    await buildUserExport('test-uid');
+
+    expect(sentryMock.captureError).toHaveBeenCalledTimes(1);
+    expect(sentryMock.captureError.mock.calls[0][1]).toEqual(
+      { scope: 'groups', kind: 'dataExport-titleListRead', extra: { failedGroups: 1 } });
+  });
+
+  it('sends no group id, group name or uid beside the error', async () => {
+    vi.mocked(collectUserDataSnapshots).mockResolvedValueOnce(snapsWithGroups(['secretGroup']));
+    failEveryReadOf(['secretGroup']);
+
+    await buildUserExport('test-uid');
+
+    expect(sentryMock.captureError).toHaveBeenCalled();
+    for (const [, context] of sentryMock.captureError.mock.calls) {
+      const sent = JSON.stringify(context);
+      expect(sent).not.toContain('secretGroup');
+      expect(sent).not.toContain('test-uid');
+    }
+  });
+
+  it('a row that does not exist is not reported', async () => {
+    vi.mocked(collectUserDataSnapshots).mockResolvedValueOnce(snapsWithGroups(['ghost']));
+    dbMock.getDoc.mockImplementation(async () => ({ exists: () => false, data: () => undefined }));
+    dbMock.getDocs.mockImplementation(async () => titleList([]));
+
+    await buildUserExport('test-uid');
+
+    expect(sentryMock.captureError).not.toHaveBeenCalled();
+  });
+
+  it('a reporter that throws does not break the export', async () => {
+    vi.mocked(collectUserDataSnapshots).mockResolvedValueOnce(snapsWithGroups(['g1']));
+    failEveryReadOf(['g1']);
+    sentryMock.captureError.mockImplementation(() => { throw new Error('sentry down'); });
+
+    const out = await buildUserExport('test-uid');
+
+    expect(out.skippedGroups).toEqual([{
+      groupId: 'g1',
+      groupName: 'g1',
+      missing: ['householdContributions', 'groupMemberRows', 'groupTitleRatings'],
+    }]);
   });
 });

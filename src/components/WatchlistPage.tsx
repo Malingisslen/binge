@@ -7,7 +7,7 @@ import {
   Search, Film, Tv, X, Check, SlidersHorizontal, ChevronDown, Library,
   Rows3, LayoutGrid, Grid3x3, CloudOff,
 } from 'lucide-react';
-import { posterUrl, titleHref } from '@/lib/tmdb/client';
+import { posterUrl, posterSrcSet, titleHref } from '@/lib/tmdb/client';
 import { getProvider } from '@/lib/tmdb/providers';
 import { seenDate } from '@/lib/seenDate';
 import ProviderDot from '@/components/ui/ProviderDot';
@@ -40,7 +40,7 @@ import {
   LIBRARY_SUB_STATE_ORDER,
 } from '@/lib/libraryView';
 import FilterRow from '@/components/watchlist/FilterRow';
-import { pluralSv } from '@/lib/utils';
+import { formatLibraryDate, pluralSv } from '@/lib/utils';
 import { toneForId } from '@/lib/duotone';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import { useIncrementalList } from '@/hooks/useIncrementalList';
@@ -51,6 +51,11 @@ import {
   LIBRARY_RETRY_LABEL,
 } from '@/lib/watchlist/libraryHoldCopy';
 import type { WatchStatus, WatchlistItem } from '@/types';
+import { Button } from '@/components/ui/Button';
+import { eyebrowClass } from '@/components/ui/Eyebrow';
+import { thClass } from '@/components/ui/tableHead';
+import { cardClass } from '@/components/ui/Card';
+import { compareTitles } from '@/lib/titleSort';
 
 // BIN-560 Phase 4: selection/next-air state is keyed by the composite doc id
 // `mediaTypeDocId(mediaType, tmdbId)`, not bare tmdbId — a movie and a TV show
@@ -61,7 +66,7 @@ type SortKey = 'updatedAt' | 'addedAt' | 'watchedAt' | 'title' | 'rating' | 'rel
 
 function fmtDate(d: Date | null): string {
   if (!d) return '—';
-  return d.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short', year: 'numeric' });
+  return formatLibraryDate(d);
 }
 
 // Sedd-kolumnen och "Sedd datum"-sorteringen visas även i den ofiltrerade /my/all-vyn,
@@ -218,7 +223,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
     }
     result = [...result].sort((a, b) => {
       switch (sort) {
-        case 'title': return a.title.localeCompare(b.title, 'sv');
+        case 'title': return compareTitles(a.title, b.title);
         case 'rating': return (b.rating ?? 0) - (a.rating ?? 0);
         case 'releaseYear': return (b.releaseYear ?? 0) - (a.releaseYear ?? 0);
         case 'addedAt': return b.addedAt.getTime() - a.addedAt.getTime();
@@ -385,9 +390,9 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
             title={LIBRARY_UNREACHABLE_TITLE}
             body={LIBRARY_UNREACHABLE_BODY}
             action={
-              <button type="button" onClick={retryListener} className="btn btn-acc">
+              <Button type="button" onClick={retryListener} variant="acc">
                 {LIBRARY_RETRY_LABEL}
-              </button>
+              </Button>
             }
           />
         </div>
@@ -409,7 +414,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
 
       {(providerFilter || behindFilterActive) && (
         <div className="chip acc" style={{ marginTop: 18, padding: '6px 12px', display: 'inline-flex', gap: 8 }}>
-          <span style={{ fontSize: 11, letterSpacing: 0.12, textTransform: 'uppercase' }}>
+          <span className={eyebrowClass({ size: 'xs', tone: 'acc' })}>
             filter:
           </span>
           {providerFilter && (
@@ -493,7 +498,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
               autoCapitalize="off"
               style={{
                 background: 'transparent', border: 0,
-                fontSize: 11.5,
+                fontSize: 'var(--fs-xs)',
                 color: 'var(--ink)', outline: 'none', width: 140,
               }}
             />
@@ -514,7 +519,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
               // Sitter på en is-on (mörk) chip → ljus badge.
               <span style={{
                 background: 'var(--bg)', color: 'var(--ink)',
-                fontSize: 10, fontWeight: 700, borderRadius: 20, padding: '0 6px', lineHeight: '15px',
+                fontSize: 'var(--fs-xxs)', fontWeight: 700, borderRadius: 20, padding: '0 6px', lineHeight: '15px',
               }}>
                 {activeFilterCount}
               </span>
@@ -545,7 +550,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
       {/* Aktiva filter som borttagbara pills — bara när panelen är stängd (öppen
           panel visar valen i sina chips). Snabb överblick + ett-klicks-rensa. */}
       {activeFilterCount > 0 && !filterOpen && (
-        <div className="flex items-center gap-[6px] flex-wrap mt-[10px]">
+        <div className="flex items-center gap-1.5 flex-wrap mt-2.5">
           {genreFilter.map(id => (
             <RemovableFilterChip
               key={`g-${id}`}
@@ -573,47 +578,47 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
       )}
 
       {selected.size > 0 && (
-        <div className="flex items-center gap-2 mb-2 px-2 py-[5px] bg-acc-deep/10 border border-acc-deep/20 rounded-sm">
+        <div className="flex items-center gap-2 mb-2 px-2 py-1.5 bg-acc-deep/10 border border-acc-deep/20 rounded-sm">
           <span className="text-xs text-ink-2">{pluralSv(selected.size, 'markerad', 'markerade')}</span>
           {status === 'sedd' && (
-            <button
+            <Button
               onClick={async () => {
                 await Promise.all(displayItems.filter(i => selected.has(keyOf(i))).map(i => updateStatus(i.mediaType, i.tmdbId, 'vill_se')));
                 setSelected(new Set());
               }}
-              className="px-2 py-[2px] text-xs border-none rounded-sm cursor-pointer bg-acc-deep text-white font-[inherit]"
+              variant="acc" size="sm"
             >
               Flytta till Vill se
-            </button>
+            </Button>
           )}
           {/* BIN-168: bulk "Avbryt" på serievyn (/my/series). Avbruten är ett
               giltigt slutläge för serier man gett upp — tidigare gick bara att
               massradera dem, inte avbryta. Skopad till 'mina' så den inte dyker
               upp på sedda filmer (terminalt) eller redan avbrutna. */}
           {status === 'mina' && (
-            <button
+            <Button
               onClick={async () => {
                 await Promise.all(displayItems.filter(i => selected.has(keyOf(i))).map(i => updateStatus(i.mediaType, i.tmdbId, 'avbruten')));
                 setSelected(new Set());
               }}
-              className="px-2 py-[2px] text-xs border border-rule rounded-sm cursor-pointer bg-surface text-ink-2 font-[inherit]"
+              variant="ghost" size="sm"
               title="Markera valda serier som avbrutna"
             >
               Avbryt
-            </button>
+            </Button>
           )}
-          <button
+          <Button
             onClick={() => { if (selected.size > 0) setConfirmDelete(displayItems.filter(i => selected.has(keyOf(i)))); }}
-            className="px-2 py-[2px] text-xs border border-danger rounded-sm cursor-pointer bg-surface text-danger-ink font-[inherit]"
+            variant="danger-ghost" size="xs"
           >
             Ta bort
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => setSelected(new Set())}
-            className="px-2 py-[2px] text-xs border border-rule rounded-sm cursor-pointer bg-surface text-ink-3 font-[inherit] ml-auto"
+            variant="ghost" size="sm" className="ml-auto"
           >
             Avmarkera
-          </button>
+          </Button>
         </div>
       )}
 
@@ -639,9 +644,9 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
 
       <div className={filterOpen ? 'grid grid-cols-1 md:grid-cols-[220px_1fr] gap-5 mt-4' : 'mt-4'}>
         {filterOpen && (
-          <aside className="bg-surface border border-rule rounded-md p-4 self-start">
+          <aside className={cardClass('p-4 self-start')}>
             <div className="flex items-center justify-between mb-3">
-              <span className="text-[11px] uppercase tracking-[0.5px] text-ink-3">Filter</span>
+              <span className={eyebrowClass({ size: 'xs' })}>Filter</span>
               <button
                 type="button"
                 onClick={() => setFilterOpen(false)}
@@ -704,7 +709,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
             ))}
             {hasMore && <div ref={sentinelRef} aria-hidden className="col-span-full h-px" />}
             {displayItems.length === 0 && (
-              <div className="col-span-full bg-surface border border-rule rounded-sm px-3 py-4 text-center text-sm text-ink-3">
+              <div className={cardClass('col-span-full px-3 py-4 text-center text-sm text-ink-3')}>
                 {emptyMessage}
               </div>
             )}
@@ -712,11 +717,11 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
         )
       ) : view === 'table' ? (
         <>
-        <div className="bg-surface border border-rule rounded-sm overflow-x-auto">
+        <div className={cardClass('overflow-x-auto')}>
           <table className="w-full border-collapse">
             <thead>
               <tr>
-                <th className="px-2 py-[6px] border-b border-rule-2 bg-cal-header w-[28px]">
+                <th className={thClass('px-2 w-[28px]')}>
                   <input
                     type="checkbox"
                     aria-label="Välj alla"
@@ -728,14 +733,14 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                     className="accent-acc-deep w-[13px] h-[13px] cursor-pointer"
                   />
                 </th>
-                <th className="text-left px-2 py-[6px] text-xxs text-ink-3 font-semibold uppercase tracking-[0.5px] border-b border-rule-2 bg-cal-header w-[44px]"></th>
-                <th className="text-left px-2 py-[6px] text-xxs text-ink-3 font-semibold uppercase tracking-[0.5px] border-b border-rule-2 bg-cal-header">Titel</th>
-                {showTypeCol && <th className="text-left px-2 py-[6px] text-xxs text-ink-3 font-semibold uppercase tracking-[0.5px] border-b border-rule-2 bg-cal-header">Typ</th>}
-                <th className="text-left px-2 py-[6px] text-xxs text-ink-3 font-semibold uppercase tracking-[0.5px] border-b border-rule-2 bg-cal-header">År</th>
-                {showAddedCol && <th className="hidden md:table-cell text-left px-2 py-[6px] text-xxs text-ink-3 font-semibold uppercase tracking-[0.5px] border-b border-rule-2 bg-cal-header">Tillagd</th>}
-                {showWatchedCol && <th className="hidden md:table-cell text-left px-2 py-[6px] text-xxs text-ink-3 font-semibold uppercase tracking-[0.5px] border-b border-rule-2 bg-cal-header">Sedd</th>}
-                <th className="hidden lg:table-cell text-left px-2 py-[6px] text-xxs text-ink-3 font-semibold uppercase tracking-[0.5px] border-b border-rule-2 bg-cal-header">Tjänster</th>
-                <th className="text-left px-2 py-[6px] text-xxs text-ink-3 font-semibold uppercase tracking-[0.5px] border-b border-rule-2 bg-cal-header">Betyg</th>
+                <th className={thClass('text-left px-2 w-[44px]')}></th>
+                <th className={thClass('text-left px-2')}>Titel</th>
+                {showTypeCol && <th className={thClass('text-left px-2')}>Typ</th>}
+                <th className={thClass('text-left px-2')}>År</th>
+                {showAddedCol && <th className={thClass('hidden md:table-cell text-left px-2')}>Tillagd</th>}
+                {showWatchedCol && <th className={thClass('hidden md:table-cell text-left px-2')}>Sedd</th>}
+                <th className={thClass('hidden lg:table-cell text-left px-2')}>Tjänster</th>
+                <th className={thClass('text-left px-2')}>Betyg</th>
               </tr>
             </thead>
             <tbody>
@@ -745,7 +750,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                 const Icon = item.mediaType === 'tv' ? Tv : Film;
                 return (
                   <tr key={keyOf(item)} className={`cursor-pointer hover:[&>td]:bg-bg-2 ${idx % 2 === 1 ? 'bg-bg-2/40' : ''}`}>
-                    <td className="px-2 py-[5px] border-b border-border-table" onClick={e => e.stopPropagation()}>
+                    <td className="px-2 py-1.5 border-b border-border-table" onClick={e => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         aria-label={`Välj ${item.title}`}
@@ -760,7 +765,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                         className="accent-acc-deep w-[13px] h-[13px] cursor-pointer"
                       />
                     </td>
-                    <td className="px-2 py-[5px] border-b border-border-table">
+                    <td className="px-2 py-1.5 border-b border-border-table">
                       <Link href={href}>
                         {poster ? (
                           <div className={`poster duo-${toneForId(item.tmdbId)} w-[32px] h-[48px]`}>
@@ -773,7 +778,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                         )}
                       </Link>
                     </td>
-                    <td className="px-2 py-[5px] border-b border-border-table">
+                    <td className="px-2 py-1.5 border-b border-border-table">
                       <Link href={href} className="no-underline text-ink">
                         <div className="font-semibold text-base">
                           {item.title}
@@ -783,23 +788,23 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                         </div>
                       </Link>
                     </td>
-                    {showTypeCol && <td className="px-2 py-[5px] border-b border-border-table text-xs text-ink-3">
+                    {showTypeCol && <td className="px-2 py-1.5 border-b border-border-table text-xs text-ink-3">
                       {item.mediaType === 'movie' ? 'Film' : 'Serie'}
                     </td>}
-                    <td className="px-2 py-[5px] border-b border-border-table text-xs text-ink-3">
+                    <td className="px-2 py-1.5 border-b border-border-table text-xs text-ink-3">
                       {item.releaseYear ?? '—'}
                     </td>
-                    {showAddedCol && <td className="hidden md:table-cell px-2 py-[5px] border-b border-border-table text-xs text-ink-3">
+                    {showAddedCol && <td className="hidden md:table-cell px-2 py-1.5 border-b border-border-table text-xs text-ink-3">
                       {fmtDate(item.addedAt)}
                     </td>}
-                    {showWatchedCol && <td className="hidden md:table-cell px-2 py-[5px] border-b border-border-table text-xs text-ink-3">
+                    {showWatchedCol && <td className="hidden md:table-cell px-2 py-1.5 border-b border-border-table text-xs text-ink-3">
                       {fmtDate(seenDate(item))}
                     </td>}
-                    <td className="hidden lg:table-cell px-2 py-[5px] border-b border-border-table">
+                    <td className="hidden lg:table-cell px-2 py-1.5 border-b border-border-table">
                       <ProviderChips providers={item.providers} myProviders={user?.myProviders ?? []} providersCheckedAt={item.providersCheckedAt} />
                     </td>
-                    <td className="px-2 py-[5px] border-b border-border-table" onClick={e => e.stopPropagation()}>
-                      <span className="inline-flex items-center gap-[4px]">
+                    <td className="px-2 py-1.5 border-b border-border-table" onClick={e => e.stopPropagation()}>
+                      <span className="inline-flex items-center gap-1">
                         <RatingStars
                           rating={item.rating}
                           onChange={r => updateRating(item.mediaType, item.tmdbId, r)}
@@ -827,8 +832,8 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
         {hasMore && <div ref={sentinelRef} aria-hidden className="h-px" />}
         </>
       ) : (
-        <div className="bg-surface border border-rule rounded-sm">
-          <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-[10px] md:gap-[7px] px-3 py-2">
+        <div className={cardClass()}>
+          <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-2.5 md:gap-2 px-3 py-2">
             {visibleItems.map(item => {
               const poster = posterUrl(item.posterPath, 'w342');
               const href = titleHref(item.mediaType, item.tmdbId);
@@ -836,19 +841,19 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
               const isSel = selected.has(keyOf(item));
               const inner = (
                 <>
-                  <div className={`poster duo-${toneForId(item.tmdbId)} mb-[3px] ${selectMode && isSel ? 'outline outline-2 outline-acc-deep' : ''}`}>
+                  <div className={`poster duo-${toneForId(item.tmdbId)} mb-1 ${selectMode && isSel ? 'outline outline-2 outline-acc-deep' : ''}`}>
                     {poster ? (
-                      <img src={poster} alt={item.title} loading="lazy" decoding="async" width={342} height={513} />
+                      <img src={poster} srcSet={posterSrcSet(item.posterPath, 'w342')} sizes="(max-width: 767px) 45vw, 140px" alt={item.title} loading="lazy" decoding="async" width={342} height={513} />
                     ) : (
                       <div className="absolute inset-0 flex flex-col items-center justify-center px-2 gap-1">
                         <Icon size={20} className="text-ink-3 opacity-40" />
-                        <span className="text-[10px] text-ink-3 text-center line-clamp-3 leading-tight">{item.title}</span>
+                        <span className="text-xxs text-ink-3 text-center line-clamp-3 leading-tight">{item.title}</span>
                       </div>
                     )}
                     <PosterProviderDots providers={item.providers} myProviders={user?.myProviders ?? []} />
                     {selectMode && (
                       <span className={`absolute top-1 left-1 z-[1] inline-flex items-center justify-center w-[16px] h-[16px] rounded-sm border ${
-                        isSel ? 'bg-acc-deep border-acc-deep text-white' : 'border-rule bg-surface'
+                        isSel ? 'bg-acc-deep border-acc-deep text-on-acc' : 'border-rule bg-surface'
                       }`}>
                         {isSel && <Check size={11} />}
                       </span>
@@ -934,11 +939,11 @@ function Segmented<T extends string>({
             aria-label={o.label ? undefined : o.title}
             title={o.label ? undefined : o.title}
             onClick={() => onChange(o.value)}
-            className="inline-flex items-center gap-[5px] cursor-pointer"
+            className="inline-flex items-center gap-1.5 cursor-pointer"
             style={{
               padding: o.label ? '5px 11px' : '6px 9px',
               fontFamily: 'inherit',
-              fontSize: 12.5,
+              fontSize: 'var(--fs-sm)',
               border: 0,
               borderLeft: i > 0 ? '1px solid var(--rule)' : undefined,
               background: active ? 'var(--ink)' : 'transparent',
@@ -961,7 +966,7 @@ function RemovableFilterChip({ label, onRemove }: { label: string; onRemove: () 
     <button
       type="button"
       onClick={onRemove}
-      className="chip acc inline-flex items-center gap-[5px]"
+      className="chip acc inline-flex items-center gap-1.5"
       aria-label={`Ta bort filter: ${label}`}
     >
       {label}
@@ -1010,11 +1015,11 @@ export function LibrarySubnav({ status, activeKey }: { status?: WatchStatus; act
   const activeView = LIBRARY_VIEWS.find(isActive);
 
   return (
-    <div ref={ref} className="relative inline-block mt-[14px]">
+    <div ref={ref} className="relative inline-block mt-3.5">
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="chip inline-flex items-center gap-[6px]"
+        className="chip inline-flex items-center gap-1.5"
         aria-expanded={open}
         aria-label="Byt biblioteksvy"
       >
@@ -1025,7 +1030,7 @@ export function LibrarySubnav({ status, activeKey }: { status?: WatchStatus; act
       {open && (
         <nav
           aria-label="Biblioteksvyer"
-          className="absolute left-0 top-full mt-[3px] bg-surface border border-rule rounded-md shadow-pop min-w-[180px] z-30 py-1"
+          className={cardClass('absolute left-0 top-full mt-1 shadow-pop min-w-[180px] z-30 py-1')}
         >
           {LIBRARY_VIEWS.map(view => {
             const active = isActive(view);
@@ -1035,7 +1040,7 @@ export function LibrarySubnav({ status, activeKey }: { status?: WatchStatus; act
                 href={view.href}
                 aria-current={active ? 'page' : undefined}
                 onClick={() => setOpen(false)}
-                className={`flex items-center justify-between gap-3 px-3 py-[6px] text-sm no-underline hover:bg-bg-2 ${active ? 'text-ink font-semibold' : 'text-ink-2'}`}
+                className={`flex items-center justify-between gap-3 px-3 py-1.5 text-sm no-underline hover:bg-bg-2 ${active ? 'text-ink font-semibold' : 'text-ink-2'}`}
               >
                 {view.label}
                 {active && <Check size={13} className="text-acc-deep" />}

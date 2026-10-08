@@ -1,15 +1,21 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Trash2 } from 'lucide-react';
 import { posterUrl, titleHref } from '@/lib/tmdb/client';
 import { useGroupMemberProgress } from '@/hooks/useGroupMemberProgress';
 import { removeFromGroupWatchlist, setMemberRating } from '@/lib/firebase/groups';
+import type { GroupWatchlistRow } from '@/lib/firebase/groups';
 import { toneForId } from '@/lib/duotone';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { captureError } from '@/lib/sentry';
 import type { GroupMember, GroupWatchlistItem } from '@/types';
+import { Eyebrow } from '@/components/ui/Eyebrow';
+import { thClass } from '@/components/ui/tableHead';
+import { Button } from '@/components/ui/Button';
+import { cardClass } from '@/components/ui/Card';
 
 /**
  * Gemensam watchlist för en grupp. Varje medlem får en kolumn för sitt
@@ -24,7 +30,7 @@ export function GroupWatchlistTable({
   groupId, watchlist, members, myUid, isOwner,
 }: {
   groupId: string;
-  watchlist: GroupWatchlistItem[];
+  watchlist: GroupWatchlistRow[];
   members: GroupMember[];
   myUid: string;
   isOwner: boolean;
@@ -36,12 +42,100 @@ export function GroupWatchlistTable({
 
   const memberProgress = useGroupMemberProgress(groupId);
   const [itemToRemove, setItemToRemove] = useState<GroupWatchlistItem | null>(null);
+  // BIN-1308: a refused rating or removal has to say so on its row, instead of the
+  // row simply staying as it was.
+  // Keyed per row and action, so a write on one row never clears another row's
+  // unresolved failure.
+  const [failed, setFailed] = useState<Record<string, true>>({});
+  const markFailed = (key: string, failedNow: boolean) => {
+    setFailed(prev => {
+      if (!failedNow && !(key in prev)) return prev;
+      const next = { ...prev };
+      if (failedNow) next[key] = true;
+      else delete next[key];
+      return next;
+    });
+  };
+
+  // BIN-1315, BIN-1330: only the row's latest attempt of an action may set or clear its
+  // failure, so an older attempt that is refused late cannot mark a newer, successful
+  // one as failed.
+  const attempts = useRef<Record<string, number>>({});
+
+  const runAttempt = async (key: string, write: () => Promise<void>, onError: (err: unknown) => void) => {
+    const attempt = (attempts.current[key] ?? 0) + 1;
+    attempts.current[key] = attempt;
+    markFailed(key, false);
+    let failedNow = false;
+    try {
+      await write();
+    } catch (err) {
+      onError(err);
+      failedNow = true;
+    }
+    if (attempts.current[key] === attempt) markFailed(key, failedNow);
+  };
+
+  // BIN-1333: a row that leaves the watchlist takes its failures with it, so a row that
+  // is removed and added again does not come back already marked as failed. Only the
+  // moment of leaving clears them: Firestore hides a deleted row before the server
+  // answers, so a refusal can land while the row is still hidden, and the row then
+  // comes back carrying it.
+  //
+  // BIN-1350: a refusal can also land while the row is hidden and the row never come
+  // back, so the title's next add starts with that refusal. A row that returns with a
+  // different `addedAt` than it left with is such a new add, and its failures are
+  // cleared too. A row Firestore restores after a refusal carries its old `addedAt`, so
+  // that refusal still shows.
+  //
+  // BIN-1354: a row with no stored `addedAt` compares as `null`, never as the stand-in
+  // date it is read with. When it left and came back undated, a restore cannot be told
+  // from a re-add whose stamp is still on its way, so the decision waits for a snapshot
+  // that carries a stamp and the refusal shows meanwhile.
+  const liveRows = useRef<ReadonlyMap<string, number | null>>(new Map());
+  const departedRows = useRef<Map<string, number | null>>(new Map());
+  useEffect(() => {
+    const live = new Map(watchlist.map(w => [mediaTypeDocId(w.mediaType, w.tmdbId), storedAddedAt(w)]));
+    const stale = new Set<string>();
+    for (const [id, addedAt] of liveRows.current) {
+      if (live.has(id)) continue;
+      stale.add(id);
+      departedRows.current.set(id, addedAt);
+    }
+    for (const [id, addedAt] of live) {
+      if (!departedRows.current.has(id)) continue;
+      const departedAddedAt = departedRows.current.get(id);
+      if (departedAddedAt === null && addedAt === null) continue;
+      departedRows.current.delete(id);
+      if (departedAddedAt !== addedAt) stale.add(id);
+    }
+    liveRows.current = live;
+    if (stale.size > 0) setFailed(prev => dropFailuresFor(prev, stale));
+  }, [watchlist]);
+
+  const rate = (item: GroupWatchlistItem, rating: number | null) => runAttempt(
+    failureKey('rate', item),
+    () => setMemberRating({ groupId, mediaType: item.mediaType, tmdbId: item.tmdbId, uid: myUid, rating }),
+    err => {
+      console.error('GroupWatchlistTable: rating write failed', err);
+      captureError(err, { scope: 'groups', kind: 'groupWatchlistTable-rate' });
+    },
+  );
+
+  const remove = (item: GroupWatchlistItem) => runAttempt(
+    failureKey('remove', item),
+    () => removeFromGroupWatchlist(item.mediaType, groupId, item.tmdbId),
+    err => {
+      console.error('GroupWatchlistTable: removal failed', err);
+      captureError(err, { scope: 'groups', kind: 'groupWatchlistTable-remove' });
+    },
+  );
 
   return (
-    <div className="bg-surface border border-rule rounded-sm">
-      <div className="px-3 py-[6px] border-b border-rule-2 text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">
+    <div className={cardClass()}>
+      <Eyebrow className="px-3 py-1.5 border-b border-rule-2">
         Gemensamt bibliotek ({watchlist.length})
-      </div>
+      </Eyebrow>
 
       {sorted.length === 0 ? (
         <div className="px-3 py-6 text-center text-xs text-ink-3">
@@ -50,19 +144,19 @@ export function GroupWatchlistTable({
       ) : (
         <table className="w-full text-xs">
           <thead>
-            <tr className="bg-rule-2/40">
-              <th className="text-left px-3 py-[6px] text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">Titel</th>
+            <tr>
+              <th className={thClass('text-left px-3')}>Titel</th>
               {members.map(m => (
                 <th
                   key={m.uid}
-                  className="text-center px-2 py-[6px] text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold"
+                  className={thClass('text-center px-2')}
                   title={m.displayName}
                 >
                   {abbrev(m.displayName)}
                 </th>
               ))}
-              <th className="text-right px-3 py-[6px] text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">Snitt</th>
-              <th className="px-2 py-[6px]"></th>
+              <th className={thClass('text-right px-3')}>Snitt</th>
+              <th className={thClass('px-2')}></th>
             </tr>
           </thead>
           <tbody>
@@ -74,9 +168,12 @@ export function GroupWatchlistTable({
               // Skicka groupId i URL:en så title-page kan aktivera spoiler-skydd
               // (Fas 2b) — `?fromGroup={id}` läses av TVShowPageClient.
               const href = titleHref(item.mediaType, item.tmdbId, { fromGroup: groupId });
+              const rowKey = mediaTypeDocId(item.mediaType, item.tmdbId);
+              const rateFailed = failed[failureKey('rate', item)] === true;
+              const removeFailed = failed[failureKey('remove', item)] === true;
               return (
-                <tr key={mediaTypeDocId(item.mediaType, item.tmdbId)} className="border-t border-rule-2 hover:bg-rule-2/30">
-                  <td className="px-3 py-[6px]">
+                <tr key={rowKey} className="border-t border-rule-2 hover:bg-rule-2/30">
+                  <td className="px-3 py-1.5">
                     <div className="flex items-center gap-2">
                       {item.posterPath && (
                         <div className={`poster duo-${toneForId(item.tmdbId)} w-[28px] h-[42px] shrink-0`}>
@@ -116,14 +213,17 @@ export function GroupWatchlistTable({
                     const r = item.memberRatings[m.uid] ?? null;
                     const mine = m.uid === myUid;
                     return (
-                      <td key={m.uid} className="text-center px-2 py-[6px]">
+                      <td key={m.uid} className="text-center px-2 py-1.5">
                         {mine ? (
-                          <RatingPicker
-                            value={r}
-                            onChange={async v => {
-                              await setMemberRating({ groupId, mediaType: item.mediaType, tmdbId: item.tmdbId, uid: myUid, rating: v });
-                            }}
-                          />
+                          <>
+                            <RatingPicker
+                              value={r}
+                              onChange={v => { void rate(item, v); }}
+                            />
+                            {rateFailed && (
+                              <div role="alert" className="text-xxs text-danger-ink">Betyget sparades inte</div>
+                            )}
+                          </>
                         ) : (
                           <span className={r != null ? 'text-ink-2' : 'text-ink-3'}>
                             {r != null ? r : '—'}
@@ -132,10 +232,10 @@ export function GroupWatchlistTable({
                       </td>
                     );
                   })}
-                  <td className="text-right px-3 py-[6px] text-ink-2">
+                  <td className="text-right px-3 py-1.5 text-ink-2">
                     {avg != null ? avg.toFixed(1) : '—'}
                   </td>
-                  <td className="text-right px-2 py-[6px]">
+                  <td className="text-right px-2 py-1.5">
                     {canDelete && (
                       <button
                         onClick={() => setItemToRemove(item)}
@@ -144,6 +244,9 @@ export function GroupWatchlistTable({
                       >
                         <Trash2 size={11} />
                       </button>
+                    )}
+                    {removeFailed && (
+                      <div role="alert" className="text-xxs text-danger-ink whitespace-nowrap">Gick inte att ta bort</div>
                     )}
                   </td>
                 </tr>
@@ -158,7 +261,7 @@ export function GroupWatchlistTable({
           body={`"${itemToRemove.title}" tas bort från gruppens gemensamma bibliotek, inklusive allas betyg på den.`}
           confirmLabel="Ta bort"
           onConfirm={() => {
-            void removeFromGroupWatchlist(itemToRemove.mediaType, groupId, itemToRemove.tmdbId);
+            void remove(itemToRemove);
             setItemToRemove(null);
           }}
           onCancel={() => setItemToRemove(null)}
@@ -166,6 +269,22 @@ export function GroupWatchlistTable({
       )}
     </div>
   );
+}
+
+function failureKey(action: 'rate' | 'remove', item: GroupWatchlistItem): string {
+  return `${action}:${mediaTypeDocId(item.mediaType, item.tmdbId)}`;
+}
+
+function storedAddedAt(item: GroupWatchlistRow): number | null {
+  return item.addedAtKnown ? item.addedAt.getTime() : null;
+}
+
+function dropFailuresFor(failed: Record<string, true>, rowIds: ReadonlySet<string>): Record<string, true> {
+  const stale = Object.keys(failed).filter(key => rowIds.has(key.slice(key.indexOf(':') + 1)));
+  if (stale.length === 0) return failed;
+  const next = { ...failed };
+  for (const key of stale) delete next[key];
+  return next;
 }
 
 function abbrev(name: string): string {
@@ -202,7 +321,7 @@ function TvAsymmetryRow({
   points.sort((a, b) => b.sortKey - a.sortKey);
 
   return (
-    <div className="text-xxs text-ink-3 mt-[2px] flex flex-wrap gap-[6px]">
+    <div className="text-xxs text-ink-3 mt-0.5 flex flex-wrap gap-1.5">
       {points.map(p => (
         <span key={p.uid} title={`${p.initial} har sett t.o.m. ${p.code}`}>
           <span className="font-semibold text-ink-2">{p.initial}</span>:{p.code}
@@ -221,22 +340,22 @@ function RatingPicker({
   const [open, setOpen] = useState(false);
   return (
     <div className="relative inline-block">
-      <button
+      <Button
         onClick={() => setOpen(v => !v)}
-        className="px-[5px] py-[1px] border border-rule rounded-sm text-xxs bg-white cursor-pointer"
+        variant="ghost" size="xs"
       >
         {value != null ? value : '+'}
-      </button>
+      </Button>
       {open && (
-        <div className="absolute z-10 right-0 mt-[2px] bg-white border border-rule rounded-sm shadow-none flex flex-wrap gap-[2px] p-1 w-[120px]">
+        <div className={cardClass('absolute z-10 right-0 mt-0.5 shadow-none flex flex-wrap gap-0.5 p-1 w-[120px]')}>
           {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
-            <button
+            <Button
               key={n}
               onClick={() => { onChange(n); setOpen(false); }}
-              className="w-[20px] h-[20px] text-xxs border border-rule-2 rounded-sm hover:border-acc-deep hover:text-acc-deep cursor-pointer bg-white"
+              variant="ghost" size="xs" className="w-[20px] h-[20px] !p-0 justify-center"
             >
               {n}
-            </button>
+            </Button>
           ))}
           <button
             onClick={() => { onChange(null); setOpen(false); }}

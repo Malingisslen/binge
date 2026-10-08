@@ -6,6 +6,8 @@ import { useToast } from '@/contexts/ToastContext';
 import { SettingsSection } from './SettingsSection';
 import type { ItemVisibility } from '@/types';
 import { MAX_BIO } from '@/lib/clampText';
+import { Button } from '@/components/ui/Button';
+import { fieldClass } from '@/components/ui/Field';
 
 const VISIBILITY_OPTIONS: { value: ItemVisibility; label: string; description: string }[] = [
   { value: 'private', label: 'Privat', description: 'Bara jag ser mina titlar.' },
@@ -53,7 +55,7 @@ export function UsernameSection() {
     <SettingsSection title="Publik profil">
       <div className="space-y-2">
         <div>
-          <label htmlFor="username" className="text-xs text-ink-3 block mb-[2px]">Användarnamn</label>
+          <label htmlFor="username" className="text-xs text-ink-3 block mb-0.5">Användarnamn</label>
           <div className="flex gap-2">
             <input
               id="username"
@@ -66,40 +68,47 @@ export function UsernameSection() {
               onChange={e => setUsernameInput(e.target.value.toLowerCase())}
               placeholder="filmnerden"
               maxLength={20}
-              className="flex-1 px-2 py-[3px] text-xs border border-rule rounded-sm bg-surface text-ink font-[inherit] outline-none"
+              className={fieldClass({ size: 'sm', className: 'flex-1' })}
             />
-            <button
+            <Button
               onClick={handleSaveUsername}
               disabled={saving || usernameInput === (user.username ?? '')}
-              className="btn btn-acc btn-sm disabled:opacity-50"
+              variant="acc" size="sm" className="disabled:opacity-50"
             >
               Spara
-            </button>
+            </Button>
           </div>
           {user.username && (
-            <div id="username-help" className="text-xxs text-ink-3 mt-[2px]">binge.nu/user/{user.username}</div>
+            <div id="username-help" className="text-xxs text-ink-3 mt-0.5">binge.nu/user/{user.username}</div>
           )}
         </div>
         <div>
-          <label htmlFor="bio" className="text-xs text-ink-3 block mb-[2px]">Bio</label>
+          <label htmlFor="bio" className="text-xs text-ink-3 block mb-0.5">Bio</label>
           <textarea
             id="bio"
             value={bioInput}
             onChange={e => setBioInput(e.target.value)}
             onBlur={async () => {
               if (bioInput === user.bio) return;
-              try { await updateBio(bioInput); toast('Bio sparad'); }
+              // Skriv bara tillbaka om faltet fortfarande haller det som skickades -
+              // text som skrevs medan sparningen pagick far inte skrivas over.
+              const sent = bioInput;
+              try {
+                const stored = await updateBio(sent);
+                setBioInput(prev => (prev === sent ? stored : prev));
+                toast('Bio sparad');
+              }
               catch { toast('Kunde inte spara. Försök igen om en stund.'); }
             }}
             placeholder="Berätta lite om dig…"
             maxLength={MAX_BIO}
             rows={2}
-            className="w-full px-2 py-1 text-xs border border-rule rounded-sm bg-surface text-ink font-[inherit] resize-none outline-none"
+            className={fieldClass({ size: 'sm', className: 'w-full resize-none' })}
           />
         </div>
         <div>
-          <span id="defaultVisibility-label" className="text-xs text-ink-3 block mb-[4px]">Standardsynlighet</span>
-          <div role="radiogroup" aria-labelledby="defaultVisibility-label" className="space-y-[6px]">
+          <span id="defaultVisibility-label" className="text-xs text-ink-3 block mb-1">Standardsynlighet</span>
+          <div role="radiogroup" aria-labelledby="defaultVisibility-label" className="space-y-1.5">
             {VISIBILITY_OPTIONS.map(opt => (
               <label key={opt.value} className="flex items-start gap-2 cursor-pointer">
                 <input
@@ -113,7 +122,7 @@ export function UsernameSection() {
                       toast(`Standardsynlighet: ${opt.label.toLowerCase()}`);
                     } catch { toast('Kunde inte spara. Försök igen om en stund.'); }
                   }}
-                  className="accent-acc-deep mt-[2px] w-[13px] h-[13px] shrink-0"
+                  className="accent-acc-deep mt-0.5 w-[13px] h-[13px] shrink-0"
                 />
                 <span className="leading-tight">
                   <span className="text-xs text-ink block">{opt.label}</span>
@@ -124,23 +133,23 @@ export function UsernameSection() {
           </div>
           {/* BIN-1244: juridik- och dataskyddsrollernas villkor — valet ska själv säga vem
               mer som kan se profilen. Malin valde lydelsen 2026-09-18. */}
-          <p className="text-xxs text-ink-3 mt-[6px]">
+          <p className="text-xxs text-ink-3 mt-1.5">
             Administratörer kan se namn, användarnamn, bild och presentation vid en anmälan.
           </p>
           {visibilitySyncPending && (
-            <div className="mt-[6px] border border-danger bg-danger-soft rounded-sm px-2 py-[6px]">
+            <div className="mt-1.5 border border-danger bg-danger-soft rounded-sm px-2 py-1.5">
               <p className="text-xxs text-danger-ink leading-snug">
                 Synligheten är sparad på din profil men hann inte uppdateras på alla dina
                 titlar — några kan fortfarande visas enligt din tidigare inställning.
                 Binge försöker igen nästa gång du öppnar appen.
               </p>
-              <button
+              <Button
                 onClick={handleRetryVisibility}
                 disabled={retryingVisibility}
-                className="btn btn-sm btn-danger-ghost mt-[4px] disabled:opacity-50"
+                variant="danger-ghost" size="sm" className="mt-1 disabled:opacity-50"
               >
                 {retryingVisibility ? 'Försöker…' : 'Försök igen nu'}
-              </button>
+              </Button>
             </div>
           )}
         </div>

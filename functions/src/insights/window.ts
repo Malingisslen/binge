@@ -25,3 +25,16 @@ export function computeWindowDeltas(
     },
   };
 }
+
+/**
+ * Which insights doc is the window's baseline: the newest `YYYY-MM-DD` snapshot on or
+ * before `from`, else the oldest one (history doesn't reach `from`; the dashboard then
+ * shows its "sedan {datum}" note). The live `daily` doc and any other non-date id never
+ * qualify. Lexicographic compare is chronological for ISO dates.
+ */
+export function pickBaselineId(ids: readonly string[], from: string): string | null {
+  const dated = ids.filter((id) => /^\d{4}-\d{2}-\d{2}$/.test(id)).sort();
+  if (dated.length === 0) return null;
+  const onOrBefore = dated.filter((id) => id <= from);
+  return onOrBefore.length > 0 ? onOrBefore[onOrBefore.length - 1] : dated[0];
+}

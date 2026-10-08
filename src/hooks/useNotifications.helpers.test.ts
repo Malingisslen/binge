@@ -68,6 +68,23 @@ describe('markOneRead', () => {
   });
 });
 
+// BIN-1254, avgjord som daterad post i `.claude/rules/accepted-deviations.md`.
+describe('markOneRead — orsakerna bakom permission-denied skiljs inte åt (BIN-1254)', () => {
+  it('en utloggad session och en raderad notis ger samma kind', async () => {
+    const deleted = Object.assign(new Error('Null value error. for update'), { code: 'permission-denied' });
+    const signedOut = Object.assign(new Error('Missing or insufficient permissions.'), {
+      code: 'permission-denied',
+    });
+    const report = vi.fn();
+
+    await markOneRead(vi.fn().mockRejectedValue(deleted), 'n1', report);
+    await markOneRead(vi.fn().mockRejectedValue(signedOut), 'n2', report);
+
+    expect(report).toHaveBeenNthCalledWith(1, deleted, 'markRead-refused');
+    expect(report).toHaveBeenNthCalledWith(2, signedOut, 'markRead-refused');
+  });
+});
+
 describe('markManyRead', () => {
   it('en avvisad skrivning stoppar inte de andra', async () => {
     const written: string[] = [];

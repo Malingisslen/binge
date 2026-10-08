@@ -2,6 +2,18 @@ import type { CineasternaTitle } from './types';
 
 const IMDB_RE = /^tt\d{6,}$/;
 
+/**
+ * The session id from `/init_portal_session`'s answer (`{ sessionid, csrftoken, success }`),
+ * or null. The older `/renew_portal_csrftoken` handshake that returned `portal_sessionid`
+ * now only renews an existing session and answers a bare POST with 400.
+ */
+export function parseSessionId(json: unknown): string | null {
+  if (!json || typeof json !== 'object' || Array.isArray(json)) return null;
+  const o = json as { success?: unknown; sessionid?: unknown };
+  if (o.success !== true) return null;
+  return typeof o.sessionid === 'string' && o.sessionid.length > 0 ? o.sessionid : null;
+}
+
 export function parseTitles(json: unknown): CineasternaTitle[] {
   if (!json || typeof json !== 'object') return [];
   const o = json as { success?: unknown; titles?: unknown };

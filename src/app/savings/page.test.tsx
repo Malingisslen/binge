@@ -37,7 +37,21 @@ vi.mock('@/hooks/useSubscriptionAdvisor', () => ({
 
 vi.mock('@/lib/analytics', () => ({ trackEvent: vi.fn() }));
 
+// BIN-1366: the full (providers-present) render path mounts sibling panels that
+// read their own hooks, so they render nothing here; the existing
+// providers-empty tests never reach them.
+vi.mock('@/components/savings/CampaignExpiryNudges', () => ({ default: () => null }));
+vi.mock('@/components/savings/PriceChangeNudges', () => ({ default: () => <div data-testid="price-change-nudges" /> }));
+vi.mock('@/components/savings/ProvidersByValue', () => ({ default: () => null }));
+const monthlyBillMock = vi.fn<() => MonthlyBill | null>(() => null);
+vi.mock('@/hooks/useMonthlyBill', () => ({ useMonthlyBill: () => monthlyBillMock() }));
+vi.mock('@/components/savings/RotationCalendar', () => ({ default: () => null }));
+vi.mock('@/components/savings/SavingsSidebar', () => ({ default: () => null }));
+vi.mock('@/components/savings/UpcomingEpisodes', () => ({ default: () => null }));
+
 import SavingsPage from './page';
+import type { MonthlyBill } from '@/lib/advisor/monthlyBill';
+import { krText, verbatim } from '@/test/krText';
 
 function baseAdvisor(over: Partial<AdvisorResult> = {}): AdvisorResult {
   return {
@@ -46,11 +60,13 @@ function baseAdvisor(over: Partial<AdvisorResult> = {}): AdvisorResult {
     willSeeByProvider: [],
     monthlySavings: 0,
     totalMonthlyCost: 0,
+    totalMonthlyCostEstimated: false,
     isLoading: false,
     hasError: false,
     hasConfiguredProviders: false,
     primaryAction: { kind: 'idle', nextCheckDate: null },
     secondaryAction: null,
+    pauseAdviceReady: true,
     activePauses: [],
     mostUsedProvider: null,
     unfinishedTmdbIds: new Set<number>(),
@@ -74,6 +90,10 @@ const SUGGESTION: BundleSuggestion = {
   replacedNames: ['Netflix', 'Max'],
   currentKr: 327,
   bundleKr: 269,
+  bindingMonths: 0,
+  startFeeKr: 0,
+  startFeeMonthlyKr: 0,
+  commitmentTotalKr: null,
   savingKr: 58,
   bonusProviderIds: [337],
   bonusNames: ['Disney+'],
@@ -145,5 +165,114 @@ describe('SavingsPage — bundle card survives a TMDB outage (BIN-442)', () => {
     expect(
       screen.queryByText('Kunde inte räkna på dina tjänster just nu'),
     ).not.toBeInTheDocument();
+  });
+});
+
+// BIN-1366: formatKr's own test proves the helper groups thousands, but not that
+// the page calls it. The paused-services section is the page's own kr call site:
+// a regression to a raw `{totalSaved}` would print "1234" and stay green there.
+describe('SavingsPage — paused-service amounts are grouped by thousands (BIN-1366)', () => {
+  beforeEach(() => {
+    advisorMock.mockReset();
+  });
+
+  it('writes a four-digit saved-so-far total and row amount with a thousands separator', () => {
+    advisorMock.mockReturnValue(
+      baseAdvisor({
+        providers: [
+          { providerId: 8, providerName: 'Netflix', shortName: 'Netflix', color: '#e50914', shows: [], monthlyCost: 149, status: 'active', nextAirDate: null },
+        ],
+        hasConfiguredProviders: true,
+        activePauses: [
+          { providerId: 384, providerName: 'Max', shortName: 'Max', color: '#002be7', pausedAt: '2025-01-01', resumeAt: null, monthlyCost: 129, savingsSoFar: 1000 },
+          { providerId: 337, providerName: 'Disney+', shortName: 'Disney+', color: '#113ccf', pausedAt: '2025-06-01', resumeAt: null, monthlyCost: 119, savingsSoFar: 234 },
+        ],
+      }),
+    );
+    render(<SavingsPage />);
+
+    expect(screen.getByText(krText('Sparat hittills: 1 234 kr'), verbatim)).toBeInTheDocument();
+    expect(screen.getByText(krText('+1 000 kr'), verbatim)).toBeInTheDocument();
+  });
+});
+
+// Paket K: under pausgolvet visar sidan inget som räknar på pauser — inga steg
+// med Pausa-knapp och ingen rotationsplan — men kostnaden och paketen står kvar.
+describe('SavingsPage — pausgolvet', () => {
+  beforeEach(() => {
+    advisorMock.mockReset();
+  });
+
+  it('visar ingen pausknapp och ber om fler titlar när biblioteket är för litet', () => {
+    advisorMock.mockReturnValue(
+      baseAdvisor({
+        providers: [
+          { providerId: 8, providerName: 'Netflix', shortName: 'Netflix', color: '#e50914', shows: [], monthlyCost: 169, status: 'pause', nextAirDate: null },
+        ],
+        hasConfiguredProviders: true,
+        totalMonthlyCost: 169,
+        pauseAdviceReady: false,
+        primaryAction: { kind: 'needs-library', titleCount: 0, minTitles: 3 },
+        bundleSuggestions: [SUGGESTION],
+      }),
+    );
+    render(<SavingsPage />);
+
+    expect(screen.getByText(/Lägg till det du följer, så kan Binge räkna/)).toBeInTheDocument();
+    expect(screen.queryByText('Pausa →')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Netflix kan pausas/)).not.toBeInTheDocument();
+    expect(screen.getByText('Utforska serier')).toBeInTheDocument();
+    expect(screen.getByText('Dina lösa tjänster kan bli billigare i ett paket')).toBeInTheDocument();
+    // Prisändringar beror inte på biblioteket, så de står kvar under golvet.
+    expect(screen.getByTestId('price-change-nudges')).toBeInTheDocument();
+  });
+
+  it('visar pausförslaget när biblioteket räcker', () => {
+    advisorMock.mockReturnValue(
+      baseAdvisor({
+        providers: [
+          { providerId: 8, providerName: 'Netflix', shortName: 'Netflix', color: '#e50914', shows: [], monthlyCost: 169, status: 'pause', nextAirDate: null },
+        ],
+        hasConfiguredProviders: true,
+        totalMonthlyCost: 169,
+        primaryAction: { kind: 'pause', providerId: 8, providerName: 'Netflix', shortName: 'Netflix', color: '#e50914', monthlyCost: 169, nextAirDate: null },
+      }),
+    );
+    render(<SavingsPage />);
+
+    expect(screen.getByText('Pausa →')).toBeInTheDocument();
+    expect(screen.queryByText(/Lägg till det du följer/)).not.toBeInTheDocument();
+    expect(screen.getByTestId('price-change-nudges')).toBeInTheDocument();
+  });
+});
+
+// BIN-1449: the monthly bill takes the place "Behåll eller säg upp?" had.
+describe('SavingsPage — månadsnotan', () => {
+  const PROVIDERS = [
+    { providerId: 8, providerName: 'Netflix', shortName: 'Netflix', color: '#e50914', shows: [], monthlyCost: 169, status: 'active' as const, nextAirDate: null },
+  ];
+  beforeEach(() => {
+    advisorMock.mockReset();
+    monthlyBillMock.mockReset();
+  });
+
+  it('shows last month’s bill when the hook has one', () => {
+    advisorMock.mockReturnValue(baseAdvisor({ providers: PROVIDERS, hasConfiguredProviders: true }));
+    monthlyBillMock.mockReturnValue({
+      month: { startMs: 0, endMs: 1, name: 'september', firstDay: '2026-09-01', lastDay: '2026-09-30' },
+      lines: [{ providerId: 8, costKr: 169, pausedWholeMonth: false, episodes: 4, films: 0, krPerItem: 42 }],
+      totalKr: 169, episodes: 4, films: 0, krPerItem: 42,
+    });
+    render(<SavingsPage />);
+    expect(screen.getByRole('heading', { name: 'Din streaming i september' })).toBeInTheDocument();
+    expect(screen.getByText('4 avsnitt · 42 kr per avsnitt')).toBeInTheDocument();
+  });
+
+  it('shows no bill when there is nothing to bill', () => {
+    advisorMock.mockReturnValue(baseAdvisor({ providers: PROVIDERS, hasConfiguredProviders: true }));
+    monthlyBillMock.mockReturnValue(null);
+    render(<SavingsPage />);
+    expect(screen.queryByTestId('monthly-bill')).toBeNull();
+    expect(screen.queryByText('Behåll eller säg upp?')).toBeNull();
   });
 });

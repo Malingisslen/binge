@@ -1,6 +1,6 @@
 // Tests for the freshness PostToolUse hook (BIN-1009).
 //
-// Run: npm test — this file is matched by vitest.config.ts's `.claude/hooks/**` include,
+// Run: npm run test:process — this file is matched by vitest.config.ts's `.claude/hooks/**` include,
 // added in the same commit. A test file outside the runner's globs is silently never run
 // while passing when invoked by hand (BIN-802), so if you move this file, move that glob.
 //
@@ -38,6 +38,8 @@ import {
   matchesToken,
   isDossierStampSkipped,
   isMapStampSkipped,
+  stripWorktreePrefix,
+  mainCheckoutOf,
 } from './freshness.mjs';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -564,5 +566,78 @@ describe('toRepoRelative', () => {
   it('leaves a path that is already relative alone, minus a ./ prefix', () => {
     expect(toRepoRelative('./src/a.ts', 'C:/binge')).toBe('src/a.ts');
     expect(toRepoRelative('src/a.ts', 'C:/binge')).toBe('src/a.ts');
+  });
+});
+
+describe('an edit made inside a sprint worktree (BIN-1397)', () => {
+  // A sprint builder works in `.claude/worktrees/<name>/`, so its edits arrive with that
+  // prefix. Before the fix the repo-relative path began with `.claude/` and the map stamper's
+  // anti-loop guard skipped it — measured: an edit to a mapped file left NO flag.
+  it('stamps the map flag with the path inside the worktree, not the worktree path', () => {
+    const dir = makeFixture({ nodePath: 'src/components/settings/DataExportSection.tsx' });
+    try {
+      runHook(
+        JSON.stringify({
+          tool_name: 'Edit',
+          tool_input: { file_path: join(dir, '.claude', 'worktrees', 'agent-x', 'src', 'components', 'settings', 'DataExportSection.tsx') },
+        }),
+        dir,
+      );
+      expect(existsSync(flagIn(dir))).toBe(true);
+      expect(JSON.parse(readFileSync(flagIn(dir), 'utf8')).triggers).toEqual(['src/components/settings/DataExportSection.tsx']);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('stamps the owning role\'s dossier marker for the same edit', () => {
+    const dir = makeFixture({ ownedPattern: 'src/components/settings/', roleNum: '14' });
+    try {
+      runHook(
+        JSON.stringify({
+          tool_name: 'Edit',
+          tool_input: { file_path: join(dir, '.claude', 'worktrees', 'agent-x', 'src', 'components', 'settings', 'DataExportSection.tsx') },
+        }),
+        dir,
+      );
+      expect(readFileSync(markerIn(dir, '14'), 'utf8')).toMatch(/^src\/components\/settings\/DataExportSection\.tsx\t/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('still never stamps for the hook machinery itself', () => {
+    expect(stripWorktreePrefix('.claude/worktrees/agent-x/.claude/hooks/freshness.mjs')).toBe('.claude/hooks/freshness.mjs');
+    expect(isMapStampSkipped(stripWorktreePrefix('.claude/worktrees/agent-x/.claude/state/x.json'))).toBe(true);
+    expect(stripWorktreePrefix('.claude/state/workflow-map-stale.json')).toBe('.claude/state/workflow-map-stale.json');
+  });
+});
+
+describe('the hook running with a sprint worktree as its root (BIN-1397, #25 condition 3)', () => {
+  // The worktree's own `.claude/state/` is deleted with the worktree, so a flag written
+  // there is a work order nobody will ever read. It must land in the checkout above.
+  it('writes the flag into the main checkout, with the path inside the worktree', () => {
+    const dir = makeFixture({ nodePath: 'src/components/settings/DataExportSection.tsx' });
+    const wt = join(dir, '.claude', 'worktrees', 'agent-x');
+    try {
+      mkdirSync(wt, { recursive: true });
+      runHook(
+        JSON.stringify({
+          tool_name: 'Edit',
+          tool_input: { file_path: join(wt, 'src', 'components', 'settings', 'DataExportSection.tsx') },
+        }),
+        wt,
+      );
+      expect(existsSync(flagIn(wt))).toBe(false);
+      expect(JSON.parse(readFileSync(flagIn(dir), 'utf8')).triggers).toEqual(['src/components/settings/DataExportSection.tsx']);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('leaves a root that is not a sprint worktree alone', () => {
+    expect(mainCheckoutOf('C:/binge')).toBe('C:/binge');
+    expect(mainCheckoutOf(['C:', 'binge', '.claude', 'worktrees', 'sprint-x'].join('\\'))).toBe('C:/binge');
+    expect(mainCheckoutOf('C:/binge/.claude/worktrees/sprint-x/src')).toBe('C:/binge/.claude/worktrees/sprint-x/src');
   });
 });

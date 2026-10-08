@@ -3,13 +3,13 @@
 import { useMemo, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { ChevronDown, ChevronUp, Tv } from 'lucide-react';
+import { ChevronDown, Tv } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTVShow } from '@/hooks/useTMDB';
 import { currentSeasonToPrefetch, seasonPrefetchSpec } from '@/lib/tmdb/prefetch';
 import { usePageMeta } from '@/hooks/usePageMeta';
 import { JsonLd, tvSchema, breadcrumbSchema } from '@/components/title/JsonLd';
-import { posterUrl, profileUrl, logoUrl } from '@/lib/tmdb/client';
+import { posterUrl, posterSrcSet, profileUrl, logoUrl } from '@/lib/tmdb/client';
 import StatusButton from '@/components/title/StatusButton';
 import NotInterestedButton from '@/components/title/NotInterestedButton';
 import AddToListButton from '@/components/title/AddToListButton';
@@ -22,6 +22,7 @@ import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import RecapPanel from '@/components/title/RecapPanel';
 import { contiguousWatchedBoundary, inventoryFromSeasons } from '@/lib/recaps/progress';
 import TrailerSection from '@/components/ui/TrailerSection';
+import { pickTrailer } from '@/lib/trailer';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { NotFound } from '@/components/ui/NotFound';
 import { AvatarInitials } from '@/components/ui/AvatarInitials';
@@ -44,17 +45,26 @@ import FriendsWhoSaw from '@/components/title/FriendsWhoSaw';
 import { useEpisodeProgressWithSync } from '@/hooks/useEpisodeProgressWithSync';
 import { tvShowStatusLabel } from '@/lib/watchStatus';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
-import { buildContentFloor, hasSubstantialText } from '@/lib/seo/contentFloor';
+import { availabilityLine, buildContentFloor, hasSubstantialText } from '@/lib/seo/contentFloor';
 import { tvContentFloorInput } from '@/lib/seo/contentFloorInput';
-import { formatNextEpisodeLabel } from '@/lib/episodeLabel';
+import { formatNextEpisodeLabel, seriesYearSpan, upcomingEpisode } from '@/lib/episodeLabel';
+import { todayIso } from '@/lib/utils';
 import { canonicalProviderId, dedupeProvidersByCanonicalId, affiliateWrap } from '@/lib/tmdb/providers';
 import { seProviderIdsForRefresh, seSubscriptionProviderIdsForRefresh } from '@/lib/tmdb/seProviderIds';
 import ClientOnly from '@/components/utils/ClientOnly';
 import { useStreamingOffers } from '@/hooks/useStreamingOffers';
 import { CheapestPathVerdict } from '@/components/title/CheapestPathVerdict';
 import PriceHistoryChart from '@/components/title/PriceHistoryChart';
+import { TitleCrumb, GenreLinks, ProviderHubLinks } from '@/components/title/TitleHubLinks';
+import { AvailabilityTable } from '@/components/seo/AvailabilityTable';
+import { titleAvailability } from '@/lib/seo/titleAvailability';
 import { offerForProvider, isLeavingSoon, formatLeaving } from '@/lib/streaming/offers';
 import type { TMDBTVShow } from '@/types';
+import { trackEvent } from '@/lib/analytics';
+import ShareButton from '@/components/share/ShareButton';
+import { buttonClass } from '@/components/ui/Button';
+import { eyebrowClass } from '@/components/ui/Eyebrow';
+import { GENRE_LABELS } from '@/lib/tmdb/genreLabels';
 
 export default function TVShowPageClient({ id, initialData }: { id: string; initialData?: TMDBTVShow }) {
   const showId = parseInt(id, 10);
@@ -172,15 +182,19 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
     () => (show ? buildContentFloor(tvContentFloorInput(show)) : undefined),
     [show],
   );
+  // SEO-2: same as the movie page — availability as text on every page.
+  const availability = useMemo(
+    () => (show ? availabilityLine(tvContentFloorInput(show)) : undefined),
+    [show],
+  );
   usePageMeta({
     title: displayTitle
       ? `${displayTitle}${firstYear ? ` (${firstYear})` : ''} — var streamar jag?`
       : 'Serie',
     description: contentFloor?.description,
     ogImage: show?.poster_path ? posterUrl(show.poster_path, 'w500') ?? undefined : undefined,
-    // Tar bort catch-all-shellets noindex när TMDB bekräftat att serien finns.
-    // Pre-renderade /tv/[id] (topp-N) påverkas inte — egen statisk HTML.
-    indexable: !!show,
+    // Ingen `indexable` (ADR 0024): en serie utanför urvalet ska förbli noindex
+    // även efter hydrering. Förrenderade /tv/[id] har egen statisk HTML.
   });
 
   const watchlistItem = mounted && show ? getItem('tv', show.id) : null;
@@ -196,7 +210,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   }, [itemExists, showIdForEffect, showStatus, cachedTmdbStatus, updateTmdbStatus]);
 
   if (isLoading) return <LoadingView variant="detail" label="Laddar serien…" />;
-  if (!show) return <NotFound crumb="Serie" title="Serien hittades inte." body="Vi kunde inte hitta den här serien i TMDB." />;
+  if (!show) return <NotFound crumb="Serie" title="Serien hittades inte." body="Den här serien gick inte att hitta." />;
 
   const poster = posterUrl(show.poster_path, 'w500');
   const tone = toneForGenreIds(show.genres.map(g => g.id));
@@ -217,23 +231,23 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   const buy = providers?.buy ?? [];
   const hasRentBuy = rent.length > 0 || buy.length > 0;
   const yearStart = show.first_air_date?.substring(0, 4) ?? '—';
-  const yearEnd = show.status === 'Ended' ? show.last_air_date?.substring(0, 4) : '';
   // BIN-735 — see the paragraph render below (the movie sibling is identical).
   const overviewText = show.overview?.trim() ? show.overview : null;
   const needsContentFloorParagraph = !hasSubstantialText(show.overview);
-  const genres = show.genres.map(g => g.name).join(', ');
+  const genres = show.genres.map(g => GENRE_LABELS[g.id] ?? g.name).join(', ');
   const cast = show.credits?.cast?.slice(0, 10) ?? [];
   // BIN-187 — "Samla klart" (seasons leg): how many of this show's seasons the
   // user has fully completed. Cheap O(seasons) derive, so computed inline (not
   // memoised) to always reflect the latest episode progress.
   const seasonMeter = seasonCompletion(show.seasons, (s, ec) => getSeasonProgress(s, ec).watched);
-  const nextEp = show.next_episode_to_air;
+  // Jämförs mot dagens datum, så bara efter montering (ClientOnly nedan): den
+  // statiska HTML:en vet inte vilken dag den läses.
+  const nextEp = upcomingEpisode(show.next_episode_to_air, todayIso());
   // "Samma serie" — other TMDB entries for the same fictional show (split franchises
   // like Doctor Who). Static/curated; empty for the vast majority of shows.
   const relatedSeries = relatedSeriesFor(show.id);
   const creators = show.credits?.crew?.filter(c => c.job === 'Creator' || c.department === 'Creator') ?? [];
-  const trailer = show.videos?.results?.find(v => v.site === 'YouTube' && v.type === 'Trailer')
-    ?? show.videos?.results?.find(v => v.site === 'YouTube' && v.type === 'Teaser');
+  const trailer = pickTrailer(show.videos?.results);
   const imdbId = show.external_ids?.imdb_id;
   const statusButtonProps = {
     tmdbId: show.id,
@@ -257,21 +271,21 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   return (
     <>
       {/* Schema.org structured data — rich snippets + knowledge panel i Google */}
-      <JsonLd data={tvSchema(show)} />
+      <JsonLd data={tvSchema(show, { name: displayTitle, description: contentFloor?.description })} />
       <JsonLd data={breadcrumbSchema([
         { name: 'Binge.nu', url: 'https://binge.nu/' },
         { name: 'Serier', url: 'https://binge.nu/series/' },
         { name: displayTitle, url: `https://binge.nu/tv/${show.id}/` },
       ])} />
 
-      <div className="crumb">Bibliotek · serier · {displayTitle}</div>
+      <TitleCrumb kind="tv" title={displayTitle} />
 
       <div className="detail-hero">
         <div className="poster-wrap">
           <div className={`poster duo-${tone}`}>
             {poster ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={poster} alt={displayTitle} loading="eager" fetchPriority="high" decoding="async" width={342} height={513} />
+              <img src={poster} srcSet={posterSrcSet(show.poster_path)} sizes="(max-width: 760px) 140px, 240px" alt={displayTitle} loading="eager" fetchPriority="high" decoding="async" width={342} height={513} />
             ) : (
               <div style={{
                 width: '100%', height: '100%',
@@ -292,13 +306,13 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
               </span>
             )}
             <span className="kind">
-              SERIE · {yearStart}{yearEnd ? `–${yearEnd}` : '–'}
+              SERIE · {seriesYearSpan(show.first_air_date, show.last_air_date, show.status === 'Ended')}
             </span>
-            {genres && <span className="kind">{genres}</span>}
+            <GenreLinks kind="tv" genres={show.genres} />
           </div>
           <h1>{displayTitle}</h1>
           {creators.length > 0 && (
-            <div style={{ marginTop: 10, fontSize: 12, color: 'var(--ink-3)', letterSpacing: 0.04 }}>
+            <div style={{ marginTop: 10, fontSize: 'var(--fs-sm)', color: 'var(--ink-3)', letterSpacing: 0.04 }}>
               {creators.length === 1 ? 'skapare' : 'skapare'}:{' '}
               {creators.map((c, i) => (
                 <span key={c.id}>
@@ -316,6 +330,9 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
               reasoning. The meta description keeps the 60-char rule unchanged. */}
           {overviewText && <p className="syn">{overviewText}</p>}
           {needsContentFloorParagraph && <p className="syn">{contentFloor?.paragraph}</p>}
+          {!needsContentFloorParagraph && availability && (
+            <p style={{ marginTop: 10, fontSize: 'var(--fs-base)', color: 'var(--ink-2)' }}>{availability}</p>
+          )}
           <div className="stats">
             <span><span className="k">säsonger</span><strong>{show.number_of_seasons}</strong></span>
             {show.number_of_episodes && (
@@ -334,7 +351,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
               <StatusButton {...statusButtonProps} />
               <div>
                 {watchlistItem && (
-                  <div style={{ fontSize: 10.5, color: 'var(--ink-3)', letterSpacing: 0.12, textTransform: 'uppercase', marginBottom: 3 }}>
+                  <div className={eyebrowClass({ size: 'xs', className: 'mb-1' })}>
                     Ditt betyg
                   </div>
                 )}
@@ -354,6 +371,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
                 releaseYear={show.first_air_date ? parseInt(show.first_air_date.substring(0, 4), 10) : null}
               />
               <NotInterestedButton tmdbId={show.id} mediaType="tv" title={displayTitle} />
+              <ShareButton path={`/tv/${show.id}/`} title={displayTitle} text={`Se var ${displayTitle} går att streama.`} surface="title" />
             </div>
           </ClientOnly>
 
@@ -366,9 +384,9 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
             />
           )}
 
-          {(onSubscription.length > 0 || hasRentBuy) && (
+          {onSubscription.length > 0 && (
             <div className="providers-row">
-              {onSubscription.length > 0 && <span className="lab">finns på</span>}
+              <span className="lab">finns på</span>
               {onSubscription.map(p => {
                 const logo = logoUrl(p.logo_path);
                 const offer = offerForProvider(offers, canonicalProviderId(p.provider_id));
@@ -384,65 +402,63 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
                   return (
                     <span key={p.provider_id} className="inline-flex items-center gap-1">
                       {offer?.link ? (
-                        <a href={affiliateWrap(p.provider_id, offer.link)} target="_blank" rel="noopener noreferrer">{imgEl}</a>
+                        <a href={affiliateWrap(p.provider_id, offer.link)} target="_blank" rel="noopener noreferrer" onClick={() => trackEvent('provider_clicked', { providerId: canonicalProviderId(p.provider_id), offerType: offer.type, mediaType: 'tv' })}>{imgEl}</a>
                       ) : imgEl}
                       {leavingLabel && (
-                        <span className="rounded-sm bg-acc-soft text-acc-deep px-1 text-[11px]">{leavingLabel}</span>
+                        <span className="rounded-sm bg-acc-soft text-acc-deep px-1 text-xs">{leavingLabel}</span>
                       )}
                     </span>
                   );
                 }
-                return <ProviderTag key={p.provider_id} provider={p} size="md" offer={offer} nowMs={now} />;
+                return <ProviderTag key={p.provider_id} provider={p} size="md" offer={offer} nowMs={now} mediaType="tv" />;
               })}
-              {hasRentBuy && (
-                <button
-                  onClick={() => setShowRentBuy(!showRentBuy)}
-                  className="btn btn-ghost btn-sm"
-                  style={{ marginLeft: 4 }}
-                >
-                  Hyr & köp {showRentBuy ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                </button>
-              )}
             </div>
           )}
+          <ProviderHubLinks providerIds={onSubscription.map(p => p.provider_id)} />
 
           <FreeWatchBadge free={free} ads={ads} />
 
-          {showRentBuy && hasRentBuy && (
-            <div style={{ marginTop: 10, fontSize: 11, color: 'var(--ink-3)' }}>
+          {/* SEO-2: <details> keeps rent/buy in the static HTML; see the movie page. */}
+          {hasRentBuy && (
+            <details className="group" style={{ marginTop: 10 }} onToggle={e => setShowRentBuy(e.currentTarget.open)}>
+              <summary className={buttonClass({ variant: 'ghost', size: 'sm', className: 'list-none [&::-webkit-details-marker]:hidden' })} style={{ cursor: 'pointer' }}>
+                Hyr & köp <ChevronDown size={12} className="transition-transform group-open:rotate-180" />
+              </summary>
+            <div style={{ marginTop: 10, fontSize: 'var(--fs-xs)', color: 'var(--ink-3)' }}>
               {rent.length > 0 && (
                 <div>
-                  <span style={{ letterSpacing: 0.12, textTransform: 'uppercase', marginRight: 6 }}>Hyr:</span>
-                  {rent.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" offer={offerForProvider(offers, canonicalProviderId(p.provider_id))} nowMs={now} />)}
+                  <span className={eyebrowClass({ size: 'xs', className: 'mr-1.5' })}>Hyr:</span>
+                  {rent.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" offer={offerForProvider(offers, canonicalProviderId(p.provider_id))} nowMs={now} mediaType="tv" />)}
                 </div>
               )}
               {buy.length > 0 && (
                 <div>
-                  <span style={{ letterSpacing: 0.12, textTransform: 'uppercase', marginRight: 6 }}>Köp:</span>
-                  {buy.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" offer={offerForProvider(offers, canonicalProviderId(p.provider_id))} nowMs={now} />)}
+                  <span className={eyebrowClass({ size: 'xs', className: 'mr-1.5' })}>Köp:</span>
+                  {buy.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" offer={offerForProvider(offers, canonicalProviderId(p.provider_id))} nowMs={now} mediaType="tv" />)}
                 </div>
               )}
               {/* BIN-354: rent price-history stat row, same as the film page —
                   lazy (only when this disclosure is open). */}
-              <PriceHistoryChart tmdbId={show.id} mediaType="tv" nowMs={now} />
+              {showRentBuy && <PriceHistoryChart tmdbId={show.id} mediaType="tv" nowMs={now} />}
             </div>
+            </details>
           )}
 
           {(subscription.length > 0 || hasRentBuy) && (
             <div style={{ marginTop: 8 }}>
-              <JustWatchCredit />{' · '}<span className="text-ink-3 text-[11px]">Tillgänglighet via Movie of the Night</span>
+              <JustWatchCredit />{' · '}<span className="text-ink-3 text-xs">Tillgänglighet via Movie of the Night</span>
             </div>
           )}
         </div>
       </div>
 
       <div style={{ marginTop: 18 }}>
-        {nextEp && (
-          <div className="chip acc" style={{ padding: '6px 12px' }}>
-            Nästa avsnitt: {formatNextEpisodeLabel(nextEp)}
-          </div>
-        )}
         <ClientOnly>
+          {nextEp && (
+            <div className="chip acc" style={{ padding: '6px 12px' }}>
+              Nästa avsnitt: {formatNextEpisodeLabel(nextEp)}
+            </div>
+          )}
           {watchlistItem?.status === 'sedd' && nextEp && (
             <div style={{
               marginTop: 8,
@@ -451,7 +467,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
               border: '1px solid var(--rule)',
               borderRadius: 6,
               display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-              fontSize: 13.5, color: 'var(--ink-2)',
+              fontSize: 'var(--fs-base)', color: 'var(--ink-2)',
             }}>
               <span>Du har markerat serien som sedd, men nya avsnitt är på väg.</span>
               <StatusButton {...statusButtonProps} />
@@ -508,8 +524,10 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
         </section>
       </ClientOnly>
 
+      <AvailabilityTable title={displayTitle} availability={titleAvailability(show['watch/providers']?.results?.SE)} />
+
       {/* Trailer — raw 16:9 video (preview surface). Döljs helt när embed saknas/failar (M1). */}
-      <TrailerSection video={trailer} />
+      <TrailerSection video={trailer} backdropPath={show.backdrop_path} />
 
       {/* Cast — raw 1:1 circular portraits (preview surface) */}
       {cast.length > 0 && (
@@ -540,8 +558,8 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
                     <AvatarInitials name={person.name} size={72} />
                   )}
                 </div>
-                <div style={{ fontSize: 13, fontWeight: 500, lineHeight: 1.25 }}>{person.name}</div>
-                <div style={{ fontSize: 10.5, color: 'var(--ink-3)', marginTop: 2, lineHeight: 1.2 }}>
+                <div style={{ fontSize: 'var(--fs-base)', fontWeight: 500, lineHeight: 1.25 }}>{person.name}</div>
+                <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--ink-3)', marginTop: 2, lineHeight: 1.2 }}>
                   {person.character}
                 </div>
               </Link>

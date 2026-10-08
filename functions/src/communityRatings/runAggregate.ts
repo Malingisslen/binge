@@ -144,9 +144,7 @@ function numberOr0(v: unknown): number {
  * `Number('') === 0` phantom (#7 QA named this as the mutation that survives a
  * naive finite-check). A non-finite or non-positive id is SKIPPED with a warning —
  * never written as `movie_NaN`, and never as `movie_0`, which BIN-646 established
- * is no genuine title. The guard is unconditional on purpose: BIN-624 may make the
- * server parser strict, turning `movie_042` into NaN instead of 42, and this code
- * must be correct either way rather than bound to that ticket's outcome.
+ * is no genuine title.
  *
  * The legacy bare-numeric branch preserves the ORIGINAL trust model: the id part
  * still comes from the path, only the PREFIX comes from the body's mediaType — so a

@@ -28,7 +28,11 @@ import { pickFocalEntry, focalEntryKey } from '@/components/home/focalPick';
 import { seedCalendarEntries } from '@/lib/calendar/seedEntries';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import { useSignedOutRedirect } from '@/hooks/useSignedOutRedirect';
+import GuestCostDemo from '@/components/pricing/GuestCostDemo';
+import BrandMark from '@/components/ui/BrandMark';
 import type { TMDBSearchResult } from '@/types';
+import { buttonClass } from '@/components/ui/Button';
+import { cardClass } from '@/components/ui/Card';
 
 // LandingPage tar trending-sektionen som ReactNode-prop istället för en
 // withTrending-flagga: auth-loading-grenen (den som pre-renderas) skickar en
@@ -36,7 +40,11 @@ import type { TMDBSearchResult } from '@/types';
 // HTML får crawlbara titellänkar — medan anonym-grenen skickar den hookade
 // <LandingPageTrending> (live-fetch med seed-fallback). Två syskon-
 // komponenter, aldrig en villkorlig hook.
-function LandingPage({ trending }: { trending?: React.ReactNode }) {
+//
+// guestDemo följer samma mönster: bara anonym-grenen skickar <GuestCostDemo>
+// (#26:s villkor 5). Auth-loading-grenen renderas även för återvändande
+// inloggade (den döljs med CSS), så demon får aldrig stå där.
+function LandingPage({ trending, guestDemo }: { trending?: React.ReactNode; guestDemo?: React.ReactNode }) {
   const goToLogin = useSignedOutRedirect();
   const { searchQuery, setSearchQuery, debouncedQuery, searchFocused, setSearchFocused, searchRef, clearSearch } = useSearchBox();
 
@@ -44,17 +52,18 @@ function LandingPage({ trending }: { trending?: React.ReactNode }) {
     <div className="min-h-screen bg-bg">
       <section className="bg-sidebar-bg text-white">
         <div className="max-w-[640px] mx-auto px-4 py-16 text-center">
-          <h1 className="text-[32px] font-extrabold text-acc-deep mb-2">
-            binge<span className="font-normal text-white/60 text-[22px]">.nu</span>
+          <h1 className="inline-flex items-center gap-3 text-5xl font-extrabold tracking-[-0.04em] text-white mb-2">
+            <BrandMark size={36} />
+            binge.nu
           </h1>
-          <p className="text-[17px] font-semibold mb-2 max-w-[520px] mx-auto">
-            Håll koll på vad du tittar på — och var det streamas.
+          <p className="text-xl font-semibold mb-2 max-w-[520px] mx-auto">
+            Se vad du betalar för streaming, och vad du kan pausa.
           </p>
           <p className="text-sm text-white/60 mb-5 max-w-[480px] mx-auto leading-relaxed">
-            Se vilken streamingtjänst som har filmen eller serien du söker, håll reda på kommande avsnitt och samla allt på ett ställe.
+            Binge håller koll på dina serier och säger till när en tjänst inte används, med svenska priser.
           </p>
           <div className="relative max-w-[440px] mx-auto mb-4" ref={searchRef}>
-            <div className="flex items-center gap-[5px] px-3 py-[8px] bg-white/[0.08] border border-white/10 rounded-sm">
+            <div className="flex items-center gap-1.5 px-3 py-2 bg-white/[0.08] border border-white/10 rounded-sm">
               <Search size={14} className="text-white/50 shrink-0" />
               <input
                 type="text"
@@ -91,27 +100,28 @@ function LandingPage({ trending }: { trending?: React.ReactNode }) {
               // back out by LoginPage's own uid effect.
               goToLogin();
             }}
-            className="px-5 py-[7px] bg-acc-deep text-white border-none rounded-sm cursor-pointer font-[inherit] text-sm font-semibold mb-8"
+            className={buttonClass({ variant: 'acc', className: 'mb-8' })}
           >
-            Logga in med Google
+            Skapa konto gratis
           </button>
           <div className="flex justify-center gap-8 flex-wrap max-w-[520px] mx-auto">
             <div className="text-center">
-              <div className="text-xs font-bold text-acc-deep mb-[3px]">Streaming-koll</div>
+              <div className="text-xs font-bold text-acc mb-1">Streaming-koll</div>
               <div className="text-xxs text-white/50 leading-snug max-w-[140px]">Se direkt vilken tjänst som har titeln.</div>
             </div>
             <div className="text-center">
-              <div className="text-xs font-bold text-acc-deep mb-[3px]">Avsnittkalender</div>
+              <div className="text-xs font-bold text-acc mb-1">Avsnittskalender</div>
               <div className="text-xxs text-white/50 leading-snug max-w-[140px]">Missa aldrig ett nytt avsnitt.</div>
             </div>
             <div className="text-center">
-              <div className="text-xs font-bold text-acc-deep mb-[3px]">Streamingrådgivaren</div>
+              <div className="text-xs font-bold text-acc mb-1">Streamingrådgivaren</div>
               <div className="text-xxs text-white/50 leading-snug max-w-[140px]">Pausa tjänster du inte använder.</div>
             </div>
           </div>
         </div>
       </section>
 
+      {guestDemo}
       {trending}
     </div>
   );
@@ -124,8 +134,8 @@ function TrendingSection({ items }: { items: TMDBSearchResult[] }) {
 
   return (
     <section className="max-w-[1000px] mx-auto px-4 py-8">
-      <div className="bg-surface border border-rule rounded-sm">
-        <div className="px-3 py-[6px] border-b border-rule-2">
+      <div className={cardClass()}>
+        <div className="px-3 py-1.5 border-b border-rule-2">
           <h2 className="text-sm font-bold text-ink-2 m-0">Trendande just nu</h2>
         </div>
         <TitleGrid items={items} />
@@ -156,11 +166,11 @@ function EmptyLibrary() {
       <p>
         Lägg till några serier eller filmer du tittar på så börjar veckan ovan
         fyllas med dina avsnitt — och tjänster du inte använder dyker upp
-        som möjliga pauser i högerkolumnen.
+        som möjliga pauser i Streamingrådgivaren.
       </p>
       <div className="actions">
-        <Link href="/series/" className="btn">Utforska serier</Link>
-        <Link href="/films/" className="btn btn-ghost">Utforska filmer</Link>
+        <Link href="/series/" className={buttonClass()}>Utforska serier</Link>
+        <Link href="/films/" className={buttonClass({ variant: 'ghost' })}>Utforska filmer</Link>
       </div>
     </div>
   );
@@ -389,7 +399,7 @@ export default function HomePageClient({
   // (Gatear på uid — inte user — eftersom profilen numera laddas parallellt
   // och kan landa något senare än auth-beskedet.)
   if (!uid) {
-    return <LandingPage trending={<LandingPageTrending seed={seed} />} />;
+    return <LandingPage trending={<LandingPageTrending seed={seed} />} guestDemo={<GuestCostDemo />} />;
   }
 
   // Auth resolverat med user: dashboard.

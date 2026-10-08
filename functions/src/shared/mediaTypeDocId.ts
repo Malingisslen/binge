@@ -14,8 +14,8 @@
  *
  * `parseTmdbIdFromDocId` below is deliberately MORE PERMISSIVE than the client
  * copy in `src/lib/mediaTypeDocId.ts`: it still resolves aliased ids the client
- * rejects since BIN-618, because these server read sites were never audited for
- * shapes only a function writes (BIN-624). Both halves are pinned by
+ * rejects since BIN-618. The split is decided and stays: `## BIN-624` in .claude/rules/accepted-deviations.md.
+ * Both halves are pinned by
  * `src/lib/mediaTypeDocId.parity.test.ts` — tightening this file without going
  * through that test is the resync BIN-636 exists to catch.
  */
@@ -70,9 +70,7 @@ export function parseTmdbIdFromDocId(docId: string): number {
  * mirror of its twin in `src/lib/mediaTypeDocId.ts` — keep those two in sync.
  * The claim stops at this function: the two MODULES are no longer mirrors
  * (`parseTmdbIdFromDocId` above stays permissive here and is strict there since
- * BIN-618), so this line is not a licence to resync the pair — not without
- * BIN-624's decision, which is what audits the server read sites and says
- * whether the split closes.
+ * BIN-618), so this line is not a licence to resync the pair: `## BIN-624` in .claude/rules/accepted-deviations.md.
  */
 export function parseMediaTypeFromDocId(docId: string): MediaType | null {
   if (docId.startsWith('movie_')) return 'movie';

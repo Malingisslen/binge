@@ -21,6 +21,10 @@ const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffec
  *    klobbrar en senare concurrent edit — eller profil-sync-effekten — som redan
  *    hunnit byta ref:en.
  *
+ * `commit` får både hela spegeln och den ändrade nyckeln. Servern ska skrivas per
+ * nyckel: en merge-skrivning av hela kartan tar aldrig bort en nyckel som saknas i den,
+ * så ett rensat värde kom tillbaka vid nästa laddning (BIN-1435).
+ *
  * `commit` läses via en ref, så den returnerade setter:n är stabil även om
  * anroparen skickar in en ny closure varje render.
  *
@@ -38,7 +42,7 @@ export function useOptimisticMirrorField<V>(
   /** The account this mirror belongs to (uid). `null`/`undefined` = signed out. */
   ownerKey: string | null | undefined,
   source: Record<number, V> | undefined,
-  commit: (next: Record<number, V>) => Promise<void>,
+  commit: (next: Record<number, V>, changed: { key: number; value: V | null }) => Promise<void>,
 ): (key: number, value: V | null) => Promise<void> {
   const mirrorRef = useRef<Record<number, V>>({});
   const commitRef = useRef(commit);
@@ -61,7 +65,7 @@ export function useOptimisticMirrorField<V>(
     else next[key] = value;
     mirrorRef.current = next;
     try {
-      await commitRef.current(next);
+      await commitRef.current(next, { key, value });
     } catch (err) {
       if (mirrorRef.current === next) mirrorRef.current = prev;
       throw err;

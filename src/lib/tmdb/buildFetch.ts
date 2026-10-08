@@ -1,7 +1,7 @@
 // Byggtids-wrapper runt TMDB-detalj-fetchar (server-only, importeras bara från
 // route-filernas generateStaticParams/generateMetadata/page).
 //
-// Varför: build:en pre-renderar ~25k titelsidor, var och en med ett TMDB-anrop.
+// Varför: build:en pre-renderar titelsidor, var och en med ett TMDB-anrop.
 // Under last stryper TMDB och anropen köar bakom klientens 8-slot-semafor; en
 // sida som väntar förbi Next 60s-tak fäller HELA exporten. En AbortSignal.timeout
 // gör att ett anrop ger upp i god tid → fetchern kastar → sidans
@@ -39,7 +39,7 @@ export const REFRESH_AFTER_MS = 6 * 24 * 60 * 60 * 1000; // 6 dagar
 // Default-tak för nätverkshämtningar per bygge (per worker). Schemalagd deploy
 // höjer det via TMDB_BUILD_REFRESH_BUDGET för en full refresh.
 // Tajt nog att ett KALLT kod-bygge (alla entries stale → budget förbrukas helt)
-// + 25k-sidors render ryms väl under push-byggets timeout även en trög TMDB-dag.
+// + render ryms väl under push-byggets timeout även en trög TMDB-dag.
 // (3000 tippade över 30 min på en kall cache 2026-06-15.) Cachen värms ändå upp
 // av den veckovisa schemalagda full-refreshen; per-bygge-freshness är sekundärt.
 const DEFAULT_REFRESH_BUDGET = 1500;
@@ -68,10 +68,9 @@ let networkFetches = 0;
 // registrerade bara `fetchForBuild` — som inte anropas EN ENDA GÅNG under
 // `Collecting page data`. Andra versionen registrerade sitemap:en, som körs i en
 // senare fas. Det som faktiskt körs i den hängande fasen är
-// `generateStaticParams` i movie/[id] (1000 list-anrop), tv/[id] (1000) och
-// person/[id] (~2100 via collectPersonIds). Alla tre anropar `trackBuildCall`.
-// Övriga generateStaticParams (provider, genre, billigaste, forsvinner och
-// catch-all [...path]) är statiska listor utan nätverk.
+// `generateStaticParams` i movie/[id] och tv/[id] (deras /discover-sidor, ADR
+// 0024). Härled vilka som registrerar: `git grep -ln "trackBuildCall" -- src/app`.
+// Övriga generateStaticParams är statiska listor utan nätverk.
 //
 // INTE instrumenterad: allt som hämtar i den SENARE fasen `Generating static
 // pages` — app/page.tsx, discover, films, series, provider/[id] och
@@ -92,8 +91,8 @@ const STUCK_AFTER_MS = BUILD_FETCH_TIMEOUT_MS + 10_000;
 // Rapportera de äldsta, inte alla. Se kommentaren i tick-loopen.
 const STUCK_REPORT_LIMIT = 5;
 // En AGGREGAT-post (en etikett som täcker en hel pipeline av anrop) har inget
-// eget 20 s-tak — `collectPersonIds` kör två sekventiella allSettled-faser, så
-// ~40 s är normalt och friskt. Med samma tröskel som ett enskilt anrop skulle
+// eget 20 s-tak — en pipeline av sekventiella faser tar längre än ett anrop.
+// Med samma tröskel som ett enskilt anrop skulle
 // varje grönt bygge skriva STUCK, och en rad som alltid syns slutar betyda
 // något. Egen, generös tröskel i stället.
 const AGGREGATE_STUCK_AFTER_MS = 4 * 60_000;
@@ -141,7 +140,7 @@ function startWatchdog(): void {
       logLine(`[build-fetch]   … och ${stuck.length - STUCK_REPORT_LIMIT} till`);
     }
     // Ingen avstängning. Första versionen tystnade när budgeten var slut och
-    // inget var i flykt — vilket är exakt läget på svansen av ett 25k-sidorsbygge,
+    // inget var i flykt — vilket är exakt läget på svansen av ett bygge,
     // alltså där en hängning är billigast att missa. En tyst vakthund går inte
     // att skilja från en som aldrig startade. Kostnaden för att låta den gå är
     // en rad var 30:e sekund per worker: ~350 rader på det längsta byggfönstret.
@@ -181,16 +180,102 @@ export function startBuildWatchdog(): void {
 export async function trackBuildCall<T>(
   label: string,
   run: () => Promise<T>,
-  opts?: { aggregate?: boolean },
+  opts?: { aggregate?: boolean; group?: BuildCallGroup },
 ): Promise<T> {
   const token = ++inFlightSeq;
-  inFlight.set(token, { label, startedAt: Date.now(), aggregate: opts?.aggregate === true });
+  const aggregate = opts?.aggregate === true;
+  inFlight.set(token, { label, startedAt: Date.now(), aggregate });
   startWatchdog();
+  const stats = !aggregate && opts?.group ? statsFor(opts.group) : null;
+  if (stats) stats.started += 1;
+  let work: Promise<T>;
   try {
-    return await run();
-  } finally {
+    work = run();
+  } catch (err) {
     inFlight.delete(token);
+    throw err;
   }
+  // Registret släpps när anropet SJÄLVT avgörs, inte när anroparen slutar vänta:
+  // ett övergivet anrop ska synas som STUCK så länge det lever.
+  work.then(() => inFlight.delete(token), () => inFlight.delete(token));
+  // Ett aggregat har inget 20 s-tak att mäta mot; det skyddas av withAggregateTimeout.
+  if (aggregate) return work;
+  return abandonAfter(work, STUCK_AFTER_MS, label, stats);
+}
+
+// ── BIN-1423: övergivna anrop räknas per urvalstyp ───────────────────────────
+//
+// Utbytesraden i selectionManifest.ts läser räknarna före och efter sin
+// härledning och skriver "Övergivna anrop N av M".
+
+/** Urvalstypen ett byggtidsanrop hör till. */
+export type BuildCallGroup = 'movie' | 'tv' | 'person';
+
+/** Startade och övergivna enskilda anrop i en grupp, med de övergivnas etiketter i ordning. */
+export interface BuildCallStats {
+  started: number;
+  abandoned: number;
+  abandonedLabels: string[];
+}
+
+const groupStats = new Map<BuildCallGroup, BuildCallStats>();
+
+function statsFor(group: BuildCallGroup): BuildCallStats {
+  let stats = groupStats.get(group);
+  if (!stats) {
+    stats = { started: 0, abandoned: 0, abandonedLabels: [] };
+    groupStats.set(group, stats);
+  }
+  return stats;
+}
+
+/** En kopia av gruppens räknare just nu, för att jämföra före och efter en härledning. */
+export function buildCallStats(group: BuildCallGroup): BuildCallStats {
+  const stats = statsFor(group);
+  return { started: stats.started, abandoned: stats.abandoned, abandonedLabels: [...stats.abandonedLabels] };
+}
+
+/**
+ * Tak för ABANDONED-raderna per worker. Varje övergivet anrop räknas ändå.
+ */
+export const ABANDONED_REPORT_LIMIT = 10;
+let abandonedLinesWritten = 0;
+
+// BIN-1420: körning 34104584836 (veckobygget 2026-09-07) hade
+// `params:popular-movies/p281` STUCK i 9 217 s trots sin 20 s-abort, och hela
+// filmhärledningen väntade på den sidan tills REFRESH_DERIVE_TIMEOUT_MS bröt
+// den. Loggen säger inte var anropet stod. Oavsett var: ett enskilt anrop som
+// överlevt sin abort överges här, så att `Promise.allSettled` i collectIds kan
+// räkna sidan som misslyckad och resten av listan blir klar.
+function abandonAfter<T>(work: Promise<T>, ms: number, label: string, stats: BuildCallStats | null): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expiry = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      if (stats) {
+        stats.abandoned += 1;
+        stats.abandonedLabels.push(label);
+      }
+      abandonedLinesWritten += 1;
+      // `::warning::` så att GitHub visar den i körningens sammanfattning: en vecka
+      // med övergivna sidor ska synas som en mindre vecka, inte som en vanlig.
+      if (abandonedLinesWritten <= ABANDONED_REPORT_LIMIT) {
+        logLine(
+          `::warning::[build-fetch] ABANDONED ${label} — ingen avgörelse ${Math.round(ms / 1000)} s efter start, ` +
+            `trots sin abort efter ${Math.round(BUILD_FETCH_TIMEOUT_MS / 1000)} s; bygget går vidare utan den (BIN-1420)`,
+        );
+      } else if (abandonedLinesWritten === ABANDONED_REPORT_LIMIT + 1) {
+        logLine(
+          `::warning::[build-fetch] fler övergivna anrop skrivs inte ut här; se [selection]-raderna (BIN-1423)`,
+        );
+      }
+      reject(new Error(`${label}: övergiven efter ${Math.round(ms / 1000)} s (BIN-1420)`));
+    }, ms);
+    // Samma regel som vakthunden: timern får aldrig hålla processen vid liv.
+    timer.unref?.();
+  });
+  return Promise.race([work, expiry]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
 }
 
 /** Nollställ budget-räknaren, vakthunden och in-flight-registret. Endast för tester. */
@@ -198,6 +283,8 @@ export function __resetBuildFetchState(): void {
   networkFetches = 0;
   inFlight.clear();
   inFlightSeq = 0;
+  groupStats.clear();
+  abandonedLinesWritten = 0;
   stopWatchdog();
   logLine = (msg) => process.stderr.write(`${msg}\n`);
 }
@@ -208,7 +295,7 @@ export function buildFetchCount(): number {
 }
 
 /** AbortSignal med byggtids-deadline. Används även för list-fetcharna i
- *  generateStaticParams (getPopular…/getTopRated…). */
+ *  generateStaticParams. */
 export function buildSignal(): AbortSignal {
   return AbortSignal.timeout(BUILD_FETCH_TIMEOUT_MS);
 }
@@ -232,22 +319,9 @@ export const RESCUE_DERIVE_TIMEOUT_MS = 15 * 60_000;
 // Veckobygget SKA få ta 1,5–2 h (eget 175-minuterstak). Ett gemensamt kort tak
 // hade fällt den körning som är hela poängen med regimen.
 //
-// ASYMMETRI ATT KÄNNA TILL: räddningsparet fungerar som avsett (15 inom 45 —
-// gott om tid att bygga färdigt på det gamla urvalet), men det HÄR paret gör det
-// inte. Slår 150-minuterstaket till återstår ~25 min av 175 för en sidrendrering
-// som tar 90–120 min, så den mjuka reträtten hinner inte i mål och körningen
-// slutar som steg-timeout ändå. Det är ofarligt — ett rött veckobygge är precis
-// beteendet före BIN-823, och det deployar ingenting — men konstanten ska inte
-// läsas som ett fungerande skydd på refresh-vägen. Där är reträtten best-effort.
-//
 // SÄNK DEN INTE PÅ KÄNSLA. Granskningen 2026-08-08 föreslog 45 min ("en frisk
-// härledning tar ~40 s"). Men de 40 sekunderna gäller VARM cache; den enda kalla
-// mätningen vi har är 2 672 s = 44,5 min för person ensam — ett 45-minuterstak
-// hade dödat den med en halv minuts marginal, alltså precis den körning taket
-// ska rädda. Taket ska rymmas i `175 − rendreringstiden`, och rendreringen mättes
-// till 90–120 min, vilket ger ett fönster på 55–85 min. 44,5 under 55 med tio minuters
-// marginal — för tunt för att välja blint när båda ändarna är enskilda mätningar.
-// Rätt värde kräver några veckors data. Spårat i BIN-826.
+// härledning tar ~40 s"). Byggtiderna som 150 vilar på: `docs/org/adr/0018-seo-selection-ratchet.md`,
+// avsnittet "Efterföljare 2026-10-02 (BIN-1114): 150 minuter står kvar".
 export const REFRESH_DERIVE_TIMEOUT_MS = 150 * 60_000;
 
 /**
@@ -260,8 +334,7 @@ export const REFRESH_DERIVE_TIMEOUT_MS = 150 * 60_000;
  * ingen övre gräns i den konstruktionen, bara varje enskild plats i den.
  *
  * Vid timeout returneras `{ ok: false }` och den övergivna promisen lämnas att
- * lösa sig själv. Varje enskild förfrågan i den dör fortfarande på sin egen
- * abort, så den kan inte hänga FASEN — men påstå inte att den är borta:
+ * lösa sig själv. Påstå inte att den är borta:
  * mätningen ovan är just en pipeline som levde 2 672 s med 20-sekundersaborter
  * på varje led. Takets EGEN timer är unref:ad; den övergivna kön är det inte —
  * dess köade semaforväntare och 429-backoff (upp till 5 s per försök, se
@@ -270,7 +343,7 @@ export const REFRESH_DERIVE_TIMEOUT_MS = 150 * 60_000;
  * reträttbygget rendrerar.
  * Det är samma konkurrens som ADR 0018 redovisar under "Rättelse om
  * budgetkonkurrens", och den är accepterad — inte bortkonstruerad.
- * Anroparen faller tillbaka på befintligt urval + frön, och täckningsgolvet
+ * Anroparen faller tillbaka på befintligt urval, och täckningsgolvet
  * avgör om det är gott nog att deploya eller om bygget ska fällas.
  */
 export async function withAggregateTimeout<T>(

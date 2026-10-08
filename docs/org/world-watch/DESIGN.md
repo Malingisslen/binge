@@ -143,6 +143,14 @@ Consumers that must tell the two apart read the router's `reasonCode`
 (`high-stakes` / `owned` / `unmapped-code` / `doc-only` / `no-code-paths`), never the
 prose in `reason`. The tier vocabulary is unchanged (`top` / `medium` / `skip`).
 
+**Decision 1 (BIN-1426, Malin 2026-10-05).** The tier rules above now describe a change
+routed as a feature: `route.mjs --feature`, which is also what the sprint engine's
+`delivery.router.command` runs. By default a change owes a critique only when it touches a
+high-stakes path or a path a review gate in `.claude/shared-plugin.json` covers. Anything
+else routes `skip`, with `reasonCode: "ordinary"` when a code path or a code-owning role is
+involved, and ships on typecheck, lint and tests. `docs/org/route.mjs` is the executable
+form, and its POLICIES comment states the rule.
+
 The role→path mapping (seeded from the reviewer routing, now generalized to all 28
 roles via the ownership map):
 
@@ -271,8 +279,8 @@ code:
   role should own the file — baselining is how a gap becomes permanent.
 - `--check` grades the COMMITTED map without writing anything.
 
-The same check runs under `npm test`, which gates CI and the deploy, so skipping it here
-only moves the failure later.
+The same check runs under `npm run test:process`, which the deploy runs as a warning, so
+skipping it here only moves the failure later.
 
 **Contract.** The hook only ever writes documentation-freshness markers — never touches
 app code, never blocks, fails open. It skips the docs that *define* the system

@@ -7,10 +7,11 @@ Filen är en JSON med följande top-level-struktur (se
 
 ```jsonc
 {
-  "schemaVersion": "2.2",
+  "schemaVersion": "2.4",
   "exportedAt": "2026-04-24T10:30:00.000Z",
   "userId": "firebase-uid",
   "readme": "…",
+  "skippedGroups": [{ "groupId": "…", "groupName": "…", "missing": ["groupMemberRows"] }],
   "tmdbAttribution": "…",
   "justwatchAttribution": "…",
   "profile": { /* users/{uid} — privat, ägar-låst */ },
@@ -39,7 +40,8 @@ Filen är en JSON med följande top-level-struktur (se
   "sessions":        [ … ],
   "groupMemberships":[ … ],
   "householdContributions": [ … ],
-  "groupMemberRows": [ … ]
+  "groupMemberRows": [ … ],
+  "groupTitleRatings": [ … ]
 }
 ```
 
@@ -47,7 +49,7 @@ Filen är en JSON med följande top-level-struktur (se
 
 | Fält | Källa | Innehåll |
 |------|-------|----------|
-| `profile` | `users/{uid}` (ägar-låst läsning, BIN-505) | displayName, email, hemkommun, photoURL, username, bio, isPublic, myProviders, defaultView, providerCosts, providerCampaigns, providerTiers, providerPauses, calibrationGenres, termsAcceptedAt, termsVersion, onboardingCompletedAt, notificationSettings, createdAt, updatedAt. Denna doc är sedan BIN-505 **bara läsbar för dig** — känsliga fält (email, hemkommun, kostnader) läcker inte längre till andra. |
+| `profile` | `users/{uid}` (ägar-låst läsning, BIN-505) | displayName, email, hemkommun, photoURL, username, bio, isPublic, myProviders, defaultView, providerCosts, providerCampaigns, providerTiers, providerPauses (med `remind` per paus, BIN-1442), pauseReminderNext, calibrationGenres, termsAcceptedAt, termsVersion, onboardingCompletedAt, notificationSettings, createdAt, updatedAt, secondWeekVisitAt. Denna doc är sedan BIN-505 **bara läsbar för dig** — känsliga fält (email, hemkommun, kostnader) läcker inte längre till andra. |
 | `publicProfile` | `publicProfiles/{uid}` (BIN-505) | Den publika projektionen andra användare ser: displayName, username, photoURL, bio, createdAt. INGA känsliga fält (ingen email/hemkommun/kostnader/myProviders). `null` om den aldrig backfillats. |
 | `watchlist` | `users/{uid}/watchlist/{tmdbId}` | Per-titel: status, betyg, progress (TV), rewatchCount, genreIds, visibility. (Anteckningar ligger sedan BIN-505 i `watchlistNotes`, inte här.) Plus TMDB-metadata cachead som bekvämlighet (denormaliserad; ingår i exporten): title, posterPath, releaseYear, totalSeasons, tmdbStatus, runtime, providers, subscriptionProviders, providersCheckedAt, nextAirDate, nextAirCode, nextAirProvider, nextAirUpdatedAt, digitalReleaseDate |
 | `watchlistTags` | `users/{uid}/watchlistTags/{tmdbId}` | Dina egna fritext-taggar per titel (privata; egen ägar-skyddad subcollection) |
@@ -70,10 +72,12 @@ Filen är en JSON med följande top-level-struktur (se
 | `listFollows` | `users/{uid}/listFollows/{listId}` | Listor du följer (BIN-96) |
 | `lists` | `lists/{listId}` (where uid==me) | Dina egenkurerade listor + items |
 | `editableLists` | `lists/{listId}` (editors array-contains me) | Listor du är medredigerare i (BIN-100) |
-| `sessions` | `sessions/{sessionId}` (where hostUid==me) | Tillsammans-sessioner du är värd för |
+| `sessions` | `sessions/{sessionId}` (where hostUid==me) | Tillsammans-sessioner du är värd för. Ditt deltagande och dina röster i någon annans session ingår inte; de raderas när sessionen gallras (BIN-1342, se `.claude/rules/accepted-deviations.md`) |
 | `groupMemberships` | `groups/{groupId}` (array-contains me) | Grupper du är medlem i + gruppdata |
 | `householdContributions` | `groups/{groupId}/household/{uid}` (endast grupper du opt:at in i, BIN-184) | Ditt delade hushålls-bidrag per grupp: providerIds, providerCosts (kr/tjänst, ordinarie pris — inga tier-namn), providerCampaigns (kampanjpris + slutdatum), activeProviderIds (tjänster med minst en osedd backlog-titel — usage-härlett, inte självrapporterat), updatedAt |
 | `groupMemberRows` | `groups/{groupId}/members/{uid}` (bara din egen rad, BIN-1172) | Raden om dig som gruppens medlemmar kan läsa, med alla fält den bär |
+| `groupTitleRatings` | `groups/{groupId}/watchlist/{titleId}` → `memberRatings.<uid>` (bara ditt eget värde, BIN-1337) | Ditt betyg per titel i varje grupps lista, som gruppens medlemmar kan se: groupId, titleId, tmdbId, mediaType, title, rating (heltal 1–10, en annan skala än `watchlist.rating`). id = `<groupId>/<titleId>` |
+| `skippedGroups` | läsningarna bakom de tre fälten ovan (BIN-1357) | En post per grupp där en läsning av hushållsbidraget, medlemsraden eller titellistan misslyckades: groupId, groupName (`null` om gruppen saknar ett namn i text), missing (de av `householdContributions`, `groupMemberRows`, `groupTitleRatings` som saknar gruppens data). Exporten avbryts inte av ett sådant fel (BIN-1352); filen är ofullständig för gruppen som står här. En rad som inte finns är inget fel och märks inte |
 
 ## Datumserialisering
 
@@ -105,6 +109,9 @@ Admin-SDK:s `Timestamp.fromMillis()`.
   Tidpunkten då du skickade en inbjudan går därför inte att få ut. Härled
   läsregeln:
   `grep -n -A 4 "match /users/{uid}/groupInvites/{groupId}" firestore.rules`
+- Räkningen av hur funktioner används, `eventStats/{YYYY-MM-DD}` (BIN-1438). Den är
+  inte per användare: varje dokument är en summa per dag utan koppling till vem som
+  gjorde något, så det finns inget i den som är ditt att exportera.
 
 ## Vad du får ut
 
@@ -164,3 +171,11 @@ Dokumentera ändringar i CHANGELOG.md-sektionen nedan.
   medlemsrad i varje grupp du är med i, `groups/{groupId}/members/{uid}`, med
   `id` = groupId). Kontoraderingen raderade redan raden; exporten tog inte med den.
   Additivt fält → minor-bump 2.1 → 2.2.
+- **2.3 (2026-09-28, BIN-1337)** — Lade till `groupTitleRatings` (ditt eget betyg
+  per titel i varje grupps lista, `id` = `<groupId>/<titleId>`). Bara ditt eget
+  värde ur radens `memberRatings`, aldrig de andra medlemmarnas. Additivt fält →
+  minor-bump 2.2 → 2.3.
+- **2.4 (2026-09-30, BIN-1357)** — Lade till `skippedGroups` (grupper vars
+  läsning av hushållsbidrag, medlemsrad eller titellista misslyckades, med de
+  fält som saknar gruppens data). Förut hoppades en sådan grupp över utan spår,
+  och `readme` kallade filen komplett. Additivt fält → minor-bump 2.3 → 2.4.

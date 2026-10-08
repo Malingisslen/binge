@@ -5,7 +5,7 @@
  * in docs/data-retention-policy.md so it doesn't accumulate forever — growing
  * Firestore storage + read cost on the 25 SEK/mån cap, and holding data longer
  * than the policy allows:
- *   - sessions/{id}        — past `expiresAt`, or (legacy, no expiresAt) >30 days
+ *   - sessions/{id}        — when `isExpiredSession` in ./logic.ts says so
  *   - users/{uid}/notifications/{id} — older than 90 days
  *   - groups/{id}/joinAttempts/{uid} — older than 1 hour (BIN-329): a spent
  *     plaintext invite token left by an abandoned/failed-cleanup token-join, or
@@ -37,7 +37,7 @@
  *     rather than an unfinished Art. 17 request — Malin's decision 2026-08-11,
  *     conditional on this running. See docs/data-retention-policy.md.
  *   - users/{uid} — the WHOLE tree, plus publicProfiles/{uid}, plus everything
- *     owned through a FIELD (the roster is FIELD_OWNED_CATEGORIES) — for uids Auth
+ *     owned through a FIELD — for uids Auth
  *     does not know at all, observed absent since an earlier run (BIN-1023):
  *     an account deleted from the Firebase Console runs no client cascade, so
  *     every document survives an erasure its owner can no longer retry (they
@@ -88,8 +88,25 @@ import { getAuth } from 'firebase-admin/auth';
 import { runRetentionCleanup, type CleanupIo, type ScanKind } from './runCleanup';
 import { handoverEstimate, type CategoryFindings } from './fieldOwned';
 import { isEmptyExcept } from '../groupHandover/logic';
-import { runGroupHandover } from '../groupHandover/runHandover';
-import { adminHandoverIo } from '../groupHandover/adminIo';
+import { planSweptMemberGroupErasure, runGroupHandover, runSweptMemberGroupErasure } from '../groupHandover/runHandover';
+import { adminHandoverIo, adminLeaverIo } from '../groupHandover/adminIo';
+import { defineSecret } from 'firebase-functions/params';
+import { sendAdminSystemNotification } from '../util/notifyOnce';
+import { applicationDefault } from 'firebase-admin/app';
+import {
+  BACKUP_CHECK_TIMEOUT_MS,
+  RETENTION_TIMEOUT_SECONDS,
+  RUN_HEALTH_DOC_PATH,
+  backupReadFromResponse,
+  backupsListUrl,
+  runWatched,
+  type BackupEntry,
+  type BackupRead,
+  type RunHealthRecord,
+} from './runHealth';
+
+// BIN-1317: the recipient of the run's own failure alert, as in streamingOffers.
+const ADMIN_UID = defineSecret('ADMIN_UID');
 
 /** Firestore's per-commit write ceiling is 500; leave headroom like the client. */
 const BATCH_SIZE = 450;
@@ -324,6 +341,14 @@ const adminIo: CleanupIo = {
           deletePaths: await paths(db.collectionGroup('groupInvites').where('fromUid', '==', uid)),
           arrayStrips: [],
         };
+      case 'rotationReminders':
+        // BIN-1279. A top-level collection, so the single-field `uid` equality
+        // needs no index override. Whether the writer has always set `uid`:
+        //   git log -p -S "markerRef.set" -- functions/src/rotationReminder/index.ts
+        return {
+          deletePaths: await paths(db.collection('rotationReminderState').where('uid', '==', uid)),
+          arrayStrips: [],
+        };
       case 'groups':
         // Handled by `commitGroupHandover`; the loop never asks for this.
         return { deletePaths: [], arrayStrips: [] } satisfies CategoryFindings;
@@ -386,11 +411,75 @@ const adminIo: CleanupIo = {
     const memberUids = (snap.get('memberUids') as string[] | undefined) ?? [];
     return isEmptyExcept(memberUids, uid) ? 'still-empty' : 'gained-member';
   },
+
+  // BIN-1294 — the groups the uid was only a MEMBER of, through the same shared
+  // functions and Admin port the account-delete button's door uses.
+  planMemberGroupErasure: async (uid) => {
+    const db = getFirestore();
+    return planSweptMemberGroupErasure({ ...adminHandoverIo(db, logger), ...adminLeaverIo(db, logger) }, uid);
+  },
+
+  commitMemberGroupErasure: async (uid, progress) => {
+    const db = getFirestore();
+    await runSweptMemberGroupErasure({ ...adminHandoverIo(db, logger), ...adminLeaverIo(db, logger) }, uid, progress);
+  },
 };
 
+/**
+ * BIN-1422: lists the database's backups through the Firestore Admin API, as the
+ * function's own service account. Every way it can fail is a failed read, never
+ * an empty list, so a lost permission is not reported as missing backups.
+ */
+async function readBackups(): Promise<BackupRead> {
+  const projectId = process.env.GCLOUD_PROJECT;
+  if (!projectId) return { ok: false, reason: 'GCLOUD_PROJECT saknas' };
+  const { access_token: token } = await applicationDefault().getAccessToken();
+  const res = await fetch(backupsListUrl(projectId), {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(BACKUP_CHECK_TIMEOUT_MS),
+  });
+  if (!res.ok) return backupReadFromResponse(res.status, null);
+  return backupReadFromResponse(res.status, (await res.json()) as { backups?: BackupEntry[]; unreachable?: string[] });
+}
+
+/**
+ * BIN-1317: the schedule wrapper also watches the run. The order of the steps and
+ * every decision are in `runWatched` (./runHealth.ts); this supplies the ports.
+ */
 export const retentionCleanup = onSchedule(
-  { schedule: 'every 24 hours', region: 'europe-west1', timeoutSeconds: 300, memory: '512MiB' },
+  {
+    schedule: 'every 24 hours',
+    region: 'europe-west1',
+    timeoutSeconds: RETENTION_TIMEOUT_SECONDS,
+    memory: '512MiB',
+    secrets: [ADMIN_UID],
+  },
   async () => {
-    await runRetentionCleanup(adminIo);
+    const healthRef = getFirestore().doc(RUN_HEALTH_DOC_PATH);
+    await runWatched({
+      now: () => Date.now(),
+      readHealth: async () => ((await healthRef.get()).data() as RunHealthRecord | undefined) ?? null,
+      writeHealth: async (patch) => {
+        await healthRef.set(patch, { merge: true });
+      },
+      notify: sendAdminSystemNotification,
+      readBackups,
+      sweep: async (tap) => {
+        await runRetentionCleanup({
+          ...adminIo,
+          log: {
+            info: (message, data) => {
+              logger.info(message, data);
+              tap.onInfo(message);
+            },
+            error: (message, data) => {
+              tap.onError(message);
+              logger.error(message, data);
+            },
+          },
+        });
+      },
+      logError: (message, data) => logger.error(message, data),
+    });
   },
 );

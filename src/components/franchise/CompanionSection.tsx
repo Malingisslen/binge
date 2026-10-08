@@ -23,6 +23,7 @@ import { companionsFor, type CompanionTitle } from '@/lib/franchise/companions';
 import { useToast } from '@/contexts/ToastContext';
 import { DELETION_IN_PROGRESS_MESSAGE, isDeletionInProgressError } from '@/lib/deletionInProgressError';
 import type { TMDBMovie } from '@/types';
+import { Button } from '@/components/ui/Button';
 
 /**
  * Cross-type franchise link: a TV series that continues as a film (Breaking Bad →
@@ -198,15 +199,15 @@ function CompanionEnriched({ companions }: { companions: CompanionTitle[] }) {
 
       {films.length > 0 && unseenCount > 0 && (
         <div style={{ marginBottom: 14 }}>
-          <button
+          <Button
             onClick={() => setShowStreaming((s) => !s)}
-            className="btn btn-ghost btn-sm"
+            variant="ghost" size="sm"
             aria-expanded={showStreaming}
           >
             {showStreaming ? 'Dölj tillgänglighet' : 'Var streamar den?'}
-          </button>
+          </Button>
           {showStreaming && (
-            <div style={{ marginTop: 8, fontSize: 13, color: 'var(--ink-2)' }}>
+            <div style={{ marginTop: 8, fontSize: 'var(--fs-base)', color: 'var(--ink-2)' }}>
               {streamingLoading ? (
                 <span className="text-ink-3">Hämtar tillgänglighet…</span>
               ) : streamSummary.considered === 0 ? (
@@ -238,7 +239,7 @@ function CompanionEnriched({ companions }: { companions: CompanionTitle[] }) {
                   seen={seen}
                 />
                 {movie && !inLibrary && (
-                  <button
+                  <Button
                     onClick={() => (signedOut ? goToLogin() : void addOne(film, movie))}
                     // Signed-out is decided FIRST, above the library gate: they
                     // never get a listener, so `libraryKnown` is false for them
@@ -248,12 +249,12 @@ function CompanionEnriched({ companions }: { companions: CompanionTitle[] }) {
                     // be KNOWN — addOne early-returns in that window, so an enabled
                     // button would be a silent dead click.
                     disabled={!signedOut && (addingId != null || !libraryKnown)}
-                    className="btn btn-ghost btn-sm inline-flex items-center gap-1"
+                    variant="ghost" size="sm" className="inline-flex items-center gap-1"
                     style={{ marginTop: 6 }}
                   >
                     <Plus size={12} />
                     Lägg i vill se
-                  </button>
+                  </Button>
                 )}
               </div>
             );

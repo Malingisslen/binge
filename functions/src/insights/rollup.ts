@@ -14,7 +14,9 @@
  */
 
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
+import { getAuth } from 'firebase-admin/auth';
 import { resolveTmdbId } from '../shared/mediaTypeDocId';
+import { onlyUserWatchlistDocs } from '../shared/watchlistPath';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { logger } from 'firebase-functions/v2';
 import {
@@ -26,11 +28,12 @@ import {
 import type { RollupData } from './types';
 // BIN-326: pure helpers live in rollup.helpers.ts (no firebase-admin import) so
 // they unit-test under the root vitest toolchain — see that file's header.
-import { topTitles, expiredInsightDocIds, canonicalProviderId, type WatchlistLite, tallyProviderIds } from './rollup.helpers';
+import { topTitles, expiredInsightDocIds, canonicalProviderId, type WatchlistLite, tallyProviderIds, activeUserCounts, type AuthActivityLite } from './rollup.helpers';
 // BIN-350: dated history doc-id keys on the Stockholm wall-clock day so it agrees
 // with the /insikter reader range BIN-343 already switched to Stockholm (otherwise
 // the near-midnight baseline read can land a day off the UTC-keyed rollup doc).
 import { stockholmDayId } from '../util/dayId';
+import { cohortCreatedRange, secondWeekReturn } from './secondWeek';
 
 /** Page size for the bounded scan (BIN-156) — mirrors the sibling watchlist
  *  scanners (streamingOffers/retentionCleanup/reclaimOrphanFollows). Never
@@ -42,10 +45,29 @@ const PAGE_SIZE = 2000;
 // 90 days is plenty for the Fas-2 trend charts.
 const RETENTION_DAYS = 90;
 
+/** Upper bound on the second-week cohort read (BIN-1442). Hitting it marks the
+ *  rollup partial rather than reporting a figure computed on a cut-off cohort. */
+const COHORT_READ_LIMIT = 5000;
+
+/** Accounts created inside the reported cohort range, two fields each. */
+async function readSecondWeekCohort(now: Date): Promise<{ rows: FirebaseFirestore.DocumentData[]; truncated: boolean }> {
+  const { start, end } = cohortCreatedRange(now);
+  const snap = await getFirestore()
+    .collection('users')
+    .where('createdAt', '>=', Timestamp.fromDate(start))
+    .where('createdAt', '<', Timestamp.fromDate(end))
+    .select('createdAt', 'secondWeekVisitAt')
+    .limit(COHORT_READ_LIMIT)
+    .get();
+  return { rows: snap.docs.map((d) => d.data()), truncated: snap.size >= COHORT_READ_LIMIT };
+}
+
 /** Read every watchlist doc (narrowed fields) across all users, paginated. */
-async function readWatchlist(): Promise<WatchlistLite[]> {
+async function readWatchlist(): Promise<{ rows: WatchlistLite[]; docsRead: number }> {
   const db = getFirestore();
   const out: WatchlistLite[] = [];
+  // Billed reads, counted before the BIN-1291 filter drops group rows.
+  let docsRead = 0;
   let cursor: FirebaseFirestore.QueryDocumentSnapshot | undefined;
   for (;;) {
     let q = db
@@ -55,7 +77,9 @@ async function readWatchlist(): Promise<WatchlistLite[]> {
       .limit(PAGE_SIZE);
     if (cursor) q = q.startAfter(cursor);
     const snap = await q.get();
-    for (const d of snap.docs) {
+    docsRead += snap.size;
+    // BIN-1291: group rows are not a user's library and must not skew the counts.
+    for (const d of onlyUserWatchlistDocs(snap.docs)) {
       const x = d.data();
       out.push({
         status: String(x.status ?? ''),
@@ -77,7 +101,7 @@ async function readWatchlist(): Promise<WatchlistLite[]> {
     if (snap.size < PAGE_SIZE) break;
     cursor = snap.docs[snap.docs.length - 1];
   }
-  return out;
+  return { rows: out, docsRead };
 }
 
 /** Count a collection cheaply with the aggregation API (1 read). */
@@ -98,12 +122,36 @@ async function countActiveSessions(): Promise<number> {
   return agg.data().count;
 }
 
+/**
+ * Page through Firebase Auth and keep only each account's activity clocks. Listing
+ * Auth users is not a Firestore read, so this adds nothing to `readsUsed`.
+ */
+async function readAuthActivity(): Promise<AuthActivityLite[]> {
+  const out: AuthActivityLite[] = [];
+  let pageToken: string | undefined;
+  do {
+    const page = await getAuth().listUsers(1000, pageToken);
+    for (const u of page.users) {
+      out.push({
+        // Holds while the app has no custom-token or other provider-less sign-in; a
+        // future one would make its real users read as anonymous and drop out here.
+        anonymous: u.providerData.length === 0,
+        lastSignInTime: u.metadata.lastSignInTime,
+        lastRefreshTime: u.metadata.lastRefreshTime,
+      });
+    }
+    pageToken = page.pageToken;
+  } while (pageToken);
+  return out;
+}
+
 export async function computeRollup(): Promise<RollupData> {
   let partial = false;
 
   let watchlist: WatchlistLite[] = [];
+  let watchlistReads = 0;
   try {
-    watchlist = await readWatchlist();
+    ({ rows: watchlist, docsRead: watchlistReads } = await readWatchlist());
   } catch (err) {
     logger.error('rollup: watchlist scan failed', err);
     partial = true;
@@ -126,6 +174,33 @@ export async function computeRollup(): Promise<RollupData> {
     safeCount(() => countActiveSessions()),
   ]);
 
+  let activeUsers: RollupData['activeUsers'];
+  try {
+    activeUsers = activeUserCounts(await readAuthActivity(), Date.now());
+  } catch (err) {
+    logger.error('rollup: auth activity scan failed', err);
+    partial = true;
+  }
+
+  // BIN-1442: how many new accounts came back during their second week. Only the
+  // two counts are stored, never which accounts.
+  let secondWeek: RollupData['secondWeekReturn'];
+  let cohortReads = 0;
+  try {
+    const now = new Date();
+    const { rows, truncated } = await readSecondWeekCohort(now);
+    cohortReads = rows.length;
+    if (truncated) {
+      logger.error('rollup: second-week cohort hit the read limit', { limit: COHORT_READ_LIMIT });
+      partial = true;
+    } else {
+      secondWeek = secondWeekReturn(rows, now);
+    }
+  } catch (err) {
+    logger.error('rollup: second-week cohort scan failed', err);
+    partial = true;
+  }
+
   // Fold TMDB's alias ids onto the canonical service before tallying, so a
   // service stored under several ids (e.g. Max = 384/1899/1825 across docs of
   // different vintages) counts as ONE row instead of splitting the panel.
@@ -146,14 +221,17 @@ export async function computeRollup(): Promise<RollupData> {
       activeSessions,
       groups,
     },
+    ...(activeUsers ? { activeUsers } : {}),
+    ...(secondWeek ? { secondWeekReturn: secondWeek } : {}),
     statusDistribution: statusDistribution(watchlist),
     mediaTypeSplit: mediaTypeSplit(watchlist),
     ratingsHistogram: ratingsHistogram(watchlist),
     topTitles: topTitles(watchlist, 10),
     topProviders: tallyTop(providers, 10).map((t) => ({ providerId: t.value, count: t.count })),
     topGenres: tallyTop(genres, 10).map((t) => ({ genreId: t.value, count: t.count })),
-    // 4 aggregation reads + one read per watchlist doc.
-    readsUsed: watchlist.length + 4,
+    // 4 aggregation reads + one read per scanned watchlist doc, group rows included,
+    // + one per cohort account read for secondWeekReturn.
+    readsUsed: watchlistReads + 4 + cohortReads,
     partial,
   };
 }

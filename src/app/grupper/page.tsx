@@ -20,6 +20,11 @@ import {
 import { useMyGroups, useMyGroupInvites } from '@/hooks/useGroups';
 import { getPublicGroupName } from '@/lib/firebase/groups';
 import type { GroupInvite } from '@/lib/firebase/groups';
+import { Eyebrow } from '@/components/ui/Eyebrow';
+import { buttonClass, Button } from '@/components/ui/Button';
+import { thClass } from '@/components/ui/tableHead';
+import { cardClass } from '@/components/ui/Card';
+import { shownSenderName } from '@/lib/friendName';
 
 export default function GrupperPage() {
   return <AuthGuard><GrupperList /></AuthGuard>;
@@ -41,7 +46,7 @@ function GrupperList() {
         </p>
         {groups.length > 0 && (
           <div className="actions">
-            <Link href="/grupper/ny" className="btn">
+            <Link href="/grupper/ny" className={buttonClass()}>
               <Plus size={12} /> Ny grupp
             </Link>
           </div>
@@ -52,11 +57,11 @@ function GrupperList() {
       {loading && <LoadingView label="Laddar grupper…" />}
 
       {!loading && groups.length === 0 && (
-        <div className="bg-surface border border-rule rounded-sm p-6 text-center">
+        <div className={cardClass('p-6 text-center')}>
           <p className="text-sm text-ink-2 mb-3">Du är inte med i några grupper än.</p>
           <Link
             href="/grupper/ny"
-            className="inline-flex items-center gap-1 px-3 py-[5px] bg-acc-deep text-white rounded-sm text-xs font-semibold no-underline"
+            className={buttonClass({ variant: 'acc', size: 'sm', className: 'inline-flex items-center gap-1 no-underline' })}
           >
             <Plus size={11} />
             Skapa din första grupp
@@ -65,15 +70,15 @@ function GrupperList() {
       )}
 
       {!loading && groups.length > 0 && (
-        <div className="bg-surface border border-rule rounded-sm overflow-hidden">
+        <div className={cardClass('overflow-hidden')}>
           <table className="w-full text-xs">
             <thead>
-              <tr className="bg-rule-2/40">
-                <th className="text-left px-3 py-[6px] text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">Namn</th>
-                <th className="text-left px-3 py-[6px] text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">Medlemmar</th>
-                <th className="text-left px-3 py-[6px] text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">Provider-läge</th>
-                <th className="text-left px-3 py-[6px] text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">Roll</th>
-                <th className="text-left px-3 py-[6px] text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">Uppdaterad</th>
+              <tr>
+                <th className={thClass('text-left px-3')}>Namn</th>
+                <th className={thClass('text-left px-3')}>Medlemmar</th>
+                <th className={thClass('text-left px-3')}>Tjänster</th>
+                <th className={thClass('text-left px-3')}>Roll</th>
+                <th className={thClass('text-left px-3')}>Uppdaterad</th>
               </tr>
             </thead>
             <tbody>
@@ -163,10 +168,10 @@ function PendingInvites() {
   };
 
   return (
-    <div className="bg-surface border border-rule rounded-sm mb-4 overflow-hidden">
-      <div className="px-3 py-[6px] border-b border-rule-2 text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">
+    <div className={cardClass('mb-4 overflow-hidden')}>
+      <Eyebrow className="px-3 py-1.5 border-b border-rule-2">
         Inbjudningar ({invites.length})
-      </div>
+      </Eyebrow>
       <ul className="divide-y divide-rule-2">
         {invites.map(inv => (
           <InviteRow
@@ -216,7 +221,7 @@ function useInviteIdentity(invite: GroupInvite) {
   const senderQuery = useSenderProfile(invite.fromUid);
   return {
     groupName: groupQuery.data ?? invite.groupName,
-    fromDisplayName: senderQuery.data?.displayName ?? invite.fromDisplayName,
+    fromDisplayName: shownSenderName(senderQuery.data, invite.fromDisplayName),
   };
 }
 
@@ -243,20 +248,20 @@ function InviteRow({
           : <div className="text-xxs text-ink-3 truncate">{fromDisplayName} bjöd in dig</div>}
       </div>
       <div className="flex gap-1">
-        <button
+        <Button
           onClick={onAccept}
           disabled={busy || blocked !== null}
-          className="px-2 py-[2px] text-xxs border border-acc-deep bg-acc-deep text-white rounded-sm cursor-pointer font-[inherit] disabled:opacity-60"
+          variant="acc" size="xs" className="disabled:opacity-60"
         >
           Acceptera
-        </button>
-        <button
+        </Button>
+        <Button
           onClick={onDecline}
           disabled={busy}
-          className="px-2 py-[2px] text-xxs border border-rule bg-surface text-ink-2 rounded-sm cursor-pointer font-[inherit] hover:bg-bg-2 disabled:opacity-60"
+          variant="ghost" size="xs" className="disabled:opacity-60"
         >
           Avböj
-        </button>
+        </Button>
       </div>
     </li>
   );

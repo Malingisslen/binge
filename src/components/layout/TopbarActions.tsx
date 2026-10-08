@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { Fragment, useState, useRef, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { Bell, Users } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
@@ -10,10 +10,13 @@ import { useMySessions } from '@/hooks/useMySessions';
 import { useClickOutside } from '@/hooks/useClickOutside';
 import { useSenderProfile } from '@/hooks/useSenderProfile';
 import { getProvider } from '@/lib/tmdb/providers';
+import { notificationSections } from '@/lib/notificationSections';
 import { useSignedOutRedirect } from '@/hooks/useSignedOutRedirect';
 import { useFriendActionAlert } from '@/hooks/useFriendActionAlert';
 import { FRIEND_FAILURE_TEXT } from '@/lib/friendActionText';
 import type { FriendRequest } from '@/lib/firebase/friends';
+import { Button } from '@/components/ui/Button';
+import { shownSenderName } from '@/lib/friendName';
 
 // Right-hand cluster of the new topbar: sessions popover, notifications bell
 // popover, and the user avatar (or "Logga in" if signed out). Extracted from
@@ -156,17 +159,17 @@ export default function TopbarActions() {
                   ))}
                 </>
               )}
-              {notifications.length > 0 && (
-                <>
+              {notificationSections(notifications).map((section, si) => (
+                <Fragment key={section.heading}>
                   <div className="popover-head">
-                    <span>Streamingnyheter</span>
-                    {providerUnreadCount > 0 && (
+                    <span>{section.heading}</span>
+                    {si === 0 && providerUnreadCount > 0 && (
                       <button onClick={markAllRead} className="popover-action-link">
                         Markera alla lästa
                       </button>
                     )}
                   </div>
-                  {notifications.slice(0, 10).map(n => {
+                  {section.items.map(n => {
                     // BIN-163 veckodigest — rollup-kort, inte tmdbId-formad.
                     // Länkar till biblioteket istället för en titelsida.
                     if (n.kind === 'weekly_digest') {
@@ -182,20 +185,34 @@ export default function TopbarActions() {
                         </Link>
                       );
                     }
-                    // BINGE-9: system-notiser (admin-varningar från backend, t.ex.
-                    // Cineasterna-synk) är inte tmdbId-formade — länka till deras
-                    // actionUrl och visa body, aldrig en /tv/undefined-titel+länk.
                     if (n.kind === 'system') {
-                      return (
-                        <Link
-                          key={n.id}
-                          href={n.actionUrl || '/insikter'}
-                          onClick={() => { markRead(n.id); setBellOpen(false); }}
-                          className={`popover-row${n.read ? '' : ' is-unread'}`}
-                        >
+                      // BIN-1259: ett kort UTAN actionUrl renderas som en knapp,
+                      // inte som en länk. Reservvägen `|| '/insikter'` skickade
+                      // varje sådant kort till adminsidan — harmlöst så länge
+                      // bara adminvarningar bar den här formen, men anmälarens
+                      // besked gör det inte, och det har medvetet ingen sida att
+                      // öppna: rapporten är läsbar bara för admin.
+                      const body = (
+                        <>
                           <div className="popover-row-title">{n.title}</div>
                           {n.body && <div className="popover-row-meta">{n.body}</div>}
+                        </>
+                      );
+                      const onSelect = () => { markRead(n.id); setBellOpen(false); };
+                      const rowClass = `popover-row${n.read ? '' : ' is-unread'}`;
+                      return n.actionUrl ? (
+                        <Link key={n.id} href={n.actionUrl} onClick={onSelect} className={rowClass}>
+                          {body}
                         </Link>
+                      ) : (
+                        <button
+                          key={n.id}
+                          type="button"
+                          onClick={onSelect}
+                          className={`${rowClass} popover-row-btn`}
+                        >
+                          {body}
+                        </button>
                       );
                     }
                     const provider = n.providerId != null ? getProvider(n.providerId) : undefined;
@@ -225,8 +242,8 @@ export default function TopbarActions() {
                       </Link>
                     );
                   })}
-                </>
-              )}
+                </Fragment>
+              ))}
             </div>
           )}
         </div>
@@ -346,19 +363,19 @@ function FriendRequestRow({
 }) {
   const { data: sender } = useSenderProfile(request.fromUid);
   const { failedAction, run } = useFriendActionAlert();
-  const displayName = sender?.displayName ?? request.fromDisplayName;
+  const displayName = shownSenderName(sender, request.fromDisplayName);
   const username = sender?.username ?? request.fromUsername;
   return (
     <div className="popover-row friend-req">
       <div className="popover-row-title">{displayName}</div>
-      {username && <div className="popover-row-meta">@{username}</div>}
+      {username && username !== displayName && <div className="popover-row-meta">@{username}</div>}
       <div className="popover-actions">
-        <button onClick={run('accept', onAccept)} className="btn btn-sm btn-acc">
+        <Button onClick={run('accept', onAccept)} variant="acc" size="sm">
           Acceptera
-        </button>
-        <button onClick={run('decline', onDecline)} className="btn btn-sm btn-ghost">
+        </Button>
+        <Button onClick={run('decline', onDecline)} variant="ghost" size="sm">
           Avböj
-        </button>
+        </Button>
       </div>
       {/* Both buttons are live at once. The alert names the LATEST click's action:
           every click clears the flag first, so a second click abandons the first. */}

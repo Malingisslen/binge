@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  availabilityLine,
   buildContentFloor,
   buildPersonDescription,
   hasSubstantialText,
@@ -291,5 +292,30 @@ describe('hasSubstantialText — the single threshold both surfaces read', () =>
     const { description } = buildContentFloor({ ...movieBase, overview });
     expect(description).not.toMatch(/\n/);
     expect(description).toContain('drömdelningsteknik. Han får');
+  });
+});
+
+describe('availabilityLine — the text answer every title page carries (SEO-2)', () => {
+  it('names the streaming service and, separately, where to rent or buy', () => {
+    expect(availabilityLine(movieBase)).toBe(
+      'Inception streamas just nu på Netflix i Sverige. Den går också att hyra eller köpa via SF Anytime.',
+    );
+  });
+
+  it('is the bare streaming sentence when nothing is for rent or sale', () => {
+    expect(availabilityLine({ ...movieBase, providers: { stream: ['Netflix'], rent: [], buy: [] } })).toBe(
+      'Inception streamas just nu på Netflix i Sverige.',
+    );
+  });
+
+  it('leads with rent/buy, once, when nothing streams', () => {
+    const line = availabilityLine({ ...movieBase, providers: { stream: [], rent: ['SF Anytime'], buy: ['Apple TV'] } });
+    expect(line).toBe('Inception går att hyra eller köpa digitalt i Sverige, till exempel via SF Anytime och Apple TV.');
+  });
+
+  it('never claims availability it was not given', () => {
+    expect(availabilityLine({ ...movieBase, providers: { stream: [], rent: [], buy: [] } })).toBe(
+      'Inception finns ännu inte på någon streamingtjänst i Sverige.',
+    );
   });
 });

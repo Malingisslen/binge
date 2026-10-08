@@ -8,12 +8,16 @@ import { useWatchlist } from '@/hooks/useWatchlist';
 import { useSearch } from '@/hooks/useTMDB';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
+import { resolveEffectiveMonthlyCost } from '@/lib/advisor/effectiveCost';
+import { isEstimatedMonthlyCost, summarizeMonthlySpend } from '@/lib/advisor/costEstimate';
+import { formatKr } from '@/lib/formatKr';
 import { mergeUserDoc } from '@/lib/firebase/userDocWrite';
 import { trackEvent } from '@/lib/analytics';
 import { posterUrl, getDisplayTitle, getReleaseYear, isAddableMediaType } from '@/lib/tmdb/client';
 import { toneForGenreIds, toneForId } from '@/lib/duotone';
 import { buildWatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
 import { takeNextPath } from '@/lib/nextPath';
+import { clearGuestSelection, loadGuestSelection, type GuestSelection } from '@/lib/guestProviders';
 import { useToast } from '@/contexts/ToastContext';
 import { DELETION_IN_PROGRESS_MESSAGE, isDeletionInProgressError } from '@/lib/deletionInProgressError';
 import {
@@ -23,14 +27,16 @@ import {
   LIBRARY_LOADING,
 } from '@/lib/watchlist/libraryHoldCopy';
 import type { TMDBSearchResult, WatchStatus } from '@/types';
+import { Button } from '@/components/ui/Button';
+import { cardClass } from '@/components/ui/Card';
 
 /**
  * Onboarding-flöde för nya användare. 4 steg:
  *
  * 1. Välkommen + value prop
- * 2. Välj streamingtjänster (defaultar till de största svenska)
+ * 2. Välj streamingtjänster och nivå (inget förvalt — paket I, 2026-10-05)
  * 3. Lägg till första titeln (med förslag + sök)
- * 4. Valfri /kalibrera + klar-skärm
+ * 4. Besked i kr för de valda tjänsterna + valfri /kalibrera
  *
  * State hålls i ett enkelt step-index. Vi persisterar inte mid-flow — om
  * användaren laddar om får de börja från början. Enkelt och OK för v1.
@@ -39,8 +45,6 @@ import type { TMDBSearchResult, WatchStatus } from '@/types';
  * bakom onboarding-completion, bara routar nya användare hit vid första
  * inloggning.
  */
-
-const DEFAULT_PROVIDERS = [8, 119, 337, 384, 76, 520]; // Netflix, Prime, Disney+, HBO Max, Viaplay, SVT Play
 
 /**
  * BIN-659: one SHAPE for every failed write in the flow — the situation is
@@ -141,10 +145,10 @@ export function OnboardingFlow() {
   return (
     <div className="max-w-[640px] mx-auto py-8 px-4">
       <StepIndicator current={step} total={4} />
-      <div className="mt-6 bg-surface border border-rule rounded-sm p-6">
+      <div className={cardClass('mt-6 p-6')}>
         {step === 1 && <StepWelcome onNext={() => goToStep(2)} />}
         {step === 2 && <StepProviders onBack={() => goToStep(1)} onNext={() => goToStep(3)} />}
-        {step === 3 && <StepFirstTitle onBack={() => goToStep(2)} onNext={() => goToStep(4)} />}
+        {step === 3 && <StepFirstTitle onBack={() => goToStep(2)} onNext={() => goToStep(4)} onFinish={finish} saving={saving} />}
         {step === 4 && <StepDone onBack={() => goToStep(3)} onFinish={finish} saving={saving} />}
       </div>
       {/* Below the card: `finish` is reachable from both the card's buttons and
@@ -191,29 +195,29 @@ function StepWelcome({ onNext }: { onNext: () => void }) {
         Välkommen till Binge.nu
       </h1>
       <p className="text-sm text-ink-2 mb-4">
-        Håll koll på vad du tittar på och se var filmer och serier streamas i
-        Sverige. Tre steg.
+        Se vad du betalar för streaming och vad du kan pausa. Binge håller koll
+        på dina serier och var de streamas i Sverige.
       </p>
       <ul className="space-y-2 mb-6 text-sm text-ink-2">
         <li className="flex items-start gap-2">
-          <Check size={14} className="text-acc-deep mt-[3px] shrink-0" />
+          <Check size={14} className="text-acc-deep mt-1 shrink-0" />
           <span>Välj vilka streamingtjänster du har</span>
         </li>
         <li className="flex items-start gap-2">
-          <Check size={14} className="text-acc-deep mt-[3px] shrink-0" />
+          <Check size={14} className="text-acc-deep mt-1 shrink-0" />
           <span>Lägg till något du vill se eller redan följer</span>
         </li>
         <li className="flex items-start gap-2">
-          <Check size={14} className="text-acc-deep mt-[3px] shrink-0" />
-          <span>Få rekommendationer baserat på din smak</span>
+          <Check size={14} className="text-acc-deep mt-1 shrink-0" />
+          <span>Se vad du betalar och vad du kan pausa</span>
         </li>
       </ul>
-      <button
+      <Button
         onClick={onNext}
-        className="inline-flex items-center gap-2 px-4 py-2 bg-acc-deep text-white rounded-sm text-sm font-semibold cursor-pointer"
+        variant="acc" className="inline-flex items-center gap-2"
       >
         Börja <ArrowRight size={14} />
-      </button>
+      </Button>
     </div>
   );
 }
@@ -221,13 +225,31 @@ function StepWelcome({ onNext }: { onNext: () => void }) {
 // ---- Step 2: Providers ----
 
 function StepProviders({ onBack, onNext }: { onBack: () => void; onNext: () => void }) {
-  const { user, updateProviders } = useAuth();
+  const { user, updateProviders, updateProviderTiers } = useAuth();
   const { show: toast } = useToast();
-  const [selected, setSelected] = useState<number[]>(
-    user?.myProviders && user.myProviders.length > 0
-      ? user.myProviders
-      : DEFAULT_PROVIDERS,
+  // Paket I: ingenting förvalt. Sex förkryssade tjänster gav nya konton ett
+  // "Du betalar 665 kr/mån" på priser de aldrig angett.
+  //
+  // Gästens val i kalkylatorn (/streamingkostnad/) förifyller steget, men BARA när
+  // kontot inte har några tjänster sparade — det skriver aldrig över ett konto som
+  // redan har ett svar (#26:s villkor 6).
+  const [guestPrefill] = useState<GuestSelection | null>(() => {
+    if ((user?.myProviders ?? []).length > 0) return null;
+    const guest = loadGuestSelection();
+    return Object.keys(guest).length > 0 ? guest : null;
+  });
+  const [selected, setSelected] = useState<number[]>(() =>
+    guestPrefill ? Object.keys(guestPrefill).map(Number) : (user?.myProviders ?? []),
   );
+  const [tiers, setTiers] = useState<Record<number, string>>(() => {
+    const own = { ...(user?.providerTiers ?? {}) };
+    if (!guestPrefill) return own;
+    for (const [id, tier] of Object.entries(guestPrefill)) {
+      if (tier && own[Number(id)] === undefined) own[Number(id)] = tier;
+    }
+    return own;
+  });
+  const [now] = useState(() => new Date());
   const [saving, setSaving] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
 
@@ -235,12 +257,35 @@ function StepProviders({ onBack, onNext }: { onBack: () => void; onNext: () => v
     setSelected(s => (s.includes(id) ? s.filter(x => x !== id) : [...s, id]));
 
   const flatrateProviders = SWEDISH_PROVIDERS.filter(p => p.type === 'flatrate');
+  const costSettings = {
+    providerTiers: tiers,
+    providerCosts: user?.providerCosts,
+    providerCampaigns: user?.providerCampaigns,
+  };
+  const pricedSelection = flatrateProviders.filter(p => selected.includes(p.id));
+
+  const chooseTier = (id: number, tierId: string) =>
+    setTiers(t => {
+      const next = { ...t };
+      if (tierId) next[id] = tierId;
+      else delete next[id];
+      return next;
+    });
 
   const save = async () => {
     setSaving(true);
     setSaveFailed(false);
     try {
       await updateProviders(selected);
+      // Bara ändrade nivåer skrivs, i en skrivning; "Vet inte" på en tidigare vald nivå rensar den.
+      const changed: Record<number, string | null> = {};
+      for (const id of selected) {
+        const chosen = tiers[id] ?? null;
+        if (chosen !== (user?.providerTiers?.[id] ?? null)) changed[id] = chosen;
+      }
+      if (Object.keys(changed).length > 0) await updateProviderTiers(changed);
+      // Valet är sparat på kontot; gästkopian har gjort sitt.
+      clearGuestSelection();
       onNext();
     } catch (err) {
       // BIN-1047: same refusal, same reason as `finish` above — `updateProviders` reaches
@@ -264,12 +309,15 @@ function StepProviders({ onBack, onNext }: { onBack: () => void; onNext: () => v
   return (
     <div>
       <h1 className="page-h1" style={{ marginBottom: 12 }}>
-        Vilka tjänster har du?
+        Vilka tjänster betalar du för?
       </h1>
       <p className="text-sm text-ink-2 mb-4">
         Används för att visa var dina titlar kan streamas — och för att räkna
-        ut om du kan pausa någon tjänst. Kryssa alla du prenumererar på.
+        ut om du kan pausa någon tjänst. Kryssa i dem du har och välj nivå om du vet den.
       </p>
+      {guestPrefill && (
+        <p className="text-xs text-ink-3 -mt-2 mb-4">Ifyllt med det du valde i kalkylatorn.</p>
+      )}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-6">
         {flatrateProviders.map(p => {
           const isSelected = selected.includes(p.id);
@@ -281,7 +329,7 @@ function StepProviders({ onBack, onNext }: { onBack: () => void; onNext: () => v
               className={`flex items-center gap-2 px-3 py-2 border rounded-sm cursor-pointer text-left ${
                 isSelected
                   ? 'border-acc-deep bg-acc-deep/[0.05] text-ink'
-                  : 'border-rule bg-white text-ink-2'
+                  : 'border-rule bg-surface text-ink-2'
               }`}
             >
               <span
@@ -294,23 +342,53 @@ function StepProviders({ onBack, onNext }: { onBack: () => void; onNext: () => v
           );
         })}
       </div>
+      {pricedSelection.length > 0 && (
+        <ul className="mb-6 divide-y divide-rule-2 border-y border-rule-2">
+          {pricedSelection.map(p => {
+            const cost = resolveEffectiveMonthlyCost(p.id, costSettings, now);
+            const estimated = isEstimatedMonthlyCost(p.id, costSettings, now);
+            return (
+              <li key={p.id} className="flex items-center gap-2 py-1.5 text-sm">
+                <span className="flex-1 min-w-0 truncate">{p.name}</span>
+                {p.tiers && p.tiers.length > 0 && (
+                  <select
+                    aria-label={`Nivå för ${p.name}`}
+                    value={tiers[p.id] ?? ''}
+                    onChange={e => chooseTier(p.id, e.target.value)}
+                    className="select max-w-[11rem]"
+                  >
+                    <option value="">Vet inte</option>
+                    {p.tiers.map(t => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                )}
+                <span className="tabular-nums font-semibold w-[4.5rem] text-right">
+                  {cost == null ? '–' : cost === 0 ? 'Gratis' : `${formatKr(cost)} kr`}
+                </span>
+                <span className="w-[5.5rem] text-xxs text-ink-3">{estimated ? 'uppskattat' : ''}</span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
       {saveFailed && (
         <SaveError message="Kunde inte spara dina tjänster. Kontrollera anslutningen och försök igen." />
       )}
       <div className="flex items-center gap-2">
-        <button
+        <Button
           onClick={onBack}
-          className="inline-flex items-center gap-1 px-3 py-2 border border-rule rounded-sm text-sm bg-white cursor-pointer"
+          variant="ghost" className="inline-flex items-center gap-1"
         >
           <ArrowLeft size={14} /> Tillbaka
-        </button>
-        <button
+        </Button>
+        <Button
           onClick={save}
           disabled={saving}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-acc-deep text-white rounded-sm text-sm font-semibold cursor-pointer disabled:opacity-50"
+          variant="acc" className="inline-flex items-center gap-2 disabled:opacity-50"
         >
           {saving ? 'Sparar…' : 'Nästa'} <ArrowRight size={14} />
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -318,7 +396,17 @@ function StepProviders({ onBack, onNext }: { onBack: () => void; onNext: () => v
 
 // ---- Step 3: Första titeln ----
 
-function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => void }) {
+function StepFirstTitle({
+  onBack,
+  onNext,
+  onFinish,
+  saving,
+}: {
+  onBack: () => void;
+  onNext: () => void;
+  onFinish: (destination?: string) => Promise<void>;
+  saving: boolean;
+}) {
   const [query, setQuery] = useState('');
   const debouncedQuery = useDebouncedValue(query, 250);
   const { data: searchData, isLoading } = useSearch(debouncedQuery);
@@ -399,7 +487,7 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
         Sök efter en film eller serie. Serier följer du; filmer markerar du
         som vill se eller sedda.
       </p>
-      <div className="flex items-center gap-2 mb-3 border border-rule rounded-sm bg-white px-2">
+      <div className={cardClass('flex items-center gap-2 mb-3 px-2')}>
         <Search size={13} className="text-ink-3" />
         <input
           type="search"
@@ -435,7 +523,7 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
               return (
                 <li
                   key={r.id}
-                  className="flex items-center gap-2 px-2 py-[5px] bg-white border border-rule rounded-sm"
+                  className={cardClass('flex items-center gap-2 px-2 py-1.5')}
                 >
                   {poster && (
                     <div className={`poster duo-${r.genre_ids?.length ? toneForGenreIds(r.genre_ids) : toneForId(r.id)} w-[28px] h-[42px] shrink-0`}>
@@ -463,29 +551,29 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
                       <Check size={11} /> Tillagd
                     </span>
                   ) : r.media_type === 'tv' ? (
-                    <button
+                    <Button
                       onClick={() => handleAdd(r, 'engage')}
                       disabled={!libraryKnown}
-                      className="text-xxs px-2 py-[3px] bg-acc-deep text-white rounded-sm cursor-pointer disabled:opacity-50"
+                      variant="acc" size="xs" className="disabled:opacity-50"
                     >
                       Följ
-                    </button>
+                    </Button>
                   ) : (
                     <div className="flex gap-1">
-                      <button
+                      <Button
                         onClick={() => handleAdd(r, 'plan')}
                         disabled={!libraryKnown}
-                        className="text-xxs px-2 py-[3px] border border-rule rounded-sm bg-white cursor-pointer disabled:opacity-50"
+                        variant="ghost" size="xs" className="disabled:opacity-50"
                       >
                         Vill se
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         onClick={() => handleAdd(r, 'engage')}
                         disabled={!libraryKnown}
-                        className="text-xxs px-2 py-[3px] bg-acc-deep text-white rounded-sm cursor-pointer disabled:opacity-50"
+                        variant="acc" size="xs" className="disabled:opacity-50"
                       >
                         Sedd
-                      </button>
+                      </Button>
                     </div>
                   )}
                 </li>
@@ -506,43 +594,58 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
           <div role="alert" className="text-xs text-danger-ink bg-danger-soft border border-danger/30 rounded-sm px-3 py-2 mb-3">
             <p className="font-semibold">{LIBRARY_UNREACHABLE_TITLE}</p>
             <p className="mt-1 text-ink-2">{LIBRARY_UNREACHABLE_BODY}</p>
-            <button type="button" onClick={retryListener} className="btn btn-acc btn-sm mt-2">
+            <Button type="button" onClick={retryListener} variant="acc" size="sm" className="mt-2">
               {LIBRARY_RETRY_LABEL}
-            </button>
+            </Button>
           </div>
         ) : (
           <p className="text-xs text-ink-3 mb-3">{LIBRARY_LOADING}</p>
         )
       )}
 
+      <p className="text-xs text-ink-3 mb-3">
+        Har du en lista någon annanstans?{' '}
+        {/* Avslutar introduktionen först — annars skickas kontot tillbaka hit vid nästa inloggning. */}
+        <button
+          type="button"
+          onClick={() => onFinish('/settings/import/')}
+          disabled={saving}
+          className="text-acc-deep underline bg-transparent border-none p-0 cursor-pointer font-[inherit] disabled:opacity-50"
+        >
+          Importera den
+        </button>
+      </p>
+
       {items.length > 0 && (
         <div className="text-xs text-acc-deep mb-3">
-          <Check size={11} className="inline mb-[2px] mr-1" />
+          <Check size={11} className="inline mb-0.5 mr-1" />
           {items.length} titel{items.length === 1 ? '' : 'ar'} tillagd{items.length === 1 ? '' : 'a'}.
         </div>
       )}
 
       <div className="flex items-center gap-2">
-        <button
+        <Button
           onClick={onBack}
-          className="inline-flex items-center gap-1 px-3 py-2 border border-rule rounded-sm text-sm bg-white cursor-pointer"
+          variant="ghost" className="inline-flex items-center gap-1"
         >
           <ArrowLeft size={14} /> Tillbaka
-        </button>
-        <button
+        </Button>
+        <Button
           onClick={onNext}
           disabled={!canContinue}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-acc-deep text-white rounded-sm text-sm font-semibold cursor-pointer disabled:opacity-50"
+          variant="acc" className="inline-flex items-center gap-2 disabled:opacity-50"
         >
           Nästa <ArrowRight size={14} />
-        </button>
+        </Button>
         {!canContinue && (
-          <button
+          // BIN-1442: an ordinary button, not a faint text link. Skipping the
+          // first title is a real choice, and the last step is where the value is.
+          <Button
             onClick={onNext}
-            className="text-xxs text-ink-3 hover:text-ink-2 bg-transparent border-none cursor-pointer ml-auto"
+            className="ml-auto"
           >
             Hoppa över
-          </button>
+          </Button>
         )}
       </div>
     </div>
@@ -560,11 +663,69 @@ function StepDone({
   onFinish: (destination?: string) => Promise<void>;
   saving: boolean;
 }) {
+  const { user, updateNotificationSettings } = useAuth();
+  const [now] = useState(() => new Date());
+  const spend = summarizeMonthlySpend(user?.myProviders ?? [], user ?? {}, now);
+  const [reminderError, setReminderError] = useState<string | null>(null);
+  // BIN-1442 — the onboarding ends on the money (Malin, 2026-10-06). The button
+  // turns on the existing rotation reminders; since BIN-1442 those also reach the
+  // bell, so they arrive without push. The dates come from the advisor's
+  // rotation calendar, which needs a library past the pause floor (three titles);
+  // until then there is nothing to remind about.
+  const remindMe = async () => {
+    setReminderError(null);
+    try {
+      await updateNotificationSettings({ rotationReminders: true });
+    } catch (err) {
+      setReminderError(err instanceof Error ? err.message : 'Kunde inte slå på påminnelserna. Försök igen.');
+      return;
+    }
+    await onFinish('/savings/');
+  };
   return (
     <div>
       <h1 className="page-h1" style={{ marginBottom: 12 }}>
         Klar.
       </h1>
+      {spend.paidCount > 0 && (
+        <div className="border border-rule rounded-sm p-4 mb-4">
+          <p className="text-sm text-ink-2">Du betalar{spend.estimated ? ' ungefär' : ''}</p>
+          <p className="text-5xl leading-tight font-bold text-ink" style={{ fontVariantNumeric: 'tabular-nums' }}>
+            {formatKr(spend.totalKr)} kr/mån
+          </p>
+          <p className="text-sm text-ink-2">
+            för {spend.paidCount} {spend.paidCount === 1 ? 'tjänst' : 'tjänster'}, alltså{' '}
+            {formatKr(spend.totalKr * 12)} kr om året.
+          </p>
+          {spend.estimated && (
+            <p className="text-xxs text-ink-3 mt-1">
+              Där du inte valt nivå räknar vi med tjänstens listpris. Du kan ändra det i inställningarna.
+            </p>
+          )}
+          <div className="flex flex-wrap items-center gap-2 mt-3">
+            <Button
+              type="button"
+              onClick={() => { void remindMe(); }}
+              disabled={saving}
+              variant="acc" className="disabled:opacity-50"
+            >
+              Påminn mig när jag kan pausa
+            </Button>
+            <Button
+              type="button"
+              onClick={() => onFinish('/savings/')}
+              disabled={saving}
+              className="disabled:opacity-50"
+            >
+              Öppna Rådgivaren
+            </Button>
+          </div>
+          <p className="text-xxs text-ink-3 mt-2">
+            Binge säger till när en tjänst du betalar för inte har något du följer, och när den blir värd att starta igen.
+          </p>
+          {reminderError && <p className="text-xxs text-danger-ink mt-1" role="alert">{reminderError}</p>}
+        </div>
+      )}
       <p className="text-sm text-ink-2 mb-4">
         Lägg till fler titlar, utforska rekommendationer eller se var dina
         serier streamas.
@@ -572,7 +733,7 @@ function StepDone({
 
       <div className="bg-acc-deep/[0.06] border border-acc-deep/30 rounded-sm p-3 mb-4">
         <div className="flex items-start gap-2 mb-2">
-          <Target size={14} className="text-acc-deep mt-[2px] shrink-0" />
+          <Target size={14} className="text-acc-deep mt-0.5 shrink-0" />
           <div className="flex-1">
             <div className="text-sm font-bold text-ink">
               Kalibrera smaken
@@ -584,38 +745,40 @@ function StepDone({
           </div>
         </div>
         <div className="flex gap-2">
-          <button
+          <Button
             onClick={() => onFinish('/kalibrera/')}
             disabled={saving}
-            className="inline-flex items-center gap-1 px-3 py-[5px] bg-acc-deep text-white rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
+            // One saffron button per screen: with the money box, that is "Påminn mig".
+            variant={spend.paidCount > 0 ? 'default' : 'acc'}
+            size="sm" className="inline-flex items-center gap-1 disabled:opacity-50"
           >
             <Target size={11} /> Kalibrera smak
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => onFinish()}
             disabled={saving}
-            className="px-3 py-[5px] border border-rule rounded-sm text-xs bg-white cursor-pointer disabled:opacity-50"
+            variant="ghost" size="sm" className="disabled:opacity-50"
           >
             Senare
-          </button>
+          </Button>
         </div>
       </div>
 
       <div className="flex items-center gap-2">
-        <button
+        <Button
           onClick={onBack}
           disabled={saving}
-          className="inline-flex items-center gap-1 px-3 py-2 border border-rule rounded-sm text-sm bg-white cursor-pointer disabled:opacity-50"
+          variant="ghost" className="inline-flex items-center gap-1 disabled:opacity-50"
         >
           <ArrowLeft size={14} /> Tillbaka
-        </button>
-        <button
+        </Button>
+        <Button
           onClick={() => onFinish()}
           disabled={saving}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-acc-deep text-white rounded-sm text-sm font-semibold cursor-pointer disabled:opacity-50"
+          variant="acc" className="inline-flex items-center gap-2 disabled:opacity-50"
         >
           {saving ? 'Sparar…' : 'Klar'} <ArrowRight size={14} />
-        </button>
+        </Button>
       </div>
     </div>
   );

@@ -4,19 +4,24 @@
 // så länge menyn bara satt på recensioner och kommentarer; profilen gör målet till en
 // PERSON, och då är ordet fel.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { UgcActionsMenu } from './UgcActionsMenu';
 
 vi.mock('@/lib/firebase/config', () => ({ auth: {}, default: {} }));
 
 const createReport = vi.hoisted(() => vi.fn());
 const show = vi.hoisted(() => vi.fn());
+const blockUser = vi.hoisted(() => vi.fn());
+const captureError = vi.hoisted(() => vi.fn());
+const refreshFriendship = vi.hoisted(() => vi.fn());
 
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ uid: 'me' }) }));
 vi.mock('@/hooks/useBlockedUsers', () => ({
-  useBlockedUsers: () => ({ isBlocked: () => false, blockUser: vi.fn(), unblockUser: vi.fn() }),
+  useBlockedUsers: () => ({ isBlocked: () => false, blockUser, unblockUser: vi.fn() }),
 }));
 vi.mock('@/contexts/ToastContext', () => ({ useToast: () => ({ show }) }));
+vi.mock('@/lib/sentry', () => ({ captureError }));
+vi.mock('@/hooks/useFriends', () => ({ useFriendActions: () => ({ refreshFriendship }) }));
 vi.mock('@/lib/firebase/reports', () => ({
   createReport,
   REPORT_REASON_LABELS: { spam: 'Spam / reklam', other: 'Annat' },
@@ -52,5 +57,123 @@ describe('UgcActionsMenu — rubriken följer måltypen (BIN-1211)', () => {
       <UgcActionsMenu targetType="user" targetId="me" targetOwnerUid="me" />,
     );
     expect(container.firstChild).toBeNull();
+  });
+});
+
+// BIN-1120. Gruppsidan monterar SAMMA meny, med en extrapost och utan
+// blockeringen. De tre proppar som gör det är nya, och varje gren nedan är en
+// yta som annars bara hade prövats genom en mock som returnerar null.
+describe('UgcActionsMenu — gruppytan (BIN-1120)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const renderGroupMenu = (onSelect = vi.fn()) => {
+    render(
+      <UgcActionsMenu
+        targetType="group"
+        targetId="g1"
+        targetOwnerUid="them"
+        triggerLabel="Mer"
+        showBlock={false}
+        extraItems={[
+          { key: 'leave', label: 'Lämna gruppen', icon: <span />, danger: true, onSelect },
+        ]}
+      />,
+    );
+    return onSelect;
+  };
+
+  it('knappen bär ordet Mer, så den inte läses som dekoration', () => {
+    renderGroupMenu();
+    expect(screen.getByLabelText('Åtgärder').textContent).toContain('Mer');
+  });
+
+  it('en gruppmeny erbjuder ingen blockering', () => {
+    renderGroupMenu();
+    fireEvent.click(screen.getByLabelText('Åtgärder'));
+    expect(screen.queryByText('Blockera användare')).toBeNull();
+    expect(screen.queryByText('Avblockera')).toBeNull();
+  });
+
+  it('den andra menyn visar fortfarande blockeringen', () => {
+    // Kontrollen åt andra hållet: utan den hade en trasig gren som alltid
+    // gömmer knappen uppfyllt testet ovan lika bra.
+    render(<UgcActionsMenu targetType="review" targetId="r1" targetOwnerUid="them" />);
+    fireEvent.click(screen.getByLabelText('Åtgärder'));
+    expect(screen.getByText('Blockera användare')).toBeTruthy();
+  });
+
+  it('en extrapost körs och stänger menyn', () => {
+    const onSelect = renderGroupMenu();
+    fireEvent.click(screen.getByLabelText('Åtgärder'));
+    fireEvent.click(screen.getByText('Lämna gruppen'));
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Lämna gruppen')).toBeNull();
+  });
+
+  it('menyraden och dialogrubriken namnger gruppen, inte "innehåll"', () => {
+    renderGroupMenu();
+    fireEvent.click(screen.getByLabelText('Åtgärder'));
+    fireEvent.click(screen.getByText('Anmäl gruppen'));
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.textContent).toContain('Anmäl gruppen');
+    expect(dialog.textContent).not.toContain('Rapportera innehåll');
+  });
+
+  it('gruppdialogen erbjuder varje skäl koden har, inte en egen lista', () => {
+    // Den parallella listan är felet som ska uteslutas: dialogen ska läsa
+    // REPORT_REASON_LABELS, vad den än innehåller.
+    renderGroupMenu();
+    fireEvent.click(screen.getByLabelText('Åtgärder'));
+    fireEvent.click(screen.getByText('Anmäl gruppen'));
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.textContent).toContain('Spam / reklam');
+    expect(dialog.textContent).toContain('Annat');
+  });
+
+  it('ägaren ser ingen meny på sin egen grupp', () => {
+    render(<UgcActionsMenu targetType="group" targetId="g1" targetOwnerUid="me" triggerLabel="Mer" />);
+    expect(screen.queryByLabelText('Åtgärder')).toBeNull();
+  });
+});
+
+// BIN-1349. En blockering avslutar numera vänskapen, och skrivningen kan nekas. Beskedet
+// måste följa vad som faktiskt hände, inte visas ovillkorligt.
+describe('UgcActionsMenu — beskedet efter en blockering (BIN-1349)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  async function block() {
+    render(<UgcActionsMenu targetType="user" targetId="them" targetOwnerUid="them" targetOwnerName="Kim" />);
+    fireEvent.click(screen.getByLabelText('Åtgärder'));
+    fireEvent.click(screen.getByText('Blockera användare'));
+    await waitFor(() => expect(show).toHaveBeenCalledTimes(1));
+    return show.mock.calls[0][0] as string;
+  }
+
+  it('säger att vänskapen tog slut när det fanns en', async () => {
+    blockUser.mockResolvedValueOnce({ endedFriendship: true });
+    expect(await block()).toBe('Blockerade Kim. Ni är inte vänner längre, och du ser inte deras innehåll.');
+  });
+
+  // Vänknappen på profilen läser en cache som annars står kvar på "Vän" en minut.
+  it('rensar vänskapens cache efter en lyckad blockering', async () => {
+    blockUser.mockResolvedValueOnce({ endedFriendship: true });
+    await block();
+    expect(refreshFriendship).toHaveBeenCalledWith('them');
+  });
+
+  it('nämner ingen vänskap när det inte fanns någon', async () => {
+    blockUser.mockResolvedValueOnce({ endedFriendship: false });
+    expect(await block()).toBe('Blockerade Kim. Du ser inte deras innehåll längre.');
+  });
+
+  it('en nekad blockering ger ett felbesked och rapporteras, aldrig "Blockerade"', async () => {
+    blockUser.mockRejectedValueOnce(new Error('permission-denied'));
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const message = await block();
+    expect(message).toBe('Kunde inte blockera Kim. Försök igen.');
+    expect(message).not.toContain('Blockerade');
+    expect(captureError).toHaveBeenCalledWith(expect.any(Error), { scope: 'social', kind: 'blockUser' });
+    expect(refreshFriendship).not.toHaveBeenCalled();
+    errSpy.mockRestore();
   });
 });

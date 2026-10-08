@@ -3,6 +3,19 @@ name: Build and Deploy
 on:
   push:
     branches: [main]
+    # A push that only touches docs/, tasks/, .claude/ or Markdown starts no run
+    # (BIN-1426). The workflow-map files are named back in because their linter runs
+    # here; a later pattern wins over an earlier one. A product test that reads one of
+    # these files, scripts/check-published-commands.test.mjs among them, runs with the
+    # next push that starts a run.
+    paths:
+      - '**'
+      - '!docs/**'
+      - 'docs/workflow-map.html'
+      - 'docs/workflow-map-universe.json'
+      - '!tasks/**'
+      - '!.claude/**'
+      - '!**/*.md'
   schedule:
     # Veckovis metadata-refresh (måndag 04:00 UTC): bust:ar TMDB-byggcachen så
     # titel-metadata (overview, providers, status) hålls färsk. Kod-deployer
@@ -14,45 +27,47 @@ on:
         description: 'Full TMDB-cache-refresh (lång byggfönster ~175 min) — använd för att värma en kall cache manuellt mellan de veckovisa körningarna'
         type: boolean
         default: false
+      backend_deployed_by_hand:
+        description: 'Jag har deployat regler och funktioner för hand: deploya bara webbplatsen'
+        type: boolean
+        default: false
+      deploy_all_backend:
+        description: 'Deploya regler, index och alla funktioner, oavsett vad som ändrats'
+        type: boolean
+        default: false
 
+# Every job reads the repository and nothing more, unless it says otherwise below.
+permissions:
+  contents: read
+
+# One lane: a running run holds it, so later pushes, the weekly run and Run workflow queue
+# behind it, and no two deploys overlap. A newer queued run replaces an older queued one,
+# and the comparison in `checks` starts at the commit the last deploy left live, so the
+# replaced run's rules and functions changes are not lost. The `backend` job deploys main
+# as it stands when the job starts (its backend gate), so the run queued behind it usually
+# has nothing left to deploy.
 concurrency:
   group: deploy-main
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  # Everything a deploy waits for, and which rules, indexes and functions changed: the
+  # `backend` job deploys `deploy`, and the hosting job requires `checked`.
+  checks:
     runs-on: ubuntu-latest
-    # Gate the deploy on the Firestore rules-test suite. Without this job the rules
-    # tests would never run on the path a rules change actually takes.
-    needs: rules-tests
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      # Where the comparison starts: this workflow's runs on main and the backend job's records.
+      actions: read
+    outputs:
+      deploy: ${{ steps.backend-changes.outputs.deploy }}
+      checked: ${{ steps.backend-changes.outputs.checked }}
     steps:
       - uses: actions/checkout@v7
         with:
-          # Full history so the rules/functions drift-guard below can diff this
-          # push (github.event.before..sha) to see which files changed.
+          # Full history: the comparison reaches back to the commit the last deploy left live.
           fetch-depth: 0
-
-      # Drift guard: firestore.rules + functions/** are NOT auto-deployed — only
-      # hosting is. If a push to main changed them, fail loudly so prod can't
-      # silently run the old version. Deploy them manually, then ship hosting via
-      # the "Run workflow" button (workflow_dispatch), which skips this guard.
-      - name: Guard — rules/functions changed (deploy them manually)
-        if: github.event_name == 'push'
-        run: |
-          BEFORE="${{ github.event.before }}"
-          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
-            BEFORE=$(git rev-parse HEAD~1)
-          fi
-          CHANGED=$(git diff --name-only "$BEFORE" "${{ github.sha }}" -- firestore.rules 'functions/**')
-          if [ -n "$CHANGED" ]; then
-            echo "::error::firestore.rules or functions/** changed — these are NOT auto-deployed by this workflow."
-            echo "Changed files:"
-            echo "$CHANGED"
-            echo "Deploy manually:  firebase deploy --only firestore:rules    # and/or --only functions"
-            echo "Then ship hosting via the 'Run workflow' button (workflow_dispatch) — that skips this guard."
-            exit 1
-          fi
-          echo "No firestore.rules / functions changes in this push — proceeding."
 
       - uses: actions/setup-node@v7
         with:
@@ -62,12 +77,46 @@ jobs:
       - name: Install deps
         run: npm ci
 
+      - name: Refuse two Run workflow choices that contradict each other
+        if: github.event_name == 'workflow_dispatch' && inputs.backend_deployed_by_hand && inputs.deploy_all_backend
+        run: |
+          echo "::error::Välj backend_deployed_by_hand eller deploy_all_backend, inte båda."
+          exit 1
+
+      # What the `backend` job deploys (BIN-1426): the rules, indexes and functions changes
+      # since the commit the last deploy left live, so a change whose run failed, was
+      # rejected or was cancelled is found again. The run summary lists them. Uses TypeScript from the root install, hence its place after npm ci.
+      # Skipped when Run workflow says the backend was deployed by hand: that run ships
+      # hosting only.
+      - name: Find rules and functions changes
+        id: backend-changes
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.backend_deployed_by_hand) }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_ALL: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_all_backend }}
+        run: |
+          if [ "$DEPLOY_ALL" = "true" ]; then
+            node scripts/check-deploy-drift.mjs --github-output "$GITHUB_OUTPUT" --github-summary "$GITHUB_STEP_SUMMARY" --all
+          else
+            node scripts/check-deploy-drift.mjs --github-output "$GITHUB_OUTPUT" --github-summary "$GITHUB_STEP_SUMMARY" --since-last-deploy "$GITHUB_SHA"
+          fi
+
       # Quality gates — run here so a direct push to main can never deploy red code. If this slows releases, we can move to
       # required status checks via branch protection instead.
       - name: Lint
         run: npm run lint
 
       - name: Typecheck
+        run: npm run typecheck
+
+      # functions/ is a second npm project with its own lockfile and TypeScript, which the
+      # root typecheck above excludes. The same two steps as pr-checks.yml, which says why.
+      - name: Install functions deps
+        working-directory: functions
+        run: npm ci
+
+      - name: Typecheck functions
+        working-directory: functions
         run: npm run typecheck
 
       # Workflow-map freshness.
@@ -84,19 +133,18 @@ jobs:
       # `if: schedule` is what makes this "the weekly sweep" rather than every push — this
       # workflow's own `cron: '0 4 * * 1'`. The FLOOR (the glob stopped matching, so the
       # check measured nothing) is asserted in scripts/check-knowledge-caps.test.mjs under
-      # `npm test`, which is where it gets teeth: `continue-on-error` here discards this
-      # step's exit code, floor failure included.
+      # `npm run test:process`, the warning step below. `continue-on-error` here discards
+      # this step's exit code, floor failure included.
       - name: Reviewer knowledge-file caps (warning only)
         if: github.event_name == 'schedule'
         continue-on-error: true
         run: npm run check:knowledge-caps
 
-      # The `Script self-tests` step that stood here was removed by BIN-850: these files
-      # now run under `npm test` (vitest.config.ts includes scripts/**/*.{test,spec}.mjs),
-      # so keeping the step would run them twice, two ways. Its MIN=2 floor did not come
-      # for free — vitest only fails when its WHOLE include set matches nothing — so it
-      # was replaced in the same commit by scripts/scripts-self-tests-present.test.mjs.
-      # BIN-838 built the step; the floor it argued for survives, in the suite.
+      # The `Script self-tests` step that stood here was removed by BIN-850. Its MIN=2
+      # floor did not come for free — vitest only fails when its WHOLE include set
+      # matches nothing — so it was replaced in the same commit by
+      # scripts/scripts-self-tests-present.test.mjs. BIN-838 built the step; the floor
+      # it argued for survives, in the suite.
 
       # Every NEXT_PUBLIC_* read by src/ must be handed to the build below.
       # Here for the same reason the map linter is: this repo pushes direct to
@@ -110,6 +158,20 @@ jobs:
 
       - name: Test
         run: npm test
+
+      # The process tests read the review log, the git history and the process config, so
+      # they can go red without any change to the product. Malin's decision 2026-10-05
+      # (BIN-1426): they warn. The time cap is there because `continue-on-error` does not
+      # cover a hang.
+      - name: Process tests (warning only)
+        id: process-tests
+        continue-on-error: true
+        timeout-minutes: 5
+        run: npm run test:process
+
+      - name: Warn when the process tests failed
+        if: steps.process-tests.outcome == 'failure'
+        run: echo "::warning::npm run test:process failed. It does not stop the deploy (BIN-1426); the step above says which test."
 
       # Audit (high+) — körs på deploy-vägen (push→main), som är enda vägen till
       # produktion; utan detta steg saknade den vägen audit helt (BIN-344).
@@ -138,6 +200,246 @@ jobs:
           echo "::warning::npm audit hittade high+ sårbarheter — surfat men blockerar INTE prod-deployen (advisory, BIN-344). Åtgärda via npm audit fix / dependabot."
           exit 0
 
+  # Rules, indexes and functions (BIN-1426). Runs when `checks` found something to deploy,
+  # without an approval since Malin's decision of 2026-10-07 ("Deploya backend utan mina
+  # klick"). The deploy key is the `backend` environment's secret, so only this job, on
+  # main, can read it. The job deploys main as it stands when it starts, which can be newer
+  # than this run's commit; that commit is tested here before the key step.
+  backend:
+    needs: [checks, rules-tests]
+    if: needs.checks.outputs.deploy != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: backend
+    permissions:
+      contents: read
+      # The backend gate reads the runs and the deploy records.
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The backend gate compares this commit with main.
+          fetch-depth: 0
+          persist-credentials: false
+
+      # No npm cache in this job, so nothing restored from a cache runs where the key does.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      # The backend gate uses TypeScript from the root install. No install scripts: this
+      # job reads the key later.
+      - name: Install deps (no install scripts)
+        run: npm ci --ignore-scripts
+
+      # Refuses a run that is not on main. Otherwise it picks main as GitHub has it now, not
+      # this clone, as the commit to deploy (`target`), and, with this run's checkout of the
+      # script, what that commit deploys (`deploy`).
+      - name: Backend gate
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_ALL: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_all_backend }}
+        run: |
+          if [ "$DEPLOY_ALL" = "true" ]; then
+            node scripts/check-deploy-drift.mjs --backend-gate --github-output "$GITHUB_OUTPUT" --github-summary "$GITHUB_STEP_SUMMARY" --all
+          else
+            node scripts/check-deploy-drift.mjs --backend-gate --github-output "$GITHUB_OUTPUT" --github-summary "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # From here to the key step, the code is main's newer commit when main has moved on.
+      # Each step installs without install scripts and writes nothing to GITHUB_ENV or
+      # GITHUB_PATH, which would carry into the key step.
+      - name: Check out main's newer commit
+        if: steps.gate.outputs.target != github.sha
+        env:
+          TARGET: ${{ steps.gate.outputs.target }}
+        run: |
+          git checkout -q --detach "$TARGET"
+          test "$(git rev-parse HEAD)" = "$TARGET"
+
+      - name: Install the newer commit's deps (no install scripts)
+        if: steps.gate.outputs.target != github.sha
+        run: npm ci --ignore-scripts
+
+      # The functions predeploy in firebase.json builds functions/ with its own TypeScript,
+      # and `npm test` runs tests under functions/src that import its dependencies.
+      - name: Install functions deps (no install scripts)
+        working-directory: functions
+        run: npm ci --ignore-scripts
+
+      - name: Typecheck functions
+        working-directory: functions
+        run: npm run typecheck
+
+      - name: Test the newer commit
+        if: steps.gate.outputs.target != github.sha
+        run: npm test
+
+      # The rules tests, as in the `rules-tests` job, on the newer commit. No emulator cache
+      # here, so the emulator is downloaded afresh.
+      - uses: actions/setup-java@v6
+        if: steps.gate.outputs.target != github.sha
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install Firebase CLI for the rules tests (no install scripts)
+        if: steps.gate.outputs.target != github.sha
+        run: npm i -g firebase-tools@14.27.0 --ignore-scripts
+
+      - name: Rules tests on the newer commit
+        if: steps.gate.outputs.target != github.sha
+        run: npm run test:rules
+
+      # A test process still running when the key is written to disk could read it.
+      - name: Refuse while an emulator is still running
+        run: |
+          if pgrep -a java || pgrep -af 'firebase|emulator'; then
+            echo "::error::En emulator från testerna kör fortfarande, så nyckeln läses inte."
+            exit 1
+          fi
+
+      # The same pinned firebase-tools and key-file pattern as the hosting deploy below. As
+      # there, npx installs firebase-tools' own dependencies in this step, with the key in its
+      # environment, without a lockfile (it ships no npm-shrinkwrap.json) and without
+      # --ignore-scripts.
+      # No --force: a function deletion stops the deploy and is done by hand.
+      # `clean` says the target is live as it stands on main: deployed with nothing skipped,
+      # or nothing to deploy.
+      - name: Deploy rules and functions
+        id: backend-deploy
+        env:
+          FIREBASE_BACKEND_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_BACKEND_SERVICE_ACCOUNT }}
+          DEPLOY_ARGS: ${{ steps.gate.outputs.deploy }}
+        run: |
+          set -o pipefail
+          if [ -z "$DEPLOY_ARGS" ]; then
+            echo "Inget i regler och funktioner skiljer sig från det som redan är deployat."
+            echo "clean=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ -z "$FIREBASE_BACKEND_SERVICE_ACCOUNT" ]; then
+            echo "::error::Nyckeln FIREBASE_BACKEND_SERVICE_ACCOUNT saknas i miljön backend. Deploya för hand med firebase deploy $DEPLOY_ARGS --project binge-nu och kör sedan Run workflow med backend_deployed_by_hand."
+            exit 1
+          fi
+          read -ra ARGS <<< "$DEPLOY_ARGS"
+          SA="$RUNNER_TEMP/firebase-backend-sa.json"
+          trap 'rm -f "$SA"' EXIT
+          printf '%s' "$FIREBASE_BACKEND_SERVICE_ACCOUNT" > "$SA"
+          export GOOGLE_APPLICATION_CREDENTIALS="$SA"
+          npx --yes firebase-tools@15.22.3 deploy "${ARGS[@]}" --project binge-nu --non-interactive 2>&1 | tee "$RUNNER_TEMP/backend-deploy.log"
+          # Without --force, firebase skips a function whose trigger changes event type and
+          # still exits 0 (firebase-tools 15.22.3, lib/deploy/functions/prompts.js).
+          if grep -qF "Skipping updates for functions that may be unsafe to update" "$RUNNER_TEMP/backend-deploy.log"; then
+            echo "::warning::firebase hoppade över funktioner vars utlösare byter händelsetyp. Deploya dem för hand med firebase deploy --only functions --project binge-nu."
+            echo "> **Varning:** firebase hoppade över funktioner vars utlösare byter händelsetyp. Deploya dem för hand med \`firebase deploy --only functions --project binge-nu\`, som frågar innan den flyttar dem." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "clean=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # When the job deployed main's newer commit, this run's success would name its own,
+      # older commit as live. The record names the newer one, and `checks` in the next run
+      # compares with it (scripts/check-deploy-drift.mjs, lastDeployed).
+      - name: Write down the commit the job deployed
+        if: steps.gate.outputs.target != github.sha && steps.backend-deploy.outputs.clean == 'true'
+        env:
+          TARGET: ${{ steps.gate.outputs.target }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/backend-deployed"
+          printf '%s\n' "$TARGET" > "$RUNNER_TEMP/backend-deployed/deployed-sha"
+
+      - uses: actions/upload-artifact@v7
+        if: steps.gate.outputs.target != github.sha && steps.backend-deploy.outputs.clean == 'true'
+        with:
+          name: backend-deployed-${{ steps.gate.outputs.target }}
+          path: ${{ runner.temp }}/backend-deployed/deployed-sha
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 90
+
+      # A step after the gate and before the key failed, such as a test of main's newer commit.
+      - name: Say that nothing was deployed
+        if: failure() && steps.gate.outcome == 'success' && steps.backend-deploy.outcome == 'skipped'
+        env:
+          TARGET: ${{ steps.gate.outputs.target }}
+          RUN_SHA: ${{ github.sha }}
+        run: |
+          {
+            echo "### Regler och funktioner deployades inte"
+            echo
+            echo "Ett steg före deployen föll, så ingenting deployades: varken main på ${TARGET:0:12} eller körningens egen commit ${RUN_SHA:0:12}. Steget som föll står i loggen."
+            echo
+            echo "- Ett tillfälligt fel: tryck **Re-run failed jobs**."
+            echo "- Annars: rätta felet på main och pusha. Nästa körning deployar det."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Malin reads the run summary, not the log.
+      - name: Say what to do after a failed deploy
+        if: failure() && steps.backend-deploy.outcome == 'failure'
+        env:
+          DEPLOY_ARGS: ${{ steps.gate.outputs.deploy }}
+        run: |
+          LOG="$RUNNER_TEMP/backend-deploy.log"
+          {
+            echo "### Regler och funktioner deployades inte"
+            echo
+            if [ -f "$LOG" ]; then
+              echo "Sista raderna från firebase:"
+              echo
+              echo '```'
+              tail -n 30 "$LOG" | tr '`' "'"
+              echo '```'
+              echo
+            fi
+            # firebase-tools 15.22.3 throws this after deploying the functions when the image
+            # repository has no cleanup policy (lib/deploy/functions/prompts.js).
+            if [ -f "$LOG" ] && grep -qF "could not set up cleanup policy" "$LOG"; then
+              echo "- **Funktionerna är ute, men städregeln för funktionsbilder saknas.** Kör \`firebase functions:artifacts:setpolicy --location europe-west1 --project binge-nu\` en gång och tryck sedan **Re-run failed jobs**."
+            fi
+            echo "- Ett tillfälligt fel: tryck **Re-run failed jobs**."
+            echo "- Annars: deploya för hand med \`firebase deploy $DEPLOY_ARGS --project binge-nu\` och kör sedan **Run workflow** med backend_deployed_by_hand, så går webbplatsen ut."
+            echo "- Alltid för hand: att ta bort en funktion, en ny hemlighet, en trigger som behöver en ny tjänst, städregeln för funktionsbilder, och när firebase frågar om retry eller minInstances."
+            echo "- Om felet gäller funktionerna kan nya regler och index redan vara ute."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Hosting: the site itself. Waits for the checks, the rules tests, and the backend job
+  # when it runs, so rules and functions go out before the site. Requires `checked` unless
+  # Run workflow says the backend was deployed by hand, so a comparison that never ran
+  # cannot wave the site through. The job cap is for a hang outside the steps that carry
+  # their own; it sits above the build step's longest cap.
+  deploy:
+    needs: [checks, rules-tests, backend]
+    if: ${{ !cancelled() && needs.checks.result == 'success' && needs.rules-tests.result == 'success' && (needs.backend.result == 'success' || needs.backend.result == 'skipped') && (needs.checks.outputs.checked == 'true' || (github.event_name == 'workflow_dispatch' && inputs.backend_deployed_by_hand)) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 220
+    permissions:
+      contents: read
+      # The site gate reads this workflow's successful runs.
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Full history: the site gate asks whether a deployed commit comes after this one.
+          fetch-depth: 0
+          # Nothing in this job pushes, so the token stays out of .git/config.
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install deps
+        run: npm ci
+
+      # A re-run of an older run would put its site back over a newer one, for instance
+      # after Re-run failed jobs (BIN-1426). Before the build, so a refusal costs no build.
+      - name: Site gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-deploy-drift.mjs --site-gate
+
       - name: Restore .next build cache
         uses: actions/cache@v6
         with:
@@ -154,13 +456,13 @@ jobs:
       # samma cachetillstånd som just misslyckades: ett nytt tärningskast, inte
       # ett varmare bygge.
       #
-      # `timeout-minutes` nedan sitter på BYGGSTEGET, inte på jobbet, och det
-      # finns inget jobbnivå-tak. Ett steg som slår i taket fäller steget och
-      # jobbet fortsätter till `always()`-stegen som vanligt — det är alltså inte
-      # fallet "jobbet avbryts och hinner inte spara". Bevis i samma riktning:
-      # raden `Post Restore TMDB build cache = skipped` visar att köraren
-      # fortsatte bearbeta steg. Sparandet bör alltså fyra även på en hängning.
-      # Bekräfta ändå på nästa riktiga hängning innan någon förlitar sig på det.
+      # `timeout-minutes` nedan sitter på BYGGSTEGET. Ett steg som slår i taket
+      # fäller steget och jobbet fortsätter till `always()`-stegen som vanligt —
+      # det är alltså inte fallet "jobbet avbryts och hinner inte spara". Bevis i
+      # samma riktning: raden `Post Restore TMDB build cache = skipped` visar att
+      # köraren fortsatte bearbeta steg. Sparandet bör alltså fyra även på en
+      # hängning. Bekräfta ändå på nästa riktiga hängning innan någon förlitar
+      # sig på det.
       - name: Restore TMDB build cache
         id: tmdb-cache
         uses: actions/cache/restore@v6
@@ -224,8 +526,8 @@ jobs:
           #
           # Tom (kod-deploy) → routerna läser urvalet ur .tmdb-cache/selection-*.json
           # och gör NOLL listanrop. '1' (schedule/full_refresh) → urvalet härleds
-          # om ur TMDB:s topplistor och UNIONERAS med det befintliga; en titel som
-          # roterat ur topplistan behålls tills taket tvingar fram evakuering.
+          # om och UNIONERAS med det befintliga; en titel som
+          # roterat ur härledningen behålls tills taket tvingar fram evakuering.
           #
           # Före detta härleddes urvalet vid varje deploy, och eftersom TMDB:s
           # ranking roterar veckovis roterade urvalet med den: titlar ramlade ur,
@@ -255,7 +557,7 @@ jobs:
       # `continue-on-error` OCH skriptets egen try/catch, båda: catchen stänger ett kast,
       # flaggan är skyddet för det catchen inte ser — slut på minne, en Node-abort, eller
       # taket nedan. `timeout-minutes` behövs separat: "fäller aldrig" täcker inte en
-      # HÄNGNING, och det finns inget jobbnivå-tak i det här jobbet.
+      # HÄNGNING.
       - name: First Load JS-rapport (rapporterar, fäller aldrig)
         continue-on-error: true
         timeout-minutes: 2
@@ -358,6 +660,7 @@ jobs:
       # `deploy` only works reliably in the 15.x series; rules-tests keeps 14.27.0
       # for emulator-JAR compatibility. Two pins, two concerns.
       - name: Deploy to Firebase Hosting (tolerate idempotent-release 400)
+        timeout-minutes: 30
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: |
@@ -384,10 +687,12 @@ jobs:
           exit "$CODE"
 
   # Firestore security-rules tests run against the Firestore emulator (needs a
-  # JVM). Its own job so the suite executes on push-to-main — the deploy job
-  # above gates on it via `needs`. Kept separate so it can fail independently.
+  # JVM). Its own job so the suite executes on push-to-main — the backend and
+  # hosting jobs above gate on it via `needs`. Kept separate so it can fail
+  # independently.
   rules-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
 

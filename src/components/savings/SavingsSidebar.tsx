@@ -1,9 +1,12 @@
 'use client';
 
+import { formatKr } from '@/lib/formatKr';
 import { usePauseHistory, type PauseHistoryEntry } from '@/hooks/usePauseHistory';
 import { useAuth } from '@/hooks/useAuth';
 import { formatSwedishDate, daysBetween, pluralSv, localIsoDate } from '@/lib/utils';
 import type { AdvisorResult, ActivePause } from '@/types';
+import { cardClass } from '@/components/ui/Card';
+import { eyebrowClass } from '@/components/ui/Eyebrow';
 
 // Höger spalt på Streamingrådgivaren. Stackar under main content på mobil.
 // Block (i ordning):
@@ -39,6 +42,11 @@ function pickNextReviewDate(advisor: AdvisorResult): { date: string | null; rati
           ? `När första nya avsnittet kommer på ${a.providerName}`
           : 'När en titel du följer börjar streama',
       };
+    case 'needs-library':
+      return {
+        date: null,
+        rationale: 'När du har lagt till det du följer',
+      };
     case 'idle':
     default:
       return {
@@ -55,8 +63,8 @@ function monthsSince(date: Date | null | undefined): number {
   return Math.max(1, Math.floor(days / 30));
 }
 
-const BLOCK = 'bg-surface border border-rule rounded-sm px-[14px] py-[12px]';
-const HEAD = 'text-[10px] uppercase tracking-[0.5px] text-ink-3 font-bold mb-[8px]';
+const BLOCK = cardClass('px-3.5 py-3');
+const HEAD = eyebrowClass({ className: 'mb-2' });
 
 export default function SavingsSidebar({ advisor, activePauses }: Props) {
   const { user } = useAuth();
@@ -70,14 +78,14 @@ export default function SavingsSidebar({ advisor, activePauses }: Props) {
   const { date: nextReviewDate, rationale: nextReviewRationale } = pickNextReviewDate(advisor);
 
   return (
-    <aside className="flex flex-col gap-[14px]">
+    <aside className="flex flex-col gap-3.5">
       {/* Sparat hittills */}
       <div className={BLOCK}>
         <h3 className={HEAD}>Sparat hittills</h3>
-        <div className="text-[24px] font-bold text-season-done tabular-nums leading-none mb-[6px]">
-          {totalSaved} kr
+        <div className="text-4xl font-bold text-season-done tabular-nums leading-none mb-1.5">
+          {formatKr(totalSaved)} kr
         </div>
-        <p className="text-[11px] text-ink-3 leading-[1.45]">
+        <p className="text-xs text-ink-3 leading-[1.45]">
           {accountMonths > 0
             ? `Sedan du började använda Streamingrådgivaren för ${pluralSv(accountMonths, 'månad', 'månader')} sedan.`
             : 'Sedan du började använda Streamingrådgivaren.'}
@@ -88,23 +96,23 @@ export default function SavingsSidebar({ advisor, activePauses }: Props) {
       <div className={BLOCK}>
         <h3 className={HEAD}>Senaste sparbesluten</h3>
         {recent.length === 0 ? (
-          <p className="text-[11px] text-ink-3 leading-[1.45]">
+          <p className="text-xs text-ink-3 leading-[1.45]">
             Inga avslutade pauser än. När du återupptar en pausad tjänst dyker den upp här med ett spar-belopp.
           </p>
         ) : (
           <div>
             {recent.map(e => (
-              <div key={e.id} className="flex items-baseline justify-between py-[5px] border-b border-rule-2 last:border-b-0">
+              <div key={e.id} className="flex items-baseline justify-between py-1.5 border-b border-rule-2 last:border-b-0">
                 <div className="min-w-0 mr-2">
-                  <div className="text-[11px] font-semibold text-ink truncate">
+                  <div className="text-xs font-semibold text-ink truncate">
                     Pausade {e.providerShortName}
                   </div>
-                  <div className="text-[10px] text-ink-3">
+                  <div className="text-xxs text-ink-3">
                     {formatSwedishDate(e.pausedAt)} · {pluralSv(e.durationDays, 'dag', 'dagar')}
                   </div>
                 </div>
-                <div className="text-[11px] font-bold text-season-done tabular-nums whitespace-nowrap">
-                  +{e.savedAmount} kr
+                <div className="text-xs font-bold text-season-done tabular-nums whitespace-nowrap">
+                  +{formatKr(e.savedAmount)} kr
                 </div>
               </div>
             ))}
@@ -117,20 +125,20 @@ export default function SavingsSidebar({ advisor, activePauses }: Props) {
         <h3 className={HEAD}>Nästa översyn</h3>
         {nextReviewDate ? (
           <>
-            <div className="text-[18px] font-bold text-ink tabular-nums leading-none mb-[4px]">
+            <div className="text-xl font-bold text-ink tabular-nums leading-none mb-1">
               {formatSwedishDate(nextReviewDate)}
             </div>
-            <p className="text-[11px] text-ink-3 leading-[1.45]">{nextReviewRationale}</p>
+            <p className="text-xs text-ink-3 leading-[1.45]">{nextReviewRationale}</p>
           </>
         ) : (
-          <p className="text-[12px] text-ink-2 leading-[1.45]">{nextReviewRationale}</p>
+          <p className="text-sm text-ink-2 leading-[1.45]">{nextReviewRationale}</p>
         )}
       </div>
 
       {/* Så fungerar pausen */}
       <div className={BLOCK}>
         <h3 className={HEAD}>Så fungerar pausen</h3>
-        <p className="text-[12px] text-ink-2 leading-[1.5]">
+        <p className="text-sm text-ink-2 leading-[1.5]">
           När du <strong className="text-ink">pausar</strong> en tjänst säger du upp den hos streamingbolaget själv — vi markerar den som pausad här och påminner dig när det är dags att starta om.
         </p>
       </div>

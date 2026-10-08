@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useCallback } from 'react';
 import { rememberNextPath } from '@/lib/nextPath';
+import { clearPendingAdd, rememberPendingAdd, type PendingAdd } from '@/lib/pendingAdd';
 
 /**
  * BIN-714 — what a SIGNED-OUT tap on an add affordance does. Malin's decision,
@@ -19,6 +20,7 @@ import { rememberNextPath } from '@/lib/nextPath';
  *   · `HomePageClient`   — the landing CTA
  *   · `MoviePageClient`  — the cinema-countdown strip's "Bevaka släpp" (BIN-731)
  *   · `CompanionSection` — the companion strip's "Lägg i vill se" (BIN-731)
+ *   · `CostCalculator`   — the calculator's "Logga in och spara" (BIN-1437)
  *
  * The last two are the reason this list is worth keeping: both were shipped
  * hidden or permanently disabled for signed-out visitors, because their
@@ -54,10 +56,15 @@ import { rememberNextPath } from '@/lib/nextPath';
  * visitor has no library and never will have one in this session, so those gates
  * are false forever for them — ordering this second is how the tap goes dead.
  */
-export function useSignedOutRedirect(): () => void {
+export function useSignedOutRedirect(): (pendingAdd?: PendingAdd) => void {
   const router = useRouter();
-  return useCallback(() => {
+  return useCallback((pendingAdd?: PendingAdd) => {
     rememberNextPath(window.location.pathname + window.location.search);
+    // BIN-1442: an add affordance passes the title it was tapped on, so the add
+    // happens after sign-in instead of being lost (`PendingAddRunner`). Any other
+    // caller clears it — the latest tap is the one the visitor meant.
+    if (pendingAdd) rememberPendingAdd(pendingAdd);
+    else clearPendingAdd();
     router.push('/login/');
   }, [router]);
 }

@@ -492,6 +492,24 @@
       "path": "functions/src/rotationReminder/index.ts"
     },
     {
+      "id": "cf-monthly-bill",
+      "label": "monthlyBillNotify",
+      "context": "backend-api",
+      "path": "functions/src/monthlyBillNotify/index.ts, functions/src/monthlyBillNotify/logic.ts, functions/src/shared/providerPaid.ts, functions/src/shared/inboxCard.ts"
+    },
+    {
+      "id": "cf-price-change",
+      "label": "priceChangeNotify",
+      "context": "backend-api",
+      "path": "functions/src/priceChangeNotify/index.ts"
+    },
+    {
+      "id": "price-change-feed",
+      "label": "/prisandringar.json (static, build time)",
+      "context": "web-app",
+      "path": "src/app/prisandringar.json/route.ts, src/lib/advisor/priceChangeNudges.ts, src/lib/tmdb/providers.ts"
+    },
+    {
       "id": "savings-advisor",
       "label": "useSubscriptionAdvisor",
       "context": "web-app",
@@ -526,6 +544,12 @@
       "label": "ForsvinnerListClient",
       "context": "web-app",
       "path": "src/components/pages/ForsvinnerListClient.tsx"
+    },
+    {
+      "id": "vart-det-page",
+      "label": "Värt det month page",
+      "context": "web-app",
+      "path": "src/app/vart-det/[month]/page.tsx"
     },
     {
       "id": "cineasterna-api",
@@ -669,7 +693,7 @@
       "id": "cf-retentionCleanup",
       "label": "retentionCleanup scheduled sweep",
       "context": "backend-api",
-      "path": "functions/src/retentionCleanup/index.ts, functions/src/retentionCleanup/runCleanup.ts, functions/src/retentionCleanup/logic.ts, functions/src/retentionCleanup/orphans.ts, functions/src/retentionCleanup/fieldOwned.ts, functions/src/groupHandover/runHandover.ts, functions/src/groupHandover/logic.ts, functions/src/friendRequestPush/logic.ts"
+      "path": "functions/src/retentionCleanup/index.ts, functions/src/retentionCleanup/runCleanup.ts, functions/src/retentionCleanup/logic.ts, functions/src/retentionCleanup/orphans.ts, functions/src/retentionCleanup/fieldOwned.ts, functions/src/retentionCleanup/runHealth.ts, functions/src/groupHandover/runHandover.ts, functions/src/groupHandover/logic.ts, functions/src/friendRequestPush/logic.ts"
     },
     {
       "id": "data-export-section",
@@ -697,7 +721,7 @@
     },
     {
       "id": "group-handover-lib",
-      "label": "groupHandover.ts (handOverOwnedGroups)",
+      "label": "groupHandover.ts (handOverOwnedGroups, handOverGroup)",
       "context": "web-app",
       "path": "src/lib/firebase/groupHandover.ts"
     },
@@ -714,16 +738,22 @@
       "path": "src/components/layout/EmailVerificationBanner.tsx"
     },
     {
+      "id": "profile-offline-banner",
+      "label": "ProfileOfflineBanner",
+      "context": "web-app",
+      "path": "src/components/layout/ProfileOfflineBanner.tsx, src/lib/onboarding.ts"
+    },
+    {
       "id": "static-passive-pages",
       "label": "Static & read-only library pages",
       "context": "web-app",
       "path": "src/app"
     },
     {
-      "id": "external-plausible",
-      "label": "Plausible Analytics",
-      "context": "external-api",
-      "path": "functions/src/insights/api.ts"
+      "id": "cf-recordEvent",
+      "label": "recordEvent (callable)",
+      "context": "backend-api",
+      "path": "functions/src/eventStats/index.ts, functions/src/eventStats/logic.ts"
     },
     {
       "id": "global-error-boundary",
@@ -745,7 +775,7 @@
     },
     {
       "id": "analytics-lib",
-      "label": "trackEvent (Plausible wrapper)",
+      "label": "trackEvent (batched recordEvent client)",
       "context": "client-state",
       "path": "src/lib/analytics.ts"
     },
@@ -784,6 +814,36 @@
       "label": "Guider (hub-of-hubs)",
       "context": "web-app",
       "path": "src/app/guider/page.tsx, src/lib/seo/hubLinks.ts"
+    },
+    {
+      "id": "handover-group-dialog",
+      "label": "HandOverGroupDialog (steg 2 av 2)",
+      "context": "web-app",
+      "path": "src/components/groups/HandOverGroupDialog.tsx"
+    },
+    {
+      "id": "cf-handOverGroup",
+      "label": "handOverGroup callable",
+      "context": "backend-api",
+      "path": "functions/src/groupHandover/index.ts, functions/src/groupHandover/runHandover.ts, functions/src/groupHandover/adminIo.ts"
+    },
+    {
+      "id": "cf-eraseMyGroupTraces",
+      "label": "eraseMyGroupTraces callable",
+      "context": "backend-api",
+      "path": "functions/src/groupHandover/index.ts, functions/src/groupHandover/runHandover.ts, functions/src/groupHandover/adminIo.ts"
+    },
+    {
+      "id": "cf-notifyReportDecided",
+      "label": "notifyReportDecided trigger",
+      "context": "backend-api",
+      "path": "functions/src/reportDecided/index.ts, functions/src/reportDecided/logic.ts"
+    },
+    {
+      "id": "pricing-ui",
+      "label": "Pengakollen (kalkylator, prissida, gästdemo)",
+      "context": "web-app",
+      "path": "src/components/pricing, src/lib/advisor/guestCost.ts, src/lib/guestProviders.ts, src/lib/priceFreshness.ts, src/lib/priceTableRows.ts, src/lib/tmdb/providers.ts"
     }
   ],
   "actions": [
@@ -844,7 +904,7 @@
         {
           "from": "auth-context",
           "to": "web-app",
-          "payload": "BIN-645 landing — LoginPage redirects once `uid` exists AND `profileLoading` has settled either way, latched by a ref because takeNextPath() consumes. A profile that could not be read cannot claim the account needs onboarding, so it routes to the remembered path (or '/') rather than stranding a signed-in visitor on the sign-in form. A genuinely new account still goes to /onboarding/ first — and LoginPage is the app's ONLY router into it.",
+          "payload": "BIN-645 landing — LoginPage redirects once `uid` exists AND `profileLoading` has settled either way, latched by a ref because takeNextPath() consumes. A profile that could not be read cannot claim the account needs onboarding, so it routes to the remembered path (or '/') rather than stranding a signed-in visitor on the sign-in form. A genuinely new account still goes to /onboarding/ first.",
           "transport": "router.push",
           "verified": true
         },
@@ -963,7 +1023,7 @@
         {
           "from": "cf-sendPush",
           "to": "fcm-sw",
-          "payload": "push message (tab closed)",
+          "payload": "push message (tab closed); fcmOptions.link = withPushUtm(actionUrl, tag) — same-origin links gain utm_source=push, utm_medium=notis, utm_campaign=<tag prefix>; nothing in the app reads the tags since BIN-1438",
           "transport": "FCM / Web Push",
           "verified": true
         },
@@ -1300,6 +1360,13 @@
         },
         {
           "from": "list-page-client",
+          "to": "analytics-lib",
+          "payload": "public list only: ShareButton → trackEvent('share_clicked', {surface:'list', method}) then navigator.share or clipboard with /list/{id}/?utm_source=share&utm_medium=list. The link opens the prerendered list shell, which carries its own link preview",
+          "transport": "function call + Web Share / Clipboard API",
+          "verified": true
+        },
+        {
+          "from": "list-page-client",
           "to": "uselists-hook",
           "payload": "usePublicList(listId) → single getDoc lists/{listId} (react-query cached, staleTime 60s)",
           "transport": "Firestore read",
@@ -1336,6 +1403,13 @@
           "to": "user-profile-page",
           "payload": "resolveRoute(pathname) matches kind:'user' → renders UserProfilePageClient(username)",
           "transport": "client-side route dispatch",
+          "verified": true
+        },
+        {
+          "from": "user-profile-page",
+          "to": "analytics-lib",
+          "payload": "public or own profile: ShareButton → trackEvent('share_clicked', {surface:'profile', method}) then navigator.share or clipboard with /user/{username}/?utm_source=share&utm_medium=profile; served from the out/user/_/index.html shell with its own link preview",
+          "transport": "function call + Web Share / Clipboard API",
           "verified": true
         },
         {
@@ -1504,6 +1578,13 @@
           "payload": "acceptFriendRequest/declineFriendRequest — accept: batch set users/{my}/friends/{from} + users/{from}/friends/{my} (mutual) and delete both request docs; decline: delete both request docs only",
           "transport": "Firestore batch write",
           "verified": true
+        },
+        {
+          "from": "auth-context",
+          "to": "firestore",
+          "payload": "BIN-1174: after a rename, publishIdentityChange also calls updateSentFriendRequestIdentity(uid, {displayName, username}). It reads my own users/{uid}/friendRequestsSent, bounded by SENT_REQUESTS_IDENTITY_LIMIT, and runs a two-key updateDoc on each users/{toUid}/friendRequests/{uid}. It never uses set or merge, so a request that was already answered is not recreated. The update rule lets only the sender change fromDisplayName and fromUsername, each unchanged or non-null and equal to the sender's live profile. Every failed write is reported (captureError kind identityFanOut-friendRequest) and never fails the rename. Group invites are not rewritten; that is a dated entry in accepted-deviations.md.",
+          "transport": "Firestore write (fan-out)",
+          "verified": true
         }
       ],
       "area": "social"
@@ -1511,19 +1592,23 @@
     {
       "id": "flow-groups",
       "label": "Groups: create, invite, manage",
-      "description": "Owner creates a group (self as first member) and gets a plaintext invite token whose hash alone is persisted; joining is a two-step rule-verified token check, or a consent-based invite-by-handle that mirrors the friend-request pattern. Owner-only settings cover rename/defaults, member removal, and a client-side cascading delete across subcollections. BIN-184 added an opt-in household facet: a member who explicitly shares (writes groups/{gid}/household/{uid}) unlocks a share-to-see aggregate view of the group's cost data (HouseholdPanel/useGroupHousehold) — reads require the reader to already share too, revoke is immediate, and the doc is cascade-deleted on opt-out/leave/removal/group-deletion and on account deletion/export (flow-gdpr).",
+      "description": "Owner creates a group (self as first member) and gets a plaintext invite token whose hash alone is persisted; joining is a two-step rule-verified token check, or a consent-based invite-by-handle that mirrors the friend-request pattern. Owner-only settings cover rename/defaults, member removal, and a client-side cascading delete across subcollections. BIN-184 added an opt-in household facet: a member who explicitly shares (writes groups/{gid}/household/{uid}) unlocks a share-to-see aggregate view of the group's cost data (HouseholdPanel/useGroupHousehold) — reads require the reader to already share too, revoke is immediate, and the doc is cascade-deleted on opt-out/leave/removal/group-deletion and on account deletion/export (flow-gdpr). BIN-1118: en ägare som vill sluta sköta gruppen öppnar Gruppinställningar och väljer \"Lämna över\", som är steg 1 av 2; steg 2 är HandOverGroupDialog, där ägaren pekar ut en medlem. Klienten kan inte skriva ownerUid — den är pinnad oförändrad på varje klientskrivbar groups-update-gren — så valet går genom handOverGroup-callablen, som validerar att anroparen äger gruppen och att efterträdaren står i memberUids, raderar den avgående ägarens egna spår med samma maskineri som kontoraderingens dörr, och först därefter byter ägare under adminIo:s optimistiska spärr. Efteråt skriver den ett system-kort i varje kvarvarande medlems users/{uid}/notifications. BIN-1120: gruppsidans ⋯-meny är samma UgcActionsMenu som recensioner använder, med utträdet flyttat in i den och targetType=group.",
       "covers": [
         "/grupper",
         "/grupper/ny",
         "grupper/[id]",
         "GroupSettingsModal",
-        "HouseholdPanel"
+        "HouseholdPanel",
+        "handOverGroup",
+        "eraseMyGroupTraces",
+        "HandOverGroupDialog",
+        "UgcActionsMenu"
       ],
       "steps": [
         {
           "from": "grupper-new-page",
           "to": "firestore",
-          "payload": "createGroup — addDoc groups/{id} {name,ownerUid,memberUids:[ownerUid],defaults,inviteTokenHash:sha256(token)} + setDoc publicGroups/{id} {name} (BIN-1152 — the signed-in-readable name projection; its position between the two is load-bearing, because its write rule requires the group document to exist and it must precede the member doc so the createGroup-memberDoc rollback branch is what cleans it) + setDoc groups/{id}/members/{ownerUid} {uid,displayName,username,photoURL,providers,joinedAt} — the field set firestore.rules' isValidGroupMember pins; derive it with: grep -n -A 10 function.memberFields src/lib/firebase/groups.ts",
+          "payload": "createGroup — addDoc groups/{id} {name,ownerUid,memberUids:[ownerUid],defaults,inviteTokenHash:sha256(token)} (BIN-1291: the create rule refuses an id that is an existing users/{id} document, so a group can never share an id with an account) + setDoc publicGroups/{id} {name} (BIN-1152 — the signed-in-readable name projection; its position between the two is load-bearing, because its write rule requires the group document to exist and it must precede the member doc so the createGroup-memberDoc rollback branch is what cleans it) + setDoc groups/{id}/members/{ownerUid} {uid,displayName,username,photoURL,providers,joinedAt} — the field set firestore.rules' isValidGroupMember pins; derive it with: grep -n -A 10 function.memberFields src/lib/firebase/groups.ts",
           "transport": "Firestore write",
           "verified": true
         },
@@ -1577,6 +1662,13 @@
           "verified": true
         },
         {
+          "from": "group-members-panel",
+          "to": "cf-eraseMyGroupTraces",
+          "payload": "BIN-1296: after the owner removeMember batch has gone through, removeMemberAsOwner calls httpsCallable eraseMyGroupTraces({groupId, memberUid}) without waiting for it. The server reads the group first; a caller who does not own it, or a group that does not exist, gets the same silent ok and nothing is written. For the owner it erases the removed member traces the same way a leave does, and each chunk re-reads the group in its transaction and stops if the member is back, the group is gone or the caller is no longer the owner. A failure is reported as removeMember-traceErasure and never turns the removal into a failure.",
+          "transport": "Callable (httpsCallable)",
+          "verified": true
+        },
+        {
           "from": "group-page-client",
           "to": "household-panel",
           "payload": "renders <HouseholdPanel groupId> in the group side panel — aggregate-only UI (\"Disney+ betalas av 2 av er\"), never per-person; copy never implies account sharing (ADR 0010)",
@@ -1610,6 +1702,83 @@
           "payload": "BIN-1162: a rename fans out to each group's own copy of the name. publishIdentityChange runs AFTER the users/{uid} write resolves, then queries groups where memberUids array-contains uid — bounded by MY_GROUPS_LIMIT, the constant imported from groups.ts rather than re-declared — and calls updateMemberIdentity(groupId, uid, {displayName, username}) per group. That write is a two-key updateDoc, never memberFields() and never a merge set: memberFields() builds the WHOLE document, so rebuilding through it would stamp photoURL and providers with values this caller does not own, and omitting joinedAt is what satisfies the rule's immutability check, while updateDoc's not-found failure is what stops the fan-out recreating a row the deletion cascade already took. Each group is caught on its own (captureError kind identityFanOut-group; a failed import or query is identityFanOut-query), so a group whose write fails keeps the OLD name until the next rename or rejoin — there is no reconciliation pass, and that residual is a dated entry in accepted-deviations.md. Tillsammans participants are deliberately untouched: a session seat can be anonymous, so there is no account to resolve a current name from.",
           "transport": "Firestore write (fan-out)",
           "verified": true
+        },
+        {
+          "from": "group-settings-modal",
+          "to": "handover-group-dialog",
+          "payload": "ägaren öppnar steg 2",
+          "transport": "React render",
+          "verified": true
+        },
+        {
+          "from": "handover-group-dialog",
+          "to": "group-handover-lib",
+          "payload": "handOverGroup(groupId, successorUid)",
+          "transport": "function call",
+          "verified": true
+        },
+        {
+          "from": "group-handover-lib",
+          "to": "cf-handOverGroup",
+          "payload": "httpsCallable handOverGroup({groupId, successorUid}) — uid tas ur request.auth, aldrig ur nyttolasten",
+          "transport": "https-callable",
+          "verified": true
+        },
+        {
+          "from": "cf-handOverGroup",
+          "to": "firestore",
+          "payload": "läser groups/{id} + watchlist + sessionHistory, raderar den avgående ägarens spår (members/{uid}, household/{uid}, progress/{uid}, joinAttempts/{uid}) och rensar addedBy/pickedByUid/participantUids samt ägarens egen nyckel i watchlist.memberRatings (BIN-1306; de andra medlemmarnas betyg står kvar)",
+          "transport": "Firestore batch write",
+          "verified": true
+        },
+        {
+          "from": "cf-handOverGroup",
+          "to": "firestore",
+          "payload": "claimOwnership i transaktion — skriver ownerUid + memberUids",
+          "transport": "firestore-transaction-write",
+          "verified": true
+        },
+        {
+          "from": "cf-handOverGroup",
+          "to": "firestore",
+          "payload": "BIN-1271: raderar inbjudningarna den avgående ägaren skickat till just den här gruppen (users/*/groupInvites/{groupId} med fromUid = ägaren) — efter ägarbytet och bäst-möjliga, en miss fäller inte överlämningen",
+          "transport": "Firestore batch write",
+          "verified": true
+        },
+        {
+          "from": "cf-handOverGroup",
+          "to": "firestore",
+          "payload": "ett system-kort per kvarvarande medlem i users/{uid}/notifications — bäst-möjliga, en miss fäller inte överlämningen",
+          "transport": "Firestore batch write",
+          "verified": true
+        },
+        {
+          "from": "group-page-client",
+          "to": "ugc-actions-menu",
+          "payload": "⋯ Mer — Lämna gruppen, Anmäl gruppen; menyn döljer sig för ägaren, som når överlämningen via Inställningar",
+          "transport": "React render",
+          "verified": true
+        },
+        {
+          "from": "ugc-actions-menu",
+          "to": "firestore",
+          "payload": "Lämna gruppen → LeaveGroupDialog → leaveGroup(groupId, uid) → removeMember: EN klientbatch (arrayRemove ur memberUids, members/{uid}, household/{uid}). Själva utträdet går inte via någon serverväg eller gruppens medlemslista — det var #12 Trust & Safetys villkor för att flytta utträdet in i menyn. Faller skrivningen stängs rutan INTE; den byter text, eftersom omförsöket efter flytten ligger två klick in i menyn. Navigeringen efteråt är bäst-möjliga och rapporteras för sig.",
+          "transport": "Firestore batch write",
+          "verified": true
+        },
+        {
+          "from": "ugc-actions-menu",
+          "to": "cf-eraseMyGroupTraces",
+          "payload": "BIN-1260: EFTER att removeMember gått igenom anropar leaveGroup httpsCallable eraseMyGroupTraces({groupId}) utan att vänta in den. Uid:t tas ur request.auth. Ett fel rapporteras som leaveGroup-traceErasure och gör aldrig utträdet till ett misslyckande.",
+          "transport": "httpsCallable",
+          "verified": true
+        },
+        {
+          "from": "cf-eraseMyGroupTraces",
+          "to": "firestore",
+          "payload": "runLeaverErasure: läser groups/{id} FÖRST och vägrar den som står i memberUids eller äger gruppen, innan titellistan och sessionshistoriken läses. Sedan memberTraceWrites för anroparens uid (joinAttempts/{uid}, varje watchlist/*/progress/{uid}, addedBy och pickedByUid där de pekar på anroparen, anroparens egen nyckel i watchlist.memberRatings (BIN-1306), anroparen ur participantUids), i chunkar där varje chunk är en egen transaktion som läser om gruppen och stannar om anroparen gått med igen (leaverChunkMayCommit).",
+          "transport": "firestore-transaction-write",
+          "verified": true
         }
       ],
       "area": "social"
@@ -1627,7 +1796,7 @@
         {
           "from": "tillsammans-new-page",
           "to": "firestore",
-          "payload": "createSession — addDoc sessions/{id} {hostUid,hostName,groupId:null,config,status:'active',candidates:[],expiresAt:+7d} + set sessions/{id}/participants/{hostPid} {isHost:true,vetoRemaining:1} BIN-1165: firestore.rules now bounds hostName itself — create AND update require `hostName is string && size() <= 80`, the same number the participants row's displayName is pinned to and the same as MAX_SESSION_DISPLAY_NAME. BIN-1177: each of those clauses is read out of firestore.rules and compared with the constant — `npx vitest run src/lib/clampText.test.ts -t sessionsetikettens`. Before it, a script or a direct Firestore write with its own credentials could store an arbitrarily long label on a document that is `allow read: if true`. The type half is load-bearing rather than decorative: a list also has size(), so without it the bound would measure element count. The clause is inline on both branches (BIN-1153), with a denial test per branch, and it is unconditional on update because request.resource.data there is the whole post-write document. BIN-1175: the create branch also binds the document's key set and each field's type, and the update branch may change only candidates, status, updatedAt, hostName and groupId — groupId only to null, which is deleteGroup's unlink — so hostUid, config, createdAt and expiresAt cannot be rewritten after create, and a new key is refused. Read it in the `match /sessions/{sessionId}` block of firestore.rules.",
+          "payload": "createSession — addDoc sessions/{id} {hostUid,hostName,groupId:null,config,status:'active',candidates:[],expiresAt:+7d} + set sessions/{id}/participants/{hostPid} {isHost:true,vetoRemaining:1} BIN-1165: firestore.rules now bounds hostName itself — create AND update require `hostName is string && size() <= 80`, the same number the participants row's displayName is pinned to and the same as MAX_SESSION_DISPLAY_NAME. BIN-1177: each of those clauses is read out of firestore.rules and compared with the constant — `npx vitest run src/lib/clampText.test.ts -t sessionsetikettens`. Before it, a script or a direct Firestore write with its own credentials could store an arbitrarily long label on a document that is `allow read: if true`. The type half is load-bearing rather than decorative: a list also has size(), so without it the bound would measure element count. The clause is inline on both branches (BIN-1153), with a denial test per branch, and it is unconditional on update because request.resource.data there is the whole post-write document. BIN-1175: the create branch also binds the document's key set and each field's type, and the update branch may change only candidates, status, updatedAt, hostName and groupId — groupId only to null, which is deleteGroup's unlink — so hostUid, config, createdAt and expiresAt cannot be rewritten after create, and a new key is refused. Read it in the `match /sessions/{sessionId}` block of firestore.rules. BIN-1301: the create rule requires createdAt == request.time and an expiresAt after request.time and at most 8 days past it; read it in the `match /sessions/{sessionId}` block of firestore.rules.",
           "transport": "Firestore write",
           "verified": true
         },
@@ -1843,7 +2012,7 @@
     {
       "id": "flow-digest",
       "label": "Weekly digest",
-      "description": "Every Monday 09:00 Europe/Stockholm, for each user with notificationSettings.weeklyDigest==true: rolls up library-altitude what's normally a per-title badge. LEAVING half reads the shared streamingOffers docs (written by the separate streamingOffersRefresh job — no TMDB calls here) for subscription offers leaving within 14 days on a provider the user owns. NEW half is just a COUNT of the user's own provider_available inbox docs from the last 7 days (reuses availableNotify's detection, no second system). Sends at most one push + one inbox card per Stockholm calendar day.",
+      "description": "Every Monday 09:00 Europe/Stockholm, for each user with notificationSettings.weeklyDigest==true: rolls up library-altitude what's normally a per-title badge. LEAVING half reads the shared streamingOffers docs (written by the separate streamingOffersRefresh job — no TMDB calls here) for subscription offers leaving within 14 days on a provider the user owns. NEW half is just a COUNT of the user's own provider_available inbox docs from the last 7 days (reuses availableNotify's detection, no second system). Writes at most one inbox card per Stockholm calendar day and sends no push (BIN-1442). On by default for accounts created since BIN-1442.",
       "covers": [
         "weeklyDigestNotify",
         "/my/all"
@@ -1886,15 +2055,72 @@
         },
         {
           "from": "cf-weekly-digest",
-          "to": "cf-sendPush",
-          "payload": "sendPushToUser(uid, {title:'Din streamingvecka', body:'N titlar lämnar dina tjänster snart · M nya den här veckan', actionUrl:'/my/all', tag:'weekly-digest'}, {pushEnabled})",
-          "transport": "in-process call",
+          "to": "firestore",
+          "payload": "set weeklyDigestState/{uid}.lastSentDate = runDate (only after the card is written — Cloud Scheduler is at-least-once; a same-day retry sees the marker and skips)",
+          "transport": "Firestore write",
+          "verified": true
+        }
+      ],
+      "area": "notifications"
+    },
+    {
+      "id": "flow-price-change-push",
+      "label": "Price change push",
+      "description": "BIN-1444, paket L. PRICE_CHANGES lives only in the client catalog (src/lib/tmdb/providers.ts), which the price agent edits and which deploys only the site, so the site publishes it at build time as the static /prisandringar.json with the banner's approved copy prebuilt by priceChangeText. A daily function fetches that file from the fixed https://binge.nu origin (timeout, no redirects, schema-validated, row cap; any failure logs and sends nothing), keeps rows at most 14 days old (a month-only date counts from the 1st), and pushes users opted into notificationSettings.priceChanges whose service, tier and pause state match (rowAppliesTo, the same rule as the advisor banner). Dedup is per price change, written BEFORE the sends: at-most-once, and the marker carries no uid.",
+      "covers": [
+        "priceChangeNotify"
+      ],
+      "steps": [
+        {
+          "from": "price-change-feed",
+          "to": "cf-price-change",
+          "payload": "GET https://binge.nu/prisandringar.json → {version:1, rows:[{key, providerIds (canonical first), tierId, date, title, body}]} → parseFeed (whole file rejected on any malformed row) → freshRows(todayStockholm)",
+          "transport": "HTTPS fetch",
           "verified": true
         },
         {
-          "from": "cf-weekly-digest",
+          "from": "cf-price-change",
           "to": "firestore",
-          "payload": "set weeklyDigestState/{uid}.lastSentDate = runDate (only after a send — Cloud Scheduler is at-least-once; a same-day retry sees the marker and skips)",
+          "payload": "per fresh row: skip if priceChangeNotifyState/{key} exists; query users where notificationSettings.priceChanges==true (single-field equality); write priceChangeNotifyState/{key} {notifiedAt} BEFORE sending",
+          "transport": "Firestore read/write",
+          "verified": true
+        },
+        {
+          "from": "cf-price-change",
+          "to": "cf-sendPush",
+          "payload": "per matching user: sendPushToUser(uid, {title: row.title, body: row.body, actionUrl:'/savings/', tag:'price-change-{key}'}, {pushEnabled}) — push-only, no inbox doc",
+          "transport": "in-process call",
+          "verified": true
+        }
+      ],
+      "area": "notifications"
+    },
+    {
+      "id": "flow-monthly-bill",
+      "label": "Monthly bill notice",
+      "description": "On the 1st at 09:00 Europe/Stockholm: one bell card \"Din streaming i {månad}\" for every user whose bill in Rådgivaren has something to show for the month that just ended (a service that cost money and was not paused the whole month, and a film or an episode checked off in it). The card names no amount; the bill itself is computed client-side by buildMonthlyBill. Bell only, no push. On by default; a user with notificationSettings.monthlyBill === false in Inställningar, Notiser is skipped before any subcollection read (BIN-1449).",
+      "covers": [
+        "monthlyBillNotify"
+      ],
+      "steps": [
+        {
+          "from": "cf-monthly-bill",
+          "to": "firestore",
+          "payload": "page users by document id, select(myProviders, providerTiers, providerCosts, providerPauses, providerCampaigns, notificationSettings.monthlyBill); per user with a provider and not opted out: users/{uid}/pauseHistory → hasPaidService (catalog paid-ness from providerPaid.ts)",
+          "transport": "Firestore read",
+          "verified": true
+        },
+        {
+          "from": "cf-monthly-bill",
+          "to": "firestore",
+          "payload": "users/{uid}/watchlist where watchedAt in the month (movie, sedd); else every users/{uid}/episodeProgress doc for an episode watched:true in the month, whose watchlist/tv_N row exists",
+          "transport": "Firestore read",
+          "verified": true
+        },
+        {
+          "from": "cf-monthly-bill",
+          "to": "firestore",
+          "payload": "create() users/{uid}/notifications/monthly-bill-{yyyy-mm} {kind:'system', title, body, actionUrl:'/savings/', read:false}; an existing card is left alone",
           "transport": "Firestore write",
           "verified": true
         }
@@ -1904,7 +2130,7 @@
     {
       "id": "flow-rotation",
       "label": "Rotation reminder",
-      "description": "Daily scan of users opted into notificationSettings.rotationReminders==true. The rotation calendar itself is computed client-side (watchlist × TMDB × subscription cost) and persisted inline as users/{uid}.rotationSchedule when the user confirms reminders — the scheduled function never talks to TMDB, it only evaluates that persisted schedule against a 1-day due window (Stockholm date) and fires cancel/resume nudges, deduped per event via a marker written AFTER the push.",
+      "description": "Daily scan of users opted into notificationSettings.rotationReminders==true. The rotation calendar itself is computed client-side (watchlist × TMDB × subscription cost) and persisted inline as users/{uid}.rotationSchedule when the user confirms reminders — the scheduled function never talks to TMDB, it only evaluates that persisted schedule against a 1-day due window (Stockholm date) and fires cancel/resume nudges as a bell card plus a push, deduped per event via a marker written AFTER the push. BIN-1442: the same run first sends the \"Påminn mig\" reminders for paused services, found through users/{uid}.pauseReminderNext.",
       "covers": [
         "rotationReminderNotify"
       ],
@@ -1915,6 +2141,34 @@
           "payload": "client writes the confirmed rotation calendar inline to users/{uid}.rotationSchedule (providerId, cancelDate, resumeDate) when the user opts into reminders",
           "transport": "Firestore write",
           "verified": false
+        },
+        {
+          "from": "web-app",
+          "to": "firestore",
+          "payload": "Pausa → \"Påminn mig {datum}\": mergeUserDoc users/{uid} {providerPauses.{id}.remind:true, pauseReminderNext: earliest reminded resumeAt} (written together with every pause change)",
+          "transport": "Firestore write",
+          "verified": true
+        },
+        {
+          "from": "cf-rotation-reminder",
+          "to": "firestore",
+          "payload": "first: query users where pauseReminderNext <= today, select(providerPauses, notificationSettings), limit 500; per user duePauseReminders() and one read of users/{uid}/watchlist where status=='mina' to count followed series airing on that service",
+          "transport": "Firestore read",
+          "verified": true
+        },
+        {
+          "from": "cf-rotation-reminder",
+          "to": "cf-sendPush",
+          "payload": "per due pause: create users/{uid}/notifications/pause-reminder-{providerId}-{resumeAt}, then create rotationReminderState/{uid}_{providerId}_pause_{resumeAt} BEFORE the push (an existing marker skips the push), then sendPushToUser(uid, {title:{service}, body:'{service} har nytt igen: N serier du följer släpper avsnitt. Dags att starta om?'}, {pushEnabled})",
+          "transport": "in-process call",
+          "verified": true
+        },
+        {
+          "from": "cf-rotation-reminder",
+          "to": "firestore",
+          "payload": "update() users/{uid}: delete providerPauses.{id}.remind for the handled pauses, pauseReminderNext = next remaining or deleted (update fails rather than recreating a deleted profile)",
+          "transport": "Firestore write",
+          "verified": true
         },
         {
           "from": "cf-rotation-reminder",
@@ -1940,7 +2194,7 @@
         {
           "from": "cf-rotation-reminder",
           "to": "cf-sendPush",
-          "payload": "sendPushToUser(uid, {title: cancel?'Dags att rotera':'Värt det igen', body:'Dags att pausa {service} — inget du följer sänds just nu' / '{service} är värt det igen — nytt att följa', actionUrl:'/savings/', tag:'rotation-{providerId}'}, {pushEnabled}) — push-only, no inbox doc (inbox model is tmdbId-shaped)",
+          "payload": "per due event: create users/{uid}/notifications/rotation-{providerId}-{kind}-{date} (kind system, create() so a retry never doubles it), then sendPushToUser(uid, {title: cancel?'Dags att rotera':'Värt det igen', body:'Dags att pausa {service} — inget du följer sänds just nu' / '{service} är värt det igen — nytt att följa', actionUrl:'/savings/', tag:'rotation-{providerId}'}, {pushEnabled}); {service} is the server's PROVIDER_NAMES entry, the client-written shortName only as fallback",
           "transport": "in-process call",
           "verified": true
         },
@@ -1987,6 +2241,13 @@
           "from": "savings-ui",
           "to": "savings-ui",
           "payload": "rankCoverageOptions() [CoverageOptimizer] + rotationPlan() [RotationPlanner] + useRotationCalendar/useSavingsLedger [RotationCalendar] — pure client-side scoring, no network",
+          "transport": "method call",
+          "verified": true
+        },
+        {
+          "from": "pricing-ui",
+          "to": "savings-ui",
+          "payload": "price watch + cancel link (paket L): computePriceChangeNudges(user.myProviders/providerTiers/providerPauses) over the static PRICE_CHANGES → PriceChangeNudges banners (dismissed keys in localStorage only); CancelHint reads the catalog's manageUrl + lastCancelDay(providerRenewalDays) in ProvidersByValue and the paused-services list — no network, no Firestore",
           "transport": "method call",
           "verified": true
         },
@@ -2062,6 +2323,38 @@
           "from": "forsvinner-page",
           "to": "web-app",
           "payload": "renders dated 'lämnar {date}' list, links to /movie/{id}/ or /tv/{id}/",
+          "transport": "React render",
+          "verified": true
+        }
+      ],
+      "area": "data pipelines"
+    },
+    {
+      "id": "flow-vart-det",
+      "label": "Värt det month page",
+      "description": "/vart-det/[month] (BIN-1449) is pre-rendered once per listed month (VART_DET_MONTHS). At build it reads the static price catalog and PRICE_CHANGES and asks TMDB what premieres on each paid service that month; in the browser it counts what leaves each service from the public leaving rollup. Kept noindex and out of the sitemap until Malin has seen the month.",
+      "covers": [
+        "/vart-det/[month]"
+      ],
+      "steps": [
+        {
+          "from": "vart-det-page",
+          "to": "tmdb-api",
+          "payload": "build time: fetchMonthPremieres — discoverMovies by primary_release_date and discoverTV by air_date in the month, per paid SEO provider (with_watch_providers, flatrate), plus getTVShowLite on running series to find a season premiering that month; a failed read leaves the service without a level",
+          "transport": "fetch (TMDB)",
+          "verified": true
+        },
+        {
+          "from": "vart-det-page",
+          "to": "firestore",
+          "payload": "browser: VartDetLeavingCount → useStreamingLeaving(providerId) reads streamingLeaving/current and counts titles leaving inside the month",
+          "transport": "Firestore read",
+          "verified": true
+        },
+        {
+          "from": "vart-det-page",
+          "to": "web-app",
+          "payload": "renders one row per paid service: list price (cheapestEntertainmentTier), first premiere and count, price change in the month or Oförändrat, leaving count, level badge (newLevel: ≥3 Mycket nytt, 1–2 Lite nytt, 0 Inget nytt) and the printed rule",
           "transport": "React render",
           "verified": true
         }
@@ -2306,8 +2599,15 @@
         {
           "from": "movie-tv-page",
           "to": "tmdb-api",
-          "payload": "getMovie/getTVShow(id) — full detail incl. credits, videos, watch/providers.SE, recommendations (pre-rendered for top-N via generateStaticParams; catch-all client fetch for long tail)",
+          "payload": "getMovie/getTVShow(id) — full detail incl. credits, videos, watch/providers.SE, recommendations (catch-all client fetch for long tail)",
           "transport": "fetch (TMDB)",
+          "verified": true
+        },
+        {
+          "from": "movie-tv-page",
+          "to": "analytics-lib",
+          "payload": "outbound service link click → trackEvent('provider_clicked', {providerId, offerType, mediaType}); ShareButton → trackEvent('share_clicked', {surface:'title', method}) then navigator.share or clipboard with the title URL + utm_source=share&utm_medium=title",
+          "transport": "function call",
           "verified": true
         },
         {
@@ -2379,12 +2679,14 @@
     {
       "id": "flow-moderation",
       "label": "Content reporting & moderation",
-      "description": "A user reports via the UgcActionsMenu \"…\" menu. Which target types have a surface in the app is pinned by src/lib/moderation/reportTargetCoverage.test.ts rather than listed here. The client-side reports.ts helper lazy-loads Firebase Functions and calls the submitReport callable (never writes reports/ directly — the create rule is locked to `if false`). The callable validates the payload server-side, enforces a per-uid 10s cooldown inside a Firestore transaction on users/{uid}/reportMeta/throttle (closing the old batch-throttle bypass, BIN-49), and derives the real targetOwnerUid from the target doc itself rather than trusting the client (BIN-292, anti-framing). It then writes the report doc to top-level reports/. Admins review it on /admin/reports (gated by users/{uid}.isAdmin, both client-side and via firestore.rules), which reads via listReports. BIN-1244: for a user report the row calls the admin-only getProfileForModeration callable, which checks users/{caller}.isAdmin server-side, spends a per-admin hourly budget in moderationBudget/{caller} (no rule matches it, so only the function can touch it), reads publicProfiles/{uid} with the Admin SDK and returns only the display fields, and logs actor, target and whether a profile was found. The row shows those fields inline, marks a profile that is not public, and links to /user/ plus the username only for a public profile. firestore.rules is not changed by this, so no other screen can see a private profile through it. The page can transition status via updateReportStatus (writes actionedByUid + updatedAt for an audit trail).",
+      "description": "A user reports via the UgcActionsMenu \"…\" menu. Which target types have a surface in the app is pinned by src/lib/moderation/reportTargetCoverage.test.ts rather than listed here. The client-side reports.ts helper lazy-loads Firebase Functions and calls the submitReport callable (never writes reports/ directly — the create rule is locked to `if false`). The callable validates the payload server-side, enforces a per-uid 10s cooldown inside a Firestore transaction on users/{uid}/reportMeta/throttle (closing the old batch-throttle bypass, BIN-49), and derives the real targetOwnerUid from the target doc itself rather than trusting the client (BIN-292, anti-framing). It then writes the report doc to top-level reports/. Admins review it on /admin/reports (gated by users/{uid}.isAdmin, both client-side and via firestore.rules), which reads via listReports. BIN-1244: for a user report the row calls the admin-only getProfileForModeration callable, which checks users/{caller}.isAdmin server-side, spends a per-admin hourly budget in moderationBudget/{caller} (no rule matches it, so only the function can touch it), reads publicProfiles/{uid} with the Admin SDK and returns only the display fields, and logs actor, target and whether a profile was found. The row shows those fields inline, marks a profile that is not public, and links to /user/ plus the username only for a public profile. firestore.rules is not changed by this, so no other screen can see a private profile through it. The page can transition status via updateReportStatus (writes actionedByUid + updatedAt for an audit trail). BIN-1120: en grupp är också ett mål. Uppräkningen av måltyper ligger i functions/src/submitReport/logic.ts, inte i firestore.rules, och resolveTargetRef bär numera fältnamnet för ägaren per måltyp — ett gruppdokument nycklar ägaren ownerUid och har inget uid, så en läsning som antog uid hade skrivit rapporten med targetOwnerUid null utan att något fällde. BIN-1259: när en anmälan går IN i actioned eller dismissed skriver notifyReportDecided ett kort i anmälarens egen inbox. Kortet har en enda lydelse för båda utfallen och namnger varken målet eller åtgärden; utlösaren läser bara status och reporterUid, aldrig admins interna motivering (BIN-1250). Dokument-id:t härleds ur rapporten, så Firestores at-least-once-leverans lägger inte ett andra kort.",
       "covers": [
         "submitReport",
         "getProfileForModeration",
         "/admin/reports",
-        "UgcActionsMenu"
+        "UgcActionsMenu",
+        "notifyReportDecided",
+        "grupper/[id]"
       ],
       "steps": [
         {
@@ -2432,7 +2734,7 @@
         {
           "from": "admin-reports-page",
           "to": "firestore",
-          "payload": "updateReportStatus(reportId, status, actionedByUid) → updateDoc reports/{id}",
+          "payload": "updateReportStatus(reportId, status, actionedByUid, decisionNote?) → updateDoc reports/{id}. BIN-1250: an optional internal note is written only when the admin typed one (clamped to MAX_DECISION_NOTE, capped the same in firestore.rules); the reporter's decided-notice never reads it",
           "transport": "firestore-write",
           "verified": true
         },
@@ -2449,6 +2751,41 @@
           "payload": "get users/{caller} (isAdmin must be true) → tx on moderationBudget/{caller} (hourly budget) → query reports where targetType=='user' and targetId==uid (a user report must exist) → get publicProfiles/{uid}; logger.info actorUid, targetUid, found",
           "transport": "Firestore read",
           "verified": true
+        },
+        {
+          "from": "group-page-client",
+          "to": "ugc-actions-menu",
+          "payload": "medlem öppnar ⋯ Mer → Anmäl gruppen (targetType=group, targetId=groupId)",
+          "transport": "React render",
+          "verified": true
+        },
+        {
+          "from": "admin-reports-page",
+          "to": "firestore",
+          "payload": "updateReportStatus — status till actioned eller dismissed",
+          "transport": "Firestore write",
+          "verified": true
+        },
+        {
+          "from": "firestore",
+          "to": "cf-notifyReportDecided",
+          "payload": "onDocumentUpdated reports/{reportId} — fyrar bara på en övergång IN i ett avgjort läge",
+          "transport": "firestore-trigger",
+          "verified": true
+        },
+        {
+          "from": "cf-notifyReportDecided",
+          "to": "firestore",
+          "payload": "create users/{reporterUid}/notifications/report_{reportId} {kind:system, title, body, read:false} — ingen actionUrl, anmälaren kan inte läsa reports/",
+          "transport": "Firestore write",
+          "verified": true
+        },
+        {
+          "from": "ugc-actions-menu",
+          "to": "firestore",
+          "payload": "BIN-1349: Blockera användare → blockUserAndEndFriendship: EN klientbatch som skriver users/{me}/blocked/{them} och raderar båda vänskapsspeglarna och väntande förfrågningar åt båda hållen (vägarna i relationshipDocsToClear). Den blockerade tappar direkt vänner-delade titlar och profilkortet. Ingen regeländring: raderingsreglerna låter båda parter radera. Efter en lyckad blockering rensar menyn vänskapens cache via useFriendActions().refreshFriendship, så vänknappen på profilen inte står kvar på Vän. Beskedet väntar på skrivningen; nekas den visas ett felbesked och felet rapporteras som social/blockUser. En avblockering återställer ingen vänskap.",
+          "transport": "Firestore batch write",
+          "verified": true
         }
       ],
       "area": "ops & compliance"
@@ -2456,7 +2793,7 @@
     {
       "id": "flow-insights",
       "label": "Insights dashboard",
-      "description": "rollupInsights runs on a 24h Cloud Scheduler trigger, paginated-scans the watchlist collectionGroup plus aggregate counts (users/reviews/groups/active sessions), and writes one current-state snapshot to insights/daily (read by the API) and a dated insights/{YYYY-MM-DD} history doc, then prunes history past a 90-day retention window. The apiInsights HTTP function sits behind the /api/insights Hosting rewrite; it authenticates either a Firebase ID token (must resolve to users/{uid}.isAdmin===true) or a static INSIGHTS_TOKEN secret, reads insights/daily (1 read) plus a baseline dated snapshot for window deltas, fetches live Plausible analytics and askBinge usage stats, merges them into one InsightsData JSON payload, and returns it with a 5-minute private cache header. The /insikter dashboard (InsikterClient + useInsightsData hook) calls fetchInsights with a bearer token and range, and renders the merged data.",
+      "description": "rollupInsights runs on a 24h Cloud Scheduler trigger, paginated-scans the watchlist collectionGroup plus aggregate counts (users/reviews/groups/active sessions), pages through Firebase Auth for weekly/monthly active-user counts (non-anonymous accounts by the later of lastSignInTime/lastRefreshTime; only the two counts are stored), and writes one current-state snapshot to insights/daily (read by the API) and a dated insights/{YYYY-MM-DD} history doc, then prunes history past a 90-day retention window. The apiInsights HTTP function sits behind the /api/insights Hosting rewrite; it authenticates either a Firebase ID token (must resolve to users/{uid}.isAdmin===true) or a static INSIGHTS_TOKEN secret, reads insights/daily (1 read) plus a baseline dated snapshot for window deltas, reads the eventStats day docs written by recordEvent and the askBinge usage stats, merges them into one InsightsData JSON payload, and returns it with a 5-minute private cache header. The /insikter dashboard (InsikterClient + useInsightsData hook) calls fetchInsights with a bearer token and range, and renders the merged data.",
       "covers": [
         "rollupInsights",
         "apiInsights",
@@ -2468,6 +2805,13 @@
           "to": "firestore",
           "payload": "collectionGroup('watchlist').select(...) paginated scan + count() aggregations (users/reviews/groups/activeSessions)",
           "transport": "firestore-query",
+          "verified": true
+        },
+        {
+          "from": "cf-rollupInsights",
+          "to": "firebase-auth",
+          "payload": "listUsers(1000, pageToken) paged → activeUserCounts() → rollup.activeUsers {d7, d30}; a failed scan omits the field and marks the rollup partial",
+          "transport": "firebase-admin auth",
           "verified": true
         },
         {
@@ -2500,15 +2844,15 @@
         },
         {
           "from": "cf-apiInsights",
-          "to": "external-plausible",
-          "payload": "fetchPlausible(range) — live analytics fetch",
-          "transport": "https-fetch",
+          "to": "firestore",
+          "payload": "readEventStats(range): eventStats where documentId in [from, to] + eventStats orderBy documentId limit 1 (first counted day → eventsSince). No docs in range → events: null (not measured, never 0); a read error → partial",
+          "transport": "firestore-query",
           "verified": true
         },
         {
           "from": "cf-apiInsights",
           "to": "insikter-page",
-          "payload": "JSON {success, data: InsightsData{rollup, plausible, askBinge, window}}",
+          "payload": "JSON {success, data: InsightsData{rollup, events, eventsSince, askBinge, window}}",
           "transport": "https-response",
           "verified": true
         }
@@ -2518,7 +2862,7 @@
     {
       "id": "flow-hygiene",
       "label": "Data hygiene & retention",
-      "description": "Two independent Cloud Scheduler jobs sweep Firestore for stale data the client-side deletion paths structurally can't reach or don't cover. reclaimOrphanFollows (weekly) reads every users/{uid} id into an alive-set, then paginated-scans the following/followers collectionGroups; a follow doc whose owner or counterpart uid isn't in the alive-set — and is older than a 24h grace window — is deleted in batches. This exists because a deleting user can only clean up follow docs they own; inbound follows created by other users on their own subcollections are permission-blocked from the deleter (firestore.rules: allow delete only for the owner). retentionCleanup (daily) paginated-scans the retention policy's targets — a parallel group first, then sequential ones that depend on it (read the roster from runRetentionCleanup rather than from a count here, which has gone stale on this page before): expired sessions/ (recursiveDelete to also reap participants/swipes subcollections), notifications/ older than 90 days across all users, groups/{id}/joinAttempts older than 1 hour (a spent plaintext invite-token backstop), and releaseNotifyState/{tmdbId}/notified/{uid} markers older than 30 days (BIN-464 — the per-user 'släpps idag' dedup marker, uid-identifying and admin-only so the client account-deletion cascade can't reach it; this sweep is its SOLE GDPR Art. 17 erasure path and its growth bound, covering self-service, abandoned and Console-deleted accounts alike), friendRequestPushes/{recipientUid}_{fromUid} markers past FRIEND_REQUEST_PUSH_MARKER_MAX_AGE_MS (BIN-1129 — the repeat friend-request push brake's marker; admin-only and outside users/, so this sweep is its only erasure path), and users/{uid}/fcmTokens/* belonging to accounts Auth no longer honours (BIN-848 — a delete or disable done in the Firebase Console runs no client cascade, and sendPushToUser gates on the profile doc's pushEnabled and never consults Auth, so that person's device keeps receiving notifications forever; FCM's own self-heal can't fire because the token is still valid on a live browser). That token sweep derives owner uids from the token refs, asks getUsers() in batches of at most 100, and deletes only for uids returned in the response's own notFound list or with disabled: true — never inferred from absence in users, since disabled accounts ARE returned there. The BIN-816 and BIN-875 sweeps run AFTER the parallel group and in that order, so a handle freed by the account the first deletes is released by the second in the SAME run: orphaned Auth accounts older than 7 days (an account whose users/{uid} profile is gone but whose Auth identity survived an interrupted client cascade), then the username reservations those accounts left behind. The BIN-816 sweep also calls deleteUsers, so the token sweep is not the only caller of an Auth user-management API in functions/. Both are ceiling-guarded independently: each refuses to delete anything at all if its candidate set is implausibly large for the number of accounts checked, and each distinguishes a scan that DIED (-1) from one that ran and found nothing (0). A batch that throws is skipped and counted, never read as \"gone\". It is NOT an unregister-on-session-end: a closed browser must keep receiving push. All deletes go through the Admin SDK, which bypasses firestore.rules entirely. BIN-727 (2026-08-15) split the orchestration out of the scheduling wrapper: functions/src/retentionCleanup/index.ts is now the port (onSchedule config, Admin handles, field projections) and runCleanup.ts holds the loop, importing neither firebase-admin nor firebase-functions — which is what lets src/test/rules/retention-cleanup-orchestrator.test.ts drive the sweeps against a live Firestore emulator under npm run test:rules. Same injected-port shape as tmdbTosSweep/runSweep.ts. Behaviour was unchanged by that split; the summary log is what docs/RUNBOOK.md triages on. BIN-1023 (2026-08-30) adds the mirror of the BIN-816 sweep and runs LAST: Firestore data whose owner uid Auth does not know at all — the whole users/{uid} tree via recursiveDelete plus the world-readable publicProfiles/{uid}, which is deleted FIRST because it lives outside that tree and would become unreachable once the uid stops appearing in listDocuments(). It never erases on one reading: a uid confirmed absent is stamped into orphanWatch/{uid} with firstSeenAt, and only a later run past ORPHAN_DATA_MIN_OBSERVED_MS deletes. That clock measures how long absence has been OBSERVED, not the account's own age, which no longer exists once the account is gone. BIN-1063 steg 3 (2026-09-07) closed the other half, inside that same per-uid erase and before the tree goes: content owned by a FIELD rather than by the uid in the path. Categories are walked from one exported list in fieldOwned.ts, which fieldOwned.test.ts pins. Not every category is a deletion: a list somebody else owns keeps its life and only loses the uid from editors, and an owned group with remaining members is HANDED OVER to the longest-standing member through the same runGroupHandover the account-delete callable drives — never a second election. A group with nobody left is deleted, and BIN-1152 (2026-09-13) added its publicGroups/{gid} name projection to that same delete list — it lives outside the group subtree, so groupSubtreePaths cannot reach it, and it is positioned BEFORE the group document because a ref earlier in the list never lands in a later chunk. A HANDED-OVER group keeps its projection: the group lives on under a new owner. Immediately before that delete each planned group is checked again (recheckPlannedGroup, BIN-1180): a group that gained a member is left entirely, and a group whose document has already vanished loses only its publicGroups projection while its planned subtree rows stay. It carries a second ceiling the account-level one cannot see: withinOrphanCeiling counts PEOPLE, and the blast radius of a correct pick is unbounded in DOCUMENTS, so FIELD_OWNED_MAX_DOCS_PER_UID is all-or-nothing per uid — a refusal erases nothing for that uid, logs loudly and keeps the watch record so the next run retries. A failed group handover stops that uid's erasure; the watch record survives, so the next run retries. BIN-1113 (2026-09-15) added friendMirrors to that list: rows about the departed uid in OTHER users' friends and friendRequestsSent (on their uid field) and incoming friendRequests (on fromUid). followers stays out; reclaimOrphanFollows reaps it.",
+      "description": "Two independent Cloud Scheduler jobs sweep Firestore for stale data the client-side deletion paths structurally can't reach or don't cover. reclaimOrphanFollows (weekly) reads every users/{uid} id into an alive-set, then paginated-scans the following/followers collectionGroups; a follow doc whose owner or counterpart uid isn't in the alive-set — and is older than a 24h grace window — is deleted in batches. This exists because a deleting user can only clean up follow docs they own; inbound follows created by other users on their own subcollections are permission-blocked from the deleter (firestore.rules: allow delete only for the owner). retentionCleanup (daily) paginated-scans the retention policy's targets — a parallel group first, then sequential ones that depend on it (read the roster from runRetentionCleanup rather than from a count here, which has gone stale on this page before): expired sessions/ (recursiveDelete to also reap participants/swipes subcollections), notifications/ older than 90 days across all users, groups/{id}/joinAttempts older than 1 hour (a spent plaintext invite-token backstop), and releaseNotifyState/{tmdbId}/notified/{uid} markers older than 30 days (BIN-464 — the per-user 'släpps idag' dedup marker, uid-identifying and admin-only so the client account-deletion cascade can't reach it; this sweep is its SOLE GDPR Art. 17 erasure path and its growth bound, covering self-service, abandoned and Console-deleted accounts alike), friendRequestPushes/{recipientUid}_{fromUid} markers past FRIEND_REQUEST_PUSH_MARKER_MAX_AGE_MS (BIN-1129 — the repeat friend-request push brake's marker; admin-only and outside users/, so this sweep is its only erasure path), and users/{uid}/fcmTokens/* belonging to accounts Auth no longer honours (BIN-848 — a delete or disable done in the Firebase Console runs no client cascade, and sendPushToUser gates on the profile doc's pushEnabled and never consults Auth, so that person's device keeps receiving notifications forever; FCM's own self-heal can't fire because the token is still valid on a live browser). That token sweep derives owner uids from the token refs, asks getUsers() in batches of at most 100, and deletes only for uids returned in the response's own notFound list or with disabled: true — never inferred from absence in users, since disabled accounts ARE returned there. The BIN-816 and BIN-875 sweeps run AFTER the parallel group and in that order, so a handle freed by the account the first deletes is released by the second in the SAME run: orphaned Auth accounts older than 7 days (an account whose users/{uid} profile is gone but whose Auth identity survived an interrupted client cascade), then the username reservations those accounts left behind. The BIN-816 sweep also calls deleteUsers, so the token sweep is not the only caller of an Auth user-management API in functions/. Both are ceiling-guarded independently: each refuses to delete anything at all if its candidate set is implausibly large for the number of accounts checked, and each distinguishes a scan that DIED (-1) from one that ran and found nothing (0). A batch that throws is skipped and counted, never read as \"gone\". It is NOT an unregister-on-session-end: a closed browser must keep receiving push. All deletes go through the Admin SDK, which bypasses firestore.rules entirely. BIN-727 (2026-08-15) split the orchestration out of the scheduling wrapper: functions/src/retentionCleanup/index.ts is now the port (onSchedule config, Admin handles, field projections) and runCleanup.ts holds the loop, importing neither firebase-admin nor firebase-functions — which is what lets src/test/rules/retention-cleanup-orchestrator.test.ts drive the sweeps against a live Firestore emulator under npm run test:rules. Same injected-port shape as tmdbTosSweep/runSweep.ts. Behaviour was unchanged by that split; the summary log is what docs/RUNBOOK.md triages on. BIN-1023 (2026-08-30) adds the mirror of the BIN-816 sweep and runs LAST: Firestore data whose owner uid Auth does not know at all — the whole users/{uid} tree via recursiveDelete plus the world-readable publicProfiles/{uid}, which is deleted FIRST because it lives outside that tree and would become unreachable once the uid stops appearing in listDocuments(). It never erases on one reading: a uid confirmed absent is stamped into orphanWatch/{uid} with firstSeenAt, and only a later run past ORPHAN_DATA_MIN_OBSERVED_MS deletes. That clock measures how long absence has been OBSERVED, not the account's own age, which no longer exists once the account is gone. BIN-1063 steg 3 (2026-09-07) closed the other half, inside that same per-uid erase and before the tree goes: content owned by a FIELD rather than by the uid in the path. Categories are walked from one exported list in fieldOwned.ts, which fieldOwned.test.ts pins. Not every category is a deletion: a list somebody else owns keeps its life and only loses the uid from editors, and an owned group with remaining members is HANDED OVER to the longest-standing member through the same runGroupHandover the account-delete callable drives — never a second election. A group with nobody left is deleted, and BIN-1152 (2026-09-13) added its publicGroups/{gid} name projection to that same delete list — it lives outside the group subtree, so groupSubtreePaths cannot reach it, and it is positioned BEFORE the group document because a ref earlier in the list never lands in a later chunk. A HANDED-OVER group keeps its projection: the group lives on under a new owner. Immediately before that delete each planned group is checked again (recheckPlannedGroup, BIN-1180): a group that gained a member is left entirely, and a group whose document has already vanished loses only its publicGroups projection while its planned subtree rows stay. It carries a second ceiling the account-level one cannot see: withinOrphanCeiling counts PEOPLE, and the blast radius of a correct pick is unbounded in DOCUMENTS, so FIELD_OWNED_MAX_DOCS_PER_UID is all-or-nothing per uid — a refusal erases nothing for that uid, logs loudly and keeps the watch record so the next run retries. A failed group handover stops that uid's erasure; the watch record survives, so the next run retries. BIN-1113 (2026-09-15) added friendMirrors to that list: rows about the departed uid in OTHER users' friends and friendRequestsSent (on their uid field) and incoming friendRequests (on fromUid). followers stays out; reclaimOrphanFollows reaps it. BIN-1279 added rotationReminders: rotationReminderState markers where uid == the departed uid.",
       "covers": [
         "reclaimOrphanFollows",
         "retentionCleanup"
@@ -2548,7 +2892,7 @@
         {
           "from": "cf-retentionCleanup",
           "to": "firestore",
-          "payload": "collection('sessions').select('expiresAt','createdAt') scan → expired refs",
+          "payload": "collection('sessions').select('expiresAt','createdAt') scan → expired refs — isExpiredSession decides (BIN-1301: also once server createdAt is older than SESSION_LIFETIME_MS, whatever expiresAt says)",
           "transport": "firestore-query",
           "verified": true
         },
@@ -2586,6 +2930,34 @@
           "payload": "getUsers() over the collected uids in batches of ≤100 (Admin SDK cap) → revoked = the response's own notFound entries + any user returned with disabled: true → batch.delete their fcmTokens docs. Read notFound explicitly, NEVER absence from users: disabled accounts are returned IN users, so inferring deletion from absence would over-delete live accounts' push registrations. A batch that throws is skipped and counted in skippedAuthBatches — \"could not verify\" is not \"gone\" — and the whole scan is caught separately. Needs firebaseauth.users.get on the runtime service account: without it every batch throws and the sweep is silently inert while the deploy stays green, which is what checkedUids in the summary log exists to expose",
           "transport": "admin-auth-lookup+firestore-batch-write",
           "verified": true
+        },
+        {
+          "from": "cf-retentionCleanup",
+          "to": "firestore",
+          "payload": "BIN-1294: for an account deleted in Firebase Console (a uid Auth no longer knows, past the observation floor), after the owned-group handover the sweep runs runSweptMemberGroupErasure over every group where memberUids array-contains the uid and the uid is not the owner: the same trace erasure the delete button runs (member row, household, joinAttempts, progress rows, addedBy, the uid's own key in watchlist.memberRatings (BIN-1306), pickedByUid, participantUids), then arrayRemove of the uid from memberUids, last per group so a failed run finds the group again. planSweptMemberGroupErasure counts these writes into the all-or-nothing document budget first, and the step runs inside the same try that keeps the orphanWatch record on failure.",
+          "transport": "Admin SDK (scheduled)",
+          "verified": true
+        },
+        {
+          "from": "cf-retentionCleanup",
+          "to": "firestore",
+          "payload": "BIN-1317: the schedule wrapper watches its own run through runWatched (runHealth.ts). Before sweeping it reads retentionCleanupHealth/current, judges the PREVIOUS run with previousRunProblems — started but never done after it logged 'retentionCleanup: scheduled sweeps done', started but never reached either line, or no run started within the missed-run window — and stamps lastStartedAt. It stamps lastScheduledSweepsDoneAt when the sweep logs that first line, and lastDoneAt plus lastErrorCount when runRetentionCleanup returns. Every health step is caught on its own and never stops the sweep",
+          "transport": "Firestore read + merge write",
+          "verified": true
+        },
+        {
+          "from": "cf-retentionCleanup",
+          "to": "firestore",
+          "payload": "BIN-1317: a non-empty problem list — the previous run's, sent BEFORE this run sweeps, and this run's own logged errors or throw, sent after — becomes one sendAdminSystemNotification card in users/{ADMIN_UID}/notifications (the admin inbox, Malin's channel choice 2026-09-27; no push, no Sentry). ADMIN_UID unbound → the send no-ops and the run logs 'retentionCleanup: alert not sent'. A schedule that stops firing altogether is not seen: no run is left to notice",
+          "transport": "Firestore write",
+          "verified": true
+        },
+        {
+          "from": "cf-retentionCleanup",
+          "to": "firestore",
+          "payload": "BIN-1422: after the start stamp, runWatched lists the database's backups through the readBackups port — GET firestore.googleapis.com/v1/projects/<GCLOUD_PROJECT>/locations/eur3/backups with the runtime service account's token, bounded by BACKUP_CHECK_TIMEOUT_MS. Only READY backups of (default) count. A newest backup older than BACKUP_MAX_AGE_MS, no backup at all, or a list that could not be read (non-2xx, unreachable locations, throw, timeout) each becomes its own sendAdminSystemNotification card titled 'Säkerhetskopiorna av databasen behöver tittas på'. The check is caught on its own and never stops the sweep; it runs only when retentionCleanup runs",
+          "transport": "Firestore Admin REST (GET) + Firestore write",
+          "verified": true
         }
       ],
       "area": "ops & compliance"
@@ -2593,7 +2965,7 @@
     {
       "id": "flow-gdpr",
       "label": "GDPR export & account deletion",
-      "description": "DataExportSection (Art. 20) lazy-loads dataExport.ts and calls buildUserExport(uid), which runs entirely client-side — Firestore security rules gate each read to the caller's own docs — via collectUserDataSnapshots(uid) reading every user-owned collection (watchlist, tags, progress, reviews, follows, sessions, etc.), and downloadExport() triggers a browser-local JSON file download (no server round trip). DeleteAccountSection (Art. 17) calls AuthContext.deleteAccount(), which reuses the same collectUserDataSnapshots reads, then builds a deletion plan via collectDeletionRefs (every doc ref to delete plus member/editor-array updates on shared docs like groups/lists) and commits it in ≤450-op batches via applyDeletionPlan — both pure, db-injectable functions extracted (BIN-347) so the cascade is exercised against the Firestore emulator in tests. A token-age pre-flight (BIN-748) runs FIRST and refuses a session older than 2 minutes with nothing touched: deleteUser still has to come last (after it the client holds no token and firestore.rules denies every write in the cascade), so before the gate the ordinary click erased all Firestore data and THEN failed on requires-recent-login, leaving the Auth identity alive over an emptied account. The gate fails closed on an unparsable or unreadable authTime, and the settings screen only promises \"Ingenting har raderats.\" for the pre-flight refusal, never for the Firebase error that can only arrive after the cascade. BIN-796 gave that Firebase branch its own wording, and BIN-876 reworked the set into four: preflight (nothing touched, keeps its retry button), recent-login and partial-cascade (both fire AFTER the deletion marker is down, so AppShell has already replaced this component with DeletionLimbo — they carry no button; since BIN-925 (Malin, 2026-08-19) only partial-cascade names that screen's \"Slutför raderingen\", while recent-login names no button at all — that one string ALSO renders in BIN-813's untagged second-attempt case, where the only visible control is the toast's own \"Försök igen\", so no wording naming a button can be true in both), and a generic branch reached only from paths that run before the first write. applyDeletionPlan tags a failure that committed at least one chunk, which is what stops the generic \"Ingenting har raderats.\" being a lie about a half-erased account. BIN-796's always-attach-an-action rule is gone: an action still doubles the toast's life from 2500ms to 6000ms, but the toast is no longer the app's only notice that the library is gone while the account remains — DeletionLimbo states it persistently, and a button on this component would be a no-op because AppShell has already unmounted it. The retry clause is load-bearing: logging back in resumes nothing, it only refreshes the token the pre-flight reads. BIN-816 SHIPPED 2026-08-13 (ADR 0019/0020): an interrupted deletion no longer re-creates the profile with a consent record dated today. A uid-scoped localStorage marker gates every users/{uid} and publicProfiles/{uid} write through src/lib/firebase/userDocWrite.ts, AppShell renders DeletionLimbo instead of the app for a marked session (that is where \"blocked from writing\" is enforced — a page never rendered cannot write), and retentionCleanup gained two sweeps that finish the job server-side: orphaned Auth accounts older than 7 days, and the username reservations they leave behind. Both need a manual functions deploy. BIN-813 SHIPPED 2026-08-15 (ADR 0021, Malin's decision (a)): the pre-flight now reads that same marker — but only to choose WHICH of the two already-locked messages it throws, never whether it throws. With the marker down it drops the preflight code, so a stale retry after a started deletion classifies as recent-login instead of carrying the promise that nothing was touched. The age check itself is untouched and still runs unconditionally before every read and write, which is the panel's binding condition: a marker that shortened the gate would tear down BIN-748 and start deleting on a token Firebase refuses anyway. BIN-877 (2026-08-14) added a contact path (hej@binge.nu) to this component and to DeletionLimbo — ADDED, never written into the four locked strings — because the limbo screen renders without a Footer and so had no other route to a human. BIN-879 ACCEPTED 2026-08-15 (ADR 0022, Malin, with #6 DPO dissenting on the record): a marker-less device merely LOADING an authenticated page recreates the profile, and because both sweeps candidate on \"Auth account exists AND profile confirmed absent\", that account leaves the candidate set PERMANENTLY rather than being delayed. Accepted because only the account holder can reach it and the 25 collections are already erased by then; docs/data-retention-policy.md carries the dated decision and docs/RUNBOOK.md §5f the support signature. BIN-909 SHIPPED 2026-08-27 (3871aea) and closed that half: the recreate no longer stamps a consent record at all. When a returning account's Auth identity is older than RETURNING_ACCOUNT_MIN_AGE_MS (5 min, measured on firebaseUser.metadata.creationTime — a clock deleting users/{uid} does not touch), ensureUserProfile returns pendingReconsent instead of writing, and AppShell hands the shell to ReconsentGate, which ASKS for both stamps. Nothing is written until the person ticks both boxes and submits. BIN-1032 SHIPPED 2026-08-27 (96074f3): that submit path (completeReconsent) creates users/{uid} without going through ensureUserProfile, so it read no marker of its own — it now calls assertProfileWritable before its first await, and the screen tells a refused write apart from a network failure rather than advising a retry that can never succeed. BIN-1025 (same commit) moved the same guard to the library's add door: writeTitle REFUSES by throwing when the marker is down, closing the path where an old tab could create users/{uid}/watchlist/* mid-cascade via a full payload that BIN-942's create floor accepts, and gating the group-progress sync on a fresh marker read. All of it is device-local by construction, so ADR 0022's cross-device accept above is unchanged. BIN-1023 shipped the server-side sweep for the uid-keyed half (see the hygiene flow). Only once the cascade succeeds does deleteUser run, then local Firestore IndexedDB persistence is cleared. BIN-184: household contributions (groups/{gid}/household/{uid}) are group-scoped, not user-owned, so they're fetched/queued inline rather than through collectUserDataSnapshots — the same pattern already used for joinAttempts. EmailVerificationBanner is a lightweight adjacent flow: resendEmailVerification calls Firebase Auth's sendEmailVerification directly (no Firestore/Functions involved), non-blocking, dismissible.",
+      "description": "DataExportSection (Art. 20) lazy-loads dataExport.ts and calls buildUserExport(uid), which runs entirely client-side — Firestore security rules gate each read to the caller's own docs — via collectUserDataSnapshots(uid) reading every user-owned collection (watchlist, tags, progress, reviews, follows, sessions, etc.), and downloadExport() triggers a browser-local JSON file download (no server round trip). DeleteAccountSection (Art. 17) calls AuthContext.deleteAccount(), which reuses the same collectUserDataSnapshots reads, then builds a deletion plan via collectDeletionRefs (every doc ref to delete plus member/editor-array updates on shared docs like groups/lists) and commits it in ≤450-op batches via applyDeletionPlan — both pure, db-injectable functions extracted (BIN-347) so the cascade is exercised against the Firestore emulator in tests. A token-age pre-flight (BIN-748) runs FIRST and refuses a session older than 2 minutes with nothing touched: deleteUser still has to come last (after it the client holds no token and firestore.rules denies every write in the cascade), so before the gate the ordinary click erased all Firestore data and THEN failed on requires-recent-login, leaving the Auth identity alive over an emptied account. The gate fails closed on an unparsable or unreadable authTime, and the settings screen only promises \"Ingenting har raderats.\" for the pre-flight refusal, never for the Firebase error that can only arrive after the cascade. BIN-796 gave that Firebase branch its own wording, and BIN-876 reworked the set into four: preflight (nothing touched, keeps its retry button), recent-login and partial-cascade (both fire AFTER the deletion marker is down, so AppShell has already replaced this component with DeletionLimbo — they carry no button; since BIN-925 (Malin, 2026-08-19) only partial-cascade names that screen's \"Slutför raderingen\", while recent-login names no button at all — that one string ALSO renders in BIN-813's untagged second-attempt case, where the only visible control is the toast's own \"Försök igen\", so no wording naming a button can be true in both), and a generic branch reached only from paths that run before the first write. applyDeletionPlan tags a failure that committed at least one chunk, which is what stops the generic \"Ingenting har raderats.\" being a lie about a half-erased account. BIN-796's always-attach-an-action rule is gone: an action still doubles the toast's life from 2500ms to 6000ms, but the toast is no longer the app's only notice that the library is gone while the account remains — DeletionLimbo states it persistently, and a button on this component would be a no-op because AppShell has already unmounted it. The retry clause is load-bearing: logging back in resumes nothing, it only refreshes the token the pre-flight reads. BIN-816 SHIPPED 2026-08-13 (ADR 0019/0020): an interrupted deletion no longer re-creates the profile with a consent record dated today. A uid-scoped localStorage marker gates every users/{uid} and publicProfiles/{uid} write through src/lib/firebase/userDocWrite.ts, AppShell renders DeletionLimbo instead of the app for a marked session (that is where \"blocked from writing\" is enforced — a page never rendered cannot write), and retentionCleanup gained two sweeps that finish the job server-side: orphaned Auth accounts older than 7 days, and the username reservations they leave behind. BIN-813 SHIPPED 2026-08-15 (ADR 0021, Malin's decision (a)): the pre-flight now reads that same marker — but only to choose WHICH of the two already-locked messages it throws, never whether it throws. With the marker down it drops the preflight code, so a stale retry after a started deletion classifies as recent-login instead of carrying the promise that nothing was touched. The age check itself is untouched and still runs unconditionally before every read and write, which is the panel's binding condition: a marker that shortened the gate would tear down BIN-748 and start deleting on a token Firebase refuses anyway. BIN-877 (2026-08-14) added a contact path (hej@binge.nu) to this component and to DeletionLimbo — ADDED, never written into the four locked strings — because the limbo screen renders without a Footer and so had no other route to a human. BIN-879 ACCEPTED 2026-08-15 (ADR 0022, Malin, with #6 DPO dissenting on the record): a marker-less device merely LOADING an authenticated page recreates the profile, and because both sweeps candidate on \"Auth account exists AND profile confirmed absent\", that account leaves the candidate set PERMANENTLY rather than being delayed. Accepted because only the account holder can reach it and the 25 collections are already erased by then; docs/data-retention-policy.md carries the dated decision and docs/RUNBOOK.md §5f the support signature. BIN-909 SHIPPED 2026-08-27 (3871aea) and closed that half: the recreate no longer stamps a consent record at all. When a returning account's Auth identity is older than RETURNING_ACCOUNT_MIN_AGE_MS (5 min, measured on firebaseUser.metadata.creationTime — a clock deleting users/{uid} does not touch), ensureUserProfile returns pendingReconsent instead of writing, and AppShell hands the shell to ReconsentGate, which ASKS for both stamps. Nothing is written until the person ticks both boxes and submits. BIN-1032 SHIPPED 2026-08-27 (96074f3): that submit path (completeReconsent) creates users/{uid} without going through ensureUserProfile, so it read no marker of its own — it now calls assertProfileWritable before its first await, and the screen tells a refused write apart from a network failure rather than advising a retry that can never succeed. BIN-1025 (same commit) moved the same guard to the library's add door: writeTitle REFUSES by throwing when the marker is down, closing the path where an old tab could create users/{uid}/watchlist/* mid-cascade via a full payload that BIN-942's create floor accepts, and gating the group-progress sync on a fresh marker read. All of it is device-local by construction, so ADR 0022's cross-device accept above is unchanged. BIN-1023 shipped the server-side sweep for the uid-keyed half (see the hygiene flow). Only once the cascade succeeds does deleteUser run, then local Firestore IndexedDB persistence is cleared. BIN-184: household contributions (groups/{gid}/household/{uid}) are group-scoped, not user-owned, so they're fetched/queued inline rather than through collectUserDataSnapshots — the same pattern already used for joinAttempts. EmailVerificationBanner is a lightweight adjacent flow: resendEmailVerification calls Firebase Auth's sendEmailVerification directly (no Firestore/Functions involved), non-blocking, dismissible.",
       "covers": [
         "/settings",
         "DataExportSection",
@@ -2619,7 +2991,7 @@
         {
           "from": "data-export-lib",
           "to": "firestore",
-          "payload": "BIN-184: householdContributions (schema 1.2) — per group I'm a member of, inline getDoc groups/{gid}/household/{myUid}; only opted-in (existing) docs are included",
+          "payload": "BIN-184: householdContributions (schema 1.2) — per group I'm a member of, inline getDoc groups/{gid}/household/{myUid}; only opted-in (existing) docs are included. BIN-1352: each group's household read is caught on its own, so a failed read skips that group rather than failing the export",
           "transport": "firestore-query",
           "verified": true
         },
@@ -2632,8 +3004,29 @@
         },
         {
           "from": "data-export-lib",
+          "to": "firestore",
+          "payload": "BIN-1337: groupTitleRatings (schema 2.3) — per group I'm a member of, inline getDocs groups/{gid}/watchlist, alongside the household and member-row reads; each group's list read is caught on its own. ownGroupTitleRatings keeps only my own value from each row's memberRatings map; other members' ratings never enter the export.",
+          "transport": "firestore-query",
+          "verified": true
+        },
+        {
+          "from": "data-export-lib",
+          "to": "sentry-lib",
+          "payload": "BIN-1379: once every per-group read has settled, a read that THREW (not a row that is merely absent) is reported via captureError under scope groups, with one kind per read (dataExport-householdRead, dataExport-memberRowRead, dataExport-titleListRead) and only a failed-group count — no group id, name or uid. Reporting sits in its own try/catch, so it cannot fail the export",
+          "transport": "function call",
+          "verified": true
+        },
+        {
+          "from": "data-export-section",
+          "to": "sentry-lib",
+          "payload": "BIN-1394: when the whole export throws, DataExportSection reports the error via captureError under scope dataExport, kind dataExport-exportFailed, with no extra data. Reporting is best effort in its own try/catch, so the error toast still shows and the button can be pressed again",
+          "transport": "function call",
+          "verified": true
+        },
+        {
+          "from": "data-export-lib",
           "to": "web-app",
-          "payload": "downloadExport(data) — client-local JSON file download, no network call",
+          "payload": "downloadExport(data) — client-local JSON file download, no network call. BIN-1380: when skippedGroups is non-empty, DataExportSection shows a status line under the button naming the groups instead of the plain toast; it stays until the next export",
           "transport": "browser-download",
           "verified": true
         },
@@ -2654,28 +3047,35 @@
         {
           "from": "cf-handOverOwnedGroups",
           "to": "firestore",
-          "payload": "BIN-1147: eraseSentInvites runs FIRST, before the owned-groups query. A collection group query on groupInvites where fromUid == uid finds the invitations this account SENT, which live in OTHER users' trees and no path walk reaches, and one atomic batch deletes them. Above SENT_INVITE_BATCH_LIMIT it deletes nothing and refuses: the order is what makes a refusal a run that wrote nothing, so the caller's \"nothing has been deleted\" wording stays true. Needs the COLLECTION_GROUP fieldOverride on groupInvites/fromUid; the deploy ordering that dependency forces is in docs/analysis/EXTERNAL_ACTIONS.md, which owns it. The sweep reaches the same documents through FIELD_OWNED_CATEGORIES' groupInvitesSent, whose deletes are chunked instead.",
+          "payload": "BIN-1147: eraseSentInvites runs FIRST, before the owned-groups query. A collection group query on groupInvites where fromUid == uid finds the invitations this account SENT, which live in OTHER users' trees and no path walk reaches, and one atomic batch deletes them. Above SENT_INVITE_BATCH_LIMIT it deletes nothing and refuses: the order is what makes a refusal a run that wrote nothing, so the caller's \"nothing has been deleted\" wording stays true. Needs the COLLECTION_GROUP fieldOverride on groupInvites/fromUid; the deploy ordering that dependency forces is in docs/analysis/EXTERNAL_ACTIONS.md, which owns it. The sweep reaches the same documents through FIELD_OWNED_CATEGORIES' groupInvitesSent, whose deletes are chunked instead. BIN-1295: once invitations were erased, a later handover refusal carries the HANDOVER_PARTIAL marker (refusalForHandover(summary, invites.found > 0)), so the client shows the partial-deletion wording instead of \"nothing has been deleted\".",
           "transport": "Firestore write (Admin SDK)",
           "verified": true
         },
         {
           "from": "cf-handOverOwnedGroups",
           "to": "firestore",
-          "payload": "query groups where ownerUid == uid; per group read members (joinedAt), watchlist and sessionHistory. The ballot is the group doc's memberUids and the member rows only supply joinedAt: a row can outlive the membership it stands for, and electing from the rows would hand the group to someone firestore.rules no longer counts as a member",
+          "payload": "query groups where ownerUid == uid; per group read members (joinedAt), watchlist and sessionHistory. The ballot is the group doc's memberUids and the member rows only supply joinedAt: a row can outlive the membership it stands for, and electing from the rows would hand the group to someone firestore.rules no longer counts as a member BIN-1304: the owned-groups query runs outside the per-group catch; a throw there is caught in handOverOwnedGroups and becomes refusalAfterHandover(invites.found > 0), partial once invitations were erased.",
           "transport": "firestore-query",
           "verified": true
         },
         {
           "from": "cf-handOverOwnedGroups",
           "to": "firestore",
-          "payload": "claimOwnership — runTransaction re-reads ownerUid and writes ownerUid + memberUids only if it has not moved. The re-read is the idempotency guard: a retry must find its own earlier handover done rather than hold a second election naming a different member. The erasure is deliberately outside it, because a group's watchlist is unbounded and a transaction that grew with it would fail the one write that must not",
+          "payload": "claimOwnership — runTransaction re-reads ownerUid and writes ownerUid + memberUids. The re-read is the idempotency guard: a retry must find its own earlier handover done rather than hold a second election naming a different member. The erasure is deliberately outside it, because a group's watchlist is unbounded and a transaction that grew with it would fail the one write that must not",
           "transport": "firestore-transaction-write",
           "verified": true
         },
         {
           "from": "cf-handOverOwnedGroups",
           "to": "firestore",
-          "payload": "eraseMemberTraces — batched (≤450 ops): delete members/{uid}, household/{uid}, joinAttempts/{uid} (plaintext invite token, BIN-329) and every watchlist/*/progress/{uid}; remove watchlist.addedBy and sessionHistory.pickedByUid where they name the departing member. Handing the group over must not become an exemption from the erasure a plain member-leave already performs (#5's binding condition)",
+          "payload": "eraseMemberTraces — batched (≤450 ops): delete members/{uid}, household/{uid}, joinAttempts/{uid} (plaintext invite token, BIN-329) and every watchlist/*/progress/{uid}; remove watchlist.addedBy and sessionHistory.pickedByUid where they name the departing member, remove the departing member from sessionHistory.participantUids (arrayRemove), and the departing member's own key in watchlist.memberRatings (BIN-1306; the other members' ratings on the same title stay). Handing the group over must not become an exemption from the erasure a plain member-leave already performs (#5's binding condition)",
+          "transport": "firestore-batch-write",
+          "verified": true
+        },
+        {
+          "from": "cf-handOverOwnedGroups",
+          "to": "firestore",
+          "payload": "BIN-1278 + BIN-1279, AFTER the handover: runMemberGroupErasure queries groups where memberUids array-contains uid, skips the ones it owns, and runs the same eraseMemberTraces in each; memberUids is left for the client cascade. Then eraseReminderMarkers deletes rotationReminderState where uid == uid, in batches. A failure here throws refusalAfterHandover, partial only when a write was already attempted (invites and handover included).",
           "transport": "firestore-batch-write",
           "verified": true
         },
@@ -2733,6 +3133,20 @@
           "to": "firestore",
           "payload": "BIN-909/BIN-1032 — the returning-account branch. ensureUserProfile finds no users/{uid}, and instead of re-creating it with today's date it checks the Auth account's own age: older than 5 minutes means this is a RETURN, not a sign-up, so it sets pendingReconsent and writes nothing. ReconsentGate takes over the shell (no route, no URL change — you must not be able to deep-link past unresolved consent) and asks for both stamps; completeReconsent then calls assertProfileWritable and creates the doc in a transaction, both timestamps serverTimestamp() at the moment of the click. A deletion running elsewhere refuses the write, and the screen says so instead of blaming the connection",
           "transport": "Firestore transaction (create users/{uid})",
+          "verified": true
+        },
+        {
+          "from": "auth-context",
+          "to": "profile-offline-banner",
+          "payload": "BIN-559 — the profile read in ensureUserProfile rejects with code unavailable when the device is offline (measured against the emulator 2026-09-23). loadProfile sets profileLoadError to offline and the shell shows a red strip under the menu: Ingen anslutning, försök igen. Any other error keeps the old behaviour, a signed-in session without a profile and without the strip",
+          "transport": "react-context",
+          "verified": true
+        },
+        {
+          "from": "profile-offline-banner",
+          "to": "auth-context",
+          "payload": "Försök igen → retryProfileLoad → the same loadProfile the sign-in uses, so the deletion marker and the returning-account gate run again on every attempt; the button is disabled while an attempt is in flight. BIN-1293: when a press ends with a profile that needsOnboarding (src/lib/onboarding.ts, the same predicate the login page uses), the strip clears and remembers the current page and pushes /onboarding/, never on a sign-in path and never without a press",
+          "transport": "react-context",
           "verified": true
         },
         {
@@ -2802,7 +3216,7 @@
         {
           "from": "static-passive-pages",
           "to": "hub-seed-lib",
-          "payload": "SEO WP1 (build-time only, static export): '/', '/films', '/series' server components build-fetch one TMDB list page (getTrending('all','week') for '/'; getPopularMovies(1)/getPopularTV(1) for '/films'/'/series') and run seedHubItems() — drops person results + non-Latin-title items (stricter than the SEO pre-render filter, so a seed can never link a de-indexed title), caps ~10-20 — to seed the client grid's initial state as a prop; exported static HTML now carries crawlable <a href=\"/movie|tv/{id}/\"> links, hydration-safe (client filters are no-ops on the seed)",
+          "payload": "SEO WP1 (build-time only, static export): '/', '/films', '/series' server components build-fetch one TMDB list page (getTrending('all','week') for '/'; getPopularMovies(1)/getPopularTV(1) for '/films'/'/series') and run seedHubItems() — drops person results + non-Latin-title items, caps ~10-20 — to seed the client grid's initial state as a prop; exported static HTML now carries crawlable <a href=\"/movie|tv/{id}/\"> links, hydration-safe (client filters are no-ops on the seed)",
           "transport": "build-time fetch (TMDB) + method call",
           "verified": true
         }
@@ -2812,7 +3226,7 @@
     {
       "id": "flow-crash-telemetry",
       "label": "App crash → error telemetry",
-      "description": "global-error.tsx is the app's last boundary: it fires only when the root layout itself throws, and Next.js then replaces the WHOLE document with it — so Providers, React context and the normal initSentry() call have never mounted. That is why this one file initialises Sentry itself and AWAITS the lazy import('@sentry/react') before reporting; without the await captureError() would silently no-op and the worst class of crash would leave no trace at all (BIN-657). Two things leave the device here. (1) A Sentry event: captureException tagged scope='app:global' + kind='error-boundary' with extra.digest (Next.js' error digest), scrubbed in beforeSend — user.email/username/ip_address deleted and the query string blanked out of request.url — at 100% error sampling and 0% traces/replays. An empty NEXT_PUBLIC_SENTRY_DSN (dev, CI, local) or an ad-blocked SDK chunk drops the event by design. (2) One Plausible event, 'error_boundary_triggered', carrying nothing but props {scope:'app:global'} — cookie-free and IP-anonymised, which is why it needs no consent gate. Everything the user sees stays on the device: a console.error plus a bare inline-styled <html> document with a 'Ladda om'-button wired to Next.js' reset(). Segment crashes never reach this node — src/app/error.tsx and its nine per-segment siblings (feed, films, grupper, movie/[id], my, search, series, tv/[id], [...path]) all render the shared SegmentError component, which fires the SAME two signals under its own scope string ('app:root', 'app:feed', 'app:movie', …) while the root layout, Providers and the topbar stay alive around one blanked-out panel. SegmentError deliberately does NOT call initSentry(): Providers already started the lazy SDK load on page mount, so its captureError() reports when the chunk has landed and silently no-ops when the crash beat it there — an accepted gap, not a bug, because the alternative is paying the 26 KB SDK on every first load. Its trackEvent('error_boundary_triggered', {scope}) carries no such dependency, which makes the Plausible scope breakdown the only reliable answer to 'which part of the app is crashing'.",
+      "description": "global-error.tsx is the app's last boundary: it fires only when the root layout itself throws, and Next.js then replaces the WHOLE document with it — so Providers, React context and the normal initSentry() call have never mounted. That is why this one file initialises Sentry itself and AWAITS the lazy import('@sentry/react') before reporting; without the await captureError() would silently no-op and the worst class of crash would leave no trace at all (BIN-657). One thing leaves the device here. (1) A Sentry event: captureException tagged scope='app:global' + kind='error-boundary' with extra.digest (Next.js' error digest), scrubbed in beforeSend — user.email/username/ip_address deleted and the query string blanked out of request.url — at 100% error sampling and 0% traces/replays. An empty NEXT_PUBLIC_SENTRY_DSN (dev, CI, local) or an ad-blocked SDK chunk drops the event by design. (2) trackEvent('error_boundary_triggered', {scope:'app:global'}) is still called but sends nothing: since BIN-1438 it is not one of the events recordEvent counts. Everything the user sees stays on the device: a console.error plus a bare inline-styled <html> document with a 'Ladda om'-button wired to Next.js' reset(). Segment crashes never reach this node — src/app/error.tsx and its nine per-segment siblings (feed, films, grupper, movie/[id], my, search, series, tv/[id], [...path]) all render the shared SegmentError component, which makes the SAME two calls under its own scope string ('app:root', 'app:feed', 'app:movie', …) while the root layout, Providers and the topbar stay alive around one blanked-out panel. SegmentError deliberately does NOT call initSentry(): Providers already started the lazy SDK load on page mount, so its captureError() reports when the chunk has landed and silently no-ops when the crash beat it there — an accepted gap, not a bug, because the alternative is paying the 26 KB SDK on every first load. Its trackEvent('error_boundary_triggered', {scope}) sends nothing since BIN-1438, so a segment crash that beats the Sentry chunk leaves no trace.",
       "covers": [
         "src/app/error.tsx",
         "src/app/[...path]/error.tsx",
@@ -2846,22 +3260,15 @@
         {
           "from": "sentry-lib",
           "to": "sentry-ingest",
-          "payload": "captureException(error, {tags: {scope: 'app:global', kind: 'error-boundary'}, extra: {digest}}) — beforeSend first deletes user.email/username/ip_address and strips the query string from request.url; ignoreErrors drops ResizeObserver/abort/network noise",
+          "payload": "captureException(error, {tags: {scope: 'app:global', kind: 'error-boundary'}, extra: {digest}}) — beforeSend first deletes user.id/email/username/ip_address, strips the query string, and replaces the id segment after user, tillsammans, grupper and list with a placeholder in request.url, the Referer header, the transaction and frame filenames; Firestore document paths in exception text are reduced to collection names (BIN-1283). beforeBreadcrumb applies the same to navigation and fetch crumbs, drops console crumbs and deletes ui crumb text; ignoreErrors drops ResizeObserver/abort/network noise",
           "transport": "https (Sentry SDK)",
           "verified": true
         },
         {
           "from": "global-error-boundary",
           "to": "analytics-lib",
-          "payload": "trackEvent('error_boundary_triggered', {scope: 'app:global'}) — fired unconditionally, independent of the Sentry init promise, so a blocked Sentry chunk still leaves a crash count",
+          "payload": "trackEvent('error_boundary_triggered', {scope: 'app:global'}) — fired unconditionally, but since BIN-1438 the event is not in COUNTED_EVENTS, so trackEvent drops it on the device and nothing is sent; Sentry is the remaining crash signal",
           "transport": "function call",
-          "verified": true
-        },
-        {
-          "from": "analytics-lib",
-          "to": "external-plausible",
-          "payload": "window.plausible('error_boundary_triggered', {props: {scope}}) — no PII beyond the fixed scope string, no URL, no error text; silent no-op when the Plausible script is absent or ad-blocked",
-          "transport": "https (Plausible script)",
           "verified": true
         },
         {
@@ -2881,7 +3288,7 @@
         {
           "from": "segment-error-boundary",
           "to": "analytics-lib",
-          "payload": "trackEvent('error_boundary_triggered', {scope}) with the segment's own scope — 'app:root', 'app:feed', 'app:films', 'app:grupper', 'app:movie', 'app:my', 'app:search', 'app:series', 'app:tv', 'app:dynamic' — the one signal here that does not depend on the Sentry chunk having loaded, which is why the Plausible scope breakdown, not Sentry, is what tells us WHICH part of the app is crashing",
+          "payload": "trackEvent('error_boundary_triggered', {scope}) with the segment's own scope — 'app:root', 'app:feed', 'app:films', 'app:grupper', 'app:movie', 'app:my', 'app:search', 'app:series', 'app:tv', 'app:dynamic' — since BIN-1438 the event is not in COUNTED_EVENTS, so trackEvent drops it on the device and nothing is sent; a crash beating the Sentry chunk now leaves no trace",
           "transport": "function call",
           "verified": true
         }
@@ -2915,6 +3322,38 @@
           "to": "firestore",
           "payload": "recapCoverageGaps/{tmdbId}.set({count: FieldValue.increment(1), lastMissedAt: serverTimestamp()}, {merge:true}) — one bounded single-doc increment per call, no rate limit needed (same cost shape as recordAskBinge)",
           "transport": "Firestore write",
+          "verified": true
+        }
+      ],
+      "area": "data pipelines"
+    },
+    {
+      "id": "flow-record-event",
+      "label": "Händelseräkning → eventStats",
+      "description": "Binge counts a fixed set of feature events itself instead of sending them to a third party (BIN-1438, replaces Plausible). trackEvent in src/lib/analytics.ts drops every event not in COUNTED_EVENTS on the device, queues the rest in memory, and POSTs them to recordEvent with a keepalive fetch carrying only an App Check token, never the ID token, at most every 30 s and on pagehide, at most 50 per call, fire-and-forget with every error swallowed — a tab closed before a send loses its queue, and the count is approximate by design. Nothing is stored on the device. recordEvent requires App Check on every call (enforceAppCheck, no signed-in branch), never reads the caller's auth, token, IP or user agent, and validates every event against EVENT_VOCABULARY in functions/src/eventStats/logic.ts: an unknown name, prop or value, a number other than step_reached 1–5, a dotted key or __proto__ is dropped and never becomes a field path, so the day doc cannot grow past the vocabulary. What survives becomes ONE merge of FieldValue.increment on eventStats/{Stockholm day}; nothing survives → no write. eventStats is sealed to clients in firestore.rules; apiInsights is its only reader (flow-insights).",
+      "covers": [
+        "recordEvent"
+      ],
+      "steps": [
+        {
+          "from": "web-app",
+          "to": "analytics-lib",
+          "payload": "trackEvent(name, props) from the call sites of signed_up, signed_in, onboarding_completed, title_added_watchlist, advisor_action_taken, provider_clicked, share_clicked, price_check_total_shown, price_check_save_clicked — any other name is a no-op",
+          "transport": "function call",
+          "verified": true
+        },
+        {
+          "from": "analytics-lib",
+          "to": "cf-recordEvent",
+          "payload": "fetch POST to the europe-west1 recordEvent URL, body {data: {events: [{name, props?}]}}, headers Content-Type: application/json and X-Firebase-AppCheck from getAppCheckToken(), NO Authorization header, keepalive: true — ≤50 events, at most every 30 s plus once on pagehide; no App Check token → the batch is dropped; errors swallowed",
+          "transport": "https callable (europe-west1)",
+          "verified": true
+        },
+        {
+          "from": "cf-recordEvent",
+          "to": "firestore",
+          "payload": "eventStats/{stockholmDayId()}.set({counts: {<event>: increment(n)}, props: {<event>: {<prop>: {<value>: increment(n)}}}}, {merge: true}) — only vocabulary keys; no write when nothing survives",
+          "transport": "Firestore write (merge)",
           "verified": true
         }
       ],
@@ -2958,6 +3397,53 @@
         }
       ],
       "area": "library"
+    },
+    {
+      "id": "flow-guest-pricing",
+      "label": "Pengakollen publikt (kalkylator, prissida, gästdemo)",
+      "description": "The money layer for visitors who are not signed in (Malin's picks 1A, 2A, 3B, 2026-10-05). /streamingkostnad is the indexable calculator, /streamingpriser the price table (noindex via its own layout until the price agent is scheduled), and the guest landing on '/' carries a six-button demo that HomePageClient mounts ONLY in its resolved signed-out branch, never in the pre-rendered auth-loading pair. None of it reads or writes Firestore and none of it calls TMDB: every number comes from the static catalog in src/lib/tmdb/providers.ts (tier prices, priceVerifiedDate, PRICE_CHANGES) through the same summarizeMonthlySpend + detectBundleArbitrage chain the signed-in advisor uses — guestCost passes providerTiers and nothing else, because a guest has no campaign and no custom cost. The guest's choice lives in sessionStorage under the one GUEST_PROVIDERS_KEY in src/lib/guestProviders.ts, validated on read, and is the only thing that crosses into the signed-in world: 'Logga in och spara' goes through useSignedOutRedirect to /login, and onboarding step 2 prefills from that key only when the account has no providers, then clears it after a successful save.",
+      "covers": [
+        "/streamingkostnad",
+        "/streamingpriser"
+      ],
+      "steps": [
+        {
+          "from": "pricing-ui",
+          "to": "pricing-ui",
+          "payload": "computeGuestCost(selection, now) → summarizeMonthlySpend(ids, {providerTiers}) for totalKr/paidCount/estimated ('Vet inte' = list price, marked uppskattat) and detectBundleArbitrage(ids, {providerTiers}, SWEDISH_BUNDLES)[0] for the best bundle (savingKr, binding, start fee, stale, downgrades shown as returned). Pure — no network.",
+          "transport": "method call",
+          "verified": true
+        },
+        {
+          "from": "pricing-ui",
+          "to": "web-app",
+          "payload": "saveGuestSelection() writes {canonicalProviderId: tierId|null} to sessionStorage 'binge:guestProviders' on every change (calculator and home demo share it, so 'Visa mer' opens the calculator pre-checked); 'Logga in och spara' → useSignedOutRedirect → rememberNextPath + router.push('/login/'). Nothing is sent to a server as a guest.",
+          "transport": "sessionStorage + router.push",
+          "verified": true
+        },
+        {
+          "from": "pricing-ui",
+          "to": "analytics-lib",
+          "payload": "trackEvent('price_check_total_shown', {surface: 'calculator'|'home', paidCount}) once per page view when a selection first yields a total, and trackEvent('price_check_save_clicked', {paidCount}) on 'Logga in och spara' — counts only, never which services; queued and sent to recordEvent (see flow-record-event)",
+          "transport": "function call",
+          "verified": true
+        },
+        {
+          "from": "pricing-ui",
+          "to": "pricing-ui",
+          "payload": "Price table: buildPriceRows() reads tier prices and priceVerifiedDate from the catalog; after mount priceFreshness(date, clientNow) gives '–' for missing/malformed/future dates and 'kan vara inaktuell' past PRICE_STALE_DAYS. PriceChangeLog lists PRICE_CHANGES newest first, labelled 'från' (service-stated) or 'upptäckt' (noticed by a price check).",
+          "transport": "method call (client clock)",
+          "verified": true
+        },
+        {
+          "from": "onboarding-flow",
+          "to": "auth-context",
+          "payload": "Step 2 reads loadGuestSelection() only when user.myProviders is empty (never overwrites), prefills selected + tiers, then updateProviders(selected) and updateProviderTiers(changed) as before; clearGuestSelection() runs only after both writes resolve, so a failed save keeps the key for the retry.",
+          "transport": "sessionStorage read + React context",
+          "verified": true
+        }
+      ],
+      "area": "user features"
     }
   ]
 }

@@ -13,6 +13,25 @@ import type { Config } from "tailwindcss";
 // values so existing pages inherit the new look without component-by-
 // component edits. They will be removed once every page is migrated to the
 // Direction-H component vocabulary.
+// Every colour is a bare var(), which Tailwind cannot split into channels, so an
+// opacity modifier (bg-acc-deep/10, border-danger/30) used to generate no CSS at
+// all. A modifier now mixes the token with transparent; without one the class
+// stays the plain var() it always was.
+type ColorFn = (args: { opacityValue?: string | number }) => string;
+// Tailwind's types only list strings, but its runtime accepts a colour function.
+function withOpacityModifier(colors: Record<string, string>): Record<string, string> {
+  const fns: Record<string, ColorFn> = Object.fromEntries(
+    Object.entries(colors).map(([name, value]) => [
+      name,
+      ({ opacityValue }: { opacityValue?: string | number }) =>
+        opacityValue === undefined || String(opacityValue).startsWith('var(')
+          ? value
+          : `color-mix(in oklch, ${value} calc(${opacityValue} * 100%), transparent)`,
+    ]),
+  );
+  return fns as unknown as Record<string, string>;
+}
+
 const config: Config = {
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
@@ -21,7 +40,44 @@ const config: Config = {
   ],
   theme: {
     extend: {
-      colors: {
+      // The spacing scale in px, 4px per step. Tailwind's default is rem, and html sets
+      // font-size to --fs-lg, so the default steps landed on 7.5px, 11.25px and so on.
+      spacing: {
+        '0.5': '2px',
+        '1': '4px',
+        '1.5': '6px',
+        '2': '8px',
+        '2.5': '10px',
+        '3': '12px',
+        '3.5': '14px',
+        '4': '16px',
+        '5': '20px',
+        '6': '24px',
+        '7': '28px',
+        '8': '32px',
+        '9': '36px',
+        '10': '40px',
+        '11': '44px',
+        '12': '48px',
+        '14': '56px',
+        '16': '64px',
+        '20': '80px',
+        '24': '96px',
+        '28': '112px',
+        '32': '128px',
+        '36': '144px',
+        '40': '160px',
+        '44': '176px',
+        '48': '192px',
+        '52': '208px',
+        '56': '224px',
+        '60': '240px',
+        '64': '256px',
+        '72': '288px',
+        '80': '320px',
+        '96': '384px',
+      },
+      colors: withOpacityModifier({
         // Direction H · primary token names
         bg: 'var(--bg)',
         'bg-2': 'var(--bg-2)',
@@ -36,6 +92,8 @@ const config: Config = {
         acc: 'var(--acc)',
         'acc-deep': 'var(--acc-deep)',
         'acc-soft': 'var(--acc-soft)',
+        'on-acc': 'var(--on-acc)',
+        'acc-deep-hover': 'var(--acc-deep-hover)',
 
         // Plum — today/picker/time-position
         'cal-deep': 'var(--cal-deep)',
@@ -75,21 +133,36 @@ const config: Config = {
         'border-table': 'var(--rule-2)',
         'cal-header': 'var(--bg-2)',
         'season-done': 'var(--season-done)',
-        // sidebar-bg kept — still used in src/app/page.tsx (landing hero section).
-        'sidebar-bg': 'var(--ink)',
-      },
+        // sidebar-bg — the landing hero band (HomePageClient). Its own token so it
+        // stays dark under white text in both themes.
+        'sidebar-bg': 'var(--hero-bg)',
+        // The dimmed page behind a modal or drawer.
+        scrim: 'var(--scrim)',
+      }),
       fontFamily: {
         sans: ['Albert Sans', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
-        mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        // Monospace is phased out (design-system.md): --mono aliases the sans stack.
+        mono: 'var(--mono)',
       },
+      // The type scale. The px values live once, as --fs-* in globals.css :root, and
+      // consistency.test.ts rejects a size written anywhere else; a missing size gets
+      // added there. xl…6xl deliberately replace Tailwind's defaults (20…60px).
       fontSize: {
-        // Direction H bumps the base — pages now read at 15px.
-        'xxs': '10px',
-        'xs': '11px',
-        'sm': '12.5px',
-        'base': '13.5px',
-        'md': '14px',
-        'lg': '15.5px',
+        'nano': 'var(--fs-nano)',
+        'micro': 'var(--fs-micro)',
+        'xxs': 'var(--fs-xxs)',
+        'xs': 'var(--fs-xs)',
+        'sm': 'var(--fs-sm)',
+        'base': 'var(--fs-base)',
+        'md': 'var(--fs-md)',
+        'lg': 'var(--fs-lg)',
+        'xl': 'var(--fs-xl)',
+        '2xl': 'var(--fs-2xl)',
+        '3xl': 'var(--fs-3xl)',
+        '4xl': 'var(--fs-4xl)',
+        '5xl': 'var(--fs-5xl)',
+        '6xl': 'var(--fs-6xl)',
+        'display': 'var(--fs-display)',
       },
       maxWidth: {
         canvas: '1320px',

@@ -6,14 +6,18 @@ import { useWatchlist } from '@/hooks/useWatchlist';
 import { useMarkSeen } from '@/hooks/useMarkSeen';
 import { useAuth } from '@/hooks/useAuth';
 import { useClickOutside } from '@/hooks/useClickOutside';
+import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useToast } from '@/contexts/ToastContext';
 import { statusLabel, statusMenuLabel, statusOptionsFor } from '@/lib/watchStatus';
-import { clearEpisodeProgress } from '@/lib/firebase/episodeProgress';
+import { useRemoveWithUndo } from '@/hooks/useRemoveWithUndo';
+import { useFirstFollowConfirmation } from '@/hooks/useFollowConfirmation';
+import { isFirstFollow } from '@/hooks/useFollowConfirmation.helpers';
 import { buildWatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
 import { useSignedOutRedirect } from '@/hooks/useSignedOutRedirect';
 import { LIBRARY_UNAVAILABLE } from './libraryHold';
 import { DELETION_IN_PROGRESS_MESSAGE, isDeletionInProgressError } from '@/lib/deletionInProgressError';
 import type { WatchStatus, MediaType } from '@/types';
+import { cardClass } from '@/components/ui/Card';
 
 interface QuickAddButtonProps {
   tmdbId: number;
@@ -37,7 +41,9 @@ export default function QuickAddButton({
   // would read as "signed out" forever for that user — handing them a login
   // round trip on every tap.
   const signedOut = !authLoading && uid == null;
-  const { getItem, upsertTitle, removeItem, listenerFailed, libraryKnown } = useWatchlist();
+  const { items, getItem, upsertTitle, listenerFailed, libraryKnown } = useWatchlist();
+  const confirmFirstFollow = useFirstFollowConfirmation();
+  const removeWithUndo = useRemoveWithUndo();
   // BIN-596: the OTHER half of the gate. `loading` from useWatchlist() cannot be
   // used here — it goes false both when the first snapshot lands and when the
   // listener dies, and a dead listener is not an empty library: writing then
@@ -61,6 +67,10 @@ export default function QuickAddButton({
   const labelFor = (s: WatchStatus) => statusLabel(s, mediaType);
   const close = useCallback(() => setOpen(false), []);
   useClickOutside(ref, close);
+  // A11Y-2: Escape closes the menu and puts focus back on the button that opened it.
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const closeAndRefocus = useCallback(() => { setOpen(false); triggerRef.current?.focus(); }, []);
+  useEscapeKey(open, closeAndRefocus);
 
   async function handleSelect(status: WatchStatus) {
     setOpen(false);
@@ -78,6 +88,8 @@ export default function QuickAddButton({
     // anything false — but it said nothing either, and the user was left with a menu that
     // closed and no answer at all. Narrow on purpose: only the deletion refusal is answered
     // here; every other failure keeps propagating exactly as it did before.
+    // Read before the write: the add itself lands in `items` optimistically.
+    const firstFollow = isFirstFollow(items, mediaType, status, current != null);
     try {
       await upsertTitle(buildWatchlistAddPayload({
         tmdbId, mediaType, status, title, posterPath, releaseYear,
@@ -87,33 +99,29 @@ export default function QuickAddButton({
       if (isDeletionInProgressError(err)) { toast(DELETION_IN_PROGRESS_MESSAGE); return; }
       throw err;
     }
-    toast(`${title} — ${labelFor(status)}`);
+    if (firstFollow) confirmFirstFollow(title, `${title} — ${labelFor(status)}`);
+    else toast(`${title} — ${labelFor(status)}`);
   }
 
   function handleRemove() {
     setOpen(false);
     // Same gate, same reason: no delete, and therefore no "borttagen" toast.
     if (signedOut || authLoading || !libraryKnown) return;
-    // Serie med påbörjad historik: per-avsnitt-historiken sparas medvetet
-    // (återtillägg återupptar där man var) — säg det och erbjud full
-    // rensning. Se clearEpisodeProgress + docs/data-retention-policy.md.
     const ownerUid = uid;
     const hadProgress =
       mediaType === 'tv' && ownerUid != null && current?.lastWatchedSeason != null;
-    void removeItem(mediaType, tmdbId);
-    if (hadProgress && ownerUid) {
-      toast(`${title} borttagen. Avsnittshistoriken sparas.`, {
-        label: 'Rensa helt',
-        onClick: () => {
-          void clearEpisodeProgress(ownerUid, tmdbId)
-            .then(() => toast('Historiken rensad.'))
-            .catch(() => toast('Kunde inte rensa historiken. Försök igen om en stund.'));
-        },
-      });
-    } else {
-      toast(`${title} borttagen`);
-    }
+    removeWithUndo({ mediaType, tmdbId, title, progressOwnerUid: hadProgress ? ownerUid : null });
   }
+
+  // Also the aria-label: title= never renders on touch (BIN-596 above).
+  const buttonLabel =
+    authLoading ? 'Laddar…'
+    : signedOut ? (current ? labelFor(current.status) : 'Lägg till')
+    : listenerFailed ? LIBRARY_UNAVAILABLE
+    // Ordered after listenerFailed, so this branch is "settled has not
+    // happened yet" — the transient half of !libraryKnown.
+    : !libraryKnown ? 'Laddar…'
+    : current ? labelFor(current.status) : 'Lägg till';
 
   return (
     <div
@@ -122,11 +130,16 @@ export default function QuickAddButton({
       onClick={e => { e.preventDefault(); e.stopPropagation(); }}
     >
       <button
+        ref={triggerRef}
+        aria-expanded={open}
         onClick={async () => {
           // BIN-645, now shared with StatusButton as BIN-714 — the whole rule
           // and every reason behind it live in useSignedOutRedirect. Called
           // FIRST, above the library gates: a signed-out visitor has no library.
-          if (signedOut) { goToLogin(); return; }
+          if (signedOut) {
+            goToLogin({ tmdbId, mediaType, title, posterPath, releaseYear, providers, subscriptionProviders, genreIds });
+            return;
+          }
           // Belt-and-braces behind the disabled attribute below: we do not yet
           // know whether this visitor is signed in, so there is no honest
           // destination — neither the menu nor a trip to /login.
@@ -149,30 +162,23 @@ export default function QuickAddButton({
         // destination (/login), and they have no library to wait for. Neither is
         // a FAILED listener — that tap's outcome is the explanation itself.
         disabled={authLoading || (!signedOut && !libraryKnown && !listenerFailed)}
-        className={`w-[28px] h-[28px] md:w-[22px] md:h-[22px] rounded-sm flex items-center justify-center border-none cursor-pointer disabled:opacity-50 disabled:cursor-default ${
+        className={`w-[28px] h-[28px] md:w-[24px] md:h-[24px] rounded-sm flex items-center justify-center border-none cursor-pointer disabled:opacity-50 disabled:cursor-default ${
           current
-            ? 'bg-acc-deep text-white'
-            : 'bg-black/60 text-white hover:bg-acc-deep'
+            ? 'bg-acc-deep text-on-acc'
+            : 'bg-black/60 text-white hover:bg-acc-deep hover:text-on-acc'
         }`}
-        title={
-          authLoading ? 'Laddar…'
-          : signedOut ? (current ? labelFor(current.status) : 'Lägg till')
-          : listenerFailed ? LIBRARY_UNAVAILABLE
-          // Ordered after listenerFailed, so this branch is "settled has not
-          // happened yet" — the transient half of !libraryKnown.
-          : !libraryKnown ? 'Laddar…'
-          : current ? labelFor(current.status) : 'Lägg till'
-        }
+        title={buttonLabel}
+        aria-label={buttonLabel}
       >
         {current ? <Check size={13} /> : <Plus size={13} />}
       </button>
       {open && (
-        <div className="absolute top-full right-0 mt-1 bg-surface border border-rule rounded-sm z-50 min-w-[110px] shadow-pop">
+        <div className={cardClass('absolute top-full right-0 mt-1 z-50 min-w-[110px] shadow-pop')}>
           {options.map(status => (
             <button
               key={status}
               onClick={() => handleSelect(status)}
-              className={`block w-full text-left px-2 py-[4px] text-xs font-[inherit] border-none cursor-pointer hover:bg-bg-2 ${
+              className={`block w-full text-left px-2 py-1 text-xs font-[inherit] border-none cursor-pointer hover:bg-bg-2 ${
                 current?.status === status ? 'text-acc-deep font-semibold' : 'text-ink'
               } bg-transparent`}
             >
@@ -184,7 +190,7 @@ export default function QuickAddButton({
               <div className="border-t border-rule-2" />
               <button
                 onClick={handleRemove}
-                className="block w-full text-left px-2 py-[4px] text-xs font-[inherit] border-none cursor-pointer hover:bg-bg-2 text-danger-ink bg-transparent"
+                className="block w-full text-left px-2 py-1 text-xs font-[inherit] border-none cursor-pointer hover:bg-bg-2 text-danger-ink bg-transparent"
               >
                 Ta bort
               </button>

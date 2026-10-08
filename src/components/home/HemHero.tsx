@@ -5,6 +5,7 @@ import { shortSwedishWeekday } from '@/lib/utils';
 import type { CalendarEntry } from '@/hooks/useCalendar';
 import { entryHref } from '@/lib/calendar/entry';
 import { daysFromToday } from './focalPick';
+import { buttonClass } from '@/components/ui/Button';
 
 // Page-header for Hem: crumb (mono uppercase) → page-h1 → standfirst →
 // actions row. The h1/standfirst is derived from the focal episode if any;
@@ -60,13 +61,13 @@ function buildCopy(entry: CalendarEntry | null, totalThisWeek: number, isLoading
       return {
         crumb: `Hem · i morgon · ${entry.provider ?? 'digitalt'}`,
         h1: `${entry.title} släpps i morgon.`,
-        stand: `Digital release ${weekday} på ${provider}.`,
+        stand: `Digitalt släpp ${weekday} på ${provider}.`,
       };
     }
     return {
       crumb: `Hem · ${weekday} · ${entry.provider ?? 'digitalt'}`,
       h1: `${entry.title} släpps ${days <= 7 ? 'i veckan' : 'snart'}.`,
-      stand: `Digital release ${weekday} på ${provider}.`,
+      stand: `Digitalt släpp ${weekday} på ${provider}.`,
     };
   }
 
@@ -110,20 +111,20 @@ export default function HemHero({ focal, totalThisWeek, hasLibrary, isLoading = 
           null
         ) : focal ? (
           <>
-            <Link href={entryHref(focal)} className="btn btn-acc">
+            <Link href={entryHref(focal)} className={buttonClass({ variant: 'acc' })}>
               Öppna {focal.title}
             </Link>
-            <Link href="/calendar/" className="btn btn-ghost">Hela kalendern</Link>
+            <Link href="/calendar/" className={buttonClass({ variant: 'ghost' })}>Hela kalendern</Link>
           </>
         ) : hasLibrary ? (
           <>
-            <Link href="/calendar/" className="btn">Visa kalendern</Link>
-            <Link href="/recommendations/" className="btn btn-ghost">Rekommendationer</Link>
+            <Link href="/calendar/" className={buttonClass()}>Visa kalendern</Link>
+            <Link href="/recommendations/" className={buttonClass({ variant: 'ghost' })}>Rekommendationer</Link>
           </>
         ) : (
           <>
-            <Link href="/series/" className="btn">Hitta serier</Link>
-            <Link href="/films/" className="btn btn-ghost">Hitta filmer</Link>
+            <Link href="/series/" className={buttonClass()}>Hitta serier</Link>
+            <Link href="/films/" className={buttonClass({ variant: 'ghost' })}>Hitta filmer</Link>
           </>
         )}
       </div>

@@ -13,6 +13,9 @@ import type { TMDBSearchResult } from '@/types';
 import { hasNonLatinTitle, isFromHiddenCountry } from '@/lib/utils/titleFilter';
 import { JsonLd, breadcrumbSchema, collectionPageSchema } from '@/components/title/JsonLd';
 import { nordicLanguageParam } from '@/lib/discover/nordic';
+import { Button } from '@/components/ui/Button';
+import { cardClass } from '@/components/ui/Card';
+import { GENRE_LABELS } from '@/lib/tmdb/genreLabels';
 
 const DISCOVER_DESCRIPTION = 'Trendande, populära och nya filmer och serier på Netflix, Viaplay, HBO Max, Disney+, SVT Play och fler svenska streamingtjänster.';
 
@@ -67,7 +70,7 @@ export default function DiscoverPageClient({
     : (() => {
         const all = [...(movieGenres?.genres ?? []), ...(tvGenres?.genres ?? [])];
         const seen = new Set<number>();
-        return all.filter(g => { if (seen.has(g.id)) return false; seen.add(g.id); return true; }).sort((a, b) => a.name.localeCompare(b.name, 'sv'));
+        return all.filter(g => { if (seen.has(g.id)) return false; seen.add(g.id); return true; }).sort((a, b) => (GENRE_LABELS[a.id] ?? a.name).localeCompare(GENRE_LABELS[b.id] ?? b.name, 'sv'));
       })();
 
   const { data: trending, isLoading: trendingLoading } = useTrending('all', 'week');
@@ -183,7 +186,7 @@ export default function DiscoverPageClient({
           >
             <option value="">Alla genrer</option>
             {(genres ?? []).map(g => (
-              <option key={g.id} value={String(g.id)}>{g.name}</option>
+              <option key={g.id} value={String(g.id)}>{GENRE_LABELS[g.id] ?? g.name}</option>
             ))}
           </select>
 
@@ -238,24 +241,24 @@ export default function DiscoverPageClient({
           }
         />
       ) : (
-        <div className="bg-surface border border-rule rounded-sm">
+        <div className={cardClass()}>
           <TitleGrid items={items} loading={isLoading && items.length === 0} />
-          <div className="px-3 py-[6px] border-t border-rule-2">
+          <div className="px-3 py-1.5 border-t border-rule-2">
             <JustWatchCredit />
           </div>
         </div>
       )}
 
       {hasMore && (
-        <button
+        <Button
           onClick={() => setPage(p => p + 1)}
           onMouseEnter={prefetchNextPage}
           onFocus={prefetchNextPage}
           disabled={discoverLoading}
-          className="btn btn-ghost btn-sm disabled:opacity-50"
+          variant="ghost" size="sm" className="disabled:opacity-50"
         >
           {discoverLoading ? 'Laddar…' : 'Visa fler'}
-        </button>
+        </Button>
       )}
     </>
   );

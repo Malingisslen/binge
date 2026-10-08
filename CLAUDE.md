@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Working agreement
 
 - **Solo, push-direct-to-main.** No PRs, no feature branches — commit and push to
-  `main` (which deploys hosting via `deploy.yml`). The one exception: a genuinely
+  `main` (which deploys via `deploy.yml`, see Commands). The one exception: a genuinely
   risky migration (Firestore rules/schema/status-model) gets a written plan and an
   explicit go-ahead first.
 - **Explain in product terms.** Malin directs the work but doesn't read code —
@@ -27,37 +27,44 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Plan before large changes — and cast the role-org first
 
-Applies to ad-hoc chat, not just `/sprint-execute`.
+Applies to ad-hoc chat, not just `/sprint-execute`. Malin's decision 1 (2026-10-05,
+BIN-1426): role critiques and reviewer agents only for database rules, sign-in, personal
+data, server functions and new features.
 
-**A change is "large"** if it hits ANY of: 3+ files; a new core module / service / hook /
-lib; an architectural change; a "refactor" / "migrate" request; a multi-file codemod; or a
-**sensitive domain** — Firestore rules / indexes / schema or the watch-status model; auth;
-user data / GDPR / privacy; Cloud Functions / FCM / moderation; deploy / hosting /
-Cloudflare config; anything legal; or anything that adds a paid service or moves Firebase
-cost. Large changes get a written plan + approval before any Edit/Write. Small, obvious,
-single-file fixes ship without ceremony.
+**A written plan + Malin's approval before any Edit/Write, cast as below**, for:
+- a **new feature**: new behaviour a user notices (a `feat` commit) or a new screen (an added
+  `src/app/**/page.tsx`). A new or rebuilt screen starts with sketches (`html-previews.md`).
+- a **sensitive path**: anything a review gate in `.claude/shared-plugin.json` covers. That
+  is Firestore rules and indexes, sign-in, personal data, Cloud Functions, and the review and
+  deploy machinery itself. The router lists such paths under `sensitive`.
+- anything that adds a paid service or moves Firebase cost.
 
-**Cast the stakeholders BEFORE writing the plan**, for any large change or sensitive domain:
-1. `node docs/org/route.mjs <paths>` → `{ tier, reasonCode, panel, roles, highStakes,
-   reason, unmappedCode, unownedCode }`, `tier` ∈ `skip` / `medium` / `top`.
-   Deterministic, no agents. Don't hand-roll a second risk judgment — this is the same
-   router `/linear` and `/stakeholder-review` use.
+**Everything else ships on typecheck, lint and tests**, with no plan, critique or ticket
+(the risky-migration exception in the working agreement still holds). A feature also gets
+one `binge-code-reviewer` run over its diff before commit; a sensitive path gets the
+reviewers its commit gate names.
+
+**Cast the stakeholders BEFORE writing the plan**:
+1. `node docs/org/route.mjs <paths>` → `{ tier, reasonCode, policy, sensitive, panel, roles,
+   highStakes, reason, unmappedCode, unownedCode }`, `tier` ∈ `skip` / `medium` / `top`.
+   Route a new feature or a cost move with `--feature`: the router cannot see either from
+   the paths. Deterministic, no agents. Don't hand-roll a second risk judgment — this is the
+   same router `/linear` and `/stakeholder-review` use.
    **Branch on `reasonCode`, not on the prose in `reason`**. `skip` is always
-   harmless (`doc-only` / `no-code-paths`). Code nobody owns routes **`medium`** with
-   `reasonCode: 'unmapped-code'`, seated on the #14 fallback and listed in `unownedCode` —
-   do not write a consumer that tests for `skip` + `unmapped-code`
+   harmless (`ordinary` / `doc-only` / `no-code-paths`). Do not write a consumer that tests
+   for `skip` + `unmapped-code`
    (no such state exists, and the branch would read as satisfied forever). And
    `unownedCode` can be non-empty even when `reasonCode` is `'owned'`, when only SOME of
    the paths have an owner: read the array, not only the code.
 2. `medium` → one blind critique from the owning role; `top` → the full panel concurrently,
    each grounded in its dossier section (`docs/role-responsibilities.md §N` +
    `docs/org/world-watch/ROLE_WORLD_MODEL.md`) and blind to the others. Critiques run on
-   **sonnet at low effort**; the commit-gate reviewers stay on **opus**.
+   **sonnet at low effort**.
 3. Fold their conditions into the plan as binding acceptance criteria. An unresolved
    high-stakes conflict — a block from Security #4 / DPO #6 / Legal #5, or anything legal /
    privacy / interpretive — is surfaced to Malin IN the plan, never buried.
 
-`skip` tier (doc-only / trivial) → no panel, plan normally.
+`skip` → no panel.
 
 ## Commit gates (shared workflow-guards plugin; config in .claude/shared-plugin.json)
 
@@ -65,9 +72,9 @@ Each gate prints its own remedy, so follow the block message rather than recitin
 procedure from here.
 
 The gates also name `.claude/rules/accepted-deviations.md`: deliberate deviations are
-decided, and a review must not re-flag them. That file is trigger-loaded (it carries
-`paths:` frontmatter) and each reviewer agent reads it — so when you dispatch a reviewer
-some other way, point it there too.
+decided, and a review must not re-flag them. That file is a trigger-loaded index of headings;
+each entry is in full in `.claude/accepted-deviations.md`, the ledger. When you dispatch a
+reviewer some other way, point it at both.
 
 ## Standing "do not do this" calls
 
@@ -77,6 +84,12 @@ some other way, point it there too.
   session-expiry gate on writes). See ADR 0015
   before touching `firestore.rules`' session block, and never "fix" the first with a token
   stored on a public-read doc.
+- **Never approve a run waiting in the `backend` environment, and never tick
+  `backend_deployed_by_hand` unless Malin says the backend is deployed by hand.** Since
+  Malin's decision of 2026-10-07 the `backend` job deploys without an approval (BIN-1426),
+  so a run that waits means the environment's settings changed, and that is hers to sort
+  out. The tick skips the backend job, and the run's success makes the next comparison
+  start after changes nobody deployed.
 
 ## Project Overview
 
@@ -89,13 +102,16 @@ version of this section claimed Next 14 while the app ran 16).
 
 ## Commands
 
-`package.json` holds the script list. These are the ones that are NOT in it — `deploy.yml`
-ships hosting only, so rules and functions are always manual:
+`package.json` holds the script list. `deploy.yml` ships a push to `main`: the site, and
+before it the rules, indexes and functions that changed, without an approval (BIN-1426;
+which files count is `watchedPaths` in `scripts/check-deploy-drift.mjs`). A push that only touches `docs/` (the workflow map
+aside), `tasks/`, `.claude/` or Markdown starts no run. By hand only when that job fails,
+then Run workflow with `backend_deployed_by_hand` to ship the site (`docs/RUNBOOK.md` §6e):
 
 ```bash
-firebase deploy --only hosting
 firebase deploy --only firestore:rules
-firebase deploy --only hosting,firestore:rules
+firebase deploy --only functions
+firebase deploy --except hosting
 ```
 
 ## Architecture
@@ -109,32 +125,21 @@ before trusting your own judgment on that surface.
 
 Not loaded every session — only when Claude reads a file matching a rule's `paths:`.
 
-**Which paths trigger a rule is answered by that file's own `paths:` frontmatter, and only
-there.** This section names what each rule is FOR; it deliberately does not restate what
-each loads on. The enumeration that used to sit here was a second list nobody widened when
-the first one changed (BIN-1020): it had gone stale on `accepted-deviations.md`, and wrote
-`watchStatus*.ts` where the frontmatter names `src/lib/watchStatus.ts` and
-`src/lib/watchStatus.migration.ts`, with no glob reaching a third — so a reader trusting the
-star believed a new `watchStatus` file would trigger the rule. It would not.
-Open the rule file's first lines rather than trusting any paraphrase of them, here or
-elsewhere.
-
-The list of rule files below is still hand-maintained, and nothing checks it — `ls
-.claude/rules/` if you doubt it is complete. That is a smaller failure than the one above:
-a missing entry under-informs, a stale path list actively misdirects.
+Which paths trigger a rule is answered only by that file's own `paths:` frontmatter (BIN-1020), and
+this hand-kept list says only what each rule is for: `ls .claude/rules/` if you doubt it is complete.
 
 - `design-system.md` — Direction H layout/tokens/tvåaccentregeln/poster-duotone/new-view
   recipe.
 - `calendar.md` — calendar entry model + sources.
-- `accepted-deviations.md` — decided deviations; review agents must read before filing a
-  finding.
+- `accepted-deviations.md` — the index of decided deviations; review agents read the
+  matching entry in the ledger, `.claude/accepted-deviations.md`, before filing a finding.
 - `html-previews.md` — Malin reads pictures, not code: a new or rebuilt screen starts with
   an ASCII sketch in the plan and variants she can react to, before any code is written.
 - `tmdb.md` — shared `TMDB_STALE` cache keys, rate-limit/AbortSignal, API conventions,
   provider-id normalization.
 - `data-model.md` — full Firestore collection tree, the GDPR export/delete helper contract,
   the WatchStatus + TV sub-state schema (incl. migration), Auth setup.
-- `deployment.md` — build pipeline, byggtids-TMDB SEO pre-rendering (25k titles, cache +
+- `deployment.md` — build pipeline, byggtids-TMDB SEO pre-rendering (cache +
   timeout protections), CI workflow roles.
 - `routing.md` — static-export catch-all dispatch for dynamic routes; what breaks if you
   add a route without updating both the dispatcher and the Firebase rewrite.

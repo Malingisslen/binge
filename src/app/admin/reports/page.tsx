@@ -8,6 +8,7 @@ import { useToast } from '@/contexts/ToastContext';
 import {
   listReports,
   updateReportStatus,
+  MAX_DECISION_NOTE,
   REPORT_REASON_LABELS,
   REPORT_STATUS_LABELS,
   type Report,
@@ -18,6 +19,9 @@ import { useQuery } from '@tanstack/react-query';
 import { getProfileForModeration } from '@/lib/firebase/moderationProfile';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { LoadingView } from '@/components/ui/LoadingView';
+import { Button } from '@/components/ui/Button';
+import { fieldClass } from '@/components/ui/Field';
+import { cardClass } from '@/components/ui/Card';
 
 const STATUS_TABS: ReportStatus[] = ['open', 'reviewed', 'actioned', 'dismissed'];
 
@@ -79,10 +83,10 @@ function ReportsDashboard() {
     void load(activeTab);
   }, [activeTab]);
 
-  const handleAction = async (reportId: string, newStatus: ReportStatus) => {
+  const handleAction = async (reportId: string, newStatus: ReportStatus, decisionNote?: string) => {
     if (!uid) return; // admin UI only renders for an authed admin; guard for the audit uid
     try {
-      await updateReportStatus(reportId, newStatus, uid);
+      await updateReportStatus(reportId, newStatus, uid, decisionNote);
       toast(`Rapport markerad som ${REPORT_STATUS_LABELS[newStatus].toLowerCase()}`);
       void load(activeTab);
     } catch {
@@ -94,13 +98,13 @@ function ReportsDashboard() {
     <div>
       <PageHeader crumb="Admin · Rapporter" title="Rapporter" />
 
-      <div className="flex gap-[1px] mb-3">
+      <div className="flex gap-px mb-3">
         {STATUS_TABS.map(s => (
           <button
             key={s}
             onClick={() => setActiveTab(s)}
-            className={`px-3 py-[4px] text-xs rounded-sm cursor-pointer ${
-              activeTab === s ? 'bg-acc-deep text-white' : 'bg-surface text-ink-2 hover:bg-bg-2'
+            className={`px-3 py-1 text-xs rounded-sm cursor-pointer ${
+              activeTab === s ? 'bg-acc-deep text-on-acc' : 'bg-surface text-ink-2 hover:bg-bg-2'
             }`}
           >
             {REPORT_STATUS_LABELS[s]}
@@ -119,7 +123,7 @@ function ReportsDashboard() {
       )}
 
       {!loading && reports.length === 0 && !error && (
-        <div className="bg-surface border border-rule rounded-sm px-3 py-6 text-center text-sm text-ink-3">
+        <div className={cardClass('px-3 py-6 text-center text-sm text-ink-3')}>
           Inga {REPORT_STATUS_LABELS[activeTab].toLowerCase()} rapporter.
         </div>
       )}
@@ -141,8 +145,10 @@ function ReportRow({
   report, onAction,
 }: {
   report: Report;
-  onAction: (id: string, status: ReportStatus) => void;
+  onAction: (id: string, status: ReportStatus, decisionNote?: string) => void;
 }) {
+  // BIN-1250: intern motivering, skickas med beslutet. Visas aldrig för anmälaren.
+  const [note, setNote] = useState('');
   const reportedUid = report.targetType === 'user' ? report.targetOwnerUid : null;
   // BIN-1244: the reported profile comes from an admin-only server lookup, so a
   // private profile is visible here too. The link to /user/ is offered only for a
@@ -159,7 +165,7 @@ function ReportRow({
   const notice = reportedProfileNotice(reportedUid, profile);
 
   return (
-    <li className="bg-surface border border-rule rounded-sm p-3">
+    <li className={cardClass('p-3')}>
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="min-w-0 flex-1">
           <div className="text-xs text-ink-3 mb-1">
@@ -206,60 +212,76 @@ function ReportRow({
             Target ägare: {report.targetOwnerUid ? report.targetOwnerUid.slice(0, 8) : 'okänd (innehållet borttaget)'}
             {report.actionedByUid && <> • Åtgärdad av {report.actionedByUid.slice(0, 8)}</>}
           </div>
+          {report.decisionNote && (
+            <div className="text-xs text-ink-2 mt-1 px-2 py-1 bg-bg rounded-sm">
+              <span className="text-ink-3">Intern motivering: </span>{report.decisionNote}
+            </div>
+          )}
         </div>
         <div className="flex flex-col gap-1 shrink-0">
           {targetLink && (
             <Link
               href={targetLink}
               target="_blank"
-              className="px-3 py-[3px] text-xs text-acc-deep no-underline hover:underline text-right"
+              className="px-3 py-1 text-xs text-acc-deep no-underline hover:underline text-right"
             >
               Öppna target →
             </Link>
           )}
           {notice === 'lookup-failed' && (
-            <span className="px-3 py-[3px] text-xxs text-ink-3 text-right">
+            <span className="px-3 py-1 text-xxs text-ink-3 text-right">
               Profilen kunde inte hämtas just nu — försök igen om en stund
             </span>
           )}
           {notice === 'missing' && (
-            <span className="px-3 py-[3px] text-xxs text-ink-3 text-right">
+            <span className="px-3 py-1 text-xxs text-ink-3 text-right">
               Ingen profil finns för kontot
             </span>
           )}
           {report.status === 'open' && (
             <>
-              <button
-                onClick={() => onAction(report.id, 'reviewed')}
-                className="px-3 py-[3px] text-xs border border-rule rounded-sm bg-white cursor-pointer hover:bg-bg-2"
+              <label className="text-xxs text-ink-3" htmlFor={`decision-note-${report.id}`}>
+                Intern motivering (visas inte för anmälaren)
+              </label>
+              <textarea
+                id={`decision-note-${report.id}`}
+                value={note}
+                onChange={e => setNote(e.target.value)}
+                maxLength={MAX_DECISION_NOTE}
+                rows={2}
+                className={fieldClass({ size: 'sm', className: 'w-56' })}
+              />
+              <Button
+                onClick={() => onAction(report.id, 'reviewed', note)}
+                variant="ghost" size="sm"
               >
                 Granskad
-              </button>
-              <button
-                onClick={() => onAction(report.id, 'actioned')}
-                className="px-3 py-[3px] text-xs bg-acc-deep text-white border-none rounded-sm cursor-pointer"
+              </Button>
+              <Button
+                onClick={() => onAction(report.id, 'actioned', note)}
+                variant="acc" size="sm"
               >
                 Åtgärda
-              </button>
-              <button
-                onClick={() => onAction(report.id, 'dismissed')}
-                className="px-3 py-[3px] text-xs border border-rule rounded-sm bg-white text-ink-3 cursor-pointer hover:bg-bg-2"
+              </Button>
+              <Button
+                onClick={() => onAction(report.id, 'dismissed', note)}
+                variant="ghost" size="sm"
               >
                 Avfärda
-              </button>
+              </Button>
             </>
           )}
           {report.status !== 'open' && (
             <>
-              <span className="px-3 py-[3px] text-xxs text-ink-3 text-right">
+              <span className="px-3 py-1 text-xxs text-ink-3 text-right">
                 {REPORT_STATUS_LABELS[report.status]}
               </span>
-              <button
+              <Button
                 onClick={() => onAction(report.id, 'open')}
-                className="px-3 py-[3px] text-xs border border-rule rounded-sm bg-white cursor-pointer hover:bg-bg-2"
+                variant="ghost" size="sm"
               >
                 Öppna igen
-              </button>
+              </Button>
             </>
           )}
         </div>

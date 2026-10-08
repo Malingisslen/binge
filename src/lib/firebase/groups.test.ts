@@ -66,6 +66,9 @@ vi.mock('./db', () => ({
 }));
 const captureErrorMock = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/sentry', () => ({ captureError: captureErrorMock, initSentry: () => {} }));
+// BIN-1260: the server step `leaveGroup` calls after the leave.
+const eraseMyGroupTracesMock = vi.hoisted(() => vi.fn((_groupId: string) => Promise.resolve()));
+vi.mock('./groupHandover', () => ({ eraseMyGroupTraces: eraseMyGroupTracesMock }));
 
 vi.mock('firebase/firestore', () => ({
   collection: vi.fn((_db: unknown, ...path: string[]) => ({ _path: path.join('/') })),
@@ -101,6 +104,8 @@ import {
   getPublicGroupName,
   addToGroupWatchlist,
   syncProgressToGroups,
+  getMyGroupIds,
+  removeMember,
   subscribeToMyGroups,
   getRecentSessionPicksAcrossGroups,
   refreshMyHouseholdContributions,
@@ -111,7 +116,13 @@ import {
   updateMemberIdentity,
   GROUP_WRITE_REFUSED,
   MY_GROUPS_LIMIT,
+  memberDocToObject,
+  watchlistDocToObject,
+  subscribeToGroupWatchlist,
+  leaveGroup,
+  removeMemberAsOwner,
 } from './groups';
+import type { GroupWatchlistRow } from './groups';
 
 function groupsQueryConstraints() {
   const call = queryMock.mock.calls.find(([coll]) => (coll as { _path?: string })?._path === 'groups');
@@ -993,9 +1004,8 @@ describe('medlemsdokumentets fältuppsättning är delad mellan createGroup och 
  * lets production accept any field set. Wildcard tokens are blanked first because
  * `{groupId}` is not a block delimiter and counting it corrupts the depth.
  */
-function ruleInviteKeys(): string[] {
-  const stripped = readFileSync(join(process.cwd(), 'firestore.rules'), 'utf8')
-    .replace(/\{[a-zA-Z]+\}/g, '<>');
+function ruleInviteKeys(rules = readFileSync(join(process.cwd(), 'firestore.rules'), 'utf8')): string[] {
+  const stripped = rules.replace(/\{[a-zA-Z]+\}/g, '<>');
   const start = stripped.indexOf('match /users/<>/groupInvites/<> {');
   if (start === -1) return [];
 
@@ -1016,8 +1026,23 @@ function ruleInviteKeys(): string[] {
 
   const list = stripped.slice(start, end).match(/hasOnly\(\s*\[([^\]]*)\]/);
   if (!list) return [];
-  return [...list[1].matchAll(/'([a-zA-Z]+)'/g)].map((m) => m[1]).sort();
+  // BIN-1270: båda citatformerna, som regelspråket tillåter. Radkommentarer i listan
+  // skalas bort först, så att ett citerat ord i en kommentar inte matar listan.
+  return [...list[1].replace(/\/\/.*$/gm, '').matchAll(/(['"])([a-zA-Z]+)\1/g)].map((m) => m[2]).sort();
 }
+
+describe('ruleInviteKeys läser båda citatformerna (BIN-1270)', () => {
+  it('fångar en dubbelciterad nyckel och hoppar över en i en kommentar', () => {
+    const rules = [
+      'match /users/{uid}/groupInvites/{groupId} {',
+      '  allow create: if request.resource.data.keys().hasOnly([',
+      `    'groupId', "fromUid", // "kommentar"`,
+      '  ]);',
+      '}',
+    ].join('\n');
+    expect(ruleInviteKeys(rules)).toEqual(['fromUid', 'groupId']);
+  });
+});
 
 describe('inbjudningens faltuppsattning ar pinnad mot regeln (BIN-1127, harledd i BIN-1146)', () => {
   // Nyckellistan kommer fran `ruleInviteKeys()` ovan, som laser den ur regeln.
@@ -1255,6 +1280,19 @@ describe('BIN-1152: projektionen foljer gruppen', () => {
     expect(proj).toBeLessThan(group);
   });
 
+  // SEC-1 (BIN-1436): firestore.rules låter en inloggad lista bara sessioner hen själv är
+  // värd för. Utan hostUid-filtret nekas frågan, Promise.all faller och ingenting raderas.
+  it('deleteGroup frågar efter sessioner med både groupId och eget hostUid', async () => {
+    getDocsMock.mockImplementation(async () => ({ docs: [] }));
+    mocks.whereMock.mockClear();
+
+    await deleteGroup('g-del', 'owner-1');
+
+    const filters = mocks.whereMock.mock.calls.map(c => c.join(' '));
+    expect(filters).toContain('groupId == g-del');
+    expect(filters).toContain('hostUid == owner-1');
+  });
+
   it('updateGroup skriver om projektionen nar NAMNET byts', async () => {
     await updateGroup('g-name', { name: 'Nytt namn' });
 
@@ -1421,5 +1459,277 @@ describe('subscribeToGroup lamnar over nekandet, inte bara dokumentet (BIN-1152)
     // "Finns inte" kommer fortfarande genom dokumentvagen, inte genom nekandet —
     // det ar de tva skarmarnas ena halva.
     expect(seen).toEqual([null]);
+  });
+});
+
+// BIN-1118. `toDate` svarar NU för ett `joinedAt` den inte kan tolka, och en
+// medlemsrad utan användbar tidsstämpel läses då som den NYASTE medlemmen —
+// motsatsen till hur `pickGroupSuccessor` rankar samma rad när servern väljer
+// efterträdare själv. Överlämningsdialogen visar medlemstid till en människa som
+// ska välja, så den måste kunna säga att den inte vet.
+//
+// Fältet härleds ur det RÅA värdet. Prövas det bara genom handbyggda fixturer i
+// dialogens eget test går en mutant som alltid svarar true — eller alltid false —
+// rakt igenom hela sviten.
+describe('memberDocToObject — joinedAtKnown följer det RÅA fältet (BIN-1118)', () => {
+  const stamp = (d: Date) => ({ toDate: () => d });
+
+  it('en Firestore-tidsstämpel räknas som känd', () => {
+    const m = memberDocToObject('u1', { joinedAt: stamp(new Date('2024-03-04')) });
+    expect(m.joinedAtKnown).toBe(true);
+    expect(m.joinedAt).toEqual(new Date('2024-03-04'));
+  });
+
+  it('ett Date-värde räknas som känt', () => {
+    expect(memberDocToObject('u1', { joinedAt: new Date('2024-03-04') }).joinedAtKnown).toBe(true);
+  });
+
+  // De tre formerna som gör `toDate` till en lögnare. Var och en för sig, så en
+  // gren som bara fångar en av dem faller.
+  it('ett saknat fält är okänt', () => {
+    expect(memberDocToObject('u1', {}).joinedAtKnown).toBe(false);
+  });
+
+  it('null är okänt', () => {
+    expect(memberDocToObject('u1', { joinedAt: null }).joinedAtKnown).toBe(false);
+  });
+
+  it('ett värde av fel typ är okänt', () => {
+    expect(memberDocToObject('u1', { joinedAt: 1709510400000 }).joinedAtKnown).toBe(false);
+    expect(memberDocToObject('u1', { joinedAt: '2024-03-04' }).joinedAtKnown).toBe(false);
+    expect(memberDocToObject('u1', { joinedAt: { toDate: 'inte en funktion' } }).joinedAtKnown).toBe(false);
+  });
+
+  // Det avgörande paret. `joinedAt` är IDENTISKT användbart i båda fallen —
+  // `toDate` har redan svarat med ett datum för den okända raden — så bara
+  // `joinedAtKnown` skiljer dem åt. Utan det skulle ytan visa samma sak för en
+  // medlem som gick med i dag och en vars tidpunkt aldrig skrevs.
+  it('en okänd rad går inte att skilja från en färsk på joinedAt allena', () => {
+    const unknown = memberDocToObject('u1', {});
+    const fresh = memberDocToObject('u2', { joinedAt: stamp(new Date()) });
+    expect(Number.isFinite(unknown.joinedAt.getTime())).toBe(true);
+    expect(Number.isFinite(fresh.joinedAt.getTime())).toBe(true);
+    expect(unknown.joinedAtKnown).toBe(false);
+    expect(fresh.joinedAtKnown).toBe(true);
+  });
+});
+
+// BIN-1383. `addedAtKnown` is what keeps GroupWatchlistTable from comparing `toDate`'s
+// moving stand-in across snapshots (BIN-1354). The table's own tests set it by hand,
+// so these pin the producer and the subscription that carries it to the table.
+// GroupWatchlistTable.test.tsx keeps its own BIN-1354 mapper suite: it also asserts that
+// `addedAt` is a Date for every unknown shape, which this suite does not.
+describe('watchlistDocToObject — addedAtKnown följer det RÅA fältet (BIN-1383)', () => {
+  it('en rad utan addedAtKnown är ett typfel (fältet är obligatoriskt)', () => {
+    const withoutField: Omit<GroupWatchlistRow, 'addedAtKnown'> & { addedAtKnown?: boolean } =
+      { ...watchlistDocToObject('movie_603', {}) };
+    delete withoutField.addedAtKnown;
+    // @ts-expect-error -- GroupWatchlistRow kräver addedAtKnown, så en rad som tappat fältet ska fällas av typkontrollen.
+    const row: GroupWatchlistRow = withoutField;
+    expect(row).not.toHaveProperty('addedAtKnown');
+  });
+
+  const stamp = (d: Date) => ({ toDate: () => d });
+
+  it('en Firestore-tidsstämpel räknas som känd', () => {
+    const row = watchlistDocToObject('movie_603', { tmdbId: 603, addedAt: stamp(new Date('2026-09-01')) });
+    expect(row.addedAtKnown).toBe(true);
+    expect(row.addedAt).toEqual(new Date('2026-09-01'));
+  });
+
+  it('ett Date-värde räknas som känt', () => {
+    expect(watchlistDocToObject('movie_603', { addedAt: new Date('2026-09-01') }).addedAtKnown).toBe(true);
+  });
+
+  it('ett saknat fält är okänt', () => {
+    expect(watchlistDocToObject('movie_603', {}).addedAtKnown).toBe(false);
+  });
+
+  it('null (en serverTimestamp som inte kommit än) är okänt', () => {
+    expect(watchlistDocToObject('movie_603', { addedAt: null }).addedAtKnown).toBe(false);
+  });
+
+  it('ett värde av fel typ är okänt', () => {
+    expect(watchlistDocToObject('movie_603', { addedAt: 1756684800000 }).addedAtKnown).toBe(false);
+    expect(watchlistDocToObject('movie_603', { addedAt: '2026-09-01' }).addedAtKnown).toBe(false);
+    expect(watchlistDocToObject('movie_603', { addedAt: { toDate: 'inte en funktion' } }).addedAtKnown).toBe(false);
+  });
+
+  it('en okänd rad går inte att skilja från en färsk på addedAt allena', () => {
+    const unknown = watchlistDocToObject('movie_603', {});
+    const fresh = watchlistDocToObject('movie_604', { addedAt: stamp(new Date()) });
+    expect(Number.isFinite(unknown.addedAt.getTime())).toBe(true);
+    expect(Number.isFinite(fresh.addedAt.getTime())).toBe(true);
+    expect(unknown.addedAtKnown).toBe(false);
+    expect(fresh.addedAtKnown).toBe(true);
+  });
+});
+
+describe('subscribeToGroupWatchlist lämnar addedAtKnown vidare från det råa dokumentet (BIN-1383)', () => {
+  it('varje rad i snapshoten bär addedAtKnown som det råa addedAt avgör', async () => {
+    const seen: GroupWatchlistRow[][] = [];
+    subscribeToGroupWatchlist('g-wl', items => seen.push(items));
+    await vi.waitUntil(() => onSnapshotMock.mock.calls.length > 0);
+    const [ref, next] = onSnapshotMock.mock.calls[0];
+    expect((ref as { _path: string })._path).toBe('groups/g-wl/watchlist');
+
+    const docOf = (id: string, data: Record<string, unknown>) => ({ id, data: () => data });
+    (next as (snap: unknown) => void)({
+      docs: [
+        docOf('movie_603', { tmdbId: 603, mediaType: 'movie', addedAt: { toDate: () => new Date('2026-09-01') } }),
+        docOf('movie_604', { tmdbId: 604, mediaType: 'movie', addedAt: null }),
+        docOf('tv_1399', { tmdbId: 1399, mediaType: 'tv' }),
+      ],
+    });
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0].map(r => [r.tmdbId, r.addedAtKnown]))
+      .toEqual([[603, true], [604, false], [1399, false]]);
+  });
+});
+
+describe('leaveGroup — utträdet först, spårraderingen efteråt (BIN-1260)', () => {
+  // Låter den inväntade `import('./groupHandover')` och kedjan efter den köras klart.
+  const settle = () => new Promise((r) => setTimeout(r, 0));
+
+  beforeEach(() => {
+    eraseMyGroupTracesMock.mockReset();
+    eraseMyGroupTracesMock.mockImplementation(async () => {});
+    captureErrorMock.mockClear();
+  });
+
+  it('skriver utträdet som förut och ber sedan servern radera spåren', async () => {
+    await leaveGroup('g1', 'me');
+    await settle();
+
+    expect(commitMock).toHaveBeenCalledTimes(1);
+    expect(eraseMyGroupTracesMock).toHaveBeenCalledWith('g1');
+  });
+
+  it('ett fel i spårraderingen rapporteras men gör inte utträdet till ett misslyckande', async () => {
+    const boom = new Error('server nere');
+    eraseMyGroupTracesMock.mockImplementation(async () => { throw boom; });
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await expect(leaveGroup('g1', 'me')).resolves.toBeUndefined();
+    await settle();
+
+    expect(captureErrorMock).toHaveBeenCalledWith(boom, { scope: 'groups', kind: 'leaveGroup-traceErasure' });
+    spy.mockRestore();
+  });
+
+  // Utträdet väntar inte på servern: en callable som aldrig svarar får inte hålla
+  // knappen i "Lämnar…" (upp till funktionens timeout).
+  it('är klart utan att vänta på spårraderingen', async () => {
+    eraseMyGroupTracesMock.mockImplementation(() => new Promise<void>(() => {}));
+
+    const outcome = await Promise.race([
+      leaveGroup('g1', 'me').then(() => 'klar'),
+      new Promise((r) => setTimeout(() => r('hänger'), 50)),
+    ]);
+
+    expect(outcome).toBe('klar');
+    await settle();
+    expect(eraseMyGroupTracesMock).toHaveBeenCalledWith('g1');
+  });
+
+  it('ber inte om någon spårradering när själva utträdet faller', async () => {
+    commitMock.mockImplementationOnce(() => Promise.reject(new Error('nekad')));
+
+    await expect(leaveGroup('g1', 'me')).rejects.toThrow('nekad');
+    await settle();
+
+    expect(eraseMyGroupTracesMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('removeMemberAsOwner — borttagningen först, spårraderingen efteråt (BIN-1296)', () => {
+  const settle = () => new Promise((r) => setTimeout(r, 0));
+
+  beforeEach(() => {
+    eraseMyGroupTracesMock.mockReset();
+    eraseMyGroupTracesMock.mockImplementation(async () => {});
+    captureErrorMock.mockClear();
+  });
+
+  it('tar bort medlemmen och ber sedan servern radera just den medlemmens spår', async () => {
+    await removeMemberAsOwner('g1', 'jonas');
+    await settle();
+
+    expect(commitMock).toHaveBeenCalledTimes(1);
+    expect(eraseMyGroupTracesMock).toHaveBeenCalledWith('g1', 'jonas');
+  });
+
+  it('ett fel i spårraderingen rapporteras men gör inte borttagningen till ett misslyckande', async () => {
+    const boom = new Error('server nere');
+    eraseMyGroupTracesMock.mockImplementation(async () => { throw boom; });
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await expect(removeMemberAsOwner('g1', 'jonas')).resolves.toBeUndefined();
+    await settle();
+
+    expect(captureErrorMock).toHaveBeenCalledWith(boom, { scope: 'groups', kind: 'removeMember-traceErasure' });
+    spy.mockRestore();
+  });
+
+  it('är klar utan att vänta på spårraderingen', async () => {
+    eraseMyGroupTracesMock.mockImplementation(() => new Promise<void>(() => {}));
+
+    const outcome = await Promise.race([
+      removeMemberAsOwner('g1', 'jonas').then(() => 'klar'),
+      new Promise((r) => setTimeout(() => r('hänger'), 50)),
+    ]);
+
+    expect(outcome).toBe('klar');
+  });
+
+  it('en nekad borttagning når anroparen, och ingen spårradering begärs', async () => {
+    commitMock.mockImplementationOnce(() => Promise.reject(new Error('nekad')));
+
+    await expect(removeMemberAsOwner('g1', 'jonas')).rejects.toThrow('nekad');
+    await settle();
+
+    expect(eraseMyGroupTracesMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('PERF-6: getMyGroupIds', () => {
+  it('two concurrent calls share ONE query', async () => {
+    getDocsMock.mockResolvedValueOnce({ empty: false, docs: [{ id: 'g1' }] });
+    const [a, b] = await Promise.all([getMyGroupIds('perf6-a'), getMyGroupIds('perf6-a')]);
+    expect(a).toEqual(['g1']);
+    expect(b).toEqual(['g1']);
+    expect(getDocsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('a failed read is not cached as an empty list — the next call queries again', async () => {
+    getDocsMock.mockRejectedValueOnce(new Error('unavailable'));
+    await expect(getMyGroupIds('perf6-b')).rejects.toThrow('unavailable');
+    getDocsMock.mockResolvedValueOnce({ empty: false, docs: [{ id: 'g9' }] });
+    await expect(getMyGroupIds('perf6-b')).resolves.toEqual(['g9']);
+    expect(getDocsMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('leaving a group drops the cached ids, so the next call reads fresh', async () => {
+    getDocsMock.mockResolvedValueOnce({ empty: false, docs: [{ id: 'g1' }] });
+    await getMyGroupIds('perf6-c');
+    await leaveGroup('g1', 'perf6-c');
+    getDocsMock.mockResolvedValueOnce({ empty: true, docs: [] });
+    await expect(getMyGroupIds('perf6-c')).resolves.toEqual([]);
+    expect(getDocsMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('PERF-6: invalidation vs a read already in flight', () => {
+  it('a membership change during the read keeps the old answer out of the cache', async () => {
+    let release!: (v: unknown) => void;
+    getDocsMock.mockImplementationOnce(() => new Promise(r => { release = r; }));
+    const stale = getMyGroupIds('perf6-d');
+    await vi.waitFor(() => expect(release).toBeDefined());
+    await removeMember('g1', 'perf6-d'); // invalidates while the read is pending
+    release({ empty: true, docs: [] });
+    await stale;
+    getDocsMock.mockResolvedValueOnce({ empty: false, docs: [{ id: 'g2' }] });
+    await expect(getMyGroupIds('perf6-d')).resolves.toEqual(['g2']);
   });
 });

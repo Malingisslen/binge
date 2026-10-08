@@ -107,7 +107,7 @@ updates:
   # Liten dep-tree → lågt PR-tak. firebase-admin + firebase-functions är
   # runtime-kopplade (en ensam funktions-bump som springer ifrån admin är just
   # den split-version-risk som landar på en yta utan preview-deploy) → grupperas.
-  # Major-bumps kan ändra Node-runtime-kontraktet och bryta den manuella
+  # Major-bumps kan ändra Node-runtime-kontraktet och bryta
   # functions-deployen → bara patch/minor automatiskt, majors granskas för hand.
   - package-ecosystem: "npm"
     directory: "/functions"
@@ -133,7 +133,7 @@ updates:
           - "minor"
           - "patch"
     ignore:
-      # Major-bumps kräver eftertanke (Node-runtime + manuell deploy).
+      # Major-bumps kräver eftertanke (Node-runtime + deploy).
       - dependency-name: "firebase-admin"
         update-types: ["version-update:semver-major"]
       - dependency-name: "firebase-functions"

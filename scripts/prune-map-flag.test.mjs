@@ -1,8 +1,8 @@
 // Tests for the pre-commit workflow-map flag pruner (BIN-790).
 //
-// Run: npm test — matched by vitest.config.ts's `scripts/**/*.{test,spec}.mjs` include.
+// Run: npm run test:process — named in vitest.config.ts's PROCESS_SCRIPTS.
 // A test file outside the runner's globs is silently never run while passing when invoked
-// by hand (BIN-802), so if you move this file, move that glob.
+// by hand (BIN-802), so if you move this file, update that list.
 //
 // WHY THIS FILE EXISTS. `prune-map-flag.mjs` DELETES work orders. Both directions cost, and
 // they cost differently:
@@ -19,7 +19,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { pruneTriggers, hasCommitSince, hasWorkingTreeChange, findRepoRoot, run, patchPaths, isHeldSince } from './prune-map-flag.mjs';
+import { pruneTriggers, hasCommitSince, hasWorkingTreeChange, findRepoRoot, run, patchPaths, isHeldSince, listOtherWorktrees } from './prune-map-flag.mjs';
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const FLAG_REL = '.claude/state/workflow-map-stale.json';
@@ -92,6 +92,9 @@ describe('pruneTriggers — grenarna', () => {
     }, {
       workingTreeChange: () => false,
       commitSince: () => false,
+      // BIN-1408: "no edit anywhere" now includes the other work folders. Left to the real
+      // git at '/irrelevant', that list fails and — correctly — keeps the trigger.
+      otherWorktrees: () => [],
     });
 
     expect(dropped).toEqual(['src/spoke.tsx']);
@@ -332,6 +335,7 @@ describe('per trigger-fönstret (BIN-1081)', () => {
       workingTreeChange: () => false,
       commitSince: (_root, _rel, since) => { seen.push(since); return false; },
       heldFiles: () => [],
+      otherWorktrees: () => [],
     });
 
     expect(seen).toEqual(['2026-09-01T00:00:00Z']);
@@ -523,6 +527,209 @@ describe('en HÅLLEN bunt är inget spöke (BIN-1082)', () => {
     run({ cwd: dir, projectDir: null, gitRunner: counting, out: { write: () => {} } });
 
     expect(stashListCalls.length).toBe(1);
+  });
+});
+
+describe('en redigering i en ANNAN arbetsmapp är inget spöke (BIN-1408)', () => {
+  // Since BIN-1397 a sprint editing in its own work folder stamps the MAIN checkout's flag,
+  // while the edit sits in that other folder. Asked from the main checkout alone — clean vs
+  // HEAD, no commit on HEAD, no stash, no patch — it looked exactly like a ghost.
+  const noEarlierEvidence = {
+    commitSince: () => false,
+    heldFiles: () => [],
+  };
+  const ghostFlag = (...triggers) => ({ firstStampedAt: '2026-09-01T00:00:00Z', triggers });
+
+  it('BEHÅLLER en trigger vars redigering bara finns i en annan arbetsmapp', () => {
+    const { kept, dropped } = pruneTriggers('/repo', ghostFlag('src/sprint.tsx'), {
+      ...noEarlierEvidence,
+      workingTreeChange: (root) => root === '/wt/sprint',
+      otherWorktrees: () => ['/wt/annan', '/wt/sprint'],
+    });
+
+    expect(kept).toEqual(['src/sprint.tsx']);
+    expect(dropped).toEqual([]);
+  });
+
+  it('SLÄPPER ändå när andra arbetsmappar finns men ingen har redigeringen', () => {
+    // The paired case: without it, "keeps" above is equally satisfied by a probe that keeps
+    // everything, and the prune would have gone inert with the suite green.
+    const { kept, dropped } = pruneTriggers('/repo', ghostFlag('src/spoke.tsx'), {
+      ...noEarlierEvidence,
+      workingTreeChange: () => false,
+      otherWorktrees: () => ['/wt/annan', '/wt/sprint'],
+    });
+
+    expect(dropped).toEqual(['src/spoke.tsx']);
+    expect(kept).toEqual([]);
+  });
+
+  it('BEHÅLLER när git inte kan lista arbetsmapparna — ett obesvarat anrop är inget spöke', () => {
+    // The default probe, driven through an injected gitRunner that throws for it alone.
+    const { kept, dropped } = pruneTriggers('/repo', ghostFlag('src/okand.tsx'), {
+      ...noEarlierEvidence,
+      workingTreeChange: () => false,
+      gitRunner: (_root, args) => {
+        if (args[0] === 'worktree') throw new Error('git kraschade');
+        return '';
+      },
+    });
+
+    expect(kept).toEqual(['src/okand.tsx']);
+    expect(dropped).toEqual([]);
+  });
+
+  it('BEHÅLLER när listan inte går att tolka', () => {
+    const { kept } = pruneTriggers('/repo', ghostFlag('src/otolkad.tsx'), {
+      ...noEarlierEvidence,
+      workingTreeChange: () => false,
+      gitRunner: (_root, args) => (args[0] === 'worktree' ? 'skräp som inte är porcelain\n' : ''),
+    });
+
+    expect(kept).toEqual(['src/otolkad.tsx']);
+  });
+
+  it('BEHÅLLER när status-frågan kastar inne i en annan arbetsmapp', () => {
+    const { kept } = pruneTriggers('/repo', ghostFlag('src/kastar.tsx'), {
+      ...noEarlierEvidence,
+      workingTreeChange: (root) => {
+        if (root === '/wt/trasig') throw new Error('git status kraschade');
+        return false;
+      },
+      otherWorktrees: () => ['/wt/trasig'],
+    });
+
+    expect(kept).toEqual(['src/kastar.tsx']);
+  });
+
+  it('listOtherWorktrees hoppar över sig själv, bare, prunable och borttagna mappar — men inte detached', () => {
+    const porcelain = [
+      'worktree /repo', 'HEAD aaa', 'branch refs/heads/main', '',
+      'worktree /wt/detached', 'HEAD bbb', 'detached', '',
+      'worktree /wt/last', 'HEAD ccc', 'branch refs/heads/sprint', 'locked agent (pid 1)', '',
+      'worktree /wt/prunable', 'HEAD ddd', 'branch refs/heads/gammal',
+      'prunable gitdir file points to non-existent location', '',
+      'worktree /wt/borta', 'HEAD eee', 'branch refs/heads/borta', '',
+      'worktree /wt/bare', 'bare', '',
+    ].join('\n');
+
+    const others = listOtherWorktrees('/repo', {
+      gitRunner: () => porcelain,
+      exists: (p) => !p.endsWith('borta'),
+    });
+
+    expect(others).toEqual(['/wt/detached', '/wt/last']);
+  });
+
+  it('listOtherWorktrees KASTAR på tom utdata, så att anroparen behåller triggern', () => {
+    expect(() => listOtherWorktrees('/repo', { gitRunner: () => '', exists: () => true })).toThrow();
+  });
+});
+
+describe('arbetsmappar och grenar mot ett riktigt repo (BIN-1408)', () => {
+  useRepo();
+
+  let wtParent;
+  afterEach(() => { if (wtParent) rmSync(wtParent, { recursive: true, force: true }); wtParent = undefined; });
+
+  /** A second work folder of `dir`, on its own branch, created with real `git worktree add`. */
+  function addWorktree(branch) {
+    wtParent = mkdtempSync(join(tmpdir(), 'prune-map-flag-wt-'));
+    const wt = join(wtParent, 'wt');
+    execFileSync('git', ['worktree', 'add', '-q', '-b', branch, wt], {
+      cwd: dir,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return wt;
+  }
+
+  const flagAt = (rel) => ({
+    map: 'docs/workflow-map.html',
+    triggers: [rel],
+    triggerStampedAt: { [rel]: '2026-09-01T12:00:00Z' },
+    firstStampedAt: '2026-09-01T12:00:00Z',
+  });
+
+  it('BEHÅLLER en trigger vars ocommittade redigering bara finns i en andra arbetsmapp', () => {
+    commitFile(dir, 'src/sprint.tsx', 'x', '2026-09-01T10:00:00+0000');
+    const wt = addWorktree('sprint');
+    writeFileSync(join(wt, 'src', 'sprint.tsx'), 'redigerad i sprintmappen, inte committad');
+    writeFlag(dir, flagAt('src/sprint.tsx'));
+
+    expect(runScript(dir)).toBe('');
+    const flag = JSON.parse(readFileSync(join(dir, FLAG_REL), 'utf8'));
+    expect(flag.triggers).toEqual(['src/sprint.tsx']);
+  });
+
+  it('SLÄPPER ändå när den andra arbetsmappen finns men inte har redigeringen', () => {
+    commitFile(dir, 'src/spoke.tsx', 'x', '2026-09-01T10:00:00+0000');
+    addWorktree('sprint');
+    writeFlag(dir, flagAt('src/spoke.tsx'));
+
+    expect(runScript(dir)).toContain('släppte 1 spöktrigger');
+    expect(existsSync(join(dir, FLAG_REL))).toBe(false);
+  });
+
+  it('ser en commit som bara finns på en annan lokal gren, efter stämplingen', () => {
+    commitFile(dir, 'src/annan.tsx', 'x', '2026-09-01T10:00:00+0000');
+    const wt = addWorktree('sprint');
+    commitFile(wt, 'src/annan.tsx', 'y', '2026-09-01T13:00:00+0000');
+
+    // Asked from the MAIN checkout, whose HEAD does not reach the sprint branch.
+    expect(hasCommitSince(dir, 'src/annan.tsx', '2026-09-01T12:00:00Z')).toBe(true);
+  });
+
+  it('ser en commit på en frikopplad HEAD i huvudmappen', () => {
+    commitFile(dir, 'src/fri.tsx', 'x', '2026-09-01T10:00:00+0000');
+    execFileSync('git', ['checkout', '-q', '--detach'], { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'] });
+    commitFile(dir, 'src/fri.tsx', 'y', '2026-09-01T13:00:00+0000');
+
+    expect(hasCommitSince(dir, 'src/fri.tsx', '2026-09-01T12:00:00Z')).toBe(true);
+  });
+
+  it('BEHÅLLER en trigger som committats i en frikopplad andra arbetsmapp efter stämplingen', () => {
+    commitFile(dir, 'src/frisprint.tsx', 'x', '2026-09-01T10:00:00+0000');
+    wtParent = mkdtempSync(join(tmpdir(), 'prune-map-flag-wt-'));
+    const wt = join(wtParent, 'wt');
+    execFileSync('git', ['worktree', 'add', '-q', '--detach', wt], { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'] });
+    commitFile(wt, 'src/frisprint.tsx', 'y', '2026-09-01T13:00:00+0000');
+    writeFlag(dir, flagAt('src/frisprint.tsx'));
+
+    expect(runScript(dir)).toBe('');
+    const flag = JSON.parse(readFileSync(join(dir, FLAG_REL), 'utf8'));
+    expect(flag.triggers).toEqual(['src/frisprint.tsx']);
+  });
+
+  it('men INTE en grencommit som ligger före stämplingen — datumgrinden står kvar', () => {
+    commitFile(dir, 'src/gammal.tsx', 'x', '2026-09-01T10:00:00+0000');
+    const wt = addWorktree('sprint');
+    commitFile(wt, 'src/gammal.tsx', 'y', '2026-09-01T11:00:00+0000');
+
+    expect(hasCommitSince(dir, 'src/gammal.tsx', '2026-09-01T12:00:00Z')).toBe(false);
+  });
+
+  it('listar arbetsmapparna EN gång per körning, inte en gång per trigger', () => {
+    commitFile(dir, 'src/a.tsx', 'x', '2026-09-01T10:00:00+0000');
+    commitFile(dir, 'src/b.tsx', 'x', '2026-09-01T10:00:00+0000');
+    commitFile(dir, 'src/c.tsx', 'x', '2026-09-01T10:00:00+0000');
+    addWorktree('sprint');
+    writeFlag(dir, {
+      triggers: ['src/a.tsx', 'src/b.tsx', 'src/c.tsx'],
+      firstStampedAt: '2026-09-01T12:00:00Z',
+    });
+
+    const worktreeListCalls = [];
+    const counting = (root, args) => {
+      if (args[0] === 'worktree' && args[1] === 'list') worktreeListCalls.push(args.join(' '));
+      return execFileSync('git', args, { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] }).toString();
+    };
+    const written = [];
+
+    run({ cwd: dir, projectDir: null, gitRunner: counting, out: { write: (s) => written.push(s) } });
+
+    expect(worktreeListCalls.length).toBe(1);
+    // And the probe was really reached for each: every ghost is still dropped.
+    expect(written.join('')).toContain('släppte 3 spöktrigger');
   });
 });
 

@@ -13,6 +13,10 @@ import {
   deriveProviderStatus,
   selectBundleSuggestions,
   CATCHUP_THRESHOLD,
+  isTotalCostEstimated,
+  hasEnoughTitlesForPauseAdvice,
+  selectPrimaryAction,
+  PAUSE_ADVICE_MIN_TITLES,
 } from './useSubscriptionAdvisor.helpers';
 import {
   detectBundleArbitrage,
@@ -221,6 +225,44 @@ describe('findTopPausable', () => {
   it('excludes active providers even if they have high cost', () => {
     const providers = [makeProvider({ monthlyCost: 199, status: 'active' })];
     expect(findTopPausable(providers, new Set())).toBeUndefined();
+  });
+});
+
+// --- pausgolvet (paket K) ---
+
+describe('hasEnoughTitlesForPauseAdvice', () => {
+  it('golvet är tre titlar, så som beslutet lyder', () => {
+    expect(PAUSE_ADVICE_MIN_TITLES).toBe(3);
+  });
+
+  it('två titlar räcker inte för ett pausförslag', () => {
+    expect(hasEnoughTitlesForPauseAdvice(0)).toBe(false);
+    expect(hasEnoughTitlesForPauseAdvice(2)).toBe(false);
+  });
+
+  it('tre titlar räcker', () => {
+    expect(hasEnoughTitlesForPauseAdvice(3)).toBe(true);
+    expect(hasEnoughTitlesForPauseAdvice(40)).toBe(true);
+  });
+});
+
+describe('selectPrimaryAction — pausgolvet', () => {
+  const pause = { kind: 'pause' as const, providerId: 8, providerName: 'Netflix', shortName: 'Netflix', color: '#e50914', monthlyCost: 169, nextAirDate: null };
+  const catchup = { kind: 'catchup' as const, providerId: 8, providerName: 'Netflix', shortName: 'Netflix', color: '#e50914', unfinishedCount: 3, monthlyCost: 169 };
+
+  it('under golvet blir det inget pausförslag, även när en tjänst ser oanvänd ut', () => {
+    const action = selectPrimaryAction({ anchorTitleCount: 2, pauseAction: pause, catchupAction: catchup, subscribeAction: null, idleNextCheckDate: null });
+    expect(action).toEqual({ kind: 'needs-library', titleCount: 2, minTitles: 3 });
+  });
+
+  it('vid golvet går pausförslaget fram', () => {
+    const action = selectPrimaryAction({ anchorTitleCount: 3, pauseAction: pause, catchupAction: catchup, subscribeAction: null, idleNextCheckDate: null });
+    expect(action.kind).toBe('pause');
+  });
+
+  it('över golvet utan förslag blir det idle med datumet', () => {
+    const action = selectPrimaryAction({ anchorTitleCount: 5, pauseAction: null, catchupAction: null, subscribeAction: null, idleNextCheckDate: '2026-11-01' });
+    expect(action).toEqual({ kind: 'idle', nextCheckDate: '2026-11-01' });
   });
 });
 
@@ -879,5 +921,25 @@ describe('selectBundleSuggestions — advisor bundle-arbitrage wiring (BIN-439)'
     );
     // Empty owned set is deterministic (no ≥2 replacements possible → no suggestion).
     expect(selectBundleSuggestions(true, [], {}, SWEDISH_BUNDLES, NOW)).toEqual([]);
+  });
+});
+
+describe('isTotalCostEstimated — rådgivarens "(uppskattat)" (paket I)', () => {
+  const NOW = new Date(2026, 9, 5);
+  const counted = [
+    makeProvider({ providerId: 8, monthlyCost: 169 }),
+    makeProvider({ providerId: 520, monthlyCost: 0 }),
+  ];
+
+  it('listpriset på en räknad tjänst gör totalen uppskattad', () => {
+    expect(isTotalCostEstimated(counted, {}, NOW)).toBe(true);
+  });
+
+  it('att välja nivå på samma tjänst vänder märket', () => {
+    expect(isTotalCostEstimated(counted, { providerTiers: { 8: 'standard' } }, NOW)).toBe(false);
+  });
+
+  it('en tjänst utanför urvalet (t.ex. pausad) påverkar inte märket', () => {
+    expect(isTotalCostEstimated([makeProvider({ providerId: 520, monthlyCost: 0 })], {}, NOW)).toBe(false);
   });
 });

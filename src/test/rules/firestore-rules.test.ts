@@ -3,11 +3,13 @@ import { resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildAddWrite } from '@/lib/watchlistWrites';
+import { buildRestoreWrites } from '@/lib/watchlist/restoreRemoved';
+import { relationshipDocsToClear } from '@/lib/blockRelationship';
 import {
   assertFails, assertSucceeds, initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, deleteField, serverTimestamp, writeBatch, query, where, limit, Timestamp, arrayUnion } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, deleteField, serverTimestamp, writeBatch, query, where, limit, Timestamp, arrayUnion, arrayRemove } from 'firebase/firestore';
 
 const PROJECT_ID = 'binge-rules-test';
 const OWNER = 'owner_uid';
@@ -173,6 +175,65 @@ describe('BIN-655 — buildAddWrite payloads satisfy the hasOnly allowlist', () 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const body = buildAddWrite(payload() as any, 'viewing', writeCtx() as any);
     await assertFails(setDoc(ref, { ...body, countsAsViewing: true }, { merge: true }));
+  });
+});
+
+describe('BIN-1430 — "Ångra": a removed title written back exactly as it was read', () => {
+  const ITEM = 'movie_603';
+  const path = (col: string) => doc(ownerDb(), 'users', OWNER, col, ITEM);
+
+  // Read the stored row the way the client's cache holds it — server Timestamps and all —
+  // then delete it, which is the state "Ångra" starts from.
+  async function storeReadAndRemove(seed: Record<string, unknown>) {
+    await testEnv.withSecurityRulesDisabled(async ctx => {
+      await setDoc(doc(ctx.firestore(), 'users', OWNER, 'watchlist', ITEM), seed);
+    });
+    const stored = (await getDoc(path('watchlist'))).data()!;
+    await assertSucceeds(deleteDoc(path('watchlist')));
+    return stored;
+  }
+
+  it('accepts the row restored with its stored Timestamps (addedAt, updatedAt, watchedAt)', async () => {
+    const stored = await storeReadAndRemove({
+      ...validWatchlist(), status: 'sedd', rating: 4.5,
+      addedAt: Timestamp.fromDate(new Date('2021-02-03')),
+      updatedAt: Timestamp.fromDate(new Date('2024-05-06')),
+      watchedAt: Timestamp.fromDate(new Date('2021-02-04')),
+    });
+    expect(stored.addedAt).toBeInstanceOf(Timestamp); // guard the guard: a raw read, not a fixture
+
+    const writes = buildRestoreWrites({
+      mediaType: 'movie', tmdbId: 603, docId: ITEM, removalGen: 1, item: stored,
+      tags: { tags: ['favorit'], mediaType: 'movie' }, notes: { note: 'Se om', mediaType: 'movie' },
+    });
+    await assertSucceeds(setDoc(path('watchlist'), writes.item));
+    await assertSucceeds(setDoc(path('watchlistTags'), writes.tags!));
+    await assertSucceeds(setDoc(path('watchlistNotes'), writes.notes!));
+    expect((await getDoc(path('watchlist'))).data()).toEqual(stored);
+  });
+
+  it('a legacy row with an inline note: verbatim is refused, the built restore is accepted', async () => {
+    const stored = await storeReadAndRemove({
+      ...validWatchlist(), notes: 'gammal anteckning',
+      addedAt: Timestamp.fromDate(new Date('2020-01-01')),
+      updatedAt: Timestamp.fromDate(new Date('2020-01-01')),
+    });
+    // Why buildRestoreWrites moves the note: the rules refuse a non-null inline note on create.
+    await assertFails(setDoc(path('watchlist'), stored));
+
+    const writes = buildRestoreWrites({ mediaType: 'movie', tmdbId: 603, docId: ITEM, removalGen: 1, item: stored, tags: null, notes: null });
+    await assertSucceeds(setDoc(path('watchlist'), writes.item));
+    await assertSucceeds(setDoc(path('watchlistNotes'), writes.notes!));
+    expect((await getDoc(path('watchlistNotes'))).data()).toEqual({ note: 'gammal anteckning', mediaType: 'movie' });
+  });
+
+  it('another account cannot restore into the owner\'s library', async () => {
+    const stored = await storeReadAndRemove({
+      ...validWatchlist(),
+      addedAt: Timestamp.fromDate(new Date('2021-02-03')),
+      updatedAt: Timestamp.fromDate(new Date('2021-02-03')),
+    });
+    await assertFails(setDoc(doc(otherDb(), 'users', OWNER, 'watchlist', ITEM), stored));
   });
 });
 
@@ -804,6 +865,51 @@ describe('users/{uid} update value bounds + isAdmin escalation (BIN-1145, BIN-11
   it('a displayName over the limit is denied on update', async () => {
     await seedOwnProfile();
     await assertFails(updateDoc(doc(ownerDb(), 'users', OWNER), { displayName: 'x'.repeat(81) }));
+  });
+
+  // Paket I (2026-10-05): updateProviderTiers skriver per nyckel med deleteField()
+  // i en merge. Emulatorn visar att regeln släpper igenom formen OCH att nyckeln
+  // faktiskt försvinner — en hel karta i en merge lämnade den kvar.
+  it('the owner can clear one provider tier per key with deleteField in a merge', async () => {
+    await seedOwnProfile({ providerTiers: { 8: 'premium', 337: 'ads' }, providerCosts: { 8: 150, 119: 59 } });
+    const ref = doc(ownerDb(), 'users', OWNER);
+    await assertSucceeds(setDoc(ref, {
+      providerTiers: { 8: deleteField(), 76: 'reklam' },
+      providerCosts: { 8: deleteField() },
+    }, { merge: true }));
+    const stored = (await getDoc(ref)).data()!;
+    expect(stored.providerTiers).toEqual({ 337: 'ads', 76: 'reklam' });
+    expect(stored.providerCosts).toEqual({ 119: 59 });
+  });
+
+  // BIN-1435: inställningarnas tre kostnadskartor skrivs per nyckel. Emulatorn visar att
+  // regeln släpper igenom formen, att just den nyckeln försvinner, och att resten av
+  // kartan och profilen står kvar.
+  it('the owner can clear one cost, campaign and renewal day per key with deleteField in a merge', async () => {
+    const campaign = { monthlyCost: 29, endDate: '2026-12-01' };
+    await seedOwnProfile({
+      bio: 'kvar',
+      providerCosts: { 8: 150, 119: 59 },
+      providerCampaigns: { 8: campaign, 337: campaign },
+      providerRenewalDays: { 8: 5, 76: 20 },
+    });
+    const ref = doc(ownerDb(), 'users', OWNER);
+    await assertSucceeds(setDoc(ref, {
+      providerCosts: { 8: deleteField() },
+      providerCampaigns: { 8: deleteField() },
+      providerRenewalDays: { 8: deleteField() },
+    }, { merge: true }));
+    const stored = (await getDoc(ref)).data()!;
+    expect(stored.providerCosts).toEqual({ 119: 59 });
+    expect(stored.providerCampaigns).toEqual({ 337: campaign });
+    expect(stored.providerRenewalDays).toEqual({ 76: 20 });
+    expect(stored.bio).toBe('kvar');
+  });
+  it('a per-key write creates a cost map that did not exist yet', async () => {
+    await seedOwnProfile();
+    const ref = doc(ownerDb(), 'users', OWNER);
+    await assertSucceeds(setDoc(ref, { providerRenewalDays: { 8: 12 } }, { merge: true }));
+    expect((await getDoc(ref)).data()!.providerRenewalDays).toEqual({ 8: 12 });
   });
 
   // The escalation guard. A client may never grant itself isAdmin, and may never
@@ -2017,6 +2123,56 @@ describe('sessions/{id} — nyckelmängd, typer och oföränderliga fält (BIN-1
   });
 });
 
+// BIN-1301 — the session's lifetime is bounded on create. Every denial below writes as
+// the host against validSession(), so hostUid, the key set and the types all pass and
+// only the named timestamp clause can be what denies.
+describe('sessions/{id} — livstid på create (BIN-1301)', () => {
+  const DAY = 24 * 3600 * 1000;
+  const inDays = (d: number) => Timestamp.fromDate(new Date(Date.now() + d * DAY));
+
+  it('the app write shape passes: server createdAt, expiresAt 7 days out', async () => {
+    await assertSucceeds(setDoc(doc(ownerDb(), 'sessions', 's_life_ok'), validSession()));
+  });
+
+  // A host device whose clock runs a few hours fast still gets its session.
+  it('expiresAt 7 days plus hours of clock drift passes', async () => {
+    await assertSucceeds(setDoc(
+      doc(ownerDb(), 'sessions', 's_life_skew'),
+      validSession({ expiresAt: inDays(7.5) }),
+    ));
+  });
+
+  it('expiresAt 30 days out is denied', async () => {
+    await assertFails(setDoc(
+      doc(ownerDb(), 'sessions', 's_life_30d'),
+      validSession({ expiresAt: inDays(30) }),
+    ));
+  });
+
+  it('expiresAt just past the 8-day ceiling is denied', async () => {
+    await assertFails(setDoc(
+      doc(ownerDb(), 'sessions', 's_life_8d'),
+      validSession({ expiresAt: inDays(8.1) }),
+    ));
+  });
+
+  it('expiresAt in the past is denied', async () => {
+    await assertFails(setDoc(
+      doc(ownerDb(), 'sessions', 's_life_past'),
+      validSession({ expiresAt: inDays(-1) }),
+    ));
+  });
+
+  // The sweep counts 7 days from createdAt, so a client-chosen createdAt would let a
+  // host move that clock.
+  it('a client-set createdAt is denied', async () => {
+    await assertFails(setDoc(
+      doc(ownerDb(), 'sessions', 's_life_created'),
+      validSession({ createdAt: Timestamp.fromDate(new Date(Date.now() + 30 * DAY)) }),
+    ));
+  });
+});
+
 // BIN-24 — Tillsammans participant uid anti-spoof. Anonymous participation stays
 // allowed (uid null), but a signed-in writer may only set their OWN uid, and an
 // anonymous writer may not carry a non-null uid (identity misattribution).
@@ -2759,6 +2915,36 @@ describe('reports admin-update actionedByUid pin (BIN-357)', () => {
       status: 'actioned', actionedByUid: 'other_admin_uid', updatedAt: serverTimestamp(),
     }));
   });
+
+  // BIN-1250. Samma giltiga uppdatering som ovan, med en motivering.
+  const decided = (decisionNote: unknown) => ({
+    status: 'dismissed', actionedByUid: ADMIN, updatedAt: serverTimestamp(), decisionNote,
+  });
+
+  it('admin kan spara en motivering på exakt taket (BIN-1250)', async () => {
+    await seedOpenReport();
+    await makeAdmin();
+    await assertSucceeds(updateDoc(doc(adminDb(), 'reports', 'rep1'), decided('a'.repeat(1000))));
+  });
+  it('en motivering över taket nekas (BIN-1250)', async () => {
+    await seedOpenReport();
+    await makeAdmin();
+    await assertFails(updateDoc(doc(adminDb(), 'reports', 'rep1'), decided('a'.repeat(1001))));
+  });
+  it('en motivering som inte är en sträng nekas (BIN-1250)', async () => {
+    await seedOpenReport();
+    await makeAdmin();
+    // En LISTA, inte ett tal: ett tal nekas redan av size()-klausulen utan typkontrollen,
+    // så bara en lista kan visa att `is string` gör något (samma fälla som displayName).
+    await assertFails(updateDoc(doc(adminDb(), 'reports', 'rep1'), decided(['a', 'b'])));
+  });
+  it('en icke-admin kan inte skriva en motivering (BIN-1250)', async () => {
+    await seedOpenReport();
+    const notAdmin = testEnv.authenticatedContext('someone_uid').firestore();
+    await assertFails(updateDoc(doc(notAdmin, 'reports', 'rep1'), {
+      status: 'dismissed', actionedByUid: 'someone_uid', updatedAt: serverTimestamp(), decisionNote: 'ok',
+    }));
+  });
 });
 
 // BIN-276 / BIN-327 — groups owner-update hardening + memberUids growth caps.
@@ -3436,6 +3622,184 @@ describe('groups/{id} growth branches pin ownerUid/name/defaults (BIN-1135)', ()
 });
 
 
+// BIN-1298 — the group watchlist row's shape. The write shapes below mirror the app's
+// three writers in src/lib/firebase/groups.ts; derive them rather than trusting this:
+//   git grep -n -A 20 "export async function addToGroupWatchlist" -- src/lib/firebase/groups.ts
+//   git grep -n -A 12 "export async function setMemberRating" -- src/lib/firebase/groups.ts
+// Every denial writes as a member with an otherwise valid payload, so only the clause
+// the test names can be what denies.
+describe('groups/{id}/watchlist — field lock (BIN-1298)', () => {
+  const MEMBER = 'other_uid';
+  const OUTSIDER = 'outsider_uid';
+  const outsiderDb = () => testEnv.authenticatedContext(OUTSIDER).firestore();
+  const row = (db: ReturnType<typeof ownerDb>, id = 'movie_603') => doc(db, 'groups', GROUP, 'watchlist', id);
+
+  // addToGroupWatchlist's payload, written with { merge: true } like the app.
+  function addShape(uid: string, over: Record<string, unknown> = {}) {
+    return {
+      tmdbId: 603, mediaType: 'movie', title: 'The Matrix', posterPath: '/m.jpg',
+      releaseYear: 1999, addedBy: uid, addedAt: serverTimestamp(), ...over,
+    };
+  }
+
+  // A row as it may already be stored: written before this rule, carrying a stray
+  // field and another member's rating.
+  async function seedRow(extra: Record<string, unknown> = {}) {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'groups', GROUP, 'watchlist', 'movie_603'), {
+        tmdbId: 603, mediaType: 'movie', title: 'The Matrix', posterPath: '/m.jpg',
+        releaseYear: 1999, addedBy: MEMBER, addedAt: Timestamp.fromDate(new Date('2026-01-01')),
+        status: 'vill_se', ...extra,
+      });
+    });
+  }
+
+  beforeEach(async () => { await seedGroup({ memberUids: [OWNER, MEMBER] }); });
+
+  describe('the app write paths pass', () => {
+    it('a member adds a title', async () => {
+      await assertSucceeds(setDoc(row(ownerDb()), addShape(OWNER), { merge: true }));
+    });
+
+    it('a title without poster or year can be added', async () => {
+      await assertSucceeds(setDoc(row(ownerDb()), addShape(OWNER, { posterPath: null, releaseYear: null }), { merge: true }));
+    });
+
+    it('a title of 200 characters can be added', async () => {
+      await assertSucceeds(setDoc(row(ownerDb()), addShape(OWNER, { title: 'x'.repeat(200) }), { merge: true }));
+    });
+
+    it('a tv title keyed tv_<id> can be added', async () => {
+      await assertSucceeds(setDoc(row(ownerDb(), 'tv_1399'), addShape(OWNER, { tmdbId: 1399, mediaType: 'tv' }), { merge: true }));
+    });
+
+    // The merge re-add restamps addedBy to whoever added the title last.
+    it('another member re-adding an existing title restamps addedBy', async () => {
+      await seedRow({ memberRatings: { [MEMBER]: 7 } });
+      await assertSucceeds(setDoc(row(ownerDb()), addShape(OWNER), { merge: true }));
+    });
+
+    it('the first rating on a stored row without memberRatings passes', async () => {
+      await seedRow();
+      await assertSucceeds(updateDoc(row(ownerDb()), { [`memberRatings.${OWNER}`]: 8 }));
+    });
+
+    it('a member changes and clears their own rating next to another member\'s', async () => {
+      await seedRow({ memberRatings: { [MEMBER]: 7 } });
+      await assertSucceeds(updateDoc(row(ownerDb()), { [`memberRatings.${OWNER}`]: 3 }));
+      await assertSucceeds(updateDoc(row(ownerDb()), { [`memberRatings.${OWNER}`]: 10 }));
+      await assertSucceeds(updateDoc(row(ownerDb()), { [`memberRatings.${OWNER}`]: deleteField() }));
+    });
+
+    it('clearing a rating that was never set passes', async () => {
+      await seedRow();
+      await assertSucceeds(updateDoc(row(ownerDb()), { [`memberRatings.${OWNER}`]: deleteField() }));
+    });
+
+    it('a member removes a title', async () => {
+      await seedRow();
+      await assertSucceeds(deleteDoc(row(ownerDb())));
+    });
+  });
+
+  describe('create denials', () => {
+    it.each([
+      ['an unknown key', { status: 'vill_se' }],
+      ['memberRatings on create', { memberRatings: { [OWNER]: 5 } }],
+      ['a string tmdbId', { tmdbId: '603' }],
+      ['an empty title', { title: '' }],
+      ['a title of 201 characters', { title: 'x'.repeat(201) }],
+      ['a non-string title', { title: 42 }],
+      ['an empty posterPath', { posterPath: '' }],
+      ['a posterPath of 301 characters', { posterPath: '/' + 'x'.repeat(300) }],
+      ['a string releaseYear', { releaseYear: '1999' }],
+      ['addedBy naming another member', { addedBy: MEMBER }],
+      ['a client-set addedAt', { addedAt: Timestamp.fromDate(new Date('2026-01-01')) }],
+    ])('%s is denied', async (_label, over) => {
+      await assertFails(setDoc(row(ownerDb()), addShape(OWNER, over), { merge: true }));
+    });
+
+    it('an id that does not match mediaType and tmdbId is denied', async () => {
+      await assertFails(setDoc(row(ownerDb(), 'movie_604'), addShape(OWNER), { merge: true }));
+    });
+
+    it('a negative tmdbId under its own id is denied', async () => {
+      await assertFails(setDoc(row(ownerDb(), 'movie_-5'), addShape(OWNER, { tmdbId: -5 }), { merge: true }));
+    });
+
+    it('a mediaType outside movie and tv under its own id is denied', async () => {
+      await assertFails(setDoc(row(ownerDb(), 'person_603'), addShape(OWNER, { mediaType: 'person' }), { merge: true }));
+    });
+
+    it('a non-member cannot add a title', async () => {
+      await assertFails(setDoc(row(outsiderDb()), addShape(OUTSIDER), { merge: true }));
+    });
+  });
+
+  describe('update denials', () => {
+    beforeEach(async () => { await seedRow({ memberRatings: { [MEMBER]: 7 } }); });
+
+    it('a re-add naming another member as addedBy is denied', async () => {
+      await assertFails(setDoc(row(ownerDb()), addShape(OWNER, { addedBy: MEMBER }), { merge: true }));
+    });
+
+    it('a re-add deleting addedBy is denied', async () => {
+      await assertFails(setDoc(row(ownerDb()), addShape(OWNER, { addedBy: deleteField() }), { merge: true }));
+    });
+
+    it('a re-add with a client-set addedAt is denied', async () => {
+      await assertFails(setDoc(row(ownerDb()), addShape(OWNER, { addedAt: Timestamp.fromDate(new Date('2026-02-01')) }), { merge: true }));
+    });
+
+    it('a re-add that adds an unknown key is denied', async () => {
+      await assertFails(setDoc(row(ownerDb()), addShape(OWNER, { extra: 'x' }), { merge: true }));
+    });
+
+    it('a re-add that changes tmdbId is denied', async () => {
+      await assertFails(setDoc(row(ownerDb()), addShape(OWNER, { tmdbId: 604 }), { merge: true }));
+    });
+
+    it('a re-add with a title of 201 characters is denied', async () => {
+      await assertFails(setDoc(row(ownerDb()), addShape(OWNER, { title: 'x'.repeat(201) }), { merge: true }));
+    });
+
+    it('setting another member\'s rating is denied', async () => {
+      await assertFails(updateDoc(row(ownerDb()), { [`memberRatings.${MEMBER}`]: 1 }));
+    });
+
+    it('deleting another member\'s rating is denied', async () => {
+      await assertFails(updateDoc(row(ownerDb()), { [`memberRatings.${MEMBER}`]: deleteField() }));
+    });
+
+    it('setting your own and another member\'s rating in one write is denied', async () => {
+      await assertFails(updateDoc(row(ownerDb()), {
+        [`memberRatings.${OWNER}`]: 5, [`memberRatings.${MEMBER}`]: 1,
+      }));
+    });
+
+    it.each([
+      ['0', 0],
+      ['11', 11],
+      ['7.5', 7.5],
+      ['a string', '7'],
+    ])('a rating of %s is denied', async (_label, value) => {
+      await assertFails(updateDoc(row(ownerDb()), { [`memberRatings.${OWNER}`]: value }));
+    });
+
+    it('replacing memberRatings with a non-map is denied', async () => {
+      await assertFails(updateDoc(row(ownerDb()), { memberRatings: 'x' }));
+    });
+
+    it('a rating together with a title change is denied', async () => {
+      await assertFails(updateDoc(row(ownerDb()), { [`memberRatings.${OWNER}`]: 5, title: 'Annan' }));
+    });
+
+    it('a non-member cannot rate', async () => {
+      await assertFails(updateDoc(row(outsiderDb()), { [`memberRatings.${OUTSIDER}`]: 5 }));
+    });
+  });
+});
+
 // BIN-532/BIN-533: members/{memberUid} create rule (firestore.rules) gates on
 // `request.auth.uid in get(groups/{groupId}).data.memberUids` — a get() that
 // resolves against the database state BEFORE the whole batch/transaction,
@@ -3583,18 +3947,17 @@ describe('groups members/{memberUid} joinedAt — pinnad vid create, oföränder
     ));
   });
 
-  // ---- CREATE, ägarens gren. Regeln har två oberoende lagliga vägar (|| i
-// selfOrOwner).
+  // ---- CREATE av en ANNAN medlems rad (BIN-1167) ----
 
-  it('ägaren KAN skapa ett annat medlems-doc med serverTimestamp()', async () => {
+  it('ägaren KAN INTE skapa ett annat medlems-doc, ens med ett giltigt joinedAt (BIN-1167)', async () => {
     await seedGroup({ memberUids: [OWNER, 'm2'] });
-    await assertSucceeds(setDoc(
+    await assertFails(setDoc(
       doc(ownerDb(), 'groups', GROUP, 'members', 'm2'),
       memberPayload('m2'),
     ));
   });
 
-  it('ägaren KAN INTE skapa ett annat medlems-doc med ett bakåtdaterat joinedAt', async () => {
+  it('ägaren KAN INTE skapa ett annat medlems-doc, inte heller med ett bakåtdaterat joinedAt (BIN-1167)', async () => {
     await seedGroup({ memberUids: [OWNER, 'm2'] });
     await assertFails(setDoc(
       doc(ownerDb(), 'groups', GROUP, 'members', 'm2'),
@@ -3642,7 +4005,7 @@ describe('groups members/{memberUid} joinedAt — pinnad vid create, oföränder
     ));
   });
 
-  it('ägaren KAN uppdatera ett annat medlems-doc utan att röra joinedAt', async () => {
+  it('ägaren KAN INTE uppdatera ett annat medlems-doc, ens utan att röra joinedAt (BIN-1167)', async () => {
     await seedGroup({ memberUids: [OWNER, 'm2'] });
     await seedMemberDoc('m2', {
       uid: 'm2',
@@ -3650,12 +4013,46 @@ describe('groups members/{memberUid} joinedAt — pinnad vid create, oföränder
     });
     // Fältet är `providers`, inte `notifications` som det var före BIN-1155:
     // `notifications` finns inte längre på dokumentet och fälls numera av
-    // nyckellistan, vilket hade gjort testet grönt av fel skäl — det hade prövat
-    // `hasOnly` i stället för ägargrenen och joinedAt, som är vad det heter efter.
-    await assertSucceeds(updateDoc(
+    // nyckellistan, vilket hade gjort testet grönt av fel skäl.
+    await assertFails(updateDoc(
       doc(ownerDb(), 'groups', GROUP, 'members', 'm2'),
       { providers: [8] },
     ));
+  });
+
+  // BIN-1167. Fixturen är ett fullt, giltigt dokument, så varje annat villkor på
+  // update är uppfyllt och nekandet kan bara komma från att skrivaren inte är raden.
+  // Kontrollen åt andra hållet: samma skrivning från medlemmen själv går igenom.
+  it('ägaren KAN INTE skriva photoURL eller providers på en annan medlems rad, medlemmen själv kan (BIN-1167)', async () => {
+    await seedGroup({ memberUids: [OWNER, 'm2'] });
+    await seedMemberDoc('m2', {
+      uid: 'm2',
+      photoURL: null,
+      providers: [8],
+      joinedAt: Timestamp.fromMillis(1_700_000_000_000),
+    });
+    const m2Db = () => testEnv.authenticatedContext('m2').firestore();
+    await assertFails(updateDoc(doc(ownerDb(), 'groups', GROUP, 'members', 'm2'), {
+      photoURL: 'https://example.com/annan.png',
+    }));
+    await assertFails(updateDoc(doc(ownerDb(), 'groups', GROUP, 'members', 'm2'), {
+      providers: [8, 119],
+    }));
+    await assertSucceeds(updateDoc(doc(m2Db(), 'groups', GROUP, 'members', 'm2'), {
+      photoURL: 'https://example.com/egen.png',
+      providers: [8, 119],
+    }));
+  });
+
+  it('ägaren kan fortfarande skapa och uppdatera sin EGEN rad (BIN-1167)', async () => {
+    await seedGroup({ memberUids: [OWNER, 'm2'] });
+    await assertSucceeds(setDoc(
+      doc(ownerDb(), 'groups', GROUP, 'members', OWNER),
+      memberPayload(OWNER),
+    ));
+    await assertSucceeds(updateDoc(doc(ownerDb(), 'groups', GROUP, 'members', OWNER), {
+      providers: [8],
+    }));
   });
 
   // Det bärande fallet. Ett medlems-doc utan joinedAt — skrivet utanför appen —
@@ -3869,9 +4266,7 @@ describe('groups members/{memberUid} — nyckellista, vardegranser och identitet
     }));
   });
 
-  // Agargrenen i selfOrOwner() far skriva en annan medlems rad. Den far inte forfalska
-  // identiteten pa den — bindningen galler BADA grenarna med flit.
-  it('agaren kan inte skriva ett namn pa en ANNAN medlems rad', async () => {
+  it('agaren kan inte skapa en ANNAN medlems rad, inte heller med ett namn (BIN-1167)', async () => {
     await seedGroup({ memberUids: [OWNER, 'm2'] });
     await seedProfile(OWNER, { displayName: 'Agaren' });
     await seedProfile('m2', { displayName: 'Medlemmen' });
@@ -3942,8 +4337,7 @@ describe('groups members/{memberUid} — nyckellista, vardegranser och identitet
   // Den tredje formen, och den som forsta versionen av regeln slappte igenom:
   // `deleteField()` TAR BORT nyckeln i stallet for att andra den, och da ser bade
   // typkontrollen och `isOwnIdentity` ett franvarande falt. Att forfalska var stangt;
-  // att TOMMA var det inte — och agargrenen racker till for att gora det pa nagon
-  // annans rad. Fyndet ar sakerhetsgranskarens, bevisat mot emulatorn.
+  // att TOMMA var det inte. Fyndet ar sakerhetsgranskarens, bevisat mot emulatorn.
   it('namnet kan inte RADERAS bort ur raden, varken av en sjalv eller av agaren', async () => {
     await seedGroup({ memberUids: [OWNER, 'other_uid'] });
     await seedProfile(OWNER, { displayName: 'Agaren' });
@@ -4016,6 +4410,85 @@ describe('groups memberUids — en icke-ägande medlem kan inte läggas till ige
   });
 });
 
+
+// BIN-1274. Reparationsvägen i docs/RUNBOOK.md §5h och posten `## BIN-1097` i
+// accepted-deviations.md: spöket lämnar gruppen och går med igen. Varje steg är
+// exakt den skrivning appen gör — utträdet som `removeMember`s batch, inträdet som
+// `joinGroupViaToken`s tre skrivningar — och ingen fixtur förseglar ett joinAttempt
+// åt den, så token-hashspärren är med i provet.
+describe('groups — en spöke-medlem kan lämna och gå med igen (BIN-1274)', () => {
+  const TOKEN = 'ghost-repair-token';
+
+  it('utträdet går igenom fast medlemsdokumentet saknas, och därefter ett nytt inträde via token', async () => {
+    await seedGroup({ memberUids: [OWNER, 'other_uid'], inviteTokenHash: sha256Hex(TOKEN) });
+    // Medlemsraden binds till skrivarens live-profil (`matchesOwnIdentity`), så
+    // profilen seedas och raden bär samma fält som `memberFields` skriver — annars
+    // vore identitetskontrollen vakuöst sann och provet bevisade en annan skrivning.
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', 'other_uid'), { displayName: 'Spöket', username: 'spoket' });
+    });
+    const db = otherDb();
+
+    // Förutsättningen: det är ett spöke, inte en vanlig medlem.
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const snap = await getDoc(doc(ctx.firestore(), 'groups', GROUP, 'members', 'other_uid'));
+      expect(snap.exists()).toBe(false);
+    });
+
+    const leave = writeBatch(db);
+    leave.update(doc(db, 'groups', GROUP), { memberUids: arrayRemove('other_uid'), updatedAt: serverTimestamp() });
+    leave.delete(doc(db, 'groups', GROUP, 'members', 'other_uid'));
+    leave.delete(doc(db, 'groups', GROUP, 'household', 'other_uid'));
+    await assertSucceeds(leave.commit());
+
+    await assertSucceeds(setDoc(doc(db, 'groups', GROUP, 'joinAttempts', 'other_uid'), {
+      token: TOKEN, createdAt: serverTimestamp(),
+    }));
+    await assertSucceeds(updateDoc(doc(db, 'groups', GROUP), {
+      memberUids: arrayUnion('other_uid'), updatedAt: serverTimestamp(),
+    }));
+    await assertSucceeds(setDoc(doc(db, 'groups', GROUP, 'members', 'other_uid'), {
+      uid: 'other_uid', displayName: 'Spöket', username: 'spoket', photoURL: null, providers: [8],
+      joinedAt: serverTimestamp(),
+    }));
+
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const group = await getDoc(doc(ctx.firestore(), 'groups', GROUP));
+      expect(group.data()?.memberUids).toEqual([OWNER, 'other_uid']);
+      const member = await getDoc(doc(ctx.firestore(), 'groups', GROUP, 'members', 'other_uid'));
+      expect(member.exists()).toBe(true);
+    });
+  });
+});
+
+
+// BIN-1291. Kedjan: en grupp med samma id som ett befintligt konto, och en titelrad
+// med `status` under den. Schemalagda funktioner tar mottagaren ur
+// `ref.parent.parent.id`, som för en gruppsökväg är grupp-id:t — alltså offrets uid.
+describe('groups — ett grupp-id får inte vara ett befintligt kontos id (BIN-1291)', () => {
+  const VICTIM = 'victim_uid';
+
+  // Före fixen gick båda skrivningarna igenom — mätt 2026-09-23 med samma fixtur och
+  // assertSucceeds. Nu nekas gruppen, så titelraden under den kan aldrig skapas.
+  const group = () => ({
+    ownerUid: OWNER, memberUids: [OWNER], name: 'Grupp', defaults: { region: 'SE' },
+    inviteTokenHash: null, inviteTokenRotatedAt: null,
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+  });
+
+  it('en grupp med samma id som ett befintligt konto nekas', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', VICTIM), { displayName: 'Offret' });
+    });
+    await assertFails(setDoc(doc(ownerDb(), 'groups', VICTIM), group()));
+  });
+
+  // Kontrollen: samma fixtur med ett id som inget konto har går igenom, så nekandet
+  // ovan kommer från id-spärren och inte från något annat villkor.
+  it('samma grupp med ett id som inget konto har går igenom', async () => {
+    await assertSucceeds(setDoc(doc(ownerDb(), 'groups', 'fresh_group_id'), group()));
+  });
+});
 
 describe('groups sessionHistory pickedByUid anti-forge', () => {
   const validPick = {
@@ -5197,5 +5670,521 @@ describe('users/{uid}/notifications/{notifId} (BIN-1170)', () => {
   it('another user cannot mark the owner notification read', async () => {
     await seedNotification('n7');
     await assertFails(updateDoc(doc(otherDb(), 'users', OWNER, 'notifications', 'n7'), { read: true }));
+  });
+});
+
+// BIN-1174: after a rename the SENDER may rewrite the name on their own pending
+// request, and nothing else. Each field is unchanged, or non-null and equal to the
+// sender's live profile — a null or a deleteField() must not clear it (BIN-1155).
+describe('users/{uid}/friendRequests/{fromUid} — sender renames (BIN-1174)', () => {
+  const SENDER = 'sender_uid';
+  const RECIPIENT = 'recipient_uid';
+  const THIRD = 'third_uid';
+  const reqRef = (db: ReturnType<typeof ownerDb>) => doc(db, 'users', RECIPIENT, 'friendRequests', SENDER);
+  const senderDb = () => testEnv.authenticatedContext(SENDER).firestore();
+  const recipientDb = () => testEnv.authenticatedContext(RECIPIENT).firestore();
+  const thirdDb = () => testEnv.authenticatedContext(THIRD).firestore();
+
+  // The profile carries the NEW name; the request still carries the old one.
+  async function seed(profile: Record<string, unknown> = { displayName: 'Nytt Namn', username: 'nytt' }) {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', SENDER), profile);
+      await setDoc(doc(ctx.firestore(), 'users', THIRD), { displayName: 'Nytt Namn', username: 'nytt' });
+      await setDoc(doc(ctx.firestore(), 'users', RECIPIENT), { displayName: 'Mottagare', username: 'mott' });
+      await setDoc(doc(ctx.firestore(), 'users', RECIPIENT, 'friendRequests', SENDER), {
+        fromUid: SENDER, fromDisplayName: 'Gammalt Namn', fromUsername: 'gammalt',
+        fromPhotoURL: null, sentAt: Timestamp.now(),
+      });
+    });
+  }
+
+  it('the sender rewrites both fields to their live identity', async () => {
+    await seed();
+    await assertSucceeds(updateDoc(reqRef(senderDb()), { fromDisplayName: 'Nytt Namn', fromUsername: 'nytt' }));
+  });
+
+  it('the sender rewrites the display name alone, leaving the username as it was', async () => {
+    await seed({ displayName: 'Nytt Namn', username: 'gammalt' });
+    await assertSucceeds(updateDoc(reqRef(senderDb()), { fromDisplayName: 'Nytt Namn', fromUsername: 'gammalt' }));
+  });
+
+  it('a name that is not the sender\'s live one is denied', async () => {
+    await seed();
+    await assertFails(updateDoc(reqRef(senderDb()), { fromDisplayName: 'Malin', fromUsername: 'nytt' }));
+  });
+
+  it('a username that is not the sender\'s live one is denied', async () => {
+    await seed();
+    await assertFails(updateDoc(reqRef(senderDb()), { fromDisplayName: 'Nytt Namn', fromUsername: 'malin' }));
+  });
+
+  it('deleteField() on the display name is denied', async () => {
+    await seed();
+    await assertFails(updateDoc(reqRef(senderDb()), { fromDisplayName: deleteField() }));
+  });
+
+  it('deleteField() on the username is denied', async () => {
+    await seed();
+    await assertFails(updateDoc(reqRef(senderDb()), { fromUsername: deleteField() }));
+  });
+
+  it('a null display name is denied even when the profile has none', async () => {
+    await seed({ username: 'nytt' });
+    await assertFails(updateDoc(reqRef(senderDb()), { fromDisplayName: null }));
+  });
+
+  it('changing fromUid is denied', async () => {
+    await seed();
+    await assertFails(updateDoc(reqRef(senderDb()), { fromDisplayName: 'Nytt Namn', fromUid: THIRD }));
+  });
+
+  it('changing sentAt is denied', async () => {
+    await seed();
+    await assertFails(updateDoc(reqRef(senderDb()), { fromDisplayName: 'Nytt Namn', sentAt: Timestamp.fromMillis(Date.now() + 60_000) }));
+  });
+
+  it('changing the photo is denied', async () => {
+    await seed();
+    await assertFails(updateDoc(reqRef(senderDb()), { fromPhotoURL: 'https://example.com/a.png' }));
+  });
+
+  it('an extra key is denied', async () => {
+    await seed();
+    await assertFails(updateDoc(reqRef(senderDb()), { fromDisplayName: 'Nytt Namn', note: 'hej' }));
+  });
+
+  it('the recipient cannot update the request', async () => {
+    await seed({ displayName: 'Nytt Namn', username: 'nytt' });
+    await assertFails(updateDoc(reqRef(recipientDb()), { fromDisplayName: 'Mottagare' }));
+  });
+
+  it('a third party whose live name matches cannot update someone else\'s request', async () => {
+    await seed();
+    await assertFails(updateDoc(reqRef(thirdDb()), { fromDisplayName: 'Nytt Namn', fromUsername: 'nytt' }));
+  });
+
+  it('an update on an answered (deleted) request fails and does not recreate it', async () => {
+    await seed();
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await deleteDoc(doc(ctx.firestore(), 'users', RECIPIENT, 'friendRequests', SENDER));
+    });
+    await assertFails(updateDoc(reqRef(senderDb()), { fromDisplayName: 'Nytt Namn', fromUsername: 'nytt' }));
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const snap = await getDoc(doc(ctx.firestore(), 'users', RECIPIENT, 'friendRequests', SENDER));
+      expect(snap.exists()).toBe(false);
+    });
+  });
+});
+
+// ---- BIN-1349: a block ends the friendship ----
+//
+// The app writes the block and deletes the relationship docs in one batch; the paths come
+// from `relationshipDocsToClear`, the same list the app uses. These tests prove the RULES
+// accept that batch from the blocker, including the deletes in the other user's tree, and
+// that each friendship mirror is load-bearing for a different read.
+describe('blocking ends the friendship (BIN-1349)', () => {
+  const BLOCKER = 'blocker_uid';
+  const BLOCKED = 'blocked_uid';
+  const blockerDb = () => testEnv.authenticatedContext(BLOCKER).firestore();
+  const blockedDb = () => testEnv.authenticatedContext(BLOCKED).firestore();
+  const friendsItem = () => ({ ...validWatchlist(), effectiveVisibility: 'friends', isPublic: false });
+
+  async function seed(opts: { friends: boolean; requests: boolean }) {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      for (const uid of [BLOCKER, BLOCKED]) {
+        await setDoc(doc(db, 'users', uid), { defaultVisibility: 'private', isPublic: false });
+        await setDoc(doc(db, 'users', uid, 'watchlist', 'movie_603'), friendsItem());
+      }
+      await setDoc(doc(db, 'publicProfiles', BLOCKER), { displayName: 'B' });
+      if (opts.friends) {
+        await setDoc(doc(db, 'users', BLOCKER, 'friends', BLOCKED), { uid: BLOCKED, since: serverTimestamp() });
+        await setDoc(doc(db, 'users', BLOCKED, 'friends', BLOCKER), { uid: BLOCKER, since: serverTimestamp() });
+      }
+      if (opts.requests) {
+        await setDoc(doc(db, 'users', BLOCKER, 'friendRequests', BLOCKED), { fromUid: BLOCKED });
+        await setDoc(doc(db, 'users', BLOCKED, 'friendRequestsSent', BLOCKER), { uid: BLOCKER });
+        await setDoc(doc(db, 'users', BLOCKED, 'friendRequests', BLOCKER), { fromUid: BLOCKER });
+        await setDoc(doc(db, 'users', BLOCKER, 'friendRequestsSent', BLOCKED), { uid: BLOCKED });
+      }
+    });
+  }
+
+  function blockBatch() {
+    const db = blockerDb();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'users', BLOCKER, 'blocked', BLOCKED), { blockedAt: serverTimestamp() });
+    for (const [root, ...rest] of relationshipDocsToClear(BLOCKER, BLOCKED)) batch.delete(doc(db, root, ...rest));
+    return batch.commit();
+  }
+
+  function acceptBatch() {
+    // acceptFriendRequest(BLOCKED, BLOCKER): the blocked user accepts the blocker's request.
+    const db = blockedDb();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'users', BLOCKED, 'friends', BLOCKER), { uid: BLOCKER, since: serverTimestamp() });
+    batch.set(doc(db, 'users', BLOCKER, 'friends', BLOCKED), { uid: BLOCKED, since: serverTimestamp() });
+    batch.delete(doc(db, 'users', BLOCKED, 'friendRequests', BLOCKER));
+    batch.delete(doc(db, 'users', BLOCKER, 'friendRequestsSent', BLOCKED));
+    return batch.commit();
+  }
+
+  async function remaining() {
+    const found: string[] = [];
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      for (const segs of relationshipDocsToClear(BLOCKER, BLOCKED)) {
+        const [root, ...rest] = segs;
+        if ((await getDoc(doc(ctx.firestore(), root, ...rest))).exists()) found.push(segs.join('/'));
+      }
+    });
+    return found;
+  }
+
+  it("control: before the block, each side reads the other's friends-only title and the profile card", async () => {
+    await seed({ friends: true, requests: false });
+    await assertSucceeds(getDoc(doc(blockedDb(), 'users', BLOCKER, 'watchlist', 'movie_603')));
+    await assertSucceeds(getDoc(doc(blockedDb(), 'publicProfiles', BLOCKER)));
+    await assertSucceeds(getDoc(doc(blockerDb(), 'users', BLOCKED, 'watchlist', 'movie_603')));
+  });
+
+  it("the blocker's batch is allowed and removes both friendship docs", async () => {
+    await seed({ friends: true, requests: false });
+    await assertSucceeds(blockBatch());
+    expect(await remaining()).toEqual([]);
+  });
+
+  // The blocked user's access hangs on the blocker's own doc users/{BLOCKER}/friends/{BLOCKED}.
+  it("the blocked user loses the blocker's friends-only title and profile card", async () => {
+    await seed({ friends: true, requests: false });
+    await assertSucceeds(blockBatch());
+    await assertFails(getDoc(doc(blockedDb(), 'users', BLOCKER, 'watchlist', 'movie_603')));
+    await assertFails(getDoc(doc(blockedDb(), 'publicProfiles', BLOCKER)));
+  });
+
+  // The blocker's access hangs on the MIRROR users/{BLOCKED}/friends/{BLOCKER}. Without the
+  // mirror delete this is the assertion that fails.
+  it("the blocker loses the blocked user's friends-only title too", async () => {
+    await seed({ friends: true, requests: false });
+    await assertSucceeds(blockBatch());
+    await assertFails(getDoc(doc(blockerDb(), 'users', BLOCKED, 'watchlist', 'movie_603')));
+  });
+
+  it('pending requests in both directions are withdrawn by the same batch', async () => {
+    await seed({ friends: false, requests: true });
+    expect((await remaining()).length).toBeGreaterThan(0);
+    await assertSucceeds(blockBatch());
+    expect(await remaining()).toEqual([]);
+  });
+
+  // #27's race, ordering (a): the block lands first and deletes the request the other party
+  // would accept, so the accept's friendship create has no proof doc and is refused.
+  it('an accept that arrives after the block is refused', async () => {
+    await seed({ friends: false, requests: true });
+    await assertSucceeds(blockBatch());
+    await assertFails(acceptBatch());
+    expect(await remaining()).toEqual([]);
+  });
+
+  // Ordering (b): the accept lands first, then the block removes the friendship it made.
+  it('a block that arrives after an accept still ends the friendship', async () => {
+    await seed({ friends: false, requests: true });
+    await assertSucceeds(acceptBatch());
+    await assertSucceeds(blockBatch());
+    expect(await remaining()).toEqual([]);
+  });
+});
+
+// SEC-1 (2026-10-05): sessions may be fetched by id by anyone (the link model), but a
+// LIST query must be constrained to the caller's own hosted sessions. The two client
+// queries are `userData.ts` (hostUid == me, GDPR export/erasure) and `deleteGroup` in
+// groups.ts (groupId == X AND hostUid == me).
+describe('sessions/{id} — list only your own hosted sessions (SEC-1)', () => {
+  async function seedSessions() {
+    await seedGroup({ memberUids: [OWNER, 'member_uid'] });
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, 'sessions', 's_mine'), validSession());
+      await setDoc(doc(db, 'sessions', 's_mine_group'), validSession({ groupId: GROUP }));
+      await setDoc(doc(db, 'sessions', 's_member_group'), validSession({ hostUid: 'member_uid', groupId: GROUP }));
+      await setDoc(doc(db, 'sessions', 's_other'), validSession({ hostUid: 'stranger_host' }));
+    });
+  }
+
+  it('an anonymous client cannot list sessions', async () => {
+    await seedSessions();
+    await assertFails(getDocs(collection(anonDb(), 'sessions')));
+  });
+
+  it('an anonymous client can still get one session by id', async () => {
+    await seedSessions();
+    await assertSucceeds(getDoc(doc(anonDb(), 'sessions', 's_other')));
+  });
+
+  it('a signed-in user cannot list all sessions', async () => {
+    await seedSessions();
+    await assertFails(getDocs(collection(otherDb(), 'sessions')));
+  });
+
+  it("a signed-in user cannot list someone else's hosted sessions", async () => {
+    await seedSessions();
+    await assertFails(getDocs(query(collection(otherDb(), 'sessions'), where('hostUid', '==', OWNER))));
+  });
+
+  it('even a group member cannot list a group\'s sessions by groupId alone', async () => {
+    await seedSessions();
+    await assertFails(getDocs(query(collection(ownerDb(), 'sessions'), where('groupId', '==', GROUP))));
+  });
+
+  // The GDPR export / erasure query in userData.ts.
+  it('the host can list their own sessions', async () => {
+    await seedSessions();
+    const snap = await assertSucceeds(getDocs(query(collection(ownerDb(), 'sessions'), where('hostUid', '==', OWNER))));
+    expect(snap.docs.map(d => d.id).sort()).toEqual(['s_mine', 's_mine_group']);
+  });
+
+  // deleteGroup's query, as the owner runs it.
+  it("the owner can list their own sessions in the group they are deleting", async () => {
+    await seedSessions();
+    const snap = await assertSucceeds(getDocs(query(collection(ownerDb(), 'sessions'),
+      where('groupId', '==', GROUP), where('hostUid', '==', OWNER))));
+    expect(snap.docs.map(d => d.id)).toEqual(['s_mine_group']);
+  });
+});
+
+// SEC-4 (2026-10-05): public documents take only known fields, with bounds. Create binds
+// the whole shape; update binds only what the write CHANGES, so an older document with a
+// stray key or an over-long value stays editable.
+describe('public documents — known fields and bounds (SEC-4)', () => {
+  async function seedReview(over: Record<string, unknown> = {}) {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'reviews', 'r_sec4'), { ...validReview(OWNER), ...over });
+    });
+  }
+  function comment(over: Record<string, unknown> = {}) {
+    return { uid: 'other_uid', text: 'Håller med.', displayName: null, username: null, createdAt: serverTimestamp(), ...over };
+  }
+
+  // Comments — the client shape in useReviewSocial.ts addComment.
+  it('a comment in the client shape is accepted', async () => {
+    await seedReview();
+    await assertSucceeds(addDoc(collection(otherDb(), 'reviews', 'r_sec4', 'comments'), comment()));
+  });
+  it('a comment with an extra field is denied', async () => {
+    await seedReview();
+    await assertFails(addDoc(collection(otherDb(), 'reviews', 'r_sec4', 'comments'), comment({ blob: 'x' })));
+  });
+  it('a comment with a client-chosen createdAt is denied', async () => {
+    await seedReview();
+    await assertFails(addDoc(collection(otherDb(), 'reviews', 'r_sec4', 'comments'),
+      comment({ createdAt: Timestamp.fromDate(new Date('2020-01-01')) })));
+  });
+
+  // Likes — the client shape in useReviewSocial.ts toggleLike.
+  it('a like in the client shape is accepted', async () => {
+    await seedReview();
+    await assertSucceeds(setDoc(doc(otherDb(), 'reviews', 'r_sec4', 'likes', 'other_uid'),
+      { uid: 'other_uid', createdAt: serverTimestamp() }));
+  });
+  // A like without createdAt was accepted before SEC-4 and still is; only a client-chosen
+  // value is new to refuse.
+  it('a like without createdAt is still accepted', async () => {
+    await seedReview();
+    await assertSucceeds(setDoc(doc(otherDb(), 'reviews', 'r_sec4', 'likes', 'other_uid'), { uid: 'other_uid' }));
+  });
+  it('a like with a client-chosen createdAt is denied', async () => {
+    await seedReview();
+    await assertFails(setDoc(doc(otherDb(), 'reviews', 'r_sec4', 'likes', 'other_uid'),
+      { uid: 'other_uid', createdAt: Timestamp.fromDate(new Date('2020-01-01')) }));
+  });
+
+  // Usernames — the client shape in username.ts claimUsername.
+  it('a username reservation in the client shape is accepted', async () => {
+    await assertSucceeds(setDoc(doc(ownerDb(), 'usernames', 'sec4name'), { uid: OWNER, createdAt: serverTimestamp() }));
+  });
+  it('a username reservation with an extra field is denied', async () => {
+    await assertFails(setDoc(doc(ownerDb(), 'usernames', 'sec4name'), { uid: OWNER, createdAt: serverTimestamp(), blob: 'x' }));
+  });
+  it('a username reservation with a client-chosen createdAt is denied', async () => {
+    await assertFails(setDoc(doc(ownerDb(), 'usernames', 'sec4name'),
+      { uid: OWNER, createdAt: Timestamp.fromDate(new Date('2020-01-01')) }));
+  });
+
+  // Reviews — title/posterPath bounded, stamps typed.
+  it('a review with a normal title and posterPath is accepted', async () => {
+    await assertSucceeds(setDoc(doc(ownerDb(), 'reviews', 'r_new'),
+      { ...validReview(OWNER), title: 'The Matrix', posterPath: '/abc.jpg' }));
+  });
+  // useReviews.ts sends `posterPath: null` for a title without a poster.
+  it('a review with a null posterPath is accepted on create', async () => {
+    await assertSucceeds(setDoc(doc(ownerDb(), 'reviews', 'r_new'),
+      { ...validReview(OWNER), title: 'Okänd', posterPath: null }));
+  });
+  it('an update sending the full payload with a null posterPath is accepted', async () => {
+    await seedReview({ title: 'Okänd', posterPath: null });
+    await assertSucceeds(updateDoc(doc(ownerDb(), 'reviews', 'r_sec4'),
+      { text: 'Ändrad.', title: 'Okänd', posterPath: null, updatedAt: serverTimestamp() }));
+  });
+  it('a review whose updatedAt is not a timestamp is denied', async () => {
+    await assertFails(setDoc(doc(ownerDb(), 'reviews', 'r_new'), { ...validReview(OWNER), updatedAt: 'x'.repeat(1000) }));
+  });
+  it('an update writing a non-timestamp updatedAt is denied', async () => {
+    await seedReview();
+    await assertFails(updateDoc(doc(ownerDb(), 'reviews', 'r_sec4'), { text: 'Ändrad.', updatedAt: 'x' }));
+  });
+  it('an older review with a bad createdAt stays editable when createdAt is untouched', async () => {
+    await seedReview({ createdAt: 'legacy' });
+    await assertSucceeds(updateDoc(doc(ownerDb(), 'reviews', 'r_sec4'), { text: 'Ändrad.', updatedAt: serverTimestamp() }));
+  });
+  it('an older over-long title cannot be rewritten to another over-long title', async () => {
+    await seedReview({ title: 'x'.repeat(400) });
+    await assertFails(updateDoc(doc(ownerDb(), 'reviews', 'r_sec4'), { title: 'y'.repeat(400) }));
+  });
+  it('a review with an over-long title is denied on create', async () => {
+    await assertFails(setDoc(doc(ownerDb(), 'reviews', 'r_new'), { ...validReview(OWNER), title: 'x'.repeat(301) }));
+  });
+  it('a review with an over-long posterPath is denied on create', async () => {
+    await assertFails(setDoc(doc(ownerDb(), 'reviews', 'r_new'), { ...validReview(OWNER), posterPath: 'x'.repeat(301) }));
+  });
+  it('a review whose createdAt is not a timestamp is denied', async () => {
+    await assertFails(setDoc(doc(ownerDb(), 'reviews', 'r_new'), { ...validReview(OWNER), createdAt: 'x'.repeat(1000) }));
+  });
+  it('an update that writes an over-long title is denied', async () => {
+    await seedReview({ title: 'The Matrix' });
+    await assertFails(updateDoc(doc(ownerDb(), 'reviews', 'r_sec4'), { title: 'x'.repeat(301) }));
+  });
+  it('an older review with an over-long title stays editable when the title is untouched', async () => {
+    await seedReview({ title: 'x'.repeat(400) });
+    await assertSucceeds(updateDoc(doc(ownerDb(), 'reviews', 'r_sec4'), { text: 'Ändrad.', updatedAt: serverTimestamp() }));
+  });
+
+  // Lists.
+  it('a list in the client shape is accepted', async () => {
+    await assertSucceeds(addDoc(collection(ownerDb(), 'lists'), listCreatePayload({ items: [] })));
+  });
+  it('a list with an extra field is denied on create', async () => {
+    await assertFails(addDoc(collection(ownerDb(), 'lists'), listCreatePayload({ items: [], blob: 'x' })));
+  });
+  it('the owner cannot add an unknown field on update', async () => {
+    await seedCollabList('l_sec4', { isPublic: true, editors: [] });
+    await assertFails(updateDoc(doc(ownerDb(), 'lists', 'l_sec4'), { blob: 'x' }));
+  });
+  it('the owner can still add an editor with arrayUnion (useListEditors)', async () => {
+    await seedCollabList('l_sec4', { isPublic: true, editors: [] });
+    await assertSucceeds(updateDoc(doc(ownerDb(), 'lists', 'l_sec4'),
+      { editors: arrayUnion('other_uid'), updatedAt: serverTimestamp() }));
+  });
+  it('an older list with a stray key stays editable', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'lists', 'l_legacy'), {
+        uid: OWNER, title: 'Gammal', description: '', isPublic: true, items: [],
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(), legacyKey: 1,
+      });
+    });
+    await assertSucceeds(updateDoc(doc(ownerDb(), 'lists', 'l_legacy'), { title: 'Ny titel', updatedAt: serverTimestamp() }));
+  });
+
+  // Group progress — the client shape in groups.ts setGroupMemberProgress.
+  function progressRef(db: ReturnType<typeof ownerDb>) {
+    return doc(db, 'groups', GROUP, 'watchlist', 'tv_1399', 'progress', OWNER);
+  }
+  function progress(over: Record<string, unknown> = {}) {
+    return { lastWatchedSeason: 2, lastWatchedEpisode: 3, status: 'mina', syncedAt: serverTimestamp(), ...over };
+  }
+  it('group progress in the client shape is accepted (merge write)', async () => {
+    await seedGroup();
+    await assertSucceeds(setDoc(progressRef(ownerDb()), progress(), { merge: true }));
+  });
+  it('group progress with nulls is accepted', async () => {
+    await seedGroup();
+    await assertSucceeds(setDoc(progressRef(ownerDb()),
+      progress({ lastWatchedSeason: null, lastWatchedEpisode: null, status: null }), { merge: true }));
+  });
+  it('group progress with an extra field is denied', async () => {
+    await seedGroup();
+    await assertFails(setDoc(progressRef(ownerDb()), progress({ blob: 'x' }), { merge: true }));
+  });
+  it.each([
+    ['lastWatchedSeason', { lastWatchedSeason: 'x'.repeat(1000) }],
+    ['lastWatchedEpisode', { lastWatchedEpisode: 'x' }],
+    ['status as a number', { status: 42 }],
+    ['status over 40 characters', { status: 'x'.repeat(41) }],
+    ['syncedAt', { syncedAt: 'x' }],
+  ])('group progress with a wrong %s is denied on create', async (_name, bad) => {
+    await seedGroup();
+    await assertFails(setDoc(progressRef(ownerDb()), progress(bad), { merge: true }));
+  });
+  it('group progress with status at 40 characters is accepted', async () => {
+    await seedGroup();
+    await assertSucceeds(setDoc(progressRef(ownerDb()), progress({ status: 'x'.repeat(40) }), { merge: true }));
+  });
+  it('an update writing a wrong type into group progress is denied', async () => {
+    await seedGroup();
+    await assertSucceeds(setDoc(progressRef(ownerDb()), progress(), { merge: true }));
+    await assertFails(setDoc(progressRef(ownerDb()), { lastWatchedSeason: 'x'.repeat(1000) }, { merge: true }));
+  });
+  it('an update adding an unknown field to group progress is denied', async () => {
+    await seedGroup();
+    await assertSucceeds(setDoc(progressRef(ownerDb()), progress(), { merge: true }));
+    await assertFails(setDoc(progressRef(ownerDb()), { blob: 'x' }, { merge: true }));
+  });
+  it('a non-member cannot delete group progress', async () => {
+    await seedGroup();
+    await assertSucceeds(setDoc(progressRef(ownerDb()), progress(), { merge: true }));
+    await assertFails(deleteDoc(progressRef(otherDb())));
+  });
+  it('the owner of a progress row can delete it', async () => {
+    await seedGroup();
+    await assertSucceeds(setDoc(progressRef(ownerDb()), progress(), { merge: true }));
+    await assertSucceeds(deleteDoc(progressRef(ownerDb())));
+  });
+  it('older group progress with a stray key stays writable', async () => {
+    await seedGroup();
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(progressRef(ctx.firestore()), { ...progress(), legacyKey: 1 });
+    });
+    await assertSucceeds(setDoc(progressRef(ownerDb()), progress({ lastWatchedEpisode: 4 }), { merge: true }));
+  });
+});
+
+// BIN-1438 — eventStats är förseglad: bara recordEvent (Admin SDK) skriver, bara
+// /api/insights (Admin SDK) läser. Emulatortest: utvärderar de riktiga reglerna.
+describe('eventStats is sealed to clients (BIN-1438, emulator)', () => {
+  const DAY = '2026-10-05';
+  const statsRef = (db: ReturnType<typeof ownerDb>) => doc(db, 'eventStats', DAY);
+
+  it('the rules block for eventStats is exactly a deny-all', () => {
+    const rules = readFileSync(resolve(__dirname, '../../../firestore.rules'), 'utf8');
+    const block = rules.match(/match \/eventStats\/\{day\} \{([^}]*)\}/);
+    expect(block, 'match /eventStats/{day} saknas i firestore.rules').not.toBeNull();
+    const statements = block![1].split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('//'));
+    expect(statements).toEqual(['allow read, write: if false;']);
+  });
+
+  beforeEach(async () => {
+    // Seedat dokument, så att ett nekat get beror på regeln och inte på att dokumentet saknas.
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'eventStats', DAY), { counts: { share_clicked: 1 } });
+    });
+  });
+
+  it.each([
+    ['anonymous', () => anonDb()],
+    ['signed-in', () => ownerDb()],
+  ] as const)('%s client cannot get an eventStats day doc', async (_who, db) => {
+    await assertFails(getDoc(statsRef(db())));
+  });
+
+  it.each([
+    ['anonymous', () => anonDb()],
+    ['signed-in', () => ownerDb()],
+  ] as const)('%s client cannot set an eventStats day doc', async (_who, db) => {
+    await assertFails(setDoc(statsRef(db()), { counts: { share_clicked: 999 } }, { merge: true }));
+  });
+
+  it('the seeded doc exists — the denials above are the rule, not a missing doc', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const snap = await getDoc(doc(ctx.firestore(), 'eventStats', DAY));
+      expect(snap.exists()).toBe(true);
+    });
   });
 });

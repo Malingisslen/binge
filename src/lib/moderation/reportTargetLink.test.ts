@@ -23,6 +23,18 @@ describe('buildTargetLink (BIN-1233)', () => {
   });
 });
 
+// BIN-1120. `group` joined the target union, and this consumer deliberately did
+// not grow a case: `/grupper/{id}` is readable only by members, so a link would
+// open "hittades inte" for the admin. `docs/moderation.md` routes a group report
+// to the Console instead. Pinned so the choice is a decision rather than an
+// omission, and so a later edit that adds a link has to change this line.
+describe('buildTargetLink — en gruppanmälan (BIN-1120)', () => {
+  it('får ingen direktlänk, med eller utan användarnamn', () => {
+    expect(buildTargetLink({ targetType: 'group', targetId: 'g1' }, 'malin')).toBeNull();
+    expect(buildTargetLink({ targetType: 'group', targetId: 'g1' }, null)).toBeNull();
+  });
+});
+
 describe('linkableUsername (BIN-1244)', () => {
   it('a public profile links on its username', () => {
     expect(linkableUsername({ username: 'kim', isPublic: true })).toBe('kim');

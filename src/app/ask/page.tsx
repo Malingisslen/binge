@@ -32,6 +32,9 @@ import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { trackEvent } from '@/lib/analytics';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import type { RowTitle, TMDBSearchResult } from '@/types';
+import { Button, buttonClass } from '@/components/ui/Button';
+import { fieldClass } from '@/components/ui/Field';
+import { cardClass } from '@/components/ui/Card';
 
 const EXAMPLES = [
   'mysig komedi under 90 min',
@@ -203,17 +206,17 @@ export default function AskPage() {
             onChange={(e) => setInput(e.target.value)}
             placeholder="Beskriv vad du vill se…"
             aria-label="Beskriv vad du vill se"
-            className="w-full bg-surface border border-rule rounded text-ink"
-            style={{ padding: '8px 10px 8px 30px', fontSize: 15 }}
+            className={fieldClass({ className: 'w-full' })}
+            style={{ padding: '8px 10px 8px 30px', fontSize: 'var(--fs-lg)' }}
           />
         </div>
-        <button type="submit" className="btn btn-acc" style={{ whiteSpace: 'nowrap' }}>Sök</button>
+        <Button type="submit" variant="acc" style={{ whiteSpace: 'nowrap' }}>Sök</Button>
       </form>
 
       {/* Examples — only before the first search */}
       {!hasQuery && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 12 }}>
-          <span className="text-ink-3" style={{ fontSize: 12, alignSelf: 'center' }}>Prova:</span>
+          <span className="text-ink-3" style={{ fontSize: 'var(--fs-sm)', alignSelf: 'center' }}>Prova:</span>
           {EXAMPLES.map((ex) => (
             <button key={ex} type="button" className="chip" onClick={() => runSearch(ex)}>{ex}</button>
           ))}
@@ -223,7 +226,7 @@ export default function AskPage() {
       {/* Interpreted filter as removable chips */}
       {hasQuery && chips.length > 0 && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 14, alignItems: 'center' }}>
-          <span className="text-ink-3" style={{ fontSize: 12 }}>{aiUsed ? 'Tolkning (AI):' : 'Tolkning:'}</span>
+          <span className="text-ink-3" style={{ fontSize: 'var(--fs-sm)' }}>{aiUsed ? 'Tolkning (AI):' : 'Tolkning:'}</span>
           {chips.map((c) => (
             <button
               key={c.key}
@@ -260,7 +263,7 @@ export default function AskPage() {
           <EmptyState
             title="Du har inte valt dina tjänster än"
             body="För att visa bara det du kan spela upp behöver Binge veta vilka streamingtjänster du har."
-            action={<Link href="/settings/" className="btn btn-acc btn-sm">Välj dina tjänster</Link>}
+            action={<Link href="/settings/" className={buttonClass({ variant: 'acc', size: 'sm' })}>Välj dina tjänster</Link>}
           />
         ) : clearedAll ? (
           <EmptyState
@@ -275,9 +278,9 @@ export default function AskPage() {
             body="Inget matchade alla filter. Ta bort ett filter ovan och prova igen."
           />
         ) : (
-          <div className="bg-surface border border-rule rounded-sm">
+          <div className={cardClass()}>
             <TitleGrid items={results} />
-            <div className="px-3 py-[6px] border-t border-rule-2">
+            <div className="px-3 py-1.5 border-t border-rule-2">
               <JustWatchCredit />
             </div>
           </div>

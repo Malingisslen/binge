@@ -1,10 +1,9 @@
 // Ownership-map ↔ commit-gate symmetry (BIN-880).
 //
-// Run: npm test (this file is in vitest.config.ts's `include` via
+// Run: npm run test:process (this file is in vitest.config.ts's `include` via
 // 'docs/org/**/*.{test,spec}.mjs' — the same glob route.test.mjs relies on).
 //
-// Why this file exists: TWO lists decide who reviews a change, and widening one has
-// never widened the other.
+// Why this file exists: TWO lists decide who reviews a change.
 //
 //   ADVISING  — docs/org/route.mjs + docs/org/ownership-map.json. Says which roles
 //               should critique a change, and whether a sprint may pick it up at all.
@@ -78,6 +77,17 @@
 //       review the router says is unnecessary is the same drift seen from the other
 //       side, and it is how a gate ends up protecting a path nobody owns.
 //
+// SINCE BIN-1426 (2026-10-06, Malin's decision 1) the router's default policy reads which
+// paths are sensitive from these same gates, so a default verdict is non-skip exactly when
+// the path is high-stakes or gated. A1 then catches only a high-stakes path no gate stops,
+// and B cannot fire; A2 is unchanged. The case named "the router's own gate matching agrees
+// with this file's model on every tracked path (BIN-1426)" pins that. What keeps the gates
+// honest now is elsewhere: route.test.mjs names the decision-1 areas with literal paths
+// ("decision 1 (BIN-1426): who owes a critique by default"), and the cases under "the gates
+// agree with each other over src/ (BIN-1426)" below compare the gates with one another.
+// FEATURE_VERDICTS routes every path the way the sprint engine's `delivery.router.command`
+// does.
+//
 // Deliberately NOT a plain biconditional over every tracked path. Ownership of PROSE is
 // advisory on purpose — docs/RUNBOOK.md, docs/SLO.md, docs/moderation.md and the ADRs
 // have owning roles precisely so a plan gets their critique, and gating a runbook edit
@@ -99,21 +109,16 @@
 //      wrong, and the half it got wrong is the half that generalises.
 //
 //      What remains true is narrower, and is A1's stated limit rather than a blind spot:
-//      a path no role owns still satisfies A1 as long as SOME gate stops it. EVERY
-//      unowned code path is in exactly that position on the tree this ships with —
-//      reviewed, but unattributed. That is BIN-871's subject, not this file's. Re-derive
-//      the count from the tree rather than reading one here: a present-tense count
-//      written inside a commit that moves it is stale before the commit lands, and this
-//      sentence has already carried two wrong ones.
+//      a path no role owns still satisfies A1 as long as SOME gate stops it. That is
+//      BIN-871's subject, not this file's.
 //   2. The rules count reviewers, they do not identify them. `blockingGates` returning a
 //      non-empty list satisfies A1/A2 no matter WHICH agent is in it, so "firestore.rules
 //      lost its SECURITY reviewer but still matches some other gate" is not a shape this
-//      file can see — only "reached ZERO blocking reviewers" is. Deleting `^functions/`
-//      or `^src/lib/firebase/` from the security gate stays green here, because every
-//      `.ts` under them is also matched by the code and integration gates. Pinning which
-//      agent must see which surface means a per-agent expectation (a fourth rule), and
-//      that is a real list of paths — the hand-copied thing this file exists to avoid —
-//      so it is deliberately not attempted here.
+//      file can see — only "reached ZERO blocking reviewers" is.
+//      Narrowed 2026-10-06 (BIN-1426): over tracked src/ `.ts`/`.tsx`, the cases under
+//      "the gates agree with each other over src/ (BIN-1426)" do see a reviewer go missing
+//      from one gate, because they compare the gates with one another rather than with a
+//      list of paths.
 //   3. `blockingGates()` is a MODEL of the blocking hook, not the hook. It re-implements
 //      the hook's matching by hand, inside the one file whose entire purpose is that two
 //      lists must not drift apart. It is
@@ -140,10 +145,10 @@
 //      and it is a limit, not a check: nothing here compares the two. (BIN-926)
 //
 //      `blockingGates()` is not the only copy. `gateMatches()` in `docs/org/route.test.mjs`
-//      models the same hook the same way and carries the same exposure, so a change to the
-//      hook's semantics has two places to be reflected, not one. Fixing either without the
-//      other is how the two lists this file watches would start disagreeing about
-//      themselves.
+//      models the same hook the same way and carries the same exposure. Fixing either without
+//      the other is how the two lists this file watches would start disagreeing about
+//      themselves. `gateCovers()` in `docs/org/route.mjs` is a third copy, and since BIN-1426
+//      the router and the commit-msg checks act on it.
 
 import { describe, it, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
@@ -189,16 +194,24 @@ const TRACKED = execFileSync('git', ['ls-files', '-z'], { cwd: REPO_ROOT, encodi
   .filter(Boolean)
   .map(posix);
 
-// One route() per path (~600 ms for ~1000 paths), computed once for all three rules.
+// One route() per path (~600 ms for ~1000 paths), computed once for all three rules. The
+// gates are passed in, so the router judges with the same config this file models.
 const VERDICTS = TRACKED.map((path) => {
-  const r = route([path]);
+  const r = route([path], { gates: GATES });
   return {
     path,
     tier: r.tier,
     reasonCode: r.reasonCode,
+    sensitive: r.sensitive.includes(path),
     ownedByGatekeeper: r.roles.some((role) => role.num === GATEKEEPER_ROLE),
     gates: blockingGates(path),
   };
+});
+
+// The same paths routed as features: `delivery.router.command` runs `--feature`.
+const FEATURE_VERDICTS = TRACKED.map((path) => {
+  const r = route([path], { feature: true, gates: GATES });
+  return { path, tier: r.tier, reasonCode: r.reasonCode };
 });
 
 // Keyed on the TIER, not on an enumeration of reasonCodes (BIN-919 — the header explains
@@ -240,12 +253,7 @@ const isAsymmetric = (path) =>
 // silence — and the rot test below fails the moment an entry stops being needed, so a
 // closed hole cannot leave a stale excuse behind (the shape route.test.mjs's
 // NOT_REVIEW_MACHINERY uses, same contract).
-const ACCEPTED_ASYMMETRIES = {
-  'functions/.gitignore':
-    'The security gate matches all of `^functions/` by prefix — deliberately broader than any file list, because that is where Cloud Functions code lives and an enumeration would go stale. A .gitignore inside it is caught by that breadth and routes `skip` (not a code extension, no owner). Narrowing the security gate to buy symmetry on an ignore-file would trade a real guard for a cosmetic one.',
-  'scripts/scripts-self-tests-present.test.mjs':
-    'The floor asserting every script under scripts/ carries a self-test (BIN-850). The test gate matches every `\\.test\\.mjs$` in the repo, which is the point of that pattern; the router leaves ordinary `scripts/` tooling as `skip` because pulling all of scripts/ into the code roots is the broad widening Malin refused (2026-08-08, alternative (a)). Same file, same reasoning, as route.test.mjs\'s NOT_REVIEW_MACHINERY entry.',
-};
+const ACCEPTED_ASYMMETRIES = {};
 
 describe('the gate config has the shape this check reads (BIN-880)', () => {
   it('every gate is an object with an agent, a marker and a pattern list', () => {
@@ -340,8 +348,12 @@ describe('the exceptions and the inputs cannot rot quietly (BIN-880)', () => {
     // value and found `tier !== 'skip'` at 400 against an actual 883, and `gates.length >
     // 0` at 400 against an actual 875 — floors at 45% and 46%, which would sit still while
     // a regression silently halved the router's output. That is BIN-926's subject and the
-    // BIN-838/823/850 family: a floor far below the real value is decoration. Both are now
-    // 700. The other three were already tight and are unchanged.
+    // BIN-838/823/850 family: a floor far below the real value is decoration.
+    //
+    // LOWERED 2026-10-06 (BIN-1426). Decision 1 takes most of src/ out of the gates on
+    // purpose, and the default policy reads its sensitive set from them, so both counts fell
+    // together. The feature policy still routes every owned path, so its floor is where a
+    // halving of the router's output would show now.
     //
     // No live values are enumerated here. A measurement taken mid-commit describes a tree
     // that no longer exists by the end of it, so read the live numbers off the tree with
@@ -350,22 +362,26 @@ describe('the exceptions and the inputs cannot rot quietly (BIN-880)', () => {
     // Floors, not equalities: the repo is expected to grow, and a floor that has to be
     // edited on every commit gets edited without being thought about.
     expect(TRACKED.length).toBeGreaterThanOrEqual(800);
-    expect(VERDICTS.filter((v) => v.tier !== 'skip').length).toBeGreaterThanOrEqual(700);
-    expect(VERDICTS.filter((v) => v.gates.length > 0).length).toBeGreaterThanOrEqual(700);
-    expect(VERDICTS.filter((v) => v.ownedByGatekeeper).length).toBeGreaterThanOrEqual(15);
+    expect(VERDICTS.filter((v) => v.tier !== 'skip').length).toBeGreaterThanOrEqual(280);
+    expect(VERDICTS.filter((v) => v.gates.length > 0).length).toBeGreaterThanOrEqual(280);
+    expect(FEATURE_VERDICTS.filter((v) => v.tier !== 'skip').length).toBeGreaterThanOrEqual(1000);
+    expect(VERDICTS.filter((v) => v.ownedByGatekeeper).length).toBeGreaterThanOrEqual(60);
     // A1 is keyed on the tier, so its scope is every non-skip code path — but the class it
     // was widened to SEE is `unmapped-code`, and nothing above would notice if route.mjs
     // stopped emitting that answer. Then A1 would quietly narrow back to the pre-BIN-919
     // rule while every assertion in this file stayed green: the rekey undone by a change
     // somewhere else, with no test to say so.
     //
-    // Set at 230, deliberately in the same band as its neighbours. It was 100 for one
-    // round — looser than the two floors this very commit raises for being decoration.
-    // A floor written to a rule the same commit calls decoration is not a floor, and the
-    // outcome verifier caught it.
+    // Lowered 2026-10-06 (BIN-1426): by default only a gated path can answer
+    // `unmapped-code`, so the class shrank with the gates. The feature policy still answers
+    // it for unowned code, and is floored on its own.
     expect(
       VERDICTS.filter((v) => isCodePath(v.path) && v.reasonCode === 'unmapped-code').length,
       'the `unmapped-code` class has collapsed — A1 has silently narrowed back to what it was before BIN-919',
+    ).toBeGreaterThanOrEqual(30);
+    expect(
+      FEATURE_VERDICTS.filter((v) => isCodePath(v.path) && v.reasonCode === 'unmapped-code').length,
+      'routed as a feature, code nobody owns no longer seats the fallback role',
     ).toBeGreaterThanOrEqual(230);
     // A1's high-stakes half specifically: if route.mjs's HIGH_STAKES list were emptied,
     // no verdict would carry this reasonCode and that half of A1 would pass vacuously
@@ -446,13 +462,67 @@ describe('the exceptions and the inputs cannot rot quietly (BIN-880)', () => {
   it('the gate-matching helper subtracts excludes, like the real hook does', () => {
     // `blockingGates` is the only thing standing between this file and the real gate,
     // so its two halves are pinned directly: a match, and a match that an `exclude`
-    // takes back. The test gate matches `\.test\.(ts|tsx)$` repo-wide; the code gate
-    // matches `^src/.*\.(ts|tsx)$` but excludes exactly those test files. A helper that
-    // forgot `exclude` would seat binge-code-reviewer here and every rule above would
-    // silently loosen (it would start demanding gates that do not exist).
-    expect(blockingGates('src/lib/watchStatus.ts')).toContain('binge-code-reviewer');
-    expect(blockingGates('src/lib/watchStatus.test.ts')).toContain('binge-test-reviewer');
-    expect(blockingGates('src/lib/watchStatus.test.ts')).not.toContain('binge-code-reviewer');
+    // takes back. The test gate matches the test files under the sensitive src/ paths; the
+    // code gate matches the `.ts`/`.tsx` there but excludes exactly those test files. A
+    // helper that forgot `exclude` would seat binge-code-reviewer here and every rule above
+    // would silently loosen (it would start demanding gates that do not exist).
+    expect(blockingGates('src/lib/firebase/userDocWrite.ts')).toContain('binge-code-reviewer');
+    expect(blockingGates('src/lib/firebase/userDocWrite.test.ts')).toContain('binge-test-reviewer');
+    expect(blockingGates('src/lib/firebase/userDocWrite.test.ts')).not.toContain('binge-code-reviewer');
+  });
+});
+
+describe('decision 1 and the gates (BIN-1426)', () => {
+  it("the router's own gate matching agrees with this file's model on every tracked path (BIN-1426)", () => {
+    const disagree = VERDICTS.filter((v) => v.sensitive !== (v.gates.length > 0)).map((v) => v.path);
+    expect(disagree, "route.mjs's gateCovers() and blockingGates() disagree").toEqual([]);
+    const odd = VERDICTS.filter(
+      (v) => (v.tier !== 'skip') !== (v.reasonCode === 'high-stakes' || v.gates.length > 0),
+    ).map((v) => `${v.path} (${v.tier}/${v.reasonCode})`);
+    expect(odd, 'a default verdict that is not "non-skip exactly when high-stakes or gated"').toEqual([]);
+  });
+
+  it('decision 1 only narrows: nothing the default critiques is cleared as a feature', () => {
+    const widened = VERDICTS.filter((v, i) => v.tier !== 'skip' && FEATURE_VERDICTS[i].tier === 'skip').map(
+      (v) => v.path,
+    );
+    expect(widened, 'the default policy asks for a critique the feature policy does not').toEqual([]);
+  });
+});
+
+describe('the gates agree with each other over src/ (BIN-1426)', () => {
+  // Decision 1's src/ surface is one list written into four gates: the security gate is its
+  // source and the code, test and integration gates mirror it. A pattern added to one and not
+  // the others gives a sensitive file some of its reviewers and not the rest. src/test/ is
+  // left out: its rules tests are gated as a directory, not by subject.
+  const SRC = TRACKED.filter((p) => /^src\/.*\.(ts|tsx)$/.test(p) && !p.startsWith('src/test/'));
+  const isTest = (p) => /\.test\.(ts|tsx)$/.test(p) || p.includes('/__tests__/');
+  const subjectOf = (p) => p.replace('/__tests__/', '/').replace(/\.test\.(ts|tsx)$/, '.$1');
+  const has = (p, agent) => blockingGates(p).includes(agent);
+
+  it('a non-test file is security-, code- and integration-gated together, or not at all', () => {
+    const odd = SRC.filter((p) => !isTest(p)).filter((p) => {
+      const security = has(p, 'binge-security-reviewer');
+      return security !== has(p, 'binge-code-reviewer') || security !== has(p, 'binge-integration-reviewer');
+    });
+    expect(odd).toEqual([]);
+  });
+
+  it('a test file is test- and integration-gated exactly when its subject is security-gated', () => {
+    const odd = SRC.filter(isTest).filter((p) => {
+      const security = has(subjectOf(p), 'binge-security-reviewer');
+      return security !== has(p, 'binge-test-reviewer') || security !== has(p, 'binge-integration-reviewer');
+    });
+    expect(odd).toEqual([]);
+  });
+
+  it('both sides of both cases hold files, so an emptied match cannot pass', () => {
+    const tests = SRC.filter(isTest);
+    const files = SRC.filter((p) => !isTest(p));
+    expect(files.filter((p) => has(p, 'binge-security-reviewer')).length).toBeGreaterThanOrEqual(35);
+    expect(files.filter((p) => !has(p, 'binge-security-reviewer')).length).toBeGreaterThanOrEqual(450);
+    expect(tests.filter((p) => has(p, 'binge-test-reviewer')).length).toBeGreaterThanOrEqual(25);
+    expect(tests.filter((p) => !has(p, 'binge-test-reviewer')).length).toBeGreaterThanOrEqual(230);
   });
 });
 
@@ -461,9 +531,9 @@ describe("the router's own golden cases are wired to something that runs (BIN-88
     // `--selftest` is advertised in route.mjs's usage block ("exit non-zero on fail") and
     // was invoked by NOTHING — not package.json, not deploy.yml, not a hook.
     // A documented command nobody runs teaches the next reader to ignore it, and
-    // route.mjs pointed at this ticket to fix that. `npm test` gates deploy.yml, so running
-    // it here is the wiring: a red golden case now fails the deploy instead of a terminal
-    // nobody opens.
+    // route.mjs pointed at this ticket to fix that. Running it here is the wiring: a red
+    // golden case now shows in `npm run test:process`, which deploy.yml runs as a warning,
+    // instead of a terminal nobody opens.
     expect(() =>
       execFileSync('node', [join('docs', 'org', 'route.mjs'), '--selftest'], {
         cwd: REPO_ROOT,

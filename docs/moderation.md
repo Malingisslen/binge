@@ -159,10 +159,46 @@ går att försöka igen när timmen gått.
 4. Vid critical (barnporr etc.) — kontakta Firebase Support för emergency
    account termination
 
+### En anmäld grupp — bara triage, ingen knapp
+
+Malins beslut 2026-09-20: gruppanmälan shippar som en **triageväg**, inte som en
+åtgärd. Det finns ingen adminväg som tar bort en grupp, och en ska inte byggas
+förrän frågan nedan är besvarad.
+
+1. Console → Firestore → `groups/{targetId}`. Anmälan bär gruppens id i
+   `targetId` och ägaren i `targetOwnerUid`, härledd av servern.
+2. Läs `name`, `memberUids` och gruppens innehåll. Är problemet en enskild
+   medlem eller ägaren, gäller `Stäng ett konto` ovan.
+3. Sätt rapporten som åtgärdad eller avfärdad i `/admin/reports`. **Det steget
+   skickar ett kort till anmälaren** — `notifyReportDecided` fyrar på övergången
+   in i ett avgjort läge. Kortet säger bara att anmälan granskats; det namnger
+   varken gruppen, utfallet eller något du skrivit. Härled:
+   `grep -n "REPORT_DECIDED_CARD" functions/src/reportDecided/logic.ts`
+
+**Vad som INTE finns, och varför det står här.** Att radera en grupp träffar
+tredje part: de andra medlemmarnas rader, hushållsdata och framsteg ligger under
+gruppen. Kontoraderingens väg städar de spåren, men den vägen går bara att nå
+genom att gruppens ägare lämnar eller raderar sitt konto. Vad en rå radering ur
+Console lämnar efter sig är **inte mätt**. Radera därför ingen grupp ur Console
+förrän någon mätt det — hantera i stället ägaren eller medlemmen.
+
 ### Dismiss en rapport
 
 Oftast om det är falsk flagga eller borderline-innehåll som inte bryter
 riktlinjerna: sätt rapporten som avfärdad i `/admin/reports`.
+
+### Intern motivering (BIN-1250)
+
+När du granskar, åtgärdar eller avfärdar en rapport i `/admin/reports` kan du skriva en kort
+motivering. Den sparas på rapporten som `decisionNote` (taket är `MAX_DECISION_NOTE` i
+`src/lib/firebase/reports.ts`) och syns bara för
+admin. Anmälaren får aldrig texten — beskedet till anmälaren är ett standardkort (BIN-1259)
+och triggern läser inte fältet. En tom motivering ändrar ingenting som redan sparats.
+
+Motiveringen är en personuppgift om den anmälda personen, med samma rättsliga grund som
+resten av anmälningshanteringen: berättigat intresse (art. 6.1.f). Den sparas lika länge som
+rapporten själv och omfattas av samma undantag från radering som anmälningarna
+(BIN-277).
 
 ---
 
@@ -193,13 +229,18 @@ Användare kan också blockera andra användare via UgcActionsMenu. Det skriver
 till `users/{uid}/blocked/{targetUid}`. **Detta är inte moderation** — det
 är en självhjälpsfunktion. Ägaren själv kontrollerar sina blocks.
 
+En blockering avslutar också en befintlig vänskap mellan de två och drar
+tillbaka väntande vänförfrågningar, i samma skrivning som blockdokumentet
+(BIN-1349, `blockUserAndEndFriendship` i `src/lib/firebase/friends.ts`; vilka
+dokument som raderas härleds ur `relationshipDocsToClear` i
+`src/lib/blockRelationship.ts`).
+
 Filter sker klient-sidigt i:
 - `ReviewList` (filter på `!isBlocked(review.uid)`)
 - `ReviewComments` (filter på `!isBlocked(comment.uid)`)
 - `FeedPage` (filter på `!isBlocked(item.uid)`)
 
-Admin behöver inte vidta åtgärd på blocks — de är symmetriska själv-
-kontrollverktyg.
+Admin behöver inte vidta åtgärd på blocks — de är själv-kontrollverktyg.
 
 ### Vänförfrågningar (BIN-1129, 2026-09-15)
 

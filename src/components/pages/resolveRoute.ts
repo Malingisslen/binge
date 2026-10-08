@@ -9,6 +9,9 @@
 // season page. The `!== 'ny'` guards keep `/tillsammans/ny` and `/grupper/ny`
 // (the create pages) from being read as a session/group id. Keep this in sync
 // with the firebase.json redirect map — together they are the URL scheme.
+//
+// BIN-1300: `SCRUBBED_SEGMENTS` in src/lib/sentry.ts decides which route segments are
+// replaced before an event reaches Sentry. Check it when a route is added here.
 
 export type RouteMatch =
   | { kind: 'tillsammans'; id: string }

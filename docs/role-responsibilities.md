@@ -87,7 +87,7 @@ experience.
 - **Canonical page recipe** — `PageHeader` (crumb → 44px h1 → standfirst),
   `LoadingView`, `EmptyState`/`NotFound`, segment error boundaries, `danger`
   token for destructive UI.
-  → `src/components/layout/PageHeader.tsx`, `src/components/ui/`, `src/components/layout/SegmentError.tsx`
+  → `src/components/layout/PageHeader.tsx`, `src/components/ui/`, `src/components/layout/SegmentError.tsx`, `src/lib/trailer.ts`, `src/lib/trailer.test.ts`
 - **Information density & typography** — 15px base, Albert Sans, compact margins,
   tabular numbers; the deliberate "tool not marketing page" feel.
 - **Posters & duotone** — 8 genre-mapped SVG duotone filters, hover-to-reveal,
@@ -164,7 +164,7 @@ is the real boundary.
 - Server-authoritative rate limiting (`submitReport` callable).
 - App Check (reCAPTCHA v3, fail-closed default), CSP/HSTS headers, secrets via
   `NEXT_PUBLIC_*` / `defineSecret`, cache-clear on logout for shared devices.
-  → `firestore.rules`, `firebase.json`, `src/lib/firebase/appCheck.ts`, `src/lib/firebase/db.ts`
+  → `firestore.rules`, `firebase.json`, `src/lib/firebase/appCheck.ts`, `src/lib/firebase/db.ts`, `src/lib/cspHosts.test.ts`
 - **Which workflow actually runs on the path code takes** (BIN-1028). Read the `on:`
   block of every file in the workflows directory (written without backticks on purpose: the generator harvests every
   backtick-quoted tracked path in a section, so quoting the directory would seat this
@@ -217,7 +217,7 @@ Owns data-protection compliance under Swedish/EU law.
 - Terms / Privacy / Community-Guidelines pages (versioned), terms-acceptance
   capture at signup, 13-year age gate.
   → `src/app/{villkor,integritet,community-guidelines}/page.tsx`
-- Cookie-free Plausible (LEK compliance, no consent banner).
+- Cookie-free first-party usage counting (`recordEvent` → `eventStats`, BIN-1438): LEK compliance, no consent banner.
 - TMDB **and** JustWatch attribution requirements.
   → `src/lib/tmdb/attribution.ts`
 - Cross-border transfer / SCC documentation; Sentry PII scrubbing.
@@ -265,15 +265,23 @@ assertion to go green").
 - Regression guards — design anti-patterns, forced `Europe/Stockholm` TZ to
   catch off-by-one date bugs, `assertNever` exhaustiveness.
   → `vitest.config.ts`, `src/lib/design/consistency.test.ts`
+- **The split between the suite that stops a deploy and the one that warns** (BIN-1426),
+  and the check that every test file runs in exactly one place.
+  → `src/test/vitestProjects.test.ts`
 - MSW network mocking; CI quality gates.
+  → `src/test/server.ts`, `src/test/handlers.ts`
+- The kronbelopp matcher that holds whichever space the runtime puts between thousands
+  (BIN-1386).
+  → `src/test/krText.ts`, `src/test/krText.test.ts`
 
 ## 8. DevOps / SRE
 
 Owns CI/CD, hosting, observability, and incident response.
 
-- The GitHub Actions workflows; the rules-tests deploy gate; the **drift-guard**
-  blocking silent rules/functions deploys.
-  → `.github/workflows/deploy.yml`, `.github/workflows/pr-checks.yml`
+- The GitHub Actions workflows; the rules-tests deploy gate; the **rules/functions
+  deploy** that waits for Malin's approval, and the check that decides what it ships
+  (BIN-1426).
+  → `.github/workflows/deploy.yml`, `.github/workflows/pr-checks.yml`, `scripts/check-deploy-drift.mjs`, `scripts/check-deploy-drift.test.mjs`
 - **The gitleaks secret scan** (BIN-922). It was the one workflow with no owning role:
   the blocking gate covers the whole workflows directory by prefix, so a change to it
   was stopped at commit time by a reviewer while the advising side called it
@@ -292,7 +300,7 @@ Owns CI/CD, hosting, observability, and incident response.
   → `.github/workflows/secret-scan.yml`
 - Static export → Firebase Hosting → Cloudflare; CSP/HSTS headers; cache tiers.
   → `firebase.json`
-- Observability — Sentry, Plausible, UptimeRobot; `SLO.md`; incident `RUNBOOK.md`;
+- Observability — Sentry, UptimeRobot; `SLO.md`; incident `RUNBOOK.md`;
   the `docs/analysis/EXTERNAL_ACTIONS.md` ops reference; emulator suite.
 - **Filer som saknade en ägande roll** (BIN-871). Felrapportering och plattformsdetektering — driftens sida av klienten.
   → `src/lib/platform.test.ts`, `src/lib/platform.ts`
@@ -364,7 +372,7 @@ Owns **everything Swedish**.
   decision tree by reason; hard content removal; account-termination cascade;
   self-service blocking; community guidelines; law-enforcement escalation
   (NCMEC/IMY).
-  → `functions/src/submitReport/`, `src/app/admin/reports/`, `docs/moderation.md`, `src/hooks/useBlockedUsers.ts`, `functions/src/moderationProfile/`, `src/lib/firebase/moderationProfile.ts`
+  → `functions/src/submitReport/`, `src/app/admin/reports/`, `docs/moderation.md`, `src/hooks/useBlockedUsers.ts`, `functions/src/moderationProfile/`, `src/lib/firebase/moderationProfile.ts`, `src/components/moderation/`, `src/lib/moderation/`, `functions/src/reportDecided/`
 
 ## 13. Data / Integrations Engineer
 
@@ -390,7 +398,7 @@ Owns external data pipelines.
   → `functions/src/{episodeNotify,returnNotify,availableNotify,streamingOffers,cineasterna,communityRatings,titleRatings}/`, `src/lib/tmdb/providers.ts`,
   `src/test/rules/available-notify-orchestrator.test.ts`
 - **Filer som saknade en ägande roll** (BIN-871). TMDB-integrationen, kalenderposterna som byggs ur den, och de hookar som läser externa källor.
-  → `src/hooks/useCommunityRating.ts`, `src/hooks/useGenreMap.ts`, `src/hooks/usePremiereEvents.ts`, `src/hooks/useRotationCalendar.ts`, `src/hooks/useSearchProviders.ts`, `src/hooks/useSwedishWikiBio.ts`, `src/hooks/useTMDB.ts`, `src/hooks/useTitleRatings.ts`, `src/lib/airingState.test.ts`, `src/lib/airingState.ts`, `src/lib/calendar/buildEntries.test.ts`, `src/lib/calendar/buildEntries.ts`, `src/lib/calendar/entry.test.ts`, `src/lib/calendar/entry.ts`, `src/lib/calendar/nextAir.ts`, `src/lib/calendar/premieres.test.ts`, `src/lib/calendar/premieres.ts`, `src/lib/calendar/releaseDate.test.ts`, `src/lib/calendar/releaseDate.ts`, `src/lib/calendar/seedEntries.test.ts`, `src/lib/calendar/seedEntries.ts`, `src/lib/calendar/summary.test.ts`, `src/lib/calendar/summary.ts`, `src/lib/calendar/types.ts`, `src/lib/tmdb/canonicalUniqueProviders.test.ts`, `src/lib/tmdb/department.test.ts`, `src/lib/tmdb/department.ts`, `src/lib/tmdb/filmographyCompletion.test.ts`, `src/lib/tmdb/filmographyCompletion.ts`, `src/lib/tmdb/genreMapping.test.ts`, `src/lib/tmdb/genreMapping.ts`, `src/lib/tmdb/personCredits.test.ts`, `src/lib/tmdb/personCredits.ts`, `src/lib/tmdb/personSeed.test.ts`, `src/lib/tmdb/personSeed.ts`, `src/lib/tmdb/prefetch.test.ts`, `src/lib/tmdb/prefetch.ts`, `src/lib/tmdb/providerAliasParity.test.ts`, `src/lib/tmdb/providers.affiliate.test.ts`, `src/lib/tmdb/providers.identityGuard.test.ts`, `src/lib/tmdb/providers.test.ts`, `src/lib/tmdb/resolveProviderMonthlyCost.test.ts`, `src/lib/tmdb/seProviderIds.test.ts`, `src/lib/tmdb/seProviderIds.ts`, `src/lib/tmdb/seasonCompletion.test.ts`, `src/lib/tmdb/seasonCompletion.ts`, `src/lib/tmdb/semaphore.test.ts`, `src/lib/tmdb/semaphore.ts`, `src/lib/tmdb/seoPersonIds.test.ts`, `src/lib/tmdb/seoPersonIds.ts`, `src/types/tmdb.ts`
+  → `src/hooks/useCommunityRating.ts`, `src/hooks/useGenreMap.ts`, `src/hooks/usePremiereEvents.ts`, `src/hooks/useRotationCalendar.ts`, `src/hooks/useSearchProviders.ts`, `src/hooks/useSwedishWikiBio.ts`, `src/hooks/useTMDB.ts`, `src/hooks/useTitleRatings.ts`, `src/lib/airingState.test.ts`, `src/lib/airingState.ts`, `src/lib/calendar/buildEntries.test.ts`, `src/lib/calendar/buildEntries.ts`, `src/lib/calendar/dayParam.test.ts`, `src/lib/calendar/dayParam.ts`, `src/lib/calendar/entry.test.ts`, `src/lib/calendar/entry.ts`, `src/lib/calendar/nextAir.ts`, `src/lib/calendar/premieres.test.ts`, `src/lib/calendar/premieres.ts`, `src/lib/calendar/releaseDate.test.ts`, `src/lib/calendar/releaseDate.ts`, `src/lib/calendar/seasonFetch.test.ts`, `src/lib/calendar/seasonFetch.ts`, `src/lib/calendar/seedEntries.test.ts`, `src/lib/calendar/seedEntries.ts`, `src/lib/calendar/summary.test.ts`, `src/lib/calendar/summary.ts`, `src/lib/calendar/types.ts`, `src/lib/tmdb/canonicalUniqueProviders.test.ts`, `src/lib/tmdb/department.test.ts`, `src/lib/tmdb/department.ts`, `src/lib/tmdb/filmographyCompletion.test.ts`, `src/lib/tmdb/filmographyCompletion.ts`, `src/lib/tmdb/genreMapping.test.ts`, `src/lib/tmdb/genreMapping.ts`, `src/lib/tmdb/hoverPrefetch.test.ts`, `src/lib/tmdb/hoverPrefetch.ts`, `src/lib/tmdb/personCredits.test.ts`, `src/lib/tmdb/personCredits.ts`, `src/lib/tmdb/personSeed.test.ts`, `src/lib/tmdb/personSeed.ts`, `src/lib/tmdb/posterSrcSet.test.ts`, `src/lib/tmdb/prefetch.test.ts`, `src/lib/tmdb/prefetch.ts`, `src/lib/tmdb/providerAliasParity.test.ts`, `src/lib/tmdb/providers.affiliate.test.ts`, `src/lib/tmdb/providers.identityGuard.test.ts`, `src/lib/tmdb/providers.test.ts`, `src/lib/tmdb/resolveProviderMonthlyCost.test.ts`, `src/lib/tmdb/seProviderIds.test.ts`, `src/lib/tmdb/seProviderIds.ts`, `src/lib/tmdb/seasonCompletion.test.ts`, `src/lib/tmdb/seasonCompletion.ts`, `src/lib/tmdb/semaphore.test.ts`, `src/lib/tmdb/semaphore.ts`, `src/types/tmdb.ts`, `src/lib/tmdb/providerNames.parity.test.ts`
 
 
 ## 14. Software Architect
@@ -404,7 +412,7 @@ Owns the cross-cutting structure.
   → `next.config.mjs`, `src/app/[...path]/`, `src/lib/watchStatus.migration.ts`, `src/contexts/WatchlistContext.tsx`
 
 - **Filer som saknade en ägande roll** (BIN-871). Domäntyperna, de generiska UI-hjälphookarna och de delade hjälparna utan egen domän.
-  → `src/contexts/WatchlistContext.test.tsx`, `src/hooks/pagination.test.ts`, `src/hooks/pagination.ts`, `src/hooks/useClickOutside.ts`, `src/hooks/useDebouncedCommit.test.ts`, `src/hooks/useDebouncedCommit.ts`, `src/hooks/useDebouncedValue.ts`, `src/hooks/useInView.test.ts`, `src/hooks/useInView.ts`, `src/hooks/useIncrementalList.test.ts`, `src/hooks/useIncrementalList.ts`, `src/hooks/useMountTime.ts`, `src/hooks/useOptimisticMirrorField.test.ts`, `src/hooks/useOptimisticMirrorField.ts`, `src/lib/assertNever.ts`, `src/lib/profileIdentityChannel.test.ts`, `src/lib/profileIdentityChannel.ts`, `src/lib/sessionTiming.test.ts`, `src/lib/sessionTiming.ts`, `src/lib/tabSession.test.ts`, `src/lib/tabSession.ts`, `src/lib/utils.test.ts`, `src/lib/utils.ts`, `src/types/index.ts`, `src/lib/watchStatus.migration.test.ts`
+  → `src/contexts/WatchlistContext.test.tsx`, `src/hooks/pagination.test.ts`, `src/hooks/pagination.ts`, `src/hooks/useClickOutside.ts`, `src/hooks/useEscapeKey.ts`, `src/hooks/useRemoveWithUndo.test.tsx`, `src/hooks/useRemoveWithUndo.ts`, `src/hooks/useDebouncedCommit.test.ts`, `src/hooks/useDebouncedCommit.ts`, `src/hooks/useDebouncedValue.ts`, `src/hooks/useInView.test.ts`, `src/hooks/useInView.ts`, `src/hooks/useIncrementalList.test.ts`, `src/hooks/useIncrementalList.ts`, `src/hooks/useMountTime.ts`, `src/hooks/useOptimisticMirrorField.test.ts`, `src/hooks/useOptimisticMirrorField.ts`, `src/lib/assertNever.ts`, `src/lib/profileIdentityChannel.test.ts`, `src/lib/profileIdentityChannel.ts`, `src/lib/sessionTiming.test.ts`, `src/lib/sessionTiming.ts`, `src/lib/tabSession.test.ts`, `src/lib/tabSession.ts`, `src/lib/utils.test.ts`, `src/lib/utils.ts`, `src/types/index.ts`, `src/lib/watchStatus.migration.test.ts`
 
 ---
 
@@ -412,15 +420,14 @@ Owns the cross-cutting structure.
 
 Owns acquisition and the top of the funnel.
 
-- ~25k-title SEO pre-render + matching sitemap (parity prevents "crawled but not
+- SEO pre-render + matching sitemap (parity prevents "crawled but not
   indexed"); `robots.txt` crawl-budget rules; JSON-LD (FAQPage, Organization,
   provider ItemLists); OpenGraph/Twitter share cards.
-  → `src/app/sitemap.ts`, `src/lib/tmdb/seoCoverage.ts`, `public/robots.txt`
+  → `src/lib/seo/sitemap.ts`, `src/lib/seo/providerHubCopy.ts`, `src/lib/seo/providerHubCopy.test.ts`, `src/app/sitemapFailedFetch.test.ts`, `src/lib/tmdb/seoCoverage.ts`, `public/robots.txt`
 - **The pre-render selection ratchet** — which titles get a pre-rendered, indexable
   page at all: the persisted selection manifest (ceiling, floor, oldest-first
-  eviction) and the committed seed of ids Google already had indexed. A change that
-  shrinks either de-indexes real pages (BIN-823).
-  → `src/lib/tmdb/selectionManifest.ts`, `src/lib/seo/selectionSeed.ts`
+  eviction).
+  → `src/lib/tmdb/selectionManifest.ts`
 - Curated provider landing pages ("Vad streamar på Netflix i Sverige") — the roster is
   SEO_PROVIDER_IDS in src/lib/tmdb/seoCoverage.ts, and generateStaticParams in
   src/app/provider/[id]/page.tsx maps it one page per entry; the curated
@@ -431,12 +438,17 @@ Owns acquisition and the top of the funnel.
   `src/app/billigaste/[slug]/page.tsx`, `src/app/forsvinner/[id]/page.tsx`,
   `src/app/guider/page.tsx`, `src/lib/seo/genreHubs.ts`, `src/lib/seo/franchises.ts`,
   `src/lib/seo/jsonLd.ts`
-- The anonymous landing page; Plausible conversion goals (`signed_up`,
-  `first_title_added`, `onboarding_completed` by step); group/session invite-share
+- The anonymous landing page; conversion events counted by `recordEvent` (`signed_up`,
+  `onboarding_completed` by step); group/session invite-share
   loops.
   → `src/app/page.tsx`, `src/lib/analytics.ts`
+- Sharing: the Dela button's UTM-tagged links and each shareable prefix's own link-preview
+  shell (BIN-1431).
+  → `src/lib/shareLink.ts`, `src/lib/shareLink.test.ts`, `src/lib/seo/shareShells.ts`,
+  `src/lib/seo/shareShells.test.ts`, `src/components/share/ShareButton.tsx`,
+  `src/components/share/ShareButton.test.tsx`
 - **Filer som saknade en ägande roll** (BIN-871). SEO-ytan, sidmetadata, sök och mätningen.
-  → `src/app/sitemap.test.ts`, `src/hooks/usePageMeta.test.ts`, `src/hooks/usePageMeta.ts`, `src/hooks/useSearchBox.ts`, `src/hooks/useTitleLinkPrefetch.ts`, `src/lib/analytics.test.ts`, `src/lib/seo/contentFloor.test.ts`, `src/lib/seo/contentFloor.ts`, `src/lib/seo/contentFloorInput.test.ts`, `src/lib/seo/contentFloorInput.ts`, `src/lib/seo/franchiseCheapest.test.ts`, `src/lib/seo/franchiseCheapest.ts`, `src/lib/seo/genreHubs.test.ts`, `src/lib/seo/hubLinks.test.ts`, `src/lib/seo/hubLinks.ts`, `src/lib/seo/hubSeeds.test.ts`, `src/lib/seo/hubSeeds.ts`, `src/lib/seo/jsonLd.test.ts`, `src/lib/seo/selectionSeed.test.ts`, `src/lib/seo/withRetry.test.ts`, `src/lib/seo/withRetry.ts`, `src/lib/tmdb/selectionManifest.io.test.ts`, `src/lib/tmdb/selectionManifest.test.ts`, `src/lib/tmdb/seoCoverage.latinFilter.test.ts`, `src/lib/tmdb/seoCoverage.test.ts`, `src/lib/tmdb/selectionResolve.test.ts`
+  → `src/lib/seo/sitemap.test.ts`, `src/hooks/usePageMeta.test.ts`, `src/hooks/usePageMeta.ts`, `src/hooks/useSearchBox.ts`, `src/hooks/useTitleLinkPrefetch.ts`, `src/lib/analytics.test.ts`, `src/lib/seo/contentFloor.test.ts`, `src/lib/seo/contentFloor.ts`, `src/lib/seo/contentFloorInput.test.ts`, `src/lib/seo/contentFloorInput.ts`, `src/lib/seo/franchiseCheapest.test.ts`, `src/lib/seo/franchiseCheapest.ts`, `src/lib/seo/genreHubs.test.ts`, `src/lib/seo/hubLinks.test.ts`, `src/lib/seo/hubLinks.ts`, `src/lib/seo/hubSeeds.test.ts`, `src/lib/seo/hubSeeds.ts`, `src/lib/seo/jsonLd.test.ts`, `src/components/pages/indexability.test.ts`, `src/lib/seo/withRetry.test.ts`, `src/lib/seo/withRetry.ts`, `src/lib/tmdb/selectionManifest.io.test.ts`, `src/lib/tmdb/selectionManifest.test.ts`, `src/lib/tmdb/seoCoverage.latinFilter.test.ts`, `src/lib/tmdb/seoCoverage.test.ts`, `src/lib/tmdb/selectionResolve.test.ts`
 
 
 ## 16. Creative Director / Brand
@@ -475,7 +487,7 @@ Owns every Swedish word.
   Tillsammans co-watching sessions; activity feed + follow-trending;
   reviews/comments/likes; three-tier visibility; **taste-match** compatibility
   scoring.
-  → `src/lib/firebase/friends.ts`, `src/hooks/{useFollow,useReviewSocial,useTasteVector}.ts`, `src/app/feed/page.tsx`, `src/lib/taste/`
+  → `src/lib/firebase/friends.ts`, `src/lib/blockRelationship.ts`, `src/hooks/{useFollow,useReviewSocial,useTasteVector}.ts`, `src/app/feed/page.tsx`, `src/lib/taste/`
 - Per-episode reaction threads (BIN-95) — UGC keyed per episode, double
   spoiler-gated: the thread stays shut until the viewer has marked that episode
   watched, and inside it a reaction its author flagged as a spoiler is blurred
@@ -497,7 +509,7 @@ Owns every Swedish word.
   storheter den här rollen redan äger i punkterna ovan.
   → `src/components/social/FollowButton.tsx`, `src/components/social/ProfileStatsPanel.tsx`
 - **Filer som saknade en ägande roll** (BIN-871). Sociala ytor: flöde, vänner, grupper, sessioner och reaktioner.
-  → `src/components/groups/GroupMembersPanel.test.tsx`, `src/components/groups/GroupMembersPanel.tsx`, `src/components/groups/GroupSessionHistoryPanel.tsx`, `src/components/groups/GroupSettingsModal.tsx`, `src/components/groups/GroupSidePanels.tsx`, `src/components/groups/GroupWatchlistTable.tsx`, `src/components/groups/HouseholdPanel.tsx`, `src/hooks/useEpisodeReactions.ts`, `src/hooks/useFollowList.helpers.test.ts`, `src/hooks/useFollowList.helpers.ts`, `src/hooks/useFollowList.ts`, `src/hooks/useFriends.ts`, `src/hooks/useFriendsWhoSaw.ts`, `src/hooks/useGroup.denied.test.tsx`, `src/hooks/useGroupHousehold.ts`, `src/hooks/useGroupMemberProgress.ts`, `src/hooks/useGroups.ts`, `src/hooks/useMySessions.ts`, `src/hooks/useNotifications.helpers.test.ts`, `src/hooks/useNotifications.helpers.ts`, `src/hooks/useNotifications.test.tsx`, `src/hooks/useNotifications.ts`, `src/hooks/useReviews.ts`, `src/hooks/useSenderProfile.ts`, `src/hooks/useSession.ts`, `src/hooks/useSessionTasteVectors.ts`, `src/hooks/useUserSearch.ts`, `src/lib/feedTrending.test.ts`, `src/lib/feedTrending.ts`, `src/lib/firebase/friends.test.ts`, `src/lib/groupInviteCache.test.ts`, `src/lib/groupInviteCache.ts`, `src/lib/groupDenialCopy.test.ts`, `src/lib/groupDenialCopy.ts`, `src/lib/groupInviteToken.test.ts`, `src/lib/groupInviteToken.ts`, `src/lib/groupProgress.test.ts`, `src/lib/groupProgress.ts`, `src/types/social.ts`
+  → `src/components/groups/GroupMembersPanel.test.tsx`, `src/components/groups/GroupMembersPanel.tsx`, `src/components/groups/GroupSessionHistoryPanel.tsx`, `src/components/groups/GroupSettingsModal.escape.test.tsx`, `src/components/groups/GroupSettingsModal.test.tsx`, `src/components/groups/GroupSettingsModal.tsx`, `src/components/groups/GroupSidePanels.tsx`, `src/components/groups/HandOverGroupDialog.test.tsx`, `src/components/groups/HandOverGroupDialog.tsx`, `src/components/groups/GroupWatchlistTable.test.tsx`, `src/components/groups/GroupWatchlistTable.tsx`, `src/components/groups/HouseholdPanel.test.tsx`, `src/components/groups/HouseholdPanel.tsx`, `src/hooks/useEpisodeReactions.ts`, `src/hooks/useFollowList.helpers.test.ts`, `src/hooks/useFollowList.helpers.ts`, `src/hooks/useFollowList.ts`, `src/hooks/useFriends.ts`, `src/hooks/useFriendsWhoSaw.ts`, `src/hooks/useGroup.denied.test.tsx`, `src/hooks/useGroupHousehold.ts`, `src/hooks/useGroupMemberProgress.ts`, `src/hooks/useGroups.ts`, `src/hooks/useMySessions.ts`, `src/hooks/useNotifications.helpers.test.ts`, `src/hooks/useNotifications.helpers.ts`, `src/hooks/useNotifications.test.tsx`, `src/hooks/useNotifications.ts`, `src/hooks/useReviews.ts`, `src/hooks/useSenderProfile.ts`, `src/hooks/useSession.ts`, `src/hooks/useSessionTasteVectors.ts`, `src/hooks/useUserSearch.ts`, `src/lib/feedTrending.test.ts`, `src/lib/feedTrending.ts`, `src/lib/firebase/friends.test.ts`, `src/lib/groupInviteCache.test.ts`, `src/lib/groupInviteCache.ts`, `src/lib/groupDenialCopy.test.ts`, `src/lib/groupDenialCopy.ts`, `src/lib/groupInviteToken.test.ts`, `src/lib/groupInviteToken.ts`, `src/lib/groupProgress.test.ts`, `src/lib/groupProgress.ts`, `src/types/social.ts`
 
 
 ## 19. Customer Support / Success
@@ -509,8 +521,8 @@ Owns the human interface to the system.
   resend; the export/deletion flows users trigger; Letterboxd/IMDb CSV import;
   username conflict help; onboarding hand-holding.
   → `src/app/login/page.tsx`, `src/components/layout/EmailVerificationBanner.tsx`, `src/app/settings/import/page.tsx`, `src/components/settings/`, `src/components/layout/Footer.tsx`
-- **Filer som saknade en ägande roll** (BIN-871). Återvändningsvägen efter inloggning och testerna för inloggnings- och importsidorna.
-  → `src/app/login/page.test.tsx`, `src/app/settings/import/page.test.tsx`, `src/lib/nextPath.test.ts`, `src/lib/nextPath.ts`
+- **Filer som saknade en ägande roll** (BIN-871).
+  → `src/app/login/page.test.tsx`, `src/app/settings/import/page.test.tsx`, `src/lib/nextPath.test.ts`, `src/lib/nextPath.ts`, `src/lib/notificationSections.test.ts`, `src/lib/notificationSections.ts`, `src/lib/onboarding.test.ts`, `src/lib/onboarding.ts`, `src/lib/pendingAdd.ts`, `src/lib/pendingAdd.helpers.ts`, `src/lib/pendingAdd.test.ts`, `src/lib/firebase/pendingAddServerCheck.ts`, `src/hooks/useFollowConfirmation.ts`, `src/hooks/useFollowConfirmation.test.tsx`, `src/hooks/useFollowConfirmation.helpers.ts`, `src/hooks/useFollowConfirmation.helpers.test.ts`, `src/lib/notificationDefaults.ts`, `src/lib/notificationDefaults.test.ts`
 
 
 ## 20. Manual / Release QA Tester
@@ -539,20 +551,21 @@ Owns the `docs/` corpus.
 
 Owns measurement.
 
-- The typed `AnalyticsEvent` taxonomy; the daily Firestore rollup feeding the
+- The typed `AnalyticsEvent` taxonomy and the first-party event counter behind it
+  (`recordEvent` → `eventStats`, BIN-1438); the daily Firestore rollup feeding the
   admin `/insikter` dashboard; the metrics catalog with thresholds + explanations;
   Ask-Binge learning-loop telemetry (which filter combos strand users);
   onboarding-funnel dropoff; per-read cost tracking.
-  → `functions/src/insights/`, `functions/src/askbinge/`, `src/app/insikter/metrics/catalog.ts`
+  → `functions/src/insights/`, `functions/src/askbinge/`, `functions/src/eventStats/`, `src/app/insikter/metrics/catalog.ts`, `src/app/insikter/metrics/catalog.test.ts`, `src/lib/analytics.parity.test.ts`
 - **Filer som saknade en ägande roll** (BIN-871). Insiktsmåtten, AskBinge-analysen och bingestatistiken.
-  → `src/app/insikter/metrics/explanations.ts`, `src/app/insikter/metrics/resolvers.test.ts`, `src/app/insikter/metrics/resolvers.ts`, `src/app/insikter/metrics/types.ts`, `src/lib/askBinge/llmFallback.ts`, `src/lib/askBinge/rankResults.test.ts`, `src/lib/askBinge/rankResults.ts`, `src/lib/askBinge/record.ts`, `src/lib/askBinge/telemetry.test.ts`, `src/lib/askBinge/telemetry.ts`, `src/lib/askBinge/toDiscoverParams.test.ts`, `src/lib/askBinge/toDiscoverParams.ts`, `src/lib/askBinge/types.ts`, `src/lib/bingeStats.test.ts`, `src/lib/bingeStats.ts`
+  → `src/app/insikter/metrics/explanations.ts`, `src/app/insikter/metrics/resolvers.test.ts`, `src/app/insikter/metrics/resolvers.ts`, `src/app/insikter/metrics/types.ts`, `src/lib/askBinge/llmFallback.ts`, `src/lib/askBinge/rankResults.test.ts`, `src/lib/askBinge/rankResults.ts`, `src/lib/askBinge/record.ts`, `src/lib/askBinge/telemetry.test.ts`, `src/lib/askBinge/telemetry.ts`, `src/lib/askBinge/toDiscoverParams.test.ts`, `src/lib/askBinge/toDiscoverParams.ts`, `src/lib/askBinge/types.ts`, `src/lib/bingeStats.test.ts`, `src/lib/bingeStats.ts`, `src/lib/secondWeek.ts`, `src/lib/secondWeek.parity.test.ts`
 
 
 ## 23. Vendor / Procurement Manager
 
 Owns the third-party stack and its costs.
 
-- ~10 vendors (TMDB, MOTN/RapidAPI, OMDb, Firebase, Cloudflare, Sentry, Plausible,
+- ~10 vendors (TMDB, MOTN/RapidAPI, OMDb, Firebase, Cloudflare, Sentry,
   reCAPTCHA, Gemini, Cineasterna), each with a per-service budget (MOTN ~450 of 500
   requests per MONTH on a billing-cycle anchor, shared with `leavingRollup` — BIN-541
   replaced the earlier "100/day" belief, which was never verified; OMDb 900/day under
@@ -572,7 +585,9 @@ Owns the nascent revenue surface.
   local moat.
   → `src/lib/advisor/serviceValue.ts`, `src/lib/tmdb/providers.ts`, `src/lib/streaming/cheapestPath.ts`, `src/hooks/useCineasternaCatalog.ts` (library-card wedge; phase-2 scope in Linear BIN-493)
 - **Filer som saknade en ägande roll** (BIN-871). Abonnemangsekonomin: priser, utgifter, förnyelser och billigaste väg.
-  → `src/hooks/useListCheapestPlan.ts`, `src/hooks/usePriceHistory.ts`, `src/hooks/useServiceValue.test.ts`, `src/hooks/useServiceValue.ts`, `src/hooks/useStreamingLeaving.ts`, `src/hooks/useStreamingOffers.test.ts`, `src/hooks/useStreamingOffers.ts`, `src/lib/renewal.test.ts`, `src/lib/renewal.ts`, `src/lib/spendSnapshot.test.ts`, `src/lib/spendSnapshot.ts`, `src/lib/streaming/cheapestPath.test.ts`, `src/lib/streaming/offers.test.ts`, `src/lib/streaming/offers.ts`, `src/lib/streaming/priceStats.test.ts`, `src/lib/streaming/priceStats.ts`, `src/lib/tmdb/providers.affiliate.test.ts`, `src/lib/tmdb/providers.identityGuard.test.ts`, `src/lib/tmdb/providers.test.ts`
+  → `src/hooks/useListCheapestPlan.ts`, `src/hooks/usePriceHistory.ts`, `src/hooks/useServiceValue.test.ts`, `src/hooks/useServiceValue.ts`, `src/hooks/useStreamingLeaving.ts`, `src/hooks/useStreamingOffers.test.ts`, `src/hooks/useStreamingOffers.ts`, `src/lib/formatKr.guard.test.ts`, `src/lib/formatKr.test.ts`, `src/lib/formatKr.ts`, `src/lib/renewal.test.ts`, `src/lib/renewal.ts`, `src/lib/spendSnapshot.test.ts`, `src/lib/spendSnapshot.ts`, `src/lib/streaming/cheapestPath.test.ts`, `src/lib/streaming/offers.test.ts`, `src/lib/streaming/offers.ts`, `src/lib/streaming/priceStats.test.ts`, `src/lib/streaming/priceStats.ts`, `src/lib/tmdb/providers.affiliate.test.ts`, `src/lib/tmdb/providers.identityGuard.test.ts`, `src/lib/tmdb/providers.test.ts`, `src/lib/guestProviders.test.ts`, `src/lib/guestProviders.ts`, `src/lib/priceFreshness.test.ts`, `src/lib/priceFreshness.ts`, `src/lib/priceTableRows.test.ts`, `src/lib/priceTableRows.ts`, `src/lib/tmdb/providers.priceData.test.ts`, `src/lib/pauseReminder.ts`, `src/lib/pauseReminder.parity.test.ts`
+- **Sparsidan och dess kort** (BIN-1340), däribland paketkortet med juridikens villkor om bindning och startavgift.
+  → `src/app/savings/`, `src/components/savings/`
 
 
 ## 25. Engineering Manager / Release Manager
@@ -582,10 +597,11 @@ Owns the process.
 - The solo push-direct-to-main working agreement + the risky-migration
   written-plan exception; the **"plan before large changes — cast the role-org
   first" governance rule** (route → convene the stakeholder panel → fold conditions
-  into acceptance criteria, for ad-hoc work as well as sprints); the deploy
-  drift-guard (rules/functions never auto-ship); the quality gates that run on the
-  push-to-main path;
-  `deploy.yml` downgrades `npm audit` to advisory by BIN-344's decision; BIN-* issue
+  into acceptance criteria, for ad-hoc work as well as sprints); rules and functions
+  deploying only after Malin approves the run (BIN-1426); the quality gates that run
+  on the push-to-main path;
+  `deploy.yml` downgrades `npm audit` to advisory by BIN-344's decision, and the process
+  tests to a warning by BIN-1426's decision; BIN-* issue
   taxonomy + sprint cadence; Dependabot grouping + framework upgrades (React 19 /
   Next 16 landed); the "explain in product terms" communication norm.
   → `CLAUDE.md` (working agreement + cast-the-panel rule), `.github/workflows/deploy.yml`, `.github/dependabot.yml`
@@ -641,7 +657,7 @@ Owns the process.
   made the commit gate POINT at that file. That moved the authority to a file no gate
   here stopped. lessons-digest.md is deliberately not
   owned.
-  → `.claude/shared-plugin.json`, `.claude/rules/accepted-deviations.md`, `.claude/rules/code-style.md`
+  → `.claude/shared-plugin.json`, `.claude/rules/accepted-deviations.md`, `.claude/accepted-deviations.md`, `.claude/rules/code-style.md`
 - **The reviewers' own instruction files and the hooks that stamp their state**
   (BIN-869). Editing what a reviewer is told to look for disarms a gate exactly as
   effectively as deleting its pattern, and until now both routed `skip` and matched
@@ -672,7 +688,7 @@ Owns the process.
   and the arrow below is what this bullet claims. File names in this bullet are written without backticks for
   the same reason the lockfile is: the generator harvests backtick-quoted tracked paths, so
   naming a file in a sentence that declines to own it would own it.
-  → `scripts/check-workflow-map.mjs`, `scripts/check-workflow-map.test.mjs`, `scripts/check-knowledge-caps.mjs`, `scripts/check-knowledge-caps.test.mjs`, `scripts/prune-map-flag.mjs`, `scripts/prune-map-flag.test.mjs`
+  → `scripts/check-workflow-map.mjs`, `scripts/check-workflow-map.test.mjs`, `scripts/check-knowledge-caps.mjs`, `scripts/check-knowledge-caps.test.mjs`, `scripts/prune-map-flag.mjs`, `scripts/prune-map-flag.test.mjs`, `scripts/check-deviations-index.mjs`, `scripts/check-deviations-index.test.mjs`
 
 - **The risk router and the ownership map it reads** (BIN-834, BIN-869). `route.mjs`
   decides which roles a change is shown to; `gen-ownership-map.mjs` computes the map
@@ -700,7 +716,7 @@ Owns wayfinding.
   section taxonomy mapping watch-status → routes; breadcrumb/`PageHeader` patterns;
   search/discovery filter hierarchy; genre cross-media mapping; noindex-by-default
   on private pages.
-  → `src/components/layout/{Subnav,MobileTabBar}.tsx`, `src/components/pages/DynamicRouter.tsx`, `firebase.json` (redirects), `src/lib/libraryView.ts`
+  → `src/components/layout/{Subnav,MobileTabBar}.tsx`, `src/components/pages/DynamicRouter.tsx`, `firebase.json` (redirects), `src/lib/libraryView.ts`, `src/components/pages/routeRewrites.test.ts`
 - Where a visitor ends up, and how she gets back. `AuthGuard` gates on `uid` rather
   than `user` (the profile loads in parallel with the auth verdict) and carries the
   return path; `WatchlistPage` is the screen the library taxonomy above renders into,
@@ -736,8 +752,13 @@ Owns wayfinding.
   handlar om samma storhet som den ytan.
   → `src/lib/listItemsPatch.ts`, `src/lib/listItemsPatch.test.ts`, `src/components/pages/ListPageClient.test.tsx`, `src/hooks/useListMutations.test.tsx`
 
+- **Tabellen "Så ser du X i Sverige" på titelsidorna** (BIN-1439 steg 2). Var titeln finns,
+  på vilket sätt, och vägen vidare till tjänstens hubb och kostnadskalkylatorn. Priserna
+  läses ur prislistan i `providers.ts` och ändras inte här; den frågan är prisrollens.
+  → `src/lib/seo/titleAvailability.ts`, `src/lib/seo/titleAvailability.test.ts`, `src/components/seo/AvailabilityTable.tsx`, `src/components/seo/AvailabilityTable.test.tsx`
+
 - **Filer som saknade en ägande roll** (BIN-871). Sidkompositionen, ruttparametrarna, appskalets layouter och felgränser, och bibliotekets vy.
-  → `src/app/error.tsx`, `src/app/feed/error.tsx`, `src/app/feed/layout.tsx`, `src/app/global-error.test.tsx`, `src/app/global-error.tsx`, `src/app/grupper/error.tsx`, `src/app/grupper/layout.tsx`, `src/app/grupper/ny/page.tsx`, `src/app/grupper/page.tsx`, `src/app/layout.tsx`, `src/app/login/layout.tsx`, `src/app/not-found.tsx`, `src/app/selectionParams.test.ts`, `src/app/tillsammans/ny/layout.tsx`, `src/app/tillsammans/ny/page.tsx`, `src/app/titleParams.watchdog.test.ts`, `src/components/pages/DiscoverPageClient.tsx`, `src/components/pages/ForsvinnerListClient.tsx`, `src/components/pages/FriendsPageClient.tsx`, `src/components/pages/FriendsPageClient.test.tsx`, `src/components/pages/GroupPageClient.joinResubscribe.test.tsx`, `src/components/pages/GroupPageClient.tsx`, `src/components/pages/HomePageClient.test.tsx`, `src/components/pages/HomePageClient.tsx`, `src/components/pages/ListPageClient.tsx`, `src/components/pages/MediaTypePage.tsx`, `src/components/pages/MoviePageClient.test.tsx`, `src/components/pages/MoviePageClient.tsx`, `src/components/pages/PersonPageClient.test.tsx`, `src/components/pages/PersonPageClient.tsx`, `src/components/pages/ProviderPageClient.tsx`, `src/components/pages/SeasonPageClient.tsx`, `src/components/pages/TVShowPageClient.test.tsx`, `src/components/pages/TVShowPageClient.tsx`, `src/components/pages/TillsammansSessionPageClient.tsx`, `src/components/pages/UserProfilePageClient.tsx`, `src/components/pages/resolveRoute.test.ts`, `src/components/pages/resolveRoute.ts`, `src/hooks/useAllEpisodeProgress.ts`, `src/hooks/useEpisodeProgress.ts`, `src/hooks/useEpisodeProgressWithSync.helpers.test.ts`, `src/hooks/useEpisodeProgressWithSync.helpers.ts`, `src/hooks/useEpisodeProgressWithSync.test.tsx`, `src/hooks/useEpisodeProgressWithSync.ts`, `src/hooks/useLists.ts`, `src/hooks/useMarkSeen.helpers.test.ts`, `src/hooks/useMarkSeen.helpers.ts`, `src/hooks/useMarkSeen.test.tsx`, `src/hooks/useMarkSeen.ts`, `src/hooks/useNotInterested.ts`, `src/hooks/usePauseHistory.ts`, `src/hooks/useRecap.helpers.test.ts`, `src/hooks/useRecap.helpers.ts`, `src/hooks/useRecap.ts`, `src/hooks/useWatchlist.ts`, `src/lib/libraryView.test.ts`, `src/lib/seenDate.test.ts`
+  → `src/app/error.tsx`, `src/app/feed/error.tsx`, `src/app/feed/layout.tsx`, `src/app/global-error.test.tsx`, `src/app/global-error.tsx`, `src/app/grupper/error.tsx`, `src/app/grupper/layout.tsx`, `src/app/grupper/ny/page.tsx`, `src/app/grupper/page.tsx`, `src/app/layout.tsx`, `src/app/login/layout.tsx`, `src/app/not-found.tsx`, `src/app/selectionParams.test.ts`, `src/app/tillsammans/ny/layout.tsx`, `src/app/tillsammans/ny/page.tsx`, `src/app/titleParams.watchdog.test.ts`, `src/components/pages/DiscoverPageClient.tsx`, `src/components/pages/ForsvinnerListClient.tsx`, `src/components/pages/FriendsPageClient.tsx`, `src/components/pages/FriendsPageClient.test.tsx`, `src/components/pages/GroupPageClient.groupActions.test.tsx`, `src/components/pages/GroupPageClient.joinResubscribe.test.tsx`, `src/components/pages/GroupPageClient.tsx`, `src/components/pages/HomePageClient.test.tsx`, `src/components/pages/HomePageClient.tsx`, `src/components/pages/ListPageClient.tsx`, `src/components/pages/MediaTypePage.tsx`, `src/components/pages/MoviePageClient.test.tsx`, `src/components/pages/MoviePageClient.tsx`, `src/components/pages/PersonPageClient.test.tsx`, `src/components/pages/PersonPageClient.tsx`, `src/components/pages/ProviderPageClient.tsx`, `src/components/pages/SeasonPageClient.tsx`, `src/components/pages/TVShowPageClient.test.tsx`, `src/components/pages/TVShowPageClient.tsx`, `src/components/pages/TillsammansSessionPageClient.tsx`, `src/components/pages/UserProfilePageClient.tsx`, `src/components/pages/resolveRoute.test.ts`, `src/components/pages/resolveRoute.ts`, `src/hooks/useAllEpisodeProgress.ts`, `src/hooks/useEpisodeProgress.ts`, `src/hooks/useEpisodeProgressWithSync.helpers.test.ts`, `src/hooks/useEpisodeProgressWithSync.helpers.ts`, `src/hooks/useEpisodeProgressWithSync.test.tsx`, `src/hooks/useEpisodeProgressWithSync.ts`, `src/hooks/useLists.ts`, `src/hooks/useMarkSeen.helpers.test.ts`, `src/hooks/useMarkSeen.helpers.ts`, `src/hooks/useMarkSeen.test.tsx`, `src/hooks/useMarkSeen.ts`, `src/hooks/useNotInterested.ts`, `src/hooks/usePauseHistory.ts`, `src/hooks/useRecap.helpers.test.ts`, `src/hooks/useRecap.helpers.ts`, `src/hooks/useRecap.ts`, `src/hooks/useWatchlist.ts`, `src/lib/libraryView.test.ts`, `src/lib/seenDate.test.ts`
 
 ---
 
@@ -798,22 +819,20 @@ findings here too.
   that build/repair those payloads. A silent change here collides or shadows real user
   data (BIN-569, BIN-608, BIN-624, BIN-766, BIN-965, BIN-1010, BIN-1011 — the last
   three are the add-vs-delete race in `WatchlistContext`'s `addIfMissing` branch,
-  decided in `.claude/rules/accepted-deviations.md` rather than fixed with a
+  decided in `.claude/accepted-deviations.md` rather than fixed with a
   compensating delete).
   → `src/lib/mediaTypeDocId.ts`, `src/lib/watchlistDocKey.ts`, `src/lib/watchlistDocKey.test.ts`, `src/lib/watchlist/**`, `src/contexts/WatchlistContext.tsx`
 - **Disaster recovery** — PITR + scheduled backups (region `eur3`).
 
 **Watch-items (diagnostic):**
 - 🟡 `retentionCleanup` + `reclaimOrphanFollows` are **live** (see
-  `docs/analysis/EXTERNAL_ACTIONS.md`), but absent from `deploy.yml` **by design** —
-  it ships hosting only, so every functions change needs a manual targeted deploy.
-  The real residual is that there is still **no health metric** for last-run /
-  docs-deleted: a sweep that silently stops running raises no alert. Closest thing
-  today is the per-run `retentionCleanup done` log line, which must be read by hand.
+  `docs/analysis/EXTERNAL_ACTIONS.md`).
+  `reclaimOrphanFollows` still has **no health metric**: a sweep that silently stops
+  running raises no alert.
 - 🔴 **PITR och schemalagda backuper är påslagna** (mätt läge, datum och
   härledningskommandon i `docs/analysis/EXTERNAL_ACTIONS.md`, "Open infra items");
-  det som saknas är en skriptad backup-hälsokoll, en restore-dry-run och en
-  playbook för validering efter återställning.
+  det som saknas är en playbook för validering efter återställning och en provad
+  återflytt av ett enskilt konto (BIN-1422).
 - 🟠 **No `schemaVersion` stamp anywhere.** Indexes, the field whitelist, mutation
   payloads, and `buildUserExport` must be kept in sync by hand; nothing audits
   migration completeness or alerts when `migrateStatus()` hits its default case.
@@ -827,6 +846,10 @@ findings here too.
   vad skriptet gör mot datalagret, inte var filen ligger. Den deployas aldrig; den körs
   för hand, en gång.
   → `functions/scripts/backfill-mirror-uid.mjs`, `functions/scripts/backfill-mirror-uid.helpers.mjs`, `functions/scripts/backfill-mirror-uid.helpers.test.mjs`
+- **Återflytt av ett raderat konto** (BIN-1422 del 2). Skriptet som flyttar en persons
+  dokument från en återställd säkerhetskopia till den skarpa databasen, och dess
+  emulatortest. Sätet följer att det skriver datalagret med Admin SDK, förbi reglerna.
+  → `functions/scripts/restore-account.mjs`, `functions/scripts/restore-account.helpers.mjs`, `functions/scripts/restore-account.helpers.test.mjs`, `src/test/rules/restore-account-orchestrator.test.ts`
 - **Gruppens arvsordning** (BIN-1063 steg 3). Vem som arver en grupp vars agare
   raderats, och vad overlamningens skrivning innehaller. Det ar en datalagerfraga:
   storheten ar ordningen mellan dokumenten i en undersamling och nyttolasten pa
@@ -866,7 +889,7 @@ findings here too.
   vems data som öppnas, alltså datalagret — inte katalogen filen ligger i.
   → `scripts/check-published-commands.mjs`, `scripts/check-published-commands.test.mjs`
 - **Filer som saknade en ägande roll** (BIN-871). Datalagret i klienten: firebase-modulerna, dokument-id, skrivvägarna och regeltesterna.
-  → `src/contexts/AuthContext.test.tsx`, `src/contexts/WatchlistContext.test.tsx`, `src/hooks/usePublicProfile.test.ts`, `src/lib/firebase/accountDeletion.ts`, `src/lib/firebase/config.ts`, `src/lib/firebase/episodeProgress.test.ts`, `src/lib/firebase/episodeProgress.ts`, `src/lib/firebase/messaging.livetoken.test.ts`, `src/lib/firebase/messaging.ts`, `src/lib/firebase/publicProfile.test.ts`, `src/lib/firebase/publicProfile.ts`, `src/lib/firebase/reports.ts`, `src/lib/firebase/sessions.clamp.test.ts`, `src/lib/firebase/sessions.joinPayload.test.ts`, `src/lib/firebase/sessions.joinPayload.ts`, `src/lib/firebase/sessions.ts`, `src/lib/firebase/userData.subcollections.test.ts`, `src/lib/firebase/userSearch.test.ts`, `src/lib/firebase/userSearch.ts`, `src/lib/firebase/username.test.ts`, `src/lib/firebase/username.ts`, `src/lib/mediaTypeDocId.parity.test.ts`, `src/lib/mediaTypeDocId.test.ts`, `src/lib/watchlistWrites.addWrite.test.ts`, `src/lib/watchlistWrites.test.ts`, `src/lib/watchlistWrites.ts`, `src/test/rules/account-deletion.test.ts`, `src/test/rules/tmdb-sweep-orchestrator.test.ts`, `src/lib/watchStatus.migration.test.ts`
+  → `src/contexts/AuthContext.test.tsx`, `src/contexts/WatchlistContext.test.tsx`, `src/hooks/usePublicProfile.test.ts`, `src/lib/firebase/accountDeletion.ts`, `src/lib/firebase/config.ts`, `src/lib/firebase/episodeProgress.test.ts`, `src/lib/firebase/episodeProgress.ts`, `src/lib/firebase/messaging.livetoken.test.ts`, `src/lib/firebase/messaging.ts`, `src/lib/firebase/publicProfile.test.ts`, `src/lib/firebase/publicProfile.ts`, `src/lib/firebase/reports.test.ts`, `src/lib/firebase/reports.ts`, `src/lib/firebase/sessions.clamp.test.ts`, `src/lib/firebase/sessions.joinPayload.test.ts`, `src/lib/firebase/sessions.joinPayload.ts`, `src/lib/firebase/sessions.ts`, `src/lib/firebase/sessions.ttl.test.ts`, `src/lib/firebase/userData.subcollections.test.ts`, `src/lib/firebase/userSearch.test.ts`, `src/lib/firebase/userSearch.ts`, `src/lib/firebase/username.test.ts`, `src/lib/firebase/username.ts`, `src/lib/mediaTypeDocId.parity.test.ts`, `src/lib/mediaTypeDocId.test.ts`, `src/lib/watchlistWrites.addWrite.test.ts`, `src/lib/watchlistWrites.test.ts`, `src/lib/watchlistWrites.ts`, `src/test/rules/account-deletion.test.ts`, `src/test/rules/tmdb-sweep-orchestrator.test.ts`, `src/lib/watchStatus.migration.test.ts`
 
 
 ## 28. Recommendations / Scoring-Integrity Engineer
@@ -879,7 +902,7 @@ owns the _social graph_). This is the Binge analog of the sibling projects'
 - **Recommendation cascade** — the per-row score ceilings (latest-fav `100−daysSince`,
   person `min(recurrence×15, 90)`, similar `min(rank×12, 80)`, free-public 55,
   trending 30) and tie-breaks.
-  → `src/lib/recommendations/cascadePrioritizer.ts`
+  → `src/lib/recommendations/cascadePrioritizer.ts`, `src/lib/recommendations/keywordLabels.ts`, `src/lib/recommendations/keywordLabels.test.ts`
 - **Seed classification** — strong (rating ≥4) / weak (3) seeds, the 30-day latest-5★
   window, recurrence thresholds (people 3, keywords 2).
   → `src/lib/recommendations/seedAnalysis.ts`
@@ -928,8 +951,8 @@ dir. Grounded findings, roughly by severity:
 
 | Gap | What's missing | Touches |
 |---|---|---|
-| **Backup / DR verification** | PITR och schemalagda backuper är påslagna (se `docs/analysis/EXTERNAL_ACTIONS.md`), men inget larmar om ett schema slutar köra, och ingen återställning har provats. DR is runbook-only and untested. | DevOps (#8), Security (#4), DPO (#6), DBA (#27) |
-| **No health metric for the retention sweeps** | `retentionCleanup` + `reclaimOrphanFollows` are deployed and running, but absent from `deploy.yml` by design (hosting-only) — so each functions change needs a manual targeted deploy, and nothing alerts if a sweep stops running or starts failing. The `retentionCleanup done` log line must be read by hand. | DevOps (#8), DPO (#6), Controller (#3), DBA (#27) |
+| **Backup / DR verification** | PITR och schemalagda backuper är påslagna (se `docs/analysis/EXTERNAL_ACTIONS.md`), och `retentionCleanup` larmar när den senaste kopian är för gammal (BIN-1422). Slutar `retentionCleanup` själv köra larmar ingenting. | DevOps (#8), Security (#4), DPO (#6), DBA (#27) |
+| **No health metric for `reclaimOrphanFollows`** | `retentionCleanup` + `reclaimOrphanFollows` are deployed and running. Nothing alerts if `reclaimOrphanFollows` stops running or starts failing, or if `retentionCleanup`'s schedule stops firing altogether. | DevOps (#8), DPO (#6), Controller (#3), DBA (#27) |
 | **Schema-version safety** | No `schemaVersion` on Firestore docs — lazy migration can't prove completeness, and a stale legacy value can persist indefinitely undetected. | Architect (#14), QA (#7), DBA (#27) |
 | **Recommendation/taste drift** | Cascade + taste weights are frozen constants; no engagement tracking, A/B test, or drift detector validates them post-launch. | Data Analyst (#22), Architect (#14), Scoring (#28) |
 | **Notification delivery** | At-most-once is enforced, but there's no per-user delivery record, no user-facing "did you get this?", and no admin delivery-rate SLO. | DevOps (#8), Trust & Safety (#12), PM (#9) |
@@ -1019,6 +1042,6 @@ This matters since BIN-803: a pattern only survives into `docs/org/ownership-map
 if git tracks its path, so "the harness is gitignored" would be an instruction to drop
 these files from the map. The durable artifacts (role map, world-watch state, ADRs,
 metrics) are committed too. Governance is shared between the **Engineering Manager (#25)** (working
-agreement, CI gates, deploy drift-guard) and this Agent-Ops layer (the pre-build
+agreement, CI gates) and this Agent-Ops layer (the pre-build
 stakeholder panel + the commit-gate reviewers). If Binge ever formalizes a 27th-style
 "executable role," this is the machinery it would own.

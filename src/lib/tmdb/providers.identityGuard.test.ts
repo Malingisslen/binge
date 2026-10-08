@@ -44,7 +44,7 @@ const BASELINE: Record<number, ProviderIdentity> = {
   337: { name: 'Disney+', shortName: 'Disney+', aliases: [], isFree: false, isAds: false, tiers: {
     ads: { name: 'Standard med reklam', kind: null }, standard: { name: 'Standard', kind: null }, premium: { name: 'Premium', kind: null },
   } },
-  384: { name: 'Max', shortName: 'HBO', aliases: [1899, 1825], isFree: false, isAds: false, tiers: {
+  384: { name: 'HBO Max', shortName: 'HBO', aliases: [1899, 1825], isFree: false, isAds: false, tiers: {
     ads: { name: 'Basic med reklam', kind: null }, standard: { name: 'Standard', kind: null }, premium: { name: 'Premium', kind: null },
   } },
   76: { name: 'Viaplay', shortName: 'Viaplay', aliases: [], isFree: false, isAds: false, tiers: {
@@ -71,6 +71,7 @@ const BASELINE: Record<number, ProviderIdentity> = {
     ads: { name: 'Standard med annonser', kind: null }, standard: { name: 'Standard', kind: null }, premium: { name: 'Premium', kind: null },
   } },
   335: { name: 'YouTube Premium', shortName: 'YT', aliases: [188], isFree: false, isAds: false, tiers: {
+    lite: { name: 'Lite', kind: null },
     student: { name: 'Student', kind: null }, solo: { name: 'Enskild', kind: null }, family: { name: 'Familj', kind: null },
   } },
   521: { name: 'Tele2 Play', shortName: 'Tele2', aliases: [497], isFree: false, isAds: false, tiers: {} },
@@ -82,6 +83,10 @@ const BASELINE: Record<number, ProviderIdentity> = {
   426: { name: 'SF Anytime', shortName: 'SF Anytime', aliases: [], isFree: false, isAds: false, tiers: {} },
   423: { name: 'Blockbuster', shortName: 'Blockbuster', aliases: [], isFree: false, isAds: false, tiers: {} },
   538: { name: 'Plex', shortName: 'Plex', aliases: [], isFree: false, isAds: true, tiers: {} },
+  11: { name: 'MUBI', shortName: 'MUBI', aliases: [], isFree: false, isAds: false, tiers: {} },
+  435: { name: 'Draken Film', shortName: 'Draken', aliases: [], isFree: false, isAds: false, tiers: {
+    bas: { name: 'Bas', kind: null }, standard: { name: 'Standard', kind: null }, premium: { name: 'Premium', kind: null },
+  } },
 };
 
 describe('SWEDISH_PROVIDERS identity guard (immutable id/name/kind — prices may change freely)', () => {

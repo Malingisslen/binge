@@ -39,11 +39,11 @@ const SELF = 'scripts-self-tests-present.test.mjs';
 const REQUIRED = [
   'check-public-env.test.mjs',
   'check-workflow-map.test.mjs',
-  // BIN-997. Not a release-path guard like the two above — it is where the knowledge-file
-  // COUNT floor gets teeth. The script exits non-zero on a floor failure, but its weekly
-  // deploy step is `continue-on-error` by design (the cap is a warning, Malin 2026-08-25),
-  // so that exit code is discarded on the one path that runs unattended. Lose this file
-  // and the check can measure an empty set forever.
+  // BIN-997. Not a release-path guard like the two above. The script exits non-zero on a
+  // knowledge-file COUNT floor failure, but its weekly deploy step is `continue-on-error`
+  // by design (the cap is a warning, Malin 2026-08-25), so that exit code is discarded on
+  // the one path that runs unattended. Lose this file and the check can measure an empty
+  // set forever.
   'check-knowledge-caps.test.mjs',
   // BIN-790. The pre-commit pruner's test. It pins the pruner's never-blocks contract, its
   // keep-on-throw branch and its zero-subprocess cheap path — and the pruner DELETES work
@@ -66,6 +66,13 @@ const REQUIRED = [
   // rules suite at all, so this wrapper is the only thing asserting that suite ever
   // RAN — a floor that stops measuring is indistinguishable from a healthy run.
   'run-rules-tests.test.mjs',
+  // BIN-1426. The deploy workflow's rules/functions check. It decides what the backend job
+  // deploys and refuses a run that is not on main, so a test file that stops running leaves
+  // both decisions unverified.
+  'check-deploy-drift.test.mjs',
+  // BIN-1426. The check that the decided-deviations index lists every ledger heading. A
+  // reviewer reads the index first, so an entry missing there is a decision it never sees.
+  'check-deviations-index.test.mjs',
 ];
 
 // A LITERAL, deliberately not `REQUIRED.length`. Deriving it made this assertion unable
@@ -74,7 +81,7 @@ const REQUIRED = [
 // replaced BIN-838's floor to prevent, reproduced inside its own replacement. Growth is
 // free at the runner; raising this number is the deliberate act that keeps the new file
 // protected, and lowering it is the deliberate act a shrink must perform out loud.
-const MIN = 8;
+const MIN = 10;
 
 // Reads the DISK set, recursively and on both suffixes, to line up as closely as a
 // directory read can with what vitest's `scripts/**/*.{test,spec}.mjs` collects. It is not

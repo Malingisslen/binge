@@ -38,6 +38,8 @@ const captureErrorMock = vi.hoisted(() => vi.fn());
 // factory below could not, which is why the failure path shipped untested the
 // first time.
 const signOutMock = vi.fn(async () => {});
+// Det signInWithPopup svarar; getAdditionalUserInfo-mocken läser `additional` ur det.
+const signInWithPopupMock = vi.fn(async (): Promise<unknown> => ({}));
 // Säkerhetsgranskning 2026-08-05: deleteAccount's pre-flight freshness gate and
 // the auth deletion it gates. Both controllable, because the whole point of the
 // fix is WHICH of them runs first when the session is stale.
@@ -50,7 +52,7 @@ vi.mock('firebase/auth', () => ({
     authCallback = cb;
     return () => {};
   },
-  signInWithPopup: vi.fn(async () => {}),
+  signInWithPopup: (...args: unknown[]) => (signInWithPopupMock as (...a: unknown[]) => Promise<unknown>)(...args),
   signInWithEmailAndPassword: vi.fn(async () => {}),
   createUserWithEmailAndPassword: (...args: unknown[]) =>
     (createUserWithEmailAndPassword as (...a: unknown[]) => Promise<{ user: FakeUser }>)(...args),
@@ -63,6 +65,7 @@ vi.mock('firebase/auth', () => ({
   getIdTokenResult: (...args: unknown[]) =>
     (getIdTokenResultMock as (...a: unknown[]) => Promise<{ authTime: string }>)(...args),
   GoogleAuthProvider: class {},
+  getAdditionalUserInfo: (cred: { additional?: { isNewUser: boolean } } | undefined) => cred?.additional ?? null,
 }));
 
 // Mutabelt auth-objekt — testen sätter currentUser innan authCallback drivs så
@@ -82,6 +85,9 @@ vi.mock('@/lib/firebase/config', () => ({ auth: authObj }));
 const setDoc = vi.fn<(...args: unknown[]) => Promise<void>>(async () => {});
 const profileDocData: { current: Record<string, unknown> | null } = { current: null };
 const profileGate: { current: Promise<void> | null } = { current: null };
+// BIN-559: when set, the profile read rejects with this error instead of answering.
+const profileReadError: { current: unknown } = { current: null };
+const profileReadCount = { current: 0 };
 
 // BIN-535: default runTransaction stub re-reads the SAME profileDocData
 // mirror the plain getDoc above uses — so the normal (non-racing) create path
@@ -145,6 +151,8 @@ vi.mock('@/lib/firebase/db', () => ({
       // WHILE ensureUserProfile is in flight, then the stale sample resolving
       // on top of it. Null by default, so every other test is unaffected.
       if (profileGate.current) await profileGate.current;
+      profileReadCount.current += 1;
+      if (profileReadError.current) throw profileReadError.current;
       return {
         exists: () => profileDocData.current !== null,
         data: () => profileDocData.current ?? {},
@@ -234,6 +242,14 @@ vi.mock('@/lib/firebase/groupHandover', () => ({
 const groupsIdentity = vi.hoisted(() => ({
   updateMemberIdentity: vi.fn(async () => {}),
 }));
+// BIN-1174: the friend-request half of the rename fan-out. Its own logic is tested in
+// friends.test.ts; here only the call site — when it runs, with what, and what it reports.
+const friendsIdentity = vi.hoisted(() => ({
+  updateSentFriendRequestIdentity: vi.fn(async (): Promise<unknown[]> => []),
+}));
+vi.mock('@/lib/firebase/friends', () => ({
+  updateSentFriendRequestIdentity: friendsIdentity.updateSentFriendRequestIdentity,
+}));
 vi.mock('@/lib/firebase/groups', () => ({
   updateMemberProviders: vi.fn(async () => {}),
   updateMemberIdentity: groupsIdentity.updateMemberIdentity,
@@ -278,6 +294,7 @@ import { REQUIRES_RECENT_LOGIN, STALE_SESSION_PREFLIGHT, classifyDeletionFailure
 import { HANDOVER_PARTIAL } from '@/lib/firebase/groupHandover';
 import { CURRENT_TERMS_VERSION } from '@/lib/legal';
 import { openProfileIdentityChannel, PROFILE_IDENTITY_CHANNEL } from '@/lib/profileIdentityChannel';
+import { MAX_BIO } from '@/lib/clampText';
 
 // BIN-1163: a real cross-tab bus, not a spy. The whole mechanism is "does the
 // OTHER tab end up holding the new name", and a mocked module could only prove
@@ -362,6 +379,8 @@ beforeEach(() => {
   FakeBroadcastChannel.open = [];
   (window as unknown as { BroadcastChannel: unknown }).BroadcastChannel = FakeBroadcastChannel;
   groupsIdentity.updateMemberIdentity.mockClear();
+  friendsIdentity.updateSentFriendRequestIdentity.mockReset();
+  friendsIdentity.updateSentFriendRequestIdentity.mockImplementation(async () => []);
   reconsentFlagRenders.length = 0;
   // BIN-909: default every test to a brand-new account, so only the tests that
   // deliberately age it reach the gate.
@@ -415,6 +434,8 @@ beforeEach(() => {
   authObj.currentUser = null;
   profileDocData.current = null;
   profileGate.current = null;
+  profileReadError.current = null;
+  profileReadCount.current = 0;
   ctx = null;
   router.push.mockClear();
   nav.pathname = '/';
@@ -568,6 +589,9 @@ describe('AuthContext — setProviderCost/setProviderCampaign rollback vid write
     await act(async () => {
       await expect(ctx!.setProviderCost(76, 129)).rejects.toThrow('permission-denied');
     });
+    // BIN-1435: the write is per key now, so the next payload can no longer carry 76;
+    // the local profile is where a leaked rejected value would show.
+    expect(ctx!.user?.providerCosts).toEqual({ 8: 100 });
 
     // Nästa lyckade edit (annan provider) får INTE bära med sig 76:an.
     await act(async () => {
@@ -589,6 +613,7 @@ describe('AuthContext — setProviderCost/setProviderCampaign rollback vid write
     await act(async () => {
       await expect(ctx!.setProviderCampaign(8, rejected)).rejects.toThrow('unavailable');
     });
+    expect(ctx!.user?.providerCampaigns).toEqual({});
 
     const accepted = { monthlyCost: 59, endDate: '2026-12-01' };
     await act(async () => {
@@ -612,8 +637,103 @@ describe('AuthContext — setProviderCost/setProviderCampaign rollback vid write
       await ctx!.setProviderCost(337, 109);
     });
 
-    const [, payload] = setDoc.mock.calls.at(-1)! as [unknown, Record<string, unknown>];
-    expect(payload.providerCosts).toEqual({ 8: 100, 76: 129, 337: 109 });
+    // BIN-1435: each write carries only its own key; the local profile holds all three.
+    const payloads = userDocWrites().map(c => (c[1] as Record<string, unknown>).providerCosts);
+    expect(payloads.slice(-2)).toEqual([{ 76: 129 }, { 337: 109 }]);
+    expect(ctx!.user?.providerCosts).toEqual({ 8: 100, 76: 129, 337: 109 });
+  });
+});
+
+// Paket I (2026-10-05): introduktionen sparar flera nivåer i en skrivning.
+describe('AuthContext — updateProviderTiers', () => {
+  it('skriver varje nivå per nyckel och behåller alla lokalt', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerTiers: { 337: 'ads' }, providerCosts: { 8: 150 } });
+    setDoc.mockClear();
+
+    await act(async () => { await ctx!.updateProviderTiers({ 8: 'basic', 76: 'reklam' }); });
+
+    const writes = userDocWrites();
+    expect(writes).toHaveLength(1);
+    const [, payload] = writes[0] as [unknown, Record<string, unknown>];
+    expect(payload.providerTiers).toEqual({ 8: 'basic', 76: 'reklam' });
+    expect(payload.providerCosts).toEqual({ 8: '__delete__', 76: '__delete__' });
+    expect(ctx!.user?.providerTiers).toEqual({ 337: 'ads', 8: 'basic', 76: 'reklam' });
+    expect(ctx!.user?.providerCosts).toEqual({});
+  });
+
+  it('"ingen nivå" tar bort nyckeln på servern, inte bara lokalt', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerTiers: { 8: 'premium', 337: 'ads' } });
+    setDoc.mockClear();
+
+    await act(async () => { await ctx!.updateProviderTier(8, null); });
+
+    const [, payload] = userDocWrites()[0] as [unknown, Record<string, unknown>];
+    expect(payload.providerTiers).toEqual({ 8: '__delete__' });
+    expect('providerCosts' in payload).toBe(false);
+    expect(ctx!.user?.providerTiers).toEqual({ 337: 'ads' });
+  });
+
+  it('en blandad omgång: vald nivå tar bort egen kostnad, borttagen nivå rör den inte', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerTiers: { 337: 'ads' }, providerCosts: { 8: 150, 337: 60, 119: 59 } });
+    setDoc.mockClear();
+
+    await act(async () => { await ctx!.updateProviderTiers({ 8: 'basic', 337: null }); });
+
+    const [, payload] = userDocWrites()[0] as [unknown, Record<string, unknown>];
+    expect(payload.providerTiers).toEqual({ 8: 'basic', 337: '__delete__' });
+    expect(payload.providerCosts).toEqual({ 8: '__delete__' });
+    expect(ctx!.user?.providerTiers).toEqual({ 8: 'basic' });
+    expect(ctx!.user?.providerCosts).toEqual({ 337: 60, 119: 59 });
+  });
+
+  it('skriver på det kanoniska id:t och hoppar över okända tjänster', async () => {
+    renderAuth();
+    await login({ username: 'malin' });
+    setDoc.mockClear();
+
+    // 1899 är ett alias för Max (384); 999999 finns inte i katalogen.
+    await act(async () => { await ctx!.updateProviderTiers({ 1899: 'ads', 999999: 'x' }); });
+
+    const [, payload] = userDocWrites()[0] as [unknown, Record<string, unknown>];
+    expect(payload.providerTiers).toEqual({ 384: 'ads' });
+    expect(ctx!.user?.providerTiers).toEqual({ 384: 'ads' });
+  });
+
+  it('två samtidiga anrop för olika tjänster behåller båda lokalt', async () => {
+    renderAuth();
+    await login({ username: 'malin' });
+
+    await act(async () => {
+      await Promise.all([ctx!.updateProviderTier(8, 'basic'), ctx!.updateProviderTier(76, 'reklam')]);
+    });
+
+    expect(ctx!.user?.providerTiers).toEqual({ 8: 'basic', 76: 'reklam' });
+  });
+
+  it('en nekad skrivning ändrar ingenting lokalt och når anroparen', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerTiers: { 8: 'premium' } });
+    setDoc.mockRejectedValueOnce(new Error('permission-denied'));
+
+    await act(async () => {
+      await expect(ctx!.updateProviderTiers({ 8: 'basic' })).rejects.toThrow('permission-denied');
+    });
+    expect(ctx!.user?.providerTiers).toEqual({ 8: 'premium' });
+  });
+
+  it('en nivå katalogen inte känner till behandlas som "ingen nivå"', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerTiers: { 8: 'premium' } });
+    setDoc.mockClear();
+
+    await act(async () => { await ctx!.updateProviderTier(8, 'finns-inte'); });
+
+    const [, payload] = userDocWrites()[0] as [unknown, Record<string, unknown>];
+    expect(payload.providerTiers).toEqual({ 8: '__delete__' });
+    expect(ctx!.user?.providerTiers).toEqual({});
   });
 });
 
@@ -628,6 +748,7 @@ describe('AuthContext — setProviderRenewalDay rollback vid write-fel (BIN-531)
     await act(async () => {
       await expect(ctx!.setProviderRenewalDay(76, 20)).rejects.toThrow('permission-denied');
     });
+    expect(ctx!.user?.providerRenewalDays).toEqual({ 8: 5 });
 
     await act(async () => {
       await ctx!.setProviderRenewalDay(8, 12);
@@ -648,8 +769,122 @@ describe('AuthContext — setProviderRenewalDay rollback vid write-fel (BIN-531)
       await ctx!.setProviderRenewalDay(337, 1);
     });
 
-    const [, payload] = setDoc.mock.calls.at(-1)! as [unknown, Record<string, unknown>];
-    expect(payload.providerRenewalDays).toEqual({ 8: 5, 76: 20, 337: 1 });
+    const payloads = userDocWrites().map(c => (c[1] as Record<string, unknown>).providerRenewalDays);
+    expect(payloads.slice(-2)).toEqual([{ 76: 20 }, { 337: 1 }]);
+    expect(ctx!.user?.providerRenewalDays).toEqual({ 8: 5, 76: 20, 337: 1 });
+  });
+});
+
+// BIN-1435: a merge of the whole map never removed a key, so a cleared cost, campaign
+// or renewal day came back on the next load. Mocked: these pin the SHAPE of the write
+// (deleteField per key); the emulator test in firestore-rules.test.ts proves the key
+// actually leaves the stored document.
+describe('AuthContext — rensade kostnadsfält tas bort på servern (BIN-1435)', () => {
+  it('att rensa en egen kostnad skickar deleteField för just den nyckeln', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerCosts: { 8: 100, 76: 129 } });
+    setDoc.mockClear();
+
+    await act(async () => { await ctx!.setProviderCost(8, null); });
+
+    const writes = userDocWrites();
+    expect(writes).toHaveLength(1);
+    expect((writes[0][1] as Record<string, unknown>).providerCosts).toEqual({ 8: '__delete__' });
+    expect(ctx!.user?.providerCosts).toEqual({ 76: 129 });
+  });
+
+  it('att ta bort en kampanj skickar deleteField, och den sista ger en tom karta lokalt', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerCampaigns: { 8: { monthlyCost: 29, endDate: '2026-12-01' } } });
+    setDoc.mockClear();
+
+    await act(async () => { await ctx!.setProviderCampaign(8, null); });
+
+    expect((userDocWrites()[0][1] as Record<string, unknown>).providerCampaigns).toEqual({ 8: '__delete__' });
+    // The household fan-out reads this map, so an empty one is what it sends on.
+    expect(ctx!.user?.providerCampaigns).toEqual({});
+  });
+
+  it('en kampanj rensad via ett alias-id tas bort på det kanoniska id:t', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerCampaigns: { 384: { monthlyCost: 59, endDate: '2026-12-01' } } });
+    setDoc.mockClear();
+
+    // 1899 är ett alias för Max (384).
+    await act(async () => { await ctx!.setProviderCampaign(1899, null); });
+
+    expect((userDocWrites()[0][1] as Record<string, unknown>).providerCampaigns).toEqual({ 384: '__delete__' });
+    expect(ctx!.user?.providerCampaigns).toEqual({});
+  });
+
+  it('en kampanj satt via ett alias-id skrivs på det kanoniska id:t', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerCampaigns: {} });
+    setDoc.mockClear();
+    const campaign = { monthlyCost: 59, endDate: '2026-12-01' };
+
+    await act(async () => { await ctx!.setProviderCampaign(1899, campaign); });
+
+    expect((userDocWrites()[0][1] as Record<string, unknown>).providerCampaigns).toEqual({ 384: campaign });
+    expect(ctx!.user?.providerCampaigns).toEqual({ 384: campaign });
+  });
+
+  it.each([0, -8, 1.5, Number.NaN])('ett ogiltigt tjänst-id (%s) nekas utan skrivning', async (badId) => {
+    renderAuth();
+    await login({ username: 'malin', providerCosts: { 8: 100 }, providerRenewalDays: { 8: 5 } });
+    setDoc.mockClear();
+
+    await act(async () => {
+      await expect(ctx!.setProviderCost(badId, 5)).rejects.toThrow('ogiltigt tjänst-id');
+      await expect(ctx!.setProviderRenewalDay(badId, 5)).rejects.toThrow('ogiltigt tjänst-id');
+    });
+
+    expect(userDocWrites()).toHaveLength(0);
+    expect(ctx!.user?.providerCosts).toEqual({ 8: 100 });
+    expect(ctx!.user?.providerRenewalDays).toEqual({ 8: 5 });
+  });
+
+  it('att rensa en förnyelsedag skickar deleteField för just den nyckeln', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerRenewalDays: { 8: 5, 76: 20 } });
+    setDoc.mockClear();
+
+    await act(async () => { await ctx!.setProviderRenewalDay(8, null); });
+
+    expect((userDocWrites()[0][1] as Record<string, unknown>).providerRenewalDays).toEqual({ 8: '__delete__' });
+    expect(ctx!.user?.providerRenewalDays).toEqual({ 76: 20 });
+  });
+
+  it('två skrivningar som blir klara i omvänd ordning behåller båda värdena lokalt', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerCosts: {} });
+    let releaseFirst!: () => void;
+    setDoc.mockImplementationOnce(() => new Promise<void>(r => { releaseFirst = r; }));
+
+    let first!: Promise<void>;
+    await act(async () => {
+      first = ctx!.setProviderCost(76, 129);
+      await ctx!.setProviderCost(337, 109); // finishes before the first
+    });
+    await act(async () => { releaseFirst(); await first; });
+
+    expect(ctx!.user?.providerCosts).toEqual({ 76: 129, 337: 109 });
+  });
+
+  it('en nekad rensning lämnar värdet kvar, och nästa ändring skickar bara sin egen nyckel', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerCosts: { 8: 100 } });
+    setDoc.mockClear();
+    setDoc.mockRejectedValueOnce(new Error('permission-denied'));
+
+    await act(async () => {
+      await expect(ctx!.setProviderCost(8, null)).rejects.toThrow('permission-denied');
+    });
+    expect(ctx!.user?.providerCosts).toEqual({ 8: 100 });
+
+    await act(async () => { await ctx!.setProviderCost(76, 129); });
+    expect((userDocWrites().at(-1)![1] as Record<string, unknown>).providerCosts).toEqual({ 76: 129 });
+    expect(ctx!.user?.providerCosts).toEqual({ 8: 100, 76: 129 });
   });
 });
 
@@ -1168,6 +1403,61 @@ describe('AuthContext — ett namnbyte når andra flikar och gruppmedlemsraderna
     errSpy.mockRestore();
   });
 
+  it('ett namnbyte skriver om namnet på skickade vänförfrågningar, med båda fälten (BIN-1174)', async () => {
+    renderAuth();
+    await login({ displayName: 'Malin', username: 'malin' });
+
+    await act(async () => { await ctx!.updateDisplayName('Malin G'); });
+
+    expect(friendsIdentity.updateSentFriendRequestIdentity).toHaveBeenCalledTimes(1);
+    expect(friendsIdentity.updateSentFriendRequestIdentity).toHaveBeenCalledWith('u1', { displayName: 'Malin G', username: 'malin' });
+  });
+
+  it('en fallerad namnskrivning når ingen vänförfrågan (BIN-1174)', async () => {
+    renderAuth();
+    await login({ displayName: 'Malin', username: 'malin' });
+    setDoc.mockImplementationOnce(async () => { throw new Error('write-refused'); });
+
+    await act(async () => {
+      await expect(ctx!.updateDisplayName('Malin G')).rejects.toThrow('write-refused');
+    });
+
+    expect(friendsIdentity.updateSentFriendRequestIdentity).not.toHaveBeenCalled();
+  });
+
+  it('en vänförfrågan som behöll det gamla namnet rapporteras men fäller inte namnbytet (BIN-1174)', async () => {
+    const denied = Object.assign(new Error('denied'), { code: 'permission-denied' });
+    friendsIdentity.updateSentFriendRequestIdentity.mockImplementationOnce(async () => [denied]);
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    renderAuth();
+    await login({ displayName: 'Malin', username: 'malin' });
+
+    await act(async () => { await ctx!.updateDisplayName('Malin G'); });
+
+    expect(ctx!.user!.displayName).toBe('Malin G');
+    expect(captureErrorMock).toHaveBeenCalledWith(
+      denied,
+      expect.objectContaining({ scope: 'auth', kind: 'identityFanOut-friendRequest' }),
+    );
+    errSpy.mockRestore();
+  });
+
+  it('en kastande läsning av skickade förfrågningar rapporteras men fäller inte namnbytet (BIN-1174)', async () => {
+    friendsIdentity.updateSentFriendRequestIdentity.mockImplementationOnce(async () => { throw new Error('offline'); });
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    renderAuth();
+    await login({ displayName: 'Malin', username: 'malin' });
+
+    await act(async () => { await ctx!.updateDisplayName('Malin G'); });
+
+    expect(ctx!.user!.displayName).toBe('Malin G');
+    expect(captureErrorMock).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'offline' }),
+      expect.objectContaining({ scope: 'auth', kind: 'identityFanOut-friendRequest' }),
+    );
+    errSpy.mockRestore();
+  });
+
   it('stänger kanalen när providern avmonteras', async () => {
     const view = renderAuth();
     await login({ displayName: 'Malin', username: 'malin' });
@@ -1215,7 +1505,7 @@ describe('AuthContext — a session ending forgets the return path (BIN-732)', (
     // The negative that makes the transition the right signal rather than "uid
     // is null". A signed-out visitor taps the poster badge, the path is stored,
     // /login loads — and Firebase then reports "no session" for the first time.
-    // Clearing on that verdict would break the funnel from the 25k prerendered
+    // Clearing on that verdict would break the funnel from the prerendered
     // title pages (BIN-645) for every visitor, every time.
     renderAuth();
     await act(async () => {}); // flusha initAppCheck().then(subscribe)
@@ -1465,7 +1755,7 @@ describe('AuthContext + AuthGuard — a tab that BOOTS mid-sign-out (BIN-748)', 
   });
 
   it('an unmarked tab booting signed-out still remembers where it was', async () => {
-    // The funnel from the 25k prerendered title pages (BIN-645) is the thing
+    // The funnel from the prerendered title pages (BIN-645) is the thing
     // this must not cost. Same boot, no marker.
     await bootWithNoSession('/bibliotek/?status=vill_se');
 
@@ -1952,6 +2242,11 @@ describe('AuthContext — an aborted deletion is not resurrected (BIN-816)', () 
       ['updateNotificationSettings', () => ctx!.updateNotificationSettings({ priceDrops: true })],
       ['updateDefaultVisibility', () => ctx!.updateDefaultVisibility('public')],
       ['updateProviderTier', () => ctx!.updateProviderTier(8, null)],
+      ['updateProviderTiers', () => ctx!.updateProviderTiers({ 8: 'basic' })],
+      // BIN-1435: the three per-key map writers, setting and clearing.
+      ['setProviderCost (clear)', () => ctx!.setProviderCost(8, null)],
+      ['setProviderCampaign (clear)', () => ctx!.setProviderCampaign(8, null)],
+      ['setProviderRenewalDay', () => ctx!.setProviderRenewalDay(8, 12)],
       // BIN-1154: den har skrivaren har en ANDRA lagring utanfor chokepointen,
       // sa den pinnar ocksa att en markerad session inte nar Auth-posten.
       // Ordningen mellan de tva skrivningarna ar hela skalet.
@@ -2523,6 +2818,245 @@ describe('AuthContext — reconsent gate for a returning account (BIN-909)', () 
   });
 });
 
+// BIN-1422 del 2, Malin's decision 2 (2026-10-07): an account restored from a backup comes
+// back WITHOUT `termsAcceptedAt`/`ageConfirmedAt` and WITH `restoredAt`, so its owner must
+// answer both questions again. Unlike BIN-909 the document exists and holds their data, so
+// the click stamps three fields onto it rather than creating it.
+describe('återställt konto godkänner villkoren igen (BIN-1422)', () => {
+  function markAborted(uid = 'u1') {
+    window.localStorage.setItem(`binge:deletionStarted:${uid}`, JSON.stringify({ startedAt: 1 }));
+  }
+
+  // What the restore script writes: the person's data, the restore bookkeeping, and no
+  // consent stamps.
+  function restoredDoc(extra: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      displayName: 'Malin Återställd',
+      username: 'malin',
+      bio: 'Tittar på allt',
+      myProviders: [8, 337],
+      restoredAt: { toDate: () => new Date('2026-10-07T10:00:00Z') },
+      restoreBasis: 'support-ärende',
+      restoreRequestedBy: 'malin',
+      restoreSourceDb: 'backup-2026-10-06',
+      ...extra,
+    };
+  }
+
+  // The harness's setDoc normally records and forgets. Here the read-back after the stamp
+  // is part of the behaviour under test, so a merge write lands in the profile mirror the
+  // way Firestore's would.
+  beforeEach(() => {
+    setDoc.mockImplementation(async (...args: unknown[]) => {
+      const [ref, data, opts] = args as [{ _path: string }, Record<string, unknown>, { merge?: boolean } | undefined];
+      if (ref._path !== 'users/u1') return;
+      profileDocData.current = opts?.merge && profileDocData.current
+        ? { ...profileDocData.current, ...data }
+        : { ...data };
+    });
+  });
+
+  function payloadKeys(call: unknown[]) {
+    return Object.keys(call[1] as Record<string, unknown>).sort();
+  }
+
+  it('ett återställt konto utan samtycke grindas, och INGENTING skrivs före klicket', async () => {
+    renderAuth();
+    await login(restoredDoc());
+    await act(async () => {}); // let every provider effect settle
+
+    expect(ctx!.pendingReconsent).toBe(true);
+    expect(ctx!.reconsentRestored).toBe(true);
+    expect(ctx!.user).toBeNull();
+    // No write of any kind: not the profile, not a transaction, not a username claim.
+    expect(setDoc).not.toHaveBeenCalled();
+    expect(runTransaction).not.toHaveBeenCalled();
+    expect(claimUsername).not.toHaveBeenCalled();
+  });
+
+  // Without a username the profile load would reserve one (tryAutoClaimUsername), so this is
+  // the fixture where a gate placed after the load would show up as a write before consent.
+  it('ett återställt konto UTAN användarnamn reserverar inget namn före klicket', async () => {
+    const noUsername = restoredDoc();
+    delete noUsername.username;
+    renderAuth();
+    await login(noUsername);
+    await act(async () => {});
+
+    expect(ctx!.pendingReconsent).toBe(true);
+    expect(claimUsername).not.toHaveBeenCalled();
+    expect(setDoc).not.toHaveBeenCalled();
+  });
+
+  it('kontroll: samma profil MED samtycke laddas och reserverar ett namn, så fixturen når anspråket', async () => {
+    const noUsername = restoredDoc({
+      termsAcceptedAt: { toDate: () => new Date() },
+      ageConfirmedAt: { toDate: () => new Date() },
+    });
+    delete noUsername.username;
+    renderAuth();
+    await login(noUsername);
+    await act(async () => {});
+
+    expect(ctx!.pendingReconsent).toBe(false);
+    expect(claimUsername).toHaveBeenCalled();
+  });
+
+  it('en stämpel som saknas räcker — termsAcceptedAt satt men ageConfirmedAt null grindas också', async () => {
+    renderAuth();
+    await login(restoredDoc({ termsAcceptedAt: { toDate: () => new Date() }, ageConfirmedAt: null }));
+
+    expect(ctx!.pendingReconsent).toBe(true);
+    expect(ctx!.reconsentRestored).toBe(true);
+    expect(ctx!.user).toBeNull();
+    expect(setDoc).not.toHaveBeenCalled();
+  });
+
+  it('spegelfallet: ageConfirmedAt satt men termsAcceptedAt saknas grindas också', async () => {
+    renderAuth();
+    await login(restoredDoc({ ageConfirmedAt: { toDate: () => new Date() } }));
+
+    expect(ctx!.pendingReconsent).toBe(true);
+    expect(ctx!.reconsentRestored).toBe(true);
+    expect(ctx!.user).toBeNull();
+    expect(setDoc).not.toHaveBeenCalled();
+  });
+
+  // The flag is a repair trigger: once consent is given, the BIN-587 retry must run and,
+  // in this harness where the re-marking succeeds, clear the flag with its own write.
+  it('en återställd reparationsflagga för synligheten sätter igång reparationen efter klicket (BIN-587)', async () => {
+    renderAuth();
+    await login(restoredDoc({ visibilitySyncPending: true }));
+    expect(setDoc).not.toHaveBeenCalled();
+
+    await act(async () => { await ctx!.completeReconsent(); });
+    await act(async () => {});
+
+    expect(ctx!.pendingReconsent).toBe(false);
+    const cleared = userDocWrites().some(c => (c[1] as Record<string, unknown>).visibilitySyncPending === '__delete__');
+    expect(cleared).toBe(true);
+    expect(ctx!.visibilitySyncPending).toBe(false);
+  });
+
+  it('klicket stämplar BARA de tre samtyckesfälten, och profilen laddas med allt annat kvar', async () => {
+    renderAuth();
+    await login(restoredDoc());
+    expect(setDoc).not.toHaveBeenCalled();
+
+    await act(async () => { await ctx!.completeReconsent(); });
+
+    expect(setDoc).toHaveBeenCalledTimes(1);
+    const call = setDoc.mock.calls[0];
+    expect((call[0] as { _path: string })._path).toBe('users/u1');
+    expect(payloadKeys(call)).toEqual(['ageConfirmedAt', 'termsAcceptedAt', 'termsVersion', 'updatedAt']);
+    const payload = call[1] as Record<string, unknown>;
+    expect(payload.termsAcceptedAt).toBe('ts');
+    expect(payload.ageConfirmedAt).toBe('ts');
+    expect(payload.termsVersion).toBe(CURRENT_TERMS_VERSION);
+    // merge, not a create: anything else would wipe what the restore brought back.
+    expect(call[2]).toEqual({ merge: true });
+    expect(runTransaction).not.toHaveBeenCalled();
+
+    expect(ctx!.pendingReconsent).toBe(false);
+    expect(ctx!.reconsentRestored).toBe(false);
+    expect(ctx!.user?.displayName).toBe('Malin Återställd');
+    expect(ctx!.user?.username).toBe('malin');
+    expect(ctx!.user?.bio).toBe('Tittar på allt');
+    expect(ctx!.user?.myProviders).toEqual([8, 337]);
+    expect(ctx!.user?.termsVersion).toBe(CURRENT_TERMS_VERSION);
+    // The restore bookkeeping is left on the document untouched.
+    expect(profileDocData.current?.restoreBasis).toBe('support-ärende');
+    expect(profileDocData.current?.restoreSourceDb).toBe('backup-2026-10-06');
+  });
+
+  it('en profil UTAN restoredAt och utan samtyckesfält grindas inte av den här regeln', async () => {
+    // The control: without it every case above passes on a provider that gates every
+    // profile missing a stamp, which would lock out accounts that predate the stamps.
+    renderAuth();
+    await login({ username: 'malin', bio: 'gammal' });
+
+    expect(ctx!.pendingReconsent).toBe(false);
+    expect(ctx!.reconsentRestored).toBe(false);
+    expect(ctx!.user?.username).toBe('malin');
+  });
+
+  it('ett återställt konto som redan har båda stämplarna laddas som vanligt', async () => {
+    renderAuth();
+    await login(restoredDoc({
+      termsAcceptedAt: { toDate: () => new Date() },
+      ageConfirmedAt: { toDate: () => new Date() },
+    }));
+
+    expect(ctx!.pendingReconsent).toBe(false);
+    expect(ctx!.reconsentRestored).toBe(false);
+    expect(ctx!.user?.username).toBe('malin');
+    expect(setDoc).not.toHaveBeenCalled();
+  });
+
+  it('en raderingsmarkör vid inloggningen vinner över återställningsgrinden', async () => {
+    markAborted();
+    renderAuth();
+    await login(restoredDoc());
+
+    expect(ctx!.deletionInProgress).toBe(true);
+    expect(ctx!.pendingReconsent).toBe(false);
+    expect(ctx!.reconsentRestored).toBe(false);
+    expect(setDoc).not.toHaveBeenCalled();
+  });
+
+  it('completeReconsent vägrar med binge/deletion-in-progress och skriver ingenting', async () => {
+    renderAuth();
+    await login(restoredDoc());
+    expect(reconsentFlagRenders.at(-1), 'förutsättningen: grinden är uppe').toBe(true);
+
+    markAborted();
+
+    await act(async () => {
+      await expect(ctx!.completeReconsent()).rejects.toThrow('binge/deletion-in-progress');
+    });
+
+    expect(setDoc).not.toHaveBeenCalled();
+    expect(runTransaction).not.toHaveBeenCalled();
+    expect(ctx!.user).toBeNull();
+  });
+
+  it('två flikar som båda klickar skriver bara de tre fälten, och slutläget är ogrindat', async () => {
+    renderAuth();
+    await login(restoredDoc());
+
+    await act(async () => {
+      await Promise.all([ctx!.completeReconsent(), ctx!.completeReconsent()]);
+    });
+
+    expect(setDoc).toHaveBeenCalledTimes(2);
+    for (const call of setDoc.mock.calls) {
+      expect((call[0] as { _path: string })._path).toBe('users/u1');
+      expect(payloadKeys(call)).toEqual(['ageConfirmedAt', 'termsAcceptedAt', 'termsVersion', 'updatedAt']);
+      expect(call[2]).toEqual({ merge: true });
+    }
+    expect(runTransaction).not.toHaveBeenCalled();
+    expect(ctx!.pendingReconsent).toBe(false);
+    expect(ctx!.user?.username).toBe('malin');
+    expect(profileDocData.current?.myProviders).toEqual([8, 337]);
+  });
+
+  it('ett kontobyte mitt i klicket adopterar ingenting', async () => {
+    renderAuth();
+    await login(restoredDoc());
+
+    // The switch lands DURING the stamp write, so the guard compares the user captured on
+    // the way in with a different one on the way out.
+    setDoc.mockImplementationOnce(async () => {
+      authObj.currentUser = { ...fakeUser, uid: 'someone-else' };
+    });
+    await act(async () => { await ctx!.completeReconsent(); });
+
+    expect(ctx!.user).toBeNull();
+    expect(ctx!.pendingReconsent).toBe(true);
+    expect(ctx!.reconsentRestored).toBe(true);
+  });
+});
+
 // BIN-1154: visningsnamnet far en redigeringsyta, och den ror flera lagringar av
 // samma personuppgift. Ordningen mellan dem ar ett beslut - Firestore forst,
 // Auth-posten bara om den gick igenom - och den ordningen ar vad de har fallen
@@ -2534,10 +3068,13 @@ describe('AuthContext - visningsnamnet gar att andra, och skrivningarna har en o
     await login({ displayName: 'Malin', email: 'malin@example.com' });
     setDoc.mockClear();
 
-    await act(async () => { await ctx!.updateDisplayName('y'.repeat(200)); });
+    let stored: string | undefined;
+    await act(async () => { stored = await ctx!.updateDisplayName('y'.repeat(200)); });
 
     const [, payload] = userDocWrites()[0] as [unknown, Record<string, unknown>, unknown];
     expect(payload.displayName).toBe('y'.repeat(80));
+    // BIN-1275: det namnfaltet far tillbaka ar samma strang som skrevs.
+    expect(stored).toBe(payload.displayName);
   });
 
   it('Auth-posten far samma BEARBETADE varde, sa de tva lagringarna inte glider isar', async () => {
@@ -2600,7 +3137,8 @@ describe('AuthContext - visningsnamnet gar att andra, och skrivningarna har en o
     setDoc.mockClear();
 
     await act(async () => {
-      await expect(ctx!.updateDisplayName('Nytt namn')).resolves.toBeUndefined();
+      // BIN-1275: resolvar med det lagrade vardet, inte bara utan att kasta.
+      await expect(ctx!.updateDisplayName('Nytt namn')).resolves.toBe('Nytt namn');
     });
 
     const [, payload] = userDocWrites()[0] as [unknown, Record<string, unknown>, unknown];
@@ -2614,5 +3152,242 @@ describe('AuthContext - visningsnamnet gar att andra, och skrivningarna har en o
       { scope: 'auth', kind: 'updateDisplayName-authSync' },
     );
     errSpy.mockRestore();
+  });
+});
+
+// BIN-1253. Bion klampas pa skrivvagen, samma form som visningsnamnet. Fixturen ar ett
+// emoji-par som STRADDLAR taket: kodenhet [MAX_BIO-1] ar den hoga halvan och [MAX_BIO]
+// den laga. En strang som ar exakt MAX_BIO lang slapps igenom oforandrad av
+// clampToCodeUnits tidiga retur (BIN-1164) och kan darfor inte bevisa klampningen.
+describe('AuthContext - bion klampas innan den skrivs (BIN-1253)', () => {
+  it('ett par som straddlar taket kapas helt, och det lagrade vardet ar valformat', async () => {
+    renderAuth();
+    await login({ displayName: 'Malin', email: 'malin@example.com' });
+    setDoc.mockClear();
+    const bio = 'a'.repeat(MAX_BIO - 1) + '😀';
+    expect(bio.length).toBe(MAX_BIO + 1);
+
+    let stored = '';
+    await act(async () => { stored = await ctx!.updateBio(bio); });
+
+    const [, payload] = userDocWrites()[0] as [unknown, Record<string, unknown>, unknown];
+    expect(payload.bio).toBe('a'.repeat(MAX_BIO - 1));
+    expect((payload.bio as string).isWellFormed()).toBe(true);
+    // Anroparen far samma strang tillbaka, sa inställningarnas textfalt kan visa det
+    // som faktiskt sparades.
+    expect(stored).toBe(payload.bio);
+  });
+});
+
+// BIN-559. Offline på första inloggningen: profilläsningen rejectar med `unavailable`
+// (mätt mot emulatorn 2026-09-23, se isOfflineProfileError). Panelens villkor, i ordning:
+// bara den koden ger remsan, omförsöket går genom samma väg som inloggningen och
+// prövar grindarna igen, och ett andra misslyckande lämnar remsan kvar.
+describe('AuthContext — offline på första inloggningen (BIN-559)', () => {
+  const offline = Object.assign(new Error('Failed to get document because the client is offline.'), { code: 'unavailable' });
+
+  it('ett anslutningsfel ger profileLoadError offline, och ingen profil', async () => {
+    profileReadError.current = offline;
+    renderAuth();
+    await login(null);
+    expect(ctx!.profileLoadError).toBe('offline');
+    expect(ctx!.user).toBeNull();
+    expect(ctx!.uid).toBe('u1');
+  });
+
+  it('ett nekande är inget anslutningsfel och ger ingen remsa', async () => {
+    profileReadError.current = Object.assign(new Error('denied'), { code: 'permission-denied' });
+    renderAuth();
+    await login(null);
+    expect(ctx!.profileLoadError).toBeNull();
+  });
+
+  it('ett lyckat omförsök skapar profilen och tar bort felet', async () => {
+    profileReadError.current = offline;
+    renderAuth();
+    await login(null);
+    profileReadError.current = null;
+    await act(async () => { await ctx!.retryProfileLoad(); });
+    expect(ctx!.profileLoadError).toBeNull();
+    expect(ctx!.user).not.toBeNull();
+    expect(runTransaction).toHaveBeenCalled();
+  });
+
+  it('ett andra misslyckande lämnar felet kvar', async () => {
+    profileReadError.current = offline;
+    renderAuth();
+    await login(null);
+    const before = profileReadCount.current;
+    await act(async () => { await ctx!.retryProfileLoad(); });
+    // Omförsöket läste faktiskt profilen igen, och föll igen.
+    expect(profileReadCount.current).toBe(before + 1);
+    expect(ctx!.profileLoadError).toBe('offline');
+    expect(ctx!.user).toBeNull();
+  });
+
+  it('omförsöket för ett gammalt konto hamnar i återsamtycket, inte i en ny samtyckesstämpel', async () => {
+    fakeUser.metadata.creationTime = new Date(Date.now() - 60 * 60 * 1000).toUTCString();
+    profileReadError.current = offline;
+    renderAuth();
+    await login(null);
+    profileReadError.current = null;
+    runTransaction.mockClear();
+    await act(async () => { await ctx!.retryProfileLoad(); });
+    expect(ctx!.pendingReconsent).toBe(true);
+    expect(runTransaction).not.toHaveBeenCalled();
+  });
+
+  it('omförsöket för ett konto som hunnit märkas för radering hamnar i limbo', async () => {
+    profileReadError.current = offline;
+    renderAuth();
+    await login(null);
+    window.localStorage.setItem('binge:deletionStarted:u1', JSON.stringify({ startedAt: 1 }));
+    profileReadError.current = null;
+    runTransaction.mockClear();
+    await act(async () => { await ctx!.retryProfileLoad(); });
+    expect(ctx!.deletionInProgress).toBe(true);
+    expect(runTransaction).not.toHaveBeenCalled();
+  });
+
+  it('en utloggning tar bort felet', async () => {
+    profileReadError.current = offline;
+    renderAuth();
+    await login(null);
+    authObj.currentUser = null;
+    await act(async () => { authCallback!(null); });
+    expect(ctx!.profileLoadError).toBeNull();
+  });
+});
+
+describe('AuthContext — signIn() säger om Google-kontot är nytt', () => {
+  it.each([
+    [{ additional: { isNewUser: true } }, true],
+    [{ additional: { isNewUser: false } }, false],
+    [{}, false],
+  ])('svaret %o ger isNewUser %s', async (cred, expected) => {
+    signInWithPopupMock.mockResolvedValueOnce(cred);
+    renderAuth();
+    await act(async () => {});
+    let result: { isNewUser: boolean } | undefined;
+    await act(async () => { result = await ctx!.signIn(); });
+    expect(result).toEqual({ isNewUser: expected });
+  });
+});
+
+// BIN-1442 — "Påminn mig". The server finds due users by pauseReminderNext alone,
+// so every write of providerPauses must carry it, computed from the same map.
+describe('pause reminders (BIN-1442)', () => {
+  const pauses = { 8: { pausedAt: '2026-10-01', resumeAt: '2026-11-03' }, 76: { pausedAt: '2026-10-01', resumeAt: '2026-12-12', remind: true } };
+
+  it('setPauseReminder writes the reminder and the earliest reminded date together', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerPauses: pauses });
+    setDoc.mockClear();
+    await act(async () => { await ctx!.setPauseReminder(8, true); });
+    const data = userDocWrites().at(-1)![1] as Record<string, unknown>;
+    expect((data.providerPauses as Record<number, { remind?: boolean }>)[8].remind).toBe(true);
+    expect(data.pauseReminderNext).toBe('2026-11-03');
+  });
+
+  it('pauseProvider keeps a reminder with its pause when the end date moves', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerPauses: pauses });
+    setDoc.mockClear();
+    await act(async () => { await ctx!.pauseProvider(76, '2026-12-01'); });
+    const data = userDocWrites().at(-1)![1] as Record<string, unknown>;
+    expect((data.providerPauses as Record<number, unknown>)[76]).toEqual({ pausedAt: '2026-10-01', resumeAt: '2026-12-01', remind: true });
+    expect(data.pauseReminderNext).toBe('2026-12-01');
+  });
+
+  it('pauseProvider writes remind:false when an open-ended pause drops the reminder', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerPauses: pauses });
+    setDoc.mockClear();
+    await act(async () => { await ctx!.pauseProvider(76, null); });
+    const data = userDocWrites().at(-1)![1] as Record<string, unknown>;
+    // The merge write would keep a stored remind:true if the key were omitted.
+    expect((data.providerPauses as Record<number, unknown>)[76]).toEqual({ pausedAt: '2026-10-01', resumeAt: null, remind: false });
+    expect(data.pauseReminderNext).toBeNull();
+  });
+
+  it('setPauseReminder refuses while a deletion is unfinished, and writes nothing', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerPauses: pauses });
+    window.localStorage.setItem('binge:deletionStarted:u1', JSON.stringify({ startedAt: 1 }));
+    setDoc.mockClear();
+    await act(async () => {
+      await expect(ctx!.setPauseReminder(8, true)).rejects.toThrow('binge/deletion-in-progress');
+    });
+    expect(userDocWrites()).toHaveLength(0);
+  });
+
+  it('resumeProvider deletes the pause key on the server and recomputes the date', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerPauses: pauses });
+    batchSets.length = 0;
+    await act(async () => { await ctx!.resumeProvider(76); });
+    const userSet = batchSets.find(b => b.ref._path === 'users/u1')!;
+    // A merge write keeps an omitted nested key, so only deleteField() removes it.
+    expect(userSet.data.providerPauses).toEqual({ 76: '__delete__' });
+    expect(userSet.data.pauseReminderNext).toBeNull();
+  });
+});
+
+describe('monthly bill setting', () => {
+  it('reads as on when the account has no such key, off only for an explicit false', async () => {
+    const { unmount } = renderAuth();
+    await login({ username: 'malin', notificationSettings: { weeklyDigest: true } });
+    expect(ctx!.user?.notificationSettings.monthlyBill).toBe(true);
+    unmount();
+    renderAuth();
+    await login({ username: 'malin', notificationSettings: { monthlyBill: false } });
+    expect(ctx!.user?.notificationSettings.monthlyBill).toBe(false);
+  });
+
+  it('turning it off keeps the other notification settings', async () => {
+    renderAuth();
+    await login({ username: 'malin', notificationSettings: { weeklyDigest: true, priceDrops: true } });
+    setDoc.mockClear();
+    await act(async () => { await ctx!.updateNotificationSettings({ monthlyBill: false }); });
+    const written = userDocWrites().map(c => (c[1] as { notificationSettings?: Record<string, unknown> }).notificationSettings).find(Boolean)!;
+    expect(written).toMatchObject({ monthlyBill: false, weeklyDigest: true, priceDrops: true });
+  });
+});
+
+describe('second-week visit stamp (BIN-1442)', () => {
+  const daysAgo = (n: number) => { const d = new Date(Date.now() - n * 86_400_000); return { toDate: () => d }; };
+  const stamps = () => userDocWrites().filter(c => 'secondWeekVisitAt' in (c[1] as Record<string, unknown>));
+
+  it('stamps once on a visit in the second week', async () => {
+    renderAuth();
+    await login({ username: 'malin', createdAt: daysAgo(9) });
+    await act(async () => {});
+    expect(stamps()).toHaveLength(1);
+    expect((stamps()[0][1] as Record<string, unknown>).secondWeekVisitAt).toBe('ts');
+    await act(async () => { await ctx!.updateNotificationSettings({ weeklyDigest: false }); });
+    expect(stamps()).toHaveLength(1);
+  });
+
+  it('writes nothing in the first week, after it, or when already stamped', async () => {
+    for (const data of [
+      { username: 'malin', createdAt: daysAgo(3) },
+      { username: 'malin', createdAt: daysAgo(20) },
+      { username: 'malin', createdAt: daysAgo(9), secondWeekVisitAt: daysAgo(8) },
+    ]) {
+      setDoc.mockClear();
+      const { unmount } = renderAuth();
+      await login(data);
+      await act(async () => {});
+      expect(stamps()).toHaveLength(0);
+      unmount();
+    }
+  });
+
+  it('writes nothing while a deletion is unfinished', async () => {
+    window.localStorage.setItem('binge:deletionStarted:u1', JSON.stringify({ startedAt: 1 }));
+    renderAuth();
+    await login({ username: 'malin', createdAt: daysAgo(9) });
+    await act(async () => {});
+    expect(stamps()).toHaveLength(0);
   });
 });

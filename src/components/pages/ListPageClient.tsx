@@ -19,7 +19,11 @@ import { LoadingView } from '@/components/ui/LoadingView';
 import { NotFound } from '@/components/ui/NotFound';
 import { EmptyState } from '@/components/ui/EmptyState';
 import ListCheapestPlanPanel from '@/components/lists/ListCheapestPlanPanel';
+import ShareButton from '@/components/share/ShareButton';
 import type { ListPlanItem } from '@/hooks/useListCheapestPlan';
+import { Eyebrow } from '@/components/ui/Eyebrow';
+import { buttonClass, Button } from '@/components/ui/Button';
+import { cardClass } from '@/components/ui/Card';
 
 export default function ListPageClient({ listId }: { listId: string }) {
   const { uid } = useAuth();
@@ -56,7 +60,7 @@ export default function ListPageClient({ listId }: { listId: string }) {
         crumb="Lista"
         title="Listan hittades inte"
         body="Listan kan vara borttagen eller satt till privat."
-        action={<Link href="/bibliotek" className="btn btn-ghost">Till biblioteket</Link>}
+        action={<Link href="/bibliotek" className={buttonClass({ variant: 'ghost' })}>Till biblioteket</Link>}
       />
     );
   }
@@ -108,12 +112,12 @@ export default function ListPageClient({ listId }: { listId: string }) {
         crumb="Lista"
         title={list.title}
         actions={canEdit && !showPicker ? (
-          <button
+          <Button
             onClick={() => setShowPicker(true)}
-            className="inline-flex items-center gap-1 px-3 py-[3px] border-none rounded-sm text-xs font-[inherit] cursor-pointer bg-acc-deep text-white shrink-0"
+            variant="acc" size="sm" className="inline-flex items-center gap-1 shrink-0"
           >
             <Plus size={12} /> Lägg till titel
-          </button>
+          </Button>
         ) : (!canEdit && uid) ? (
           // BIN-96: följ/avfölj någon annans lista (inloggad, ej egen lista
           // och ej medredigerare — canEdit täcker både ägare och editors).
@@ -131,6 +135,13 @@ export default function ListPageClient({ listId }: { listId: string }) {
         <p className="text-xs text-ink-3 mb-2">{list.description}</p>
       )}
       <span className="text-xxs text-ink-3">{list.items.length} {list.items.length === 1 ? 'titel' : 'titlar'}</span>
+      {/* En privat lista visar "hittades inte" för den som får länken, så knappen
+          finns bara när listan är publik. */}
+      {list.isPublic && (
+        <span className="ml-2 align-middle">
+          <ShareButton path={`/list/${listId}/`} title={list.title} text={`Listan ${list.title} på Binge`} surface="list" />
+        </span>
+      )}
       {!isOwner && canEdit && (
         <span className="text-xxs text-acc-deep ml-2">· du är medredigerare</span>
       )}
@@ -159,15 +170,15 @@ export default function ListPageClient({ listId }: { listId: string }) {
           body={canEdit && !showPicker ? 'Lägg till din första titel med knappen ovan.' : canEdit ? 'Använd sökfältet ovan.' : 'Den här listan har inga titlar ännu.'}
         />
       ) : (
-        <div className="bg-surface border border-rule rounded-sm mt-3">
-          <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-[10px] md:gap-[7px] px-3 py-2">
+        <div className={cardClass('mt-3')}>
+          <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-2.5 md:gap-2 px-3 py-2">
             {list.items.map(item => {
             const poster = posterUrl(item.posterPath, 'w342');
             const href = titleHref(item.mediaType, item.tmdbId);
             return (
               <div key={item.tmdbId} className="relative">
                 <Link href={href} className="no-underline text-ink block">
-                  <div className={`poster duo-${toneForId(item.tmdbId)} mb-[3px]`}>
+                  <div className={`poster duo-${toneForId(item.tmdbId)} mb-1`}>
                     {poster && <img src={poster} alt={item.title} loading="lazy" decoding="async" width={342} height={513} />}
                   </div>
                   <div className="text-xs font-semibold truncate">{item.title}</div>
@@ -212,8 +223,8 @@ function TitlePicker({ existingIds, onAdd, onClose }: TitlePickerProps) {
     .slice(0, 8);
 
   return (
-    <div className="bg-surface border border-rule rounded-sm p-2 mt-3">
-      <div className="flex items-center gap-2 mb-2 border border-rule rounded-sm bg-white px-2">
+    <div className={cardClass('p-2 mt-3')}>
+      <div className={cardClass('flex items-center gap-2 mb-2 px-2')}>
         <Search size={12} className="text-ink-3" />
         <input
           type="search"
@@ -250,7 +261,7 @@ function TitlePicker({ existingIds, onAdd, onClose }: TitlePickerProps) {
                 <button
                   onClick={() => !alreadyAdded && onAdd(r)}
                   disabled={alreadyAdded}
-                  className="w-full flex items-center gap-2 px-1 py-[3px] bg-transparent border-none cursor-pointer text-left hover:bg-bg-2 rounded-sm disabled:cursor-default disabled:opacity-60"
+                  className="w-full flex items-center gap-2 px-1 py-1 bg-transparent border-none cursor-pointer text-left hover:bg-bg-2 rounded-sm disabled:cursor-default disabled:opacity-60"
                 >
                   {poster ? (
                     <div className={`poster duo-${toneForId(r.id)} w-[24px] h-[36px] shrink-0`}>
@@ -313,12 +324,12 @@ function EditorsManager({ editors, onAdd, onRemove }: {
     if (!res.ok) setMsg(res.error ?? 'Kunde inte ta bort medredigeraren.');
   };
   return (
-    <div className="bg-surface border border-rule rounded-md px-3 py-[10px] mt-3 max-w-[420px]">
-      <div className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold mb-1">Medredigerare</div>
+    <div className={cardClass('px-3 py-2.5 mt-3 max-w-[420px]')}>
+      <Eyebrow className="mb-1">Medredigerare</Eyebrow>
       <p className="text-xxs text-ink-3 mb-2">
         De du lägger till kan lägga till och ta bort titlar — men inte ändra listans namn eller synlighet.
       </p>
-      <div className="flex gap-[6px] items-center mb-1">
+      <div className="flex gap-1.5 items-center mb-1">
         <input
           value={handle}
           onChange={e => setHandle(e.target.value)}
@@ -330,7 +341,7 @@ function EditorsManager({ editors, onAdd, onRemove }: {
       </div>
       {msg && <div className="text-xxs text-ink-3 mb-2">{msg}</div>}
       {editors.length > 0 && (
-        <div className="flex flex-col gap-[4px] mt-2">
+        <div className="flex flex-col gap-1 mt-2">
           {editors.map(uid => <EditorRow key={uid} uid={uid} onRemove={() => handleRemove(uid)} />)}
         </div>
       )}
@@ -353,13 +364,13 @@ function EditorRow({ uid, onRemove }: { uid: string; onRemove: () => void }) {
   return (
     <div className="flex items-center justify-between text-xs">
       <span className="text-ink truncate">{name ?? '…'}</span>
-      <button
+      <Button
         type="button"
         onClick={onRemove}
-        className="text-xxs text-danger-ink border border-rule rounded-sm px-2 py-[1px] bg-surface cursor-pointer shrink-0 ml-2"
+        variant="danger-ghost" size="xs" className="shrink-0 ml-2"
       >
         Ta bort
-      </button>
+      </Button>
     </div>
   );
 }

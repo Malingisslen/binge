@@ -88,6 +88,17 @@ pre-commit:
       run: node scripts/prune-map-flag.mjs
       priority: 3
 
+    # BIN-1426. The decided-deviations ledger lives in `.claude/accepted-deviations.md`; the
+    # trigger-loaded file `.claude/rules/accepted-deviations.md` lists only its headings. A
+    # reviewer reads the list first, so a heading missing there hides that decision.
+    deviations-index:
+      glob:
+        - ".claude/accepted-deviations.md"
+        - ".claude/rules/accepted-deviations.md"
+      run: node scripts/check-deviations-index.mjs
+      fail_text: "The deviations index and the ledger's headings differ. Copy the new heading line, unchanged, to the end of .claude/rules/accepted-deviations.md."
+      priority: 2
+
 # BIN-917's criterion 4, and the reason it lives here rather than nowhere.
 #
 # The ticket asks that a batch not reach the COMMITTER without a stakeholder-review row in
@@ -104,11 +115,8 @@ pre-commit:
 #
 commit-msg:
   commands:
-    # NOT glob-gated, and deliberately: this check reads the
-    # SUBJECT, not the staged files, and a code-changing commit that touches no `.ts` is
-    # exactly the case that escaped on 2026-08-16 (049f21b is a test-file commit). It costs
-    # one node process and one file read — no toolchain, no compile. Measured well under a
-    # second.
+    # NOT glob-gated, and deliberately: a code-changing commit that touches no `.ts` is
+    # exactly the case that escaped on 2026-08-16 (049f21b is a test-file commit).
     review-coverage:
       run: node docs/org/metrics/check_review_coverage.mjs --message {1}
       fail_text: "This commit names a ticket with no stakeholder-review row (BIN-917). Log the review, or fix the subject."

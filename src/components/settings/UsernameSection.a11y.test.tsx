@@ -7,12 +7,12 @@
  * en CSS-valjare hade varit gront bade fore och efter fixen.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, fireEvent } from '@testing-library/react';
 
 const auth = vi.hoisted(() => ({
   user: {} as Record<string, unknown> | null,
   updateUsername: vi.fn(async () => {}),
-  updateBio: vi.fn(async () => {}),
+  updateBio: vi.fn(async (bio: string) => bio),
   updateDefaultVisibility: vi.fn(async () => {}),
   visibilitySyncPending: false,
 }));
@@ -68,5 +68,31 @@ describe('UsernameSection — falten har tillgangliga namn (BIN-1161)', () => {
   it('anvandarnamnsfaltet ber inte om autofyll', async () => {
     await renderSection();
     expect(screen.getByLabelText('Användarnamn').getAttribute('autocomplete')).toBe('off');
+  });
+});
+
+// BIN-1253: updateBio klampar och resolvar med det LAGRADE vardet. Textfaltet ska visa
+// det, sa "Bio sparad" aldrig star over text som inte sparades.
+describe('UsernameSection — bion visar det som sparades (BIN-1253)', () => {
+  it('textfaltet tar det varde updateBio resolvar med', async () => {
+    auth.updateBio.mockImplementationOnce(async () => 'kapad');
+    await renderSection();
+    const field = screen.getByLabelText('Bio') as HTMLTextAreaElement;
+    fireEvent.change(field, { target: { value: 'kapad text' } });
+    await act(async () => { fireEvent.blur(field); });
+    expect(auth.updateBio).toHaveBeenCalledWith('kapad text');
+    expect(field.value).toBe('kapad');
+  });
+
+  it('text som skrivs medan sparningen pagar skrivs inte over', async () => {
+    let resolveSave: (v: string) => void = () => {};
+    auth.updateBio.mockImplementationOnce(() => new Promise<string>(r => { resolveSave = r; }));
+    await renderSection();
+    const field = screen.getByLabelText('Bio') as HTMLTextAreaElement;
+    fireEvent.change(field, { target: { value: 'forsta' } });
+    await act(async () => { fireEvent.blur(field); });
+    fireEvent.change(field, { target: { value: 'forsta och mer' } });
+    await act(async () => { resolveSave('forsta'); });
+    expect(field.value).toBe('forsta och mer');
   });
 });

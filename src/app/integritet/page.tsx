@@ -10,10 +10,37 @@ export default function IntegritetPage() {
   return (
     <LegalPageShell
       title="Integritetspolicy"
-      lastUpdated="2026-09-18"
-      version="1.5"
+      lastUpdated="2026-10-08"
+      version="1.13"
+      toc={[
+        { id: 'ansvarig', label: '1. Vem är ansvarig?' },
+        { id: 'uppgifter', label: '2. Vilka uppgifter vi samlar in' },
+        { id: 'rattslig-grund', label: '3. Varför vi behandlar uppgifterna (rättslig grund)' },
+        { id: 'personuppgiftsbitraden', label: '4. Vilka som behandlar dina uppgifter åt oss' },
+        { id: 'overforingar', label: '5. Överföringar utanför EU/EES' },
+        { id: 'lagringstid', label: '6. Hur länge vi sparar uppgifterna' },
+        { id: 'rattigheter', label: '7. Dina rättigheter' },
+        { id: 'cookies', label: '8. Cookies och lokal lagring' },
+        { id: 'alder', label: '9. Ålder' },
+        { id: 'grupper', label: '10. Delning i grupper' },
+        { id: 'andringar', label: '11. Ändringar' },
+        { id: 'kontakt', label: '12. Kontakt' },
+      ]}
     >
-      <section>
+      {/* Malins godkända sammanfattning (2026-10-08). Den lovar inget utöver
+          avsnitten nedan; ändras något där ska den läsas om. */}
+      <div aria-label="I korthet">
+        <h2>I korthet</h2>
+        <ul>
+          <li>Vi sparar det du själv lägger in: ditt konto, ditt bibliotek och dina betyg, dina streamingtjänster och det du delar i grupper.</li>
+          <li>Vi säljer aldrig dina uppgifter och använder inga reklamnätverk.</li>
+          <li>Databasen ligger inom EU. Några leverantörer är amerikanska, till exempel Google och TMDB.</li>
+          <li>Du kan själv ladda ner eller radera all din data under Inställningar.</li>
+          <li>Har du frågor? Skriv till <a href="mailto:hej@binge.nu">hej@binge.nu</a>.</li>
+        </ul>
+      </div>
+
+      <section id="ansvarig">
         <h2>1. Vem är ansvarig?</h2>
         <p>
           Binge.nu drivs av Malin Gisslén som privatperson. För frågor
@@ -23,7 +50,7 @@ export default function IntegritetPage() {
         </p>
       </section>
 
-      <section>
+      <section id="uppgifter">
         <h2>2. Vilka uppgifter vi samlar in</h2>
         <p>
           När du skapar ett konto på Binge.nu sparar vi följande:
@@ -37,22 +64,28 @@ export default function IntegritetPage() {
           <li><strong>Recensioner, listor och sociala kopplingar</strong> — recensioner, kommentarer och listor du skapat, samt vänner, följare och grupp-medlemskap. Ditt medlemskap i en grupp bär ditt visningsnamn, användarnamn, din profilbild och vilka streamingtjänster du har (se §10).</li>
           <li><strong>Streamingrådgivaren-historik</strong> — dina pausa- och återuppta-beslut (sparbeslut) som rådgivaren sparar.</li>
           <li><strong>&quot;Inte intresserad&quot;-markeringar</strong> — titlar du gömt från rekommendationer.</li>
+          <li><strong>Veckobrevet</strong> — Nya konton får veckobrevet &quot;Din streamingvecka&quot; i appens klocka varje måndag. Det byggs av det du redan sparat i Binge och skickas inte som e-post eller notis. Du stänger av det under Inställningar, Notiser.</li>
+          <li><strong>Månadssammanfattningen</strong> — Den 1:a varje månad kan du få kortet &quot;Din streaming i [månad]&quot; i appens klocka, om du hade en betald tjänst och bockade av något förra månaden. Det byggs av det du redan sparat i Binge och skickas inte som e-post eller notis. Du stänger av det under Inställningar, Notiser.</li>
+          <li><strong>Andra veckan</strong> — Binge sparar en gång per konto datumet när du öppnar appen under din andra vecka. Det används bara för att räkna hur många nya konton som kommer tillbaka, som en summa, och raderas när du raderar kontot.</li>
           <li><strong>Push-notistoken</strong> — om du aktiverat push-notiser sparar vi en enhetsspecifik token (Firebase Cloud Messaging) för att kunna skicka notiser.</li>
+          <li><strong>Hemkommun</strong> — om du själv väljer en kommun för att se vad som finns på ditt bibliotek. Den är frivillig och går att ta bort i inställningarna.</li>
+          <li><strong>Avsnittsreaktioner</strong> — reaktioner du lämnar på enskilda avsnitt. De är publika och visar att de kommer från ditt konto.</li>
+          <li><strong>Det du gör i en grupp</strong> — titlar du lägger till i gruppens lista, betyg du sätter på dem och vilken titel ni valde på en filmkväll. Det visas för gruppens medlemmar tillsammans med vem som lade till eller valde den.</li>
           <li><strong>Teknisk logg-data</strong> — IP-adress och webbläsarens User-Agent hanteras av Firebase och Cloudflare för säkerhet och drift.</li>
         </ul>
         <p>
-          Vi samlar <strong>inte</strong> in: geografisk position, kontaktlista,
-          kalender, eller innehåll från andra appar. Vi säljer aldrig dina
-          uppgifter.
+          Vi samlar <strong>inte</strong> in din geografiska position (bara den
+          kommun du själv väljer, se ovan), kontaktlista, kalender eller innehåll
+          från andra appar. Vi säljer aldrig dina uppgifter.
         </p>
       </section>
 
-      <section>
+      <section id="rattslig-grund">
         <h2>3. Varför vi behandlar uppgifterna (rättslig grund)</h2>
         <ul>
-          <li><strong>Avtal (GDPR art. 6.1.b)</strong> — för att leverera tjänsten: spara din bevakningslista, visa rätt streaming-info, köra rådgivaren, och visa de grupper du är medlem i vilka streamingtjänster du har, eftersom det är så gruppen räknar ut vad ni kan se tillsammans (se §10).</li>
-          <li><strong>Berättigat intresse (art. 6.1.f)</strong> — för driftlogg, felsökning, felövervakning, bot- och missbruksskydd, samt cookiefri och anonymiserad besöksstatistik (se §4).</li>
-          <li><strong>Samtycke (art. 6.1.a)</strong> — för Hushåll, den frivilliga delningen av prenumerationskostnader i grupper (se §10), samt eventuella framtida inslag som kräver samtycke, t.ex. marknadsföring eller cookie-baserad spårning. Inga marknadsföringsinslag används idag.</li>
+          <li><strong>Avtal (GDPR art. 6.1.b)</strong> — för att leverera tjänsten: spara din bevakningslista, visa rätt streaming-info, köra rådgivaren, och visa de grupper du är medlem i vilka streamingtjänster du har, eftersom det är så gruppen räknar ut vad ni kan se tillsammans, och visa gruppens medlemmar de betyg du sätter på gruppens titlar (se §10).</li>
+          <li><strong>Berättigat intresse (art. 6.1.f)</strong> — för driftlogg, felsökning, felövervakning, bot- och missbruksskydd, samt cookiefri räkning av hur funktioner används, som bara sparas som en summa per dag (se §4). Också för att visa en svensk biografi från Wikipedia på personsidor: intresset är att sidan ska vara begriplig på svenska, och Wikimedia får ingenting om ditt konto (se §4).</li>
+          <li><strong>Samtycke (art. 6.1.a)</strong> — för Hushåll, den frivilliga delningen av prenumerationskostnader i grupper (se §10), för att spela en trailer från YouTube, där ditt tryck på spela är samtycket (se §4 och §8), samt eventuella framtida inslag som kräver samtycke, t.ex. marknadsföring eller cookie-baserad spårning. Inga marknadsföringsinslag används idag.</li>
         </ul>
         <p>
           Administratörer kan se namn, användarnamn, profilbild och presentation
@@ -62,7 +95,7 @@ export default function IntegritetPage() {
         </p>
       </section>
 
-      <section>
+      <section id="personuppgiftsbitraden">
         <h2>4. Vilka som behandlar dina uppgifter åt oss</h2>
         <p>
           Vi använder följande personuppgiftsbiträden:
@@ -70,12 +103,23 @@ export default function IntegritetPage() {
         <ul>
           <li><strong>Google / Firebase</strong> (autentisering, databas, push-notiser, drift) — behandlar uppgifterna enligt Googles databehandlaravtal (DPA). Dina uppgifter lagras inom EU: Firestore-databasen i multiregionen <code>eur3</code> (Belgien och Nederländerna) och serverfunktionerna i <code>europe-west1</code> (Belgien).</li>
           <li><strong>Google reCAPTCHA / Firebase App Check</strong> (bot- och missbruksskydd) — laddar ett skript från Google som analyserar webbläsarsignaler för att skilja människor från bottar. Sätter en teknisk token och skickar signaler till Google.</li>
-          <li><strong>Plausible Analytics</strong> (besöksstatistik) — cookiefri och IP-anonymiserad statistik över sidvisningar. Sätter inga cookies och lagrar varken din IP-adress eller andra personuppgifter.</li>
+          <li><strong>Egen räkning av hur funktioner används</strong> — Binge räknar själv till exempel att någon klickade vidare till en tjänst eller delade en titel. Det sparas bara som en summa per dag, utan koppling till dig eller ditt konto, och inga cookies sätts. Som vid alla anrop till våra servrar kan din IP-adress finnas i Googles tekniska serverloggar i högst 30 dagar.</li>
           <li><strong>Cloudflare</strong> (CDN, DNS, brandvägg) — behandlar trafikdata under Cloudflares DPA.</li>
-          <li><strong>The Movie Database (TMDB)</strong> — vi hämtar film- och serieinformation från TMDB. Dina personuppgifter överförs <em>inte</em> till TMDB; endast titel-ID:n och sökfrågor skickas.</li>
+          <li><strong>The Movie Database (TMDB)</strong> — vi hämtar film- och serieinformation och affischer från TMDB. Det sker direkt från din webbläsare, så TMDB får din IP-adress, viss webbläsarinformation och det du skriver när du söker. TMDB får inte din profil, ditt konto eller vad du tittar på.</li>
           <li><strong>Sentry</strong> (felövervakning) — tar emot teknisk information när något går fel i appen, så vi kan hitta och rätta buggar. Personuppgifter som e-post, användarnamn och användar-id rensas bort innan felrapporten skickas. Sentry är amerikanskt och anlitar i sin tur egna underleverantörer (bl.a. Intercom och OpenAI); aktuell lista finns hos <a href="https://sentry.io/legal/subprocessors/" target="_blank" rel="noopener noreferrer">Sentry</a>.</li>
           <li><strong>Google Gemini</strong> (används av &quot;Fråga Binge&quot;) — om vår vanliga sökning inte lyckas tolka din fritextfråga skickas själva frågetexten till Googles Gemini-modell, som tolkar den till en sökning. Ingen profil- eller tittardata skickas med, bara din formulering. Frågetexten skickas i stunden för tolkningen. Som EES-kund omfattas behandlingen av Googles databehandlaravtal (DPA), och frågetexten används inte för att träna eller förbättra Googles modeller. Google Gemini är amerikanskt.</li>
           <li><strong>Anthropic (Claude)</strong> — vi använder Claude i en förproducerad process (inte i realtid) för att skapa spoilerfria avsnittssammanfattningar från <em>offentliga</em> källor (Wikipedia m.fl.). <em>Inga</em> personuppgifter och ingen tittardata skickas till Anthropic — endast offentlig avsnittsinformation. Anthropic är amerikanskt.</li>
+        </ul>
+        <h3>Tjänster som din webbläsare hämtar direkt</h3>
+        <p>
+          Två tjänster hämtas direkt av din webbläsare när du använder en viss
+          funktion. De är inte våra biträden, och vi skickar inga uppgifter om
+          ditt konto till dem. De tar emot det en webbläsare alltid skickar: din
+          IP-adress, vilken webbläsare du använder och vad som efterfrågas.
+        </p>
+        <ul>
+          <li><strong>YouTube</strong> (trailers) — ingenting laddas från YouTube förrän du trycker på en trailer. Då hämtas spelaren från <code>youtube-nocookie.com</code>, och Google får din IP-adress och vilken video du spelar. YouTube kan lagra cookies eller lokal lagring i din webbläsare när videon spelas. Google är amerikanskt.</li>
+          <li><strong>Wikipedia och Wikidata</strong> (svenska biografier på personsidor) — när en personsida saknar svensk biografi från TMDB kan webbläsaren hämta personens svenska Wikipedia-sammanfattning, via Wikidata och svenska Wikipedia, från Wikimedia Foundation. Wikimedia får din IP-adress och vilken person sidan gäller. Wikimedia Foundation är amerikanskt.</li>
         </ul>
         <p>
           Vi använder inga reklamnätverk eller marknadsföringsverktyg, och
@@ -83,7 +127,7 @@ export default function IntegritetPage() {
         </p>
       </section>
 
-      <section>
+      <section id="overforingar">
         <h2>5. Överföringar utanför EU/EES</h2>
         <p>
           Vissa leverantörer är amerikanska eller kan vid enskilda operationer
@@ -92,16 +136,22 @@ export default function IntegritetPage() {
           För dessa överföringar gäller EU-kommissionens
           standardavtalsklausuler (SCC) och, där det är tillämpligt, EU–US Data
           Privacy Framework, med kompletterande skyddsåtgärder. TMDB är
-          amerikanskt men tar inte emot dina personuppgifter.
+          amerikanskt och tar emot din IP-adress, webbläsarinformation och
+          dina sökord direkt från din webbläsare, men inte din profil eller
+          din tittardata.
+        </p>
+        <p>
+          YouTube (Google) och Wikimedia Foundation (se §4) är amerikanska, så
+          förfrågningarna dit går till USA.
         </p>
       </section>
 
-      <section>
+      <section id="lagringstid">
         <h2>6. Hur länge vi sparar uppgifterna</h2>
         <ul>
           <li>Din profil och bevakningslista sparas så länge ditt konto är aktivt.</li>
-          <li>Notifikationer sparas i upp till 180 dagar.</li>
-          <li>Tillsammans-sessioner utgår automatiskt 7 dagar efter skapandet.</li>
+          <li>Notifikationer raderas automatiskt när de är 90 dagar gamla.</li>
+          <li>Tillsammans-sessioner raderas automatiskt senast ett dygn efter att de blivit 7 dagar gamla.</li>
           <li>Teknisk logg-data i Firebase/Cloudflare sparas enligt respektive leverantörs standardtid (typiskt 30 dagar).</li>
           <li>
             <strong>Om du tar bort ditt konto</strong> raderar vi all din data
@@ -111,7 +161,10 @@ export default function IntegritetPage() {
             blockeringar, vän- och följar-relationer (även de speglade hos
             motparten), dina recensioner inklusive likes och kommentarer på dem,
             kommentarer och likes du gjort på andras recensioner, dina listor,
-            samt Tillsammans-sessioner du är värd för. En grupp du äger lämnas i
+            samt Tillsammans-sessioner du är värd för. Har du deltagit i någon
+            annans Tillsammans-session ligger din plats där, med ditt
+            visningsnamn, dina streamingtjänster och dina röster, kvar tills
+            sessionen raderas, senast ett dygn efter att den blivit 7 dagar gammal. En grupp du äger lämnas i
             stället över till den medlem som varit med längst, om gruppen har kvar
             några medlemmar — annars raderas den, och dina egna spår i en
             överlämnad grupp tas bort ändå. Grupper du bara är medlem i lämnar du
@@ -123,18 +176,37 @@ export default function IntegritetPage() {
             automatiskt av en återkommande rutin, normalt en gång i veckan.
           </li>
           <li>
+            {/* BIN-1422 del 2: Malins text, godkänd 2026-10-07; meningen om profilens anteckning godkänd 2026-10-08. */}
+            Om du ångrar en radering och själv ber om det kan ditt konto
+            återställas från en säkerhetskopia. Då kommer din profil,
+            bevakningslista, avsnittsframsteg, anteckningar, egna taggar,
+            blockeringar och vän- och följarrelationer tillbaka, även de som är
+            speglade hos den andra personen. Den personen får en notis och kan ta
+            bort relationen. Recensioner, listor, grupper och Tillsammans-sessioner
+            kommer inte tillbaka. Du godkänner villkoren på nytt innan kontot går
+            att använda. Att kontot återställts, på vems begäran och varför sparas
+            i 12 månader. Utöver den loggen får din profil en anteckning om när
+            och varför kontot återställdes och vem som bad om det. Anteckningen
+            finns kvar så länge kontot finns och ingår i din dataexport.
+          </li>
+          <li>
             <strong>Ett undantag från raderingen:</strong> om du har anmält
             innehåll för moderering kan själva anmälan sparas i moderationssyfte
             även efter att du raderat ditt konto — det vill säga ditt interna
             användar-id, vilket skäl du angav och en eventuell kommentar du
-            skrev. Det gör vi för att kunna hantera missbruk och försvara
-            moderationsbeslut (GDPR art. 17.3). Anmälan är aldrig publik och
-            syns bara för administratörer.
+            skrev. Samma sak gäller om någon annan har anmält dig eller något du
+            skrivit: anmälan sparar ditt interna användar-id och vad som
+            anmäldes, och den ligger kvar även om du raderar ditt konto. Det gör
+            vi för att kunna hantera missbruk och försvara moderationsbeslut
+            (GDPR art. 17.3). Anmälan är aldrig publik och syns bara för
+            administratörer. När en administratör avgör en anmälan kan en intern
+            anteckning om beslutet sparas med den. Den visas aldrig för någon
+            annan.
           </li>
         </ul>
       </section>
 
-      <section>
+      <section id="rattigheter">
         <h2>7. Dina rättigheter</h2>
         <p>
           Du har rätt att:
@@ -149,17 +221,18 @@ export default function IntegritetPage() {
         </ul>
       </section>
 
-      <section>
+      <section id="cookies">
         <h2>8. Cookies och lokal lagring</h2>
         <p>
           Binge sätter inga egna spårningscookies. Vi använder:
         </p>
         <ul>
-          <li><strong>IndexedDB</strong> — Firebase lagrar din inloggningssession här.</li>
+          <li><strong>IndexedDB</strong> — Firebase lagrar din inloggningssession här, och appen sparar en kopia av din egen data (till exempel ditt bibliotek och din profil) så att den laddar snabbt och fungerar utan anslutning. Kopien finns bara på din enhet och tas bort när du loggar ut eller raderar kontot, så långt webbläsaren tillåter.</li>
           <li><strong>Funktionella cookies från Cloudflare</strong> (<code>__cf_bm</code>, <code>__cflb</code>) — används för botskydd och lastbalansering och är nödvändiga för att tjänsten ska fungera.</li>
           <li><strong>Google reCAPTCHA</strong> (<code>_GRECAPTCHA</code>) — sätts av Googles reCAPTCHA/App Check för bot- och missbruksskydd. Räknas som nödvändig för tjänstens säkerhet.</li>
+          <li><strong>YouTube</strong> — sätts bara om du trycker på en trailer. Spelaren laddas från <code>youtube-nocookie.com</code>, men YouTube kan ändå lagra cookies eller lokal lagring i din webbläsare medan videon spelas.</li>
           <li>
-            <strong>Tre värden i webbläsarens <code>sessionStorage</code></strong> — till
+            <strong>Värden i webbläsarens <code>sessionStorage</code></strong> — till
             skillnad från cookies och IndexedDB ovan är de bundna till den enskilda fliken
             och försvinner när du stänger fliken eller webbläsaren. Ingen tredje part har
             åtkomst till dem, och de lämnar aldrig din enhet.
@@ -184,19 +257,70 @@ export default function IntegritetPage() {
                 flik kan skicka in anmälningar av olämpligt innehåll. Innehåller bara
                 klockslaget för din senaste anmälan, ingenting om vad du anmälde.
               </li>
+              <li>
+                <code>binge:guestProviders</code> — vilka betaltjänster du kryssat i på
+                kalkylatorn eller startsidan, så att valet följer med om du skapar ett konto.
+                Raderas när du sparat dina tjänster.
+              </li>
+              <li>
+                <code>binge:pendingAdd</code> — titeln du tryckte <em>Lägg till</em> på
+                innan du loggat in, så att den läggs till i ditt bibliotek automatiskt när
+                du loggat in eller skapat konto. Innehåller bara titelns namn och offentliga
+                uppgifter om den. Raderas så fort den lästs. Den tas också bort om den är
+                äldre än 30 minuter, eller om inloggningssidan öppnas mer än en minut efter
+                att du tryckte.
+              </li>
             </ul>
           </li>
           <li>
             <strong>Webbläsarens <code>localStorage</code></strong> — till skillnad
             från sessionStorage-värdena ovan finns dessa kvar även efter att du
             stängt fliken eller webbläsaren, tills du ändrar dem eller rensar
-            webbläsarens data. Värdet nedan är det vi hittills redovisat i detalj;
-            listan är inte fullständig, och vi utökar den efter hand.
+            webbläsarens data. Det här sparas (ingen av dem lämnar enheten eller
+            läses av tredje part):
             <ul>
               <li>
                 <code>binge:theme</code> — om du valt ljust läge, mörkt läge eller
                 att följa enhetens egen inställning. Innehåller bara det valet. Ingen
                 tredje part har åtkomst till det, och det lämnar aldrig din enhet.
+              </li>
+              <li>
+                <code>binge:groupInvite:&lt;grupp&gt;</code> — om du äger en grupp och
+                skapat en inbjudningslänk sparas själva länken här, så att du kan
+                kopiera den igen. Den som har tillgång till din webbläsare kan alltså
+                se länken. Den tas bort när du byter eller stänger av länken och när
+                du raderar kontot, men inte när du loggar ut.
+              </li>
+              <li>
+                <code>binge-session-pid-&lt;session&gt;</code> och{' '}
+                <code>binge-my-sessions</code> — vilka Tillsammans-sessioner du gått
+                med i på den här enheten, med din plats i dem (högst 20).
+              </li>
+              <li>
+                <code>binge:wasLoggedIn</code> — att någon varit inloggad på enheten,
+                så att appen kan ladda snabbare.
+              </li>
+              <li>
+                <code>binge:fcm:tokenId:&lt;id&gt;</code> — en hänvisning till enhetens
+                push-notistoken, om du slagit på notiser.
+              </li>
+              <li>
+                <code>binge:pubprofile-sig:&lt;id&gt;</code> — ett kontrollvärde för din
+                publika profil, så att appen vet om den behöver uppdateras.
+              </li>
+              <li>
+                <code>binge:deletionStarted:&lt;id&gt;</code> — sätts om en
+                kontoradering påbörjats men inte slutförts, så att appen kan slutföra
+                den.
+              </li>
+              <li>
+                <code>binge:rec-rotation:…</code> — vilka rekommendationer du nyss
+                sett, så att samma inte visas igen direkt.
+              </li>
+              <li>
+                <code>binge-rq-cache</code> — en tillfällig kopia av allmän film- och
+                seriedata (genrer, trender), högst ett dygn gammal. Den innehåller
+                inget om dig.
               </li>
             </ul>
           </li>
@@ -208,7 +332,7 @@ export default function IntegritetPage() {
         </p>
       </section>
 
-      <section>
+      <section id="alder">
         <h2>9. Ålder</h2>
         <p>
           För att skapa konto på Binge måste du vara minst 13 år gammal,
@@ -216,7 +340,7 @@ export default function IntegritetPage() {
         </p>
       </section>
 
-      <section>
+      <section id="grupper">
         <h2>10. Delning i grupper</h2>
         <p>
           <strong>Din tjänstelista delas med gruppen.</strong> När du är medlem
@@ -230,6 +354,12 @@ export default function IntegritetPage() {
           lista rad för rad. Den tas bort ur gruppen när du lämnar gruppen,
           blir borttagen ur den eller tar bort ditt konto. Hushåll nedan är något annat: att dela vad
           tjänsterna kostar är frivilligt och kräver ett eget samtycke.
+        </p>
+        <p>
+          <strong>Betyg på gruppens titlar.</strong> Sätter du ett betyg på en titel i
+          gruppens lista kan gruppens övriga medlemmar, nuvarande och framtida, se det.
+          Betyget raderas när du lämnar gruppen, blir borttagen ur den eller tar bort ditt
+          konto. Dina egna betyg ingår i din dataexport (se §7).
         </p>
         <p>
           Om du går med i en grupp kan du välja att aktivera <strong>Hushåll</strong> —
@@ -255,7 +385,7 @@ export default function IntegritetPage() {
         </p>
       </section>
 
-      <section>
+      <section id="andringar">
         <h2>11. Ändringar</h2>
         <p>
           Om vi gör materiella ändringar i denna policy uppdaterar vi
@@ -263,7 +393,7 @@ export default function IntegritetPage() {
         </p>
       </section>
 
-      <section>
+      <section id="kontakt">
         <h2>12. Kontakt</h2>
         <p>
           Har du frågor? Skriv till{' '}

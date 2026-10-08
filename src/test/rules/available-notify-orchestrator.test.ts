@@ -345,6 +345,29 @@ describe('bevakningsskanningen', () => {
     expect(d.sent[0].uid).toBe('ida');
     expect(d.sent[0].payload.actionUrl).toBe('/movie/777/');
   });
+
+  // BIN-1291. A group row carrying a `status` reaches the scan, because the query
+  // cannot scope by parent. It must cost nothing and reach nobody — and the cursor
+  // must still come from the unfiltered page, so user rows after it are kept.
+  it('hoppar över en grupps titelrad med status, och tappar inga användarrader efter den', async () => {
+    const db = adminLikeDb();
+    const d = makeDoubles();
+    // Sorted by path, `groups/...` comes before `users/...`, so with the two-doc page
+    // the first page is BOTH group rows: a filter that also fed the cursor would end
+    // the scan there.
+    await setDoc(doc(db, 'groups/ida/watchlist/movie_1'), { mediaType: 'movie', status: 'vill_se', title: 'Falsk', tmdbId: 1 });
+    await setDoc(doc(db, 'groups/ida/watchlist/movie_5'), { mediaType: 'movie', status: 'mina', title: 'Falsk', tmdbId: 5 });
+    await seedTitle(db, 'ida', 'movie', 2, 'vill_se', 'Två');
+    await seedTitle(db, 'bo', 'movie', 3, 'mina', 'Tre');
+    for (const key of ['movie:1', 'movie:2', 'movie:3', 'movie:5']) d.flatrate.set(key, []);
+
+    const summary = await runAvailableNotify(makeIo(db, d));
+
+    expect(summary.watchlistDocs).toBe(2);
+    expect(countCalls(d, 'fetchSeFlatrate')).toBe(2);
+    expect(d.calls).not.toContain('fetchSeFlatrate:movie:1');
+    expect(d.calls).not.toContain('fetchSeFlatrate:movie:5');
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

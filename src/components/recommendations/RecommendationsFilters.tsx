@@ -1,11 +1,10 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { getMovieGenres, getTVGenres } from '@/lib/tmdb/client';
-import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
+import { GENRE_OPTIONS } from '@/lib/tmdb/genreLabels';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import type { FilterState } from '@/types';
+import { fieldClass } from '@/components/ui/Field';
 
 const DECADES = ['1960', '1970', '1980', '1990', '2000', '2010', '2020'];
 const COUNTRIES = ['SE', 'NO', 'DK', 'FI', 'GB', 'US', 'FR', 'DE', 'JP', 'KR', 'IT', 'ES'];
@@ -28,25 +27,6 @@ export default function RecommendationsFilters({ filters, onChange, hasMyProvide
     }
   }, [debouncedSearch, onChange, filters]);
 
-  const { data: movieGenres } = useQuery({
-    queryKey: ['genres-movie'],
-    queryFn: getMovieGenres,
-    staleTime: TMDB_STALE.GENRES,
-  });
-  const { data: tvGenres } = useQuery({
-    queryKey: ['genres-tv'],
-    queryFn: getTVGenres,
-    staleTime: TMDB_STALE.GENRES,
-  });
-
-  const allGenres = (() => {
-    const merged = [...(movieGenres?.genres ?? []), ...(tvGenres?.genres ?? [])];
-    const seen = new Set<number>();
-    return merged
-      .filter(g => { if (seen.has(g.id)) return false; seen.add(g.id); return true; })
-      .sort((a, b) => a.name.localeCompare(b.name, 'sv'));
-  })();
-
   return (
     <div className="flex flex-wrap items-center gap-2 mb-4">
       <select
@@ -56,7 +36,7 @@ export default function RecommendationsFilters({ filters, onChange, hasMyProvide
         aria-label="Filtrera på genre"
       >
         <option value="">Alla genrer</option>
-        {allGenres.map(g => <option key={g.id} value={String(g.id)}>{g.name}</option>)}
+        {GENRE_OPTIONS.map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
       </select>
       <select
         value={filters.country}
@@ -82,7 +62,7 @@ export default function RecommendationsFilters({ filters, onChange, hasMyProvide
           type="number" min={0} max={9} step={0.5}
           value={filters.voteAverageMin}
           onChange={e => onChange({ ...filters, voteAverageMin: Number(e.target.value) })}
-          className="w-12 text-xs border border-rule rounded-sm px-1 py-[2px] bg-surface"
+          className={fieldClass({ size: 'sm', className: 'w-12' })}
         />
       </label>
       {hasMyProviders && (
@@ -101,7 +81,7 @@ export default function RecommendationsFilters({ filters, onChange, hasMyProvide
         placeholder="Sök i rekommendationer…"
         value={searchInput}
         onChange={e => setSearchInput(e.target.value)}
-        className="text-xs border border-rule rounded-sm px-2 py-[2px] bg-surface text-ink-2 outline-none flex-1 min-w-[160px]"
+        className={fieldClass({ size: 'sm', className: 'flex-1 min-w-[160px]' })}
       />
     </div>
   );

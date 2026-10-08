@@ -22,6 +22,7 @@ import { sendPushToUser } from '../push';
 import { detectPriceDrop } from '../streamingOffers/priceDrop';
 import type { PricePoint } from '../streamingOffers/priceHistory';
 import { mediaTypeDocId, resolveTmdbId } from '../shared/mediaTypeDocId';
+import { onlyUserWatchlistDocs } from '../shared/watchlistPath';
 
 interface WantedFilm {
   uid: string;
@@ -52,7 +53,8 @@ async function readWantedFilms(): Promise<WantedFilm[]> {
     if (cursor) q = q.startAfter(cursor);
     const snap = await q.get();
     if (snap.empty) break;
-    for (const d of snap.docs) {
+    // BIN-1291: a group row's parent.parent is a GROUP id, not a recipient.
+    for (const d of onlyUserWatchlistDocs(snap.docs)) {
       const x = d.data();
       out.push({
         uid: d.ref.parent.parent?.id ?? '',

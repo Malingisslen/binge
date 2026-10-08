@@ -58,7 +58,10 @@ vi.mock('@/hooks/useNotifications', () => ({ useNotifications: () => notif }));
 vi.mock('@/hooks/useFriends', () => ({ useFriendActions: () => friendActions }));
 vi.mock('@/hooks/useMySessions', () => ({ useMySessions: () => [] }));
 vi.mock('@/hooks/useClickOutside', () => ({ useClickOutside: () => {} }));
-vi.mock('@/hooks/useSenderProfile', () => ({ useSenderProfile: () => ({ data: null }) }));
+const senders = vi.hoisted(() => new Map<string, { displayName: string | null; username: string | null }>());
+vi.mock('@/hooks/useSenderProfile', () => ({
+  useSenderProfile: (uid: string) => ({ data: senders.get(uid) ?? null }),
+}));
 
 const STORAGE_KEY = 'binge:nextAfterLogin';
 
@@ -156,7 +159,24 @@ describe('TopbarActions — a refused friend-request write says so, on its own r
     notif.unreadCount = 0;
     notif.friendRequestsCount = 0;
     notif.recentPicksCount = 0;
+    senders.clear();
     vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  // A sender whose profile has a blank name is shown by username, and the @-line
+  // is dropped only when it would repeat that same word.
+  it('shows a nameless sender by username, once', async () => {
+    senders.set('s', { displayName: '  ', username: 'sara' });
+    const view = await openBell([request('s', 'Användare')]);
+    const row = rowFor(view, 'sara');
+    expect(within(row).queryByText('Användare')).toBeNull();
+    expect(within(row).queryByText('@sara')).toBeNull();
+  });
+
+  it('keeps the @-line when the name and username differ', async () => {
+    senders.set('s', { displayName: 'Sara', username: 'sara' });
+    const view = await openBell([request('s', 'Sara')]);
+    expect(within(rowFor(view, 'Sara')).getByText('@sara')).toBeTruthy();
   });
 
   it('a refused accept says so, naming the accept', async () => {
@@ -213,5 +233,109 @@ describe('TopbarActions — a refused friend-request write says so, on its own r
 
     expect(within(annaRow).getByRole('alert').textContent).toBe('Kunde inte acceptera förfrågan.');
     expect(within(rowFor(view, 'Bertil')).queryByRole('alert')).toBeNull();
+  });
+});
+
+// BIN-1259. Ett system-kort UTAN `actionUrl` är den normala formen sedan
+// anmälarens besked finns — rapporten är läsbar bara för admin, så kortet har
+// medvetet ingen sida att öppna. Reservvägen `|| '/insikter'` skickade varje
+// sådant kort till adminsidan, och den grenen var opinnad: en återgång till den
+// ovillkorliga länken hade shippat tyst.
+describe('TopbarActions — systemnotiser med och utan länk (BIN-1259)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    notif.friendRequests = [];
+    notif.friendRequestsCount = 0;
+    notif.providerUnreadCount = 0;
+  });
+
+  const systemCard = (over: Record<string, unknown> = {}) => ({
+    id: 'n1',
+    tmdbId: 0,
+    mediaType: 'movie',
+    kind: 'system',
+    title: 'Din anmälan',
+    body: 'Vi har granskat din anmälan.',
+    providerId: null,
+    providerName: null,
+    episodeCode: null,
+    read: false,
+    createdAt: new Date('2026-09-20'),
+    ...over,
+  });
+
+  async function openBellWith(cards: unknown[]) {
+    auth.user = { displayName: 'Malin' };
+    auth.uid = 'me';
+    notif.notifications = cards;
+    notif.unreadCount = cards.length;
+    let view!: ReturnType<typeof render>;
+    await act(async () => { view = render(<TopbarActions />); });
+    await act(async () => {
+      fireEvent.click(view.getByRole('button', { name: /Notiser/ }));
+    });
+    return view;
+  }
+
+  it('ett kort utan actionUrl renderas som en rad, inte som en länk', async () => {
+    const view = await openBellWith([systemCard()]);
+    const row = view.getByText('Din anmälan').closest('a, button');
+    expect(row).toBeTruthy();
+    expect(row!.tagName).toBe('BUTTON');
+    expect(row!.getAttribute('href')).toBeNull();
+  });
+
+  // Kontrollen åt andra hållet. Utan den hade en trasig gren som ALDRIG länkar
+  // uppfyllt testet ovan lika bra.
+  it('ett kort med actionUrl är fortfarande en länk dit', async () => {
+    const view = await openBellWith([systemCard({ actionUrl: '/insikter' })]);
+    const row = view.getByText('Din anmälan').closest('a, button');
+    expect(row!.tagName).toBe('A');
+    expect(row!.getAttribute('href')).toBe('/insikter');
+  });
+
+  it('ingen av formerna skickar läsaren till /insikter utan att kortet bett om det', async () => {
+    const view = await openBellWith([systemCard()]);
+    const row = view.getByText('Din anmälan').closest('a, button');
+    expect(row!.outerHTML).not.toContain('/insikter');
+  });
+
+  // BIN-1265: ett systemkort står under "Från Binge", inte under "Streamingnyheter".
+  it('ett systemkort står under rubriken Från Binge, och ett streamingkort under Streamingnyheter', async () => {
+    const streaming = { ...systemCard({ id: 'n2', kind: 'availability', title: 'Dune', body: undefined }), providerName: 'Netflix', providerId: 8 };
+    const view = await openBellWith([streaming, systemCard()]);
+    const heads = view.getAllByText(/^(Från Binge|Streamingnyheter)$/).map((el) => el.textContent);
+    expect(heads).toEqual(['Från Binge', 'Streamingnyheter']);
+    const fromBinge = view.getByText('Från Binge').closest('.popover-head')!;
+    const streamingHead = view.getByText('Streamingnyheter').closest('.popover-head')!;
+    const report = view.getByText('Din anmälan');
+    const dune = view.getByText('Dune');
+    expect(fromBinge.compareDocumentPosition(report) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(report.compareDocumentPosition(streamingHead) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(streamingHead.compareDocumentPosition(dune) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('Markera alla lästa står under den första rubriken och inte under den andra', async () => {
+    notif.providerUnreadCount = 2;
+    const streaming = { ...systemCard({ id: 'n2', kind: 'availability', title: 'Dune', body: undefined }), providerName: 'Netflix', providerId: 8 };
+    const view = await openBellWith([streaming, systemCard()]);
+    const buttons = view.getAllByText('Markera alla lästa');
+    expect(buttons).toHaveLength(1);
+    const fromBinge = view.getByText('Från Binge').closest('.popover-head')!;
+    const streamingHead = view.getByText('Streamingnyheter').closest('.popover-head')!;
+    expect(fromBinge.contains(buttons[0])).toBe(true);
+    expect(streamingHead.contains(buttons[0])).toBe(false);
+    await act(async () => {
+      fireEvent.click(buttons[0]);
+    });
+    expect(notif.markAllRead).toHaveBeenCalledTimes(1);
+  });
+
+  it('en klickad rad markeras som läst oavsett form', async () => {
+    const view = await openBellWith([systemCard()]);
+    await act(async () => {
+      fireEvent.click(view.getByText('Din anmälan'));
+    });
+    expect(notif.markRead).toHaveBeenCalledWith('n1');
   });
 });

@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
+import { eyebrowClass } from '@/components/ui/Eyebrow';
 
 /**
  * Enhetligt sektion-kort för /settings. Ersätter de tidigare separata
@@ -35,9 +36,8 @@ export function SettingsSection({
   const isOpen = collapsible ? open : true;
 
   const borderClass = tone === 'danger' ? 'border-danger' : 'border-rule';
-  const eyebrowClass = tone === 'danger' ? 'text-danger-ink' : 'text-ink-3';
   const eyebrow = (
-    <span className={`text-[11px] uppercase tracking-[0.14em] font-medium ${eyebrowClass}`}>
+    <span className={eyebrowClass({ size: 'xs', tone: tone === 'danger' ? 'danger' : 'muted' })}>
       {title}
     </span>
   );
@@ -49,7 +49,7 @@ export function SettingsSection({
           type="button"
           aria-expanded={open}
           onClick={() => setOpen(o => !o)}
-          className="w-full flex items-center justify-between px-3 pt-[10px] pb-2 cursor-pointer text-left rounded-t-md hover:bg-bg-2"
+          className="w-full flex items-center justify-between px-3 pt-2.5 pb-2 cursor-pointer text-left rounded-t-md hover:bg-bg-2"
         >
           {eyebrow}
           {open
@@ -57,7 +57,7 @@ export function SettingsSection({
             : <ChevronDown size={14} className="text-ink-3" />}
         </button>
       ) : (
-        <div className="flex items-center justify-between px-3 pt-[10px] pb-2">
+        <div className="flex items-center justify-between px-3 pt-2.5 pb-2">
           {eyebrow}
           {action}
         </div>

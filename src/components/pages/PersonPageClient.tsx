@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { usePerson, usePersonCredits } from '@/hooks/useTMDB';
 import { usePageMeta } from '@/hooks/usePageMeta';
-import { JsonLd, breadcrumbSchema } from '@/components/title/JsonLd';
+import { JsonLd, breadcrumbSchema, personSchema } from '@/components/title/JsonLd';
 import { useSwedishWikiBio } from '@/hooks/useSwedishWikiBio';
 import { profileUrl, getPersonEn, isAddableMediaType } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
@@ -14,12 +14,14 @@ import { filmographyCompletion } from '@/lib/tmdb/filmographyCompletion';
 import { buildPersonDescription } from '@/lib/seo/contentFloor';
 import { personDescriptionInput } from '@/lib/seo/contentFloorInput';
 import { useWatchlist } from '@/hooks/useWatchlist';
+import { useAuth } from '@/contexts/AuthContext';
 import TitleGrid from '@/components/title/TitleGrid';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { NotFound } from '@/components/ui/NotFound';
 import { EmptyState } from '@/components/ui/EmptyState';
 import type { TMDBPerson } from '@/types';
+import { cardClass } from '@/components/ui/Card';
 
 export default function PersonPageClient({ id, initialData }: { id: string; initialData?: TMDBPerson }) {
   const personId = parseInt(id, 10);
@@ -36,6 +38,8 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
   const { data: fetchedCredits } = usePersonCredits(person && !seededCredits ? personId : null);
   const credits = seededCredits ?? fetchedCredits;
   const { getItem, loading: watchlistLoading } = useWatchlist();
+  // "Du har sett" förutsätter ett bibliotek; en utloggad besökare har inget.
+  const { uid } = useAuth();
 
   // BIN-747: trimmed at the SOURCE, not just where it renders. TMDB returns
   // blank-but-truthy biographies ('   ', '\n'), and an untrimmed value is truthy
@@ -144,19 +148,21 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
     title: person ? person.name : 'Person',
     description: metaDescription,
     ogImage: person?.profile_path ? profileUrl(person.profile_path, 'w500') ?? undefined : undefined,
-    // Tar bort catch-all-shellets noindex när TMDB bekräftat att personen finns.
-    // Pre-renderade /person/[id] (topp-N) påverkas inte — egen statisk HTML.
-    indexable: !!person,
+    // Ingen `indexable` (ADR 0024): personsidor är noindex för Google.
   });
 
   if (isLoading) return <LoadingView variant="detail" label="Laddar person…" />;
-  if (!person) return <NotFound crumb="Person" title="Personen hittades inte." body="Vi kunde inte hitta den här personen i TMDB." />;
+  if (!person) return <NotFound crumb="Person" title="Personen hittades inte." body="Den här personen gick inte att hitta." />;
 
   const photo = profileUrl(person.profile_path, 'w500');
   const birthYear = person.birthday?.substring(0, 4);
 
   return (
     <div>
+      <JsonLd data={personSchema(person, {
+        description: metaDescription,
+        jobTitle: person.known_for_department ? translateDepartment(person.known_for_department) : null,
+      })} />
       {/* BIN-423 WP4: breadcrumb structured data (speglar movie/tv-sidorna) */}
       <JsonLd data={breadcrumbSchema([
         { name: 'Binge.nu', url: 'https://binge.nu/' },
@@ -216,7 +222,7 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
         </div>
       </div>
 
-      {!watchlistLoading && directedMeter.total >= 3 && (
+      {uid && !watchlistLoading && directedMeter.total >= 3 && (
         <div className="mb-4 max-w-sm">
           <div className="flex items-center justify-between text-xs mb-1">
             <span className="font-bold text-ink-2">
@@ -240,13 +246,13 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
       {/* BIN-206: de osedda regisserade filmerna — gör mätaren aktionerbar.
           Bakom en stängd <details> (samma idiom som Filmografi/Gästframträdanden)
           så den inte tränger undan biografin. */}
-      {!watchlistLoading && directedMeter.total >= 3 && unseenDirected.length > 0 && (
+      {uid && !watchlistLoading && directedMeter.total >= 3 && unseenDirected.length > 0 && (
         <details className="mb-4">
           <summary className="text-sm font-bold text-ink-2 mb-2 cursor-pointer select-none">
             Osedda att samla klart ({unseenDirected.length})
             <span className="ml-2 font-normal text-xxs text-ink-3">regisserade filmer du inte sett</span>
           </summary>
-          <div className="bg-surface border border-rule rounded-sm">
+          <div className={cardClass()}>
             <TitleGrid items={unseenDirected} />
           </div>
         </details>
@@ -255,7 +261,7 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
       {roles.length > 0 && (
         <div className="mb-4">
           <h2 className="text-sm font-bold text-ink-2 mb-2">Filmografi ({roles.length})</h2>
-          <div className="bg-surface border border-rule rounded-sm">
+          <div className={cardClass()}>
             <TitleGrid items={roles} />
           </div>
         </div>
@@ -267,14 +273,14 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
             Gästframträdanden ({selfCredits.length})
             <span className="ml-2 font-normal text-xxs text-ink-3">talkshows, galor, dokumentärer — som sig själv</span>
           </summary>
-          <div className="bg-surface border border-rule rounded-sm">
+          <div className={cardClass()}>
             <TitleGrid items={selfCredits} />
           </div>
         </details>
       )}
 
       {roles.length === 0 && selfCredits.length === 0 && (
-        <EmptyState title="Ingen filmografi" body="Vi hittade inga titlar för den här personen ännu." />
+        <EmptyState title="Ingen filmografi" body="Inga titlar hittades för den här personen ännu." />
       )}
     </div>
   );

@@ -29,21 +29,25 @@ export default function SeasonRow({
 
   return (
     <div className="border-b border-rule-2 last:border-b-0">
-      <div className="flex items-center justify-between py-[5px] text-sm">
-        <div
-          className="flex items-center gap-1 cursor-pointer flex-1 min-w-0"
+      <div className="flex items-center justify-between py-1.5 text-sm">
+        {/* A11Y-2: a real button, so keyboard and screen-reader users can open the
+            season and hear whether it is open. */}
+        <button
+          type="button"
+          className="flex items-center gap-1 cursor-pointer flex-1 min-w-0 min-h-[32px] text-left bg-transparent border-0 p-0 font-[inherit] focus-visible:outline focus-visible:outline-2 focus-visible:outline-acc-deep"
           onClick={onToggle}
+          aria-expanded={expanded}
         >
           <ChevronRight
             size={12}
             className={`shrink-0 text-ink-3 transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`}
           />
           <span className="font-semibold text-ink-2">
-            {name} <span className="font-normal text-ink-3 text-xs">({episodeCount} avs)</span>
+            {name}{episodeCount > 0 && <> <span className="font-normal text-ink-3 text-xs">({episodeCount} avs)</span></>}
           </span>
-        </div>
+        </button>
         {episodeCount > 0 ? (
-          <div className="flex items-center gap-[5px] flex-1 max-w-[180px] mx-4">
+          <div className="flex items-center gap-1.5 flex-1 max-w-[180px] mx-4">
             <div className="flex-1 h-[3px] bg-rule rounded-full overflow-hidden">
               <div className="h-full bg-ink rounded-full" style={{ width: `${pct}%` }} />
             </div>
@@ -53,7 +57,7 @@ export default function SeasonRow({
           <span className="text-xxs text-ink-3 mx-4">Kommande</span>
         )}
         {isDone && (
-          <span className="px-[10px] py-[2px] rounded-sm text-xxs font-semibold bg-season-done text-white">
+          <span className="px-2.5 py-0.5 rounded-sm text-xxs font-semibold bg-season-done text-white">
             Sedd
           </span>
         )}

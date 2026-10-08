@@ -1,5 +1,6 @@
 'use client';
 
+import BrandMark from '@/components/ui/BrandMark';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -9,7 +10,12 @@ import { scorePassword } from '@/lib/passwordStrength';
 import { PasswordStrengthMeter } from '@/components/auth/PasswordStrengthMeter';
 import { CURRENT_TERMS_VERSION, MIN_AGE } from '@/lib/legal';
 import { takeNextPath } from '@/lib/nextPath';
+import { dropStalePendingAdd } from '@/lib/pendingAdd';
+import { needsOnboarding } from '@/lib/onboarding';
 import { MAX_DISPLAY_NAME } from '@/lib/clampText';
+import { fieldClass } from '@/components/ui/Field';
+import { cardClass } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
 
 /**
  * BIN-1169: the error codes whose text is the same whichever way the visitor signed in.
@@ -55,6 +61,13 @@ export default function LoginPage() {
   // remount, which is the whole reason it isn't state.
   const redirectedRef = useRef(false);
 
+  // BIN-1442: a pending "Lägg till" belongs to the trip that brought the visitor
+  // here. One left by an abandoned trip — on a shared computer, maybe someone
+  // else's — is dropped when this page opens. A form left open and used by the
+  // next person is not covered; see pendingAdd.ts. Idempotent, so the StrictMode
+  // double-run is harmless.
+  useEffect(() => { dropStalePendingAdd(); }, []);
+
   // Gated on `uid` — the AUTH verdict — not on `user`, the Firestore profile.
   // AuthContext deliberately KEEPS uid and nulls the profile when a profile read
   // fails, so gating on `user` left that population sitting on the login FORM
@@ -65,11 +78,7 @@ export default function LoginPage() {
   useEffect(() => {
     if (!uid || profileLoading || redirectedRef.current) return;
     redirectedRef.current = true;
-    // Nya användare utan myProviders + utan onboardingCompletedAt ska igenom
-    // onboarding-flödet. Existerande användare (före featuren landade) har
-    // varken flagga men har providers — vi skickar bara in tomma profiler.
-    const needsOnboarding =
-      user != null && !user.onboardingCompletedAt && (user.myProviders?.length ?? 0) === 0;
+    const onboarding = needsOnboarding(user);
     // Come back to where the visitor started. Four surfaces remember a path, and
     // they all go through `useSignedOutRedirect` — read its caller list rather
     // than trusting a copy of it here; an earlier version of this comment named
@@ -85,14 +94,16 @@ export default function LoginPage() {
     // The path comes from sessionStorage, never a query param — see nextPath.ts
     // for why (a `?next=` would travel to Firebase's Google-hosted auth handler,
     // and would be attacker-supplied). `takeNextPath` validates on read anyway.
-    const next = needsOnboarding ? null : takeNextPath();
-    router.push(needsOnboarding ? '/onboarding/' : (next ?? '/'));
+    const next = onboarding ? null : takeNextPath();
+    router.push(onboarding ? '/onboarding/' : (next ?? '/'));
   }, [uid, user, profileLoading, router]);
 
   async function handleGoogle() {
     setError('');
     try {
-      await signIn();
+      const { isNewUser } = await signIn();
+      // Ett första Google-konto är en registrering, precis som e-postformulärets.
+      if (isNewUser) trackEvent('signed_up');
       trackEvent('signed_in', { method: 'google' });
     } catch (err: unknown) {
       console.error('Google sign-in failed:', err);
@@ -148,23 +159,24 @@ export default function LoginPage() {
 
   return (
     <div className="flex items-center justify-center min-h-[60vh]">
-      <div className="bg-surface border border-rule rounded-sm px-8 py-6 max-w-[340px] w-full">
+      <div className={cardClass('px-8 py-6 max-w-[340px] w-full')}>
         <div className="text-center mb-4">
-          <div className="text-[20px] font-extrabold text-acc-deep">
-            binge<span className="font-normal text-ink-3 text-sm">.nu</span>
-          </div>
+          <h1 className="inline-flex items-center gap-2 text-2xl font-extrabold tracking-[-0.04em] text-ink">
+            <BrandMark size={24} />
+            binge.nu
+          </h1>
           <p className="text-sm text-ink-3 mt-1">
-            Håll koll på vad du tittar på och var det finns att streama i Sverige.
+            Se vad du betalar för streaming, och vad du kan pausa.
           </p>
         </div>
 
-        <button
+        <Button
           onClick={handleGoogle}
           disabled={loading}
-          className="w-full px-4 py-2 bg-acc-deep text-white border-none rounded-sm cursor-pointer font-[inherit] text-base font-semibold hover:opacity-90 disabled:opacity-50 mb-2"
+          variant="acc" className="w-full disabled:opacity-50 mb-2"
         >
           Logga in med Google
-        </button>
+        </Button>
 
         {/* BIN-275/348: browse-wrap consent + 13+ age notice at the Google entry
             point. Continuing past this records terms acceptance + age confirmation
@@ -195,7 +207,7 @@ export default function LoginPage() {
               maxLength={MAX_DISPLAY_NAME}
               value={name}
               onChange={e => setName(e.target.value)}
-              className="w-full px-2 py-[6px] mb-2 text-base border border-rule rounded-sm bg-white font-[inherit] outline-none focus:border-acc-deep"
+              className={fieldClass({ className: 'w-full mb-2' })}
             />
           )}
           <input
@@ -205,7 +217,7 @@ export default function LoginPage() {
             value={email}
             onChange={e => setEmail(e.target.value)}
             required
-            className="w-full px-2 py-[6px] mb-2 text-base border border-rule rounded-sm bg-white font-[inherit] outline-none focus:border-acc-deep"
+            className={fieldClass({ className: 'w-full mb-2' })}
           />
           <input
             type="password"
@@ -215,7 +227,7 @@ export default function LoginPage() {
             onChange={e => setPassword(e.target.value)}
             required
             minLength={mode === 'register' ? 8 : 6}
-            className="w-full px-2 py-[6px] mb-2 text-base border border-rule rounded-sm bg-white font-[inherit] outline-none focus:border-acc-deep"
+            className={fieldClass({ className: 'w-full mb-2' })}
           />
           {mode === 'register' && passwordStrength && (
             <PasswordStrengthMeter strength={passwordStrength} />
@@ -227,7 +239,7 @@ export default function LoginPage() {
                   type="checkbox"
                   checked={ageConfirmed}
                   onChange={e => setAgeConfirmed(e.target.checked)}
-                  className="mt-[2px] cursor-pointer"
+                  className="mt-0.5 cursor-pointer"
                 />
                 <span>Jag är minst {MIN_AGE} år gammal.</span>
               </label>
@@ -236,7 +248,7 @@ export default function LoginPage() {
                   type="checkbox"
                   checked={termsAccepted}
                   onChange={e => setTermsAccepted(e.target.checked)}
-                  className="mt-[2px] cursor-pointer"
+                  className="mt-0.5 cursor-pointer"
                 />
                 <span>
                   Jag godkänner Binges{' '}
@@ -247,11 +259,11 @@ export default function LoginPage() {
               </label>
             </div>
           )}
-          {error && <div className="text-xs text-danger-ink mb-2">{error}</div>}
+          {error && <div role="alert" className="text-xs text-danger-ink mb-2">{error}</div>}
           <button
             type="submit"
             disabled={registerDisabled}
-            className="w-full px-4 py-[6px] bg-ink text-white border-none rounded-sm cursor-pointer font-[inherit] text-base font-semibold hover:opacity-90 disabled:opacity-50"
+            className="w-full px-4 py-1.5 bg-ink text-bg border-none rounded-sm cursor-pointer font-[inherit] text-base font-semibold hover:opacity-90 disabled:opacity-50"
           >
             {submitting ? (mode === 'register' ? 'Skapar…' : 'Loggar in…') : mode === 'register' ? 'Skapa konto' : 'Logga in'}
           </button>

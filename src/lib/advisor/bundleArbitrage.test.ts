@@ -5,6 +5,8 @@ import {
   isBundleStale,
   SWEDISH_BUNDLES,
   BUNDLE_STALE_DAYS,
+  START_FEE_MIN_SPREAD_MONTHS,
+  startFeeMonthlyKr,
   type SwedishBundle,
 } from './bundleArbitrage';
 
@@ -261,8 +263,8 @@ describe('tier-aware comparison (BIN-433)', () => {
     expect(out).toHaveLength(1); // gate passes on replaced.length === 2 alone
     expect(out[0].replacedProviderIds.sort((a, b) => a - b)).toEqual([8, 337]);
     expect(out[0].downgradeProviderIds).toEqual([384]);
-    expect(out[0].downgradeNames).toEqual(['Max']);
-    expect(out[0].currentKr).toBe(238); // 169 + 69 — Max's 149 NOT included
+    expect(out[0].downgradeNames).toEqual(['HBO Max']);
+    expect(out[0].currentKr).toBe(238); // 169 + 69 — HBO Max's 149 NOT included
     expect(out[0].savingKr).toBe(38); // 238 − 200, downgrade never folded in
   });
 
@@ -303,10 +305,14 @@ describe('tier-aware comparison (BIN-433)', () => {
 });
 
 describe('SWEDISH_BUNDLES seed integrity (BIN-429 verification → BIN-433 seeds)', () => {
-  it('seeds the three live-verified Telia bundles at their exact ordinary prices (2026-07-07)', () => {
+  it('seeds the live-verified bundles at their exact ordinary prices', () => {
     expect(SWEDISH_BUNDLES.map(b => b.id).sort()).toEqual([
-      'telia-streaming-maxad', 'telia-streaming-mer', 'telia-streaming-mest',
+      'allente-premium', 'allente-standard',
+      'tele2-streaming-max', 'telia-streaming-maxad', 'telia-streaming-mer', 'telia-streaming-mest',
     ]);
+    expect(SWEDISH_BUNDLES.find(b => b.id === 'tele2-streaming-max')?.monthlyKr).toBe(249);
+    expect(SWEDISH_BUNDLES.find(b => b.id === 'allente-standard')?.monthlyKr).toBe(559);
+    expect(SWEDISH_BUNDLES.find(b => b.id === 'allente-premium')?.monthlyKr).toBe(899);
     // Every seeded price pinned exactly — a typo'd real-money number must go red
     // (high-review 2026-07-07: an ordering assertion alone left Maxad unpinned).
     expect(SWEDISH_BUNDLES.find(b => b.id === 'telia-streaming-mer')?.monthlyKr).toBe(269);
@@ -379,5 +385,112 @@ describe('SWEDISH_BUNDLES seed integrity (BIN-429 verification → BIN-433 seeds
     expect(out[1].savingKr).toBe(77);
     expect(out[2].currentKr).toBe(327);
     expect(out[2].savingKr).toBe(58);
+  });
+
+  it('Tele2 Streaming Max yields a suggestion for a household on exactly its four ad tiers (BIN-1335)', () => {
+    // Guards the silent failure mode: a mistyped tier or provider id makes the
+    // bundle quietly produce no suggestion instead of a wrong number.
+    const user = { providerTiers: { 337: 'ads', 384: 'ads', 489: 'plus-ads', 431: 'ads' } };
+    const out = detectBundleArbitrage([337, 384, 489, 431], user, SWEDISH_BUNDLES, NOW);
+    const tele2 = out.find(s => s.bundle.id === 'tele2-streaming-max');
+    expect(tele2, 'Tele2 Streaming Max produced no suggestion').toBeDefined();
+    expect(tele2?.replacedProviderIds.slice().sort((a, b) => a - b)).toEqual([337, 384, 431, 489]);
+    expect(tele2?.currentKr).toBe(296); // 69 + 89 + 69 + 69 at catalog ad-tier prices
+    expect(tele2?.savingKr).toBe(47);
+    expect(tele2?.downgradeProviderIds).toEqual([]);
+  });
+
+  it('never maps provider 521 "Tele2 Play" (the app) into a bundle', () => {
+    for (const b of SWEDISH_BUNDLES) expect(b.includedProviderIds, b.id).not.toContain(521);
+  });
+
+  it('every seeded bundle DECLARES its binding period and start fee — omission cannot mean "none" (BIN-1335)', () => {
+    for (const b of SWEDISH_BUNDLES) {
+      expect(typeof b.bindingMonths, `${b.id}: declare bindingMonths (0 = none)`).toBe('number');
+      expect(typeof b.startFeeKr, `${b.id}: declare startFeeKr (0 = none)`).toBe('number');
+      expect(b.bindingMonths! >= 0 && b.startFeeKr! >= 0, b.id).toBe(true);
+    }
+    const premium = SWEDISH_BUNDLES.find(b => b.id === 'allente-premium');
+    expect(premium?.bindingMonths).toBe(12);
+    expect(premium?.startFeeKr).toBe(695);
+    expect(SWEDISH_BUNDLES.find(b => b.id === 'allente-standard')?.startFeeKr).toBe(695);
+  });
+
+  it('Allente Premium, fee included, for a household on exactly its five catalogued services (BIN-1335)', () => {
+    const user = { providerTiers: { 76: 'total', 384: 'ads', 489: 'plus-ads' } }; // Prime 69, Apple TV+ 119 untiered
+    const out = detectBundleArbitrage([76, 384, 119, 489, 350], user, SWEDISH_BUNDLES, NOW);
+    const premium = out.find(s => s.bundle.id === 'allente-premium');
+    expect(premium, 'Allente Premium produced no suggestion').toBeDefined();
+    expect(premium?.currentKr).toBe(1095); // 749 + 89 + 69 + 69 + 119
+    expect(premium?.startFeeMonthlyKr).toBe(58); // ceil(695 / 12)
+    expect(premium?.savingKr).toBe(138); // 1095 − 899 − 58
+    expect(premium?.bindingMonths).toBe(12);
+    expect(premium?.startFeeKr).toBe(695);
+    expect(premium?.commitmentTotalKr).toBe(11_483); // 12 × 899 + 695
+  });
+
+  it('bundles without binding or fee keep exactly the savings they had before the fee rule (BIN-1335)', () => {
+    const user = {
+      providerTiers: { 8: 'standard', 384: 'ads', 337: 'ads', 489: 'plus', 76: 'standard' },
+    };
+    const out = detectBundleArbitrage([8, 384, 337, 119, 489, 76], user, SWEDISH_BUNDLES, NOW);
+    for (const s of out.filter(x => x.bundle.vendor === 'Telia')) {
+      expect(s.startFeeMonthlyKr, s.bundle.id).toBe(0);
+      expect(s.commitmentTotalKr, s.bundle.id).toBeNull();
+      expect(s.savingKr, s.bundle.id).toBe(s.currentKr - s.bundleKr);
+    }
+    expect(out.filter(x => x.bundle.vendor === 'Telia').map(s => s.savingKr)).toEqual([235, 77, 58]);
+  });
+});
+
+describe('start fee (BIN-1335, Malin 2026-09-28 variant A)', () => {
+  const base: SwedishBundle = {
+    id: 'fee-bundle',
+    name: 'Avgiftspaket',
+    vendor: 'Test',
+    monthlyKr: 100,
+    includedProviderIds: [384, 337],
+    includedTiers: { 384: 'ads', 337: 'ads' },
+    verifiedDate: '2026-07-01',
+  };
+  const user = { providerTiers: { 384: 'ads', 337: 'ads' } }; // 89 + 69 = 158 à la carte
+
+  it('spreads the fee over the binding period, never over less than a year, rounding up', () => {
+    expect(START_FEE_MIN_SPREAD_MONTHS).toBe(12);
+    expect(startFeeMonthlyKr({ startFeeKr: 695, bindingMonths: 12 })).toBe(58);
+    expect(startFeeMonthlyKr({ startFeeKr: 695, bindingMonths: 24 })).toBe(29);
+    expect(startFeeMonthlyKr({ startFeeKr: 120, bindingMonths: 0 })).toBe(10);
+    expect(startFeeMonthlyKr({ startFeeKr: 120, bindingMonths: 3 })).toBe(10);
+    expect(startFeeMonthlyKr({ startFeeKr: 0, bindingMonths: 12 })).toBe(0);
+    expect(startFeeMonthlyKr({})).toBe(0);
+  });
+
+  it('drops a bundle that only saves money before its start fee', () => {
+    // 158 − 100 = 58 before the fee; 695 / 12 → 58 per month → saving 0 → not a suggestion.
+    const bundle = { ...base, bindingMonths: 12, startFeeKr: 695 };
+    expect(detectBundleArbitrage([384, 337], user, [{ ...base }], NOW)).toHaveLength(1);
+    expect(detectBundleArbitrage([384, 337], user, [bundle], NOW)).toEqual([]);
+  });
+
+  it('counts the fee against the saving and reports the same integer it deducted', () => {
+    const bundle = { ...base, bindingMonths: 12, startFeeKr: 240 }; // 20 kr/mån
+    const [s] = detectBundleArbitrage([384, 337], user, [bundle], NOW);
+    expect(s.startFeeMonthlyKr).toBe(20);
+    expect(s.savingKr).toBe(158 - 100 - 20);
+    expect(s.savingKr).toBe(s.currentKr - s.bundleKr - s.startFeeMonthlyKr);
+    expect(s.commitmentTotalKr).toBe(12 * 100 + 240);
+  });
+
+  it('ranks by the fee-inclusive saving, so a cheaper-looking bundle with a fee can fall behind', () => {
+    const withFee = { ...base, id: 'with-fee', monthlyKr: 90, bindingMonths: 12, startFeeKr: 600 }; // 158−90−50 = 18
+    const noFee = { ...base, id: 'no-fee', monthlyKr: 110 }; // 158−110 = 48
+    const out = detectBundleArbitrage([384, 337], user, [withFee, noFee], NOW);
+    expect(out.map(s => s.bundle.id)).toEqual(['no-fee', 'with-fee']);
+  });
+
+  it('a fee without binding has no commitment total', () => {
+    const [s] = detectBundleArbitrage([384, 337], user, [{ ...base, startFeeKr: 120 }], NOW);
+    expect(s.bindingMonths).toBe(0);
+    expect(s.commitmentTotalKr).toBeNull();
   });
 });

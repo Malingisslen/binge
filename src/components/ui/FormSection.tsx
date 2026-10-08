@@ -1,11 +1,12 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { Eyebrow } from '@/components/ui/Eyebrow';
 
 export function FormSection({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="px-3 py-[10px] border-b border-rule-2 last:border-b-0">
-      <div className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold mb-[6px]">{title}</div>
+    <div className="px-3 py-2.5 border-b border-rule-2 last:border-b-0">
+      <Eyebrow className="mb-1.5">{title}</Eyebrow>
       {children}
     </div>
   );
@@ -20,16 +21,16 @@ export function FormRadioGroup<T extends string>({
   options: { value: T; label: string; desc?: string }[];
 }) {
   return (
-    <div className="space-y-[3px]">
+    <div className="space-y-1">
       {options.map(opt => (
-        <label key={opt.value} className="flex items-start gap-2 cursor-pointer text-xs py-[2px]">
+        <label key={opt.value} className="flex items-start gap-2 cursor-pointer text-xs py-0.5">
           <input
             type="radio"
             name={name}
             value={opt.value}
             checked={value === opt.value}
             onChange={() => onChange(opt.value)}
-            className="accent-acc-deep w-[12px] h-[12px] mt-[2px]"
+            className="accent-acc-deep w-[12px] h-[12px] mt-0.5"
           />
           <div>
             <div className="text-ink">{opt.label}</div>

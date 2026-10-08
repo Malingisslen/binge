@@ -7,6 +7,7 @@ import {
   getProviderColor,
   hasFreeProvider,
   dedupeProvidersByCanonicalId,
+  resolveProviderMonthlyCost,
 } from './providers';
 // BIN-814: the SE extraction moved out of providers.ts. The canonicalisation cases
 // below still belong here — they are about THIS module's alias map — so they drive
@@ -146,14 +147,14 @@ describe('SE extraction through this module\'s alias map', () => {
   });
 });
 
-describe('B1 — Max rebrand (id 384)', () => {
-  it('renders the HBO Max provider under the name "Max"', () => { expect(getProvider(384)?.name).toBe('Max'); });
+describe('B1 — HBO Max (id 384), namnet tillbaka efter Max-perioden', () => {
+  it('renders id 384 under the name "HBO Max"', () => { expect(getProvider(384)?.name).toBe('HBO Max'); });
   it('keeps the legacy HBO Max alias 1899 mapped to id 384', () => {
     expect(getProvider(1899)?.id).toBe(384); expect(canonicalProviderId(1899)).toBe(384);
   });
-  it('lists Max exactly once', () => {
+  it('lists HBO Max exactly once', () => {
     const named = SWEDISH_PROVIDERS.filter(p => p.name === 'Max' || p.name === 'HBO Max');
-    expect(named).toHaveLength(1); expect(named[0].name).toBe('Max');
+    expect(named).toHaveLength(1); expect(named[0].name).toBe('HBO Max');
   });
 });
 describe('B1 — C More legacy id maps to TV4 Play (id 489)', () => {
@@ -172,9 +173,9 @@ describe('B1 — C More legacy id maps to TV4 Play (id 489)', () => {
 });
 
 describe('X3 — Amazon Channel-varianter canonicaliseras (live-verifierade SE-ids 2026-06-10)', () => {
-  it('mappar HBO Max Amazon Channel (1825) till Max (384)', () => {
+  it('mappar HBO Max Amazon Channel (1825) till HBO Max (384)', () => {
     expect(canonicalProviderId(1825)).toBe(384);
-    expect(getProvider(1825)?.name).toBe('Max');
+    expect(getProvider(1825)?.name).toBe('HBO Max');
   });
 
   it('mappar Apple TV Amazon Channel (2243) till Apple TV+ (350)', () => {
@@ -323,5 +324,53 @@ describe('PROVIDER_MAP', () => {
         expect(PROVIDER_MAP.get(alias)).toBe(p);
       }
     }
+  });
+});
+
+describe('BIN-1400 — YouTube Premium Lite', () => {
+  it('has a lite tier named Lite at 99, first in an ascending price list', () => {
+    const yt = getProvider(335);
+    expect(yt?.tiers?.find(t => t.id === 'lite')).toEqual({ id: 'lite', name: 'Lite', cost: 99 });
+    const costs = (yt?.tiers ?? []).map(t => t.cost);
+    expect(costs).toEqual([...costs].sort((a, b) => a - b));
+    expect(yt?.tiers?.[0]?.id).toBe('lite');
+    expect(yt?.defaultMonthlyCost).toBe(169);
+  });
+
+  it('resolves a saved lite choice to 99', () => {
+    expect(resolveProviderMonthlyCost(335, { providerTiers: { 335: 'lite' } })).toBe(99);
+  });
+});
+
+describe('BIN-1401 — MUBI och Draken Film i katalogen, Hayu inte', () => {
+  it.each([
+    [11, 'MUBI', 'MUBI'],
+    [435, 'Draken Film', 'Draken'],
+  ])('%i resolves to its own flatrate entry, not free or ads', (id, name, shortName) => {
+    const p = getProvider(id);
+    expect(p?.id).toBe(id);
+    expect(p?.name).toBe(name);
+    expect(p?.shortName).toBe(shortName);
+    expect(p?.type).toBe('flatrate');
+    expect(p?.defaultMonthlyCost).toBeGreaterThan(0);
+    expect(canonicalProviderId(id)).toBe(id);
+    expect(Boolean(p?.isFree)).toBe(false);
+    expect(Boolean(p?.isAds)).toBe(false);
+    expect(hasFreeProvider([id])).toBe(false);
+  });
+
+  it('Draken Film har nivåerna Bas, Standard och Premium i stigande pris (BIN-1418)', () => {
+    const draken = getProvider(435);
+    expect(draken?.tiers).toEqual([
+      { id: 'bas', name: 'Bas', cost: 95 },
+      { id: 'standard', name: 'Standard', cost: 125 },
+      { id: 'premium', name: 'Premium', cost: 165 },
+    ]);
+    expect(draken?.defaultMonthlyCost).toBe(125);
+    expect(resolveProviderMonthlyCost(435, { providerTiers: { 435: 'bas' } })).toBe(95);
+  });
+
+  it('Hayu (223) is not in the catalog', () => {
+    expect(getProvider(223)).toBeUndefined();
   });
 });

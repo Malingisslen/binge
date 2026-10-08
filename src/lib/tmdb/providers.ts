@@ -29,12 +29,30 @@ export interface SwedishProvider {
   // förslags-bucketen — annars rankas irrelevanta reklam-tjänster upp som
   // "alternativ" trots att användaren inte använder dem.
   isAds?: boolean;
+  // Senaste dag (YYYY-MM-DD) någon läste tjänstens svenska prissida och jämförde
+  // priserna — samma datum som den senaste `live-verifierat`-kommentaren som gäller
+  // pris. Saknas där ingen daterad priskontroll finns; prissidan visar då "–".
+  // Prisagenten får sätta fältet på tjänster den själv kontrollerat
+  // (docs/price-agent-runbook.md).
+  priceVerifiedDate?: string;
+  // Abonnemangets namn hos en tjänst utan `tiers`, för prissidans nivåkolumn. Bara
+  // visningstext: ingen beräkning läser det.
+  planName?: string;
+  // Tjänstens egen sida där en inloggad användare hanterar eller säger upp
+  // abonnemanget ("Säg upp" i Rådgivaren). Bara en adress tjänstens egen hjälpsida
+  // anger; `manageUrlVerifiedDate` är dagen någon senast läste den hjälpsidan.
+  // Prisagenten kontrollerar länkarna varje månad (docs/price-agent-runbook.md).
+  manageUrl?: string;
+  manageUrlVerifiedDate?: string;
 }
 
 export const SWEDISH_PROVIDERS: SwedishProvider[] = [
   {
     // live-verifierat 2026-07-02 — https://help.netflix.com/en/node/24926 (SE-höjning ~2026-05-15, +20 kr rakt över, ordinarie ej kampanj)
     id: 8, name: 'Netflix', shortName: 'Netflix', color: '#E50914', type: 'flatrate', defaultMonthlyCost: 169,
+    // Säg upp: https://help.netflix.com/sv/node/407 (läst 2026-10-06)
+    manageUrl: 'https://www.netflix.com/cancelplan', manageUrlVerifiedDate: '2026-10-06',
+    priceVerifiedDate: '2026-07-02',
     // 175 = "Netflix Kids", TMDB:s egen variantpost för samma abonnemang — inte en egen
     // tjänst. Utan aliaset renderas en titel TMDB märker med 175 som en okänd leverantör.
     // Id:t kommer ur BIN-1073:s svep av /watch/providers/movie?watch_region=SE 2026-09-02.
@@ -50,9 +68,11 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
       { id: 'premium', name: 'Premium', cost: 219 },
     ],
   },
-  { id: 119, name: 'Amazon Prime Video', shortName: 'Prime', color: '#00A8E1', type: 'flatrate', defaultMonthlyCost: 69 },
+  { id: 119, name: 'Amazon Prime Video', shortName: 'Prime', color: '#00A8E1', type: 'flatrate', defaultMonthlyCost: 69, planName: 'Prime-medlemskap' },
   {
+    // live-verifierat 2026-10-01 — https://www.disneyplus.com/sv-se — prisagenten läste 69/109/159 (BIN-1398)
     id: 337, name: 'Disney+', shortName: 'Disney+', color: '#0063E5', type: 'flatrate', defaultMonthlyCost: 109,
+    priceVerifiedDate: '2026-10-01',
     tiers: [
       { id: 'ads', name: 'Standard med reklam', cost: 69 },
       { id: 'standard', name: 'Standard', cost: 109 },
@@ -60,7 +80,12 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
     ],
   },
   {
-    id: 384, name: 'Max', shortName: 'HBO', color: '#7B2FBE', type: 'flatrate', defaultMonthlyCost: 149,
+    // live-verifierat 2026-10-06 — https://www.hbomax.com/se/sv — Basic med reklam 89,00,
+    // Standard 149,00, Premium 189,00 kr/månad. Sporttillägget (70 kr) modelleras inte.
+    id: 384, name: 'HBO Max', shortName: 'HBO', color: '#7B2FBE', type: 'flatrate', defaultMonthlyCost: 149,
+    priceVerifiedDate: '2026-10-06',
+    // Säg upp: https://help.hbomax.com/se-sv/answer/detail/000002526 (läst 2026-10-06)
+    manageUrl: 'https://www.hbomax.com/subscription', manageUrlVerifiedDate: '2026-10-06',
     // 1899 = legacy HBO Max-id. 1825 = "HBO Max Amazon Channel"
     // (live-verifierat SE-id 2026-06-10) — samma tjänst via Prime Video.
     aliases: [1899, 1825],
@@ -72,6 +97,7 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
   },
   {
     id: 76, name: 'Viaplay', shortName: 'Viaplay', color: '#FF6B00', type: 'flatrate', defaultMonthlyCost: 169,
+    priceVerifiedDate: '2026-09-02',
     // live-verifierat 2026-07-02 — https://viaplay.se — reklam = 99 ORDINARIE utan bindning
     // (79 var reklam + 6 mån bindning); total = 749 ordinarie reklamfritt (699 = Total med reklam) (BIN-406)
     // live-verifierat 2026-09-02 — https://viaplay.se — medium = 449 ordinarie, ingen kampanj
@@ -91,6 +117,7 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
     // timeline-lanes + Hem-widget) med "TV4 Play" (providerName i råd-texterna).
     // Ett namn överallt (A3, QA-audit 2026-06-09).
     id: 489, name: 'TV4 Play', shortName: 'TV4 Play', color: '#E2001A', type: 'flatrate', defaultMonthlyCost: 169,
+    priceVerifiedDate: '2026-09-02',
     // 1944 = TMDB:s nuvarande primär-id för TV4 Play. 1759 = retirerade C More
     // (uppgick i TV4 Play); finns inte längre i TMDB:s live-katalog men gammal
     // sparad provider-data kan innehålla det → canonicalisera till TV4 Play.
@@ -110,13 +137,19 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
     ],
   },
   {
+    // live-verifierat 2026-10-06 — https://www.apple.com/se/apple-tv-plus/ — "119 kr per månad
+    // efter en kostnadsfri provperiod". Apple kallar tjänsten Apple TV på sidan.
     id: 350, name: 'Apple TV+', shortName: 'Apple', color: '#555555', type: 'flatrate', defaultMonthlyCost: 119,
+    priceVerifiedDate: '2026-10-06', planName: 'Apple TV',
+    // Säg upp: https://support.apple.com/sv-se/118428 (läst 2026-10-06)
+    manageUrl: 'https://account.apple.com/account/manage/section/subscriptions', manageUrlVerifiedDate: '2026-10-06',
     // 2243 = "Apple TV Amazon Channel" (live-verifierat SE-id 2026-06-10).
     aliases: [2243],
   },
   {
     // live-verifierat 2026-07-02 — https://www.discoveryplus.com/se/sv (nivåstruktur omgjord till 3 nivåer; 'Premium (4K)'/'Entry' finns inte längre som egna SKU:er)
     id: 510, name: 'Discovery+', shortName: 'Disc+', color: '#1E3264', type: 'flatrate', defaultMonthlyCost: 109,
+    priceVerifiedDate: '2026-07-02',
     tiers: [
       { id: 'ads', name: 'Underhållning (med reklam)', cost: 59 },
       { id: 'standard', name: 'Underhållning', cost: 109 },
@@ -132,8 +165,11 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
     // Fan 85 och Mega Fan 99 står kvar oförändrade: den prishöjning biljettens sekundärkällor
     // varnade för har inte nått Sverige. Skärmbilden visade två nivåer; fanns en tredje under
     // vikningen syntes den inte, och en ny nivå klassas för hand.
+    // live-verifierat 2026-10-02 — https://www.crunchyroll.com/ — Malin läste sidan i vanlig
+    // webbläsare (BIN-1399): Fan SEK 85.00/mo, Mega Fan SEK 99.00/mo, VAT inclusive.
     // Katalogen modellerar inte årspriserna (850 respektive 990).
     id: 323, name: 'Crunchyroll', shortName: 'CR', color: '#F47521', type: 'flatrate', defaultMonthlyCost: 85,
+    priceVerifiedDate: '2026-10-02',
     // 1968 = "Crunchyroll Amazon Channel" (live-verifierat SE-id 2026-06-10).
     // 283 = TMDB:s nuvarande bas-id för Crunchyroll på titel-nivå (live-verifierat
     // 2026-06-20 via /tv/37854 → SE flatrate 283). Behåll 323 som primär så
@@ -151,6 +187,9 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
     // Reklam-nivån var 59 och är 69. Standard 109 och Premium 159 lästes om och står kvar.
     // Skärmbilden visade också bindningspriser (6 och 12 mån) som katalogen inte modellerar.
     id: 431, name: 'SkyShowtime', shortName: 'Sky', color: '#0D1D40', type: 'flatrate', defaultMonthlyCost: 109,
+    // Säg upp: https://www.skyshowtime.com/se/help/article/how-do-i-cancel-my-skyshowtime-subscription (läst 2026-10-06)
+    manageUrl: 'https://www.skyshowtime.com/en/account/plans', manageUrlVerifiedDate: '2026-10-06',
+    priceVerifiedDate: '2026-09-03',
     // 1773 = TMDB:s nuvarande SE-id för SkyShowtime (katalog-endpoint 2026-06-20). (BIN-64)
     // 531 = nedlagda Paramount+ (SE-nedläggning 2022-10-01, uppgick i SkyShowtime — BIN-404);
     // aliasa hit så gammal sparad Paramount+-data + ev. TMDB-titlar mappar till efterträdaren.
@@ -166,12 +205,15 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
     // i vanlig webbläsare; agenten fastnade på samtyckesväggen (BIN-1071). Höjningen har
     // alltså slagit igenom, tidigare än den oktober biljettens sekundärkällor angav — och de
     // hade dessutom fel om Student, som de uppgav vara oförändrad på 95. Storefronten: 109.
-    // Skärmbilden visade tre kort (Enskild, Familj, Student); om Premium Lite finns i SE syntes
-    // den inte, och en ny nivå läggs aldrig till utan att klassas för hand.
+    // Skärmbilden visade tre kort (Enskild, Familj, Student). Nivån Lite: BIN-1400.
     id: 335, name: 'YouTube Premium', shortName: 'YT', color: '#FF0000', type: 'flatrate', defaultMonthlyCost: 169,
+    // Säg upp: https://support.google.com/youtube/answer/6308278?hl=sv (läst 2026-10-06)
+    manageUrl: 'https://www.youtube.com/paid_memberships', manageUrlVerifiedDate: '2026-10-06',
+    priceVerifiedDate: '2026-09-03',
     // 188 = TMDB:s nuvarande SE-id för YouTube Premium (katalog-endpoint 2026-06-20). (BIN-64)
     aliases: [188],
     tiers: [
+      { id: 'lite', name: 'Lite', cost: 99 },
       { id: 'student', name: 'Student', cost: 109 },
       { id: 'solo', name: 'Enskild', cost: 169 },
       { id: 'family', name: 'Familj', cost: 309 },
@@ -180,7 +222,7 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
   // 497 / 517 = TMDB:s nuvarande SE-id:n för Tele2 Play / TriArt Play
   // (katalog-endpoint 2026-06-20); 521 / 578 var de gamla. Aliasa de nya (BIN-64).
   // live-verifierat 2026-07-02 — https://www.tele2.se/tv — 99 kr var KAMPANJ (6 mån); ordinarie Streaming Flex = 199 (BIN-406)
-  { id: 521, name: 'Tele2 Play', shortName: 'Tele2', color: '#00A0D6', type: 'flatrate', defaultMonthlyCost: 199, aliases: [497] },
+  { id: 521, name: 'Tele2 Play', shortName: 'Tele2', color: '#00A0D6', type: 'flatrate', defaultMonthlyCost: 199, aliases: [497], priceVerifiedDate: '2026-07-02', planName: 'Streaming Flex' },
   // Pluto TV (TMDB SE-id 300, live-verifierat 2026-07-02) — gratis reklamfinansierad AVOD;
   // ersatte Viafree i SE 2022 (Lyxfällan/Paradise Hotel m.m., 70+ kanaler). isAds driver
   // advisor-ads-bucketen; defaultMonthlyCost 0 → advisor ger 'free'-status (aldrig paus-
@@ -194,6 +236,24 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
   // omläst 2026-09-02 svarar `provider_name: "Plex"`. TMDB mot TMDB, ingen extern källa.
   // (BIN-1077)
   { id: 538, name: 'Plex', shortName: 'Plex', color: '#E5A00D', type: 'flatrate', defaultMonthlyCost: 0, isAds: true },
+  // live-verifierat 2026-10-02 — https://mubi.com/en/se/memberships (dit /sv/se omdirigerar) —
+  // agenten läste sidans planlista med geoLocation SE: månadsplanen 129 SEK. Årsplanen och
+  // studentplanen modelleras inte. Färgen är den som sidan använder. (BIN-1401)
+  // Säg upp: https://help.mubi.com/article/68-how-do-i-cancel-my-subscription-if-i-purchased-it-online-through-the-web (läst 2026-10-06)
+  { id: 11, name: 'MUBI', shortName: 'MUBI', color: '#001489', type: 'flatrate', defaultMonthlyCost: 129, priceVerifiedDate: '2026-10-02', manageUrl: 'https://mubi.com/subscription', manageUrlVerifiedDate: '2026-10-06', planName: 'Månadsplan' },
+  {
+    // live-verifierat 2026-10-02 — https://www.drakenfilm.se — sidans planlista, månadspris i
+    // SEK. Färgen är sidans accentfärg. (BIN-1401; nivåerna: Malins val 2026-10-02, BIN-1418)
+    id: 435, name: 'Draken Film', shortName: 'Draken', color: '#EC6446', type: 'flatrate', defaultMonthlyCost: 125,
+    // Säg upp: https://support.goteborgfilmfestival.se/hur-avslutar-jag-min-prenumeration-pa-draken-film/ (läst 2026-10-06)
+    manageUrl: 'https://drakenfilm.se/mina-sidor/prenumerationer', manageUrlVerifiedDate: '2026-10-06',
+    priceVerifiedDate: '2026-10-02',
+    tiers: [
+      { id: 'bas', name: 'Bas', cost: 95 },
+      { id: 'standard', name: 'Standard', cost: 125 },
+      { id: 'premium', name: 'Premium', cost: 165 },
+    ],
+  },
   // live-verifierat 2026-07-02 — https://www.triartplay.se — INTE längre fri flatrate-streaming:
   // numera en hyr-tjänst med medlemsklubb ("Klubben" 49 kr/mån = en gratisfilm + hyrrabatter). (BIN-406)
   { id: 578, name: 'TriArt Play', shortName: 'TriArt', color: '#222222', type: 'rent', aliases: [517] },
@@ -209,6 +269,37 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
   // 2026-09-02; /watch/providers/movie?watch_region=SE omläst 2026-09-02 svarar
   // `provider_name: "Blockbuster"`. TMDB mot TMDB, ingen extern källa. (BIN-1077)
   { id: 423, name: 'Blockbuster', shortName: 'Blockbuster', color: '#003399', type: 'rent' },
+];
+
+/**
+ * En ordinarie prisändring (aldrig en kampanj) med daterad källa. Visas som
+ * "Prisändringar" på /streamingpriser/, nyast först.
+ *
+ * `date` är 'YYYY-MM' eller 'YYYY-MM-DD'. `dateKind` säger vad datumet mäter:
+ * 'effective' = när tjänsten själv anger att priset gällde från, 'noticed' = när
+ * en priskontroll i Binge upptäckte det nya priset (höjningen kan ha skett tidigare).
+ * `tierId` är null för en tjänst utan nivåer (priset är då `defaultMonthlyCost`).
+ *
+ * Prisagenten får lägga till rader här (docs/price-agent-runbook.md);
+ * providers.priceData.test.ts fäller en rad som pekar på en okänd tjänst eller nivå.
+ */
+export interface PriceChange {
+  date: string;
+  dateKind: 'effective' | 'noticed';
+  providerId: number;
+  tierId: string | null;
+  fromKr: number;
+  toKr: number;
+  source: string;
+}
+
+export const PRICE_CHANGES: PriceChange[] = [
+  // Netflix-kommentaren ovan: SE-höjning ~2026-05-15, +20 kr rakt över, ordinarie ej kampanj.
+  { date: '2026-05', dateKind: 'effective', providerId: 8, tierId: 'basic', fromKr: 109, toKr: 129, source: 'https://help.netflix.com/en/node/24926' },
+  { date: '2026-05', dateKind: 'effective', providerId: 8, tierId: 'standard', fromKr: 149, toKr: 169, source: 'https://help.netflix.com/en/node/24926' },
+  { date: '2026-05', dateKind: 'effective', providerId: 8, tierId: 'premium', fromKr: 199, toKr: 219, source: 'https://help.netflix.com/en/node/24926' },
+  { date: '2026-09-03', dateKind: 'noticed', providerId: 431, tierId: 'ads', fromKr: 59, toKr: 69, source: 'https://www.skyshowtime.com/se (BIN-1071)' },
+  { date: '2026-09-03', dateKind: 'noticed', providerId: 335, tierId: 'student', fromKr: 95, toKr: 109, source: 'https://www.youtube.com/premium (BIN-1071)' },
 ];
 
 export const PROVIDER_MAP: Map<number, SwedishProvider> = (() => {
@@ -320,7 +411,7 @@ export function hasFreeProvider(ids: number[]): boolean {
 }
 
 // BIN-173 — affiliate-tag the rent/buy deeplinks Binge already renders, so the
-// outbound clicks we already drive (across 25k SEO title pages) earn commission
+// outbound clicks we already drive earn commission
 // instead of leaking. Table-driven: each entry is keyed by the *canonical*
 // provider id and rewrites the bare MOTN deeplink into the network's tagged URL.
 //

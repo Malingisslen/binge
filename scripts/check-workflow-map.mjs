@@ -425,10 +425,8 @@ export function enumerateRoutes(root = ROOT, dir = APP_DIR, appDir = dir) {
   return [...new Set(found)].sort();
 }
 
-// Deliberate exclusions per list, entry -> one line of reason. ALL THREE EMPTY today, and
-// that is the honest state: every crash boundary, Cloud Function and route in the tree
-// belongs in the universe, and BIN-891's three drifted entries were added to it rather
-// than exempted from it. A map rather than an array so an exclusion must carry an argument
+// Deliberate exclusions per list, entry -> one line of reason. BIN-891's three drifted
+// entries were added to the universe rather than exempted from it. A map rather than an array so an exclusion must carry an argument
 // — and the argument is enforced HERE, by the check, not only by the test file
 // (integration review, 2026-08-14: `hasOwnProperty` alone silences a path whose value is
 // '' or null, so the map shape by itself proves nothing). An entry that stops matching
@@ -436,7 +434,9 @@ export function enumerateRoutes(root = ROOT, dir = APP_DIR, appDir = dir) {
 // remembers granting.
 export const BOUNDARY_EXEMPTIONS = {};
 export const FUNCTION_EXEMPTIONS = {};
-export const ROUTE_EXEMPTIONS = {};
+export const ROUTE_EXEMPTIONS = {
+  '/designsystem': 'static noindex component specimen page: reads no data, sends nothing, no user flow passes through it',
+};
 // Exported for the same reason the floors are: a literal repeated in the test file is a
 // second answer to one question, and the two drift (integration review, 2026-08-14 — this
 // batch had just removed exactly that divergence for the other floor).

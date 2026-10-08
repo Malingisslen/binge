@@ -18,12 +18,15 @@
 // it is for the sibling check. The staged files are readable in both phases; the ticket ids
 // are not.
 //
+// WHICH COMMITS IT GRADES. Only those `owesReview` in the sibling says owe a review row
+// (BIN-1426, decision 1): an ordinary change owes no critique, so no role can be missing from
+// one. A new feature is routed as one, with `route.mjs --feature`.
+//
 // WHAT THIS DOES NOT DO. It never asks whether a review row EXISTS — that is
 // `check_review_coverage.mjs`, which runs beside it and owns the silence case. This one
 // grades only the ROLES: given rows that exist, does their panel cover what the staged files
 // route to. A commit whose tickets have no rows at all passes here, so the two messages never
-// compete to explain the same failure. Whether the sibling refuses it instead depends on that
-// check's own commit-type list — read it there.
+// compete to explain the same failure.
 //
 // AND IT DOES NOT TEST A ROW'S AGE OR SCOPE. `loggedPanel` unions every `review` row bearing
 // one of the ticket ids, whenever it was written and whatever fileset it was written about.
@@ -38,9 +41,12 @@
 
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseEvents, ticketOf } from './check_events.mjs';
-import { ticketsInSubject, stagedEventsLog, REPO_ROOT } from './check_review_coverage.mjs';
+import {
+  ticketsInSubject, stagedEventsLog, REPO_ROOT, owesReview, isFeature, stagedAddedFiles, stagedReviewGates,
+} from './check_review_coverage.mjs';
 import { route, ROLE_TITLES } from '../route.mjs';
 
 /**
@@ -79,16 +85,70 @@ export function stagedRoutingUnion(stagedPaths) {
  *
  *     node -e "const fs=require('fs');const c={};for(const l of fs.readFileSync('docs/org/metrics/events.jsonl','utf8').split(/\r?\n/)){if(!l)continue;const o=JSON.parse(l);if(o.type!=='review')continue;const p=o.panel;const k=Array.isArray(p)?(p.length?typeof p[0]:'empty'):'missing';c[k]=(c[k]||0)+1}console.log(c)"
  */
-export function panelNumbers(panel) {
+export function panelNumbers(panel, roles = ROLE_SLUGS) {
   if (!Array.isArray(panel)) return [];
   const out = [];
   for (const entry of panel) {
     if (typeof entry === 'number' && Number.isInteger(entry)) { out.push(entry); continue; }
     if (typeof entry !== 'string') continue;
+    // The name first: a role's own title can carry digits ("Localization / i18n"), and read
+    // as a number it would credit #18. "#25 Engineering Manager …" names no role by slug, so
+    // it still falls through to its number.
+    const n = roleNumberByName(entry, roles);
+    if (n !== null) { out.push(n); continue; }
     const m = entry.match(/\d+/);
     if (m) out.push(Number(m[0]));
   }
   return out;
+}
+
+/**
+ * BIN-1368. The sprint engine also writes a panel entry WITHOUT its number — a bare title
+ * (`"DevOps / SRE"`) or a slug (`"security-architect"`, `"database-administrator"`). Read
+ * digits only and such a row names no role, so this gate refuses a commit whose critique ran.
+ *
+ * A name resolves to a role when, slugified, it equals that role's slug, is a word-boundary
+ * prefix of exactly ONE role's slug, or is one of `ROLE_ALIASES`. Anything else — an
+ * ambiguous prefix, a persona that is not a routed role — resolves to nothing, so the gate
+ * never credits a role nobody named. Replay the live log to see what stays unresolved:
+ *
+ *     node -e "import('./docs/org/metrics/check_staged_routing.mjs').then(m=>m.unresolvedPanelNames())"
+ */
+const ROLE_ALIASES = { dpo: 6, dba: 27 };
+
+const slugify = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+
+function loadRoleSlugs() {
+  try {
+    const map = JSON.parse(readFileSync(join(REPO_ROOT, 'docs', 'org', 'ownership-map.json'), 'utf8'));
+    return Object.entries(map.roles).map(([num, r]) => [Number(num), r.slug]);
+  } catch {
+    return [];
+  }
+}
+const ROLE_SLUGS = loadRoleSlugs();
+
+export function roleNumberByName(name, roles = ROLE_SLUGS) {
+  const s = slugify(name);
+  if (!s) return null;
+  if (Object.hasOwn(ROLE_ALIASES, s)) return ROLE_ALIASES[s];
+  const exact = roles.find(([, slug]) => slug === s);
+  if (exact) return exact[0];
+  const prefixed = roles.filter(([, slug]) => slug.startsWith(`${s}-`));
+  return prefixed.length === 1 ? prefixed[0][0] : null;
+}
+
+/** Digit-less panel strings in the live log that resolve to no role (condition 1 of #25). */
+export function unresolvedPanelNames(file = join(REPO_ROOT, 'docs', 'org', 'metrics', 'events.jsonl')) {
+  const counts = {};
+  for (const row of parseEvents(readFileSync(file, 'utf8'))) {
+    if (row.type !== 'review' || !Array.isArray(row.panel)) continue;
+    for (const e of row.panel) {
+      if (typeof e === 'string' && !/\d/.test(e) && roleNumberByName(e) === null) counts[e] = (counts[e] || 0) + 1;
+    }
+  }
+  console.log(counts);
+  return counts;
 }
 
 /** Every role number logged across the `review` rows belonging to `tickets`. */
@@ -110,19 +170,26 @@ export function loggedPanel(rows, tickets) {
 }
 
 /**
- * @returns {{ok: boolean, reason: string, tickets: string[], paths: string[],
+ * `added` and `gates` are what `owesReview` reads. With `gates` null, the router reads the
+ * gates in the working tree itself.
+ *
+ * @returns {{ok: boolean, reason: string, tickets: string[], paths: string[], feature: boolean,
  *          tier: string, routed: number[], logged: number[], missing: number[],
  *          roleTitles: Map<number, string>}}
  */
-export function gradeStagedRouting({ subject, stagedPaths, rows }) {
+export function gradeStagedRouting({ subject, stagedPaths, rows, added = [], gates = null }) {
   const tickets = ticketsInSubject(subject);
   const paths = stagedRoutingUnion(stagedPaths);
-  const base = { tickets, paths, tier: 'n/a', routed: [], logged: [], missing: [], roleTitles: new Map() };
+  const feature = isFeature(subject, added);
+  const base = { tickets, paths, feature, tier: 'n/a', routed: [], logged: [], missing: [], roleTitles: new Map() };
 
+  if (!owesReview({ subject, files: stagedPaths, added, gates })) {
+    return { ...base, ok: true, reason: 'this commit owes no review row' };
+  }
   if (tickets.length === 0) return { ...base, ok: true, reason: 'the subject names no ticket' };
   if (paths.length === 0) return { ...base, ok: true, reason: 'nothing is staged that the router reads' };
 
-  const routing = route(paths);
+  const routing = route(paths, { feature, gates: gates ?? undefined });
   const routed = [...new Set(panelNumbers(routing.panel))].sort((a, b) => a - b);
   // The fallback seat is never in `roles` — nothing matched it, the router invented it — so
   // a message built from `roles` alone would name it `#14` and nothing else. That is the
@@ -144,6 +211,24 @@ export function gradeStagedRouting({ subject, stagedPaths, rows }) {
 
   const loggedSet = new Set(logged);
   const missing = routed.filter((n) => !loggedSet.has(n));
+  // The sprint routes every ticket as a feature (`delivery.router.command` carries
+  // `--feature`), and on a mix of sensitive and ordinary files that seats a different role
+  // than the default routing. A critique logged under either routing of the same files
+  // covers the commit, so a sprint's fix is not refused for the role it did not convene.
+  if (missing.length > 0) {
+    const asFeature = [...new Set(panelNumbers(route(paths, { feature: true, gates: gates ?? undefined }).panel))];
+    if (asFeature.length > 0 && asFeature.every((n) => loggedSet.has(n))) {
+      return {
+        ...base,
+        ok: true,
+        reason: 'every role the routing as a feature names is logged, which is how a sprint routes a ticket',
+        tier: routing.tier,
+        routed,
+        logged,
+        roleTitles,
+      };
+    }
+  }
   return {
     ...base,
     ok: missing.length === 0,
@@ -156,9 +241,9 @@ export function gradeStagedRouting({ subject, stagedPaths, rows }) {
   };
 }
 
-/** The staged file list, as git sees it right now. */
+/** The staged file list, as git sees it right now; a moved file under both of its paths. */
 export function readStagedPaths(repoDir = REPO_ROOT) {
-  const raw = execFileSync('git', ['diff', '--cached', '--name-only'], {
+  const raw = execFileSync('git', ['diff', '--cached', '--name-only', '--no-renames'], {
     cwd: repoDir, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'],
   });
   return raw.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
@@ -178,11 +263,11 @@ export function refusalLines(verdict) {
     'The staged files route to a role that no `review` row for these tickets names. That is',
     'BIN-1059: the panel was decided on a file set that has since moved. Reproduce it with',
     '',
-    `  node docs/org/route.mjs ${verdict.paths.join(' ')}`,
+    `  node docs/org/route.mjs ${verdict.feature ? '--feature ' : ''}${verdict.paths.join(' ')}`,
     '',
     'Then either convene the missing role\'s blind critique and log a row naming it, or commit',
     'the files SPLIT so each commit routes to the critique that actually ran. Do not widen the',
-    'logged panel to match — the row records who reviewed, not who should have.',
+    'logged panel to match.',
   ];
 }
 
@@ -194,6 +279,8 @@ export function mainMessage(messagePath) {
     subject,
     stagedPaths: readStagedPaths(),
     rows: parseEvents(log.text),
+    added: stagedAddedFiles(),
+    gates: stagedReviewGates().gates,
   });
 
   if (verdict.ok) {

@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { Suspense, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import AuthGuard from '@/components/AuthGuard';
 import WeekBoard from '@/components/calendar/WeekBoard';
 import MonthStrip from '@/components/calendar/MonthStrip';
@@ -10,14 +11,28 @@ import { LoadingView } from '@/components/ui/LoadingView';
 import { useCalendarEntries, getWeekStart, getWeekNumber } from '@/hooks/useCalendar';
 import { countEntries } from '@/lib/calendar/summary';
 import { buildCalendarHeadline, buildCalendarStandfirst } from '@/lib/calendar/copy';
+import { parseDayParam } from '@/lib/calendar/dayParam';
+import { Button } from '@/components/ui/Button';
 
 export default function CalendarPage() {
-  return <AuthGuard><CalendarContent /></AuthGuard>;
+  // Suspense: useSearchParams needs a boundary in a static export.
+  return <AuthGuard><Suspense><CalendarContent /></Suspense></AuthGuard>;
 }
 
 function CalendarContent() {
   const { entries, isLoading } = useCalendarEntries();
-  const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()));
+  // UX-8: a day tapped in the topbar's week strip arrives as `?day=`. Opening the
+  // calendar on that day's week, and marking the day, happens again whenever the
+  // param changes, because the strip can be tapped while the calendar is already open.
+  const dayParam = useSearchParams().get('day');
+  const focusDate = useMemo(() => parseDayParam(dayParam), [dayParam]);
+  const [weekStart, setWeekStart] = useState(() => getWeekStart(focusDate ?? new Date()));
+  const [syncedDay, setSyncedDay] = useState(dayParam);
+  if (dayParam !== syncedDay) {
+    setSyncedDay(dayParam);
+    if (focusDate) setWeekStart(getWeekStart(focusDate));
+  }
+  const focusKey = focusDate ? isoKey(focusDate) : null;
   const weekNum = getWeekNumber(weekStart);
   const today = useMemo(() => {
     const d = new Date();
@@ -104,13 +119,13 @@ function CalendarContent() {
           </button>
         </div>
         {!isCurrentWeek && (
-          <button onClick={goToday} className="btn btn-ghost btn-sm">
+          <Button onClick={goToday} variant="ghost" size="sm">
             Hoppa till idag
-          </button>
+          </Button>
         )}
       </div>
 
-      <WeekBoard weekStart={weekStart} entries={weekEntries} />
+      <WeekBoard weekStart={weekStart} entries={weekEntries} focusKey={focusKey} />
 
       {entries.length > 0 && (
         <MonthStrip anchor={weekStart} entries={entries} onJumpToWeek={setWeekStart} />

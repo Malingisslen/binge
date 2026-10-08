@@ -5,7 +5,8 @@ import { usePathname } from 'next/navigation';
 
 // The horizontal section nav that lives directly below the topbar on every
 // authenticated page. Order matches Direction H's subnav exactly:
-// Hem · Bibliotek · Kalender · Rekommendationer · Streamingrådgivaren · Vänner · Grupper.
+// Hem · Bibliotek · Kalender · Rekommendationer · Fråga Binge · Streamingrådgivaren · Vänner.
+// Grupper is out of the menus while the feature is paused (plan round 2, decision 4).
 
 type NavItem = {
   label: string;
@@ -24,7 +25,6 @@ const ITEMS: readonly NavItem[] = [
   { label: 'Fråga Binge', href: '/ask/' },
   { label: 'Streamingrådgivaren', href: '/savings/' },
   { label: 'Vänner', href: '/my/friends/', matches: ['/feed', '/user/'] },
-  { label: 'Grupper', href: '/grupper/', matches: ['/tillsammans/'] },
 ];
 
 export default function Subnav() {

@@ -8,6 +8,8 @@ import { shortSwedishWeekday } from '@/lib/utils';
 import type { CalendarEntry } from '@/hooks/useCalendar';
 import { entryHref } from '@/lib/calendar/entry';
 import { daysFromToday } from './focalPick';
+import MarkEpisodeSeenButton from './MarkEpisodeSeenButton';
+import { buttonClass } from '@/components/ui/Button';
 
 // The Hem focal block: 21:9 duotone still up top + a 2:3 poster overlapping
 // the bottom-left + a meta column + a CTA column. Designed for the "tonight
@@ -97,7 +99,7 @@ export default function HemFocal({ entry }: Props) {
               <span>{dayLabel} {new Date(entry.airDate + 'T00:00:00').getDate()}</span>
             )}
             {entry.provider && <span>{entry.provider}</span>}
-            <span>{entry.kind === 'movie' ? 'digital release' : `avsnitt ${entry.episodeCode}`}</span>
+            <span>{entry.kind === 'movie' ? 'digitalt släpp' : `avsnitt ${entry.episodeCode}`}</span>
           </div>
           <h2>
             <Link href={href} style={{ color: 'inherit', textDecoration: 'none' }}>
@@ -129,8 +131,11 @@ export default function HemFocal({ entry }: Props) {
         </div>
 
         <div className="cta">
-          <Link href={href} className="btn">{isMovie ? 'Öppna filmen' : 'Öppna serien'}</Link>
-          <Link href="/calendar/" className="btn btn-ghost btn-sm">Se hela veckan</Link>
+          {entry.kind === 'episode' && days <= 0 && (
+            <MarkEpisodeSeenButton tmdbId={entry.tmdbId} season={entry.season} episode={entry.episode} className={buttonClass()} />
+          )}
+          <Link href={href} className={buttonClass({ variant: entry.kind === 'episode' && days <= 0 ? 'ghost' : 'default' })}>{isMovie ? 'Öppna filmen' : 'Öppna serien'}</Link>
+          <Link href="/calendar/" className={buttonClass({ variant: 'ghost', size: 'sm' })}>Se hela veckan</Link>
         </div>
       </div>
     </article>

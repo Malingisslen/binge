@@ -11,24 +11,28 @@ import {
   acceptGroupInvite as acceptInvite,
   declineGroupInvite as declineInvite,
   type GroupInvite,
+  type GroupWatchlistRow,
 } from '@/lib/firebase/groups';
 import { useAuth } from '@/hooks/useAuth';
 import type { AcceptInviteResult } from '@/lib/firebase/groups';
-import type { Group, GroupMember, GroupWatchlistItem } from '@/types';
+import type { Group, GroupMember } from '@/types';
 
-export function useMyGroups(uid: string | null) {
+// PERF-6: `enabled: false` keeps the live listener closed until a surface actually
+// needs the list (the title page's group menu, when opened).
+export function useMyGroups(uid: string | null, { enabled = true }: { enabled?: boolean } = {}) {
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!uid) { setGroups([]); setLoading(false); return; }
+    if (!enabled) { setGroups([]); setLoading(true); return; }
     setLoading(true);
     const unsub = subscribeToMyGroups(uid, gs => {
       setGroups(gs.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()));
       setLoading(false);
     });
     return () => unsub();
-  }, [uid]);
+  }, [uid, enabled]);
 
   return { groups, loading };
 }
@@ -48,7 +52,7 @@ export function useMyGroups(uid: string | null) {
 export function useGroup(groupId: string | null) {
   const [group, setGroup] = useState<Group | null>(null);
   const [members, setMembers] = useState<GroupMember[]>([]);
-  const [watchlist, setWatchlist] = useState<GroupWatchlistItem[]>([]);
+  const [watchlist, setWatchlist] = useState<GroupWatchlistRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [denied, setDenied] = useState(false);

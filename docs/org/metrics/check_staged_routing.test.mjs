@@ -6,10 +6,12 @@ import {
   REVIEWER_ARTIFACT,
   stagedRoutingUnion,
   panelNumbers,
+  roleNumberByName,
   loggedPanel,
   gradeStagedRouting,
   refusalLines,
 } from './check_staged_routing.mjs';
+import { readReviewGates, route } from '../route.mjs';
 
 const ROOT = process.cwd();
 const SCRIPT = join(ROOT, 'docs', 'org', 'metrics', 'check_staged_routing.mjs');
@@ -27,6 +29,30 @@ describe('panelNumbers — the log writes the panel two ways', () => {
     // docblock in the module carries the command that re-derives the mix.
     expect(panelNumbers(['#25 Engineering Manager / Release Manager'])).toEqual([25]);
     expect(panelNumbers(['#4 Security Architect', '#27 DBA'])).toEqual([4, 27]);
+  });
+
+  it('reads a panel written by bare title or slug, without a number (BIN-1368)', () => {
+    expect(panelNumbers(['DevOps / SRE'])).toEqual([8]);
+    expect(panelNumbers(['Trust & Safety / Content Moderation'])).toEqual([12]);
+    expect(panelNumbers(['security-architect', 'Data Protection Officer'])).toEqual([4, 6]);
+    // A word-boundary prefix of exactly one role's slug, and the two short aliases in the log.
+    expect(panelNumbers(['database-administrator', 'qa-test-engineer'])).toEqual([27, 7]);
+    expect(panelNumbers(['dpo', 'DBA'])).toEqual([6, 27]);
+  });
+
+  it('every role in the ownership map round-trips by title AND by slug to its own number', () => {
+    const roles = Object.entries(JSON.parse(readFileSync(join(ROOT, 'docs', 'org', 'ownership-map.json'), 'utf8')).roles);
+    expect(roles.length).toBeGreaterThan(0);
+    for (const [num, r] of roles) {
+      expect(panelNumbers([r.title]), r.title).toEqual([Number(num)]);
+      expect(panelNumbers([r.slug]), r.slug).toEqual([Number(num)]);
+    }
+  });
+
+  it('a name that is ambiguous or no routed role resolves to NOTHING — the gate credits no one by guess', () => {
+    // `data` prefixes three roles' slugs; `product` two; the archaeologist is a persona, not a role.
+    expect(panelNumbers(['data', 'product', 'Codebase Archaeologist', 'security-arch'])).toEqual([]);
+    expect(roleNumberByName('')).toBe(null);
   });
 
   it('an empty or missing panel is no roles, never a crash', () => {
@@ -119,6 +145,38 @@ describe('gradeStagedRouting — both directions, against the real router', () =
     expect(v.ok, 'a string-shaped panel was read as covering nothing').toBe(true);
   });
 
+  // BIN-1368. The shape is copied from a real `declined-unattended` row the sprint engine
+  // wrote: bare titles, `ran:false`, and the ticket id only at the head of `plan`.
+  const TOP_STAGED = ['firestore.rules'];
+  const declinedRow = (ticket, panel) => ({
+    type: 'review', tier: 'full', panel, outcome: 'declined-unattended', ran: false,
+    via: 'sprint-parallel', plan: `${ticket} — pulled out before the build; an unattended sprint cannot convene this review`,
+  });
+  const titleOf = (n) => gradeStagedRouting({ subject: 'x (BIN-1368)', stagedPaths: TOP_STAGED, rows: [] }).roleTitles.get(n);
+
+  it('a declined row naming the top panel by bare TITLE covers it (BIN-1368)', () => {
+    const { routed, tier } = gradeStagedRouting({ subject: 'fix(rules): x (BIN-1368)', stagedPaths: TOP_STAGED, rows: [] });
+    expect(tier).toBe('top');
+    const v = gradeStagedRouting({
+      subject: 'fix(rules): x (BIN-1368)',
+      stagedPaths: TOP_STAGED,
+      rows: [declinedRow('BIN-1368', routed.map(titleOf))],
+    });
+    expect(v.ok, `titles ${routed.map(titleOf)} were read as naming nobody`).toBe(true);
+  });
+
+  it('a declined row that leaves out one routed role is still REFUSED (BIN-1368)', () => {
+    const { routed } = gradeStagedRouting({ subject: 'fix(rules): x (BIN-1368)', stagedPaths: TOP_STAGED, rows: [] });
+    const [dropped, ...kept] = routed;
+    const v = gradeStagedRouting({
+      subject: 'fix(rules): x (BIN-1368)',
+      stagedPaths: TOP_STAGED,
+      rows: [declinedRow('BIN-1368', kept.map(titleOf))],
+    });
+    expect(v.ok).toBe(false);
+    expect(v.missing).toEqual([dropped]);
+  });
+
   it('a subject naming no ticket passes — there is nothing to compare against', () => {
     expect(gradeStagedRouting({ subject: 'chore: tidy', stagedPaths: STAGED, rows: [] }).ok).toBe(true);
   });
@@ -133,23 +191,139 @@ describe('gradeStagedRouting — both directions, against the real router', () =
     expect(v.reason).toMatch(/no review row for these tickets/);
   });
 
+  // A feat subject owes a review row, so these reach the routing branches they are named
+  // for; a docs subject would stop at "owes no review row" first.
   it('a doc-only stage routes to no role and is not blocked', () => {
     const v = gradeStagedRouting({
-      subject: 'docs: a note (BIN-1059)',
+      subject: 'feat: a note (BIN-1059)',
       stagedPaths: ['README.md'],
       rows: [row('BIN-1059', [])],
     });
     expect(v.ok).toBe(true);
+    expect(v.reason).toMatch(/route to tier "skip"/);
   });
 
   it('the reviewer notebook alone cannot make a commit owe a panel', () => {
     const v = gradeStagedRouting({
-      subject: 'docs: a lesson (BIN-1059)',
+      subject: 'feat: a lesson (BIN-1059)',
       stagedPaths: ['.claude/agents/binge-test-reviewer.knowledge.md'],
       rows: [row('BIN-1059', [])],
     });
     expect(v.ok).toBe(true);
     expect(v.paths).toEqual([]);
+    expect(v.reason).toBe('nothing is staged that the router reads');
+  });
+});
+
+describe('decision 1 (BIN-1426): only a commit that owes a review row is graded', () => {
+  // The real gates, as this commit ships them, so the router and `owesReview` read one config.
+  const gates = readReviewGates();
+
+  it('a docs commit touching a gated file owes no row, so a ticket named in it is not graded', () => {
+    // deploy.yml sits under a review gate and routes to a role of its own; the docs subject
+    // makes the commit ordinary, so no panel is owed whatever the ticket's rows say.
+    const v = gradeStagedRouting({
+      subject: 'docs(deploy): en kommentar (BIN-1059)',
+      stagedPaths: ['.github/workflows/deploy.yml'],
+      rows: [row('BIN-1059', [25])],
+      gates,
+    });
+    expect(v.ok).toBe(true);
+    expect(v.reason).toBe('this commit owes no review row');
+    const asFix = gradeStagedRouting({
+      subject: 'fix(deploy): ett steg (BIN-1059)',
+      stagedPaths: ['.github/workflows/deploy.yml'],
+      rows: [row('BIN-1059', [25])],
+      gates,
+    });
+    expect(asFix.ok, 'the same files under a code type owe the routed role').toBe(false);
+    expect(asFix.missing.length).toBeGreaterThan(0);
+  });
+
+  it('an ordinary fix is not graded even when its ticket\'s rows name another role', () => {
+    const v = gradeStagedRouting({
+      subject: 'fix(ui): knappen (BIN-1059)',
+      stagedPaths: ['src/components/ui/DuotonePoster.tsx'],
+      rows: [row('BIN-1059', [13])],
+      gates,
+    });
+    expect(v.ok).toBe(true);
+    expect(v.reason).toBe('this commit owes no review row');
+  });
+
+  it('a feat on the same ordinary file is routed as a feature and owes its owner', () => {
+    const v = gradeStagedRouting({
+      subject: 'feat(ui): en ny affisch (BIN-1059)',
+      stagedPaths: ['src/components/ui/DuotonePoster.tsx'],
+      rows: [row('BIN-1059', [13])],
+      gates,
+    });
+    expect(v.feature).toBe(true);
+    expect(v.tier).toBe('medium');
+    expect(v.ok).toBe(false);
+    expect(v.routed.length).toBeGreaterThan(0);
+  });
+
+  it('an added page makes a fix a feature here too', () => {
+    const page = 'src/app/ny-sida/page.tsx';
+    const v = gradeStagedRouting({
+      subject: 'fix(ui): en ny sida (BIN-1059)',
+      stagedPaths: [page],
+      rows: [row('BIN-1059', [])],
+      added: [page],
+      gates,
+    });
+    expect(v.feature).toBe(true);
+    expect(v.reason).not.toBe('this commit owes no review row');
+    expect(v.routed.length, 'a new screen routed as a feature owes some role').toBeGreaterThan(0);
+  });
+
+  describe('a fix logged the way a sprint routes it (as a feature) is not refused', () => {
+    // A sensitive file and an ordinary one: the default routing seats the sensitive file's
+    // owner, the feature routing another role. The router's own selftest pins this pair.
+    const pair = ['src/components/ui/DuotonePoster.tsx', 'src/lib/firebase/friends.ts'];
+    const panel = (r) => [...new Set(panelNumbers(r.panel))];
+    const byDefault = panel(route(pair, { gates }));
+    const asFeature = panel(route(pair, { feature: true, gates }));
+    const grade = (roles, subject = 'fix(data): vänner (BIN-1059)') =>
+      gradeStagedRouting({ subject, stagedPaths: pair, rows: [row('BIN-1059', roles)], gates });
+
+    it('the two routings seat different roles, or this block proves nothing', () => {
+      expect(byDefault.length).toBeGreaterThan(0);
+      expect(asFeature.length).toBeGreaterThan(0);
+      expect(asFeature.some((n) => !byDefault.includes(n))).toBe(true);
+    });
+
+    it('passes with the default panel and with the feature panel', () => {
+      expect(grade(byDefault).ok).toBe(true);
+      const v = grade(asFeature);
+      expect(v.ok).toBe(true);
+      expect(v.reason).toMatch(/routing as a feature/);
+    });
+
+    it('refuses a panel that covers neither, naming the default routing\'s role', () => {
+      const v = grade([13]);
+      expect(v.ok).toBe(false);
+      expect(v.missing).toEqual(byDefault.filter((n) => n !== 13));
+    });
+
+    it('routes the second time on the same union, without a reviewer\'s notebook', () => {
+      // A reviewer stages its folded lessons in the same commit. Left in, the notebook moves
+      // the feature routing to another role, and the fix logged as a sprint routes it is refused.
+      const v = gradeStagedRouting({
+        subject: 'fix(data): vänner (BIN-1059)',
+        stagedPaths: [...pair, '.claude/agents/binge-test-reviewer.knowledge.md'],
+        rows: [row('BIN-1059', asFeature)],
+        gates,
+      });
+      expect(v.ok).toBe(true);
+      expect(v.reason).toMatch(/routing as a feature/);
+    });
+
+    it('a feat is held to the feature routing alone', () => {
+      expect(grade(asFeature, 'feat(data): vänner (BIN-1059)').ok).toBe(true);
+      expect(grade(byDefault, 'feat(data): vänner (BIN-1059)').ok).toBe(false);
+    });
   });
 });
 
@@ -169,7 +343,16 @@ describe('the refusal message', () => {
   });
 
   it('carries the command that reproduces the routing, with the staged paths in it', () => {
-    expect(text).toContain('node docs/org/route.mjs lefthook.yml');
+    // A `feat` subject is routed as a feature, so the command has to say so or it reproduces
+    // a different answer.
+    expect(text).toContain('node docs/org/route.mjs --feature lefthook.yml');
+    const fix = gradeStagedRouting({
+      subject: 'fix(gates): something (BIN-1059)',
+      stagedPaths: ['lefthook.yml'],
+      rows: [row('BIN-1059', [13])],
+    });
+    expect(fix.ok).toBe(false);
+    expect(refusalLines(fix).join('\n')).toContain('node docs/org/route.mjs lefthook.yml');
   });
 
   it('does not offer LEFTHOOK=0 or any way to skip', () => {
@@ -187,19 +370,21 @@ describe('the check is WIRED — "it exists" and "it runs" are different claims'
   // satisfied by a function nobody calls — the very shape being guarded against.
   const mainBody = src.slice(src.indexOf('export function mainMessage'));
 
-  it('mainMessage calls gradeStagedRouting with subject, stagedPaths AND rows', () => {
+  it('mainMessage calls gradeStagedRouting with subject, stagedPaths, rows, added AND gates', () => {
     expect(src.indexOf('export function mainMessage'), 'mainMessage is gone').toBeGreaterThan(-1);
     const call = mainBody.match(/gradeStagedRouting\(\{([\s\S]*?)\}\)/);
     expect(call, 'mainMessage no longer calls gradeStagedRouting at all').not.toBeNull();
-    for (const arg of ['subject', 'stagedPaths', 'rows']) {
+    for (const arg of ['subject', 'stagedPaths', 'rows', 'added', 'gates']) {
       expect(call[1], `the ${arg} argument was dropped — the check still runs and asks less`)
         .toMatch(new RegExp(`\\b${arg}\\s*[:,]`));
     }
   });
 
   it('mainMessage reads the STAGED files, not the working tree', () => {
-    expect(src).toMatch(/stagedPaths:\s*readStagedPaths\(\)/);
-    expect(src).toMatch(/'diff',\s*'--cached',\s*'--name-only'/);
+    expect(mainBody).toMatch(/stagedPaths:\s*readStagedPaths\(\)/);
+    expect(mainBody).toMatch(/added:\s*stagedAddedFiles\(\)/);
+    expect(mainBody).toMatch(/gates:\s*stagedReviewGates\(\)\.gates/);
+    expect(src).toMatch(/'diff',\s*'--cached',\s*'--name-only',\s*'--no-renames'/);
   });
 
   it('mainMessage returns 1 on a refusal, so lefthook fails the commit', () => {

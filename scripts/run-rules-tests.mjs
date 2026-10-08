@@ -94,7 +94,35 @@ const REPO = resolve(HERE, '..');
 // and `size()`'s unit got a pair of tests driven by a Swedish name where UTF-8 bytes and
 // UTF-16 code units differ. Measured with `npm run test:rules -- --port 8123`, not
 // counted by hand.
-export const MIN_TESTS = 724;
+// BIN-1167, 2026-09-23: raised to what `numTotalTests` reported once the group member
+// rule stopped letting the owner write another member's row. The cases name themselves
+// `(BIN-1167)`. Measured with `npm run test:rules`, not counted by hand.
+// BIN-1250, 2026-09-23: raised to what `numTotalTests` reported with the report
+// decisionNote cases in place, named `(BIN-1250)`. Measured with
+// `npm run test:rules -- --port 8123`, not counted by hand.
+// BIN-1260/1278/1279, 2026-09-23: raised to what `numTotalTests` reported with the
+// leaver-erasure, member-group and reminder-marker cases in place. Measured with
+// `npm run test:rules -- --port 8123`, not counted by hand.
+// BIN-1291, 2026-09-23: raised to what `numTotalTests` reported with the group-id
+// denial, its control, and the availableNotify group-row case in place. Measured with
+// `npm run test:rules -- --port 8123`, not counted by hand.
+// BIN-1174, 2026-09-23: raised to what `numTotalTests` reported with the sender-rename
+// cases in place, in the describe block named `(BIN-1174)`. Measured with
+// `npm run test:rules -- --port 8123`, not counted by hand.
+// BIN-1296, 2026-09-23: raised to what `numTotalTests` reported with the owner-removal
+// erasure cases in place, in the describe block named `(BIN-1296)`. Measured the same way.
+// BIN-1294, 2026-09-23: raised to what `numTotalTests` reported with the sweep's
+// member-group cases in place. Measured the same way.
+// BIN-1301, 2026-09-26: raised to what `numTotalTests` reported with the session
+// lifetime cases in place, in the describe block named `(BIN-1301)`. Measured the same way.
+// BIN-1298, 2026-09-26: raised to what `numTotalTests` reported with the group
+// watchlist field-lock cases in place, in the describe block named `(BIN-1298)`.
+// Measured the same way.
+// SEC-1/SEC-4, 2026-10-05: raised to what `numTotalTests` reported with the describe
+// blocks named `(SEC-1)` and `(SEC-4)` in place. Measured with `npm run test:rules`.
+// BIN-1438, 2026-10-05: raised to what `numTotalTests` reported with the describe block
+// named `(BIN-1438, emulator)` in place. Measured with `npm run test:rules -- --port 8123`.
+export const MIN_TESTS = 894;
 
 const VITEST_ARGS = ['run', '--config', 'vitest.rules.config.ts'];
 

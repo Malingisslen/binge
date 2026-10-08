@@ -5,8 +5,10 @@ contradictions, never append at the bottom. A bullet earns its place only by cha
 Dated record → `…archive.md` (append-only).
 
 ## Seed checklist
-- **Ownership:** every per-user read/write enforces `request.auth.uid` (`blocked`=hygiene). `NEXT_PUBLIC_`
-  secret = finding.
+- **Ownership:** every per-user read/write enforces `request.auth.uid`. `NEXT_PUBLIC_`
+  secret = finding. Blocking's client filter on reviews/comments/feed is accepted hygiene; a
+  `friendRequests` create on `blocked/$(request.auth.uid)` is rule-enforced (`## BIN-1129` in
+  accepted-deviations.md), so a diff removing that clause is a finding.
 
 ## How to prove a finding
 - **A test title is not coverage** — an `it()` naming "rejects 0 → 1" actually asserted `5`. A mock with FEWER

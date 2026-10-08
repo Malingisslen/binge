@@ -9,9 +9,8 @@ import {
 
 // Mostly in lockstep with src/lib/mediaTypeDocId.test.ts — but NOT on the read
 // side. The two helpers stopped being byte-identical at BIN-618: this server copy
-// still resolves aliased doc ids (`movie_042`) that the client now rejects,
-// because the server read sites were never audited for shapes only a function
-// writes (BIN-624, still open).
+// still resolves aliased doc ids (`movie_042`) that the client now rejects.
+// The split is decided and stays: `## BIN-624` in .claude/rules/accepted-deviations.md.
 //
 // So do not "resync" the pair on the strength of anything in this file. The
 // divergence is pinned by src/lib/mediaTypeDocId.parity.test.ts, which imports

@@ -4,6 +4,8 @@ import type { MetricKey } from '../metrics/types';
 import { DATA_RESOLVERS } from '../metrics/resolvers';
 import { METRICS } from '../metrics/catalog';
 import { useInsightsContext } from '../state/InsightsContext';
+import { eyebrowClass } from '@/components/ui/Eyebrow';
+import { cardClass } from '@/components/ui/Card';
 
 // A small, fixed palette built from binge tokens — saffran accent first, then
 // neutral inks. No foreign hues; stays within the design system.
@@ -38,10 +40,10 @@ export function Donut({ metricKey }: { metricKey: MetricKey }) {
   }, []);
 
   return (
-    <div className="bg-surface border border-rule rounded-md p-3">
-      <div className="text-[11px] uppercase tracking-wide text-ink-3 mb-2">{label}</div>
+    <div className={cardClass('p-3')}>
+      <div className={eyebrowClass({ size: 'xs', className: 'mb-2' })}>{label}</div>
       {total === 0 ? (
-        <div className="text-sm text-ink-3 py-2">Ingen data</div>
+        <div className="text-sm text-ink-3 py-2">{value.missing ?? 'Ingen data'}</div>
       ) : (
         <div className="flex items-center gap-4">
           <svg width={104} height={104} viewBox="0 0 100 100" aria-hidden className="shrink-0">
@@ -66,7 +68,7 @@ export function Donut({ metricKey }: { metricKey: MetricKey }) {
                 <span className={`inline-block w-2.5 h-2.5 rounded-full ${SLICE_CLASSES[i % SLICE_CLASSES.length]} bg-current shrink-0`} />
                 <span className="truncate text-ink-2">{e.label}</span>
                 <span className="ml-auto text-ink tabular-nums">{e.value.toLocaleString('sv-SE')}</span>
-                <span className="text-ink-3 tabular-nums text-[11px] w-9 text-right">{Math.round((e.value / total) * 100)}%</span>
+                <span className="text-ink-3 tabular-nums text-xs w-9 text-right">{Math.round((e.value / total) * 100)}%</span>
               </li>
             ))}
           </ul>

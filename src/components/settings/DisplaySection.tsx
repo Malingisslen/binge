@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/contexts/ToastContext';
 import { useTheme, type ThemeMode } from '@/contexts/ThemeContext';
 import { SettingsSection } from './SettingsSection';
+import { buttonClass } from '@/components/ui/Button';
 
 const THEME_LABELS: Record<ThemeMode, string> = { system: 'System', light: 'Ljust', dark: 'Mörkt' };
 
@@ -24,7 +25,7 @@ export function DisplaySection() {
               try { await updateDefaultView(v); toast('Inställning sparad'); }
               catch { toast('Kunde inte spara. Försök igen om en stund.'); }
             }}
-            className={`btn btn-sm ${user.defaultView === v ? 'btn-acc' : 'btn-ghost'}`}
+            className={buttonClass({ variant: user.defaultView === v ? 'acc' : 'ghost', size: 'sm' })}
           >
             {v === 'table' ? 'Tabell' : v === 'cards' ? 'Kort' : 'Rutnät'}
           </button>
@@ -39,7 +40,7 @@ export function DisplaySection() {
             key={m}
             onClick={() => setMode(m)}
             aria-pressed={mode === m}
-            className={`btn btn-sm ${mode === m ? 'btn-acc' : 'btn-ghost'}`}
+            className={buttonClass({ variant: mode === m ? 'acc' : 'ghost', size: 'sm' })}
           >
             {THEME_LABELS[m]}
           </button>

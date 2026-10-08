@@ -12,8 +12,10 @@
  *     user's own recent `provider_available` inbox docs) — summary, not a second
  *     detection system, so no duplicate notifications.
  *
- * Delivers ONE weekly push + ONE inbox card (kind 'weekly_digest', the only
- * non-tmdbId-shaped inbox kind — useNotifications renders it specially). Weekly
+ * Delivers ONE inbox card (kind 'weekly_digest', the only non-tmdbId-shaped
+ * inbox kind — useNotifications renders it specially), and no push: BIN-1442
+ * turned the digest on for new accounts on the promise, in the privacy page,
+ * that it reaches the app's bell only. Weekly
  * because the signal moves slowly and it keeps this the cheapest function in the
  * set (pure Firestore reads, once a week, only over opted-in users).
  *
@@ -27,7 +29,6 @@ import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { resolveTmdbId } from '../shared/mediaTypeDocId';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { logger } from 'firebase-functions/v2';
-import { sendPushToUser } from '../push';
 import { stockholmDayId } from '../util/dayId';
 import {
   buildLeavingDigest,
@@ -152,8 +153,6 @@ async function countNewArrivals(uid: string, nowMs: number): Promise<number> {
 
 async function processUser(uid: string, data: FirebaseFirestore.DocumentData, nowMs: number, runDate: string): Promise<boolean> {
   const db = getFirestore();
-  const settings = data.notificationSettings as { pushEnabled?: boolean } | undefined;
-  const pushEnabled = settings?.pushEnabled === true;
   const myProviders = Array.isArray(data.myProviders)
     ? (data.myProviders as unknown[]).filter((n): n is number => typeof n === 'number')
     : [];
@@ -182,13 +181,6 @@ async function processUser(uid: string, data: FirebaseFirestore.DocumentData, no
     read: false,
     createdAt: FieldValue.serverTimestamp(),
   }, { merge: true });
-
-  await sendPushToUser(uid, {
-    title: 'Din streamingvecka',
-    body: summary,
-    actionUrl: '/my/all',
-    tag: 'weekly-digest',
-  }, { pushEnabled });
 
   await stateRef.set({ lastSentDate: runDate, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
   return true;

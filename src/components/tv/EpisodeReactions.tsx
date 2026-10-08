@@ -3,6 +3,9 @@
 import { useState } from 'react';
 import { useEpisodeReactions, type EpisodeReaction } from '@/hooks/useEpisodeReactions';
 import { LoadingView } from '@/components/ui/LoadingView';
+import { Eyebrow } from '@/components/ui/Eyebrow';
+import { fieldClass } from '@/components/ui/Field';
+import { cardClass } from '@/components/ui/Card';
 
 // BIN-95: per-episode reaction thread. The whole thread is spoiler-gated on the
 // viewer's own progress — if they haven't watched THIS episode, no reactions are
@@ -55,9 +58,9 @@ function ReactionsThread({ tmdbId, season, episode, onClose }: {
   };
 
   return (
-    <div className="ep-reactions bg-surface border border-rule rounded-md p-2 mt-1">
+    <div className={cardClass('ep-reactions p-2 mt-1')}>
       <div className="flex items-center justify-between mb-1">
-        <span className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold">Reaktioner</span>
+        <Eyebrow as="span">Reaktioner</Eyebrow>
         <button type="button" onClick={onClose} className="text-xxs text-ink-3 bg-transparent border-none cursor-pointer">Dölj</button>
       </div>
 
@@ -69,7 +72,7 @@ function ReactionsThread({ tmdbId, season, episode, onClose }: {
             placeholder="Vad tyckte du om avsnittet?"
             maxLength={2000}
             rows={2}
-            className="w-full px-2 py-1 text-xs border border-rule rounded-sm bg-surface font-[inherit] resize-none outline-none"
+            className={fieldClass({ size: 'sm', className: 'w-full resize-none' })}
           />
           <div className="flex items-center justify-between mt-1">
             <label className="flex items-center gap-1 text-xxs text-ink-3 cursor-pointer">

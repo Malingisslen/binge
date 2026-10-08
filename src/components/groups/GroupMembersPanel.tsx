@@ -3,12 +3,16 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { X } from 'lucide-react';
-import { inviteMemberByUid, removeMember } from '@/lib/firebase/groups';
+import { inviteMemberByUid, removeMemberAsOwner } from '@/lib/firebase/groups';
 import { useUserSearch } from '@/hooks/useUserSearch';
 import { useAuth } from '@/hooks/useAuth';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import type { ResolvedUser } from '@/lib/firebase/username';
 import type { GroupMember } from '@/types';
+import { Eyebrow } from '@/components/ui/Eyebrow';
+import { fieldClass } from '@/components/ui/Field';
+import { cardClass } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
 
 /**
  * Medlemslistan i en grupp med per-rad delete och "+ Lägg till"-expansion.
@@ -27,11 +31,11 @@ export function GroupMembersPanel({
   const [adding, setAdding] = useState(false);
   const [memberToRemove, setMemberToRemove] = useState<GroupMember | null>(null);
   return (
-    <div className="bg-surface border border-rule rounded-sm">
-      <div className="px-3 py-[6px] border-b border-rule-2 flex items-center justify-between">
-        <div className="text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">
+    <div className={cardClass()}>
+      <div className="px-3 py-1.5 border-b border-rule-2 flex items-center justify-between">
+        <Eyebrow>
           Medlemmar ({members.length})
-        </div>
+        </Eyebrow>
         {isOwner && (
           <button
             onClick={() => setAdding(v => !v)}
@@ -91,7 +95,7 @@ export function GroupMembersPanel({
           body={`${memberToRemove.displayName} tas bort från gruppen och kan bara komma tillbaka via en ny inbjudan.`}
           confirmLabel="Ta bort"
           onConfirm={() => {
-            void removeMember(groupId, memberToRemove.uid);
+            void removeMemberAsOwner(groupId, memberToRemove.uid);
             setMemberToRemove(null);
           }}
           onCancel={() => setMemberToRemove(null)}
@@ -166,13 +170,13 @@ function AddMemberSearch({
   };
 
   return (
-    <div className="px-3 py-2 border-b border-rule-2 bg-white/50 space-y-1">
+    <div className="px-3 py-2 border-b border-rule-2 bg-surface space-y-1">
       <input
         type="text"
         value={q}
         onChange={e => { setQ(e.target.value); setErr(null); }}
         placeholder="Sök efter @användarnamn eller namn…"
-        className="w-full px-2 py-1 text-xs border border-rule rounded-sm bg-white outline-none"
+        className={fieldClass({ size: 'sm', className: 'w-full' })}
         autoFocus
       />
       {q.trim().length >= 2 && isLoading && (
@@ -184,25 +188,25 @@ function AddMemberSearch({
         </div>
       )}
       {filtered.length > 0 && (
-        <ul className="bg-white border border-rule rounded-sm divide-y divide-rule-2">
+        <ul className={cardClass('divide-y divide-rule-2')}>
           {filtered.map(u => {
             const already = existingUids.includes(u.uid);
             const isInvited = invited.has(u.uid);
             const busy = inviting === u.uid;
             return (
-              <li key={u.uid} className="px-2 py-[5px] flex items-center gap-2">
+              <li key={u.uid} className="px-2 py-1.5 flex items-center gap-2">
                 <SmallAvatar name={u.displayName} photoURL={u.photoURL} />
                 <div className="flex-1 min-w-0">
                   <div className="text-xs text-ink truncate">{u.displayName}</div>
                   <div className="text-xxs text-ink-3 truncate">@{u.username}</div>
                 </div>
-                <button
+                <Button
                   onClick={() => handleInvite(u)}
                   disabled={already || busy || isInvited || !user}
-                  className="px-2 py-[2px] text-xxs border-none rounded-sm cursor-pointer font-[inherit] bg-acc-deep text-white disabled:bg-rule disabled:text-ink-3 disabled:cursor-default"
+                  variant="acc" size="xs" className="disabled:bg-rule disabled:text-ink-3 disabled:cursor-default"
                 >
                   {already ? 'Medlem' : isInvited ? 'Inbjuden' : busy ? 'Bjuder in…' : 'Bjud in'}
-                </button>
+                </Button>
               </li>
             );
           })}

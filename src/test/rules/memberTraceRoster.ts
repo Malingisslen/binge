@@ -29,6 +29,7 @@ const HISTORY = 'history-1';
 export const ROSTER_ERASURE: TraceErasure = {
   itemIds: [ITEM],
   clearAddedByIds: [ITEM],
+  clearRatingIds: [ITEM],
   clearPickedByIds: [HISTORY],
   dropParticipantIds: [HISTORY],
 };
@@ -47,6 +48,8 @@ const LEAVER_TRACES: readonly SeededTrace[] = [
   { op: 'delete', collection: 'joinAttempts', doc: LEAVER },
   { op: 'delete', collection: `watchlist/${ITEM}/progress`, doc: LEAVER },
   { op: 'clear', collection: 'watchlist', doc: ITEM, field: 'addedBy' },
+  // BIN-1306: the leaver's own key in the rating map, never the map itself.
+  { op: 'clear', collection: 'watchlist', doc: ITEM, field: `memberRatings.${LEAVER}` },
   { op: 'clear', collection: 'sessionHistory', doc: HISTORY, field: 'pickedByUid' },
   { op: 'drop', collection: 'sessionHistory', doc: HISTORY, field: 'participantUids' },
 ];
@@ -64,10 +67,22 @@ async function seed(db: Firestore) {
     await setDoc(doc(db, 'groups', GROUP, 'joinAttempts', uid), { token: 'plaintext' });
     await setDoc(doc(db, 'groups', GROUP, 'watchlist', ITEM, 'progress', uid), { season: 1 });
   }
-  await setDoc(doc(db, 'groups', GROUP, 'watchlist', ITEM), { addedBy: LEAVER, title: ITEM });
+  await setDoc(doc(db, 'groups', GROUP, 'watchlist', ITEM), {
+    addedBy: LEAVER, title: ITEM, memberRatings: { [LEAVER]: 7, [STAYER]: 8 },
+  });
   await setDoc(doc(db, 'groups', GROUP, 'sessionHistory', HISTORY), {
     pickedByUid: LEAVER, tmdbId: 1, participantUids: [LEAVER, STAYER],
   });
+}
+
+/** Whether a field path, dotted for a nested key, is present on the document data. */
+function fieldPresent(data: Record<string, unknown>, fieldPath: string): boolean {
+  let node: unknown = data;
+  for (const segment of fieldPath.split('.')) {
+    if (typeof node !== 'object' || node === null || !(segment in node)) return false;
+    node = (node as Record<string, unknown>)[segment];
+  }
+  return true;
 }
 
 /** Is this trace of the leaver still present? */
@@ -76,7 +91,7 @@ async function present(db: Firestore, t: SeededTrace): Promise<boolean> {
   if (!snap.exists()) return false;
   if (t.op === 'delete') return true;
   const data = snap.data();
-  if (t.op === 'clear') return t.field! in data;
+  if (t.op === 'clear') return fieldPresent(data, t.field!);
   return ((data[t.field!] as string[] | undefined) ?? []).includes(LEAVER);
 }
 
@@ -111,6 +126,10 @@ export async function rosterMismatches(run: Run, erase: HandoverIo['eraseMemberT
       if (!(await getDoc(doc(db, `groups/${GROUP}/${sub}/${STAYER}`))).exists()) {
         mismatches.push(`port erased the remaining member's ${sub} row`);
       }
+    }
+    const item = await getDoc(doc(db, 'groups', GROUP, 'watchlist', ITEM));
+    if (!fieldPresent(item.data() ?? {}, `memberRatings.${STAYER}`)) {
+      mismatches.push("port erased the remaining member's rating");
     }
     const history = await getDoc(doc(db, 'groups', GROUP, 'sessionHistory', HISTORY));
     if (!((history.data()?.participantUids as string[] | undefined) ?? []).includes(STAYER)) {

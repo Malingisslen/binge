@@ -11,7 +11,7 @@
 
 import { FRANCHISES } from '@/lib/seo/franchises';
 import { GENRE_HUBS } from '@/lib/seo/genreHubs';
-import { getProvider } from '@/lib/tmdb/providers';
+import { canonicalProviderId, getProvider } from '@/lib/tmdb/providers';
 import { SEO_PROVIDER_IDS } from '@/lib/tmdb/seoCoverage';
 
 export interface HubLink {
@@ -57,6 +57,15 @@ export function genreLinks(): HubLink[] {
   return GENRE_HUBS.map((g) => ({ href: `/genre/${g.slug}/`, label: g.label }));
 }
 
+/**
+ * Kalkylatorn (/streamingkostnad/). Prissidan /streamingpriser/ står medvetet
+ * INTE här: den är noindex tills Malin bekräftat att prisagenten är schemalagd
+ * (#26:s villkor 4), och hubLinks.test.ts fäller den om den läggs till.
+ */
+export function costLinks(): HubLink[] {
+  return [{ href: '/streamingkostnad/', label: 'Räkna ut din streamingkostnad' }];
+}
+
 export function hubSections(): HubSection[] {
   return [
     {
@@ -83,5 +92,38 @@ export function hubSections(): HubSection[] {
       blurb: 'Populära filmer och serier genre för genre — och var de streamar i Sverige.',
       links: genreLinks(),
     },
+    {
+      id: 'kostnad',
+      heading: 'Vad kostar streaming?',
+      blurb: 'Kryssa i tjänsterna du betalar för och se månads- och årskostnaden med ordinarie listpriser.',
+      links: costLinks(),
+    },
   ];
+}
+
+// SEO-4 — links FROM title pages and provider hubs INTO the curated hubs. Each
+// returns null for anything outside the pre-rendered set, so a page never links
+// to a catch-all URL that serves the noindex shell.
+
+function curatedProviderId(providerId: number): number | null {
+  const pid = canonicalProviderId(providerId);
+  return SEO_PROVIDER_IDS.includes(pid) ? pid : null;
+}
+
+/** `/provider/{id}/` for a curated provider (alias ids resolve), else null. */
+export function providerHubHref(providerId: number): string | null {
+  const pid = curatedProviderId(providerId);
+  return pid === null ? null : `/provider/${pid}/`;
+}
+
+/** `/forsvinner/{id}/` for a curated provider (alias ids resolve), else null. */
+export function leavingHubHref(providerId: number): string | null {
+  const pid = curatedProviderId(providerId);
+  return pid === null ? null : `/forsvinner/${pid}/`;
+}
+
+/** `/genre/{slug}/` for a TMDB genre id that has a curated hub on this side, else null. */
+export function genreHubHref(kind: 'movie' | 'tv', genreId: number): string | null {
+  const hub = GENRE_HUBS.find((g) => (kind === 'movie' ? g.movieGenreId : g.tvGenreId) === genreId);
+  return hub ? `/genre/${hub.slug}/` : null;
 }

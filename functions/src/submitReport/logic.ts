@@ -12,7 +12,7 @@
  */
 
 export const REPORT_REASONS = ['spam', 'hate', 'harassment', 'illegal', 'pii', 'other'] as const;
-export const REPORT_TARGET_TYPES = ['review', 'comment', 'user', 'list'] as const;
+export const REPORT_TARGET_TYPES = ['review', 'comment', 'user', 'list', 'group'] as const;
 export type ReportReason = (typeof REPORT_REASONS)[number];
 export type ReportTargetType = (typeof REPORT_TARGET_TYPES)[number];
 
@@ -35,7 +35,12 @@ export interface ValidReport {
 // path/parse logic is unit-testable.
 export type TargetRef =
   | { kind: 'user'; uid: string }   // a user report — targetId IS the owner uid
-  | { kind: 'doc'; path: string[] } // read .uid from the doc at this path
+  // Read the owner from the doc at this path. `ownerField` names the key that
+  // holds it: `reviews`, `lists` and `comments` all key it `uid`, but a group
+  // document keys it `ownerUid` and carries no `uid` at all. Before BIN-1120 the
+  // reader hardcoded `uid`, so a group target would have produced a report with
+  // `targetOwnerUid: null` — created, not rejected, and silently unattributed.
+  | { kind: 'doc'; path: string[]; ownerField: string }
   | { kind: 'invalid' };            // malformed (e.g. bad comment path) → unresolved
 
 export function resolveTargetRef(targetType: ReportTargetType, targetId: string): TargetRef {
@@ -43,17 +48,43 @@ export function resolveTargetRef(targetType: ReportTargetType, targetId: string)
     case 'user':
       return { kind: 'user', uid: targetId };
     case 'review':
-      return { kind: 'doc', path: ['reviews', targetId] };
+      return { kind: 'doc', path: ['reviews', targetId], ownerField: 'uid' };
     case 'list':
-      return { kind: 'doc', path: ['lists', targetId] };
+      return { kind: 'doc', path: ['lists', targetId], ownerField: 'uid' };
+    case 'group':
+      return { kind: 'doc', path: ['groups', targetId], ownerField: 'ownerUid' };
     case 'comment': {
       // targetId packs the full path: reviews/{reviewId}/comments/{commentId}
       const m = /^reviews\/([^/]+)\/comments\/([^/]+)$/.exec(targetId);
-      return m ? { kind: 'doc', path: ['reviews', m[1], 'comments', m[2]] } : { kind: 'invalid' };
+      return m
+        ? { kind: 'doc', path: ['reviews', m[1], 'comments', m[2]], ownerField: 'uid' }
+        : { kind: 'invalid' };
     }
     default:
       return { kind: 'invalid' };
   }
+}
+
+/**
+ * Read the target owner out of the fetched document.
+ *
+ * Extracted from the callable (BIN-1120) so the field-name choice is testable
+ * without firebase-admin: a group document keys its owner `ownerUid` and has no
+ * `uid`, so a reader that hardcoded `uid` would have returned null for every
+ * group report — and a null owner is WRITTEN, not rejected, so nothing would
+ * have failed. The asymmetry lives in `ownerField` on the ref, not here.
+ *
+ * A missing or malformed document stays unresolved rather than rejecting: the
+ * callable deliberately keeps reports about since-deleted targets.
+ */
+export function resolveDocOwner(
+  ref: Extract<TargetRef, { kind: 'doc' }>,
+  snap: { exists: boolean; get: (field: string) => unknown },
+): { targetOwnerUid: string | null; ownerResolved: boolean } {
+  const owner = snap.exists ? snap.get(ref.ownerField) : undefined;
+  return typeof owner === 'string' && owner.length > 0
+    ? { targetOwnerUid: owner, ownerResolved: true }
+    : { targetOwnerUid: null, ownerResolved: false };
 }
 
 export type ValidationResult =

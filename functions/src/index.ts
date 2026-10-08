@@ -181,7 +181,7 @@ export const onSessionPickCreate = onDocumentCreated(
 
 // ── Insikter (intern analys-dashboard) ───────────────────────────────────────
 // rollupInsights: schemalagd Firestore-aggregering → insights/daily.
-// apiInsights: HTTP-endpoint bakom /api/insights (admin-token + Plausible-merge).
+// apiInsights: HTTP-endpoint bakom /api/insights (admin-token + eventStats-summor).
 export { rollupInsights } from './insights/rollup';
 export { apiInsights } from './insights/api';
 
@@ -246,7 +246,22 @@ export { getProfileForModeration } from './moderationProfile';
 // Server-auktoritativ av två skäl: `ownerUid` är pinnad oförändrad på varje
 // groups-update-gren, och reglerna kan inte iterera medlems-undersamlingen för
 // att kontrollera VEM som varit med längst. Kontot tas ur `request.auth`.
-export { handOverOwnedGroups } from './groupHandover';
+// handOverGroup (BIN-1118): callable som lämnar över EN grupp till en efterträdare
+// som ägaren själv pekat ut, och tar ägaren ur gruppen. Samma serverkrav som ovan,
+// plus ett till: de kvarvarande medlemmarna får en notis, och det skriver i ANDRAS
+// `users/{uid}/notifications`, vilket ingen regelgren kan tillåta.
+// eraseMyGroupTraces (BIN-1260, BIN-1296): se funktionens egen rubrik i
+// groupHandover/index.ts.
+export { handOverOwnedGroups, handOverGroup, eraseMyGroupTraces } from './groupHandover';
+
+// ── Besked till anmälaren (BIN-1259) ────────────────────────────────────────
+// notifyReportDecided: Firestore-utlösare som lägger ETT kort i anmälarens inbox
+// när en anmälan går in i ett avgjort läge. Utlösare och inte en skrivning från
+// adminvyn, eftersom `users/{uid}/notifications` är låst för klienter — en
+// isAdmin()-gren där hade gett varje adminsession rätt att skriva vad som helst
+// i vems inbox som helst. Kortet läser bara `status` och `reporterUid`, aldrig
+// admins egen motivering (BIN-1250, som är intern).
+export { notifyReportDecided } from './reportDecided';
 
 // ── Fråga Binge usage/error recorder (BIN-176 learning loop) ─────────────────
 // recordAskBinge: callable som inkrementerar dagliga räknare i askBingeStats/{date}
@@ -254,6 +269,12 @@ export { handOverOwnedGroups } from './groupHandover';
 // skrivaren — askBingeStats är låst för klienter i firestore.rules. App Check ELLER
 // inloggad krävs (ingen öppen flod-vektor). /api/insights läser dem per intervall.
 export { recordAskBinge } from './askbinge';
+// ── Egen räkning av hur funktioner används (BIN-1438) ───────────────────────
+// recordEvent: callable som inkrementerar dagliga summor i eventStats/{date} för ett
+// fast ordförråd av händelser (klick till tjänster, delningar, priskollar, inloggningar).
+// Ersätter Plausible. eventStats är låst för klienter i firestore.rules. App Check krävs
+// för varje anrop; funktionen läser aldrig vem som anropar. /api/insights läser summorna.
+export { recordEvent } from './eventStats';
 // LLM-fallback query parser (runs only on low-confidence deterministic parses).
 // Needs GEMINI_API_KEY secret + a functions deploy; client degrades gracefully.
 export { askBingeParse } from './askbinge/parse';
@@ -303,6 +324,14 @@ export { priceDropNotify } from './priceDropNotify';
 // ingen rules-ändring (rotationSchedule + flaggan är owner-skrivbara user-fält).
 export { rotationReminderNotify } from './rotationReminder';
 
+// ── Prisvakt-push (BIN-1444, paket L) ────────────────────────────────────────
+// priceChangeNotify: daglig hämtning av sajtens /prisandringar.json (byggd ur
+// klientkatalogens PRICE_CHANGES) → rader högst 14 dygn gamla → push till users
+// med opt-in (notificationSettings.priceChanges) vars tjänst+nivå matchar.
+// Deduppas per prisändring mot priceChangeNotifyState/{key} (ingen uid). Admin
+// SDK → ingen rules-ändring.
+export { priceChangeNotify } from './priceChangeNotify';
+
 // ── Veckodigest "lämnar snart + nytt på dina tjänster" (BIN-163) ─────────────
 // weeklyDigestNotify: veckovis (mån 09:00 Europe/Stockholm) query av users med
 // opt-in (notificationSettings.weeklyDigest) → läser deras bibliotek + delade
@@ -311,6 +340,12 @@ export { rotationReminderNotify } from './rotationReminder';
 // pushat) → ETT push + EN inbox-kort (kind 'weekly_digest'). Deduppas mot
 // weeklyDigestState/{uid}.lastSentDate. Inga TMDB-anrop (rena Firestore-läsningar).
 export { weeklyDigestNotify } from './weeklyDigest';
+
+// monthlyBillNotify: den 1:a varje månad 09:00 Europe/Stockholm. Ett klockkort
+// "Din streaming i <månad>" till den som hade en betald tjänst och bockade av något
+// förra månaden (BIN-1449). Bara klockan, ingen push. Kortets id är
+// monthly-bill-<yyyy-mm>, skrivet med create(), så en omkörning dubblar inget.
+export { monthlyBillNotify } from './monthlyBillNotify';
 
 // ── TMDB ToS-svep (BIN-402) ──────────────────────────────────────────────────
 // tmdbFieldsSweep: månadsvis collectionGroup-scan av ALLA watchlist-docs →

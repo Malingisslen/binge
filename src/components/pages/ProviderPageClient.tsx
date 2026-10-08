@@ -11,7 +11,11 @@ import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import Link from 'next/link';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { localIsoDate } from '@/lib/utils';
+import { providerHubCopy } from '@/lib/seo/providerHubCopy';
+import { leavingHubHref } from '@/lib/seo/hubLinks';
 import type { TMDBSearchResult } from '@/types';
+import { Button } from '@/components/ui/Button';
+import { cardClass } from '@/components/ui/Card';
 
 type Tab = 'new' | 'movies' | 'tv';
 
@@ -111,15 +115,19 @@ export default function ProviderPageClient({
     indexable,
   });
 
+  const copy = provider ? providerHubCopy(provider) : null;
+  const leavingHref = leavingHubHref(providerId);
+
   return (
     <div>
       <PageHeader
         crumb="Streamingtjänst"
-        title={providerName}
+        title={copy?.h1 ?? providerName}
+        standfirst={copy?.standfirst}
         icon={provider?.color ? <ProviderDot color={provider.color} size={10} /> : undefined}
       />
       <div className="flex items-center gap-2 mt-3 mb-3">
-        <div className="flex gap-[6px]">
+        <div className="flex gap-1.5">
           {([['new', 'Nytt'], ['movies', 'Filmer'], ['tv', 'Serier']] as const).map(([key, label]) => (
             <button
               key={key}
@@ -134,29 +142,29 @@ export default function ProviderPageClient({
         </div>
       </div>
 
-      {indexable && (
+      {leavingHref && (
         <div className="mb-3">
-          <Link href={`/forsvinner/${canonicalProviderId(providerId)}/`} className="text-sm text-acc-deep hover:underline">
+          <Link href={leavingHref} className="text-sm text-acc-deep hover:underline">
             Vad försvinner från {providerName} snart? →
           </Link>
         </div>
       )}
 
-      <div className="bg-surface border border-rule rounded-sm">
+      <div className={cardClass()}>
         <TitleGrid items={allResults} loading={isLoading && allResults.length === 0} />
-        <div className="px-3 py-[6px] border-t border-rule">
+        <div className="px-3 py-1.5 border-t border-rule">
           <JustWatchCredit />
         </div>
       </div>
 
       {hasMore && (
-        <button
+        <Button
           onClick={() => setPage(p => p + 1)}
           disabled={isLoading}
-          className="btn btn-ghost btn-sm mt-3 disabled:opacity-50"
+          variant="ghost" size="sm" className="mt-3 disabled:opacity-50"
         >
           {isLoading ? 'Laddar…' : 'Visa fler'}
-        </button>
+        </Button>
       )}
     </div>
   );

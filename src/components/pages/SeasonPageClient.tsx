@@ -13,6 +13,8 @@ import { LoadingView } from '@/components/ui/LoadingView';
 import { NotFound } from '@/components/ui/NotFound';
 import { countAiredEpisodes } from '@/lib/episodeLabel';
 import { todayIso } from '@/lib/utils';
+import { Button } from '@/components/ui/Button';
+import { cardClass } from '@/components/ui/Card';
 
 export default function SeasonPageClient({ id, num }: { id: string; num: string }) {
   const seriesId = parseInt(id, 10);
@@ -45,11 +47,11 @@ export default function SeasonPageClient({ id, num }: { id: string; num: string 
         title={season.name}
         standfirst={`${progressLoading ? '—' : watchedCount}/${episodes.length} avsnitt sedda`}
         actions={!progressLoading && watchedCount < episodes.length && airedCount > 0 ? (
-          <button type="button" onClick={() => markSeasonWatched(seasonNum, episodes.length)} className="btn btn-acc btn-sm">Markera alla sedda</button>
+          <Button type="button" onClick={() => markSeasonWatched(seasonNum, episodes.length)} variant="acc" size="sm">Markera alla sedda</Button>
         ) : undefined}
       />
 
-      <div className="bg-surface border border-rule rounded-sm px-3 py-1 mt-3">
+      <div className={cardClass('px-3 py-1 mt-3')}>
         <div className="flex items-center gap-2 py-2 border-b border-rule-2">
           <div className="flex-1 h-[3px] bg-rule rounded-full overflow-hidden">
             <div

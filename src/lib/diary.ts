@@ -8,7 +8,7 @@ import { seenDate } from '@/lib/seenDate';
 // useAllEpisodeProgress). Both are the payoff of editable watch dates (BIN-91).
 // All assembly is pure + testable; the hook only fetches + normalises.
 
-const MONTHS_SV = [
+export const MONTHS_SV = [
   'januari', 'februari', 'mars', 'april', 'maj', 'juni',
   'juli', 'augusti', 'september', 'oktober', 'november', 'december',
 ];
@@ -111,4 +111,17 @@ export function buildFilmDiary(items: WatchlistItem[]): DiaryMonth[] {
 /** Total entries across all months — for the header count. */
 export function diaryEntryCount(months: DiaryMonth[]): number {
   return months.reduce((sum, m) => sum + m.entries.length, 0);
+}
+
+/** De första `limit` inläggen, med månadsindelningen kvar och tomma månader borttagna. */
+export function firstEntries(months: DiaryMonth[], limit: number): DiaryMonth[] {
+  const out: DiaryMonth[] = [];
+  let left = limit;
+  for (const m of months) {
+    if (left <= 0) break;
+    const entries = m.entries.slice(0, left);
+    out.push(entries.length === m.entries.length ? m : { ...m, entries });
+    left -= entries.length;
+  }
+  return out;
 }

@@ -19,7 +19,7 @@ export function PasswordStrengthMeter({ strength }: { strength: PasswordStrength
 
   return (
     <div className="mb-2 -mt-1">
-      <div className="flex gap-[2px] mb-1" aria-hidden="true">
+      <div className="flex gap-0.5 mb-1" aria-hidden="true">
         {[1, 2, 3, 4].map(i => (
           <div
             key={i}

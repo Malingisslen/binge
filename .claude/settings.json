@@ -1,5 +1,6 @@
 {
   "permissions": {
+    "allow": ["Write(~/.claude/state/preview-done-*.marker)"],
     "deny": [
       "Read(**/.env)",
       "Read(**/.env.*)",

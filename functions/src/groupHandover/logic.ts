@@ -36,7 +36,7 @@ export interface MemberRow {
  * the group" destroys a live group on a retried sweep that already succeeded.
  */
 export type HandoverOutcome =
-  | { readonly kind: 'handover'; readonly ownerUid: string; readonly memberUids: readonly string[] }
+  | { readonly kind: 'handover'; readonly ownerUid: string }
   /** Nobody eligible remains. A successor cannot be invented, so the group goes. */
   | { readonly kind: 'delete' }
   /**
@@ -125,7 +125,6 @@ export function isEmptyExcept(memberUids: readonly string[], leavingUid: string)
  *
  * `noop` comes first and is the idempotency guard: a retried run must hold no
  * second election, which could name a different member than the first one did.
- * `memberUids` shrinks by exactly the departing uid and never grows.
  */
 export function buildHandoverUpdate(
   currentOwnerUid: string,
@@ -140,7 +139,141 @@ export function buildHandoverUpdate(
   const survivors = memberUids.filter((uid) => uid !== leavingUid);
   const successorUid = pickGroupSuccessor(members, leavingUid, survivors);
   if (successorUid === null) return { kind: 'delete' };
-  return { kind: 'handover', ownerUid: successorUid, memberUids: survivors };
+  return { kind: 'handover', ownerUid: successorUid };
+}
+
+/**
+ * A refusal the owner is meant to READ, as opposed to anything that merely went
+ * wrong.
+ *
+ * BIN-1118 first marked the difference with an `HttpsError` code, and the
+ * callable assigned that code to everything thrown inside its try — so a raw
+ * gRPC message from a failed batch write reached the dialog and was rendered
+ * verbatim, in a Swedish UI, at the moment the owner was giving the group away.
+ * `eraseMemberTraces` throws exactly that way when a watchlist row is deleted
+ * between the read and the write; its own comment in `adminIo.ts` says so.
+ *
+ * A class rather than a string sentinel because the callable only has to ask
+ * `instanceof`, and nothing has to stay in sync with a list of wordings.
+ */
+export class HandoverRefusal extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'HandoverRefusal';
+  }
+}
+
+/**
+ * BIN-1118. The owner names their own successor, instead of the server electing
+ * the longest-standing member.
+ *
+ * Separate from `buildHandoverUpdate` on purpose: that one answers "the owner is
+ * gone, who gets this?" for the deletion and sweep doors, where no human is
+ * present to choose and a tie must break deterministically. This one answers
+ * "the owner picked X" — so it validates the pick rather than holding an
+ * election, and it REFUSES where the other returns `noop`. A caller that pointed
+ * at the wrong group, or at someone who is not a member, must hear about it;
+ * silently doing nothing would show the owner a success and leave them owner.
+ *
+ * `delete` is deliberately not an outcome. An owner with nobody else in the group
+ * has nobody to pick, so the UI never offers the choice, and the existing "Radera
+ * grupp" is the honest action there.
+ */
+export type OwnerPickedOutcome =
+  | { readonly kind: 'handover'; readonly ownerUid: string }
+  | { readonly kind: 'refused'; readonly reason: 'not-owner' | 'not-a-member' | 'self' };
+
+export function buildOwnerPickedHandover(
+  group: { readonly ownerUid: string; readonly memberUids: readonly string[] },
+  leavingUid: string,
+  successorUid: string,
+): OwnerPickedOutcome {
+  if (group.ownerUid !== leavingUid) return { kind: 'refused', reason: 'not-owner' };
+  // Checked before membership: the leaver IS in `memberUids`, so without this the
+  // next test would pass and the owner would hand the group to themselves — a
+  // write that looks like a handover, changes nothing, and still removes them
+  // from `memberUids`, leaving a group owned by a non-member.
+  if (successorUid === leavingUid) return { kind: 'refused', reason: 'self' };
+  if (!group.memberUids.includes(successorUid)) return { kind: 'refused', reason: 'not-a-member' };
+  return { kind: 'handover', ownerUid: successorUid };
+}
+
+/**
+ * BIN-1266 — what `claimOwnership` writes, decided from the group AS ITS OWN
+ * TRANSACTION READ IT. ONE decision site; every port runs it inside its
+ * read-then-write.
+ *
+ * `memberUids` is derived here, from `fresh`, and never carried in from the
+ * caller's earlier read: the erasure runs between that read and the claim, and a
+ * member who left in that window used to be written back into the group.
+ *
+ * `successor-left` writes nothing. Writing would leave a group owned by someone
+ * who is not in `memberUids` — the state BIN-1108 closed in the rules.
+ */
+export type ClaimResult =
+  | { readonly kind: 'claimed'; readonly ownerUid: string; readonly memberUids: readonly string[] }
+  | { readonly kind: 'owner-changed' }
+  | { readonly kind: 'successor-left' };
+
+export function planClaim(
+  fresh: { readonly ownerUid: string; readonly memberUids: readonly string[] } | null,
+  expectedOwnerUid: string,
+  write: { readonly ownerUid: string; readonly leavingUid: string },
+): ClaimResult {
+  if (!fresh || fresh.ownerUid !== expectedOwnerUid) return { kind: 'owner-changed' };
+  if (!fresh.memberUids.includes(write.ownerUid)) return { kind: 'successor-left' };
+  return {
+    kind: 'claimed',
+    ownerUid: write.ownerUid,
+    memberUids: fresh.memberUids.filter((uid) => uid !== write.leavingUid),
+  };
+}
+
+/**
+ * Build the departing member's trace-erasure payload. ONE construction site.
+ *
+ * BIN-1118 first wrote this enumeration a second time, inside the owner-picked
+ * handover, and that is precisely the defect the roster block in `logic.test.ts`
+ * exists to stop: its handler assertions search the runner's source text, and one
+ * occurrence satisfies them, so dropping a category from the SECOND copy stayed
+ * green. The direction of that silence is the bad one — a missed category leaves
+ * a departing member's rows in a group they are no longer in, and after the swap
+ * neither door's query finds that group again, so no retry reaches them.
+ *
+ * The guard that keeps that true reads `runHandover.ts` and requires every
+ * `io.eraseMemberTraces(` call site there to build its payload with this function.
+ * A door added in ANOTHER file is outside that scan, which is why the sibling
+ * roster guard in `src/test/rules/group-handover-orchestrator.test.ts` derives the
+ * file list instead of naming one.
+ */
+export function buildTraceErasure(
+  watchlist: readonly {
+    readonly id: string;
+    readonly addedBy?: unknown;
+    readonly memberRatings?: unknown;
+  }[],
+  history: readonly {
+    readonly id: string;
+    readonly pickedByUid?: unknown;
+    readonly participantUids: readonly string[];
+  }[],
+  leavingUid: string,
+): TraceErasure {
+  return {
+    itemIds: watchlist.map((row) => row.id),
+    clearAddedByIds: watchlist
+      .filter((row) => clearsAddedBy(row.addedBy, leavingUid))
+      .map((row) => row.id),
+    clearRatingIds: watchlist
+      .filter((row) => holdsRatingBy(row.memberRatings, leavingUid))
+      .map((row) => row.id),
+    clearPickedByIds: history
+      .filter((row) => clearsAddedBy(row.pickedByUid, leavingUid))
+      .map((row) => row.id),
+    dropParticipantIds: history
+      .filter((row) => row.participantUids.includes(leavingUid))
+      .map((row) => row.id),
+  };
 }
 
 /**
@@ -151,6 +284,32 @@ export function buildHandoverUpdate(
  */
 export function clearsAddedBy(addedBy: unknown, leavingUid: string): boolean {
   return addedBy === leavingUid;
+}
+
+/**
+ * Whether a `groups/{gid}/watchlist/{id}` row's `memberRatings` map holds the
+ * departing member's own rating.
+ *
+ * BIN-1306, Malin's decision of 2026-09-26: the rating goes with the member, the
+ * other members' ratings on the same title stay. A row that never had the map, or
+ * holds it in some other shape, has nothing of theirs to clear.
+ */
+export function holdsRatingBy(memberRatings: unknown, leavingUid: string): boolean {
+  return typeof memberRatings === 'object'
+    && memberRatings !== null
+    && !Array.isArray(memberRatings)
+    && Object.prototype.hasOwnProperty.call(memberRatings, leavingUid);
+}
+
+/**
+ * The field path of one member's key inside `memberRatings`.
+ *
+ * Both SDKs read a dotted update key as a nested field path, so this removes the
+ * one key and leaves the other members' ratings untouched. The client already
+ * writes the same path (`setMemberRating` in `src/lib/firebase/groups.ts`).
+ */
+export function memberRatingField(uid: string): string {
+  return `memberRatings.${uid}`;
 }
 
 /**
@@ -188,6 +347,9 @@ export function memberTraceWrites(leavingUid: string, erasure: TraceErasure): Tr
   }
   for (const itemId of erasure.clearAddedByIds) {
     writes.push({ op: 'clear', collection: 'watchlist', doc: itemId, field: 'addedBy' });
+  }
+  for (const itemId of erasure.clearRatingIds) {
+    writes.push({ op: 'clear', collection: 'watchlist', doc: itemId, field: memberRatingField(leavingUid) });
   }
   for (const rowId of erasure.clearPickedByIds) {
     writes.push({ op: 'clear', collection: 'sessionHistory', doc: rowId, field: 'pickedByUid' });
@@ -245,9 +407,14 @@ export const HANDOVER_PARTIAL = 'binge/handover-partial';
  */
 export function refusalForHandover(
   summary: { readonly failed: number; readonly attempted: number },
+  /**
+   * BIN-1295: the sent invitations the same call erased BEFORE the handover.
+   * Once they are gone, a refusal is not "nothing has been deleted" either.
+   */
+  invitesErased = false,
 ): string | null {
   if (summary.failed === 0) return null;
-  if (summary.attempted > 0) {
+  if (summary.attempted > 0 || invitesErased) {
     return `${HANDOVER_PARTIAL}: Kunde inte lämna över alla grupper, och en del ändringar hann göras. Försök igen.`;
   }
   return 'Kunde inte lämna över alla grupper. Försök igen.';
@@ -285,4 +452,107 @@ export const SENT_INVITE_BATCH_LIMIT = 450;
 export function refusalForSentInvites(found: number): string | null {
   if (found <= SENT_INVITE_BATCH_LIMIT) return null;
   return `Fler an ${SENT_INVITE_BATCH_LIMIT} skickade gruppinbjudningar. Ingenting raderades.`;
+}
+
+/**
+ * BIN-1260: what a person who has LEFT a group may have erased from it.
+ *
+ * Leaving stays a client write (#12's condition, `## BIN-1120` in
+ * .claude/rules/accepted-deviations.md); this runs afterwards, as a separate
+ * server step the leaver calls for themselves. It must therefore refuse anyone
+ * still IN the group: erasing a live member's row would manufacture the ghost
+ * state BIN-1097 is about, out of a membership that is working.
+ *
+ * `nothing` covers a group that is gone. A caller who was never a member gets
+ * `erase` like anyone else, and every write that follows names only their own
+ * uid, so it finds nothing to change. Both answers return the same thing to the
+ * client, so the callable says nothing about whether a group exists.
+ */
+export type LeaverErasurePlan =
+  | { kind: 'erase' }
+  | { kind: 'nothing' }
+  | { kind: 'refused'; reason: 'still-member' | 'owner' };
+
+export function planLeaverErasure(
+  group: { readonly ownerUid: string; readonly memberUids: readonly string[] } | null,
+  uid: string,
+): LeaverErasurePlan {
+  if (!group) return { kind: 'nothing' };
+  // Before the membership check although an owner is normally a member: the
+  // owner leaves through the handover, and that answer should not depend on
+  // `memberUids` being intact.
+  if (group.ownerUid === uid) return { kind: 'refused', reason: 'owner' };
+  if (group.memberUids.includes(uid)) return { kind: 'refused', reason: 'still-member' };
+  return { kind: 'erase' };
+}
+
+export const LEAVER_ERASURE_REFUSALS: Record<'still-member' | 'owner', string> = {
+  'still-member': 'Du är fortfarande med i gruppen.',
+  owner: 'Du äger gruppen. Lämna över den först.',
+};
+
+/**
+ * Whether one chunk of a leaver's erasure may be written, decided on a read made
+ * INSIDE the same transaction as the chunk.
+ *
+ * #4 Security's binding condition on BIN-1260: a leaver who rejoins while the
+ * erasure is still running has a live membership again, and the chunks still
+ * queued would delete its fresh member row, household contribution and
+ * progress. A check made once at the start cannot see that, so every chunk
+ * re-reads the group and stops when the caller is back in, or the group is gone.
+ */
+export function leaverChunkMayCommit(
+  group: { readonly memberUids: readonly string[]; readonly ownerUid?: string } | null,
+  uid: string,
+  requiredOwner?: string,
+): boolean {
+  if (group === null || group.memberUids.includes(uid)) return false;
+  // BIN-1296: an owner's removal also stops when the caller is no longer the
+  // owner — a handover mid-run must not let the old owner keep erasing.
+  return requiredOwner === undefined || group.ownerUid === requiredOwner;
+}
+
+/**
+ * BIN-1296: what an OWNER who has removed a member may have erased from the group.
+ *
+ * `nothing` when the group is gone OR the caller does not own it — one answer for
+ * both, so the callable says nothing to a non-owner about whether a group exists
+ * (#4, #5, #6, #27). Otherwise the removed member is judged exactly as a leaver
+ * is: still in `memberUids` refuses, since erasing a live member's row would
+ * manufacture the ghost state BIN-1097 is about.
+ */
+export type OwnerRemovalPlan =
+  | { kind: 'erase' }
+  | { kind: 'nothing' }
+  | { kind: 'refused'; reason: 'still-member' };
+
+export function planOwnerRemovalErasure(
+  group: { readonly ownerUid: string; readonly memberUids: readonly string[] } | null,
+  callerUid: string,
+  memberUid: string,
+): OwnerRemovalPlan {
+  if (!group || group.ownerUid !== callerUid) return { kind: 'nothing' };
+  if (group.memberUids.includes(memberUid)) return { kind: 'refused', reason: 'still-member' };
+  return { kind: 'erase' };
+}
+
+export const OWNER_REMOVAL_REFUSALS: Record<'still-member', string> = {
+  'still-member': 'Personen är fortfarande med i gruppen.',
+};
+
+/**
+ * The error the account-delete door throws when the handover itself throws, or
+ * when a step after it fails (BIN-1304). Derive the call sites:
+ *   git grep -n "refusalAfterHandover(" -- functions/src/groupHandover/index.ts
+ *
+ * `anyWriteAttempted` must be conservative in the same way `HandoverSummary.
+ * attempted` is: true as soon as a write was attempted, not once one landed.
+ * #4's condition: a failure before anything was written must not be reported as
+ * partial, and one after must not be reported as untouched.
+ */
+export function refusalAfterHandover(anyWriteAttempted: boolean): string {
+  if (anyWriteAttempted) {
+    return `${HANDOVER_PARTIAL}: Kunde inte radera allt, och en del ändringar hann göras. Försök igen.`;
+  }
+  return 'Kunde inte radera allt. Försök igen.';
 }

@@ -27,13 +27,17 @@
 <style>
 /* ── tokens: verbatim from src/app/globals.css :root ───────────────────────── */
 :root {
+  --fs-nano: 8px; --fs-micro: 9px; --fs-xxs: 10px; --fs-xs: 11px; --fs-sm: 12.5px;
+  --fs-base: 13.5px; --fs-md: 14px; --fs-lg: 15px; --fs-xl: 17px; --fs-2xl: 20px;
+  --fs-3xl: 22px; --fs-4xl: 24px; --fs-5xl: 32px; --fs-6xl: 44px;
+  --scrim:     oklch(0 0 0 / 0.45);
   --bg:        oklch(0.985 0.003 90);
   --bg-2:      oklch(0.968 0.004 90);
   --surface:   oklch(1 0 0);
 
   --ink:       oklch(0.18 0.006 80);
   --ink-2:     oklch(0.42 0.008 80);
-  --ink-3:     oklch(0.60 0.010 80);
+  --ink-3:     oklch(0.53 0.010 80);
 
   --rule:      oklch(0.88 0.006 80);
   --rule-2:    oklch(0.94 0.005 80);
@@ -41,7 +45,7 @@
 
   /* saffran — nu / live / avgörande. CTA, live, veto, brand. */
   --acc:       oklch(0.72 0.14 75);
-  --acc-deep:  oklch(0.55 0.13 70);
+  --acc-deep:  oklch(0.53 0.13 70);
   --acc-soft:  oklch(0.955 0.04 75);
 
   /* plum — idag / tidpositionering. WeekStrip today, kalenderns today-kolumn. */
@@ -57,7 +61,7 @@
   --danger-ink:  oklch(0.48 0.16 25);
 
   --success:     oklch(0.62 0.16 165);
-  --season-done: oklch(0.55 0.13 145);
+  --season-done: oklch(0.52 0.13 145);
 
   --sans: 'Albert Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
 
@@ -117,7 +121,7 @@ html, body { margin: 0; font-size: 15px; font-family: var(--sans); background: v
 
 /* ── primitives — radii 3/6/8 only, two shadows only, two accents only ─────── */
 h2.screen { font-size: 19px; margin: 0 0 16px; }
-.card { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 16px; }
+.card { background: var(--surface); border: 1px solid var(--rule); border-radius: 3px; padding: 16px; }
 .row { display: flex; gap: 16px; flex-wrap: wrap; }
 .btn { height: 34px; padding: 0 14px; border-radius: 6px; border: 1px solid transparent;
        background: var(--acc); color: oklch(0.18 0.006 80); font: inherit; font-weight: 600;

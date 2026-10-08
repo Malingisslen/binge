@@ -1,7 +1,7 @@
 {
-  "name": "Binge — håll koll på vad du tittar på",
+  "name": "Binge – dina serier och vad de kostar",
   "short_name": "Binge",
-  "description": "Spåra film och TV-serier och se var varje titel finns att streama i Sverige.",
+  "description": "Se vad du betalar för streaming och vad du kan pausa.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -10,7 +10,10 @@
   "dir": "ltr",
   "background_color": "#f9f7f1",
   "theme_color": "#f9f7f1",
-  "categories": ["entertainment", "lifestyle"],
+  "categories": [
+    "entertainment",
+    "lifestyle"
+  ],
   "icons": [
     {
       "src": "/icon-192.png",

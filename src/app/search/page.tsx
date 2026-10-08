@@ -13,6 +13,7 @@ import { canonicalProviderId, dedupeProvidersByCanonicalId } from '@/lib/tmdb/pr
 import { isAddableMediaType } from '@/lib/tmdb/client';
 import { trackEvent } from '@/lib/analytics';
 import type { TMDBProvider } from '@/types';
+import { cardClass } from '@/components/ui/Card';
 
 type MediaFilter = 'all' | 'movie' | 'tv';
 
@@ -108,9 +109,9 @@ function SearchResults() {
       ) : results.length === 0 ? (
         <EmptyState title="Inga träffar" body="Prova ett annat sökord." />
       ) : (
-        <div className="bg-surface border border-rule rounded-sm">
+        <div className={cardClass()}>
           <TitleGrid items={results} providerMap={providerMap} />
-          <div className="px-3 py-[6px] border-t border-rule-2">
+          <div className="px-3 py-1.5 border-t border-rule-2">
             <JustWatchCredit />
           </div>
         </div>

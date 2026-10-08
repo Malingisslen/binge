@@ -7,8 +7,11 @@ import {
   type Firestore, type Query,
 } from 'firebase/firestore';
 
-import { runGroupHandover, type HandoverIo } from '../../../functions/src/groupHandover/runHandover';
-import { isEmptyExcept } from '../../../functions/src/groupHandover/logic';
+import {
+  planSweptMemberGroupErasure, runGroupHandover, runSweptMemberGroupErasure,
+  type HandoverIo, type MemberGroupsIo, type MemberStripIo,
+} from '../../../functions/src/groupHandover/runHandover';
+import { isEmptyExcept, planClaim } from '../../../functions/src/groupHandover/logic';
 import { rosterMismatches } from './memberTraceRoster';
 import { FRIEND_REQUEST_PUSH_MARKER_MAX_AGE_MS } from '../../../functions/src/friendRequestPush/logic';
 import {
@@ -343,6 +346,12 @@ function makeIo(db: Firestore, auth: FakeAuth, overrides: Partial<CleanupIo> = {
             deletePaths: await pathsOf(query(collectionGroup(db, 'groupInvites'), where('fromUid', '==', uid))),
             arrayStrips: [],
           };
+        case 'rotationReminders':
+          // BIN-1279. Mirrors the Admin adapter's query on the top-level collection.
+          return {
+            deletePaths: await pathsOf(query(collection(db, 'rotationReminderState'), where('uid', '==', uid))),
+            arrayStrips: [],
+          };
         case 'groups':
           return { deletePaths: [], arrayStrips: [] };
       }
@@ -390,7 +399,26 @@ function makeIo(db: Firestore, auth: FakeAuth, overrides: Partial<CleanupIo> = {
       return isEmptyExcept(memberUids, uid) ? 'still-empty' : 'gained-member';
     },
 
+    // BIN-1294 — drives the SAME shared functions production drives.
+    planMemberGroupErasure: async (uid) => planSweptMemberGroupErasure(memberGroupIo(db), uid),
+    commitMemberGroupErasure: async (uid, progress) => {
+      await runSweptMemberGroupErasure(memberGroupIo(db), uid, progress);
+    },
+
     ...overrides,
+  };
+}
+
+/** BIN-1294: the member-group step's port — the handover reads plus the two new operations. */
+function memberGroupIo(db: Firestore): HandoverIo & MemberGroupsIo & MemberStripIo {
+  return {
+    ...handoverIo(db),
+    memberGroups: async (uid) =>
+      (await getDocs(query(collection(db, 'groups'), where('memberUids', 'array-contains', uid))))
+        .docs.map((x) => ({ id: x.id, ownerUid: (x.data().ownerUid as string) ?? '' })),
+    stripMemberUid: async (groupId, uid) => {
+      await updateDoc(doc(db, 'groups', groupId), { memberUids: arrayRemove(uid) });
+    },
   };
 }
 
@@ -434,7 +462,7 @@ function handoverIo(db: Firestore): HandoverIo {
       }),
     readWatchlist: async (groupId) =>
       (await getDocs(collection(db, 'groups', groupId, 'watchlist'))).docs
-        .map((x) => ({ id: x.id, addedBy: x.data().addedBy })),
+        .map((x) => ({ id: x.id, addedBy: x.data().addedBy, memberRatings: x.data().memberRatings })),
     readSessionHistory: async (groupId) =>
       (await getDocs(collection(db, 'groups', groupId, 'sessionHistory'))).docs.map((x) => ({
         id: x.id,
@@ -444,13 +472,18 @@ function handoverIo(db: Firestore): HandoverIo {
     claimOwnership: async (groupId, expectedOwnerUid, write) => {
       const ref = doc(db, 'groups', groupId);
       const fresh = await getDoc(ref);
-      if (!fresh.exists() || fresh.data().ownerUid !== expectedOwnerUid) return false;
-      await updateDoc(ref, {
-        ownerUid: write.ownerUid,
-        memberUids: write.memberUids,
-        updatedAt: serverTimestamp(),
-      });
-      return true;
+      const claim = planClaim(fresh.exists() ? {
+        ownerUid: fresh.data().ownerUid,
+        memberUids: fresh.data().memberUids ?? [],
+      } : null, expectedOwnerUid, write);
+      if (claim.kind === 'claimed') {
+        await updateDoc(ref, {
+          ownerUid: claim.ownerUid,
+          memberUids: claim.memberUids,
+          updatedAt: serverTimestamp(),
+        });
+      }
+      return claim;
     },
     eraseMemberTraces: async (groupId, leavingUid, erasure) => {
       const batch = writeBatch(db);
@@ -462,6 +495,11 @@ function handoverIo(db: Firestore): HandoverIo {
       }
       for (const itemId of erasure.clearAddedByIds) {
         batch.update(doc(db, 'groups', groupId, 'watchlist', itemId), { addedBy: deleteField() });
+      }
+      for (const itemId of erasure.clearRatingIds) {
+        batch.update(doc(db, 'groups', groupId, 'watchlist', itemId), {
+          [`memberRatings.${leavingUid}`]: deleteField(),
+        });
       }
       for (const rowId of erasure.clearPickedByIds) {
         batch.update(doc(db, 'groups', groupId, 'sessionHistory', rowId), { pickedByUid: deleteField() });
@@ -984,6 +1022,8 @@ async function seedFieldOwned(db: Firestore): Promise<void> {
     await setDoc(doc(db, 'sessions', `sess-${uid}`), { hostUid: uid });
     await setDoc(doc(db, 'sessions', `sess-${uid}`, 'participants', uid), { uid });
     await setDoc(doc(db, 'sessions', `sess-${uid}`, 'swipes', 'movie_42'), { votes: {} });
+    // BIN-1279: a rotation-reminder dedup marker, named after the service.
+    await setDoc(doc(db, 'rotationReminderState', `${uid}_8_cancel_2026-09-01`), { uid, notifiedAt: ts(NOW - 3000) });
     // An invitation this uid SENT, living in a THIRD party's tree. Owned by the
     // field, unreachable by any path walk from the sender (BIN-1147).
     // `fromDisplayName` deliberately does NOT echo `fromUid`, and the two
@@ -1056,6 +1096,7 @@ describe('retentionCleanup orchestrator — the FIELD-owned half (BIN-1063 steg 
     ['a friend row in another tree', 'users/pal/friends/consoled', 'users/pal/friends/keeper'],
     ['a request another account sent them', 'users/pal/friendRequestsSent/consoled', 'users/pal/friendRequestsSent/keeper'],
     ['a friend request they sent', 'users/pal/friendRequests/consoled', 'users/pal/friendRequests/keeper'],
+    ['rotation-reminder markers', 'rotationReminderState/consoled_8_cancel_2026-09-01', 'rotationReminderState/keeper_8_cancel_2026-09-01'],
   ])('erases %s for the departed account and leaves the live one alone', async (_label, gone, kept) => {
     const db = adminLikeDb();
     await sweepPastTheFloor(db);
@@ -1072,8 +1113,60 @@ describe('retentionCleanup orchestrator — the FIELD-owned half (BIN-1063 steg 
   it('the table is checked against the list the run walks', () => {
     expect([...FIELD_OWNED_CATEGORIES]).toEqual([
       'reviews', 'foreignReviewUgc', 'reactions', 'lists', 'sessions',
-      'friendMirrors', 'groupInvitesSent', 'groups',
+      'friendMirrors', 'groupInvitesSent', 'rotationReminders', 'groups',
     ]);
+  });
+
+  // BIN-1294: a group the departed account was only a MEMBER of. Its traces and its
+  // `memberUids` entry go; the owner's rows in the SAME collections stay.
+  it('erases a member-only group’s traces and memberUids entry, and leaves the live owner’s', async () => {
+    const db = adminLikeDb();
+    await setDoc(doc(db, 'groups', 'joined'), { ownerUid: 'keeper', memberUids: ['keeper', 'consoled'] });
+    await setDoc(doc(db, 'groups', 'joined', 'members', 'keeper'), { uid: 'keeper', joinedAt: ts(NOW - 2000) });
+    await setDoc(doc(db, 'groups', 'joined', 'members', 'consoled'), { uid: 'consoled', joinedAt: ts(NOW - 1000) });
+    await setDoc(doc(db, 'groups', 'joined', 'household', 'consoled'), { uid: 'consoled' });
+    await setDoc(doc(db, 'groups', 'joined', 'household', 'keeper'), { uid: 'keeper' });
+    await setDoc(doc(db, 'groups', 'joined', 'watchlist', 'movie_1'), { addedBy: 'consoled', title: 'x' });
+    await setDoc(doc(db, 'groups', 'joined', 'watchlist', 'movie_2'), { addedBy: 'keeper', title: 'y' });
+    await setDoc(doc(db, 'groups', 'joined', 'watchlist', 'movie_1', 'progress', 'consoled'), { s: 1 });
+    await setDoc(doc(db, 'groups', 'joined', 'watchlist', 'movie_1', 'progress', 'keeper'), { s: 1 });
+    await setDoc(doc(db, 'groups', 'joined', 'sessionHistory', 'h1'), {
+      pickedByUid: 'consoled', participantUids: ['keeper', 'consoled'],
+    });
+    await sweepPastTheFloor(db);
+
+    expect((await getDoc(doc(db, 'groups', 'joined'))).data()?.memberUids).toEqual(['keeper']);
+    expect(await exists(db, 'groups/joined/members/consoled')).toBe(false);
+    expect(await exists(db, 'groups/joined/household/consoled')).toBe(false);
+    expect(await exists(db, 'groups/joined/watchlist/movie_1/progress/consoled')).toBe(false);
+    expect('addedBy' in ((await getDoc(doc(db, 'groups', 'joined', 'watchlist', 'movie_1'))).data() ?? {})).toBe(false);
+    const h1 = (await getDoc(doc(db, 'groups', 'joined', 'sessionHistory', 'h1'))).data() ?? {};
+    expect('pickedByUid' in h1).toBe(false);
+    expect(h1.participantUids).toEqual(['keeper']);
+
+    expect(await exists(db, 'groups/joined/members/keeper')).toBe(true);
+    expect(await exists(db, 'groups/joined/household/keeper')).toBe(true);
+    expect(await exists(db, 'groups/joined/watchlist/movie_1/progress/keeper')).toBe(true);
+    expect((await getDoc(doc(db, 'groups', 'joined', 'watchlist', 'movie_2'))).data()?.addedBy).toBe('keeper');
+    expect((await getDoc(doc(db, 'groups', 'joined', 'watchlist', 'movie_1'))).data()?.title).toBe('x');
+  });
+
+  // #27's condition: a failure in the member-group step keeps the watch record, so
+  // the next run retries, and `users/{uid}` is untouched.
+  it('a failed member-group step keeps the watch record and the user tree', async () => {
+    const db = adminLikeDb();
+    const auth = makeAuth(ORPHAN_DATA_ACCOUNTS);
+    await seedOrphanData(db);
+    await seedFieldOwned(db);
+    await runRetentionCleanup(makeIo(db, auth));
+    const later = NOW + ORPHAN_DATA_MIN_OBSERVED_MS + ONE_DAY;
+    await runRetentionCleanup(makeIo(db, auth, {
+      now: () => later,
+      commitMemberGroupErasure: async () => { throw new Error('nere'); },
+    }));
+
+    expect(await exists(db, 'orphanWatch/consoled')).toBe(true);
+    expect(await exists(db, 'users/consoled/watchlist/movie_42')).toBe(true);
   });
 
   // BIN-1113. Two rows the new category must NOT reach: a follower row about the
@@ -1220,7 +1313,9 @@ describe('retentionCleanup orchestrator — the FIELD-owned half (BIN-1063 steg 
     // BIN-1113 raised it again, to the 20 the run reported: `seedFieldOwned` now
     // seeds a `friends`, a `friendRequestsSent` and a `friendRequests` row about
     // `consoled` under `users/pal`.
-    expect(summary.fieldOwnedDocs).toBe(20);
+    // BIN-1279 raised it to the 21 the run reported: `seedFieldOwned` now seeds one
+    // `rotationReminderState` marker for `consoled`.
+    expect(summary.fieldOwnedDocs).toBe(21);
     expect(summary.fieldOwnedRefused).toBe(0);
   });
 

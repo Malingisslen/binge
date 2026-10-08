@@ -7,7 +7,10 @@ import { SWEDISH_PROVIDERS, canonicalProviderId, type SwedishProvider } from '@/
 import { useDebouncedCommit } from '@/hooks/useDebouncedCommit';
 import { isValidBillingDay, daysUntilRenewal } from '@/lib/renewal';
 import { trackEvent } from '@/lib/analytics';
+import { formatKr } from '@/lib/formatKr';
 import { SettingsSection } from './SettingsSection';
+import { eyebrowClass } from '@/components/ui/Eyebrow';
+import { fieldClass } from '@/components/ui/Field';
 import {
   readableTextColor,
   splitProviders,
@@ -62,7 +65,7 @@ export function ProvidersSection() {
         type="button"
         aria-pressed={isSelected}
         onClick={() => toggle(p.id)}
-        className="relative h-[46px] rounded-md flex items-center justify-center text-center text-[12px] font-bold px-2 transition-colors"
+        className="relative h-[46px] rounded-md flex items-center justify-center text-center text-sm font-bold px-2 transition-colors"
         style={
           isSelected
             ? { background: p.color, color: fg === 'white' ? 'white' : 'var(--ink)' }
@@ -70,7 +73,7 @@ export function ProvidersSection() {
         }
       >
         {p.shortName}
-        {isSelected && <span aria-hidden="true" className="absolute top-1 right-1.5 text-[10px]">✓</span>}
+        {isSelected && <span aria-hidden="true" className="absolute top-1 right-1.5 text-xxs">✓</span>}
       </button>
     );
   };
@@ -79,17 +82,17 @@ export function ProvidersSection() {
     <SettingsSection title="Mina streamingtjänster" collapsible defaultOpen={savedProviders.length === 0}>
       {selectedProviders.length > 0 ? (
         <>
-          <div className="text-[10px] uppercase tracking-[0.14em] text-ink-3 mb-2">
+          <div className={eyebrowClass({ className: 'mb-2' })}>
             Dina tjänster · {selectedProviders.length}
           </div>
-          <div className="grid grid-cols-4 gap-[7px] mb-4">
+          <div className="grid grid-cols-4 gap-2 mb-4">
             {selectedProviders.map(p => tile(p, true))}
             {available.length > 0 && (
               <button
                 type="button"
                 aria-label="Lägg till fler tjänster"
                 onClick={() => addMoreRef.current?.scrollIntoView({ behavior: 'smooth' })}
-                className="h-[46px] rounded-md flex items-center justify-center border-[1.5px] border-dashed border-rule text-ink-3 text-[20px] leading-none transition-colors hover:border-ink-3 hover:text-ink"
+                className="h-[46px] rounded-md flex items-center justify-center border-[1.5px] border-dashed border-rule text-ink-3 text-2xl leading-none transition-colors hover:border-ink-3 hover:text-ink"
               >
                 +
               </button>
@@ -104,8 +107,8 @@ export function ProvidersSection() {
 
       {available.length > 0 && (
         <div ref={addMoreRef}>
-          <div className="text-[10px] uppercase tracking-[0.14em] text-ink-3 mb-2">Lägg till fler</div>
-          <div className="grid grid-cols-4 gap-[7px] mb-4">
+          <div className={eyebrowClass({ className: 'mb-2' })}>Lägg till fler</div>
+          <div className="grid grid-cols-4 gap-2 mb-4">
             {available.map(p => tile(p, false))}
           </div>
         </div>
@@ -113,12 +116,12 @@ export function ProvidersSection() {
 
       {selectedProviders.length > 0 && (
         <div className="border-t border-rule-2 pt-3">
-          <div className="text-[10px] uppercase tracking-[0.14em] text-ink-3 mb-2">Nivå &amp; kostnad</div>
-          <p className="text-[11px] text-ink-3 mb-2 leading-snug">
+          <div className={eyebrowClass({ className: 'mb-2' })}>Nivå &amp; kostnad</div>
+          <p className="text-xs text-ink-3 mb-2 leading-snug">
             Väljer du en nivå följer priset tjänstens aktuella listpris — det uppdateras automatiskt när tjänsten
             ändrar sitt. Väljer du <span className="whitespace-nowrap">&quot;Egen kostnad…&quot;</span> gäller beloppet du själv skriver in.
           </p>
-          <div className="space-y-[2px]">
+          <div className="space-y-0.5">
             {selectedProviders.map(provider => {
               const selectedTierId = user.providerTiers?.[provider.id];
               const hasTiers = (provider.tiers?.length ?? 0) > 0;
@@ -127,14 +130,14 @@ export function ProvidersSection() {
               const renewalDay = user.providerRenewalDays?.[provider.id];
               return (
                 <div key={provider.id}>
-                <div className="flex items-center gap-[10px] py-[3px]">
+                <div className="flex items-center gap-2.5 py-1">
                   <span
-                    className="rounded-sm px-2 py-[1px] text-[11px] font-semibold min-w-[54px] text-center"
+                    className="rounded-sm px-2 py-px text-xs font-semibold min-w-[54px] text-center"
                     style={{ background: provider.color, color: fg === 'white' ? 'white' : 'var(--ink)' }}
                   >
                     {provider.shortName}
                   </span>
-                  <span className="flex-1 text-[11px] text-ink-3">
+                  <span className="flex-1 text-xs text-ink-3">
                     {renewalDay != null ? `förnyas om ${daysUntilRenewal(renewalDay, new Date())} d` : ''}
                   </span>
                   {hasTiers ? (
@@ -149,7 +152,7 @@ export function ProvidersSection() {
                     >
                       <option value="">Egen kostnad…</option>
                       {provider.tiers!.map(t => (
-                        <option key={t.id} value={t.id}>{t.name} — {t.cost} kr</option>
+                        <option key={t.id} value={t.id}>{t.name} — {formatKr(t.cost)} kr</option>
                       ))}
                     </select>
                   ) : null}
@@ -159,6 +162,7 @@ export function ProvidersSection() {
                       min="0"
                       step="1"
                       placeholder="kr/mån"
+                      aria-label={`Kostnad per månad för ${provider.name}`}
                       defaultValue={user.providerCosts?.[provider.id] ?? ''}
                       onBlur={e => {
                         const val = parseInt(e.target.value, 10);
@@ -170,7 +174,7 @@ export function ProvidersSection() {
                           toast('Kunde inte spara kostnaden. Försök igen om en stund.'),
                         );
                       }}
-                      className="w-[70px] px-1 py-[1px] text-xs border border-rule rounded-sm bg-surface text-ink font-[inherit] outline-none text-right"
+                      className={fieldClass({ size: 'sm', className: 'w-[70px] text-right' })}
                     />
                   )}
                   <input
@@ -190,7 +194,7 @@ export function ProvidersSection() {
                         toast('Kunde inte spara förnyelsedagen. Försök igen om en stund.'),
                       );
                     }}
-                    className="w-[48px] px-1 py-[1px] text-xs border border-rule rounded-sm bg-surface text-ink font-[inherit] outline-none text-right"
+                    className={fieldClass({ size: 'sm', className: 'w-[48px] text-right' })}
                   />
                 </div>
                 <ProviderCampaignRow
@@ -206,11 +210,11 @@ export function ProvidersSection() {
               );
             })}
           </div>
-          <div className="flex items-center justify-between mt-3 border-t border-rule-2 pt-[10px]">
-            <span className="text-[11px] text-ink-3">
+          <div className="flex items-center justify-between mt-3 border-t border-rule-2 pt-2.5">
+            <span className="text-xs text-ink-3">
               {pendingSave ? 'Sparar…' : '✓ Sparat automatiskt'}
             </span>
-            <span className="text-[13px] font-bold tabular-nums">{total} kr/mån</span>
+            <span className="text-base font-bold tabular-nums">{formatKr(total)} kr/mån</span>
           </div>
         </div>
       )}
@@ -259,12 +263,12 @@ function ProviderCampaignRow({
 
   if (!editing) {
     return (
-      <div className="flex items-center gap-2 pl-[64px] pb-[4px] text-[11px]">
+      <div className="flex items-center gap-2 pl-16 pb-1 text-xs">
         {campaign ? (
           <>
             <span className="text-ink-3">
               Kampanj:{' '}
-              <span className="text-ink font-semibold tabular-nums">{campaign.monthlyCost} kr</span>{' '}
+              <span className="text-ink font-semibold tabular-nums">{formatKr(campaign.monthlyCost)} kr</span>{' '}
               t.o.m. {campaign.endDate}
             </span>
             <button type="button" onClick={startEdit} className="text-acc-deep bg-transparent border-none p-0 cursor-pointer">Ändra</button>
@@ -280,7 +284,7 @@ function ProviderCampaignRow({
   }
 
   return (
-    <div className="flex items-center gap-2 pl-[64px] pb-[5px] text-[11px] flex-wrap">
+    <div className="flex items-center gap-2 pl-16 pb-1.5 text-xs flex-wrap">
       <span className="text-ink-3">Kampanjpris</span>
       <input
         type="number"
@@ -290,7 +294,7 @@ function ProviderCampaignRow({
         value={cost}
         onChange={e => setCost(e.target.value)}
         aria-label="Kampanjpris per månad"
-        className="w-[70px] px-1 py-[1px] text-xs border border-rule rounded-sm bg-surface text-ink font-[inherit] outline-none text-right"
+        className={fieldClass({ size: 'sm', className: 'w-[70px] text-right' })}
       />
       <span className="text-ink-3">t.o.m.</span>
       <input
@@ -298,7 +302,7 @@ function ProviderCampaignRow({
         value={endDate}
         onChange={e => setEndDate(e.target.value)}
         aria-label="Kampanjens slutdatum"
-        className="px-1 py-[1px] text-xs border border-rule rounded-sm bg-surface text-ink font-[inherit] outline-none"
+        className={fieldClass({ size: 'sm' })}
       />
       <button
         type="button"

@@ -11,7 +11,9 @@ UGC enligt följande regler.
 
 Allt som bara användaren själv ser tas bort helt:
 
-- `users/{uid}` (privat profil-doc; sedan BIN-505 ägar-låst läsning)
+- `users/{uid}` (privat profil-doc; sedan BIN-505 ägar-låst läsning). Fältet
+  `secondWeekVisitAt` (BIN-1442) följer med: datumet för första besöket under
+  andra veckan, som Insikter bara läser som en summa.
 - `publicProfiles/{uid}` (BIN-505 — den publika projektionen; TOP-LEVEL, ej en
   user-subcollection, så den raderas explicit i `collectDeletionRefs` via
   `snaps.publicProfileSnap.ref`, inte via subcollection-guarden)
@@ -52,6 +54,14 @@ vid kontoradering. Export och radering läser samma helper
 (`src/lib/firebase/userData.ts`), så listorna hålls i synk: lägger man till en
 ny user-owned subcollection måste helpern uppdateras så båda flödena får med den.
 
+Utanför mitt träd, och därför inte i helpern:
+
+- `rotationReminderState/{uid}_{providerId}_{kind}_{datum}` — dedup-märket för
+  påminnelsen om att pausa eller återuppta en streamingtjänst (BIN-1279). Id:t
+  namnger tjänsten. Klienten kan varken läsa eller radera det, så servern raderar
+  det: den anropbara `handOverOwnedGroups` vid raderaknappen, och
+  `retentionCleanup`-sopningen för ett konto som raderats i Firebase Console.
+
 #### Per-titel-borttagning ("Ta bort" i biblioteket)
 
 "Ta bort" på en titel raderar watchlist-docen men lämnar medvetet kvar
@@ -87,6 +97,9 @@ Så vid radering:
   fältägda innehållet, för konton som raderas utanför app-cascaden.
 - `lists/{listId}` där `uid == me` → **delete**
 - `sessions/{sessionId}` där `hostUid == me` → **delete**
+  - Undantag (BIN-1342, Malins beslut 2026-09-28): din deltagarrad och dina röster i en
+    session någon ANNAN är värd för raderas inte med kontot. De försvinner när sessionen
+    gallras av `retentionCleanup` (se nedan). Beslutet står i `.claude/rules/accepted-deviations.md`.
 
 ### Moderationsrapporter → Retention (Art. 17(3))
 
@@ -112,8 +125,7 @@ publikt (skapandet går via den anropbara `submitReport`, och admin läser i
 `/admin/reports`; se `match /reports` i `firestore.rules`).
 
 **Transparens:** integritetspolicyn bör nämna att en anmälares uid kan behållas
-i moderationssyfte efter kontoradering (Art. 13/14). Spåras som copy-följdpunkt
-— ingen brådska nu när grunden är dokumenterad här.
+i moderationssyfte efter kontoradering (Art. 13/14).
 
 ### Grupp-medlemskap → Självborttag
 
@@ -144,8 +156,9 @@ När användaren raderas:
   Mina egna spår i den överlämnade gruppen raderas ändå: `members/{uid}` (som
   bär en kopia av namn och bild), `household/{uid}`, `joinAttempts/{uid}` och
   varje `watchlist/*/progress/{uid}`. De uid-bärande FÄLTEN rensas i stället för
-  att raden tas bort: `watchlist.addedBy`, `sessionHistory.pickedByUid` och mitt
-  uid ur `sessionHistory.participantUids`. Raden blir kvar — gruppens egen
+  att raden tas bort: `watchlist.addedBy`, mitt betyg i `watchlist.memberRatings`
+  (BIN-1306), `sessionHistory.pickedByUid` och mitt uid ur
+  `sessionHistory.participantUids`. Raden blir kvar — gruppens egen
   historik är inte min att radera — men den pekar inte längre på mig.
 
   Raderingen görs FÖRE ägarbytet, och ordningen bär: båda dörrarna hittar en
@@ -194,6 +207,31 @@ När användaren raderas:
   kommentar och i posten daterad 2026-09-10 i `.claude/rules/accepted-deviations.md`;
   den upprepas inte här, eftersom två exemplar av ett beslut är två saker som kan
   glida isär.
+- **Mina spår i grupper jag bara är MEDLEM i raderas också** (BIN-1278, Malins
+  beslut 2026-09-23). Samma spår som i ägarfallet ovan: `watchlist.addedBy`,
+  mitt betyg i `watchlist.memberRatings`, `sessionHistory.pickedByUid` och mitt
+  uid ur `sessionHistory.participantUids`, utöver raderna under mitt eget uid. Görs av servern, i samma anropbara funktion,
+  EFTER överlämningen. Mitt uid tas sedan ur `memberUids` av klientkaskaden, som
+  förut.
+
+### Att lämna en grupp → samma spår raderas (BIN-1260, Malins beslut 2026-09-23)
+
+Själva utträdet är en klientskrivning och oförändrat: mitt uid ur `memberUids`,
+`members/{uid}` och `household/{uid}` raderas. Efteråt anropar appen den anropbara
+`eraseMyGroupTraces`, som raderar resten: `joinAttempts/{uid}`, varje
+`watchlist/*/progress/{uid}`, och rensar `watchlist.addedBy`, mitt betyg i
+`watchlist.memberRatings`, `sessionHistory.pickedByUid` och
+`sessionHistory.participantUids` där de pekar på mig. Titlarna, historikraderna och
+de andra medlemmarnas betyg blir kvar i gruppen.
+
+Steget är bäst-möjligt: faller det står utträdet ändå, och felet rapporteras.
+
+Betyget (`watchlist.memberRatings.<uid>`) rensas sedan BIN-1306, Malins beslut
+2026-09-26, i samma steg som `addedBy`. Härled steget:
+
+```
+git grep -n -e clearRatingIds -e clearAddedByIds -- functions/src/groupHandover/logic.ts
+```
 
 ### Hushålls-bidrag (delade prenumerationskostnader) → Samtyckesbaserad, självstyrd radering (BIN-184, 2026-07-05)
 
@@ -442,11 +480,10 @@ markören, inte utfallet. Personuppgifter ska inte landa under ett uid vars rade
 ## Tekniska implikationer
 
 `AuthContext.deleteAccount` implementerar redan hård radering via
-`writeBatch` i 450-ops chunks. Ingen cascade-ändring krävs för Sprint 4,
-men:
+`writeBatch` i 450-ops chunks.
 
 - `firestore.indexes.json` har redan single-field collection-group-index
-  på `comments.uid` + `likes` documentId — behövs för delete-queryn.
+  på `comments.uid` + `likes.uid` — behövs för delete-queryn.
 
 ### Enhetslokal data vid radering (localStorage)
 
@@ -557,11 +594,7 @@ cascaden) — operationell metadata, inte användarens "lämnade" personuppgifte
   referenser filtreras lazy på läsning och städas av den veckovisa
   `reclaimOrphanFollows`-sweepen.
 
-**Täckningsgräns (ärlig):** kontraktet skyddar nycklar som finns i kärnan. En
-helt ny `users/{uid}/<x>`-subcollection som aldrig läggs till i helpern fångas
-INTE (den blir aldrig en `keyof`). Att täcka den klassen kräver ett emulator-
-backat raderingstest + en subcollection-enumeration mot `firestore.rules` —
-spårat som följdticket.
+**Täckningsgräns (ärlig):** kontraktet skyddar nycklar som finns i kärnan.
 
 **Console-bypass (känd begränsning):** `deleteAccount`-cascaden körs bara vid
 självservice-radering i appen. Raderar en admin ett konto direkt i Firebase
@@ -803,14 +836,8 @@ Detta raderas INTE, och det är beslut:
   någon annans radering.
 * **En ägd grupp med kvarvarande medlemmar lämnas över** till den som varit
   medlem längst (Malins beslut 2026-09-06), genom exakt samma `runGroupHandover`
-  som raderaknappen driver — aldrig ett andra val. Finns ingen annan medlem kvar
+  som raderaknappen driver. Finns ingen annan medlem kvar
   raderas gruppen.
-* **En grupp kontot bara var MEDLEM i rörs inte alls.** Svepet frågar på
-  `ownerUid`, inte på `memberUids`, så uid:t står kvar i medlemslistan och
-  `groups/{g}/members/{uid}` behåller sitt denormaliserade `displayName` och
-  `photoURL` för gruppens övriga medlemmar — permanent, eftersom uid:t inte
-  återkommer i `listUserUids()` efter att samma körning raderat `users/{uid}`.
-  Klientkaskaden når dem; svepet gör det inte.
 
 **Dokumentbudget.** Kontotaket ovan räknar PERSONER. Den här halvan behöver ett
 tak till, för utflakningen av ett KORREKT val är obegränsad i dokument: ett konto
@@ -857,13 +884,57 @@ hittades. Profilens innehåll loggas aldrig.
   regel i `firestore.rules` matchar samlingen, så klienten kan varken läsa, ändra eller
   radera den. Kontoraderingen tar inte bort dokumentet; det gäller bara admin-konton.
 
+### Räkning av hur funktioner används → summor per dag, sparas tills vidare (BIN-1438, 2026-10-05)
+
+Den anropbara funktionen `recordEvent` (`functions/src/eventStats/`) lägger händelser
+från ett fast ordförråd — till exempel ett klick vidare till en tjänst eller en delning
+— till dagens summa i `eventStats/{YYYY-MM-DD}`. Dokumentet bär bara antal per händelse
+och per uppräknat egenskapsvärde; funktionen läser, loggar och skriver aldrig uid,
+IP-adress eller webbläsare. Härled ordförrådet:
+`git grep -n "export const EVENT_VOCABULARY" -- functions/src/eventStats/logic.ts`
+
+- **Personuppgifter:** inga i dokumenten. De sparas **tills vidare**, utan gallring.
+- **Export och radering:** ingår inte i exporten och rörs inte av kontoraderingen —
+  ingenting i dem är knutet till ett konto (se `docs/data-export-format.md`).
+- **Tekniska anropsloggar:** som vid alla anrop till en Cloud Function kan Googles
+  förfrågningsloggar för `recordEvent` innehålla IP-adressen. De ligger i Cloud
+  Loggings `_Default`-bucket med dess lagringstid (se avsnittet om admins uppslag ovan
+  för kommandot som läser den), med Google som personuppgiftsbiträde.
+- **Läsning:** bara `/api/insights` på servern; `firestore.rules` nekar klienter både
+  läsning och skrivning.
+
+### Återställt konto → loggpost i `restoreLog`, 12 månader (BIN-1422, 2026-10-07)
+
+Ett raderat konto kan flyttas tillbaka från en säkerhetskopia, bara när ägaren själv ber om
+det (Malins beslut 2026-10-07; förloppet i `docs/RUNBOOK.md` §5b). En körning med `--apply` lämnar en
+post i `restoreLog/{datum}-{uid}`: uid, grund, vem som bad (e-postadressen), en hänvisning
+till begäran, skälet, vem som körde, källdatabasen, och de andra kontonas uid där en relation
+lades tillbaka.
+
+- **Rättslig grund:** berättigat intresse, art. 6.1.f — att kunna visa att återställningen
+  skedde på ägarens begäran, och vilka andra konton den rörde.
+- **Lagringstid:** 12 månader. Posten bär `expireAt`; Firestores TTL-policy på fältet raderar
+  den.
+- **Läsning:** ingen regel i `firestore.rules` matchar samlingen, så klienten kan varken läsa
+  eller skriva den.
+- **Export och radering:** posten ingår inte i exporten och rörs inte av kontoraderingen;
+  den är ett underlag om själva återställningen.
+- **Kopian:** den återställda databasen raderas samma dag, senast efter 7 dagar.
+- **Anteckningen på profilen:** `restoredAt`, `restoreBasis`, `restoreRequestedBy` och
+  `restoreSourceDb` på `users/{uid}` står kvar så länge kontot finns och följer med exporten
+  och kontoraderingen. Ingen egen gallringstid (Malins beslut 2026-10-08).
+
 ### Tillsammans-sessioner och notifikationer — schemalagt svep
 
 `retentionCleanup` raderar dagligen:
 
-- **`sessions/{id}`** när sessionens egen `expiresAt` har passerat, eller — för
-  äldre sessioner utan `expiresAt` — när `createdAt` är äldre än `SESSION_MAX_AGE_MS`
-  (30 dagar).
+- **`sessions/{id}`** när sessionens egen `expiresAt` har passerat, eller när
+  `createdAt` är äldre än `SESSION_LIFETIME_MS` (7 dagar), vilket som kommer först.
+  `createdAt` är serverns tid — `firestore.rules` kräver det när sessionen skapas — så
+  sjudagarslöftet räknas på en klocka värden inte kan flytta. `expiresAt` sätts på
+  värdens enhet och får enligt reglerna ligga högst 8 dagar fram, för att en enhet vars
+  klocka går före inte ska nekas. Äldre sessioner utan `expiresAt` raderas när
+  `createdAt` är äldre än `SESSION_MAX_AGE_MS` (30 dagar).
 - **`users/{uid}/notifications/{id}`** när `createdAt` är äldre än
   `NOTIFICATION_MAX_AGE_MS` (90 dagar).
 
@@ -879,20 +950,63 @@ Policy ska omvärderas om:
   revisas BIN-277-beslutet
 - Threading blir djupare (kommentarer på kommentarer) och breakage
   blir användarfientligt
-- Cloud Functions finns — då kan vi göra "mjuk radering" med 30-dagars
-  ångra-fönster ovanpå hård radering
 
 ## Kopplingar
 
 - **Integritetspolicy** (`src/app/integritet/page.tsx`) ska reflektera
-  denna policy för användare — uppdateras i sprint 4 dag 5.
+  denna policy för användare.
 - **Terms of Service** (`src/app/villkor/page.tsx`) — ingen direkt
   ändring men nämner att borttaget innehåll inte återställs.
-- **Moderation-runbook** (`docs/moderation.md`, pending sprint 5) —
-  samma delete-cascade används när admin tar bort en användare för
-  policy-brott.
+- **Moderation-runbook** (`docs/moderation.md`).
 
 ## Ändringslogg
+
+- **2026-10-07 (BIN-1422)** — ett raderat konto kan återställas på ägarens begäran. Se
+  avsnittet "Återställt konto" ovan; integritetssidan v1.11 säger det i §6.
+
+- **2026-10-05 (BIN-1438)** — Malins val "Egen räknare": Plausible är borttaget, och
+  Binge räknar själv ett fast urval händelser som summor per dag i `eventStats`. Se
+  avsnittet "Räkning av hur funktioner används" ovan.
+
+- **2026-09-27 (BIN-1317)** — `retentionCleanup` larmar nu admin-inkorgen (Malins val
+  2026-09-27) när en körning loggar fel, när förra körningen aldrig blev klar — oavsett
+  om den hann logga `retentionCleanup: scheduled sweeps done` eller ingen av raderna —
+  och när en schemalagd körning uteblivit. En körning som dör eller uteblir syns först
+  vid nästa körning. Slutar schemat köra helt larmar ingenting.
+  Körningen sparar sina egna tidsstämplar och `lastErrorCount`, antalet fel den
+  loggade (`retentionCleanupHealth/current`), inga personuppgifter. Härled fälten:
+  `git grep -n "writeHealth(" -- functions/src`.
+
+- **2026-09-27 (BIN-1307)** — Malins beslut: integritetssidan (v1.7) säger nu att en
+  Tillsammans-session raderas "senast ett dygn efter att den blivit 7 dagar gammal", i
+  stället för "högst 7 dagar". Sessionens livslängd är oförändrad. Löftet förutsätter att
+  det dagliga svepet lyckas radera sessionen.
+  En session utan `expiresAt` raderas först efter 30 dagar och skulle bryta löftet.
+
+- **2026-09-26 (BIN-1298)** — Malins beslut (runda 3, A): gruppens titelrader
+  (`groups/{gid}/watchlist/{id}`) tar bara emot de fält appen skriver. En medlem kan
+  inte längre lagra godtyckliga fält där, och bara sätta eller ta bort sitt eget betyg.
+
+- **2026-09-26 (BIN-1301)** — Malins beslut (runda 3, A): en Tillsammans-session
+  raderas av det första dagliga svepet efter att den blivit 7 dagar gammal, räknat på
+  serverns `createdAt`, även om dess `expiresAt` ligger längre fram. Reglerna nekar en ny session vars
+  `expiresAt` ligger mer än 8 dagar fram eller redan har passerat.
+
+- **2026-09-23 (BIN-1294)** — Malins beslut (runda 2, A): sopningen raderar nu ett
+  konsolraderat kontos spår i grupper det bara var MEDLEM i, samma spår som
+  raderaknappen raderar, och tar bort uid:t ur gruppens `memberUids`. Steget räknas
+  in i dokumentbudgeten och körs efter gruppernas överlämning.
+
+- **2026-09-23 (BIN-1296)** — Malins beslut (runda 2, A): när en ägare tar bort en
+  medlem raderas samma spår som när medlemmen själv lämnar (se "Att lämna en
+  grupp" ovan). Appen anropar `eraseMyGroupTraces` med den borttagnas uid efter
+  borttagningen; bara gruppens ägare kan få något raderat den vägen.
+
+- **2026-09-23 (BIN-1281, BIN-1250)** — Malins beslut (runda 2, A): en anmälan
+  som någon annan gjort mot en användare, med den anmäldas interna användar-id
+  (`targetOwnerUid`) och vad som anmäldes, behålls efter att den anmälda raderat
+  sitt konto, på samma grund som BIN-277. Detsamma gäller adminens interna
+  motivering (`decisionNote`). Integritetssidan v1.6 säger det.
 
 - **2026-07-22 (BIN-560)** — Personliga bibliotekets Firestore-doc-id:n
   namespacas till `${mediaType}_${tmdbId}` (t.ex. `movie_603`/`tv_1399`).

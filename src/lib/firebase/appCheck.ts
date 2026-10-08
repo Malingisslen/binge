@@ -1,4 +1,9 @@
+import type { AppCheck } from 'firebase/app-check';
+
 let initPromise: Promise<void> | null = null;
+// Instansen som initializeAppCheck gav, för getAppCheckToken. null utan site key eller
+// om initieringen inte lyckades.
+let appCheckInstance: AppCheck | null = null;
 
 // Anropas från AuthContext-effekten (efter React 19-hydration) och AWAITAS
 // där innan onAuthStateChanged subscribar — Auth attachar App Check-tokens
@@ -60,7 +65,7 @@ export function initAppCheck(): Promise<void> {
       if (process.env.NEXT_PUBLIC_APP_ENV === 'development') {
         (globalThis as unknown as { FIREBASE_APPCHECK_DEBUG_TOKEN?: boolean }).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
       }
-      mod.initializeAppCheck(appMod.default, {
+      appCheckInstance = mod.initializeAppCheck(appMod.default, {
         provider: new mod.ReCaptchaV3Provider(siteKey),
         isTokenAutoRefreshEnabled: true,
       });
@@ -70,4 +75,24 @@ export function initAppCheck(): Promise<void> {
     }
   })();
   return initPromise;
+}
+
+/**
+ * En App Check-token för ett anrop som inte går via Firebase-SDK:n (BIN-1438: händelse-
+ * räknaren skickar med `fetch` för att inte bära användarens id-token). null när App
+ * Check inte är initierat — ingen site key, chunkfel, initAppCheck ännu inte anropad —
+ * eller när getToken kastar.
+ */
+export async function getAppCheckToken(): Promise<string | null> {
+  try {
+    // Startar aldrig initieringen själv: ordningen mot onAuthStateChanged ovan ägs av
+    // AuthContext. Har ingen initiering påbörjats finns ingen token att hämta.
+    if (!initPromise) return null;
+    await initPromise;
+    if (!appCheckInstance) return null;
+    const { getToken } = await import('firebase/app-check');
+    return (await getToken(appCheckInstance)).token || null;
+  } catch {
+    return null;
+  }
 }

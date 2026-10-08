@@ -11,6 +11,15 @@ import type { RowResult, RowSpec, FilterState, RowTitle } from '@/types';
 const VISIBLE_CAP = 20;
 const POOL_TARGET = 100;
 
+// "Klassiker" means titles that have stood the test of time. Without a decade
+// filter the query had no date bound at all, so a well-rated series from this
+// year topped the row. Ten years is the bar.
+export const CANON_MIN_AGE_YEARS = 10;
+
+export function canonLatestDate(now: Date): string {
+  return `${now.getFullYear() - CANON_MIN_AGE_YEARS}-12-31`;
+}
+
 function discoverParamsMovie(genreId: number | null, dateParams: Record<string, string>, voteParam: Record<string, string>, page: number): Record<string, string> {
   const p: Record<string, string> = {
     sort_by: 'vote_average.desc',
@@ -27,7 +36,9 @@ function discoverParamsTV(genreId: number | null, decade: string, voteParam: Rec
     sort_by: 'vote_average.desc',
     'vote_count.gte': '500',
     ...(genreId !== null ? { with_genres: String(genreId) } : {}),
-    ...(decade ? { 'first_air_date.gte': `${decade}-01-01`, 'first_air_date.lte': `${Number(decade) + 9}-12-31` } : {}),
+    ...(decade
+      ? { 'first_air_date.gte': `${decade}-01-01`, 'first_air_date.lte': `${Number(decade) + 9}-12-31` }
+      : { 'first_air_date.lte': canonLatestDate(new Date()) }),
     ...voteParam,
   };
   if (page > 1) p.page = String(page);
@@ -73,7 +84,7 @@ export function useRowGenreCanon(
   const dateParams: Record<string, string> = filters.decade ? {
     'primary_release_date.gte': `${filters.decade}-01-01`,
     'primary_release_date.lte': `${Number(filters.decade) + 9}-12-31`,
-  } : {};
+  } : { 'primary_release_date.lte': canonLatestDate(new Date()) };
   const voteParam: Record<string, string> = filters.voteAverageMin > 0 ? { 'vote_average.gte': String(filters.voteAverageMin) } : {};
 
   const queries = useQueries({

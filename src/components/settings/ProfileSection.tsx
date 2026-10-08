@@ -5,6 +5,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/contexts/ToastContext';
 import { SettingsSection } from './SettingsSection';
 import { MAX_DISPLAY_NAME } from '@/lib/clampText';
+import { Button } from '@/components/ui/Button';
+import { fieldClass } from '@/components/ui/Field';
 
 export function ProfileSection() {
   const { user, signOut, updateDisplayName } = useAuth();
@@ -30,8 +32,12 @@ export function ProfileSection() {
       toast('Namnet kan inte vara tomt.');
       return;
     }
+    // BIN-1275: faltet visar det som LAGRADES, som kan vara kortare an det som
+    // skrevs. Bara om ingen skrivit i faltet under sparningen (samma spärr som bion).
+    const sent = nameInput;
     try {
-      await updateDisplayName(next);
+      const stored = await updateDisplayName(next);
+      setNameInput(prev => (prev === sent ? stored : prev));
       toast('Namnet sparat');
     } catch {
       setNameInput(user!.displayName);
@@ -53,7 +59,7 @@ export function ProfileSection() {
         value={nameInput}
         onChange={e => setNameInput(e.target.value)}
         onBlur={saveName}
-        className="w-full px-2 py-1 text-base border border-rule rounded-sm bg-surface text-ink font-[inherit] outline-none focus:border-acc-deep"
+        className={fieldClass({ className: 'w-full' })}
       />
       <p id="displayName-help" className="text-xxs text-ink-3 mt-1">
         Visas för andra användare i appen, till exempel i notiser och på din profil.
@@ -64,9 +70,9 @@ export function ProfileSection() {
         <span className="text-ink-3 text-xs mr-2">E-post:</span>
         {user.email}
       </div>
-      <button onClick={signOut} className="btn btn-ghost btn-sm mt-3">
+      <Button onClick={signOut} variant="ghost" size="sm" className="mt-3">
         Logga ut
-      </button>
+      </Button>
     </SettingsSection>
   );
 }
