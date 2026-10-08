@@ -1,7 +1,7 @@
 // src/components/settings/DeleteAccountSection.test.tsx
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act, cleanup } from '@testing-library/react';
-import { DeleteAccountSection } from './DeleteAccountSection';
+import { CONFIRM_WORD, DeleteAccountSection } from './DeleteAccountSection';
 import { DeletionLimbo } from '@/components/layout/DeletionLimbo';
 import { CASCADE_PARTIAL, DELETION_HANDED_OFF, REQUIRES_RECENT_LOGIN, STALE_SESSION_PREFLIGHT } from '@/lib/authErrors';
 
@@ -85,9 +85,14 @@ const GENERIC_MSG = 'Kunde inte ta bort kontot. Ingenting har raderats. Kontroll
 
 const RETRY_ACTION = { label: 'Försök igen', onClick: expect.any(Function) };
 
+function typeConfirmWord(text = CONFIRM_WORD) {
+  fireEvent.change(screen.getByLabelText(`Skriv ${CONFIRM_WORD} för att bekräfta`), { target: { value: text } });
+}
+
 async function attemptDelete() {
   render(<DeleteAccountSection />);
   fireEvent.click(screen.getByText('Ta bort mitt konto'));
+  typeConfirmWord();
   await act(async () => {
     fireEvent.click(screen.getByText('Ja, ta bort permanent'));
   });
@@ -353,5 +358,63 @@ describe('BIN-936 — båda skärmarnas texter för samma feltillstånd namnger 
     const action = toast.show.mock.calls[0][1] as { label: string };
     expect(action.label).toBe('Försök igen');
     expect(toast.show.mock.calls[0][0]).not.toContain('Slutför raderingen');
+  });
+});
+
+// Inställningar och kontoradering, 2026-10-08: ett felklick räckte förut för att starta
+// en radering som inte går att ångra. Nu måste ordet skrivas, och ett gammalt ord får
+// aldrig ligga kvar och hålla knappen tryckbar.
+describe('bekräftelseordet', () => {
+  it('knappen går inte att trycka förrän ordet är skrivet, och då raderas ingenting', async () => {
+    render(<DeleteAccountSection />);
+    fireEvent.click(screen.getByText('Ta bort mitt konto'));
+    const button = screen.getByRole('button', { name: 'Ja, ta bort permanent' }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+
+    typeConfirmWord('RADER');
+    expect(button.disabled).toBe(true);
+    typeConfirmWord('RADERAS');
+    expect(button.disabled).toBe(true);
+    typeConfirmWord('XRADERA');
+    expect(button.disabled).toBe(true);
+    await act(async () => { fireEvent.submit(button.closest('form')!); });
+    expect(auth.deleteAccount).not.toHaveBeenCalled();
+
+    typeConfirmWord();
+    expect(button.disabled).toBe(false);
+  });
+
+  it('ordet är skiftlägesokänsligt och tål mellanslag runt om', async () => {
+    render(<DeleteAccountSection />);
+    fireEvent.click(screen.getByText('Ta bort mitt konto'));
+    typeConfirmWord(' radera ');
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Ja, ta bort permanent' }));
+    });
+    expect(auth.deleteAccount).toHaveBeenCalledTimes(1);
+  });
+
+  it('Avbryt tömmer fältet, så nästa öppning kräver ordet igen', () => {
+    render(<DeleteAccountSection />);
+    fireEvent.click(screen.getByText('Ta bort mitt konto'));
+    typeConfirmWord();
+    fireEvent.click(screen.getByRole('button', { name: 'Avbryt' }));
+    fireEvent.click(screen.getByText('Ta bort mitt konto'));
+    expect((screen.getByLabelText(`Skriv ${CONFIRM_WORD} för att bekräfta`) as HTMLInputElement).value).toBe('');
+    expect((screen.getByRole('button', { name: 'Ja, ta bort permanent' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('ett misslyckat försök tömmer fältet, så "Försök igen" kräver ordet igen', async () => {
+    auth.deleteAccount.mockRejectedValue(new Error('auth/network-request-failed'));
+    await attemptDelete();
+    const action = toast.show.mock.calls[0][1] as { onClick: () => void };
+    await act(async () => { action.onClick(); });
+    expect((screen.getByLabelText(`Skriv ${CONFIRM_WORD} för att bekräfta`) as HTMLInputElement).value).toBe('');
+    expect((screen.getByRole('button', { name: 'Ja, ta bort permanent' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('länken till exporten pekar på datasektionen på samma sida', () => {
+    render(<DeleteAccountSection />);
+    expect(screen.getByRole('link', { name: 'Exportera din data först' }).getAttribute('href')).toBe('#data');
   });
 });

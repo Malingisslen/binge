@@ -3,7 +3,7 @@
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/contexts/ToastContext';
 import { SettingsSection } from './SettingsSection';
-import { MUNICIPALITY_NAMES } from '@/lib/libraries/municipalities';
+import { MunicipalityPicker } from './MunicipalityPicker';
 import { Button } from '@/components/ui/Button';
 
 /**
@@ -27,24 +27,20 @@ export function BibliotekSection() {
         gratis via biblioteket (t.ex. Cineasterna). Vi kan inte se ditt lånesaldo
         — bara vad som <em>kan</em> vara gratis.
       </p>
-      <div className="flex items-center gap-2 flex-wrap">
-        <select
-          className="select"
-          aria-label="Välj hemkommun"
-          value={user.hemkommun ?? ''}
-          onChange={async e => {
-            const value = e.target.value || null;
+      <div className="flex items-start gap-2 flex-wrap">
+        <MunicipalityPicker
+          value={user.hemkommun ?? null}
+          onSelect={async name => {
             try {
-              await updateHomeMunicipality(value);
-              toast(value ? `Hemkommun: ${value}` : 'Hemkommun rensad');
-            } catch { toast('Kunde inte spara. Försök igen om en stund.'); }
+              await updateHomeMunicipality(name);
+              toast(`Hemkommun: ${name}`);
+              return true;
+            } catch {
+              toast('Kunde inte spara. Försök igen om en stund.');
+              return false;
+            }
           }}
-        >
-          <option value="">Ingen vald</option>
-          {MUNICIPALITY_NAMES.map(name => (
-            <option key={name} value={name}>{name}</option>
-          ))}
-        </select>
+        />
         {user.hemkommun && (
           <Button
             type="button"

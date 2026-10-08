@@ -188,7 +188,7 @@ export function NotificationsSection() {
   }
 
   return (
-    <SettingsSection title="Notifikationer">
+    <SettingsSection title="Notiser">
       <p className="text-xs text-ink-3 mb-2">
         Få notiser när någon skickar en vänförfrågan eller när din grupp loggar
         en ny filmkväll. Notiser visas på den här enheten — andra enheter har
