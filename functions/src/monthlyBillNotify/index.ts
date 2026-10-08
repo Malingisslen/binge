@@ -16,7 +16,7 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { logger } from 'firebase-functions/v2';
 import { createInboxCard } from '../shared/inboxCard';
 import {
-  activePauses, episodeCheckedOff, filmCheckedOff, hasPaidService, monthlyBillCard, previousStockholmMonth, showDocIds,
+  activePauses, episodeCheckedOff, filmCheckedOff, hasPaidService, monthlyBillCard, monthlyBillOptedOut, previousStockholmMonth, showDocIds,
   type BillPause, type BillUser, type NotifyMonth,
 } from './logic';
 
@@ -68,6 +68,8 @@ async function checkedOffSomething(db: Firestore, uid: string, month: NotifyMont
 async function handleUser(db: Firestore, doc: QueryDocumentSnapshot, month: NotifyMonth): Promise<'written' | 'existed' | 'skipped'> {
   const user = doc.data() as BillUser;
   if (!Array.isArray(user.myProviders) || user.myProviders.length === 0) return 'skipped';
+  // Before any subcollection read, so a user who turned the card off costs nothing.
+  if (monthlyBillOptedOut(user)) return 'skipped';
   const pauses = await pausesFor(db, doc.id, user);
   if (!hasPaidService(user, pauses, month)) return 'skipped';
   if (!(await checkedOffSomething(db, doc.id, month))) return 'skipped';
@@ -84,7 +86,7 @@ export const monthlyBillNotify = onSchedule(
     let cursor: QueryDocumentSnapshot | null = null;
     for (;;) {
       let q = db.collection('users').orderBy(FieldPath.documentId())
-        .select('myProviders', 'providerTiers', 'providerCosts', 'providerPauses', 'providerCampaigns')
+        .select('myProviders', 'providerTiers', 'providerCosts', 'providerPauses', 'providerCampaigns', 'notificationSettings.monthlyBill')
         .limit(USER_PAGE);
       if (cursor) q = q.startAfter(cursor);
       const page = await q.get();

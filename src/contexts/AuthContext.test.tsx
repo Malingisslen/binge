@@ -3333,6 +3333,27 @@ describe('pause reminders (BIN-1442)', () => {
   });
 });
 
+describe('monthly bill setting', () => {
+  it('reads as on when the account has no such key, off only for an explicit false', async () => {
+    const { unmount } = renderAuth();
+    await login({ username: 'malin', notificationSettings: { weeklyDigest: true } });
+    expect(ctx!.user?.notificationSettings.monthlyBill).toBe(true);
+    unmount();
+    renderAuth();
+    await login({ username: 'malin', notificationSettings: { monthlyBill: false } });
+    expect(ctx!.user?.notificationSettings.monthlyBill).toBe(false);
+  });
+
+  it('turning it off keeps the other notification settings', async () => {
+    renderAuth();
+    await login({ username: 'malin', notificationSettings: { weeklyDigest: true, priceDrops: true } });
+    setDoc.mockClear();
+    await act(async () => { await ctx!.updateNotificationSettings({ monthlyBill: false }); });
+    const written = userDocWrites().map(c => (c[1] as { notificationSettings?: Record<string, unknown> }).notificationSettings).find(Boolean)!;
+    expect(written).toMatchObject({ monthlyBill: false, weeklyDigest: true, priceDrops: true });
+  });
+});
+
 describe('second-week visit stamp (BIN-1442)', () => {
   const daysAgo = (n: number) => { const d = new Date(Date.now() - n * 86_400_000); return { toDate: () => d }; };
   const stamps = () => userDocWrites().filter(c => 'secondWeekVisitAt' in (c[1] as Record<string, unknown>));

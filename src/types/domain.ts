@@ -222,6 +222,10 @@ export interface UserProfile {
     // (weeklyDigestNotify). ETT inbox-kort, inte per titel, och ingen push
     // (BIN-1442). På för nya konton, se NEW_ACCOUNT_NOTIFICATION_SETTINGS.
     weeklyDigest: boolean;
+    // Månadskortet "Din streaming i <månad>" i klockan den 1:a (monthlyBillNotify).
+    // Ingen push. På som standard; bara ett uttryckligt false stänger av det, så
+    // ett konto som saknar nyckeln får kortet.
+    monthlyBill: boolean;
   };
   // BIN-181 — klient-persistad rotationskalender-snapshot (paus/återkom-datum)
   // som rotationReminderNotify läser. Skrivs när användaren slår på påminnelser.

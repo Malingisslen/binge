@@ -56,6 +56,17 @@ export interface BillUser {
   providerCosts?: Record<string, number>;
   providerPauses?: Record<string, { pausedAt?: unknown }>;
   providerCampaigns?: Record<string, { monthlyCost?: unknown; endDate?: unknown }>;
+  notificationSettings?: unknown;
+}
+
+/**
+ * The user turned the card off in Inställningar, Notiser. Only an explicit false
+ * counts: the setting is on by default, and an account created before it existed,
+ * or one holding a malformed value, keeps getting the card it was promised.
+ */
+export function monthlyBillOptedOut(user: BillUser): boolean {
+  const settings = user.notificationSettings;
+  return !!settings && typeof settings === 'object' && (settings as { monthlyBill?: unknown }).monthlyBill === false;
 }
 
 export interface BillPause { providerId: number; pausedAt: string; resumedAt: string | null }

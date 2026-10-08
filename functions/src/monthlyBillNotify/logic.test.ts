@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
-  activePauses, episodeCheckedOff, filmCheckedOff, hasPaidService, monthlyBillCard, previousStockholmMonth, stockholmMidnightMs,
+  activePauses, episodeCheckedOff, filmCheckedOff, hasPaidService, monthlyBillCard, monthlyBillOptedOut, previousStockholmMonth, stockholmMidnightMs,
 } from './logic';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const september = previousStockholmMonth(new Date('2026-10-01T07:00:00Z')); // 09:00 Stockholm on the 1st
 
@@ -82,5 +84,30 @@ describe('monthlyBillCard', () => {
       title: 'Din streaming i september',
       body: 'Du har streamat klart i september. Se vad varje tjänst kostade per avsnitt.',
     });
+  });
+});
+
+describe('monthlyBillOptedOut', () => {
+  it('only an explicit false turns the card off', () => {
+    expect(monthlyBillOptedOut({ notificationSettings: { monthlyBill: false } })).toBe(true);
+  });
+  it('a missing, true or malformed setting keeps the card on', () => {
+    for (const notificationSettings of [undefined, null, 'x', 0, {}, { monthlyBill: true }, { monthlyBill: null },
+      { monthlyBill: 'false' }, { monthlyBill: 0 }]) {
+      expect(monthlyBillOptedOut({ notificationSettings })).toBe(false);
+    }
+    expect(monthlyBillOptedOut({})).toBe(false);
+  });
+
+  // A source scan, not a run: the entrypoint imports firebase-admin. A user who
+  // turned the card off must cost no subcollection read, and the setting must
+  // come from the page query, not a read of its own.
+  it('is checked before the first subcollection read, from the page query', () => {
+    const src = readFileSync(join(__dirname, 'index.ts'), 'utf8');
+    const handle = src.slice(src.indexOf('async function handleUser'));
+    const skip = "if (monthlyBillOptedOut(user)) return 'skipped';";
+    expect(handle.indexOf(skip)).toBeGreaterThan(-1);
+    expect(handle.indexOf(skip)).toBeLessThan(handle.indexOf('pausesFor('));
+    expect(src).toMatch(/\.select\([^)]*'notificationSettings\.monthlyBill'/);
   });
 });
