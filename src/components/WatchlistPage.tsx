@@ -55,6 +55,7 @@ import { Button } from '@/components/ui/Button';
 import { eyebrowClass } from '@/components/ui/Eyebrow';
 import { thClass } from '@/components/ui/tableHead';
 import { cardClass } from '@/components/ui/Card';
+import { compareTitles } from '@/lib/titleSort';
 
 // BIN-560 Phase 4: selection/next-air state is keyed by the composite doc id
 // `mediaTypeDocId(mediaType, tmdbId)`, not bare tmdbId — a movie and a TV show
@@ -222,7 +223,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
     }
     result = [...result].sort((a, b) => {
       switch (sort) {
-        case 'title': return a.title.localeCompare(b.title, 'sv');
+        case 'title': return compareTitles(a.title, b.title);
         case 'rating': return (b.rating ?? 0) - (a.rating ?? 0);
         case 'releaseYear': return (b.releaseYear ?? 0) - (a.releaseYear ?? 0);
         case 'addedAt': return b.addedAt.getTime() - a.addedAt.getTime();
