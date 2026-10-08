@@ -6,14 +6,28 @@ import { classifyDeletionFailure, deletionWasHandedOff } from '@/lib/authErrors'
 import { useToast } from '@/contexts/ToastContext';
 import { SettingsSection } from './SettingsSection';
 import { Button } from '@/components/ui/Button';
+import { fieldClass } from '@/components/ui/Field';
+
+// Ett skrivet ord som spärr: raderingen kan inte ångras, och ett felklick på en
+// knapp räcker inte som bekräftelse. Skiftlägesokänsligt så att mobilens
+// autoversal inte stoppar någon.
+export const CONFIRM_WORD = 'RADERA';
 
 export function DeleteAccountSection() {
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [confirmText, setConfirmText] = useState('');
+  const confirmWordTyped = confirmText.trim().toLocaleUpperCase('sv') === CONFIRM_WORD;
   const { deleteAccount } = useAuth();
   const { show: toast } = useToast();
 
+  const cancel = () => {
+    setConfirming(false);
+    setConfirmText('');
+  };
+
   const handleDelete = async () => {
+    if (!confirmWordTyped) return;
     setDeleting(true);
     try {
       await deleteAccount();
@@ -71,7 +85,8 @@ export function DeleteAccountSection() {
             ? 'Raderingen avbröts av ett anslutningsfel innan den hann bli klar. En del av din data kan redan vara borttagen. Tryck på Slutför raderingen — resten går igenom utan att skada det som redan tagits bort.'
             : 'Kunde inte ta bort kontot. Ingenting har raderats. Kontrollera anslutningen och försök igen.';
       setDeleting(false);
-      setConfirming(false);
+      // Ett nytt försök kräver att ordet skrivs igen.
+      cancel();
       // En toast utan åtgärd självdör efter 2,5 s; med åtgärd lever den 6 s
       // (ToastContext). Knappen följer med precis när DEN HÄR komponenten
       // fortfarande finns kvar att trycka i — dvs när felet saknar
@@ -116,8 +131,12 @@ export function DeleteAccountSection() {
 
   return (
     <SettingsSection title="Ta bort konto" tone="danger">
+      <p className="text-sm text-ink-2 mb-1">
+        Ditt bibliotek, dina betyg, din avsnittsprogress och dina inställningar raderas permanent.
+      </p>
       <p className="text-xs text-ink-3 mb-2">
-        All data raderas permanent — bibliotek, betyg, avsnittsprogress och inställningar.
+        Det går inte att ångra. Vill du spara en kopia?{' '}
+        <a href="#data" className="text-acc-deep">Exportera din data först</a>.
       </p>
       {/*
         BIN-877 — kontaktvägen ligger i sektionen, inte i felmeddelandena.
@@ -186,18 +205,39 @@ export function DeleteAccountSection() {
           Ta bort mitt konto
         </Button>
       ) : (
-        <div className="flex gap-2">
-          <Button
-            onClick={handleDelete}
+        <form
+          className="mt-3 pt-3 border-t border-rule-2"
+          onSubmit={e => { e.preventDefault(); void handleDelete(); }}
+        >
+          <label htmlFor="delete-confirm-word" className="block text-xs font-semibold text-ink mb-1">
+            Skriv {CONFIRM_WORD} för att bekräfta
+          </label>
+          <input
+            id="delete-confirm-word"
+            type="text"
+            value={confirmText}
+            onChange={e => setConfirmText(e.target.value)}
+            autoComplete="off"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            autoFocus
             disabled={deleting}
-            variant="danger" size="sm" className="disabled:opacity-50"
-          >
-            {deleting ? 'Raderar…' : 'Ja, ta bort permanent'}
-          </Button>
-          <Button onClick={() => setConfirming(false)} variant="ghost" size="sm">
-            Avbryt
-          </Button>
-        </div>
+            className={fieldClass({ size: 'sm', className: 'w-full max-w-xs' })}
+          />
+          <div className="flex gap-2 mt-2">
+            <Button
+              type="submit"
+              disabled={deleting || !confirmWordTyped}
+              variant="danger" size="sm" className="disabled:opacity-50"
+            >
+              {deleting ? 'Raderar…' : 'Ja, ta bort permanent'}
+            </Button>
+            <Button type="button" onClick={cancel} disabled={deleting} variant="ghost" size="sm">
+              Avbryt
+            </Button>
+          </div>
+        </form>
       )}
     </SettingsSection>
   );

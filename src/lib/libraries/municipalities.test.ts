@@ -4,6 +4,7 @@ import {
   MUNICIPALITY_NAMES,
   findMunicipality,
   isValidMunicipality,
+  searchMunicipalities,
 } from './municipalities';
 
 describe('Swedish municipalities catalog', () => {
@@ -45,5 +46,28 @@ describe('Swedish municipalities catalog', () => {
     expect(findMunicipality(undefined)).toBeNull();
     expect(isValidMunicipality('Oslo')).toBe(false);
     expect(isValidMunicipality('Uppsala')).toBe(true);
+  });
+
+  it('search puts names that start with the query before names that only contain it', () => {
+    // Olofström sorterar före Strömstad i bokstavsordning, så ordningen nedan finns
+    // bara om prefixträffarna verkligen läggs först.
+    expect(searchMunicipalities('ström')).toEqual(['Strömstad', 'Strömsund', 'Olofström']);
+  });
+
+  it('search is case-insensitive, trims, and handles å/ä/ö', () => {
+    expect(searchMunicipalities('  GÖTE ')[0]).toBe('Göteborg');
+    expect(searchMunicipalities('malmö')).toEqual(['Malmö']);
+    expect(searchMunicipalities('örnsk')).toEqual(['Örnsköldsvik']);
+  });
+
+  it('search ignores accents, so "Malmo" and "Ostersund" still find the right name', () => {
+    expect(searchMunicipalities('malmo')).toEqual(['Malmö']);
+    expect(searchMunicipalities('Ostersund')).toEqual(['Östersund']);
+    expect(searchMunicipalities('goteborg')).toEqual(['Göteborg']);
+  });
+
+  it('an empty query returns every name, and a miss returns none', () => {
+    expect(searchMunicipalities('')).toEqual([...MUNICIPALITY_NAMES]);
+    expect(searchMunicipalities('Köpenhamn')).toEqual([]);
   });
 });

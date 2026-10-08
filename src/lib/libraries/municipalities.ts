@@ -133,3 +133,28 @@ export function findMunicipality(name: string | null | undefined): Municipality 
 export function isValidMunicipality(name: string | null | undefined): boolean {
   return findMunicipality(name) !== null;
 }
+
+// Strips accents so "Malmo" or "Ostersund", typed on a keyboard without å/ä/ö,
+// still finds the name. The picker always shows the real spelling.
+function foldForSearch(s: string): string {
+  return s.trim().toLocaleLowerCase('sv').normalize('NFD').replace(/\p{M}/gu, '');
+}
+
+/**
+ * Names matching a typed query for the searchable home-municipality picker.
+ * Names that start with the query come first, then names that only contain it,
+ * so a typed prefix lands at the top of the list. Each group keeps Swedish
+ * alphabetical order. Ignores case and accents; an empty query returns every name.
+ */
+export function searchMunicipalities(query: string): string[] {
+  const q = foldForSearch(query);
+  if (!q) return [...MUNICIPALITY_NAMES];
+  const starts: string[] = [];
+  const contains: string[] = [];
+  for (const name of MUNICIPALITY_NAMES) {
+    const n = foldForSearch(name);
+    if (n.startsWith(q)) starts.push(name);
+    else if (n.includes(q)) contains.push(name);
+  }
+  return [...starts, ...contains];
+}
