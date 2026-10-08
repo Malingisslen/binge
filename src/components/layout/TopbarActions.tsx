@@ -362,12 +362,13 @@ function FriendRequestRow({
 }) {
   const { data: sender } = useSenderProfile(request.fromUid);
   const { failedAction, run } = useFriendActionAlert();
-  const displayName = sender?.displayName ?? request.fromDisplayName;
+  // `||`, not `??`: a profile with a blank name must fall through to the username.
+  const displayName = sender?.displayName?.trim() || sender?.username || request.fromDisplayName;
   const username = sender?.username ?? request.fromUsername;
   return (
     <div className="popover-row friend-req">
       <div className="popover-row-title">{displayName}</div>
-      {username && <div className="popover-row-meta">@{username}</div>}
+      {username && username !== displayName && <div className="popover-row-meta">@{username}</div>}
       <div className="popover-actions">
         <Button onClick={run('accept', onAccept)} variant="acc" size="sm">
           Acceptera

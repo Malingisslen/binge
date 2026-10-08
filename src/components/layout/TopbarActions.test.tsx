@@ -58,7 +58,10 @@ vi.mock('@/hooks/useNotifications', () => ({ useNotifications: () => notif }));
 vi.mock('@/hooks/useFriends', () => ({ useFriendActions: () => friendActions }));
 vi.mock('@/hooks/useMySessions', () => ({ useMySessions: () => [] }));
 vi.mock('@/hooks/useClickOutside', () => ({ useClickOutside: () => {} }));
-vi.mock('@/hooks/useSenderProfile', () => ({ useSenderProfile: () => ({ data: null }) }));
+const senders = vi.hoisted(() => new Map<string, { displayName: string | null; username: string | null }>());
+vi.mock('@/hooks/useSenderProfile', () => ({
+  useSenderProfile: (uid: string) => ({ data: senders.get(uid) ?? null }),
+}));
 
 const STORAGE_KEY = 'binge:nextAfterLogin';
 
@@ -156,7 +159,24 @@ describe('TopbarActions — a refused friend-request write says so, on its own r
     notif.unreadCount = 0;
     notif.friendRequestsCount = 0;
     notif.recentPicksCount = 0;
+    senders.clear();
     vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  // A sender whose profile has a blank name is shown by username, and the @-line
+  // is dropped only when it would repeat that same word.
+  it('shows a nameless sender by username, once', async () => {
+    senders.set('s', { displayName: '  ', username: 'sara' });
+    const view = await openBell([request('s', 'Användare')]);
+    const row = rowFor(view, 'sara');
+    expect(within(row).queryByText('Användare')).toBeNull();
+    expect(within(row).queryByText('@sara')).toBeNull();
+  });
+
+  it('keeps the @-line when the name and username differ', async () => {
+    senders.set('s', { displayName: 'Sara', username: 'sara' });
+    const view = await openBell([request('s', 'Sara')]);
+    expect(within(rowFor(view, 'Sara')).getByText('@sara')).toBeTruthy();
   });
 
   it('a refused accept says so, naming the accept', async () => {
