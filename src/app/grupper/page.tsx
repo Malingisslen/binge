@@ -24,6 +24,7 @@ import { Eyebrow } from '@/components/ui/Eyebrow';
 import { buttonClass, Button } from '@/components/ui/Button';
 import { thClass } from '@/components/ui/tableHead';
 import { cardClass } from '@/components/ui/Card';
+import { shownSenderName } from '@/lib/friendName';
 
 export default function GrupperPage() {
   return <AuthGuard><GrupperList /></AuthGuard>;
@@ -220,7 +221,7 @@ function useInviteIdentity(invite: GroupInvite) {
   const senderQuery = useSenderProfile(invite.fromUid);
   return {
     groupName: groupQuery.data ?? invite.groupName,
-    fromDisplayName: senderQuery.data?.displayName ?? invite.fromDisplayName,
+    fromDisplayName: shownSenderName(senderQuery.data, invite.fromDisplayName),
   };
 }
 

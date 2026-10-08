@@ -16,6 +16,7 @@ import { useFriendActionAlert } from '@/hooks/useFriendActionAlert';
 import { FRIEND_FAILURE_TEXT } from '@/lib/friendActionText';
 import type { FriendRequest } from '@/lib/firebase/friends';
 import { Button } from '@/components/ui/Button';
+import { shownSenderName } from '@/lib/friendName';
 
 // Right-hand cluster of the new topbar: sessions popover, notifications bell
 // popover, and the user avatar (or "Logga in" if signed out). Extracted from
@@ -362,8 +363,7 @@ function FriendRequestRow({
 }) {
   const { data: sender } = useSenderProfile(request.fromUid);
   const { failedAction, run } = useFriendActionAlert();
-  // `||`, not `??`: a profile with a blank name must fall through to the username.
-  const displayName = sender?.displayName?.trim() || sender?.username || request.fromDisplayName;
+  const displayName = shownSenderName(sender, request.fromDisplayName);
   const username = sender?.username ?? request.fromUsername;
   return (
     <div className="popover-row friend-req">
