@@ -10,8 +10,8 @@ export default function IntegritetPage() {
   return (
     <LegalPageShell
       title="Integritetspolicy"
-      lastUpdated="2026-10-07"
-      version="1.11"
+      lastUpdated="2026-10-08"
+      version="1.12"
       toc={[
         { id: 'ansvarig', label: '1. Vem är ansvarig?' },
         { id: 'uppgifter', label: '2. Vilka uppgifter vi samlar in' },
@@ -175,7 +175,7 @@ export default function IntegritetPage() {
             automatiskt av en återkommande rutin, normalt en gång i veckan.
           </li>
           <li>
-            {/* BIN-1422 del 2: Malins text, godkänd 2026-10-07. */}
+            {/* BIN-1422 del 2: Malins text, godkänd 2026-10-07; meningen om profilens anteckning godkänd 2026-10-08. */}
             Om du ångrar en radering och själv ber om det kan ditt konto
             återställas från en säkerhetskopia. Då kommer din profil,
             bevakningslista, avsnittsframsteg, anteckningar, egna taggar,
@@ -184,7 +184,9 @@ export default function IntegritetPage() {
             bort relationen. Recensioner, listor, grupper och Tillsammans-sessioner
             kommer inte tillbaka. Du godkänner villkoren på nytt innan kontot går
             att använda. Att kontot återställts, på vems begäran och varför sparas
-            i 12 månader.
+            i 12 månader. Utöver den loggen får din profil en anteckning om när
+            och varför kontot återställdes och vem som bad om det. Anteckningen
+            finns kvar så länge kontot finns och ingår i din dataexport.
           </li>
           <li>
             <strong>Ett undantag från raderingen:</strong> om du har anmält
