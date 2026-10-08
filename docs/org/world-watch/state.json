@@ -79,7 +79,7 @@
           "note": "How vuln alerts/grouping reach the repo."
         }
       ],
-      "lastScan": "2026-09-14",
+      "lastScan": "2026-10-08",
       "snapshot": {
         "nextjs-advisories": "2026-09-07: Direct WebFetch worked. TWO NEW critical (CVSS 9.5) unauthenticated-RCE advisories published 2026-08-25: GHSA-2xp9-vwfh-vxw4 (Image Optimization API, AVIF/libheif via sharp, affects <15.5.24 and <16.3.3) and GHSA-p293-qw3h-jr36 (Windows-filesystem-hosted servers only, affects >=13.4<15.5.24 and >=16.0<16.3.3). Both patched in 15.5.24/16.3.3. Checked package-lock.json: binge already resolves next@16.3.3 — the exact patched version. NOT material — already safe, no ticket filed. Confirmed via package-lock, not assumed.",
         "ghsa-npm": "2026-09-07: Direct WebFetch worked. No advisories for react, react-dom, firebase, firebase-admin, firebase-functions, or @firebase/* surfaced among recent entries (unrelated packages: TypeSpec Spector, CodeWhale, TOML, Orval, Claude Code Templates, SimpleWebAuthn). next.js advisories covered directly above. No change.",
@@ -109,6 +109,11 @@
           "date": "2026-09-14",
           "via": "weekly-janitor-sweep (cloud sandbox, no Linear)",
           "note": "Lean WebSearch pass (cloud sandbox, no Linear). No new Next.js/React advisory beyond the known August 2026 critical pair (GHSA-2xp9-vwfh-vxw4, GHSA-p293-qw3h-jr36) — package-lock.json still resolves next@^16.3.3 (dist-tag confirmed), the exact patched version, still not material. Firebase JS SDK bumped to 12.19.0, no security-relevant changelog content found. No new material item this cycle."
+        },
+        {
+          "date": "2026-10-08",
+          "via": "weekly-janitor-sweep (cloud sandbox, no Linear)",
+          "note": "MATERIAL FINDING — filed GitHub issue #133. Next.js published a critical RCE advisory GHSA-vcvr-r3jv-pc5j / CVE-2026-94545 (CVSS 9.5, 2026-09-22) in next/og's Node.js ImageResponse, affecting next >=16.2.0 <16.3.6, fixed in 16.3.6. Re-checked package-lock.json directly (not just package.json's ^16.3.3 range spec) and found binge actually resolves next@16.3.5 — inside the vulnerable range, unpatched. Grepped src/ for next/og, ImageResponse, and the opengraph-image/twitter-image file convention: no hits, so the specific exploitable code path isn't in use today, which lowers urgency but doesn't close the gap (a future OG-image route would reopen it). Also flagged in the issue: the same Sep-30-2026 release train shipped an SSRF (Image Optimization, High) and several SSG/ISR cache-poisoning advisories (self-hosted deployments) not individually triaged here. Recommend bumping past 16.3.6 to the latest Sep-30 patch in one PR."
         }
       ]
     },
