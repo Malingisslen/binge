@@ -777,6 +777,29 @@ button { font: inherit; cursor: pointer; }
   box-shadow: 0 0 0 2px var(--acc-soft);
 }
 
+/* Two-thumb range (År in the shared filter panel). Both inputs share one track and
+   only their thumbs take the pointer, so either thumb can be dragged. */
+.range-dual { position: relative; height: 24px; }
+.range-dual-track, .range-dual-fill { position: absolute; top: 10px; height: 4px; border-radius: 2px; }
+.range-dual-track { left: 0; right: 0; background: var(--rule); }
+.range-dual-fill { background: var(--ink); }
+.range-dual input[type=range] {
+  position: absolute; left: 0; right: 0; top: 4px; width: 100%; height: 16px; margin: 0;
+  background: none; pointer-events: none; -webkit-appearance: none; appearance: none;
+}
+.range-dual input[type=range]::-webkit-slider-runnable-track { background: none; }
+.range-dual input[type=range]::-webkit-slider-thumb {
+  pointer-events: auto; -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--ink); border: 2px solid var(--surface); cursor: pointer;
+}
+.range-dual input[type=range]::-moz-range-thumb {
+  pointer-events: auto; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--ink); border: 2px solid var(--surface); cursor: pointer;
+}
+.range-dual input[type=range]:focus-visible { outline: none; }
+.range-dual input[type=range]:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--acc-deep); outline-offset: 1px; }
+.range-dual input[type=range]:focus-visible::-moz-range-thumb { outline: 2px solid var(--acc-deep); outline-offset: 1px; }
+
 /* Text field primitive: input and textarea. .field-sm is the inline size next to a row. */
 .field {
   font-family: var(--sans);

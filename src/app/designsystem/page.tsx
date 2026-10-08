@@ -10,6 +10,7 @@ import { cardClass } from '@/components/ui/Card';
 import { fieldClass } from '@/components/ui/Field';
 import { badgeClass, tagClass } from '@/components/ui/Badge';
 import { thClass } from '@/components/ui/tableHead';
+import FilterPanelDemo from '@/components/filters/FilterPanelDemo';
 
 // The living component page: every piece is the real component or CSS class, so the
 // page changes when they do. Both themes side by side, whatever theme the viewer runs.
@@ -163,6 +164,10 @@ function Specimen({ theme }: { theme: 'light' | 'dark' }) {
 
       <Section title="Tomt tillstånd">
         <EmptyState title="Inga listor ännu" body="Skapa din första lista och dela den med en vän." />
+      </Section>
+
+      <Section title="Filter">
+        <FilterPanelDemo />
       </Section>
 
       <Section title="Duotone">

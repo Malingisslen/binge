@@ -6,12 +6,13 @@ import { discoverMovies, discoverTV } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import { dedupeAndExclude, splitVisibleAndPool, applyClientFilters } from '@/lib/recommendations/rowComposition';
 import { crossMediaGenreId } from '@/lib/tmdb/genreMapping';
+import { discoverDateParams, discoverVoteParams, discoverKeyParts } from '@/lib/recommendations/discoverFilterParams';
 import type { RowResult, RowSpec, FilterState, RowTitle } from '@/types';
 
 const VISIBLE_CAP = 20;
 const POOL_TARGET = 100;
 
-// "Klassiker" means titles that have stood the test of time. Without a decade
+// "Klassiker" means titles that have stood the test of time. Without an end-year
 // filter the query had no date bound at all, so a well-rated series from this
 // year topped the row. Ten years is the bar.
 export const CANON_MIN_AGE_YEARS = 10;
@@ -31,14 +32,12 @@ function discoverParamsMovie(genreId: number | null, dateParams: Record<string, 
   if (page > 1) p.page = String(page);
   return p;
 }
-function discoverParamsTV(genreId: number | null, decade: string, voteParam: Record<string, string>, page: number): Record<string, string> {
+function discoverParamsTV(genreId: number | null, dateParams: Record<string, string>, voteParam: Record<string, string>, page: number): Record<string, string> {
   const p: Record<string, string> = {
     sort_by: 'vote_average.desc',
     'vote_count.gte': '500',
     ...(genreId !== null ? { with_genres: String(genreId) } : {}),
-    ...(decade
-      ? { 'first_air_date.gte': `${decade}-01-01`, 'first_air_date.lte': `${Number(decade) + 9}-12-31` }
-      : { 'first_air_date.lte': canonLatestDate(new Date()) }),
+    ...dateParams,
     ...voteParam,
   };
   if (page > 1) p.page = String(page);
@@ -81,18 +80,18 @@ export function useRowGenreCanon(
     ? genreIdsForQueries(genreId, filters.mediaType)
     : { movieGenreId: null, tvGenreId: null };
 
-  const dateParams: Record<string, string> = filters.decade ? {
-    'primary_release_date.gte': `${filters.decade}-01-01`,
-    'primary_release_date.lte': `${Number(filters.decade) + 9}-12-31`,
-  } : { 'primary_release_date.lte': canonLatestDate(new Date()) };
-  const voteParam: Record<string, string> = filters.voteAverageMin > 0 ? { 'vote_average.gte': String(filters.voteAverageMin) } : {};
+  const canonCutoff = canonLatestDate(new Date());
+  const dateParams = discoverDateParams(filters, 'primary_release_date', canonCutoff);
+  const tvDateParams = discoverDateParams(filters, 'first_air_date', canonCutoff);
+  const voteParam = discoverVoteParams(filters);
+  const keyParts = discoverKeyParts(filters);
 
   const queries = useQueries({
     queries: [
-      { queryKey: ['rec-genre-canon-movie', movieGenreId, filters.decade, filters.voteAverageMin, 1], queryFn: ({ signal }: { signal?: AbortSignal }) => discoverMovies(discoverParamsMovie(movieGenreId, dateParams, voteParam, 1), { signal }), staleTime: TMDB_STALE.DISCOVER, enabled: movieGenreId !== null },
-      { queryKey: ['rec-genre-canon-movie', movieGenreId, filters.decade, filters.voteAverageMin, 2], queryFn: ({ signal }: { signal?: AbortSignal }) => discoverMovies(discoverParamsMovie(movieGenreId, dateParams, voteParam, 2), { signal }), staleTime: TMDB_STALE.DISCOVER, enabled: movieGenreId !== null },
-      { queryKey: ['rec-genre-canon-tv', tvGenreId, filters.decade, filters.voteAverageMin, 1], queryFn: ({ signal }: { signal?: AbortSignal }) => discoverTV(discoverParamsTV(tvGenreId, filters.decade, voteParam, 1), { signal }), staleTime: TMDB_STALE.DISCOVER, enabled: tvGenreId !== null },
-      { queryKey: ['rec-genre-canon-tv', tvGenreId, filters.decade, filters.voteAverageMin, 2], queryFn: ({ signal }: { signal?: AbortSignal }) => discoverTV(discoverParamsTV(tvGenreId, filters.decade, voteParam, 2), { signal }), staleTime: TMDB_STALE.DISCOVER, enabled: tvGenreId !== null },
+      { queryKey: ['rec-genre-canon-movie', movieGenreId, ...keyParts, 1], queryFn: ({ signal }: { signal?: AbortSignal }) => discoverMovies(discoverParamsMovie(movieGenreId, dateParams, voteParam, 1), { signal }), staleTime: TMDB_STALE.DISCOVER, enabled: movieGenreId !== null },
+      { queryKey: ['rec-genre-canon-movie', movieGenreId, ...keyParts, 2], queryFn: ({ signal }: { signal?: AbortSignal }) => discoverMovies(discoverParamsMovie(movieGenreId, dateParams, voteParam, 2), { signal }), staleTime: TMDB_STALE.DISCOVER, enabled: movieGenreId !== null },
+      { queryKey: ['rec-genre-canon-tv', tvGenreId, ...keyParts, 1], queryFn: ({ signal }: { signal?: AbortSignal }) => discoverTV(discoverParamsTV(tvGenreId, tvDateParams, voteParam, 1), { signal }), staleTime: TMDB_STALE.DISCOVER, enabled: tvGenreId !== null },
+      { queryKey: ['rec-genre-canon-tv', tvGenreId, ...keyParts, 2], queryFn: ({ signal }: { signal?: AbortSignal }) => discoverTV(discoverParamsTV(tvGenreId, tvDateParams, voteParam, 2), { signal }), staleTime: TMDB_STALE.DISCOVER, enabled: tvGenreId !== null },
     ],
   });
 

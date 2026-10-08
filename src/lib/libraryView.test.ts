@@ -4,8 +4,11 @@ import {
   libraryProgressLabel,
   seenEpisodeCode,
   buildStandfirst,
-  itemPassesGenreRating,
-  genresInLibrary,
+  itemPassesLibraryFilters,
+  genreOptionsInLibrary,
+  serviceCountsInLibrary,
+  sanitizeLibraryFilters,
+  DEFAULT_LIBRARY_FILTERS,
   itemPassesTags,
   tagsInLibrary,
   LIBRARY_SUB_STATE_ORDER,
@@ -200,46 +203,99 @@ describe('buildStandfirst', () => {
   });
 });
 
-describe('itemPassesGenreRating (BIN-44)', () => {
+describe('itemPassesLibraryFilters', () => {
+  const F = DEFAULT_LIBRARY_FILTERS;
+  const ctx = (o: Partial<{ genreIds: number[]; wantedProviders: number[] | null; runtime: number | null }> = {}) =>
+    ({ genreIds: [], wantedProviders: null, runtime: null, ...o });
+
   it('no filters → passes everything', () => {
-    expect(itemPassesGenreRating(makeItem({ genreIds: [], rating: null }), [], null)).toBe(true);
+    expect(itemPassesLibraryFilters(makeItem({ genreIds: [], rating: null }), F, ctx())).toBe(true);
   });
   it('genre is OR-match (item has at least one selected genre)', () => {
     const item = makeItem({ genreIds: [18, 35] }); // Drama, Komedi
-    expect(itemPassesGenreRating(item, [35], null)).toBe(true);   // matches Komedi
-    expect(itemPassesGenreRating(item, [28], null)).toBe(false);  // no Action
-    expect(itemPassesGenreRating(item, [28, 18], null)).toBe(true); // matches Drama
+    expect(itemPassesLibraryFilters(item, F, ctx({ genreIds: [35] }))).toBe(true);
+    expect(itemPassesLibraryFilters(item, F, ctx({ genreIds: [28] }))).toBe(false);
+    expect(itemPassesLibraryFilters(item, F, ctx({ genreIds: [28, 18] }))).toBe(true);
   });
-  it('minRating excludes lower or unrated', () => {
-    // 0.5–5 scale (BIN-161): thresholds are star values, not /10.
-    expect(itemPassesGenreRating(makeItem({ rating: 4 }), [], 3)).toBe(true);
-    expect(itemPassesGenreRating(makeItem({ rating: 3 }), [], 3)).toBe(true); // boundary inclusive
-    expect(itemPassesGenreRating(makeItem({ rating: 2.5 }), [], 3)).toBe(false);
-    expect(itemPassesGenreRating(makeItem({ rating: null }), [], 3)).toBe(false);
+  it('lowest rating is in half stars and excludes lower or unrated', () => {
+    const at = (minStars: number, rating: number | null) =>
+      itemPassesLibraryFilters(makeItem({ rating }), { ...F, minStars }, ctx());
+    expect(at(3, 4)).toBe(true);
+    expect(at(3, 3)).toBe(true); // boundary inclusive
+    expect(at(3, 2.5)).toBe(false);
+    expect(at(3, null)).toBe(false);
+    expect(at(3.5, 3.5)).toBe(true);
+    expect(at(3.5, 3)).toBe(false);
   });
   it('combines genre AND rating', () => {
     const item = makeItem({ genreIds: [18], rating: 4 });
-    expect(itemPassesGenreRating(item, [18], 3)).toBe(true);
-    expect(itemPassesGenreRating(item, [18], 4.5)).toBe(false); // rating too low
-    expect(itemPassesGenreRating(item, [28], 3)).toBe(false); // genre miss
+    expect(itemPassesLibraryFilters(item, { ...F, minStars: 3 }, ctx({ genreIds: [18] }))).toBe(true);
+    expect(itemPassesLibraryFilters(item, { ...F, minStars: 4.5 }, ctx({ genreIds: [18] }))).toBe(false);
+    expect(itemPassesLibraryFilters(item, { ...F, minStars: 3 }, ctx({ genreIds: [28] }))).toBe(false);
+  });
+  it('availability reads subscription offers, and falls back to every offer on an old doc', () => {
+    const rentOnlyNetflix = makeItem({ providers: [8, 76], subscriptionProviders: [76] });
+    expect(itemPassesLibraryFilters(rentOnlyNetflix, F, ctx({ wantedProviders: [8] }))).toBe(false);
+    expect(itemPassesLibraryFilters(rentOnlyNetflix, F, ctx({ wantedProviders: [76] }))).toBe(true);
+    const oldDoc = makeItem({ providers: [8], subscriptionProviders: null });
+    expect(itemPassesLibraryFilters(oldDoc, F, ctx({ wantedProviders: [8] }))).toBe(true);
+  });
+  it('tags narrow through the combined filter too', () => {
+    const tagged = makeItem({ tags: ['Mys'] });
+    expect(itemPassesLibraryFilters(tagged, { ...F, tags: ['mys'] }, ctx())).toBe(true);
+    expect(itemPassesLibraryFilters(tagged, { ...F, tags: ['Skräck'] }, ctx())).toBe(false);
+  });
+  it('a title checked and found on no subscription does not fall back to rent-and-buy offers', () => {
+    const rentOnly = makeItem({ providers: [8], subscriptionProviders: [] });
+    expect(itemPassesLibraryFilters(rentOnly, F, ctx({ wantedProviders: [8] }))).toBe(false);
+  });
+  it('status, year and length each narrow on their own', () => {
+    const film = makeItem({ mediaType: 'movie', status: 'sedd', releaseYear: 1995 });
+    expect(itemPassesLibraryFilters(film, { ...F, status: 'vill_se' }, ctx())).toBe(false);
+    expect(itemPassesLibraryFilters(film, { ...F, status: 'sedd' }, ctx())).toBe(true);
+    expect(itemPassesLibraryFilters(film, { ...F, yearMin: 1990, yearMax: 1999 }, ctx())).toBe(true);
+    expect(itemPassesLibraryFilters(film, { ...F, yearMin: 2000 }, ctx())).toBe(false);
+    expect(itemPassesLibraryFilters(film, { ...F, length: 'film-120' }, ctx({ runtime: 97 }))).toBe(true);
+    expect(itemPassesLibraryFilters(film, { ...F, length: 'film-90' }, ctx({ runtime: 97 }))).toBe(false);
+    expect(itemPassesLibraryFilters(film, { ...F, length: 'film-120' }, ctx({ runtime: null }))).toBe(false);
   });
 });
 
-describe('genresInLibrary (BIN-44)', () => {
-  it('dedupes genres present and sorts by Swedish name', () => {
-    // Insertion order (35, 18, 28) deliberately differs from sorted order, so
-    // the name assertion genuinely pins the sort (not just Set insertion order).
+describe('genreOptionsInLibrary', () => {
+  it('offers only the shared Swedish options whose genres occur, in the shared order', () => {
     const items = [
-      makeItem({ genreIds: [35, 18] }), // Komedi, Drama
-      makeItem({ genreIds: [28, 35] }), // Action, Komedi (dup)
+      makeItem({ genreIds: [35, 18] }),   // Komedi, Drama
+      makeItem({ genreIds: [10759] }),    // series Action & äventyr → Action and Äventyr
     ];
-    const res = genresInLibrary(items);
-    expect(res.map(g => g.id).sort((a, b) => a - b)).toEqual([18, 28, 35]);
-    // Sorted by Swedish name (not insertion order Komedi/Drama/Action): Action, Drama, Komedi
-    expect(res.map(g => g.name)).toEqual(['Action', 'Drama', 'Komedi']);
+    expect(genreOptionsInLibrary(items).map(g => g.label)).toEqual(['Action', 'Drama', 'Komedi', 'Äventyr']);
   });
   it('returns [] for empty library', () => {
-    expect(genresInLibrary([])).toEqual([]);
+    expect(genreOptionsInLibrary([])).toEqual([]);
+  });
+});
+
+describe('serviceCountsInLibrary', () => {
+  const names: Record<number, string> = { 8: 'Netflix', 76: 'Viaplay', 489: 'TV4 Play' };
+  it('counts each title once per service, canonicalising aliases, most first', () => {
+    const items = [
+      makeItem({ subscriptionProviders: [8, 76] }),
+      makeItem({ subscriptionProviders: [76] }),
+      makeItem({ subscriptionProviders: [1944, 489] }), // TV4 Play twice under two ids
+      makeItem({ subscriptionProviders: [99999] }),     // unknown service: not offered
+    ];
+    expect(serviceCountsInLibrary(items, id => names[id])).toEqual([
+      { id: 76, name: 'Viaplay', count: 2 },
+      { id: 8, name: 'Netflix', count: 1 },
+      { id: 489, name: 'TV4 Play', count: 1 },
+    ]);
+  });
+});
+
+describe('sanitizeLibraryFilters', () => {
+  it('a stored value from another build falls back per axis', () => {
+    expect(sanitizeLibraryFilters({ status: 'bogus', tags: ['a', 3], minStars: 3.3, yearMin: 2010, yearMax: 1990, genres: ['35', 'x'] }))
+      .toEqual({ ...DEFAULT_LIBRARY_FILTERS, tags: ['a'], yearMin: 1990, yearMax: 2010, genres: ['35'] });
+    expect(sanitizeLibraryFilters('garbage')).toEqual(DEFAULT_LIBRARY_FILTERS);
   });
 });
 

@@ -31,6 +31,7 @@ const watchlist = vi.hoisted(() => ({
 vi.mock('@/hooks/useWatchlist', () => ({ useWatchlist: () => watchlist }));
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { myProviders: [] } }) }));
 vi.mock('@/hooks/useCalendar', () => ({ useCalendarEntries: () => ({ entries: [] }) }));
+vi.mock('@/hooks/useLibraryRuntimes', () => ({ useLibraryRuntimes: () => ({ runtimeOf: () => null, pending: false }) }));
 vi.mock('@/hooks/useSubscriptionAdvisor', () => ({
   useSubscriptionAdvisor: () => ({
     isLoading: false,

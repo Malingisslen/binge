@@ -4,7 +4,7 @@ import { Suspense, useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import {
-  Search, Film, Tv, X, Check, SlidersHorizontal, ChevronDown, Library,
+  Search, Film, Tv, X, Check, ChevronDown, Library,
   Rows3, LayoutGrid, Grid3x3, CloudOff,
 } from 'lucide-react';
 import { posterUrl, posterSrcSet, titleHref } from '@/lib/tmdb/client';
@@ -33,13 +33,25 @@ import {
 import {
   librarySubState,
   buildStandfirst,
-  itemPassesGenreRating,
-  genresInLibrary,
-  itemPassesTags,
+  itemPassesLibraryFilters,
+  genreOptionsInLibrary,
+  serviceCountsInLibrary,
+  sanitizeLibraryFilters,
   tagsInLibrary,
+  DEFAULT_LIBRARY_FILTERS,
   LIBRARY_SUB_STATE_ORDER,
+  type LibraryFilters,
 } from '@/lib/libraryView';
-import FilterRow from '@/components/watchlist/FilterRow';
+import { countSharedFilters, formatStars, genreIdsOf, wantedProviderIds, withoutEmptyMine, yearCeiling } from '@/lib/filters/titleFilters';
+import {
+  ActiveFilterChips,
+  FilterPanel,
+  FilterToggle,
+  FilteredEmptyState,
+  sharedChipsFor,
+} from '@/components/filters/TitleFilters';
+import { usePersistedState } from '@/hooks/usePersistedState';
+import { useLibraryRuntimes } from '@/hooks/useLibraryRuntimes';
 import { formatLibraryDate, pluralSv } from '@/lib/utils';
 import { toneForId } from '@/lib/duotone';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
@@ -52,6 +64,7 @@ import {
 } from '@/lib/watchlist/libraryHoldCopy';
 import type { WatchStatus, WatchlistItem } from '@/types';
 import { Button } from '@/components/ui/Button';
+import { Segmented } from '@/components/ui/Segmented';
 import { eyebrowClass } from '@/components/ui/Eyebrow';
 import { thClass } from '@/components/ui/tableHead';
 import { cardClass } from '@/components/ui/Card';
@@ -131,6 +144,10 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
   };
   const [mediaFilter, setMediaFilter] = useState<MediaFilter>('all');
   const [sort, setSort] = useState<SortKey>('updatedAt');
+  // Filters survive a reload, per library view.
+  const [storedLibFilters, setLibFiltersRaw] = usePersistedState<LibraryFilters>(
+    `binge:filters:library:${status ?? 'all'}`, DEFAULT_LIBRARY_FILTERS, sanitizeLibraryFilters,
+  );
   const showAddedCol = status !== 'sedd';
   const showWatchedCol = status === 'sedd' || !status;
   // B10/B14: /my/series ('mina') och /my/films ('sedd') kan per schema bara
@@ -157,22 +174,23 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
     return next;
   });
   const [searchQuery, setSearchQuery] = useState('');
-  // BIN-44: library filter row (genre OR-match + min-rating), client-side.
-  const [genreFilter, setGenreFilter] = useState<number[]>([]);
-  const [minRating, setMinRating] = useState<number | null>(null);
-  // BIN-164: taggfilter (OR-match, som genre), klient-sidigt.
-  const [tagFilter, setTagFilter] = useState<string[]>([]);
-  // BIN-UX: genre/betyg/tagg-filtren bor nu i en infällbar panel (togglas av
-  // Filter-knappen) istället för en alltid-synlig vägg. Aktiva filter visas som
-  // borttagbara pills när panelen är stängd.
+  // The panel holds the axes shared with Rekommendationer plus Status (on "Allt") and Taggar.
   const [filterOpen, setFilterOpen] = useState(false);
-  const activeFilterCount = genreFilter.length + (minRating != null ? 1 : 0) + tagFilter.length;
+  // A filter change can hide selected titles; bulk actions must never reach them (BIN-153).
+  const setLibFilters = (next: LibraryFilters) => { setLibFiltersRaw(next); setSelected(new Set()); };
+  const myProviders = useMemo(() => user?.myProviders ?? [], [user?.myProviders]);
+  // A saved "Mina tjänster" from before the user removed every service would filter nothing.
+  const libFilters = useMemo(
+    () => withoutEmptyMine(storedLibFilters, myProviders),
+    [storedLibFilters, myProviders],
+  );
+  const activeFilterCount = countSharedFilters(libFilters) + libFilters.tags.length + (libFilters.status ? 1 : 0);
   const clearAllFilters = () => {
-    setGenreFilter([]);
-    setMinRating(null);
-    setTagFilter([]);
-    setSelected(new Set());
+    setLibFilters(DEFAULT_LIBRARY_FILTERS);
+    setSearchQuery('');
   };
+  const wantedProviders = useMemo(() => wantedProviderIds(libFilters, myProviders), [libFilters, myProviders]);
+  const selectedGenreIds = useMemo(() => genreIdsOf(libFilters.genres), [libFilters.genres]);
   const { entries: calendarEntries } = useCalendarEntries();
   const nextAirByTmdbId = useMemo(() => {
     // Composite-keyed (mediaTypeDocId): calendarEntries mix TV episode air-dates
@@ -200,20 +218,25 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
     if (user?.defaultView) setView(user.defaultView);
   }, [user?.defaultView, status]);
 
+  const baseItems = useMemo(
+    () => status ? items.filter(i => i.status === status && (status !== 'mina' || !i.dropped)) : items,
+    [items, status],
+  );
+  const { runtimeOf, pending: runtimesPending } = useLibraryRuntimes(baseItems, !!libFilters.length);
+
   const filtered = useMemo(() => {
-    let result = status ? items.filter(i => i.status === status && (status !== 'mina' || !i.dropped)) : items;
+    let result = baseItems;
     if (mediaFilter !== 'all') {
       result = result.filter(i => i.mediaType === mediaFilter);
     }
     if (providerFilterId != null) {
       result = result.filter(i => i.providers.includes(providerFilterId));
     }
-    if (genreFilter.length > 0 || minRating != null) {
-      result = result.filter(i => itemPassesGenreRating(i, genreFilter, minRating));
-    }
-    if (tagFilter.length > 0) {
-      result = result.filter(i => itemPassesTags(i, tagFilter));
-    }
+    result = result.filter(i => itemPassesLibraryFilters(i, libFilters, {
+      genreIds: selectedGenreIds,
+      wantedProviders,
+      runtime: libFilters.length ? runtimeOf(i) : null,
+    }));
     if (behindIds) {
       result = result.filter(i => behindIds.has(i.tmdbId));
     }
@@ -232,24 +255,19 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
       }
     });
     return result;
-  }, [items, status, mediaFilter, sort, searchQuery, providerFilterId, genreFilter, minRating, tagFilter, behindIds]);
+  }, [baseItems, mediaFilter, sort, searchQuery, providerFilterId, libFilters, selectedGenreIds, wantedProviders, runtimeOf, behindIds]);
 
   // Genrer som finns i denna lista (base-filtrerad på status) → filterchips
   // visar bara relevanta val och försvinner inte när man filtrerar (BIN-44).
-  const availableGenres = useMemo(
-    () => genresInLibrary(status ? items.filter(i => i.status === status && (status !== 'mina' || !i.dropped)) : items),
-    [items, status],
+  const availableGenres = useMemo(() => genreOptionsInLibrary(baseItems), [baseItems]);
+  const availableServices = useMemo(
+    () => serviceCountsInLibrary(baseItems, id => getProvider(id)?.shortName),
+    [baseItems],
   );
 
   // BIN-164: taggarna som faktiskt finns i denna lista → filterchips (döljs helt
   // när inga taggar finns, samma mönster som genre).
-  const availableTags = useMemo(
-    () => tagsInLibrary(status ? items.filter(i => i.status === status && (status !== 'mina' || !i.dropped)) : items),
-    [items, status],
-  );
-  // FilterRow/panelen renderar bara Genre/Betyg/Taggar när det finns genrer eller
-  // taggar (Betyg ensamt räcker inte) — Filter-knappen speglar samma villkor.
-  const hasFilterOptions = availableGenres.length > 0 || availableTags.length > 0;
+  const availableTags = useMemo(() => tagsInLibrary(baseItems), [baseItems]);
 
   const totalCount = useMemo(
     () => status
@@ -328,8 +346,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
     mediaFilter !== 'all' ||
     !!providerFilter ||
     behindFilterActive ||
-    genreFilter.length > 0 ||
-    minRating != null ||
+    activeFilterCount > 0 ||
     searchQuery.length > 0;
   const emptyMessage = hasActiveFilters
     ? 'Inga titlar matchar dina filter. Justera ovan eller rensa.'
@@ -505,33 +522,14 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
           </div>
         )}
 
-        {hasFilterOptions && (
-          <button
-            type="button"
-            onClick={() => setFilterOpen(o => !o)}
-            className={`chip${filterOpen || activeFilterCount > 0 ? ' is-on' : ''}`}
-            style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5 }}
-            aria-expanded={filterOpen}
-          >
-            <SlidersHorizontal size={13} />
-            Filter
-            {activeFilterCount > 0 && (
-              // Sitter på en is-on (mörk) chip → ljus badge.
-              <span style={{
-                background: 'var(--bg)', color: 'var(--ink)',
-                fontSize: 'var(--fs-xxs)', fontWeight: 700, borderRadius: 20, padding: '0 6px', lineHeight: '15px',
-              }}>
-                {activeFilterCount}
-              </span>
-            )}
-          </button>
-        )}
+        <div style={{ marginLeft: 'auto' }}>
+          <FilterToggle open={filterOpen} activeCount={activeFilterCount} onToggle={() => setFilterOpen(o => !o)} />
+        </div>
 
         <button
           type="button"
           onClick={() => { setSelectMode(m => !m); setSelected(new Set()); }}
           className={`chip${selectMode ? ' is-on' : ''}`}
-          style={hasFilterOptions ? undefined : { marginLeft: 'auto' }}
         >
           {selectMode ? 'Klar' : 'Välj'}
         </button>
@@ -547,34 +545,78 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
         />
       </div>
 
-      {/* Aktiva filter som borttagbara pills — bara när panelen är stängd (öppen
-          panel visar valen i sina chips). Snabb överblick + ett-klicks-rensa. */}
-      {activeFilterCount > 0 && !filterOpen && (
-        <div className="flex items-center gap-1.5 flex-wrap mt-2.5">
-          {genreFilter.map(id => (
-            <RemovableFilterChip
-              key={`g-${id}`}
-              label={availableGenres.find(g => g.id === id)?.name ?? 'Genre'}
-              onRemove={() => { setGenreFilter(prev => prev.filter(g => g !== id)); setSelected(new Set()); }}
-            />
-          ))}
-          {minRating != null && (
-            <RemovableFilterChip
-              label={`${minRating}+★`}
-              onRemove={() => { setMinRating(null); setSelected(new Set()); }}
-            />
-          )}
-          {tagFilter.map(t => (
-            <RemovableFilterChip
-              key={`t-${t}`}
-              label={t}
-              onRemove={() => { setTagFilter(prev => prev.filter(x => x !== t)); setSelected(new Set()); }}
-            />
-          ))}
-          <button type="button" onClick={clearAllFilters} className="chip" style={{ borderStyle: 'dashed' }}>
-            Rensa alla
-          </button>
-        </div>
+      {filterOpen && (
+        <FilterPanel
+          value={libFilters}
+          onChange={shared => setLibFilters({ ...libFilters, ...shared })}
+          onClose={() => setFilterOpen(false)}
+          genreOptions={availableGenres}
+          services={availableServices}
+          hasMyServices={myProviders.length > 0}
+          yearCeiling={yearCeiling()}
+          extra={
+            <>
+              {!status && (
+                <div>
+                  <label htmlFor="lib-status" className={`${eyebrowClass({ size: 'xs' })} block mb-1.5`}>Status</label>
+                  <select
+                    id="lib-status"
+                    className="select w-full"
+                    value={libFilters.status}
+                    onChange={e => setLibFilters({ ...libFilters, status: e.target.value as WatchStatus | '' })}
+                  >
+                    <option value="">Alla statusar</option>
+                    {STATUS_CHOICES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+              )}
+              {availableTags.length > 0 && (
+                <fieldset className="col-span-full">
+                  <legend className={`${eyebrowClass({ size: 'xs' })} mb-1.5`}>Taggar</legend>
+                  <div className="flex flex-wrap gap-1.5">
+                    {availableTags.map(t => {
+                      const on = libFilters.tags.includes(t);
+                      return (
+                        <button
+                          key={t}
+                          type="button"
+                          aria-pressed={on}
+                          className={`chip${on ? ' is-on' : ''}`}
+                          onClick={() => setLibFilters({
+                            ...libFilters,
+                            tags: on ? libFilters.tags.filter(x => x !== t) : [...libFilters.tags, t],
+                          })}
+                        >
+                          {t}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </fieldset>
+              )}
+            </>
+          }
+        />
+      )}
+
+      <ActiveFilterChips
+        chips={[
+          ...(libFilters.status
+            ? [{ key: 'status', label: STATUS_CHOICES.find(o => o.value === libFilters.status)?.label ?? '', onRemove: () => setLibFilters({ ...libFilters, status: '' }) }]
+            : []),
+          ...sharedChipsFor(libFilters, shared => setLibFilters({ ...libFilters, ...shared }), id => getProvider(id)?.shortName ?? `Tjänst ${id}`),
+          ...libFilters.tags.map(t => ({
+            key: `tag-${t}`,
+            label: t,
+            onRemove: () => setLibFilters({ ...libFilters, tags: libFilters.tags.filter(x => x !== t) }),
+          })),
+        ]}
+        onClearAll={clearAllFilters}
+      />
+      {activeFilterCount > 0 && (
+        <p className="text-xs text-ink-3 mt-2" aria-live="polite">
+          {displayItems.length} av {baseItems.length} titlar
+        </p>
       )}
 
       {selected.size > 0 && (
@@ -642,51 +684,13 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
         />
       )}
 
-      <div className={filterOpen ? 'grid grid-cols-1 md:grid-cols-[220px_1fr] gap-5 mt-4' : 'mt-4'}>
-        {filterOpen && (
-          <aside className={cardClass('p-4 self-start')}>
-            <div className="flex items-center justify-between mb-3">
-              <span className={eyebrowClass({ size: 'xs' })}>Filter</span>
-              <button
-                type="button"
-                onClick={() => setFilterOpen(false)}
-                className="topbar-icon-btn text-ink-3"
-                aria-label="Stäng filter"
-              >
-                <X size={14} />
-              </button>
-            </div>
-            <FilterRow
-              vertical
-              genres={availableGenres}
-              genreFilter={genreFilter}
-              onToggleGenre={id => {
-                setGenreFilter(prev => prev.includes(id) ? prev.filter(g => g !== id) : [...prev, id]);
-                setSelected(new Set());
-              }}
-              minRating={minRating}
-              onSetMinRating={r => { setMinRating(r); setSelected(new Set()); }}
-              tags={availableTags}
-              tagFilter={tagFilter}
-              onToggleTag={t => {
-                setTagFilter(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
-                setSelected(new Set());
-              }}
-            />
-            {activeFilterCount > 0 && (
-              <button
-                type="button"
-                onClick={clearAllFilters}
-                className="chip mt-4"
-                style={{ borderStyle: 'dashed', width: '100%', justifyContent: 'center' }}
-              >
-                Rensa alla filter
-              </button>
-            )}
-          </aside>
-        )}
+      <div className="mt-4">
         <div>
-      {view === 'cards' ? (
+      {runtimesPending && displayItems.length === 0 ? (
+        <LoadingView variant="grid" label="Hämtar speltider…" />
+      ) : displayItems.length === 0 && activeFilterCount > 0 ? (
+        <FilteredEmptyState noun="titlar" onClearAll={clearAllFilters} />
+      ) : view === 'cards' ? (
         followingSections ? (
           <FollowingCardSections
             sections={followingSections}
@@ -812,7 +816,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                           dim={item.rating === null}
                         />
                         {item.rating !== null && (
-                          <span className="text-xxs text-ink-3">{item.rating.toFixed(1)}</span>
+                          <span className="text-xxs text-ink-3">{formatStars(item.rating)}</span>
                         )}
                       </span>
                     </td>
@@ -907,73 +911,12 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
   );
 }
 
-// Segmentkontroll (variant 2): en bordad grupp där exakt ett val är aktivt (ink-
-// fyllt). Semantiskt rätt för ömsesidigt uteslutande val (medietyp, vyläge) och
-// kompaktare än fristående chips. Ikon-only-segment får title/aria-label.
-function Segmented<T extends string>({
-  options,
-  value,
-  onChange,
-  ariaLabel,
-}: {
-  options: { value: T; label?: string; icon?: React.ReactNode; title?: string }[];
-  value: T;
-  onChange: (v: T) => void;
-  ariaLabel: string;
-}) {
-  return (
-    <div
-      role="group"
-      aria-label={ariaLabel}
-      style={{ display: 'inline-flex', border: '1px solid var(--rule)', borderRadius: 6, overflow: 'hidden', background: 'var(--surface)' }}
-    >
-      {options.map((o, i) => {
-        const active = o.value === value;
-        return (
-          <button
-            key={o.value}
-            type="button"
-            aria-pressed={active}
-            // Ikon-only-segment behöver namn för skärmläsare/tooltip; text-segment
-            // har redan sin etikett synlig, så inget redundant title/aria där.
-            aria-label={o.label ? undefined : o.title}
-            title={o.label ? undefined : o.title}
-            onClick={() => onChange(o.value)}
-            className="inline-flex items-center gap-1.5 cursor-pointer"
-            style={{
-              padding: o.label ? '5px 11px' : '6px 9px',
-              fontFamily: 'inherit',
-              fontSize: 'var(--fs-sm)',
-              border: 0,
-              borderLeft: i > 0 ? '1px solid var(--rule)' : undefined,
-              background: active ? 'var(--ink)' : 'transparent',
-              color: active ? 'var(--bg)' : 'var(--ink-2)',
-            }}
-          >
-            {o.icon}
-            {o.label && <span>{o.label}</span>}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-// En aktiv-filter-pill: accent-chip med titel + kryss, klick tar bort filtret.
-// Delas av genre/betyg/tagg-pillsen så etikett + layout bor på ett ställe.
-function RemovableFilterChip({ label, onRemove }: { label: string; onRemove: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onRemove}
-      className="chip acc inline-flex items-center gap-1.5"
-      aria-label={`Ta bort filter: ${label}`}
-    >
-      {label}
-      <X size={11} />
-    </button>
-  );
-}
+const STATUS_CHOICES: ReadonlyArray<{ value: WatchStatus; label: string }> = [
+  { value: 'mina', label: 'Följer' },
+  { value: 'vill_se', label: 'Vill se' },
+  { value: 'sedd', label: 'Sett' },
+  { value: 'avbruten', label: 'Avbrutna' },
+];
 
 // B12: biblioteksvyerna (Följer/Vill se/Filmer/Avbrutna/Alla) var onåbara i
 // UI:t — Subnav "Bibliotek" pekar bara på /my/all. Den här länkraden gör

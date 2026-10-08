@@ -1,6 +1,6 @@
 import { hasNonLatinTitle, isFromHiddenCountry } from '@/lib/utils/titleFilter';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
-import { parseGenreFilter } from '@/lib/tmdb/genreLabels';
+import { genreIdsOf, passesGenres, passesStars, passesYear, starsFromTmdb } from '@/lib/filters/titleFilters';
 import type { RowTitle, FilterState } from '@/types';
 
 /**
@@ -53,16 +53,16 @@ export function containsSearchText(
   return false;
 }
 
-function decadeOf(releaseDate: string | null | undefined): string | null {
-  if (!releaseDate) return null;
-  const year = Number(releaseDate.slice(0, 4));
-  if (!Number.isFinite(year)) return null;
-  return String(Math.floor(year / 10) * 10);
+export function releaseYearOf(t: Pick<RowTitle, 'release_date'> & { first_air_date?: string }): number | null {
+  const date = t.release_date || t.first_air_date;
+  if (!date) return null;
+  const year = Number(date.slice(0, 4));
+  return Number.isInteger(year) && year > 0 ? year : null;
 }
 
 /**
  * Apply page-level filters to a row's pool.
- * Note: provider filtering (myProvidersOnly) requires per-title provider data
+ * Note: provider and length filtering require per-title provider data
  * which is not on TMDBSearchResult — that's handled separately in the row hook
  * via useSearchProviders.
  */
@@ -70,7 +70,7 @@ export function applyClientFilters(
   items: readonly RowTitle[],
   filters: FilterState,
 ): RowTitle[] {
-  const genreIds = parseGenreFilter(filters.genre);
+  const genreIds = genreIdsOf(filters.genres);
   return items.filter(t => {
     if (filters.mediaType !== 'all' && t.media_type !== filters.mediaType) return false;
     if (filters.hideNonLatinTitles) {
@@ -78,20 +78,13 @@ export function applyClientFilters(
       if (hasNonLatinTitle(t.title ?? tn.name, t.original_title ?? tn.original_name)) return false;
     }
     if (filters.hiddenCountries.length && isFromHiddenCountry(t.origin_country, [...filters.hiddenCountries])) return false;
-    if (genreIds.length > 0 && !(t.genre_ids ?? []).some(id => genreIds.includes(id))) return false;
+    if (!passesGenres(t.genre_ids, genreIds)) return false;
     if (filters.country) {
       const oc = t.origin_country ?? [];
       if (!oc.includes(filters.country)) return false;
     }
-    if (filters.decade) {
-      const tWithFirstAir = t as RowTitle & { first_air_date?: string };
-      if (decadeOf(t.release_date ?? tWithFirstAir.first_air_date) !== filters.decade) {
-        return false;
-      }
-    }
-    if (filters.voteAverageMin > 0) {
-      if ((t.vote_average ?? 0) < filters.voteAverageMin) return false;
-    }
+    if (!passesYear(releaseYearOf(t), filters.yearMin, filters.yearMax)) return false;
+    if (!passesStars(starsFromTmdb(t.vote_average), filters.minStars)) return false;
     if (filters.searchText) {
       const tWithName = t as RowTitle & { name?: string; original_name?: string };
       if (!containsSearchText(t.title ?? tWithName.name, t.original_title ?? tWithName.original_name, filters.searchText)) {

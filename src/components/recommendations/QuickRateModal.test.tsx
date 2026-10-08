@@ -67,7 +67,7 @@ async function openModal() {
 }
 
 async function rate(label: string) {
-  await act(async () => { fireEvent.click(screen.getByText(label)); });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: label })); });
 }
 
 describe('QuickRateModal — a rating pass is not a viewing log (BIN-611 / BIN-599)', () => {
@@ -81,7 +81,7 @@ describe('QuickRateModal — a rating pass is not a viewing log (BIN-611 / BIN-5
   it('rates an already-seen film WITHOUT touching its status', async () => {
     watchlist.getItem.mockReturnValue(seen());
     await openModal();
-    await rate('Sett 4★');
+    await rate('Sett, 4 stjärnor');
 
     expect(watchlist.updateRating).toHaveBeenCalledWith('movie', 603, 4);
     // The whole point: no second 'sedd' write, so `rewatchFields` never fires.
@@ -92,7 +92,7 @@ describe('QuickRateModal — a rating pass is not a viewing log (BIN-611 / BIN-5
   it('still promotes a tracked-but-unseen film to sedd', async () => {
     watchlist.getItem.mockReturnValue(seen({ status: 'vill_se' }));
     await openModal();
-    await rate('Sett 5★');
+    await rate('Sett, 5 stjärnor');
 
     expect(watchlist.updateRating).toHaveBeenCalledWith('movie', 603, 5);
     expect(watchlist.updateStatus).toHaveBeenCalledWith('movie', 603, 'sedd');
@@ -101,7 +101,7 @@ describe('QuickRateModal — a rating pass is not a viewing log (BIN-611 / BIN-5
 
   it('adds an untracked film as seen, in one write', async () => {
     await openModal();
-    await rate('Sett 3★');
+    await rate('Sett, 3 stjärnor');
 
     expect(watchlist.upsertTitle).toHaveBeenCalledTimes(1);
     expect(watchlist.upsertTitle.mock.calls[0][0]).toMatchObject({
@@ -112,6 +112,14 @@ describe('QuickRateModal — a rating pass is not a viewing log (BIN-611 / BIN-5
     expect(watchlist.updateStatus).not.toHaveBeenCalled();
   });
 
+  it('a half star is a rating of its own', async () => {
+    watchlist.getItem.mockReturnValue(seen());
+    await openModal();
+    await rate('Sett, 3,5 stjärnor');
+
+    expect(watchlist.updateRating).toHaveBeenCalledWith('movie', 603, 3.5);
+  });
+
   // BIN-942. `updateRating`/`updateStatus` swallow the create-floor's refusal and RESOLVE, so
   // an ungated `setRated` would retire the card on a write that never landed — permanently for
   // this pass, with no way back to it. Two reviewers found this independently on the same diff.
@@ -119,7 +127,7 @@ describe('QuickRateModal — a rating pass is not a viewing log (BIN-611 / BIN-5
     watchlist.getItem.mockReturnValue(seen());
     watchlist.updateRating.mockResolvedValueOnce('refused');
     await openModal();
-    await rate('Sett 4★');
+    await rate('Sett, 4 stjärnor');
 
     // The write was attempted — this is not a "nothing happened" pass.
     expect(watchlist.updateRating).toHaveBeenCalledWith('movie', 603, 4);
@@ -132,7 +140,7 @@ describe('QuickRateModal — a rating pass is not a viewing log (BIN-611 / BIN-5
     // test above — and "nothing is ever marked" is a worse bug than the one it guards.
     watchlist.getItem.mockReturnValue(seen());
     await openModal();
-    await rate('Sett 4★');
+    await rate('Sett, 4 stjärnor');
 
     expect(screen.getByText('Snabb-betyg (1 markerade)')).toBeInTheDocument();
   });
@@ -169,8 +177,8 @@ describe('BIN-643 — no write while the library is unknown', () => {
     watchlist.snapshotSettled = false;
     await openModal();
 
-    expect(screen.getByText('Sett 5★')).toBeDisabled();
-    await rate('Sett 5★');
+    expect(screen.getByRole('button', { name: 'Sett, 5 stjärnor' })).toBeDisabled();
+    await rate('Sett, 5 stjärnor');
     expect(watchlist.upsertTitle).not.toHaveBeenCalled();
     expect(watchlist.updateRating).not.toHaveBeenCalled();
     expect(watchlist.updateStatus).not.toHaveBeenCalled();
@@ -185,8 +193,8 @@ describe('BIN-643 — no write while the library is unknown', () => {
     watchlist.listenerFailed = true;
     await openModal();
 
-    expect(screen.getByText('Sett 4★')).toBeDisabled();
-    await rate('Sett 4★');
+    expect(screen.getByRole('button', { name: 'Sett, 4 stjärnor' })).toBeDisabled();
+    await rate('Sett, 4 stjärnor');
     expect(watchlist.upsertTitle).not.toHaveBeenCalled();
     expect(watchlist.updateRating).not.toHaveBeenCalled();
 
@@ -200,9 +208,9 @@ describe('BIN-643 — no write while the library is unknown', () => {
     // tests above.
     await openModal();
 
-    expect(screen.getByText('Sett 4★')).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Sett, 4 stjärnor' })).not.toBeDisabled();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    await rate('Sett 4★');
+    await rate('Sett, 4 stjärnor');
     expect(watchlist.updateRating).toHaveBeenCalledWith('movie', 603, 4);
   });
 });
@@ -222,7 +230,7 @@ describe('QuickRateModal — a refused add SAYS so (BIN-1038)', () => {
     // that did not register.
     watchlist.upsertTitle.mockRejectedValueOnce(new Error(`${DELETION_IN_PROGRESS}: refused`));
     await openModal();
-    await rate('Sett 4★');
+    await rate('Sett, 4 stjärnor');
 
     expect(watchlist.upsertTitle).toHaveBeenCalledTimes(1);
     expect(toast).toHaveBeenCalledWith(DELETION_IN_PROGRESS_MESSAGE);
@@ -238,7 +246,7 @@ describe('QuickRateModal — a refused add SAYS so (BIN-1038)', () => {
     try {
       watchlist.upsertTitle.mockRejectedValueOnce(new Error('firestore/unavailable'));
       await openModal();
-      await rate('Sett 4★');
+      await rate('Sett, 4 stjärnor');
       await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
 
       expect((escaped[0] as Error)?.message).toBe('firestore/unavailable');

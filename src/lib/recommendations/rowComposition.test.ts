@@ -13,7 +13,8 @@ import {
   demoteExhaustedRows,
 } from './rowComposition';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
-import type { RowTitle, FilterState } from '@/types';
+import { DEFAULT_FILTERS, type RowTitle, type FilterState } from '@/types';
+import { tmdbVoteFloor } from '@/lib/filters/titleFilters';
 
 function mkTitle(overrides: Partial<RowTitle> = {}): RowTitle {
   return {
@@ -72,10 +73,7 @@ describe('splitVisibleAndPool', () => {
 });
 
 describe('applyClientFilters', () => {
-  const base: FilterState = {
-    mediaType: 'all', genre: '', country: '', myProvidersOnly: false, decade: '', voteAverageMin: 0, searchText: '',
-    hideNonLatinTitles: false, hiddenCountries: [],
-  };
+  const base: FilterState = DEFAULT_FILTERS;
 
   it('filters by hideNonLatinTitles when set', () => {
     const items = [
@@ -105,22 +103,54 @@ describe('applyClientFilters', () => {
     expect(applyClientFilters(items, { ...base, mediaType: 'all' }).map(t => t.id)).toEqual([1, 2]);
   });
 
-  it('filters by decade', () => {
+  it('filters by year range, inclusive at both ends', () => {
     const items = [
       mkTitle({ id: 1, release_date: '1985-06-01' }),
       mkTitle({ id: 2, release_date: '2005-06-01' }),
       mkTitle({ id: 3, release_date: '1979-12-31' }),
+      mkTitle({ id: 4, release_date: '1989-12-31' }),
     ];
-    expect(applyClientFilters(items, { ...base, decade: '1980' }).map(t => t.id)).toEqual([1]);
+    expect(applyClientFilters(items, { ...base, yearMin: 1980, yearMax: 1989 }).map(t => t.id)).toEqual([1, 4]);
   });
 
-  it('filters by voteAverageMin', () => {
+  it('an open year bound filters only on the side that is set', () => {
     const items = [
-      mkTitle({ id: 1, vote_average: 6.0 }),
-      mkTitle({ id: 2, vote_average: 7.5 }),
-      mkTitle({ id: 3, vote_average: 8.2 }),
+      mkTitle({ id: 1, release_date: '1985-06-01' }),
+      mkTitle({ id: 2, release_date: '2005-06-01' }),
     ];
-    expect(applyClientFilters(items, { ...base, voteAverageMin: 7.5 }).map(t => t.id)).toEqual([2, 3]);
+    expect(applyClientFilters(items, { ...base, yearMin: 2000 }).map(t => t.id)).toEqual([2]);
+    expect(applyClientFilters(items, { ...base, yearMax: 1999 }).map(t => t.id)).toEqual([1]);
+  });
+
+  it('reads a series year from first_air_date, and drops a title with no date once a bound is set', () => {
+    const items = [
+      { ...mkTitle({ id: 1, media_type: 'tv' }), release_date: undefined, first_air_date: '1994-09-22' } as RowTitle,
+      mkTitle({ id: 2, release_date: '' }),
+    ];
+    expect(applyClientFilters(items, { ...base, yearMin: 1990, yearMax: 1999 }).map(t => t.id)).toEqual([1]);
+    expect(applyClientFilters(items, base).map(t => t.id)).toEqual([1, 2]);
+  });
+
+  it('filters by star floor on the rounded half-star value', () => {
+    const items = [
+      mkTitle({ id: 1, vote_average: 6.0 }),  // 3 stars
+      mkTitle({ id: 2, vote_average: 7.5 }),  // 4 stars
+      mkTitle({ id: 3, vote_average: 8.2 }),  // 4 stars
+    ];
+    expect(applyClientFilters(items, { ...base, minStars: 3.5 }).map(t => t.id)).toEqual([2, 3]);
+  });
+
+  it('a title is kept exactly when its shown star value reaches the floor', () => {
+    const items = [
+      mkTitle({ id: 1, vote_average: 6.4 }),   // shows 3
+      mkTitle({ id: 2, vote_average: 6.5 }),   // shows 3,5
+      mkTitle({ id: 3, vote_average: 6.75 }),  // shows 3,5
+    ];
+    const kept = applyClientFilters(items, { ...base, minStars: 3.5 });
+    expect(kept.map(t => t.id)).toEqual([2, 3]);
+    // The TMDB pre-filter must never drop a title the client filter keeps.
+    const floor = tmdbVoteFloor(3.5)!;
+    expect(floor).toBeLessThanOrEqual(Math.min(...kept.map(t => t.vote_average)));
   });
 
   it('filters by country', () => {
@@ -134,7 +164,7 @@ describe('applyClientFilters', () => {
 
   it('filters by genre', () => {
     const items = [mkTitle({ id: 1, genre_ids: [18, 53] }), mkTitle({ id: 2, genre_ids: [28] })];
-    expect(applyClientFilters(items, { ...base, genre: '53' }).map(t => t.id)).toEqual([1]);
+    expect(applyClientFilters(items, { ...base, genres: ['53'] }).map(t => t.id)).toEqual([1]);
   });
 
   it('a merged genre option matches a film and a series filed under different TMDB ids', () => {
@@ -143,7 +173,7 @@ describe('applyClientFilters', () => {
       mkTitle({ id: 2, genre_ids: [10759] }),  // series: Action & Adventure
       mkTitle({ id: 3, genre_ids: [18] }),     // Drama
     ];
-    expect(applyClientFilters(items, { ...base, genre: '28,10759' }).map(t => t.id)).toEqual([1, 2]);
+    expect(applyClientFilters(items, { ...base, genres: ['28,10759'] }).map(t => t.id)).toEqual([1, 2]);
   });
 
   it('filters by search text on title or original_title', () => {

@@ -1,23 +1,21 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState, useMemo, useEffect, useCallback, useContext } from 'react';
+import { useMemo, useCallback, useContext, createContext } from 'react';
 import { ChevronLeft } from 'lucide-react';
 import { useRecommendationsCascade } from '@/hooks/useRecommendationsCascade';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useNotInterested } from '@/hooks/useNotInterested';
 import { useAuth } from '@/hooks/useAuth';
-import { parseRowKey, DEFAULT_FILTERS } from '@/types';
-import type { FilterState, RowSpec, RowResult, RowTitle, MediaTypeFilter } from '@/types';
+import { parseRowKey } from '@/types';
+import type { FilterState, RowSpec, RowResult } from '@/types';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { LoadingView } from '@/components/ui/LoadingView';
 
-const MEDIA_TABS: ReadonlyArray<{ value: MediaTypeFilter; label: string }> = [
-  { value: 'all', label: 'Alla' },
-  { value: 'movie', label: 'Filmer' },
-  { value: 'tv', label: 'Serier' },
-];
-import RecommendationsFilters from './RecommendationsFilters';
+import RecommendationsFilters, { useRecommendationFilters, activeRecFilterCount } from './RecommendationsFilters';
+import { FilteredEmptyState } from '@/components/filters/TitleFilters';
+import { wantedProviderIds } from '@/lib/filters/titleFilters';
+import type { RowRefinement } from '@/lib/recommendations/refineTitles';
 import TitleGrid from '@/components/title/TitleGrid';
 import { useRowTrending } from '@/hooks/rows/useRowTrending';
 import { useRowLatestFav } from '@/hooks/rows/useRowLatestFav';
@@ -30,28 +28,24 @@ import { useRowFreePublic } from '@/hooks/rows/useRowFreePublic';
 import { useRowCompanion } from '@/hooks/rows/useRowCompanion';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import { Button } from '@/components/ui/Button';
-import { MyServicesFilterContext } from './myServicesContext';
-import { useMyServicesFilter } from '@/hooks/useMyServicesFilter';
+import { RowRefinementContext } from './rowRefinementContext';
+import { useRefinedTitles } from '@/hooks/useRefinedTitles';
+
+/** "Rensa alla" for the empty state, or null when no filter is on (then empty means empty). */
+const ClearFiltersContext = createContext<(() => void) | null>(null);
 
 interface Props {
   rowKeyParam: string;
 }
 
-type SortKey = 'relevance' | 'rating' | 'release';
-
-function applySort(items: RowTitle[], sort: SortKey): RowTitle[] {
-  if (sort === 'rating')   return [...items].sort((a, b) => (b.vote_average ?? 0) - (a.vote_average ?? 0));
-  if (sort === 'release')  {
-    const d = (x: RowTitle) => x.release_date ?? x.first_air_date ?? '';
-    return [...items].sort((a, b) => d(b).localeCompare(d(a)));
-  }
-  return items;
-}
-
-function ResultGrid({ result, sort }: { result: RowResult; sort: SortKey }) {
-  const myServices = useContext(MyServicesFilterContext);
-  const all = useMyServicesFilter([...result.visible, ...result.backingPool], myServices);
-  return <TitleGrid items={applySort(all, sort)} loading={result.isLoading && all.length === 0} showNotInterested />;
+function ResultGrid({ result }: { result: RowResult }) {
+  const refinement = useContext(RowRefinementContext);
+  const pool = useMemo(() => [...result.visible, ...result.backingPool], [result.visible, result.backingPool]);
+  const { items, pending } = useRefinedTitles(pool, refinement);
+  const loading = (result.isLoading || pending) && items.length === 0;
+  const clearAll = useContext(ClearFiltersContext);
+  if (!loading && items.length === 0 && clearAll) return <FilteredEmptyState noun="förslag" onClearAll={clearAll} />;
+  return <TitleGrid items={items} loading={loading} showNotInterested />;
 }
 
 export default function RecommendationsExpanded({ rowKeyParam }: Props) {
@@ -63,18 +57,18 @@ export default function RecommendationsExpanded({ rowKeyParam }: Props) {
   const { user } = useAuth();
   const router = useRouter();
   const goBack = useCallback(() => router.push('/recommendations'), [router]);
-  const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
-  const [sort, setSort] = useState<SortKey>('relevance');
-
-  const userHideNonLatin = user?.hideNonLatinTitles ?? false;
-  const userHiddenCountries = user?.hiddenCountries ?? [];
-  useEffect(() => {
-    setFilters(f => (
-      f.hideNonLatinTitles === userHideNonLatin && f.hiddenCountries === userHiddenCountries
-        ? f
-        : { ...f, hideNonLatinTitles: userHideNonLatin, hiddenCountries: userHiddenCountries }
-    ));
-  }, [userHideNonLatin, userHiddenCountries]);
+  const userHiddenCountries = useMemo(() => user?.hiddenCountries ?? [], [user?.hiddenCountries]);
+  const myProviders = useMemo(() => user?.myProviders ?? [], [user?.myProviders]);
+  const { filters, setFilters, clearAll } = useRecommendationFilters({
+    hideNonLatinTitles: user?.hideNonLatinTitles ?? false,
+    hiddenCountries: userHiddenCountries,
+    myProviders,
+  });
+  const refinement = useMemo<RowRefinement>(() => ({
+    providerIds: wantedProviderIds(filters, myProviders),
+    length: filters.length,
+    sort: filters.sort,
+  }), [filters, myProviders]);
 
   const excludedIds = useMemo(() => {
     // BIN-560 Phase 4: composite-keyed (mediaTypeDocId) so a tracked movie can't
@@ -113,48 +107,31 @@ export default function RecommendationsExpanded({ rowKeyParam }: Props) {
         standfirst={spec.description ?? undefined}
       />
 
-      <div className="flex gap-px mb-3">
-        {MEDIA_TABS.map(t => (
-          <button
-            type="button"
-            key={t.value}
-            onClick={() => setFilters(f => ({ ...f, mediaType: t.value }))}
-            aria-pressed={filters.mediaType === t.value}
-            className={`appearance-none border-none px-2 py-0.5 text-xs rounded-sm cursor-pointer ${
-              filters.mediaType === t.value ? 'bg-acc-deep text-on-acc' : 'bg-transparent text-ink-3'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
-        <RecommendationsFilters filters={filters} onChange={setFilters} hasMyProviders={cascade.hasMyProviders} />
-        <select value={sort} onChange={e => setSort(e.target.value as SortKey)} className="select" aria-label="Sortera rekommendationer">
-          <option value="relevance">Relevans</option>
-          <option value="rating">Betyg</option>
-          <option value="release">Premiärdatum</option>
-        </select>
-      </div>
+      <RecommendationsFilters
+        filters={filters}
+        onChange={setFilters}
+        onClearAll={clearAll}
+        hasMyProviders={cascade.hasMyProviders}
+      />
 
       {niLoading ? (
         // Vänta på "inte intresserad"-listan innan gridden renderas — annars
         // blinkar avfärdade titlar in tills snapshotten landat (BIN-37).
         <LoadingView variant="grid" label="Laddar rekommendationer…" />
       ) : (
-        <MyServicesFilterContext.Provider value={filters.myProvidersOnly && (user?.myProviders?.length ?? 0) > 0 ? user!.myProviders : null}>
+        <RowRefinementContext.Provider value={refinement}>
+        <ClearFiltersContext.Provider value={activeRecFilterCount(filters) > 0 ? clearAll : null}>
         <ExpandedDispatch
           spec={spec}
           excludedIds={excludedIds}
           filters={filters}
-          sort={sort}
           myProviders={user?.myProviders ?? []}
           topGenreIds={cascade.topGenreIds}
           hiddenCountries={user?.hiddenCountries ?? []}
           latestFiveStar={cascade.latestFiveStar}
         />
-        </MyServicesFilterContext.Provider>
+        </ClearFiltersContext.Provider>
+        </RowRefinementContext.Provider>
       )}
     </>
   );
@@ -164,7 +141,6 @@ interface DispatchProps {
   spec: RowSpec;
   excludedIds: ReadonlySet<string>;
   filters: FilterState;
-  sort: SortKey;
   myProviders: number[];
   topGenreIds: number[];
   hiddenCountries: string[];
@@ -185,50 +161,50 @@ function ExpandedDispatch(props: DispatchProps) {
   }
 }
 
-function TrendingExpanded({ spec, excludedIds, filters, sort }: DispatchProps) {
+function TrendingExpanded({ spec, excludedIds, filters }: DispatchProps) {
   const r = useRowTrending(spec, excludedIds, filters);
-  return <ResultGrid result={r} sort={sort} />;
+  return <ResultGrid result={r} />;
 }
 
-function LatestFavExpanded({ spec, excludedIds, filters, sort, latestFiveStar }: DispatchProps) {
+function LatestFavExpanded({ spec, excludedIds, filters, latestFiveStar }: DispatchProps) {
   const seed = latestFiveStar ? { tmdbId: latestFiveStar.tmdbId, mediaType: latestFiveStar.mediaType } : null;
   const r = useRowLatestFav(spec, seed, excludedIds, filters);
-  return <ResultGrid result={r} sort={sort} />;
+  return <ResultGrid result={r} />;
 }
 
-function SimilarExpanded({ spec, excludedIds, filters, sort }: DispatchProps) {
+function SimilarExpanded({ spec, excludedIds, filters }: DispatchProps) {
   const r = useRowSimilar(spec, excludedIds, filters);
-  return <ResultGrid result={r} sort={sort} />;
+  return <ResultGrid result={r} />;
 }
 
-function PersonExpanded({ spec, excludedIds, filters, sort }: DispatchProps) {
+function PersonExpanded({ spec, excludedIds, filters }: DispatchProps) {
   const r = useRowPerson(spec, excludedIds, filters);
-  return <ResultGrid result={r} sort={sort} />;
+  return <ResultGrid result={r} />;
 }
 
-function GenreExpanded({ spec, excludedIds, filters, sort }: DispatchProps) {
+function GenreExpanded({ spec, excludedIds, filters }: DispatchProps) {
   const r = useRowGenreCanon(spec, excludedIds, filters);
-  return <ResultGrid result={r} sort={sort} />;
+  return <ResultGrid result={r} />;
 }
 
-function ThematicExpanded({ spec, excludedIds, filters, sort }: DispatchProps) {
+function ThematicExpanded({ spec, excludedIds, filters }: DispatchProps) {
   const r = useRowThematic(spec, excludedIds, filters);
-  return <ResultGrid result={r} sort={sort} />;
+  return <ResultGrid result={r} />;
 }
 
-function UpcomingExpanded({ spec, excludedIds, filters, sort, myProviders, topGenreIds }: DispatchProps) {
+function UpcomingExpanded({ spec, excludedIds, filters, myProviders, topGenreIds }: DispatchProps) {
   const r = useRowUpcoming(spec, myProviders, topGenreIds, excludedIds, filters);
-  return <ResultGrid result={r} sort={sort} />;
+  return <ResultGrid result={r} />;
 }
 
-function FreePublicExpanded({ spec, excludedIds, filters, sort }: DispatchProps) {
+function FreePublicExpanded({ spec, excludedIds, filters }: DispatchProps) {
   const r = useRowFreePublic(spec, excludedIds, filters);
-  return <ResultGrid result={r} sort={sort} />;
+  return <ResultGrid result={r} />;
 }
 
 // BIN-583. No cross-row dedup here: the expanded view renders exactly one row,
 // so there is no sibling row for a companion film to collide with.
-function CompanionExpanded({ spec, excludedIds, filters, sort }: DispatchProps) {
+function CompanionExpanded({ spec, excludedIds, filters }: DispatchProps) {
   const r = useRowCompanion(spec, excludedIds, filters);
-  return <ResultGrid result={r} sort={sort} />;
+  return <ResultGrid result={r} />;
 }

@@ -17,7 +17,10 @@ import { useRowCompanion } from '@/hooks/rows/useRowCompanion';
 import RecRow from './RecRow';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { LoadingView } from '@/components/ui/LoadingView';
-import RecommendationsFilters from './RecommendationsFilters';
+import RecommendationsFilters, { useRecommendationFilters, activeRecFilterCount } from './RecommendationsFilters';
+import { FilteredEmptyState } from '@/components/filters/TitleFilters';
+import { wantedProviderIds } from '@/lib/filters/titleFilters';
+import type { RowRefinement } from '@/lib/recommendations/refineTitles';
 import EmptyState from './EmptyState';
 import QuickRateModal from './QuickRateModal';
 import { RowExhaustionContext, type ReportExhaustion } from './rowExhaustionContext';
@@ -25,38 +28,27 @@ import { demoteExhaustedRows } from '@/lib/recommendations/rowComposition';
 import { rowMatchesMediaFilter } from '@/lib/recommendations/rowMediaFilter';
 import { excludedIdsForOtherRows, exclusionsForRow } from './RecommendationsHub.helpers';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
-import { DEFAULT_FILTERS } from '@/types';
-import type { FilterState, RowSpec, MediaTypeFilter } from '@/types';
+import type { FilterState, RowSpec } from '@/types';
 import { Button } from '@/components/ui/Button';
-import { MyServicesFilterContext } from './myServicesContext';
+import { RowRefinementContext, RowEmptyContext, type ReportEmpty } from './rowRefinementContext';
 
 const INITIAL_VISIBLE_ROWS = 5;
-
-const MEDIA_TABS: ReadonlyArray<{ value: MediaTypeFilter; label: string }> = [
-  { value: 'all', label: 'Alla' },
-  { value: 'movie', label: 'Filmer' },
-  { value: 'tv', label: 'Serier' },
-];
 
 export default function RecommendationsHub() {
   const cascade = useRecommendationsCascade();
   const { items, loading: watchlistLoading } = useWatchlist();
   const { items: ni, loading: niLoading } = useNotInterested();
   const { user } = useAuth();
-  const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
+  const userHideNonLatin = user?.hideNonLatinTitles ?? false;
+  const userHiddenCountries = useMemo(() => user?.hiddenCountries ?? [], [user?.hiddenCountries]);
+  const myProviders = useMemo(() => user?.myProviders ?? [], [user?.myProviders]);
+  const { filters, setFilters, clearAll } = useRecommendationFilters({
+    hideNonLatinTitles: userHideNonLatin,
+    hiddenCountries: userHiddenCountries,
+    myProviders,
+  });
   const [quickRateOpen, setQuickRateOpen] = useState(false);
   const [visibleRowCount, setVisibleRowCount] = useState(INITIAL_VISIBLE_ROWS);
-
-  // Synka user-prefs (hideNonLatin, hiddenCountries) in i filter när profil läses.
-  const userHideNonLatin = user?.hideNonLatinTitles ?? false;
-  const userHiddenCountries = user?.hiddenCountries ?? [];
-  useEffect(() => {
-    setFilters(f => (
-      f.hideNonLatinTitles === userHideNonLatin && f.hiddenCountries === userHiddenCountries
-        ? f
-        : { ...f, hideNonLatinTitles: userHideNonLatin, hiddenCountries: userHiddenCountries }
-    ));
-  }, [userHideNonLatin, userHiddenCountries]);
 
   const excludedIds = useMemo(() => {
     // BIN-560 Phase 4: composite-keyed (mediaTypeDocId) — see RecommendationsExpanded.
@@ -91,6 +83,18 @@ export default function RecommendationsHub() {
     });
   }, []);
 
+  // Rows that filters left with nothing to show (reported once their data settled).
+  const [emptyRows, setEmptyRows] = useState<ReadonlySet<string>>(() => new Set());
+  const reportEmpty = useCallback<ReportEmpty>((rowKey, empty) => {
+    setEmptyRows(prev => {
+      if (prev.has(rowKey) === empty) return prev;
+      const next = new Set(prev);
+      if (empty) next.add(rowKey);
+      else next.delete(rowKey);
+      return next;
+    });
+  }, []);
+
   const scrollThrottleRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -119,8 +123,20 @@ export default function RecommendationsHub() {
   );
   const visibleRows = orderedRows.slice(0, visibleRowCount);
   const hiddenCountries = user?.hiddenCountries ?? [];
-  const myProviders = user?.myProviders ?? [];
-  const myServicesFilter = filters.myProvidersOnly && myProviders.length > 0 ? myProviders : null;
+  const refinement = useMemo<RowRefinement>(() => ({
+    providerIds: wantedProviderIds(filters, myProviders),
+    length: filters.length,
+    sort: filters.sort,
+  }), [filters, myProviders]);
+  const shownRowCount = filteredRows.filter(r => !emptyRows.has(r.rowKey)).length;
+  const allVisibleEmpty = visibleRows.length > 0 && visibleRows.every(r => emptyRows.has(r.rowKey));
+  // Filters can empty the first rows; reveal the next ones instead of a blank page.
+  useEffect(() => {
+    if (allVisibleEmpty && visibleRowCount < filteredRows.length) {
+      setVisibleRowCount(c => Math.min(c + 2, filteredRows.length));
+    }
+  }, [allVisibleEmpty, visibleRowCount, filteredRows.length]);
+  const nothingMatches = allVisibleEmpty && visibleRowCount >= filteredRows.length;
 
   // R1: prioritizeRows körs om för varje detail/keyword-query som löser —
   // person-rader dyker upp och numreringen skiftar mitt under laddning.
@@ -132,7 +148,7 @@ export default function RecommendationsHub() {
   return (
     <>
       <header>
-        <div className="crumb">Rekommendationer{rowsPending ? '' : ` · ${filteredRows.length} rader`}</div>
+        <div className="crumb">Rekommendationer{rowsPending ? '' : ` · ${shownRowCount} rader`}</div>
         <h1 className="page-h1">Vad du kan se — och varför.</h1>
         <p className="stand">
           Sju kategorier sorterade efter vad du har tittat på senast. Varje rad
@@ -141,20 +157,12 @@ export default function RecommendationsHub() {
         </p>
       </header>
 
-      <div className="rec-filters">
-        {MEDIA_TABS.map(t => (
-          <button
-            key={t.value}
-            type="button"
-            onClick={() => setFilters(f => ({ ...f, mediaType: t.value }))}
-            className={`chip${filters.mediaType === t.value ? ' is-on' : ''}`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      <RecommendationsFilters filters={filters} onChange={setFilters} hasMyProviders={cascade.hasMyProviders} />
+      <RecommendationsFilters
+        filters={filters}
+        onChange={setFilters}
+        onClearAll={clearAll}
+        hasMyProviders={cascade.hasMyProviders}
+      />
       <QuickRateModal open={quickRateOpen} onClose={() => setQuickRateOpen(false)} />
 
       {rowsPending ? (
@@ -163,7 +171,8 @@ export default function RecommendationsHub() {
         <>
           <EmptyState ratingCount={cascade.ratingCount} onOpenQuickRate={() => setQuickRateOpen(true)} />
 
-          <MyServicesFilterContext.Provider value={myServicesFilter}>
+          <RowRefinementContext.Provider value={refinement}>
+          <RowEmptyContext.Provider value={reportEmpty}>
           <RowExhaustionContext.Provider value={reportExhaustion}>
             {visibleRows.map((spec, idx) => (
               <RowDispatch
@@ -180,9 +189,10 @@ export default function RecommendationsHub() {
               />
             ))}
           </RowExhaustionContext.Provider>
-          </MyServicesFilterContext.Provider>
+          </RowEmptyContext.Provider>
+          </RowRefinementContext.Provider>
 
-          {visibleRowCount < filteredRows.length && (
+          {!nothingMatches && visibleRowCount < filteredRows.length && (
             <Button
               onClick={() => setVisibleRowCount(c => c + 2)}
               variant="ghost" size="sm"
@@ -191,10 +201,16 @@ export default function RecommendationsHub() {
               Visa fler rader ›
             </Button>
           )}
-          {filteredRows.length === 0 && cascade.rows.length > 0 && (
-            <p className="stand" style={{ marginTop: 24 }}>
-              Inga {filters.mediaType === 'movie' ? 'filmer' : 'serier'} matchar dina filter. Justera ovan eller rensa.
-            </p>
+          {((filteredRows.length === 0 && cascade.rows.length > 0) || nothingMatches) && (
+            activeRecFilterCount(filters) > 0
+              ? <FilteredEmptyState noun="förslag" onClearAll={clearAll} />
+              : (
+                <p className="stand" style={{ marginTop: 24 }}>
+                  {filters.mediaType === 'all'
+                    ? 'Inga nya förslag just nu.'
+                    : `Inga förslag för ${filters.mediaType === 'movie' ? 'film' : 'serier'} just nu.`}
+                </p>
+              )
           )}
 
           {visibleRows.length > 0 && (

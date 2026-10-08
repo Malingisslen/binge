@@ -1,5 +1,6 @@
 'use client';
 
+import { formatStars, starsFromTmdb } from '@/lib/filters/titleFilters';
 import { useState } from 'react';
 import Link from 'next/link';
 import { posterUrl, getDisplayTitle, getReleaseYear, isAddableMediaType, titleHref } from '@/lib/tmdb/client';
@@ -36,7 +37,7 @@ export default function RecCard({ item, providers }: Props) {
   const [imgError, setImgError] = useState(false);
 
   const sub = item.media_type === 'tv' ? 'serie' : 'film';
-  const meta = year != null ? `${sub} · ${year} · ${item.vote_average ? item.vote_average.toFixed(1) : '—'}` : sub;
+  const meta = year != null ? `${sub} · ${year} · ${starsFromTmdb(item.vote_average) > 0 ? `${formatStars(starsFromTmdb(item.vote_average))}★` : '—'}` : sub;
 
   return (
     <div className="rec-card">

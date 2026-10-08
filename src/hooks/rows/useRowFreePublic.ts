@@ -12,6 +12,7 @@ import { discoverMovies, discoverTV } from '@/lib/tmdb/client';
 import { FREE_PUBLIC_PROVIDER_IDS } from '@/lib/tmdb/providers';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import { dedupeAndExclude, splitVisibleAndPool, applyClientFilters, scorePopularity } from '@/lib/recommendations/rowComposition';
+import { discoverDateParams, discoverVoteParams, discoverKeyParts } from '@/lib/recommendations/discoverFilterParams';
 import type { RowResult, RowSpec, FilterState, RowTitle } from '@/types';
 
 const VISIBLE_CAP = 20;
@@ -51,24 +52,19 @@ export function useRowFreePublic(
   const wantMovies = filters.mediaType !== 'tv';
   const wantTV = filters.mediaType !== 'movie';
 
-  const dateParams: Record<string, string> = filters.decade ? {
-    'primary_release_date.gte': `${filters.decade}-01-01`,
-    'primary_release_date.lte': `${Number(filters.decade) + 9}-12-31`,
-  } : {};
-  const tvDateParams: Record<string, string> = filters.decade ? {
-    'first_air_date.gte': `${filters.decade}-01-01`,
-    'first_air_date.lte': `${Number(filters.decade) + 9}-12-31`,
-  } : {};
-  const voteParam: Record<string, string> = filters.voteAverageMin > 0 ? { 'vote_average.gte': String(filters.voteAverageMin) } : {};
+  const dateParams = discoverDateParams(filters, 'primary_release_date');
+  const tvDateParams = discoverDateParams(filters, 'first_air_date');
+  const voteParam = discoverVoteParams(filters);
+  const keyParts = discoverKeyParts(filters);
 
   const hasProviders = FREE_PUBLIC_PROVIDER_IDS.length > 0;
 
   const queries = useQueries({
     queries: [
-      { queryKey: ['rec-free-public-movie', filters.mediaType, filters.decade, filters.voteAverageMin, 1], queryFn: ({ signal }: { signal?: AbortSignal }) => discoverMovies(movieParams(dateParams, voteParam, 1), { signal }), staleTime: TMDB_STALE.DISCOVER, enabled: hasProviders && wantMovies },
-      { queryKey: ['rec-free-public-movie', filters.mediaType, filters.decade, filters.voteAverageMin, 2], queryFn: ({ signal }: { signal?: AbortSignal }) => discoverMovies(movieParams(dateParams, voteParam, 2), { signal }), staleTime: TMDB_STALE.DISCOVER, enabled: hasProviders && wantMovies },
-      { queryKey: ['rec-free-public-tv', filters.mediaType, filters.decade, filters.voteAverageMin, 1], queryFn: ({ signal }: { signal?: AbortSignal }) => discoverTV(tvParams(tvDateParams, voteParam, 1), { signal }), staleTime: TMDB_STALE.DISCOVER, enabled: hasProviders && wantTV },
-      { queryKey: ['rec-free-public-tv', filters.mediaType, filters.decade, filters.voteAverageMin, 2], queryFn: ({ signal }: { signal?: AbortSignal }) => discoverTV(tvParams(tvDateParams, voteParam, 2), { signal }), staleTime: TMDB_STALE.DISCOVER, enabled: hasProviders && wantTV },
+      { queryKey: ['rec-free-public-movie', filters.mediaType, ...keyParts, 1], queryFn: ({ signal }: { signal?: AbortSignal }) => discoverMovies(movieParams(dateParams, voteParam, 1), { signal }), staleTime: TMDB_STALE.DISCOVER, enabled: hasProviders && wantMovies },
+      { queryKey: ['rec-free-public-movie', filters.mediaType, ...keyParts, 2], queryFn: ({ signal }: { signal?: AbortSignal }) => discoverMovies(movieParams(dateParams, voteParam, 2), { signal }), staleTime: TMDB_STALE.DISCOVER, enabled: hasProviders && wantMovies },
+      { queryKey: ['rec-free-public-tv', filters.mediaType, ...keyParts, 1], queryFn: ({ signal }: { signal?: AbortSignal }) => discoverTV(tvParams(tvDateParams, voteParam, 1), { signal }), staleTime: TMDB_STALE.DISCOVER, enabled: hasProviders && wantTV },
+      { queryKey: ['rec-free-public-tv', filters.mediaType, ...keyParts, 2], queryFn: ({ signal }: { signal?: AbortSignal }) => discoverTV(tvParams(tvDateParams, voteParam, 2), { signal }), staleTime: TMDB_STALE.DISCOVER, enabled: hasProviders && wantTV },
     ],
   });
 
