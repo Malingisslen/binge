@@ -1,5 +1,6 @@
 'use client';
 
+import { formatStars, starsFromTmdb } from '@/lib/filters/titleFilters';
 import { useState } from 'react';
 import Link from 'next/link';
 import { Film, Tv } from 'lucide-react';
@@ -181,7 +182,7 @@ export default function TitleCard({ item, providers, showNotInterested }: TitleC
           letterSpacing: 0.02,
         }}>
           {/* 0 betyder att ingen har röstat än (ofta osläppt), inte betyget noll. */}
-          {year ?? '—'} · {item.vote_average > 0 ? item.vote_average.toFixed(1) : '—'}
+          {year ?? '—'} · {starsFromTmdb(item.vote_average) > 0 ? `${formatStars(starsFromTmdb(item.vote_average))}★` : '—'}
         </div>
       </Link>
     </div>

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { toRowTitle } from './useRowCompanion.helpers';
 import { applyClientFilters } from '@/lib/recommendations/rowComposition';
-import type { FilterState, TMDBMovie } from '@/types';
+import { DEFAULT_FILTERS, type FilterState, type TMDBMovie } from '@/types';
 
 function movie(overrides: Partial<TMDBMovie> = {}): TMDBMovie {
   return {
@@ -21,15 +21,7 @@ function movie(overrides: Partial<TMDBMovie> = {}): TMDBMovie {
 }
 
 function filters(overrides: Partial<FilterState> = {}): FilterState {
-  return {
-    mediaType: 'all',
-    genre: '',
-    country: '',
-    decade: '',
-    hiddenCountries: [],
-    hideNonLatinTitles: false,
-    ...overrides,
-  } as FilterState;
+  return { ...DEFAULT_FILTERS, ...overrides };
 }
 
 describe('toRowTitle', () => {

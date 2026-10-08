@@ -3,7 +3,18 @@
 
 import { isEndedStatus } from '@/lib/airingState';
 import { pluralSv } from '@/lib/utils';
-import { genreLabel } from '@/lib/tmdb/genreLabels';
+import { GENRE_OPTIONS, parseGenreFilter, type GenreOption } from '@/lib/tmdb/genreLabels';
+import { canonicalProviderId } from '@/lib/tmdb/providers';
+import {
+  DEFAULT_SHARED_FILTERS,
+  passesGenres,
+  passesLength,
+  passesProviders,
+  passesStars,
+  passesYear,
+  sanitizeSharedFilters,
+  type SharedFilters,
+} from '@/lib/filters/titleFilters';
 import type { WatchStatus, WatchlistItem } from '@/types';
 
 // === Substate för /my/series — persisted-fields-only (B7/T2/B2) ===
@@ -125,30 +136,68 @@ export function buildStandfirst(
   return `${visible} av ${total} ${plur} visas. Filtrera mer eller justera vyn.`;
 }
 
-// === Bibliotekets filterrad (BIN-44) — rena, klient-sidiga axlar ===
-// Provider + typ filtreras redan på sidan; dessa lägger till genre + betyg
-// (sub-state filtreras i komponenten via subStateOf eftersom den behöver
-// rådgivarens behind-set). Allt på redan inläst watchlist-data — noll TMDB.
+// === Bibliotekets filter — samma axlar som Rekommendationer (src/lib/filters/titleFilters.ts) ===
+// Allt på redan inläst watchlist-data; bara Längd kan behöva hämta en speltid som saknas.
 
-/** OR-match på genre (titeln har minst en av de valda) + lägsta betyg. */
-export function itemPassesGenreRating(
-  item: WatchlistItem,
-  genreIds: number[],
-  minRating: number | null,
-): boolean {
-  if (genreIds.length > 0 && !genreIds.some(g => item.genreIds.includes(g))) return false;
-  if (minRating != null && (item.rating == null || item.rating < minRating)) return false;
-  return true;
+/** Library choices on top of the shared axes. */
+export interface LibraryFilters extends SharedFilters {
+  /** Only offered on "Allt", where every status is mixed; '' = every status. */
+  status: WatchStatus | '';
+  tags: string[];
 }
 
-/** De genrer som faktiskt finns i den givna listan, sorterade på svenskt namn —
- *  så filterchips bara visar relevanta val (inte alla 26 TMDB-genrer). */
-export function genresInLibrary(items: WatchlistItem[]): { id: number; name: string }[] {
-  const ids = new Set<number>();
-  for (const i of items) for (const g of i.genreIds ?? []) ids.add(g);
-  return Array.from(ids)
-    .map(id => ({ id, name: genreLabel(id) }))
-    .sort((a, b) => a.name.localeCompare(b.name, 'sv'));
+export const DEFAULT_LIBRARY_FILTERS: LibraryFilters = { ...DEFAULT_SHARED_FILTERS, status: '', tags: [] };
+
+const STATUSES: readonly WatchStatus[] = ['vill_se', 'mina', 'sedd', 'avbruten'];
+
+export function sanitizeLibraryFilters(raw: unknown): LibraryFilters {
+  const r = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
+  return {
+    ...sanitizeSharedFilters(r),
+    status: STATUSES.includes(r.status as WatchStatus) ? r.status as WatchStatus : '',
+    tags: Array.isArray(r.tags) ? r.tags.filter((t): t is string => typeof t === 'string') : [],
+  };
+}
+
+/** Where a title streams on a subscription; older docs without the split fall back to every offer. */
+export const streamingProvidersOf = (item: WatchlistItem): number[] =>
+  item.subscriptionProviders ?? item.providers;
+
+export function itemPassesLibraryFilters(
+  item: WatchlistItem,
+  f: LibraryFilters,
+  ctx: { genreIds: number[]; wantedProviders: number[] | null; runtime: number | null | undefined },
+): boolean {
+  if (f.status && item.status !== f.status) return false;
+  if (!passesGenres(item.genreIds, ctx.genreIds)) return false;
+  if (!passesProviders(streamingProvidersOf(item), ctx.wantedProviders)) return false;
+  if (!passesYear(item.releaseYear, f.yearMin, f.yearMax)) return false;
+  if (!passesStars(item.rating, f.minStars)) return false;
+  if (!passesLength(item.mediaType, ctx.runtime, f.length)) return false;
+  return itemPassesTags(item, f.tags);
+}
+
+/** The shared genre options that occur in this list, so the panel offers only real choices. */
+export function genreOptionsInLibrary(items: WatchlistItem[]): GenreOption[] {
+  const present = new Set(items.flatMap(i => i.genreIds ?? []));
+  return GENRE_OPTIONS.filter(o => parseGenreFilter(o.value).some(id => present.has(id)));
+}
+
+/** Each streaming service in the list with how many of its titles are there, most first. */
+export function serviceCountsInLibrary(
+  items: WatchlistItem[],
+  nameOf: (id: number) => string | undefined,
+): { id: number; name: string; count: number }[] {
+  const counts = new Map<number, number>();
+  for (const i of items) {
+    for (const id of new Set(streamingProvidersOf(i).map(canonicalProviderId))) {
+      counts.set(id, (counts.get(id) ?? 0) + 1);
+    }
+  }
+  return [...counts]
+    .map(([id, count]) => ({ id, count, name: nameOf(id) }))
+    .filter((s): s is { id: number; count: number; name: string } => !!s.name)
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'sv'));
 }
 
 // === Taggfilter (BIN-164) — samma klient-sidiga, noll-TMDB-mönster som genre ===

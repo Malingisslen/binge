@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useContext, useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { RefreshCw } from 'lucide-react';
 import { useSearchProviders } from '@/hooks/useSearchProviders';
@@ -11,8 +11,8 @@ import RecCard from './RecCard';
 import { LoadingView } from '@/components/ui/LoadingView';
 import type { RowResult } from '@/types';
 import { whyForRow } from './RecRow.helpers';
-import { MyServicesFilterContext } from './myServicesContext';
-import { useMyServicesFilter } from '@/hooks/useMyServicesFilter';
+import { RowRefinementContext, RowEmptyContext } from './rowRefinementContext';
+import { useRefinedTitles } from '@/hooks/useRefinedTitles';
 
 const ROW_VISIBLE = 6;
 const ROTATION_KEY_PREFIX = 'binge:rec-rotation:';
@@ -43,8 +43,9 @@ export default function RecRow({ result, index }: Props) {
   const { rowSpec, visible, backingPool, isLoading } = result;
   const [seed, setSeed] = useState<number>(() => readSeed(rowSpec.rowKey));
 
-  const myServices = useContext(MyServicesFilterContext);
-  const merged = useMyServicesFilter([...visible, ...backingPool], myServices);
+  const refinement = useContext(RowRefinementContext);
+  const pool = useMemo(() => [...visible, ...backingPool], [visible, backingPool]);
+  const { items: merged, pending } = useRefinedTitles(pool, refinement);
   const items = rotatePool(merged, seed, ROW_VISIBLE);
   const canRotate = merged.length > ROW_VISIBLE;
   // "Tapped out" = rotated through the whole pool at least once. Further blanda
@@ -66,10 +67,16 @@ export default function RecRow({ result, index }: Props) {
   // otherwise occupy a visible slot rendering nothing. Don't report on unmount:
   // a demoted row that scrolls out of view must stay demoted, not bounce back.
   const report = useContext(RowExhaustionContext);
-  const tappedOut = exhausted || (!isLoading && merged.length === 0);
+  // Not empty while a filter's facts are still loading: the row would flash as gone.
+  const empty = !isLoading && !pending && merged.length === 0;
+  const tappedOut = exhausted || empty;
   useEffect(() => {
     report(rowSpec.rowKey, tappedOut);
   }, [report, rowSpec.rowKey, tappedOut]);
+  const reportEmpty = useContext(RowEmptyContext);
+  useEffect(() => {
+    reportEmpty(rowSpec.rowKey, empty);
+  }, [reportEmpty, rowSpec.rowKey, empty]);
 
   // Hämta providers först när raden är ~300px från viklinjen — annars fan-out:ar
   // /recommendations watch-providers för varje rad direkt vid mount (~6×rader).
@@ -77,7 +84,7 @@ export default function RecRow({ result, index }: Props) {
   const { ref: rowRef, inView } = useInView<HTMLElement>({ rootMargin: '300px', once: true });
   const providerMap = useSearchProviders(inView ? items : []);
 
-  if (!isLoading && items.length === 0) return null;
+  if (!isLoading && !pending && items.length === 0) return null;
 
   const num = String(index + 1).padStart(2, '0');
   const whyLine = whyForRow(rowSpec);
@@ -129,7 +136,7 @@ export default function RecRow({ result, index }: Props) {
           );
         })}
       </div>
-      {isLoading && items.length === 0 && (
+      {(isLoading || pending) && items.length === 0 && (
         <LoadingView variant="grid" rows={ROW_VISIBLE} label="Laddar förslag…" />
       )}
     </section>

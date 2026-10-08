@@ -4,6 +4,7 @@
 // movie/TV discover queries, and describeFilter() to render the interpreted filter
 // as removable chips (so the user sees + can correct the parse).
 
+import { formatStars, starsFromTmdb } from '@/lib/filters/titleFilters';
 import type { AskFilter } from './types';
 import { MOODS } from '@/lib/moodLens';
 import { genreLabel } from '@/lib/tmdb/genreLabels';
@@ -105,7 +106,7 @@ export function describeFilter(filter: AskFilter): FilterChip[] {
   }
   if (filter.myProvidersOnly) chips.push({ key: 'myProvidersOnly', label: 'Mina tjänster' });
   if (filter.excludeSeen) chips.push({ key: 'excludeSeen', label: 'Osedda' });
-  if (filter.voteAverageMin) chips.push({ key: 'voteAverageMin', label: `Betyg ≥ ${filter.voteAverageMin}` });
+  if (filter.voteAverageMin) chips.push({ key: 'voteAverageMin', label: `${formatStars(starsFromTmdb(filter.voteAverageMin))}★ eller mer` });
   if (filter.decade) chips.push({ key: 'decade', label: decadeLabel(filter.decade) });
   if (filter.originalLanguage) chips.push({ key: 'originalLanguage', label: LANG_LABEL[filter.originalLanguage] ?? filter.originalLanguage });
   if (filter.sortBy === 'vote_average.desc') chips.push({ key: 'sortBy', label: 'Högst betyg först' });

@@ -5,6 +5,7 @@ import { useQueries } from '@tanstack/react-query';
 import { discoverMovies, discoverTV } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import { dedupeAndExclude, splitVisibleAndPool, applyClientFilters, scorePopularity } from '@/lib/recommendations/rowComposition';
+import { discoverDateParams, discoverVoteParams, discoverKeyParts } from '@/lib/recommendations/discoverFilterParams';
 import type { RowResult, RowSpec, FilterState, RowTitle } from '@/types';
 
 const VISIBLE_CAP = 20;
@@ -42,22 +43,17 @@ export function useRowThematic(
   const wantMovies = filters.mediaType !== 'tv';
   const wantTV = filters.mediaType !== 'movie';
 
-  const dateParams: Record<string, string> = filters.decade ? {
-    'primary_release_date.gte': `${filters.decade}-01-01`,
-    'primary_release_date.lte': `${Number(filters.decade) + 9}-12-31`,
-  } : {};
-  const tvDateParams: Record<string, string> = filters.decade ? {
-    'first_air_date.gte': `${filters.decade}-01-01`,
-    'first_air_date.lte': `${Number(filters.decade) + 9}-12-31`,
-  } : {};
-  const voteParam: Record<string, string> = filters.voteAverageMin > 0 ? { 'vote_average.gte': String(filters.voteAverageMin) } : {};
+  const dateParams = discoverDateParams(filters, 'primary_release_date');
+  const tvDateParams = discoverDateParams(filters, 'first_air_date');
+  const voteParam = discoverVoteParams(filters);
+  const keyParts = discoverKeyParts(filters);
 
   const queries = useQueries({
     queries: [
-      { queryKey: ['rec-thematic-movie', keywordId, filters.decade, filters.voteAverageMin, 1], queryFn: ({ signal }: { signal?: AbortSignal }) => discoverMovies(movieParams(keywordId, dateParams, voteParam, 1), { signal }), staleTime: TMDB_STALE.DISCOVER, enabled: !!keywordId && wantMovies },
-      { queryKey: ['rec-thematic-movie', keywordId, filters.decade, filters.voteAverageMin, 2], queryFn: ({ signal }: { signal?: AbortSignal }) => discoverMovies(movieParams(keywordId, dateParams, voteParam, 2), { signal }), staleTime: TMDB_STALE.DISCOVER, enabled: !!keywordId && wantMovies },
-      { queryKey: ['rec-thematic-tv', keywordId, filters.decade, filters.voteAverageMin, 1], queryFn: ({ signal }: { signal?: AbortSignal }) => discoverTV(tvParams(keywordId, tvDateParams, voteParam, 1), { signal }), staleTime: TMDB_STALE.DISCOVER, enabled: !!keywordId && wantTV },
-      { queryKey: ['rec-thematic-tv', keywordId, filters.decade, filters.voteAverageMin, 2], queryFn: ({ signal }: { signal?: AbortSignal }) => discoverTV(tvParams(keywordId, tvDateParams, voteParam, 2), { signal }), staleTime: TMDB_STALE.DISCOVER, enabled: !!keywordId && wantTV },
+      { queryKey: ['rec-thematic-movie', keywordId, ...keyParts, 1], queryFn: ({ signal }: { signal?: AbortSignal }) => discoverMovies(movieParams(keywordId, dateParams, voteParam, 1), { signal }), staleTime: TMDB_STALE.DISCOVER, enabled: !!keywordId && wantMovies },
+      { queryKey: ['rec-thematic-movie', keywordId, ...keyParts, 2], queryFn: ({ signal }: { signal?: AbortSignal }) => discoverMovies(movieParams(keywordId, dateParams, voteParam, 2), { signal }), staleTime: TMDB_STALE.DISCOVER, enabled: !!keywordId && wantMovies },
+      { queryKey: ['rec-thematic-tv', keywordId, ...keyParts, 1], queryFn: ({ signal }: { signal?: AbortSignal }) => discoverTV(tvParams(keywordId, tvDateParams, voteParam, 1), { signal }), staleTime: TMDB_STALE.DISCOVER, enabled: !!keywordId && wantTV },
+      { queryKey: ['rec-thematic-tv', keywordId, ...keyParts, 2], queryFn: ({ signal }: { signal?: AbortSignal }) => discoverTV(tvParams(keywordId, tvDateParams, voteParam, 2), { signal }), staleTime: TMDB_STALE.DISCOVER, enabled: !!keywordId && wantTV },
     ],
   });
 

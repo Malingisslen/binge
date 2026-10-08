@@ -1,5 +1,7 @@
 'use client';
 
+import { StarInput } from '@/components/ui/StarInput';
+import { formatStars } from '@/lib/filters/titleFilters';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { discoverMovies, posterUrl } from '@/lib/tmdb/client';
@@ -175,14 +177,19 @@ export default function QuickRateModal({ open, onClose }: Props) {
                     </div>
                   )}
                   <div className="font-semibold mb-1 line-clamp-2">{t.title}</div>
-                  {/* The three rating buttons WRITE, so they hold on
+                  {/* The star buttons WRITE, so they hold on
                       `libraryKnown`. "Hoppa över" only advances local state —
                       disabling it would strand the visitor in a modal whose only
                       exit is the footer. */}
-                  <div className="grid grid-cols-2 gap-1">
-                    <button onClick={() => markRated(t, 5)} disabled={!libraryKnown} className="bg-acc-deep/10 text-acc-deep text-xxs py-1 rounded-sm disabled:opacity-50">Sett 5★</button>
-                    <button onClick={() => markRated(t, 4)} disabled={!libraryKnown} className="bg-acc-deep/10 text-acc-deep text-xxs py-1 rounded-sm disabled:opacity-50">Sett 4★</button>
-                    <Button onClick={() => markRated(t, 3)} disabled={!libraryKnown} variant="ghost" size="xs" className="disabled:opacity-50">Sett 3★</Button>
+                  <div className="flex flex-col items-start gap-1">
+                    <StarInput
+                      value={0}
+                      size={16}
+                      disabled={!libraryKnown}
+                      onSelect={v => markRated(t, v)}
+                      labelFor={v => `Sett, ${formatStars(v)} stjärnor`}
+                      groupLabel={`Betygsätt ${t.title ?? ''}`}
+                    />
                     <Button onClick={() => skip(t.id)} variant="ghost" size="xs">Hoppa över</Button>
                   </div>
                 </div>

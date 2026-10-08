@@ -3,6 +3,7 @@ import { assertNever } from '@/lib/assertNever';
 import type { MediaType } from './domain';
 import type { TMDBSearchResult } from './tmdb';
 import type { CompanionTitle } from '@/lib/franchise/companions';
+import { DEFAULT_SHARED_FILTERS, type SharedFilters } from '@/lib/filters/titleFilters';
 
 export type RowId =
   | { kind: 'similar'; mediaType: MediaType; tmdbId: number }
@@ -167,13 +168,16 @@ export interface RowSpec {
 
 export type MediaTypeFilter = 'all' | 'movie' | 'tv';
 
-export interface FilterState {
+export type RecSortKey = 'relevance' | 'rating' | 'release';
+
+/**
+ * Rekommendationer's filters: the axes shared with Bibliotek (SharedFilters) plus
+ * the ones only suggestions have.
+ */
+export interface FilterState extends SharedFilters {
   mediaType: MediaTypeFilter;
-  genre: string;          // genre id as string, or ''
   country: string;        // ISO-3166 country, or ''
-  myProvidersOnly: boolean;
-  decade: string;         // '1960'..'2020' or ''
-  voteAverageMin: number; // 0..9 in 0.5 steps
+  sort: RecSortKey;
   searchText: string;
   // Always-on filters härledda från user.profile (settings-sidan styr dem,
   // INTE filter-baren). Page komponenten synkar dessa när profilen läses in.
@@ -182,12 +186,10 @@ export interface FilterState {
 }
 
 export const DEFAULT_FILTERS: FilterState = {
+  ...DEFAULT_SHARED_FILTERS,
   mediaType: 'all',
-  genre: '',
   country: '',
-  myProvidersOnly: false,
-  decade: '',
-  voteAverageMin: 0,
+  sort: 'relevance',
   searchText: '',
   hideNonLatinTitles: false,
   hiddenCountries: [],
