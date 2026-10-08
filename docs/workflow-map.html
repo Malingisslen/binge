@@ -2098,7 +2098,7 @@
     {
       "id": "flow-monthly-bill",
       "label": "Monthly bill notice",
-      "description": "On the 1st at 09:00 Europe/Stockholm: one bell card \"Din streaming i {månad}\" for every user whose bill in Rådgivaren has something to show for the month that just ended (a service that cost money and was not paused the whole month, and a film or an episode checked off in it). The card names no amount; the bill itself is computed client-side by buildMonthlyBill. Bell only, no push, no setting (BIN-1449).",
+      "description": "On the 1st at 09:00 Europe/Stockholm: one bell card \"Din streaming i {månad}\" for every user whose bill in Rådgivaren has something to show for the month that just ended (a service that cost money and was not paused the whole month, and a film or an episode checked off in it). The card names no amount; the bill itself is computed client-side by buildMonthlyBill. Bell only, no push. On by default; a user with notificationSettings.monthlyBill === false in Inställningar, Notiser is skipped before any subcollection read (BIN-1449).",
       "covers": [
         "monthlyBillNotify"
       ],
@@ -2106,7 +2106,7 @@
         {
           "from": "cf-monthly-bill",
           "to": "firestore",
-          "payload": "page users by document id, select(myProviders, providerTiers, providerCosts, providerPauses); per user with one: users/{uid}/pauseHistory → hasPaidService (catalog paid-ness from providerPaid.ts)",
+          "payload": "page users by document id, select(myProviders, providerTiers, providerCosts, providerPauses, providerCampaigns, notificationSettings.monthlyBill); per user with a provider and not opted out: users/{uid}/pauseHistory → hasPaidService (catalog paid-ness from providerPaid.ts)",
           "transport": "Firestore read",
           "verified": true
         },
