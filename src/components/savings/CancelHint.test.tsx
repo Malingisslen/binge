@@ -12,23 +12,30 @@ describe('CancelHint', () => {
     expect(link.getAttribute('href')).toBe('https://www.netflix.com/cancelplan');
   });
 
-  it('visar bara datumet, utan länk, för en tjänst utan kontrollerad länk', () => {
+  it('hänvisar till kontoinställningarna, utan länk, för en tjänst utan kontrollerad länk', () => {
     render(<CancelHint providerId={76} billingDay={11} now={VERIFIED} />);
     expect(screen.queryByRole('link')).toBeNull();
-    expect(screen.getByText('Säg upp före dragningen 11 okt 2026')).toBeTruthy();
+    expect(screen.getByText('Säg upp i tjänstens kontoinställningar före dragningen 11 okt 2026')).toBeTruthy();
   });
 
-  it('renderar ingenting utan länk och utan faktureringsdag', () => {
-    const { container } = render(<CancelHint providerId={76} billingDay={undefined} now={VERIFIED} />);
-    expect(container.innerHTML).toBe('');
+  it('hänvisar till kontoinställningarna även utan faktureringsdag', () => {
+    render(<CancelHint providerId={76} billingDay={undefined} now={VERIFIED} />);
+    expect(screen.queryByRole('link')).toBeNull();
+    expect(screen.getByText('Säg upp i tjänstens kontoinställningar')).toBeTruthy();
   });
 
   it('döljer en länk som ingen kontrollerat inom fönstret', () => {
     const late = new Date(2026, 9, 6 + MANAGE_URL_STALE_DAYS + 1);
     const { container } = render(<CancelHint providerId={8} billingDay={undefined} now={late} />);
-    expect(container.innerHTML).toBe('');
+    expect(container.querySelector('a')).toBeNull();
+    expect(container.textContent).toBe('Säg upp i tjänstens kontoinställningar');
     const edge = new Date(2026, 9, 6 + MANAGE_URL_STALE_DAYS);
     render(<CancelHint providerId={8} billingDay={undefined} now={edge} />);
     expect(screen.getByRole('link', { name: 'Säg upp ›' })).toBeTruthy();
+  });
+
+  it('visar ingenting för en gratistjänst', () => {
+    const { container } = render(<CancelHint providerId={520} billingDay={undefined} now={VERIFIED} />);
+    expect(container.innerHTML).toBe('');
   });
 });
