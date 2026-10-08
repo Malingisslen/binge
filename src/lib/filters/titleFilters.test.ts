@@ -54,15 +54,18 @@ describe('passesYear', () => {
 });
 
 describe('passesLength', () => {
-  it('film lengths are strict upper bounds and only apply to films', () => {
+  it('film lengths are inclusive upper bounds and only apply to films', () => {
     expect(passesLength('movie', 89, 'film-90')).toBe(true);
-    expect(passesLength('movie', 90, 'film-90')).toBe(false);
-    expect(passesLength('movie', 119, 'film-120')).toBe(true);
+    expect(passesLength('movie', 90, 'film-90')).toBe(true);
+    expect(passesLength('movie', 91, 'film-90')).toBe(false);
+    expect(passesLength('movie', 120, 'film-120')).toBe(true);
+    expect(passesLength('movie', 121, 'film-120')).toBe(false);
     expect(passesLength('tv', 20, 'film-90')).toBe(false);
   });
-  it('short episodes are series with episodes under 30 minutes', () => {
+  it('short episodes are series with episodes of at most 30 minutes', () => {
     expect(passesLength('tv', 22, 'short-episodes')).toBe(true);
-    expect(passesLength('tv', 30, 'short-episodes')).toBe(false);
+    expect(passesLength('tv', 30, 'short-episodes')).toBe(true);
+    expect(passesLength('tv', 31, 'short-episodes')).toBe(false);
     expect(passesLength('movie', 22, 'short-episodes')).toBe(false);
   });
   it('an unknown runtime fails while a length is chosen and passes when none is', () => {
@@ -104,7 +107,7 @@ describe('sharedFilterChips', () => {
     };
     const chips = sharedFilterChips(f, name);
     expect(chips.map(c => c.label)).toEqual([
-      'Netflix eller Viaplay', 'Komedi', 'Film under 90 min', 'År 1990–1999', '3,5★ eller mer',
+      'Netflix eller Viaplay', 'Komedi', 'Film högst 90 min', 'År 1990–1999', '3,5★ eller mer',
     ]);
     const afterGenre = chips[1].clear(f);
     expect(afterGenre).toEqual({ ...f, genres: [] });
