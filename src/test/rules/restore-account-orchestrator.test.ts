@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, it, expect } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, it, expect } from 'vitest';
 import { initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
 import {
   collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, setDoc, Timestamp, where,
@@ -52,13 +52,31 @@ afterAll(async () => {
   await sourceEnv.cleanup();
   await targetEnv.cleanup();
 });
+// One client per database per test, closed after it: every context call opens a new client
+// with its own connection, and an open one lingers beside the rules suite on the same emulator.
+let sourceDb: Firestore | undefined;
+let targetDb: Firestore | undefined;
 beforeEach(async () => {
   await sourceEnv.clearFirestore();
   await targetEnv.clearFirestore();
+  sourceDb = sourceEnv.unauthenticatedContext().firestore() as unknown as Firestore;
+  targetDb = targetEnv.unauthenticatedContext().firestore() as unknown as Firestore;
+});
+afterEach(async () => {
+  // The context hands out the compat client, so its own terminate(), not the modular one.
+  await Promise.all([sourceDb, targetDb].map(db => (db as unknown as { terminate(): Promise<void> } | undefined)?.terminate()));
+  sourceDb = undefined;
+  targetDb = undefined;
 });
 
-const src = () => sourceEnv.unauthenticatedContext().firestore() as unknown as Firestore;
-const dst = () => targetEnv.unauthenticatedContext().firestore() as unknown as Firestore;
+const src = () => {
+  if (!sourceDb) throw new Error('src() used outside a test');
+  return sourceDb;
+};
+const dst = () => {
+  if (!targetDb) throw new Error('dst() used outside a test');
+  return targetDb;
+};
 
 type Created = 'created' | 'existed';
 

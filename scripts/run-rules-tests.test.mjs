@@ -20,7 +20,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  verdict, looksLikePortTaken, describePortHolder, buildAltConfig, parsePort, MIN_TESTS,
+  verdict, looksLikePortTaken, describePortHolder, buildAltConfig, parsePort, MIN_TESTS, failedTests,
 } from './run-rules-tests.mjs';
 
 describe('verdict', () => {
@@ -106,6 +106,55 @@ describe('verdict', () => {
   test('a non-integer skipped-count fails', () => {
     expect(verdict({ exitCode: 0, count: MIN_TESTS, pending: '0', todo: 0 }))
       .toMatchObject({ ok: false, reason: 'unreadable-modes' });
+  });
+});
+
+describe('failedTests', () => {
+  // Mutations that must fail this block:
+  //   - return [] unconditionally            → "names a failed test with its message" goes red
+  //   - drop the file-level branch           → "a file that failed before any test ran" goes red
+  //   - drop the clip                        → "a long message is cut" goes red
+  //   - read report.testResults without the Array check → "any report shape gives a list" throws
+  const failedFile = {
+    name: '/w/src/test/rules/restore.test.ts',
+    status: 'failed',
+    assertionResults: [
+      { status: 'passed', fullName: 'ok one', failureMessages: [] },
+      { status: 'failed', fullName: 'restore skips a relation', failureMessages: ['FirebaseError: client is offline'] },
+    ],
+  };
+
+  test('names a failed test with its message, and skips the passing ones', () => {
+    const out = failedTests({ testResults: [failedFile] });
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain('restore skips a relation');
+    expect(out[0]).toContain('client is offline');
+    expect(out[0]).not.toContain('ok one');
+  });
+
+  test('a file that failed before any test ran carries its reason on the file', () => {
+    const out = failedTests({ testResults: [{ name: 'x.test.ts', status: 'failed', assertionResults: [], message: 'Cannot find module' }] });
+    expect(out).toEqual(['x.test.ts\nCannot find module']);
+  });
+
+  test('a failed test with no message still gets a line', () => {
+    for (const failureMessages of [[], undefined, null]) {
+      const out = failedTests({ testResults: [{ name: 'f', status: 'failed', assertionResults: [{ status: 'failed', title: 't', failureMessages }] }] });
+      expect(out).toEqual(['f > t\n(inget felmeddelande)']);
+    }
+  });
+
+  test('a long message is cut', () => {
+    const long = 'x'.repeat(5000);
+    const out = failedTests({ testResults: [{ name: 'f', status: 'failed', assertionResults: [{ status: 'failed', title: 't', failureMessages: [long] }] }] });
+    expect(out[0].length).toBeLessThan(2000);
+    expect(out[0].endsWith(' …')).toBe(true);
+  });
+
+  test('any report shape gives a list', () => {
+    for (const report of [null, undefined, {}, { testResults: 'nope' }, { testResults: [null, 5, {}] }]) {
+      expect(failedTests(report)).toEqual([]);
+    }
   });
 });
 
@@ -210,6 +259,15 @@ describe('main() runs the emulator CLI through npx with --no-install', () => {
 
   test('the spawn call carries the flag as its first argument', () => {
     expect(SOURCE).toContain("spawnSync('npx', ['--no-install', ...args]");
+  });
+
+  // Mutation: move the listing above `if (v.ok)` → a green run prints FAIL lines too,
+  // or drop it → a red run in CI names nothing again.
+  test('main() prints the failed tests only after a verdict that is not ok', () => {
+    const okReturn = SOURCE.indexOf('if (v.ok) {');
+    const listing = SOURCE.indexOf('for (const block of failedTests(report))');
+    expect(okReturn).toBeGreaterThan(-1);
+    expect(listing).toBeGreaterThan(okReturn);
   });
 
   // BIN-1209, same shape one argument over: `verdict()` can be handed the report's

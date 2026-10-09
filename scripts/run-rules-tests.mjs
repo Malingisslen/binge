@@ -189,6 +189,38 @@ export function verdict({ exitCode, count, pending, todo, min = MIN_TESTS }) {
   return { ok: true, reason: 'passed', message: `${count} regeltest kordes.` };
 }
 
+const FAILURE_MESSAGE_MAX = 1500;
+
+/**
+ * One text block per failed test, read from vitest's JSON report, for the CI log: the
+ * emulator's output can arrive in CI without vitest's failure section, and the report
+ * is not uploaded. Total by design: any shape of report, null included, gives a list,
+ * so printing it can never turn a red run into a crash that hides the verdict.
+ */
+export function failedTests(report) {
+  const files = Array.isArray(report?.testResults) ? report.testResults : [];
+  const clip = (text) => {
+    const s = String(text ?? '').trim();
+    return s.length > FAILURE_MESSAGE_MAX ? `${s.slice(0, FAILURE_MESSAGE_MAX)} …` : s;
+  };
+  const out = [];
+  for (const file of files) {
+    const name = String(file?.name ?? '(okand fil)');
+    const tests = Array.isArray(file?.assertionResults) ? file.assertionResults : [];
+    const failed = tests.filter((t) => t?.status === 'failed');
+    for (const t of failed) {
+      const messages = Array.isArray(t.failureMessages) ? t.failureMessages : [];
+      out.push(`${name} > ${t.fullName ?? t.title ?? '(namnlost test)'}\n${clip(messages[0]) || '(inget felmeddelande)'}`);
+    }
+    // A file that failed before any test ran (an import error, a throwing beforeAll)
+    // carries its reason on the file, with no failed test to hang it on.
+    if (file?.status === 'failed' && failed.length === 0) {
+      out.push(`${name}\n${clip(file.message) || '(inget felmeddelande)'}`);
+    }
+  }
+  return out;
+}
+
 /** True when the emulator output says the port was already held. */
 export function looksLikePortTaken(output) {
   return /port taken|is not open on localhost/i.test(String(output ?? ''));
@@ -298,6 +330,7 @@ function main(argv) {
     return 0;
   }
   process.stderr.write(`\n[rules] ${v.message}\n`);
+  for (const block of failedTests(report)) process.stderr.write(`\n[rules] FAIL ${block}\n`);
   if (looksLikePortTaken(output)) {
     process.stderr.write(`[rules] ${describePortHolder(port ?? 8080)}\n`);
   }
