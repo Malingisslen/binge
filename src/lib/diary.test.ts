@@ -129,6 +129,21 @@ describe('buildDiary — same show, same day collapses to one row', () => {
     expect(entries[0].episodeCount).toBe(3);
   });
 
+  it('keeps two different shows on the same day as two rows, each dated by its latest episode', () => {
+    const other = mk({ tmdbId: 8, title: 'Severance', mediaType: 'tv', status: 'mina', watchedAt: null });
+    const episodes = [
+      { tmdbId: 7, season: 1, episode: 1, watchedAt: at(9) },
+      { tmdbId: 8, season: 1, episode: 1, watchedAt: at(10) },
+      { tmdbId: 7, season: 1, episode: 2, watchedAt: at(11) },
+      { tmdbId: 8, season: 1, episode: 2, watchedAt: at(12) },
+    ];
+    const entries = buildDiary([show, other], episodes).flatMap(m => m.entries);
+    expect(entries.map(e => [e.item.title, e.episodeCode, e.date.getHours()])).toEqual([
+      ['Severance', 'S01E01–S01E02 · 2 avsnitt', 12],
+      ['Silo', 'S01E01–S01E02 · 2 avsnitt', 11],
+    ]);
+  });
+
   it('keeps different days apart, and a lone episode keeps its plain code', () => {
     const episodes = [
       { tmdbId: 7, season: 1, episode: 1, watchedAt: at(10, 8) },

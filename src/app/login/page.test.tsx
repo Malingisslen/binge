@@ -340,6 +340,24 @@ describe('LoginPage — glömt lösenord och vad som sparas', () => {
     expect(getByRole('status').textContent).toContain('Om adressen har ett konto');
   });
 
+  it('gives the same neutral answer when the address has no account', async () => {
+    resetMock.mockRejectedValueOnce({ code: 'auth/user-not-found' });
+    const { getByText, getByLabelText, getByRole, queryByRole } = await act(async () => render(<LoginPage />));
+    fireEvent.change(getByLabelText('E-post'), { target: { value: 'ingen@b.se' } });
+    await act(async () => { fireEvent.click(getByText('Glömt lösenordet?')); });
+    expect(getByRole('status').textContent).toContain('Om adressen har ett konto');
+    expect(queryByRole('alert')).toBeNull();
+  });
+
+  it('asks for a valid address when Firebase rejects its format', async () => {
+    resetMock.mockRejectedValueOnce({ code: 'auth/invalid-email' });
+    const { getByText, getByLabelText, getByRole, queryByRole } = await act(async () => render(<LoginPage />));
+    fireEvent.change(getByLabelText('E-post'), { target: { value: 'inte-en-adress' } });
+    await act(async () => { fireEvent.click(getByText('Glömt lösenordet?')); });
+    expect(getByRole('alert').textContent).toContain('Skriv en giltig e-postadress');
+    expect(queryByRole('status')).toBeNull();
+  });
+
   it('names the title a signed-out tap is waiting to save', async () => {
     window.sessionStorage.setItem('binge:pendingAdd', JSON.stringify({
       tmdbId: 1, mediaType: 'movie', title: 'Dune', posterPath: null, releaseYear: 2021, savedAt: Date.now(),
