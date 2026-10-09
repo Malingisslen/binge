@@ -14,7 +14,7 @@ const LINKS = [
 export function PageNotFound() {
   return (
     <div className="flex flex-col items-center justify-center min-h-[40vh] text-center">
-      <h1 className="text-6xl font-extrabold text-acc-deep mb-1">Sidan finns inte</h1>
+      <h1 className="text-4xl font-extrabold text-acc-deep mb-1 [text-wrap:balance]">Sidan finns inte</h1>
       <p className="text-sm text-ink-2 mb-4">Länken kan vara fel, eller så har sidan flyttat.</p>
       <form action="/search/" method="get" className="flex gap-2 mb-4 w-full max-w-[360px]">
         <input

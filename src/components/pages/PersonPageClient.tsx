@@ -146,7 +146,9 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
   );
 
   usePageMeta({
-    title: person ? person.name : 'Person',
+    title: person
+      ? resolveDisplayName({ localized: person.name, english: firstLatinAlias(person.also_known_as) }).primary
+      : 'Person',
     description: metaDescription,
     ogImage: person?.profile_path ? profileUrl(person.profile_path, 'w500') ?? undefined : undefined,
     // Ingen `indexable` (ADR 0024): personsidor är noindex för Google.
