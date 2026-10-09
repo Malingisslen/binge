@@ -201,6 +201,11 @@ describe('buildStandfirst', () => {
     expect(buildStandfirst(0, 0, 'mina', 'all')).toBe('Inget i biblioteket än. Hitta något att titta på via Rekommendationer.');
     expect(buildStandfirst(0, 10, 'mina', 'all')).toBe('Inga titlar matchar dina filter. Justera ovan eller rensa.');
   });
+
+  it('names the empty tab, not the library, when other tabs have titles', () => {
+    expect(buildStandfirst(0, 0, 'avbruten', 'all', 3)).toBe('Inget avbrutet än.');
+    expect(buildStandfirst(0, 0, 'avbruten', 'all', 0)).toBe('Inget i biblioteket än. Hitta något att titta på via Rekommendationer.');
+  });
 });
 
 describe('itemPassesLibraryFilters', () => {

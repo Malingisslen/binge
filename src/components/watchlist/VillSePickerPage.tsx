@@ -232,7 +232,7 @@ export default function VillSePickerPage() {
             </p>
           )}
           <p className="mt-2 text-xxs text-ink-3">
-            Prickar på postern = tjänst där titeln ingår i abonnemanget (färg per tjänst, hovra för namn). Fylld prick = tjänst du har. Titlar du kan se direkt visas först. Hyr- och köpalternativ visas på titelsidan.
+            Prickar på postern = tjänst där titeln ingår i abonnemanget (färg per tjänst, tryck eller hovra för namn). Fylld prick = tjänst du har. Titlar du kan se direkt visas först. Hyr- och köpalternativ visas på titelsidan.
           </p>
           <div style={{ marginTop: 16 }}>
             <JustWatchCredit />

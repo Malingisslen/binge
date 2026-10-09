@@ -69,7 +69,7 @@ describe('HomePageClient — the landing sign-in CTA (BIN-668)', () => {
 
     fireEvent.click(cta());
 
-    expect(push).toHaveBeenCalledWith('/login/');
+    expect(push).toHaveBeenCalledWith('/login/?skapa=1');
     expect(auth.signIn).not.toHaveBeenCalled();
   });
 
@@ -90,7 +90,7 @@ describe('HomePageClient — the landing sign-in CTA (BIN-668)', () => {
     await act(async () => { view = render(<HomePageClient />); });
 
     fireEvent.click(cta());
-    expect(push).toHaveBeenCalledWith('/login/');
+    expect(push).toHaveBeenCalledWith('/login/?skapa=1');
     expect(auth.signIn).not.toHaveBeenCalled();
 
     auth.loading = false;
@@ -98,7 +98,7 @@ describe('HomePageClient — the landing sign-in CTA (BIN-668)', () => {
 
     push.mockClear();
     fireEvent.click(cta());
-    expect(push).toHaveBeenCalledWith('/login/');
+    expect(push).toHaveBeenCalledWith('/login/?skapa=1');
     expect(auth.signIn).not.toHaveBeenCalled();
   });
 

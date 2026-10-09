@@ -7,7 +7,8 @@ import { useQuery } from '@tanstack/react-query';
 import { ThumbsUp, ThumbsDown, Sparkles, ChevronLeft } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import { useAuth } from '@/hooks/useAuth';
-import { getTrending, posterUrl, backdropUrl, isAddableMediaType } from '@/lib/tmdb/client';
+import { getTrending, posterUrl, backdropUrl } from '@/lib/tmdb/client';
+import { pickCalibrationCandidates } from '@/lib/calibrationCandidates';
 import type { TMDBSearchResult } from '@/types';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { LoadingView } from '@/components/ui/LoadingView';
@@ -26,18 +27,19 @@ function KalibreraContent() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['kalibrera-candidates'],
-    queryFn: () => getTrending('all', 'week'),
+    // Two pages: the filter below drops unreleased and undescribed titles, and
+    // one page of twenty can leave fewer than a round's worth.
+    queryFn: async () => {
+      const [first, second] = await Promise.all([
+        getTrending('all', 'week'),
+        getTrending('all', 'week', { page: 2 }),
+      ]);
+      return [...first.results, ...second.results];
+    },
     staleTime: 60 * 60 * 1000,
   });
 
-  const pool = useMemo(() => {
-    const list = (data?.results ?? []).filter(r =>
-      isAddableMediaType(r)
-      && r.poster_path
-      && (r.genre_ids?.length ?? 0) > 0,
-    );
-    return list.slice(0, ROUND_SIZE);
-  }, [data]);
+  const pool = useMemo(() => pickCalibrationCandidates(data ?? [], ROUND_SIZE), [data]);
 
   const [index, setIndex] = useState(0);
   const [votes, setVotes] = useState<Record<number, 'up' | 'down'>>({});
@@ -145,7 +147,7 @@ function CalibrationCard({
       <div className="text-xxs text-ink-3 px-3 py-1 border-b border-rule-2">
         {progress.current}/{progress.total}
       </div>
-      <div className="relative h-[180px] bg-ink overflow-hidden">
+      <div className="relative h-[120px] sm:h-[180px] bg-ink overflow-hidden">
         {backdrop && (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={backdrop} alt="" width={1280} height={720} className="w-full h-full object-cover object-[center_20%] opacity-60" loading="eager" decoding="async" />

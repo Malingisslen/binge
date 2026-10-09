@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { rankSearchResults } from '@/lib/searchRanking';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, ArrowLeft, Check, Search, Target } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
@@ -92,6 +93,9 @@ export function OnboardingFlow() {
   const goToStep = (next: 1 | 2 | 3 | 4) => {
     setSaveFailed(false);
     setStep(next);
+    // The card is shorter than the step before it on a phone, so without this the
+    // page stays scrolled to the old step's buttons and the new heading is off-screen.
+    window.scrollTo({ top: 0 });
   };
 
   // Markerar onboarding som klar och navigerar. `destination` låter
@@ -505,8 +509,7 @@ function StepFirstTitle({
 
       {searchData && searchData.results.length > 0 && (
         <ul className="space-y-1 mb-4 max-h-[280px] overflow-y-auto">
-          {searchData.results
-            .filter(isAddableMediaType)
+          {rankSearchResults(searchData.results.filter(isAddableMediaType), debouncedQuery)
             .slice(0, 6)
             .map(r => {
               // BIN-664: tmdbId alone is not an identity. TMDB numbers movies
@@ -619,7 +622,7 @@ function StepFirstTitle({
       {items.length > 0 && (
         <div className="text-xs text-acc-deep mb-3">
           <Check size={11} className="inline mb-0.5 mr-1" />
-          {items.length} titel{items.length === 1 ? '' : 'ar'} tillagd{items.length === 1 ? '' : 'a'}.
+          {items.length} {items.length === 1 ? 'titel' : 'titlar'} tillagd{items.length === 1 ? '' : 'a'}.
         </div>
       )}
 
@@ -640,11 +643,13 @@ function StepFirstTitle({
         {!canContinue && (
           // BIN-1442: an ordinary button, not a faint text link. Skipping the
           // first title is a real choice, and the last step is where the value is.
+          // Ghost, so "Nästa" stays the primary action; named for the step because
+          // the page-level "Hoppa över" below leaves onboarding altogether.
           <Button
             onClick={onNext}
-            className="ml-auto"
+            variant="ghost" className="ml-auto"
           >
-            Hoppa över
+            Hoppa över steget
           </Button>
         )}
       </div>
@@ -739,7 +744,7 @@ function StepDone({
               Kalibrera smaken
             </div>
             <p className="text-xxs text-ink-3 mt-1">
-              Ranka 10 genrer du gillar så blir rekommendationerna skarpare.
+              Tumme upp eller ner på 10 populära titlar så blir rekommendationerna skarpare.
               Cirka 2 minuter — kan göras senare från inställningarna.
             </p>
           </div>

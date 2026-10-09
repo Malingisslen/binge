@@ -6,6 +6,7 @@ import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { clearNextPath, rememberNextPath } from '@/lib/nextPath';
 import { tabShowedSessionOn } from '@/lib/tabSession';
+import { rememberLoginBounce } from '@/lib/loginBounce';
 
 export default function AuthGuard({ children }: { children: ReactNode }) {
   // Gatear på uid — inte user — eftersom profilen laddas parallellt med
@@ -73,6 +74,7 @@ export default function AuthGuard({ children }: { children: ReactNode }) {
       // either way: leaving, if anything, invalidates an older intent too.
       if (signedOutAtFirstVerdict.current) {
         rememberNextPath(window.location.pathname + window.location.search);
+        rememberLoginBounce();
       }
       router.push('/login');
     }

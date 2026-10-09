@@ -36,6 +36,7 @@ describe('scorePassword', () => {
     const r = scorePassword('MinLösenord1234!');
     expect(r.score).toBe(4);
     expect(r.label).toBe('Starkt');
+    expect(r.feedback).toBe('');
   });
 
   it('scores single-class 10-char as 2 via length-tier', () => {

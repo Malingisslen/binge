@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Users, Share2 } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
@@ -41,11 +41,30 @@ function NyContent() {
   const [allowAsymmetry, setAllowAsymmetry] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [providersError, setProvidersError] = useState<string | null>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+  const providersRef = useRef<HTMLDivElement>(null);
+
+  // The profile often arrives after the first render, so the useState seeds can
+  // be empty. Seed once per field and never overwrite what the user has typed.
+  const seeded = useRef({ name: !!user?.displayName, providers: (user?.myProviders?.length ?? 0) > 0 });
+  useEffect(() => {
+    if (!seeded.current.name && user?.displayName) {
+      seeded.current.name = true;
+      setHostName(prev => prev || (user.displayName ?? ''));
+    }
+    if (!seeded.current.providers && (user?.myProviders?.length ?? 0) > 0) {
+      seeded.current.providers = true;
+      setProviders(prev => prev.length > 0 ? prev : (user?.myProviders ?? []));
+    }
+  }, [user?.displayName, user?.myProviders]);
 
   const flatrate = SWEDISH_PROVIDERS.filter(p => p.type === 'flatrate');
 
   const toggleProvider = (id: number) => {
     setProviders(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    setProvidersError(null);
   };
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -53,8 +72,16 @@ function NyContent() {
     setError(null);
 
     const name = hostName.trim();
-    if (!name) { setError('Ange ett namn'); return; }
-    if (providers.length === 0) { setError('Välj minst en streamingtjänst'); return; }
+    const missingName = !name;
+    const missingProviders = providers.length === 0;
+    setNameError(missingName ? 'Ange ett namn' : null);
+    setProvidersError(missingProviders ? 'Välj minst en streamingtjänst' : null);
+    if (missingName) { nameRef.current?.focus(); return; }
+    if (missingProviders) {
+      providersRef.current?.scrollIntoView({ block: 'center' });
+      providersRef.current?.querySelector('input')?.focus();
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -106,22 +133,26 @@ function NyContent() {
             id="tillsammans-vardnamn"
             type="text"
             value={hostName}
-            onChange={e => setHostName(e.target.value)}
+            ref={nameRef}
+            onChange={e => { setHostName(e.target.value); setNameError(null); }}
+            aria-invalid={nameError ? true : undefined}
+            aria-describedby={nameError ? 'tillsammans-namn-fel' : undefined}
             placeholder="T.ex. Lisa"
             maxLength={MAX_SESSION_DISPLAY_NAME}
             className={fieldClass({ className: 'w-full max-w-[260px]' })}
           />
+          {nameError && <p id="tillsammans-namn-fel" role="alert" className="text-xs text-danger-ink mt-1">{nameError}</p>}
         </FormSection>
 
         <FormSection title="Dina streamingtjänster">
           <p className="text-xs text-ink-3 mb-2">Bara titlar från de här tjänsterna (plus deltagarnas, beroende på läge nedan) visas.</p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
+          <div ref={providersRef} className="grid grid-cols-2 sm:grid-cols-3 gap-1">
             {flatrate.map(p => {
               const selected = providers.includes(p.id);
               return (
                 <label
                   key={p.id}
-                  className={`flex items-center gap-1.5 px-2 py-1 border rounded-sm cursor-pointer text-xs ${
+                  className={`flex items-center gap-1.5 px-2 py-2 border rounded-sm cursor-pointer text-xs min-h-[40px] ${
                     selected ? 'border-acc-deep bg-acc-deep/[0.08]' : 'border-rule bg-surface'
                   }`}
                 >
@@ -137,6 +168,7 @@ function NyContent() {
               );
             })}
           </div>
+          {providersError && <p role="alert" className="text-xs text-danger-ink mt-1">{providersError}</p>}
         </FormSection>
 
         <FormSection title="Vad?">

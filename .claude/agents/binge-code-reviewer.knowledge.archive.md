@@ -8478,3 +8478,8 @@ BIN-1307 staged a privacy-page wording change (`src/app/integritet/page.tsx`), a
 
 ### 2026-09-30 — replaced in the active file: a name-only panel no longer counts as nothing (BIN-1378)
 The principle "The staged index is ground truth and it is not stable" carried, until BIN-1378, this lead verbatim: "a name-only `panel` (`["Legal / GDPR Counsel"]`) carries no role number and counts as nothing". BIN-1368 (d21749c1) made `panelNumbers` resolve a digit-less entry through `roleNumberByName`. Measured on 2026-09-30: `node -e "import('./docs/org/metrics/check_staged_routing.mjs').then(m=>console.log(m.panelNumbers(['Legal / GDPR Counsel'])))"` prints `[ 5 ]`.
+
+### 2026-10-09 — new-user mobile walkthrough UX batch (34 files)
+- RatingStars: star span widened to min-w/min-h 40px but the half-star overlay is `absolute left-0 width:50%` and the glyph is now centred, so the overlay no longer sits on the glyph (half star renders misplaced); left-third tap zone (13px of 40) falls in the padding left of the ~14px glyph. A tap-target widening must re-anchor children positioned against the old box.
+- passwordStrength: score-4 label set to '' while PasswordStrengthMeter returns null on empty label, so the strongest password hides the whole meter.
+- Non-blocking: SpendSnapshotTile shows "Lägg till det du följer" during advisor load (flash); Tillsammans prefill refills a field the user cleared before the profile arrived.

@@ -9,7 +9,9 @@ function starSpans(container: HTMLElement) {
 // jsdom ger alltid en noll-stor rect, så halvstjärne-grenen (som beror på
 // klickets x-position relativt stjärnans bredd) är osynlig om vi inte mockar
 // getBoundingClientRect. Dessa tester pinnar båda grenarna explicit.
-function mockRect(el: Element) {
+// Zonen mäts på själva tecknet, inte på den 40px stora tryckytan runt det.
+function mockRect(star: Element) {
+  const el = star.querySelector('[data-star-glyph]')!;
   el.getBoundingClientRect = () => ({
     left: 0, width: 40, top: 0, right: 40, bottom: 0, height: 0, x: 0, y: 0,
     toJSON() {},
@@ -31,8 +33,22 @@ describe('RatingStars', () => {
     const { container } = render(<RatingStars rating={null} onChange={onChange} />);
     const fourth = starSpans(container)[3];
     mockRect(fourth);
-    fireEvent.click(fourth, { clientX: 10 });
+    fireEvent.click(fourth, { clientX: 13 });
     expect(onChange).toHaveBeenCalledWith(3.5);
+  });
+
+  it('klick i mitten av en stjärna ger hel stjärna, inte halv', () => {
+    const onChange = vi.fn();
+    const { container } = render(<RatingStars rating={null} onChange={onChange} />);
+    const fourth = starSpans(container)[3];
+    mockRect(fourth);
+    fireEvent.click(fourth, { clientX: 15 });
+    expect(onChange).toHaveBeenCalledWith(4);
+  });
+
+  it('stjärnorna är radioknappar med svensk etikett', () => {
+    const { getByRole } = render(<RatingStars rating={null} onChange={vi.fn()} />);
+    expect(getByRole('radio', { name: 'Betyg 4 av 5' })).toBeTruthy();
   });
 
   it('readonly tar bort klick-affordansen och anropar aldrig onChange', () => {

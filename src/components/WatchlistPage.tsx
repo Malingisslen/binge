@@ -33,6 +33,7 @@ import {
 import {
   librarySubState,
   buildStandfirst,
+  emptyListText,
   itemPassesLibraryFilters,
   genreOptionsInLibrary,
   serviceCountsInLibrary,
@@ -339,8 +340,8 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
     [items]
   );
   const standfirst = status === 'mina'
-    ? buildStandfirst(tvVisibleCount, tvTotalCount, status, mediaFilter)
-    : buildStandfirst(filtered.length, totalCount, status, mediaFilter);
+    ? buildStandfirst(tvVisibleCount, tvTotalCount, status, mediaFilter, items.length)
+    : buildStandfirst(filtered.length, totalCount, status, mediaFilter, items.length);
 
   const hasActiveFilters =
     mediaFilter !== 'all' ||
@@ -351,7 +352,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
   const emptyMessage = hasActiveFilters
     ? 'Inga titlar matchar dina filter. Justera ovan eller rensa.'
     : totalCount === 0
-      ? 'Inget i biblioteket än. Hitta något att titta på via Rekommendationer.'
+      ? emptyListText(status, items.length)
       : 'Inga titlar i den här vyn. Pröva ett annat filter eller status ovan.';
 
   // B13: medan Firestore-snapshoten laddar är items tom — utan denna gate
@@ -466,7 +467,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
             value={mediaFilter}
             onChange={f => { setMediaFilter(f); setSelected(new Set()); }}
             options={[
-              { value: 'all', label: 'Alla' },
+              { value: 'all', label: 'Alla typer' },
               { value: 'tv', label: 'Serier' },
               { value: 'movie', label: 'Film' },
             ]}
@@ -894,7 +895,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
               som oförklarade statusprickar. */}
           {displayItems.length > 0 && (
             <p className="px-3 pb-2 mt-0 text-xxs text-ink-3">
-              Prickar på postern = streamingtjänst (färg per tjänst, hovra för namn). Fylld prick = tjänst du har.
+              Prickar på postern = streamingtjänst (färg per tjänst, tryck eller hovra för namn). Fylld prick = tjänst du har.
             </p>
           )}
         </div>

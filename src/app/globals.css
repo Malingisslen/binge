@@ -452,8 +452,9 @@ button { font: inherit; cursor: pointer; }
 }
 .topbar-rhs .search:focus-within { border-color: var(--ink); }
 /* A keyboard shortcut hint means nothing on a touch screen, and on a phone it
-   takes width from the placeholder. */
-@media (hover: none) { .topbar-rhs .search .k { display: none; } }
+   takes width from the placeholder. The width clause covers phones whose
+   browser reports hover (emulators, some Android browsers). */
+@media (hover: none), (max-width: 760px) { .topbar-rhs .search .k { display: none; } }
 .topbar-rhs .search input {
   flex: 1;
   background: transparent;
@@ -2533,6 +2534,12 @@ button { font: inherit; cursor: pointer; }
   width: 100%;
   min-height: 24px;
   user-select: none;
+}
+/* The box is 20px; a 40px tap area on touch screens. The stacking context keeps
+   the row's stills and the "Markera hit" link from sitting on top of it. */
+.ep .check { position: relative; z-index: 1; }
+@media (pointer: coarse) {
+  .ep .check { min-width: 40px; min-height: 40px; margin: 0 -5px; width: auto; }
 }
 .ep .check input { position: absolute; opacity: 0; pointer-events: none; }
 /* The visible box (A11Y-2/A11Y-4): before, an unticked episode showed nothing at

@@ -113,6 +113,22 @@ export function libraryProgressLabel(
   }
 }
 
+// Empty-tab copy for a library that has titles, just none with this status.
+const EMPTY_STATUS_TEXT: Record<WatchStatus, string> = {
+  mina: 'Inget som följs än.',
+  vill_se: 'Inget i Vill se än.',
+  sedd: 'Inget sett än.',
+  avbruten: 'Inget avbrutet än.',
+};
+
+/** Copy for a list with no titles: the library itself is empty, or only this status is. */
+export function emptyListText(status: WatchStatus | undefined, libraryTotal: number): string {
+  if (libraryTotal === 0 || !status) {
+    return 'Inget i biblioteket än. Hitta något att titta på via Rekommendationer.';
+  }
+  return EMPTY_STATUS_TEXT[status];
+}
+
 // === Standfirst-copy (B1/B5) ===
 // Enda källan för sidans räknarmening — sektionsräknare i kortvyn refererar
 // samma totalsumma ("X av Y") så de två siffrorna alltid går ihop.
@@ -121,11 +137,12 @@ export function buildStandfirst(
   total: number,
   status: WatchStatus | undefined,
   mediaFilter: 'all' | 'tv' | 'movie',
+  libraryTotal: number = total,
 ): string {
   const sing = mediaFilter === 'tv' ? 'serie' : mediaFilter === 'movie' ? 'film' : 'titel';
   const plur = mediaFilter === 'tv' ? 'serier' : mediaFilter === 'movie' ? 'filmer' : 'titlar';
   if (total === 0) {
-    return 'Inget i biblioteket än. Hitta något att titta på via Rekommendationer.';
+    return emptyListText(status, libraryTotal);
   }
   if (visible === 0) {
     return `Inga ${plur} matchar dina filter. Justera ovan eller rensa.`;

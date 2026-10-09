@@ -99,7 +99,7 @@ function LandingPage({ trending, guestDemo }: { trending?: React.ReactNode; gues
               // the verdict. /login is the honest destination either way — an
               // already-signed-in visitor who lands there is redirected straight
               // back out by LoginPage's own uid effect.
-              goToLogin();
+              goToLogin(undefined, { register: true });
             }}
             className={buttonClass({ variant: 'acc', className: 'mb-8' })}
           >

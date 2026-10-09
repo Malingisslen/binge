@@ -71,7 +71,7 @@ export default function SparandeTile() {
       {totalSavings > 0 ? (
         <>
           <div className="val tnum">
-            {formatKr(totalSavings)}<span className="unit">kr</span>
+            {formatKr(totalSavings)}{' '}<span className="unit">kr</span>
           </div>
           <p className="note">
             {pausable.length === 1 ? (

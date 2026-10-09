@@ -56,15 +56,16 @@ import { clearPendingAdd, rememberPendingAdd, type PendingAdd } from '@/lib/pend
  * visitor has no library and never will have one in this session, so those gates
  * are false forever for them — ordering this second is how the tap goes dead.
  */
-export function useSignedOutRedirect(): (pendingAdd?: PendingAdd) => void {
+export function useSignedOutRedirect(): (pendingAdd?: PendingAdd, options?: { register?: boolean }) => void {
   const router = useRouter();
-  return useCallback((pendingAdd?: PendingAdd) => {
+  return useCallback((pendingAdd?: PendingAdd, options?: { register?: boolean }) => {
     rememberNextPath(window.location.pathname + window.location.search);
     // BIN-1442: an add affordance passes the title it was tapped on, so the add
     // happens after sign-in instead of being lost (`PendingAddRunner`). Any other
     // caller clears it — the latest tap is the one the visitor meant.
     if (pendingAdd) rememberPendingAdd(pendingAdd);
     else clearPendingAdd();
-    router.push('/login/');
+    // A "Skapa konto" tap should open the register form, not the login form.
+    router.push(options?.register ? '/login/?skapa=1' : '/login/');
   }, [router]);
 }

@@ -19,6 +19,7 @@ const CONFIG = {
   tv: {
     title: 'Serier',
     standfirst: 'Populära TV-serier just nu och var de går att streama i Sverige. Följ det du tittar på, så håller Binge koll på nya avsnitt och var serien finns.',
+    followingLabel: 'Följer',
     popularLabel: 'Populära serier',
     emptyText: 'Du följer inga serier ännu. Tryck + på en serie nedan.',
     guestText: 'Skapa ett gratis konto, så håller Binge koll på nya avsnitt i serierna du följer.',
@@ -28,6 +29,7 @@ const CONFIG = {
   movie: {
     title: 'Filmer',
     standfirst: 'Populära filmer just nu och var de går att streama i Sverige. Spara det du vill se, så håller Binge koll på när det dyker upp på dina tjänster.',
+    followingLabel: 'Sedda',
     popularLabel: 'Populära filmer',
     emptyText: 'Du har inga sedda filmer ännu. Tryck + på en film nedan.',
     guestText: 'Skapa ett gratis konto, så säger Binge till när filmerna du vill se dyker upp på dina tjänster.',
@@ -96,7 +98,7 @@ export default function MediaTypePage({
       {following.length > 0 ? (
         <div className={cardClass('mb-3.5')}>
           <div className="flex items-center justify-between px-3 py-1.5 border-b border-rule-2">
-            <h2 className="text-sm font-bold text-ink-2 m-0">Följer</h2>
+            <h2 className="text-sm font-bold text-ink-2 m-0">{cfg.followingLabel}</h2>
             <Link href={mediaType === 'tv' ? '/my/series/' : '/my/films/'} className="text-xs text-acc-deep no-underline">
               Alla {following.length} →
             </Link>

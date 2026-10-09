@@ -3,7 +3,8 @@
 // merely contain the word and have no poster, pushing the title the person is
 // typing towards (Dune) out of the eight. Re-ranking the page we already have
 // costs no extra request: titles whose name starts with the typed text first,
-// then titles with a poster, and TMDB's order within each group.
+// then titles with a poster, then the better-known title (a 1982 namesake
+// otherwise outranks the 2019 film everyone means), and TMDB's order after that.
 
 interface RankableTitle {
   title?: string;
@@ -11,6 +12,7 @@ interface RankableTitle {
   original_title?: string;
   original_name?: string;
   poster_path?: string | null;
+  popularity?: number;
 }
 
 function startsWithQuery(item: RankableTitle, q: string): boolean {
@@ -23,6 +25,6 @@ export function rankSearchResults<T extends RankableTitle>(items: readonly T[], 
   const score = (item: T) => (q && startsWithQuery(item, q) ? 0 : 2) + (item.poster_path ? 0 : 1);
   return items
     .map((item, index) => ({ item, index, s: score(item) }))
-    .sort((a, b) => a.s - b.s || a.index - b.index)
+    .sort((a, b) => a.s - b.s || (b.item.popularity ?? 0) - (a.item.popularity ?? 0) || a.index - b.index)
     .map(x => x.item);
 }

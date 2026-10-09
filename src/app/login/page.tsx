@@ -71,6 +71,9 @@ export default function LoginPage() {
   const [pendingTitle, setPendingTitle] = useState<string | null>(null);
   const [resetSent, setResetSent] = useState(false);
   useEffect(() => {
+    // Client-side read: the page is statically exported, so there is no request
+    // to read the query from at build time.
+    if (new URLSearchParams(window.location.search).get('skapa') === '1') setMode('register');
     dropStalePendingAdd();
     setPendingTitle(peekPendingAdd()?.title ?? null);
   }, []);
@@ -182,6 +185,15 @@ export default function LoginPage() {
     setSubmitting(false);
   }
 
+  // The button is disabled until the consent boxes are ticked; without this the
+  // visitor sees a grey button and no reason.
+  const missingHint = mode === 'register'
+    ? (!ageConfirmed && !termsAccepted ? 'Bocka i båda rutorna för att kunna skapa konto.'
+      : !ageConfirmed ? `Bekräfta att du är minst ${MIN_AGE} år för att kunna skapa konto.`
+      : !termsAccepted ? 'Godkänn villkoren för att kunna skapa konto.'
+      : '')
+    : '';
+
   const registerDisabled = submitting
     || (mode === 'register' && (!ageConfirmed || !termsAccepted));
 
@@ -288,6 +300,9 @@ export default function LoginPage() {
                 </span>
               </label>
             </div>
+          )}
+          {mode === 'register' && missingHint && !submitting && (
+            <p className="text-xs text-ink-3 mb-2">{missingHint}</p>
           )}
           {error && <div role="alert" className="text-xs text-danger-ink mb-2">{error}</div>}
           {resetSent && (

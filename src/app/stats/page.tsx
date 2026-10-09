@@ -12,6 +12,7 @@ import { seenDate } from '@/lib/seenDate';
 import { markedSeen } from '@/lib/markedSeen';
 import { cardClass } from '@/components/ui/Card';
 import { formatDecimal } from '@/lib/formatDecimal';
+import { pluralSv } from '@/lib/utils';
 
 const MONTH_NAMES = ['jan', 'feb', 'mar', 'apr', 'maj', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
 
@@ -104,7 +105,7 @@ function StatsContent() {
         <div className="crumb">Statistik · {stats.total} titlar totalt</div>
         <h1 className="page-h1">Statistik</h1>
         <p className="stand">
-          {stats.watched.length} sedda · {stats.rated.length} betygsatta · snittbetyg {formatDecimal(stats.avgRating)}.
+          {pluralSv(stats.watched.length, 'sedd', 'sedda')} · {pluralSv(stats.rated.length, 'betygsatt', 'betygsatta')}{stats.rated.length > 0 && ` · snittbetyg ${formatDecimal(stats.avgRating)}`}.
         </p>
       </header>
       <div style={{ marginTop: 28 }}>
@@ -113,7 +114,7 @@ function StatsContent() {
         <StatCard label="Totalt" value={stats.total} />
         <StatCard label="Följer" value={stats.following.length} />
         <StatCard label="Sedd" value={stats.watched.length} />
-        <StatCard label="Medelbetyg" value={stats.avgRating > 0 ? formatDecimal(stats.avgRating) : '—'} />
+        <StatCard label="Medelbetyg" value={stats.rated.length > 0 ? formatDecimal(stats.avgRating) : '—'} />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 mb-4">
@@ -142,10 +143,10 @@ function StatsContent() {
               )}
             </div>
             <div className="flex justify-between text-xs text-ink-3">
-              <span><span className="inline-block w-[8px] h-[8px] rounded-[1px] bg-acc-deep mr-1 align-middle" /> {stats.movies.length} filmer</span>
-              <span><span className="inline-block w-[8px] h-[8px] rounded-[1px] bg-ink-2 mr-1 align-middle" /> {stats.tvShows.length} serier</span>
+              <span><span className="inline-block w-[8px] h-[8px] rounded-[1px] bg-acc-deep mr-1 align-middle" /> {pluralSv(stats.movies.length, 'film', 'filmer')}</span>
+              <span><span className="inline-block w-[8px] h-[8px] rounded-[1px] bg-ink-2 mr-1 align-middle" /> {pluralSv(stats.tvShows.length, 'serie', 'serier')}</span>
               {stats.totalRewatches > 0 && (
-                <span className="text-ink-3">{stats.totalRewatches} omtittningar</span>
+                <span className="text-ink-3">{pluralSv(stats.totalRewatches, 'omtittning', 'omtittningar')}</span>
               )}
             </div>
           </div>

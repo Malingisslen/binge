@@ -326,11 +326,13 @@ const SWEDISH_POPULAR: Record<string, string> = {
 };
 
 export function getPopularMovies(page = 1, opts?: TmdbFetchOpts): Promise<TMDBListResponse<TMDBSearchResult>> {
-  return discoverMovies({ ...SWEDISH_POPULAR, page: String(page) }, opts);
+  // Without a vote floor, popularity.desc surfaces obscure catalogue titles that
+  // a streaming service happens to carry (a 1985 film with a handful of votes).
+  return discoverMovies({ ...SWEDISH_POPULAR, 'vote_count.gte': '200', page: String(page) }, opts);
 }
 
 export function getPopularTV(page = 1, opts?: TmdbFetchOpts): Promise<TMDBListResponse<TMDBSearchResult>> {
-  return discoverTV({ ...SWEDISH_POPULAR, without_genres: '10763,10767', page: String(page) }, opts);
+  return discoverTV({ ...SWEDISH_POPULAR, without_genres: '10763,10767', 'vote_count.gte': '50', page: String(page) }, opts);
 }
 
 export function getTopRatedMovies(page = 1, opts?: TmdbFetchOpts): Promise<TMDBListResponse<TMDBSearchResult>> {

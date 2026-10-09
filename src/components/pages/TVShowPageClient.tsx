@@ -303,7 +303,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
           <div className="chips-line">
             {watchlistItem && (
               <span className="chip acc">
-                <span className="dot" />{tvShowStatusLabel(show.status).toLowerCase()}
+                <span className="dot" />{`Serien ${tvShowStatusLabel(show.status).toLowerCase()}`}
               </span>
             )}
             <span className="kind">

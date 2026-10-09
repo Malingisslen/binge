@@ -366,3 +366,31 @@ describe('LoginPage — glömt lösenord och vad som sparas', () => {
     expect(getByText(/så sparas Dune i ditt bibliotek/)).toBeTruthy();
   });
 });
+
+describe('LoginPage — "Skapa konto" från startsidan öppnar registreringen', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    window.sessionStorage.clear();
+    auth.user = null;
+    auth.uid = null;
+    auth.profileLoading = false;
+    auth.loading = false;
+    window.history.pushState({}, '', '/login/');
+  });
+
+  it('öppnar inloggningen utan ?skapa=1', async () => {
+    const { findByRole } = await act(async () => render(<LoginPage />));
+    expect(await findByRole('button', { name: 'Logga in' })).toBeInTheDocument();
+  });
+
+  it('öppnar registreringen med ?skapa=1, och säger varför knappen är grå', async () => {
+    window.history.pushState({}, '', '/login/?skapa=1');
+    const { findByRole, getByText } = await act(async () => render(<LoginPage />));
+    const submit = await findByRole('button', { name: 'Skapa konto' });
+    expect(submit).toBeDisabled();
+    expect(getByText('Bocka i båda rutorna för att kunna skapa konto.')).toBeInTheDocument();
+
+    fireEvent.click(getByText(/Jag är minst/));
+    expect(getByText(/Godkänn villkoren för att kunna skapa konto/)).toBeInTheDocument();
+  });
+});

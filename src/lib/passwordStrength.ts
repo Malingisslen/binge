@@ -69,7 +69,7 @@ export function scorePassword(password: string): PasswordStrength {
     'Försök längre eller lägg till siffror/symboler.',
     'Längre är bättre — sikta på 12+ tecken.',
     'Bra styrka.',
-    'Stark.',
+    '',
   ];
 
   return {

@@ -30008,3 +30008,9 @@ APPROVAL-readd (condition 7 is a grep, not a test; fails closed).
 shared `node_modules` 452 → 452. The four reviewed files' worktree blobs equal the index.
 
 **Knowledge fold:** tooling chapter, the shell/defaults sentence now asks for a quoted-key probe.
+
+## 2026-10-09 — staged batch: login ?skapa=1, RatingStars third-zone, calibrationCandidates, loginBounce
+Diff reviewed: HomePageClient.test (3 sed'd '/login/' -> '/login/?skapa=1'), login/page.test, OnboardingFlow.test, RatingStars.test, passwordStrength, searchRanking, libraryView, new calibrationCandidates.test + loginBounce.test. 155/155 green.
+HomePageClient: all three changed assertions are on cta() = first "Skapa konto gratis" button (the hero), so each still tests its name; but no remaining test pins plain '/login/' for the other goToLogin callers (verified by grep of the register option: only HomePageClient passes it).
+Mutations: RatingStars `width / 3` -> `/ 2`: 5/5 green (new "middle" test uses clientX 20 of width 40, which is whole under both). calibrationCandidates survivors (7/7 green each): MIN_VOTES 50->5000, `date <= today`->`<`, genre_ids guard removed, poster_path guard removed, dedupe key without media_type. Files restored (diff -q against scratchpad backups).
+Verdict: fail (blocking: RatingStars third-zone test vacuous; calibrationCandidates guards unpinned).

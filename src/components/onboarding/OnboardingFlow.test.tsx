@@ -80,6 +80,8 @@ async function goToLastStep() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // jsdom logs "Not implemented" for scrollTo; the step change calls it.
+  window.scrollTo = vi.fn() as unknown as typeof window.scrollTo;
   window.sessionStorage.clear();
   auth.uid = 'u1';
   auth.user = { uid: 'u1', myProviders: [] };
@@ -646,5 +648,47 @@ describe('guest calculator prefill on step 2', () => {
     render(<OnboardingFlow />);
     await toStep2();
     expect(screen.queryByText('Ifyllt med det du valde i kalkylatorn.')).toBeNull();
+  });
+});
+
+describe('step 3 — copy, ranking and navigation polish', () => {
+  const scrollTo = vi.fn();
+  beforeEach(() => {
+    window.scrollTo = scrollTo as unknown as typeof window.scrollTo;
+    scrollTo.mockClear();
+  });
+
+  async function toStepThree() {
+    render(<OnboardingFlow />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Börja/ })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Nästa/ })); });
+  }
+
+  it('scrolls to the top when the step changes', async () => {
+    await toStepThree();
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0 });
+  });
+
+  it('says "titlar" in the plural', async () => {
+    watchlist.items = [item(1, 'movie'), item(2, 'movie'), item(3, 'tv')];
+    await toStepThree();
+    expect(screen.getByText(/3 titlar tillagda\./)).toBeInTheDocument();
+  });
+
+  it('lists the better-known namesake first', async () => {
+    const obscure = { ...gotSeries, id: 1, media_type: 'movie', title: 'Parasite', name: undefined, first_air_date: undefined, release_date: '1982-01-01', poster_path: '/a.jpg', popularity: 2 } as TMDBSearchResult;
+    const famous = { ...obscure, id: 496243, release_date: '2019-05-30', popularity: 80 } as TMDBSearchResult;
+    search.data = { results: [obscure, famous] };
+    await toStepThree();
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'Parasite' } });
+    await act(async () => { await new Promise(r => setTimeout(r, 300)); });
+    const years = screen.getAllByText(/^Film · \d{4}$/).map(e => e.textContent);
+    expect(years).toEqual(['Film · 2019', 'Film · 1982']);
+  });
+
+  it('offers the skip as a secondary button, with a different name than the page-level one', async () => {
+    await toStepThree();
+    expect(screen.getByRole('button', { name: 'Hoppa över steget' })).toHaveClass('btn-ghost');
+    expect(screen.getAllByRole('button', { name: 'Hoppa över' })).toHaveLength(1);
   });
 });

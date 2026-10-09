@@ -27,4 +27,20 @@ describe('rankSearchResults', () => {
     ];
     expect(rankSearchResults(items, 'Dune')[0].title).toBe('Snöstorm');
   });
+
+  it('puts the better-known of two equally good matches first', () => {
+    const items = [
+      { title: 'Parasite', poster_path: '/a.jpg', popularity: 3 },
+      { title: 'Parasite', poster_path: '/b.jpg', popularity: 90 },
+    ];
+    expect(rankSearchResults(items, 'Parasite').map(i => i.popularity)).toEqual([90, 3]);
+  });
+
+  it('does not let popularity beat a title that starts with the query', () => {
+    const items = [
+      { title: 'Big Hit', poster_path: '/a.jpg', popularity: 500 },
+      { title: 'Parasite', poster_path: '/b.jpg', popularity: 1 },
+    ];
+    expect(rankSearchResults(items, 'Parasite')[0].title).toBe('Parasite');
+  });
 });

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import LoginBounceNotice from '@/components/auth/LoginBounceNotice';
 
 export const metadata: Metadata = {
   title: 'Logga in',
@@ -7,5 +8,10 @@ export const metadata: Metadata = {
 };
 
 export default function LoginLayout({ children }: { children: React.ReactNode }) {
-  return children;
+  return (
+    <>
+      <LoginBounceNotice />
+      {children}
+    </>
+  );
 }

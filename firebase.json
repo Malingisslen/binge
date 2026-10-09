@@ -13,7 +13,11 @@
       { "source": "/my/watched", "destination": "/my/films/", "type": 301 },
       { "source": "/my/watched/", "destination": "/my/films/", "type": 301 },
       { "source": "/my/want-to-watch", "destination": "/my/vill-se/", "type": 301 },
-      { "source": "/my/want-to-watch/", "destination": "/my/vill-se/", "type": 301 }
+      { "source": "/my/want-to-watch/", "destination": "/my/vill-se/", "type": 301 },
+      { "source": "/my", "destination": "/my/all/", "type": 301 },
+      { "source": "/my/", "destination": "/my/all/", "type": 301 },
+      { "source": "/tillsammans", "destination": "/tillsammans/ny/", "type": 301 },
+      { "source": "/tillsammans/", "destination": "/tillsammans/ny/", "type": 301 }
     ],
     "rewrites": [
       {
