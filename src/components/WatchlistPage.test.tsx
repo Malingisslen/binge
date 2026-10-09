@@ -31,7 +31,13 @@ const watchlist = vi.hoisted(() => ({
 vi.mock('@/hooks/useWatchlist', () => ({ useWatchlist: () => watchlist }));
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { myProviders: [] } }) }));
 vi.mock('@/hooks/useCalendar', () => ({ useCalendarEntries: () => ({ entries: [] }) }));
-vi.mock('@/hooks/useLibraryRuntimes', () => ({ useLibraryRuntimes: () => ({ runtimeOf: () => null, pending: false }) }));
+const runtimes = vi.hoisted(() => ({ pending: false, settled: 0, needed: 0, byId: {} as Record<number, number> }));
+vi.mock('@/hooks/useLibraryRuntimes', () => ({
+  useLibraryRuntimes: () => ({
+    runtimeOf: (i: { tmdbId: number }) => runtimes.byId[i.tmdbId] ?? null,
+    pending: runtimes.pending, settled: runtimes.settled, needed: runtimes.needed,
+  }),
+}));
 vi.mock('@/hooks/useSubscriptionAdvisor', () => ({
   useSubscriptionAdvisor: () => ({
     isLoading: false,
@@ -66,6 +72,9 @@ beforeEach(() => {
   watchlist.loading = false;
   watchlist.snapshotSettled = true;
   watchlist.listenerFailed = false;
+  runtimes.pending = false;
+  runtimes.byId = {};
+  localStorage.clear();
 });
 
 describe('BIN-700 — a dead listener says so instead of showing an empty library', () => {
@@ -123,3 +132,28 @@ describe('BIN-700 — a dead listener says so instead of showing an empty librar
     expect(screen.getByText(/Laddar biblioteket/)).toBeInTheDocument();
   });
 });
+
+describe('WatchlistPage — Längd waits for every runtime', () => {
+  const setLength = (runtimeMax: number) =>
+    localStorage.setItem('binge:filters:library:all', JSON.stringify({ runtimeMax }));
+
+  it('shows the lookup progress instead of a list that would grow as lengths arrive', async () => {
+    watchlist.items = [film(1), film(2), film(3)];
+    runtimes.byId = { 1: 85 };
+    runtimes.pending = true; runtimes.settled = 1; runtimes.needed = 3;
+    setLength(90);
+    render(<WatchlistPage title="Allt" />);
+    expect(await screen.findByText(/Hämtar speltider… 1 av 3/)).toBeInTheDocument();
+    expect(screen.queryByText('Film 1')).not.toBeInTheDocument();
+    expect(screen.queryByText(/av 3 titlar/)).not.toBeInTheDocument();
+  });
+
+  it('once every length is in, the count is final and says how many have no known length', async () => {
+    watchlist.items = [film(1), film(2), film(3)];
+    runtimes.byId = { 1: 85, 2: 140 };
+    setLength(90);
+    render(<WatchlistPage title="Allt" />);
+    expect(await screen.findByText(/1 av 3 titlar · 1 saknar känd speltid/)).toBeInTheDocument();
+  });
+});
+

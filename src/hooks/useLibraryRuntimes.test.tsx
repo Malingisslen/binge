@@ -38,4 +38,16 @@ describe('useLibraryRuntimes', () => {
     // A series without episode_run_time falls back to its latest episode's length.
     expect(result.current.runtimeOf(missingSeries)).toBe(24);
   });
+
+  it('counts a lookup that failed as settled, so the wait ends, and leaves its runtime unknown', async () => {
+    getMovieLite.mockImplementationOnce(async () => { throw new Error('TMDB API error: 500'); });
+    const failing = item({ tmdbId: 5 });
+    const fine = item({ tmdbId: 6 });
+    const { result } = renderHook(() => useLibraryRuntimes([failing, fine], true), { wrapper });
+    expect(result.current.needed).toBe(2);
+    await waitFor(() => expect(result.current.pending).toBe(false));
+    expect(result.current.settled).toBe(2);
+    expect(result.current.runtimeOf(failing)).toBeNull();
+    expect(result.current.runtimeOf(fine)).toBe(101);
+  });
 });

@@ -17,6 +17,9 @@ const NONE: WatchlistItem[] = [];
 export function useLibraryRuntimes(items: WatchlistItem[], enabled: boolean): {
   runtimeOf: (item: WatchlistItem) => number | null;
   pending: boolean;
+  /** Lookups finished (with or without an answer) out of those needed, for a progress label. */
+  settled: number;
+  needed: number;
 } {
   const missing = useMemo(() => (enabled ? items.filter(i => !i.runtime) : NONE), [items, enabled]);
   const queries = useQueries({
@@ -28,6 +31,7 @@ export function useLibraryRuntimes(items: WatchlistItem[], enabled: boolean): {
     })),
   });
   const pending = queries.some(q => q.isLoading);
+  const settled = queries.filter(q => !q.isLoading).length;
   // useQueries hands back a new array every render; key the derived map on what
   // actually changed so the list below keeps its identity (and its scroll window).
   const dataSig = queries.map(q => q.dataUpdatedAt).join(',');
@@ -50,5 +54,5 @@ export function useLibraryRuntimes(items: WatchlistItem[], enabled: boolean): {
     () => (item: WatchlistItem) => item.runtime || fetched.get(mediaTypeDocId(item.mediaType, item.tmdbId)) || null,
     [fetched],
   );
-  return { runtimeOf, pending };
+  return { runtimeOf, pending, settled, needed: missing.length };
 }

@@ -222,7 +222,16 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
     () => status ? items.filter(i => i.status === status && (status !== 'mina' || !i.dropped)) : items,
     [items, status],
   );
-  const { runtimeOf, pending: runtimesPending } = useLibraryRuntimes(baseItems, hasRuntimeFilter(libFilters));
+  const runtimeFilterOn = hasRuntimeFilter(libFilters);
+  const {
+    runtimeOf, pending: runtimesPending, settled: runtimesSettled, needed: runtimesNeeded,
+  } = useLibraryRuntimes(baseItems, runtimeFilterOn);
+  // Titles whose length neither the library nor TMDB knows cannot pass a length bound;
+  // the count line says so instead of letting them vanish silently.
+  const unknownRuntimeCount = useMemo(
+    () => (runtimeFilterOn && !runtimesPending ? baseItems.filter(i => runtimeOf(i) == null).length : 0),
+    [runtimeFilterOn, runtimesPending, baseItems, runtimeOf],
+  );
 
   const filtered = useMemo(() => {
     let result = baseItems;
@@ -235,7 +244,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
     result = result.filter(i => itemPassesLibraryFilters(i, libFilters, {
       genreIds: selectedGenreIds,
       wantedProviders,
-      runtime: hasRuntimeFilter(libFilters) ? runtimeOf(i) : null,
+      runtime: runtimeFilterOn ? runtimeOf(i) : null,
     }));
     if (behindIds) {
       result = result.filter(i => behindIds.has(i.tmdbId));
@@ -338,9 +347,11 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
     () => items.filter(i => i.status === 'mina' && !i.dropped && i.mediaType === 'tv').length,
     [items]
   );
-  const standfirst = status === 'mina'
-    ? buildStandfirst(tvVisibleCount, tvTotalCount, status, mediaFilter)
-    : buildStandfirst(filtered.length, totalCount, status, mediaFilter);
+  const standfirst = runtimeFilterOn && runtimesPending
+    ? 'Hämtar speltider för Längd…'
+    : status === 'mina'
+      ? buildStandfirst(tvVisibleCount, tvTotalCount, status, mediaFilter)
+      : buildStandfirst(filtered.length, totalCount, status, mediaFilter);
 
   const hasActiveFilters =
     mediaFilter !== 'all' ||
@@ -613,9 +624,10 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
         ]}
         onClearAll={clearAllFilters}
       />
-      {activeFilterCount > 0 && (
+      {activeFilterCount > 0 && !(runtimeFilterOn && runtimesPending) && (
         <p className="text-xs text-ink-3 mt-2" aria-live="polite">
           {displayItems.length} av {baseItems.length} titlar
+          {unknownRuntimeCount > 0 && ` · ${unknownRuntimeCount} saknar känd speltid och visas inte med Längd`}
         </p>
       )}
 
@@ -686,8 +698,9 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
 
       <div className="mt-4">
         <div>
-      {runtimesPending && displayItems.length === 0 ? (
-        <LoadingView variant="grid" label="Hämtar speltider…" />
+      {/* A partial list would grow while lengths arrive, so the count never settles; wait for all of them. */}
+      {runtimeFilterOn && runtimesPending ? (
+        <LoadingView variant="grid" label={`Hämtar speltider… ${runtimesSettled} av ${runtimesNeeded}`} />
       ) : displayItems.length === 0 && activeFilterCount > 0 ? (
         <FilteredEmptyState noun="titlar" onClearAll={clearAllFilters} />
       ) : view === 'cards' ? (
