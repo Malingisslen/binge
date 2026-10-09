@@ -3,7 +3,8 @@ import {
   DEFAULT_SHARED_FILTERS,
   countSharedFilters,
   formatStars,
-  passesLength,
+  passesRuntime,
+  runtimeLabel,
   passesProviders,
   passesYear,
   sanitizeSharedFilters,
@@ -53,24 +54,36 @@ describe('passesYear', () => {
   });
 });
 
-describe('passesLength', () => {
-  it('film lengths are inclusive upper bounds and only apply to films', () => {
-    expect(passesLength('movie', 89, 'film-90')).toBe(true);
-    expect(passesLength('movie', 90, 'film-90')).toBe(true);
-    expect(passesLength('movie', 91, 'film-90')).toBe(false);
-    expect(passesLength('movie', 120, 'film-120')).toBe(true);
-    expect(passesLength('movie', 121, 'film-120')).toBe(false);
-    expect(passesLength('tv', 20, 'film-90')).toBe(false);
+describe('passesRuntime', () => {
+  it('both bounds are inclusive, so a 90-minute film fits up to 90', () => {
+    expect(passesRuntime(90, null, 90)).toBe(true);
+    expect(passesRuntime(91, null, 90)).toBe(false);
+    expect(passesRuntime(45, 45, 120)).toBe(true);
+    expect(passesRuntime(44, 45, 120)).toBe(false);
+    expect(passesRuntime(120, 45, 120)).toBe(true);
+    expect(passesRuntime(121, 45, 120)).toBe(false);
   });
-  it('short episodes are series with episodes of at most 30 minutes', () => {
-    expect(passesLength('tv', 22, 'short-episodes')).toBe(true);
-    expect(passesLength('tv', 30, 'short-episodes')).toBe(true);
-    expect(passesLength('tv', 31, 'short-episodes')).toBe(false);
-    expect(passesLength('movie', 22, 'short-episodes')).toBe(false);
+  it('films and episodes share one scale: a 22-minute episode fits up to 30', () => {
+    expect(passesRuntime(22, null, 30)).toBe(true);
   });
-  it('an unknown runtime fails while a length is chosen and passes when none is', () => {
-    expect(passesLength('movie', null, 'film-120')).toBe(false);
-    expect(passesLength('movie', null, '')).toBe(true);
+  it('an open end lets everything past it through', () => {
+    expect(passesRuntime(200, 60, null)).toBe(true);
+    expect(passesRuntime(59, 60, null)).toBe(false);
+  });
+  it('an unknown runtime fails while a bound is set and passes when none is', () => {
+    expect(passesRuntime(null, null, 120)).toBe(false);
+    expect(passesRuntime(0, 10, null)).toBe(false);
+    expect(passesRuntime(null, null, null)).toBe(true);
+  });
+});
+
+describe('runtimeLabel', () => {
+  it('names the range the way the chip shows it', () => {
+    expect(runtimeLabel(null, null)).toBe('Alla längder');
+    expect(runtimeLabel(45, 120)).toBe('45–120 min');
+    expect(runtimeLabel(null, 90)).toBe('Högst 90 min');
+    expect(runtimeLabel(60, null)).toBe('Minst 60 min');
+    expect(runtimeLabel(30, 30)).toBe('30 min');
   });
 });
 
@@ -103,11 +116,11 @@ describe('sharedFilterChips', () => {
     const f = {
       ...DEFAULT_SHARED_FILTERS,
       availability: 'specific' as const, services: [8, 76],
-      genres: ['35'], length: 'film-90' as const, yearMin: 1990, yearMax: 1999, minStars: 3.5,
+      genres: ['35'], runtimeMin: 45, runtimeMax: 120, yearMin: 1990, yearMax: 1999, minStars: 3.5,
     };
     const chips = sharedFilterChips(f, name);
     expect(chips.map(c => c.label)).toEqual([
-      'Netflix eller Viaplay', 'Komedi', 'Film högst 90 min', 'År 1990–1999', '3,5★ eller mer',
+      'Netflix eller Viaplay', 'Komedi', '45–120 min', 'År 1990–1999', '3,5★ eller mer',
     ]);
     const afterGenre = chips[1].clear(f);
     expect(afterGenre).toEqual({ ...f, genres: [] });
@@ -125,9 +138,23 @@ describe('sanitizeSharedFilters', () => {
   it('drops what does not fit, per axis', () => {
     expect(sanitizeSharedFilters({
       genres: ['35', 'nope', 7], availability: 'weird', services: [8, -1, 'x'],
-      length: 'film-999', yearMin: 2010.5, yearMax: 'x', minStars: 3.3,
+      runtimeMin: 0, runtimeMax: 999, yearMin: 2010.5, yearMax: 'x', minStars: 3.3,
     })).toEqual({ ...DEFAULT_SHARED_FILTERS, genres: ['35'], services: [8] });
     expect(sanitizeSharedFilters(null)).toEqual(DEFAULT_SHARED_FILTERS);
+  });
+  it('a length chosen before the slider carries over as the upper bound it meant', () => {
+    expect(sanitizeSharedFilters({ length: 'film-90' })).toMatchObject({ runtimeMin: null, runtimeMax: 90 });
+    expect(sanitizeSharedFilters({ length: 'film-120' })).toMatchObject({ runtimeMax: 120 });
+    expect(sanitizeSharedFilters({ length: 'short-episodes' })).toMatchObject({ runtimeMax: 30 });
+    expect(sanitizeSharedFilters({ length: 'film-90', runtimeMin: 60 })).toMatchObject({ runtimeMin: 60, runtimeMax: null });
+  });
+  it('a runtime end the slider can set reads back, including a lower bound at the top stop', () => {
+    expect(sanitizeSharedFilters({ runtimeMin: 180 })).toMatchObject({ runtimeMin: 180, runtimeMax: null });
+    expect(sanitizeSharedFilters({ runtimeMax: 0 })).toMatchObject({ runtimeMin: null, runtimeMax: 0 });
+    expect(sanitizeSharedFilters({ runtimeMin: 0, runtimeMax: 180 })).toMatchObject({ runtimeMin: null, runtimeMax: null });
+  });
+  it('swaps a reversed runtime range', () => {
+    expect(sanitizeSharedFilters({ runtimeMin: 120, runtimeMax: 45 })).toMatchObject({ runtimeMin: 45, runtimeMax: 120 });
   });
   it('swaps a reversed year range instead of emptying the list', () => {
     expect(sanitizeSharedFilters({ yearMin: 2000, yearMax: 1990 })).toMatchObject({ yearMin: 1990, yearMax: 2000 });

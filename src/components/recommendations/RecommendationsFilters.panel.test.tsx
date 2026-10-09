@@ -47,6 +47,21 @@ describe('Rekommendationers filterpanel', () => {
     expect(lastCall(onChange).minStars).toBe(0);
   });
 
+  it('Längd is a minute slider: pulling the top thumb sets an upper bound, the top stop leaves it open', () => {
+    const onChange = renderPanel();
+    fireEvent.change(screen.getByLabelText('Längst speltid'), { target: { value: '90' } });
+    expect(lastCall(onChange)).toMatchObject({ runtimeMin: null, runtimeMax: 90 });
+    fireEvent.change(screen.getByLabelText('Kortast speltid'), { target: { value: '45' } });
+    expect(lastCall(onChange)).toMatchObject({ runtimeMin: 45, runtimeMax: null });
+  });
+
+  it('a runtime range shows as one chip that clears both ends', () => {
+    const onChange = vi.fn();
+    render(<RecommendationsFilters filters={{ ...DEFAULT_FILTERS, runtimeMin: 45, runtimeMax: 120 }} onChange={onChange} onClearAll={vi.fn()} hasMyProviders />);
+    fireEvent.click(screen.getByRole('button', { name: 'Ta bort filter: 45–120 min' }));
+    expect(lastCall(onChange)).toMatchObject({ runtimeMin: null, runtimeMax: null });
+  });
+
   it('Mina tjänster switches availability to your services', () => {
     const onChange = renderPanel();
     fireEvent.click(screen.getByRole('button', { name: 'Mina tjänster' }));

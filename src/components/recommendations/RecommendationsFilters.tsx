@@ -73,7 +73,7 @@ const STORED_DEFAULT: StoredFilters = sanitizeStored({});
 
 const pickShared = (f: SharedFilters): SharedFilters => ({
   genres: f.genres, availability: f.availability, services: f.services,
-  length: f.length, yearMin: f.yearMin, yearMax: f.yearMax, minStars: f.minStars,
+  runtimeMin: f.runtimeMin, runtimeMax: f.runtimeMax, yearMin: f.yearMin, yearMax: f.yearMax, minStars: f.minStars,
 });
 
 /**

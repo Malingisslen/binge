@@ -1,5 +1,5 @@
 import { canonicalProviderId } from '@/lib/tmdb/providers';
-import { passesLength, type LengthFilter } from '@/lib/filters/titleFilters';
+import { hasRuntimeFilter, passesRuntime } from '@/lib/filters/titleFilters';
 import type { TMDBProviderData } from '@/types/tmdb';
 import type { RecSortKey, RowTitle } from '@/types';
 
@@ -11,11 +11,12 @@ import type { RecSortKey, RowTitle } from '@/types';
 export interface RowRefinement {
   /** Canonical provider ids the title must stream on, or null for no service filter. */
   providerIds: number[] | null;
-  length: LengthFilter;
+  runtimeMin: number | null;
+  runtimeMax: number | null;
   sort: RecSortKey;
 }
 
-export const NO_REFINEMENT: RowRefinement = { providerIds: null, length: '', sort: 'relevance' };
+export const NO_REFINEMENT: RowRefinement = { providerIds: null, runtimeMin: null, runtimeMax: null, sort: 'relevance' };
 
 export const titleKey = (t: { id: number; media_type: string }) => `${t.media_type}-${t.id}`;
 
@@ -61,6 +62,6 @@ export function refineTitles(
   r: RowRefinement,
 ): RowTitle[] {
   let out = r.providerIds ? keepOnServices(items, facts.providersByKey, r.providerIds) : items;
-  if (r.length) out = out.filter(t => passesLength(t.media_type, facts.runtimeByKey[titleKey(t)], r.length));
+  if (hasRuntimeFilter(r)) out = out.filter(t => passesRuntime(facts.runtimeByKey[titleKey(t)], r.runtimeMin, r.runtimeMax));
   return sortRowTitles(out, r.sort);
 }

@@ -42,7 +42,7 @@ import {
   LIBRARY_SUB_STATE_ORDER,
   type LibraryFilters,
 } from '@/lib/libraryView';
-import { countSharedFilters, formatStars, genreIdsOf, wantedProviderIds, withoutEmptyMine, yearCeiling } from '@/lib/filters/titleFilters';
+import { countSharedFilters, formatStars, hasRuntimeFilter, genreIdsOf, wantedProviderIds, withoutEmptyMine, yearCeiling } from '@/lib/filters/titleFilters';
 import {
   ActiveFilterChips,
   FilterPanel,
@@ -222,7 +222,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
     () => status ? items.filter(i => i.status === status && (status !== 'mina' || !i.dropped)) : items,
     [items, status],
   );
-  const { runtimeOf, pending: runtimesPending } = useLibraryRuntimes(baseItems, !!libFilters.length);
+  const { runtimeOf, pending: runtimesPending } = useLibraryRuntimes(baseItems, hasRuntimeFilter(libFilters));
 
   const filtered = useMemo(() => {
     let result = baseItems;
@@ -235,7 +235,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
     result = result.filter(i => itemPassesLibraryFilters(i, libFilters, {
       genreIds: selectedGenreIds,
       wantedProviders,
-      runtime: libFilters.length ? runtimeOf(i) : null,
+      runtime: hasRuntimeFilter(libFilters) ? runtimeOf(i) : null,
     }));
     if (behindIds) {
       result = result.filter(i => behindIds.has(i.tmdbId));

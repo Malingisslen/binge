@@ -8,7 +8,7 @@ import { canonicalProviderId } from '@/lib/tmdb/providers';
 import {
   DEFAULT_SHARED_FILTERS,
   passesGenres,
-  passesLength,
+  passesRuntime,
   passesProviders,
   passesStars,
   passesYear,
@@ -173,7 +173,7 @@ export function itemPassesLibraryFilters(
   if (!passesProviders(streamingProvidersOf(item), ctx.wantedProviders)) return false;
   if (!passesYear(item.releaseYear, f.yearMin, f.yearMax)) return false;
   if (!passesStars(item.rating, f.minStars)) return false;
-  if (!passesLength(item.mediaType, ctx.runtime, f.length)) return false;
+  if (!passesRuntime(ctx.runtime, f.runtimeMin, f.runtimeMax)) return false;
   return itemPassesTags(item, f.tags);
 }
 

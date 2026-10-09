@@ -125,7 +125,8 @@ export default function RecommendationsHub() {
   const hiddenCountries = user?.hiddenCountries ?? [];
   const refinement = useMemo<RowRefinement>(() => ({
     providerIds: wantedProviderIds(filters, myProviders),
-    length: filters.length,
+    runtimeMin: filters.runtimeMin,
+    runtimeMax: filters.runtimeMax,
     sort: filters.sort,
   }), [filters, myProviders]);
   const shownRowCount = filteredRows.filter(r => !emptyRows.has(r.rowKey)).length;
