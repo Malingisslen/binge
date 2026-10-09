@@ -13,6 +13,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { canonicalProviderId, dedupeProvidersByCanonicalId } from '@/lib/tmdb/providers';
 import { isAddableMediaType } from '@/lib/tmdb/client';
 import { trackEvent } from '@/lib/analytics';
+import { departmentLabel, rankPeople } from '@/lib/searchPeople';
 import type { TMDBProvider } from '@/types';
 import { cardClass } from '@/components/ui/Card';
 
@@ -30,10 +31,9 @@ function SearchResults() {
 
   // Sökfältet lovar "titel, person" — personträffar visas som länkar ovanför
   // titlarna i stället för att filtreras bort.
-  const people = useMemo(() =>
-    (data?.results ?? []).filter(r => r.media_type === 'person').slice(0, 6),
-    [data]
-  );
+  // TMDB har ofta flera personer med samma namn. De mest kända först, och bara
+  // några, så att sex likadana "Tom Holland" inte fyller raden.
+  const people = useMemo(() => rankPeople(data?.results ?? []), [data]);
 
   const allResults = useMemo(() =>
     (data?.results ?? []).filter(isAddableMediaType),
@@ -117,7 +117,7 @@ function SearchResults() {
           <span className="text-sm text-ink-2">Personer:</span>
           {people.map(p => (
             <Link key={p.id} href={`/person/${p.id}/`} className="chip no-underline">
-              {p.name}
+              {p.name}{p.known_for_department ? ` · ${departmentLabel(p.known_for_department)}` : ''}
             </Link>
           ))}
         </div>

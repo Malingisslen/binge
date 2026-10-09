@@ -9,6 +9,7 @@ import { useUserSearch } from '@/hooks/useUserSearch';
 import { posterUrl, profileUrl, getDisplayTitle, getReleaseYear, isAddableMediaType, titleHref } from '@/lib/tmdb/client';
 import { toneForId } from '@/lib/duotone';
 import { rankSearchResults } from '@/lib/searchRanking';
+import { departmentLabel, rankPeople } from '@/lib/searchPeople';
 import type { ResolvedUser } from '@/lib/firebase/username';
 import { eyebrowClass } from '@/components/ui/Eyebrow';
 import { cardClass } from '@/components/ui/Card';
@@ -29,9 +30,6 @@ type Row =
   | { kind: 'person'; id: number }
   | { kind: 'title'; item: { media_type: 'movie' | 'tv'; id: number } };
 
-// Sökfältet lovar "titel, person", så personträffar från TMDB visas som en egen
-// grupp. Tre räcker: den som söker ett namn vill nästan alltid ha den första.
-const MAX_PEOPLE = 3;
 
 export default function SearchDropdown({ query, onSelect, onActiveOptionChange }: SearchDropdownProps) {
   const { data: titleData, isLoading: titlesLoading } = useSearch(query);
@@ -45,7 +43,7 @@ export default function SearchDropdown({ query, onSelect, onActiveOptionChange }
   );
   const userResults = useMemo(() => userData ?? [], [userData]);
   const personResults = useMemo(
-    () => (titleData?.results ?? []).filter(r => r.media_type === 'person').slice(0, MAX_PEOPLE),
+    () => rankPeople(titleData?.results ?? []),
     [titleData],
   );
 
@@ -247,13 +245,6 @@ export default function SearchDropdown({ query, onSelect, onActiveOptionChange }
       )}
     </div>
   );
-}
-
-function departmentLabel(dept: string | undefined): string {
-  if (dept === 'Acting') return 'Skådespelare';
-  if (dept === 'Directing') return 'Regissör';
-  if (dept === 'Writing') return 'Manusförfattare';
-  return 'Person';
 }
 
 function UserAvatar({ name, photoURL }: { name: string; photoURL: string | null }) {
