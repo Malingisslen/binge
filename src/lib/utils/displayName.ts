@@ -34,6 +34,10 @@ export function firstLatinAlias(aliases: readonly string[] | undefined): string 
 }
 
 /** Credits rows: `name` follows the sv-SE request, `original_name` is TMDB's own spelling. */
-export function personName(p: { name: string; original_name?: string }): DisplayName {
-  return resolveDisplayName({ localized: p.name, original: p.original_name });
+export function personName(
+  p: { id?: number; name: string; original_name?: string },
+  latinNames?: ReadonlyMap<number, string>,
+): DisplayName {
+  const english = p.id != null ? latinNames?.get(p.id) : undefined;
+  return resolveDisplayName({ localized: p.name, original: p.original_name, english });
 }

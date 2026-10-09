@@ -109,6 +109,10 @@ const movie = {
 
 vi.mock('@/hooks/useTMDB', () => ({ useMovie: () => ({ data: tmdb.movie, isLoading: tmdb.isLoading }) }));
 vi.mock('@/hooks/useWatchlist', () => ({ useWatchlist: () => watchlist }));
+const latin = vi.hoisted(() => ({ names: undefined as ReadonlyMap<number, string> | undefined, people: [] as { name: string }[] }));
+vi.mock('@/hooks/useLatinPersonNames', () => ({
+  useLatinPersonNames: (_t: string, _id: number, people: { name: string }[]) => { latin.people = people; return latin.names; },
+}));
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => auth }));
 vi.mock('next/navigation', () => ({ useRouter: () => router }));
 vi.mock('@/hooks/usePageMeta', () => ({ usePageMeta: () => {} }));
@@ -191,6 +195,8 @@ beforeEach(() => {
   auth.loading = false;
   tmdb.movie = movie;
   tmdb.isLoading = true;
+  latin.names = undefined;
+  latin.people = [];
 });
 
 describe('MoviePageClient — the lazy backfills wait for the watchlist (BIN-598)', () => {
@@ -557,5 +563,20 @@ describe('MoviePageClient — tabellen "Så ser du X i Sverige" finns i den stat
 
     const names = [...(section?.querySelectorAll('th[scope="row"]') ?? [])].map(th => th.textContent);
     expect(names).toEqual(['TV4 Play']);
+  });
+});
+
+describe('MoviePageClient — a cast name TMDB only has in kanji', () => {
+  const watanabe = { id: 3899, name: '渡辺謙', original_name: '渡辺謙', character: 'Katsumoto', profile_path: null };
+
+  it('asks for Latin names for the shown cast and shows the English one with the original under it', () => {
+    signedInWithSettledLibrary();
+    tmdb.movie = { ...movie, credits: { cast: [watanabe], crew: [] } };
+    latin.names = new Map([[3899, 'Ken Watanabe']]);
+    render(<MoviePageClient id="603" />);
+
+    expect(latin.people.map(p => p.name)).toContain('渡辺謙');
+    expect(screen.getByText('Ken Watanabe')).toBeTruthy();
+    expect(screen.getByText('渡辺謙')).toBeTruthy();
   });
 });

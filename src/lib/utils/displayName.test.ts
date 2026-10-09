@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveDisplayName, firstLatinAlias } from './displayName';
+import { resolveDisplayName, firstLatinAlias, personName } from './displayName';
 
 describe('resolveDisplayName', () => {
   it('keeps a Swedish name and shows the non-Latin original underneath', () => {
@@ -60,5 +60,25 @@ describe('firstLatinAlias', () => {
   it('returns null without a Latin alias', () => {
     expect(firstLatinAlias(['渡辺謙'])).toBeNull();
     expect(firstLatinAlias(undefined)).toBeNull();
+  });
+});
+
+describe('personName', () => {
+  // TMDB's sv-SE credits give both fields in kanji for Ken Watanabe; en-US has the Latin name.
+  const watanabe = { id: 3899, name: '渡辺謙', original_name: '渡辺謙' };
+
+  it('uses the en-US name for a person whose sv-SE names are both non-Latin', () => {
+    expect(personName(watanabe, new Map([[3899, 'Ken Watanabe']]))).toEqual({
+      primary: 'Ken Watanabe',
+      secondary: '渡辺謙',
+    });
+  });
+
+  it('keeps the original script when no Latin name is known yet', () => {
+    expect(personName(watanabe).primary).toBe('渡辺謙');
+  });
+
+  it('leaves a Latin name alone even when the map has another spelling', () => {
+    expect(personName({ id: 500, name: 'Tom Cruise' }, new Map([[500, 'Thomas Cruise']])).primary).toBe('Tom Cruise');
   });
 });

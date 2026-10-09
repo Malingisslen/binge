@@ -39,6 +39,7 @@ import { useTitleRatings } from '@/hooks/useTitleRatings';
 import { RatingsRow } from '@/components/title/RatingsRow';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import { personName } from '@/lib/utils/displayName';
+import { useLatinPersonNames } from '@/hooks/useLatinPersonNames';
 import { availabilityLine, buildContentFloor, hasSubstantialText } from '@/lib/seo/contentFloor';
 import { movieContentFloorInput } from '@/lib/seo/contentFloorInput';
 import { franchiseByCollectionId } from '@/lib/seo/franchises';
@@ -76,6 +77,10 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   // så TMDB-anropet aldrig avfyras (undviker 404 → Sentry) och sidan faller ner
   // till "Filmen hittades inte." nedan.
   const { data: movie, isLoading } = useMovie(Number.isFinite(movieId) ? movieId : null, initialData);
+  const latinNames = useLatinPersonNames('movie', movie?.id, [
+    ...(movie?.credits?.cast?.slice(0, 10) ?? []),
+    ...(movie?.credits?.crew?.filter(c => c.job === 'Director' || c.job === 'Screenplay' || c.job === 'Writer') ?? []),
+  ]);
   const { offers } = useStreamingOffers(movie?.id, 'movie');
   const cineasterna = useCineasternaCatalog();
   const { getItem, upsertTitle, updateRating, updateNotes, updateWatchedAt, setRuntime, refreshTmdbFields, updateTags, items, loading: watchlistLoading, libraryKnown } = useWatchlist();
@@ -352,7 +357,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
                     <span key={d.id}>
                       {i > 0 && ', '}
                       <Link href={`/person/${d.id}/`} style={{ color: 'var(--ink-2)', textDecoration: 'none', borderBottom: '1px solid var(--rule)' }}>
-                        {personName(d).primary}
+                        {personName(d, latinNames).primary}
                       </Link>
                     </span>
                   ))}
@@ -366,7 +371,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
                     <span key={w.id}>
                       {i > 0 && ', '}
                       <Link href={`/person/${w.id}/`} style={{ color: 'var(--ink-2)', textDecoration: 'none', borderBottom: '1px solid var(--rule)' }}>
-                        {personName(w).primary}
+                        {personName(w, latinNames).primary}
                       </Link>
                     </span>
                   ))}
@@ -616,20 +621,20 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={profileUrl(person.profile_path)!}
-                      alt={personName(person).primary}
+                      alt={personName(person, latinNames).primary}
                       loading="lazy"
                       decoding="async"
                       width={72}
                       height={72}
                     />
                   ) : (
-                    <AvatarInitials name={personName(person).primary} size={72} />
+                    <AvatarInitials name={personName(person, latinNames).primary} size={72} />
                   )}
                 </div>
-                <div style={{ fontSize: 'var(--fs-base)', fontWeight: 500, lineHeight: 1.25 }}>{personName(person).primary}</div>
-                {personName(person).secondary && (
+                <div style={{ fontSize: 'var(--fs-base)', fontWeight: 500, lineHeight: 1.25 }}>{personName(person, latinNames).primary}</div>
+                {personName(person, latinNames).secondary && (
                   <div lang="und" style={{ fontSize: 'var(--fs-xs)', color: 'var(--ink-3)', lineHeight: 1.2 }}>
-                    {personName(person).secondary}
+                    {personName(person, latinNames).secondary}
                   </div>
                 )}
                 <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--ink-3)', marginTop: 2, lineHeight: 1.2 }}>

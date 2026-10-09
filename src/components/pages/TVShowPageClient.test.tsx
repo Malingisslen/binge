@@ -77,6 +77,7 @@ const show = {
 
 vi.mock('@/hooks/useTMDB', () => ({ useTVShow: () => ({ data: tmdb.show, isLoading: tmdb.isLoading }) }));
 vi.mock('@/hooks/useWatchlist', () => ({ useWatchlist: () => watchlist }));
+vi.mock('@/hooks/useLatinPersonNames', () => ({ useLatinPersonNames: () => undefined }));
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: null, uid: null, loading: false }) }));
 vi.mock('@/hooks/usePageMeta', () => ({ usePageMeta: () => {} }));
 vi.mock('@/hooks/useTitleRatings', () => ({ useTitleRatings: () => ({}) }));

@@ -268,8 +268,9 @@ export function getCredits(
   mediaType: 'movie' | 'tv',
   id: number,
   opts?: TmdbFetchOpts,
+  language?: string,
 ): Promise<{ id: number; cast: { id: number; name: string }[]; crew: { id: number; name: string; job?: string }[] }> {
-  return tmdbFetch(`/${mediaType}/${id}/credits`, {}, opts);
+  return tmdbFetch(`/${mediaType}/${id}/credits`, language ? { language } : {}, opts);
 }
 
 /** Convenience — normalizes movie + tv keyword response into a flat array. */

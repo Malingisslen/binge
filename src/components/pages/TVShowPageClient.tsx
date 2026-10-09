@@ -47,6 +47,7 @@ import { useEpisodeProgressWithSync } from '@/hooks/useEpisodeProgressWithSync';
 import { tvShowStatusLabel } from '@/lib/watchStatus';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import { personName } from '@/lib/utils/displayName';
+import { useLatinPersonNames } from '@/hooks/useLatinPersonNames';
 import { availabilityLine, buildContentFloor, hasSubstantialText } from '@/lib/seo/contentFloor';
 import { tvContentFloorInput } from '@/lib/seo/contentFloorInput';
 import { formatNextEpisodeLabel, seriesYearSpan, upcomingEpisode } from '@/lib/episodeLabel';
@@ -79,6 +80,10 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   // TMDB-anropet aldrig avfyras (undviker 404 → Sentry) och sidan faller ner
   // till "Serien hittades inte." nedan.
   const { data: show, isLoading } = useTVShow(Number.isFinite(showId) ? showId : null, initialData);
+  const latinNames = useLatinPersonNames('tv', show?.id, [
+    ...(show?.credits?.cast?.slice(0, 10) ?? []),
+    ...(show?.credits?.crew?.filter(c => c.job === 'Creator' || c.department === 'Creator') ?? []),
+  ]);
   const { offers } = useStreamingOffers(show?.id, 'tv');
   const { getItem, updateRating, updateNotes, updateTmdbStatus, setRuntime, refreshTmdbFields, updateTags, items, loading: watchlistLoading } = useWatchlist();
   const { user } = useAuth();
@@ -320,7 +325,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
                 <span key={c.id}>
                   {i > 0 && ', '}
                   <Link href={`/person/${c.id}/`} style={{ color: 'var(--ink-2)', textDecoration: 'none', borderBottom: '1px solid var(--rule)' }}>
-                    {personName(c).primary}
+                    {personName(c, latinNames).primary}
                   </Link>
                 </span>
               ))}
@@ -554,20 +559,20 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={profileUrl(person.profile_path)!}
-                      alt={personName(person).primary}
+                      alt={personName(person, latinNames).primary}
                       loading="lazy"
                       decoding="async"
                       width={72}
                       height={72}
                     />
                   ) : (
-                    <AvatarInitials name={personName(person).primary} size={72} />
+                    <AvatarInitials name={personName(person, latinNames).primary} size={72} />
                   )}
                 </div>
-                <div style={{ fontSize: 'var(--fs-base)', fontWeight: 500, lineHeight: 1.25 }}>{personName(person).primary}</div>
-                {personName(person).secondary && (
+                <div style={{ fontSize: 'var(--fs-base)', fontWeight: 500, lineHeight: 1.25 }}>{personName(person, latinNames).primary}</div>
+                {personName(person, latinNames).secondary && (
                   <div lang="und" style={{ fontSize: 'var(--fs-xs)', color: 'var(--ink-3)', lineHeight: 1.2 }}>
-                    {personName(person).secondary}
+                    {personName(person, latinNames).secondary}
                   </div>
                 )}
                 <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--ink-3)', marginTop: 2, lineHeight: 1.2 }}>
