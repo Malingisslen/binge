@@ -41,7 +41,7 @@ describe('useRefinedTitles', () => {
   });
 
   it('a length filter fetches each runtime, is pending until they land, then keeps what fits', async () => {
-    const r = { ...NO_REFINEMENT, length: 'film-90' as const };
+    const r = { ...NO_REFINEMENT, runtimeMax: 90 };
     const { result } = renderHook(() => useRefinedTitles(items, r), { wrapper });
     await waitFor(() => expect(getMovieLite).toHaveBeenCalledTimes(2));
     expect(result.current.pending).toBe(true);

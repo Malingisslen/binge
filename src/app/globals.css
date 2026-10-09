@@ -777,7 +777,7 @@ button { font: inherit; cursor: pointer; }
   box-shadow: 0 0 0 2px var(--acc-soft);
 }
 
-/* Two-thumb range (År in the shared filter panel). Both inputs share one track and
+/* Two-thumb range (År and Längd in the shared filter panel). Both inputs share one track and
    only their thumbs take the pointer, so either thumb can be dragged. */
 .range-dual { position: relative; height: 24px; }
 .range-dual-track, .range-dual-fill { position: absolute; top: 10px; height: 4px; border-radius: 2px; }

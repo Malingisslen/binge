@@ -255,9 +255,10 @@ describe('itemPassesLibraryFilters', () => {
     expect(itemPassesLibraryFilters(film, { ...F, status: 'sedd' }, ctx())).toBe(true);
     expect(itemPassesLibraryFilters(film, { ...F, yearMin: 1990, yearMax: 1999 }, ctx())).toBe(true);
     expect(itemPassesLibraryFilters(film, { ...F, yearMin: 2000 }, ctx())).toBe(false);
-    expect(itemPassesLibraryFilters(film, { ...F, length: 'film-120' }, ctx({ runtime: 97 }))).toBe(true);
-    expect(itemPassesLibraryFilters(film, { ...F, length: 'film-90' }, ctx({ runtime: 97 }))).toBe(false);
-    expect(itemPassesLibraryFilters(film, { ...F, length: 'film-120' }, ctx({ runtime: null }))).toBe(false);
+    expect(itemPassesLibraryFilters(film, { ...F, runtimeMax: 120 }, ctx({ runtime: 97 }))).toBe(true);
+    expect(itemPassesLibraryFilters(film, { ...F, runtimeMax: 90 }, ctx({ runtime: 97 }))).toBe(false);
+    expect(itemPassesLibraryFilters(film, { ...F, runtimeMin: 100 }, ctx({ runtime: 97 }))).toBe(false);
+    expect(itemPassesLibraryFilters(film, { ...F, runtimeMax: 120 }, ctx({ runtime: null }))).toBe(false);
   });
 });
 

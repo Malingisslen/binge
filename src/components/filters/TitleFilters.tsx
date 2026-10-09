@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { SlidersHorizontal, X } from 'lucide-react';
 import { StarInput } from '@/components/ui/StarInput';
 import { cardClass } from '@/components/ui/Card';
@@ -9,13 +9,15 @@ import { Segmented } from '@/components/ui/Segmented';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import {
-  LENGTH_OPTIONS,
+  RUNTIME_CEILING,
+  RUNTIME_FLOOR,
+  RUNTIME_STEP,
   YEAR_FLOOR,
   formatStars,
+  runtimeLabel,
   sharedFilterChips,
   type ActiveChip,
   type AvailabilityMode,
-  type LengthFilter,
   type SharedFilters,
 } from '@/lib/filters/titleFilters';
 import type { GenreOption } from '@/lib/tmdb/genreLabels';
@@ -65,7 +67,6 @@ interface PanelProps {
 export function FilterPanel({
   value, onChange, onClose, genreOptions, services, hasMyServices, yearCeiling, extra,
 }: PanelProps) {
-  const lengthId = useId();
   const set = (patch: Partial<SharedFilters>) => onChange({ ...value, ...patch });
   const availabilityOptions: { value: AvailabilityMode; label: string }[] = [
     { value: 'all', label: 'Alla' },
@@ -145,17 +146,11 @@ export function FilterPanel({
           </fieldset>
         )}
 
-        <div>
-          <label htmlFor={lengthId} className={`${capClass} block mb-1.5`}>Längd</label>
-          <select
-            id={lengthId}
-            className="select w-full"
-            value={value.length}
-            onChange={e => set({ length: e.target.value as LengthFilter })}
-          >
-            {LENGTH_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </div>
+        <RuntimeRangeSlider
+          min={value.runtimeMin}
+          max={value.runtimeMax}
+          onChange={(runtimeMin, runtimeMax) => set({ runtimeMin, runtimeMax })}
+        />
 
         <YearRangeSlider
           min={value.yearMin}
@@ -173,9 +168,54 @@ export function FilterPanel({
 }
 
 /**
- * Two thumbs on one track. The outer stops mean "no bound": at the floor the range
- * also keeps older titles, at the ceiling also undated upcoming ones.
+ * Two thumbs on one track. The outer stops mean "no bound", so a range pulled to an
+ * end keeps everything beyond it.
  */
+function RangeSlider({
+  title, min, max, floor, ceiling, step, label, lowLabel, highLabel, valueText, onChange,
+}: {
+  title: string;
+  min: number | null;
+  max: number | null;
+  floor: number;
+  ceiling: number;
+  step: number;
+  label: string;
+  lowLabel: string;
+  highLabel: string;
+  valueText: (v: number, open: boolean) => string;
+  onChange: (min: number | null, max: number | null) => void;
+}) {
+  const lo = min ?? floor;
+  const hi = max ?? ceiling;
+  const pct = (v: number) => ((v - floor) / (ceiling - floor)) * 100;
+  const emit = (a: number, b: number) => onChange(a <= floor ? null : a, b >= ceiling ? null : b);
+
+  return (
+    <div>
+      <div className={`${capClass} mb-1.5 flex justify-between gap-2`}>
+        <span>{title}</span>
+        <span className="normal-case tracking-normal text-ink-2 whitespace-nowrap" aria-live="polite">{label}</span>
+      </div>
+      <div className="range-dual">
+        <div className="range-dual-track" />
+        <div className="range-dual-fill" style={{ left: `${pct(lo)}%`, width: `${pct(hi) - pct(lo)}%` }} />
+        <input
+          type="range" min={floor} max={ceiling} step={step} value={lo}
+          aria-label={lowLabel} aria-valuetext={valueText(lo, min == null)}
+          onChange={e => emit(Math.min(Number(e.target.value), hi), hi)}
+        />
+        <input
+          type="range" min={floor} max={ceiling} step={step} value={hi}
+          aria-label={highLabel} aria-valuetext={valueText(hi, max == null)}
+          onChange={e => emit(lo, Math.max(Number(e.target.value), lo))}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** At the floor the range also keeps older titles, at the ceiling also undated upcoming ones. */
 export function YearRangeSlider({
   min, max, ceiling, onChange,
 }: {
@@ -184,37 +224,36 @@ export function YearRangeSlider({
   ceiling: number;
   onChange: (min: number | null, max: number | null) => void;
 }) {
-  const lo = min ?? YEAR_FLOOR;
-  const hi = max ?? ceiling;
-  const span = ceiling - YEAR_FLOOR;
-  const pct = (y: number) => ((y - YEAR_FLOOR) / span) * 100;
-  const emit = (a: number, b: number) => onChange(a <= YEAR_FLOOR ? null : a, b >= ceiling ? null : b);
   const label = min == null && max == null ? 'Alla år'
     : min == null ? `Till ${max}`
     : max == null ? `Från ${min}`
     : min === max ? String(min) : `${min}–${max}`;
-
   return (
-    <div>
-      <div className={`${capClass} mb-1.5 flex justify-between gap-2`}>
-        <span>År</span>
-        <span className="normal-case tracking-normal text-ink-2 whitespace-nowrap" aria-live="polite">{label}</span>
-      </div>
-      <div className="range-dual">
-        <div className="range-dual-track" />
-        <div className="range-dual-fill" style={{ left: `${pct(lo)}%`, width: `${pct(hi) - pct(lo)}%` }} />
-        <input
-          type="range" min={YEAR_FLOOR} max={ceiling} step={1} value={lo}
-          aria-label="Tidigast år" aria-valuetext={min == null ? 'Inget tidigaste år' : String(lo)}
-          onChange={e => emit(Math.min(Number(e.target.value), hi), hi)}
-        />
-        <input
-          type="range" min={YEAR_FLOOR} max={ceiling} step={1} value={hi}
-          aria-label="Senast år" aria-valuetext={max == null ? 'Inget senaste år' : String(hi)}
-          onChange={e => emit(lo, Math.max(Number(e.target.value), lo))}
-        />
-      </div>
-    </div>
+    <RangeSlider
+      title="År" min={min} max={max} floor={YEAR_FLOOR} ceiling={ceiling} step={1} label={label}
+      lowLabel="Tidigast år" highLabel="Senast år"
+      valueText={(v, open) => open ? (v === YEAR_FLOOR ? 'Inget tidigaste år' : 'Inget senaste år') : String(v)}
+      onChange={onChange}
+    />
+  );
+}
+
+/** Minutes per film or per episode; the top stop leaves the upper end open. */
+export function RuntimeRangeSlider({
+  min, max, onChange,
+}: {
+  min: number | null;
+  max: number | null;
+  onChange: (min: number | null, max: number | null) => void;
+}) {
+  return (
+    <RangeSlider
+      title="Längd" min={min} max={max} floor={RUNTIME_FLOOR} ceiling={RUNTIME_CEILING} step={RUNTIME_STEP}
+      label={runtimeLabel(min, max)}
+      lowLabel="Kortast speltid" highLabel="Längst speltid"
+      valueText={(v, open) => open ? (v === RUNTIME_FLOOR ? 'Ingen nedre gräns' : 'Ingen övre gräns') : `${v} minuter`}
+      onChange={onChange}
+    />
   );
 }
 

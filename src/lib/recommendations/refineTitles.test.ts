@@ -89,11 +89,12 @@ describe('refineTitles', () => {
   it('Längd behåller det som ryms och tappar titlar utan känd speltid', () => {
     const items = [film80, film150, shortSeries, noRuntime];
     const facts = { providersByKey: {}, runtimeByKey };
-    expect(refineTitles(items, facts, { ...NO_REFINEMENT, length: 'film-90' }).map(t => t.id)).toEqual([1]);
-    expect(refineTitles(items, facts, { ...NO_REFINEMENT, length: 'short-episodes' }).map(t => t.id)).toEqual([3]);
+    expect(refineTitles(items, facts, { ...NO_REFINEMENT, runtimeMax: 90 }).map(t => t.id)).toEqual([1, 3]);
+    expect(refineTitles(items, facts, { ...NO_REFINEMENT, runtimeMax: 30 }).map(t => t.id)).toEqual([3]);
+    expect(refineTitles(items, facts, { ...NO_REFINEMENT, runtimeMin: 60 }).map(t => t.id)).toEqual([1, 2]);
   });
 
   it('en förfining som tömmer poolen ger en tom lista, inte ett fel', () => {
-    expect(refineTitles([film150], { providersByKey: {}, runtimeByKey }, { ...NO_REFINEMENT, length: 'film-90' })).toEqual([]);
+    expect(refineTitles([film150], { providersByKey: {}, runtimeByKey }, { ...NO_REFINEMENT, runtimeMax: 90 })).toEqual([]);
   });
 });

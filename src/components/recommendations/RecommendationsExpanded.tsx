@@ -66,7 +66,8 @@ export default function RecommendationsExpanded({ rowKeyParam }: Props) {
   });
   const refinement = useMemo<RowRefinement>(() => ({
     providerIds: wantedProviderIds(filters, myProviders),
-    length: filters.length,
+    runtimeMin: filters.runtimeMin,
+    runtimeMax: filters.runtimeMax,
     sort: filters.sort,
   }), [filters, myProviders]);
 

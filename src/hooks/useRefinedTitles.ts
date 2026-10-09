@@ -5,6 +5,7 @@ import { useQueries } from '@tanstack/react-query';
 import { getMovieLite, getTVShowLite, getWatchProviders } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import { refineTitles, titleKey, type RowRefinement } from '@/lib/recommendations/refineTitles';
+import { hasRuntimeFilter } from '@/lib/filters/titleFilters';
 import type { RowTitle, TMDBMovie, TMDBProviderData, TMDBTVShow } from '@/types';
 
 const NONE: RowTitle[] = [];
@@ -25,7 +26,7 @@ function runtimeOf(data: TMDBMovie | TMDBTVShow | undefined, mediaType: 'movie' 
  */
 export function useRefinedTitles(items: RowTitle[], r: RowRefinement): { items: RowTitle[]; pending: boolean } {
   const providerItems = r.providerIds ? items : NONE;
-  const runtimeItems = r.length ? items : NONE;
+  const runtimeItems = hasRuntimeFilter(r) ? items : NONE;
 
   const providerQueries = useQueries({
     queries: providerItems.map(item => ({
