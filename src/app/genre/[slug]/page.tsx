@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { discoverMovies, discoverTV, posterUrl } from '@/lib/tmdb/client';
+import { discoverMovies, discoverTV, getWatchProviders, posterUrl } from '@/lib/tmdb/client';
+import { canonicalProviderId, getProvider } from '@/lib/tmdb/providers';
 import { GENRE_HUBS, genreHubBySlug, type GenreHub } from '@/lib/seo/genreHubs';
 import { jsonLd } from '@/lib/seo/jsonLd';
 import { withRetry } from '@/lib/seo/withRetry';
@@ -24,7 +25,7 @@ export const dynamicParams = false;
  * noindex by default), inte en äkta 404; noindex-grenen i generateMetadata
  * täcker dev-läget och är skyddsnät om hostingbeteendet ändras.
  *
- * Build-data: EN discover-fråga per medium direkt via discoverMovies/discoverTV
+ * Build-data: discover-frågan per medium går direkt via discoverMovies/discoverTV
  * (PE-villkor: ALDRIG via fetchForBuild — dess cache/budget är id-nycklad för
  * titelpipelinen; query-formade anrop hör inte hemma där). Zero-rader
  * (flakad build-fetch) skeppar en resilient "kommer snart"-EmptyState istället
@@ -97,9 +98,7 @@ async function fetchGenre(hub: GenreHub): Promise<{ movies: TMDBSearchResult[]; 
       ? Promise.resolve<TMDBSearchResult[]>([])
       : withRetry(
           () => discoverMovies({ ...DISCOVER_PARAMS, with_genres: String(hub.movieGenreId) }, { signal: attemptSignal() }),
-          // 5 attempts, 700ms step (~7s tail): these pages make 1 call each, so
-          // a longer tail costs seconds, not build minutes; attemptSignal() is
-          // rebuilt per attempt since a timed-out signal can't be reused.
+          // attemptSignal() is rebuilt per attempt since a timed-out signal can't be reused.
           5,
           700,
         ).then((r) => r.results ?? []).catch((e) => {
@@ -126,6 +125,31 @@ interface Row {
   year: string | null;
   posterPath: string | null;
   href: string;
+  /** Var titeln streamas i Sverige när sidan byggdes; null = okänt (hämtningen misslyckades). */
+  where: string | null;
+}
+
+// Ett försök med kort tak per titel, och hela fasen har en egen deadline, så
+// sidan håller sig inom byggets tidsgräns även när TMDB hänger efter discover.
+const PROVIDER_TIMEOUT_MS = 4000;
+const PROVIDER_PHASE_MS = 8000;
+
+/**
+ * Sidan lovar "var du kan se dem", så varje rad får tjänsterna från byggtiden.
+ * Ett misslyckat anrop ger bara den gamla hänvisningen till titelsidan.
+ */
+async function whereToWatch(kind: 'movie' | 'tv', id: number): Promise<string | null> {
+  try {
+    const res = await getWatchProviders(kind, id, { signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS) });
+    const se = res.results?.SE;
+    const names = [...new Set((se?.flatrate ?? []).map(p => getProvider(canonicalProviderId(p.provider_id))?.name ?? p.provider_name))];
+    if (names.length > 0) return names.length > 3 ? `${names.slice(0, 3).join(', ')} m.fl.` : names.join(', ');
+    if ((se?.free?.length ?? 0) > 0 || (se?.ads?.length ?? 0) > 0) return 'Gratis att se';
+    if ((se?.rent?.length ?? 0) > 0 || (se?.buy?.length ?? 0) > 0) return 'Hyr eller köp';
+    return 'Inte på någon tjänst i Sverige just nu';
+  } catch {
+    return null;
+  }
 }
 
 function toRows(items: TMDBSearchResult[], kind: 'movie' | 'tv'): Row[] {
@@ -136,9 +160,16 @@ function toRows(items: TMDBSearchResult[], kind: 'movie' | 'tv'): Row[] {
       year: (kind === 'movie' ? x.release_date : x.first_air_date)?.slice(0, 4) || null,
       posterPath: x.poster_path ?? null,
       href: `/${kind}/${x.id}/`,
+      where: null as string | null,
     }))
     .filter((r) => r.title)
     .slice(0, SECTION_CAP);
+}
+
+async function withWhere(rows: Row[], kind: 'movie' | 'tv'): Promise<Row[]> {
+  const filled = Promise.all(rows.map(async r => ({ ...r, where: await whereToWatch(kind, r.id) })));
+  const deadline = new Promise<Row[]>(resolve => setTimeout(() => resolve(rows), PROVIDER_PHASE_MS));
+  return Promise.race([filled, deadline]);
 }
 
 function TitleRows({ rows }: { rows: Row[] }) {
@@ -158,7 +189,7 @@ function TitleRows({ rows }: { rows: Row[] }) {
                 <div className="text-base font-medium text-ink truncate">
                   {r.title}{r.year ? <span className="text-ink-3 font-normal"> ({r.year})</span> : null}
                 </div>
-                <div className="text-sm text-ink-2">Se var den streamar</div>
+                <div className="text-sm text-ink-2 truncate">{r.where ?? 'Se var den streamar'}</div>
               </div>
             </Link>
           </li>
@@ -174,8 +205,10 @@ export default async function GenrePage({ params }: { params: Promise<PageParams
   if (!hub) notFound();
 
   const { movies, tv } = await fetchGenre(hub);
-  const movieRows = toRows(movies, 'movie');
-  const tvRows = toRows(tv, 'tv');
+  const [movieRows, tvRows] = await Promise.all([
+    withWhere(toRows(movies, 'movie'), 'movie'),
+    withWhere(toRows(tv, 'tv'), 'tv'),
+  ]);
   const url = `${SITE}/genre/${hub.slug}/`;
 
   const collectionPage = {

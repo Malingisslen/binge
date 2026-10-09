@@ -23,6 +23,9 @@ import { getProvider } from './providers';
  * migration-safe for existing user profiles.
  */
 
+// 2026-10-09, efter UX-genomgången: korta namn som HBO, CR, Disc+, YT
+// byttes mot tjänstens riktiga namn. Kortnamnet är bara text i UI:t; profiler
+// pekar på id:n, så bytet är migreringssäkert.
 interface TierIdentity {
   name: string;
   kind: 'sport' | null;
@@ -44,7 +47,7 @@ const BASELINE: Record<number, ProviderIdentity> = {
   337: { name: 'Disney+', shortName: 'Disney+', aliases: [], isFree: false, isAds: false, tiers: {
     ads: { name: 'Standard med reklam', kind: null }, standard: { name: 'Standard', kind: null }, premium: { name: 'Premium', kind: null },
   } },
-  384: { name: 'HBO Max', shortName: 'HBO', aliases: [1899, 1825], isFree: false, isAds: false, tiers: {
+  384: { name: 'HBO Max', shortName: 'HBO Max', aliases: [1899, 1825], isFree: false, isAds: false, tiers: {
     ads: { name: 'Basic med reklam', kind: null }, standard: { name: 'Standard', kind: null }, premium: { name: 'Premium', kind: null },
   } },
   76: { name: 'Viaplay', shortName: 'Viaplay', aliases: [], isFree: false, isAds: false, tiers: {
@@ -59,22 +62,22 @@ const BASELINE: Record<number, ProviderIdentity> = {
     'sport-hockey': { name: 'Sport Hockey utan reklam', kind: 'sport' },
     sport: { name: 'Sport Total utan reklam', kind: 'sport' },
   } },
-  350: { name: 'Apple TV+', shortName: 'Apple', aliases: [2243], isFree: false, isAds: false, tiers: {} },
-  510: { name: 'Discovery+', shortName: 'Disc+', aliases: [], isFree: false, isAds: false, tiers: {
+  350: { name: 'Apple TV+', shortName: 'Apple TV+', aliases: [2243], isFree: false, isAds: false, tiers: {} },
+  510: { name: 'Discovery+', shortName: 'Discovery+', aliases: [], isFree: false, isAds: false, tiers: {
     ads: { name: 'Underhållning (med reklam)', kind: null }, standard: { name: 'Underhållning', kind: null },
     sport: { name: 'Underhållning + Sport', kind: 'sport' },
   } },
-  323: { name: 'Crunchyroll', shortName: 'CR', aliases: [1968, 283], isFree: false, isAds: false, tiers: {
+  323: { name: 'Crunchyroll', shortName: 'Crunchyroll', aliases: [1968, 283], isFree: false, isAds: false, tiers: {
     fan: { name: 'Fan', kind: null }, megafan: { name: 'Mega Fan', kind: null },
   } },
-  431: { name: 'SkyShowtime', shortName: 'Sky', aliases: [1773, 531], isFree: false, isAds: false, tiers: {
+  431: { name: 'SkyShowtime', shortName: 'SkyShowtime', aliases: [1773, 531], isFree: false, isAds: false, tiers: {
     ads: { name: 'Standard med annonser', kind: null }, standard: { name: 'Standard', kind: null }, premium: { name: 'Premium', kind: null },
   } },
-  335: { name: 'YouTube Premium', shortName: 'YT', aliases: [188], isFree: false, isAds: false, tiers: {
+  335: { name: 'YouTube Premium', shortName: 'YouTube', aliases: [188], isFree: false, isAds: false, tiers: {
     lite: { name: 'Lite', kind: null },
     student: { name: 'Student', kind: null }, solo: { name: 'Enskild', kind: null }, family: { name: 'Familj', kind: null },
   } },
-  521: { name: 'Tele2 Play', shortName: 'Tele2', aliases: [497], isFree: false, isAds: false, tiers: {} },
+  521: { name: 'Tele2 Play', shortName: 'Tele2 Play', aliases: [497], isFree: false, isAds: false, tiers: {} },
   300: { name: 'Pluto TV', shortName: 'Pluto', aliases: [], isFree: false, isAds: true, tiers: {} },
   578: { name: 'TriArt Play', shortName: 'TriArt', aliases: [517], isFree: false, isAds: false, tiers: {} },
   35: { name: 'Rakuten TV', shortName: 'Rakuten', aliases: [], isFree: false, isAds: false, tiers: {} },

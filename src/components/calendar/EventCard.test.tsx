@@ -181,7 +181,7 @@ describe('EventCard — toggle is outside the link (BIN-660)', () => {
     const { container } = render(<EventCard entry={episode} />);
 
     expect(toggle()).toHaveAttribute('aria-pressed', 'true');
-    expect(toggle()).toHaveTextContent('sett');
+    expect(toggle()).toHaveTextContent('Sett');
     // The filled square is the only signal a sighted user gets; aria-pressed
     // and the label would both stay correct if `is-on` silently stopped.
     expect(toggle().querySelector('.ev-toggle')).toHaveClass('is-on');
@@ -200,7 +200,7 @@ describe('EventCard — toggle is outside the link (BIN-660)', () => {
     // No aria-label: an override would freeze the name while the visible text
     // changes to "sett", breaking WCAG's label-in-name for voice control.
     expect(toggle()).not.toHaveAttribute('aria-label');
-    expect(toggle()).toHaveTextContent('markera sedd');
+    expect(toggle()).toHaveTextContent('Markera sedd');
     expect(toggle()).toHaveAttribute('aria-pressed', 'false');
     expect(toggle().querySelector('.ev-toggle')).not.toHaveClass('is-on');
     // The read path's argument order is as easy to swap as the write path's.

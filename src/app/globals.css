@@ -13,10 +13,12 @@
 :root, [data-theme='light'] {
   /* The type scale: every font-size in this file and in tailwind.config.ts reads these.
      consistency.test.ts rejects a px font-size anywhere else. */
-  --fs-nano: 8px;
-  --fs-micro: 9px;
-  --fs-xxs: 10px;
-  --fs-xs: 11px;
+  /* 12px är golvet för text (Malins val 2026-10-09): de fyra minsta stegen pekar
+     på samma storlek. Stegen finns kvar så att ingen komponent behöver ändras. */
+  --fs-nano: 12px;
+  --fs-micro: 12px;
+  --fs-xxs: 12px;
+  --fs-xs: 12px;
   --fs-sm: 12.5px;
   --fs-base: 13.5px;
   --fs-md: 14px;
@@ -349,6 +351,11 @@ button { font: inherit; cursor: pointer; }
 .topbar-week .day.today .lab,
 .topbar-week .day.today .num,
 .topbar-week .day.today .count strong { color: var(--cal-deep); }
+/* Mörkt läge: plommontexten på plommonbakgrunden nådde 3,6:1, under kravet 4,5:1.
+   Bakgrunden bär fortfarande "idag", texten blir vanlig textfärg. */
+[data-theme='dark'] .topbar-week .day.today .lab,
+[data-theme='dark'] .topbar-week .day.today .num,
+[data-theme='dark'] .topbar-week .day.today .count strong { color: var(--ink); }
 
 /* Popover med full lista — visas på hover/focus av cellen. CSS-only,
    matchar binge-densiteten (mono, ingen radius, inga skuggor, 1px rule). */
@@ -405,6 +412,22 @@ button { font: inherit; cursor: pointer; }
   left: 0; right: 0; top: 0;
   height: 2px;
   background: var(--cal-deep);
+}
+
+/* Gästernas startsida: bara Logga in till höger (LandingTopbar). */
+.app-topbar .landing-topbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 14px;
+}
+@media (max-width: 980px) {
+  .app-topbar:has(> .landing-topbar-actions) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .app-topbar:has(> .landing-topbar-actions) .brand { border-bottom: none; }
 }
 
 .topbar-rhs {
@@ -2370,14 +2393,44 @@ button { font: inherit; cursor: pointer; }
   outline-offset: -1px;
 }
 
+/* "Läs mer" behövs bara där beskrivningen kortas (mobil). */
+.detail-hero .syn-more { display: none; }
+
 @media (max-width: 760px) {
   .detail-hero {
-    grid-template-columns: 140px 1fr;
-    gap: 18px;
+    grid-template-columns: 96px 1fr;
+    gap: 14px;
   }
-  .detail-hero .poster-wrap { width: 140px; }
+  .detail-hero .poster-wrap { width: 96px; }
   .detail-hero h1 { font-size: var(--fs-5xl); }
   .detail-hero .syn { font-size: var(--fs-lg); }
+  /* Mobil: titel, sedan var den går att se, sedan Lägg till, sist beskrivning
+     och betyg. Ordningen i koden är datorns. */
+  .detail-hero .meta-col { display: flex; flex-direction: column; }
+  .detail-hero .meta-col > * { order: 1; }
+  .detail-hero .meta-col > .chips-line,
+  .detail-hero .meta-col > h1,
+  .detail-hero .meta-col > .creators { order: -3; }
+  .detail-hero .meta-col > .where-block { order: -2; }
+  .detail-hero .meta-col > .actions-row { order: -1; }
+  .detail-hero .syn-wrap:not(.is-open) .syn {
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .detail-hero .syn-more {
+    display: inline;
+    background: none;
+    border: none;
+    padding: 0;
+    margin-top: 4px;
+    font: inherit;
+    font-size: var(--fs-base);
+    color: var(--acc-deep);
+    text-decoration: underline;
+    cursor: pointer;
+  }
 }
 
 /* Section header pattern used on detail page */

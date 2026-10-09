@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/contexts/ToastContext';
-import { SWEDISH_PROVIDERS, canonicalProviderId, type SwedishProvider } from '@/lib/tmdb/providers';
+import { SWEDISH_PROVIDERS, canonicalProviderId, getProvider, type SwedishProvider } from '@/lib/tmdb/providers';
 import { useDebouncedCommit } from '@/hooks/useDebouncedCommit';
 import { isValidBillingDay, daysUntilRenewal } from '@/lib/renewal';
 import { trackEvent } from '@/lib/analytics';
@@ -79,7 +79,14 @@ export function ProvidersSection() {
   };
 
   return (
-    <SettingsSection title="Mina streamingtjänster" collapsible defaultOpen={savedProviders.length === 0}>
+    <SettingsSection
+      title="Mina streamingtjänster"
+      collapsible
+      defaultOpen={savedProviders.length === 0}
+      summary={savedProviders.length > 0
+        ? `${savedProviders.length}: ${savedProviders.map(id => getProvider(id)?.name).filter(Boolean).join(', ')}`
+        : undefined}
+    >
       {selectedProviders.length > 0 ? (
         <>
           <div className={eyebrowClass({ className: 'mb-2' })}>
@@ -156,7 +163,9 @@ export function ProvidersSection() {
                       ))}
                     </select>
                   ) : null}
-                  {(!hasTiers || isCustom) && (
+                  {provider.isFree ? (
+                    <span className="text-xs text-ink-3">Gratis</span>
+                  ) : (!hasTiers || isCustom) && (
                     <input
                       type="number"
                       min="0"

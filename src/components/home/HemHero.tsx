@@ -40,7 +40,7 @@ function buildCopy(entry: CalendarEntry | null, totalThisWeek: number, isLoading
         ? `${totalThisWeek} avsnitt denna vecka.`
         : 'En lugn vecka.',
       stand: totalThisWeek > 0
-        ? 'Inget i kväll. Senare i veckan finns avsnitt nedan.'
+        ? 'Inget i kväll. Kommande avsnitt finns nedan.'
         : 'Inget på schemat. Utforska Rekommendationer för att hitta något.',
     };
   }

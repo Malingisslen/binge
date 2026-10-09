@@ -41,14 +41,14 @@ function ListsContent() {
       <PageHeader
         crumb="Bibliotek · Listor"
         title="Mina listor"
-        actions={
+        actions={lists.length === 0 ? undefined : (
           <Button
             onClick={() => setShowForm(true)}
             variant="acc" size="sm"
           >
             Skapa ny lista
           </Button>
-        }
+        )}
       />
 
       {showForm && (

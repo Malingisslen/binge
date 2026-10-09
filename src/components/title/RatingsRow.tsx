@@ -2,6 +2,7 @@
 import type { Ratings } from '@/lib/ratings/types';
 import { cardClass } from '@/components/ui/Card';
 import { eyebrowClass } from '@/components/ui/Eyebrow';
+import { formatDecimal } from '@/lib/formatDecimal';
 
 // External + TMDB ratings as polished per-source cards: source label + saffron
 // value + muted scale. The IMDb card links to IMDb. Returns null when there is
@@ -30,7 +31,7 @@ export function RatingsRow({
       {hasTmdb && (
         <div className={card}>
           <span className={src}>TMDB</span>
-          <span className={val}>{tmdb!.toFixed(1)}<span className={scale}> /10</span></span>
+          <span className={val}>{formatDecimal(tmdb!)}<span className={scale}> /10</span></span>
         </div>
       )}
       {ratings?.imdb && (
@@ -41,15 +42,15 @@ export function RatingsRow({
             rel="noopener noreferrer"
             className={card}
             style={{ textDecoration: 'none' }}
-            aria-label={`IMDb-betyg ${ratings.imdb.score.toFixed(1)} av 10, öppnas på IMDb`}
+            aria-label={`IMDb-betyg ${formatDecimal(ratings.imdb.score)} av 10, öppnas på IMDb`}
           >
             <span className={src}>IMDb</span>
-            <span className={val}>{ratings.imdb.score.toFixed(1)}<span className={scale}> /10</span></span>
+            <span className={val}>{formatDecimal(ratings.imdb.score)}<span className={scale}> /10</span></span>
           </a>
         ) : (
           <div className={card}>
             <span className={src}>IMDb</span>
-            <span className={val}>{ratings.imdb.score.toFixed(1)}<span className={scale}> /10</span></span>
+            <span className={val}>{formatDecimal(ratings.imdb.score)}<span className={scale}> /10</span></span>
           </div>
         )
       )}

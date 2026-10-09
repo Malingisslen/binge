@@ -9,6 +9,7 @@ import { priorSeasonNumbers, type EpisodeRef, type SeasonEpisodes } from '@/lib/
 import type { RecapSource } from '@/lib/recaps/types';
 import { cardClass } from '@/components/ui/Card';
 import { badgeClass } from '@/components/ui/Badge';
+import { formatEpisodeCode } from '@/lib/utils';
 
 // BIN-185 — "Påminn mig var jag slutade". Shows ONLY when a cached recap exists for the user's
 // spoiler-safe boundary (the contiguous frontier, computed by the parent from episodeProgress +
@@ -189,7 +190,7 @@ export default function RecapPanel({
       </div>
       {missing > 0 && (
         <div className="text-sm text-ink-2 mt-1">
-          Sammanfattningen täcker till och med S{coveredBoundary!.season}E{coveredBoundary!.episode} —
+          Sammanfattningen täcker till och med {formatEpisodeCode(coveredBoundary!.season, coveredBoundary!.episode)} —
           {' '}informationen från {missing === 1 ? 'det senaste avsnittet' : `de ${missing} senaste avsnitten`} du sett saknas.
         </div>
       )}

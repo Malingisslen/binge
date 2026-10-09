@@ -15,7 +15,7 @@ import { JsonLd, breadcrumbSchema, collectionPageSchema } from '@/components/tit
 import { nordicLanguageParam } from '@/lib/discover/nordic';
 import { Button } from '@/components/ui/Button';
 import { cardClass } from '@/components/ui/Card';
-import { GENRE_LABELS } from '@/lib/tmdb/genreLabels';
+import { GENRE_OPTIONS, parseGenreFilter } from '@/lib/tmdb/genreLabels';
 
 const DISCOVER_DESCRIPTION = 'Trendande, populära och nya filmer och serier på Netflix, Viaplay, HBO Max, Disney+, SVT Play och fler svenska streamingtjänster.';
 
@@ -62,16 +62,23 @@ export default function DiscoverPageClient({
     staleTime: 60 * 60 * 1000,
   });
 
-  // Merge both genre lists for trending (which has both movies and TV)
-  const genres = tab === 'movies'
-    ? movieGenres?.genres
+  // Samma svenska genrelista som Rekommendationer och Bibliotek: ett val bär alla
+  // TMDB-id:n som betyder genren, så "Action" hittar både filmer och serier.
+  // På en film- eller serieflik visas bara genrer som finns för just den sorten.
+  const tabGenreIds = tab === 'movies'
+    ? movieGenres?.genres.map(g => g.id)
     : tab === 'tv'
-    ? tvGenres?.genres
-    : (() => {
-        const all = [...(movieGenres?.genres ?? []), ...(tvGenres?.genres ?? [])];
-        const seen = new Set<number>();
-        return all.filter(g => { if (seen.has(g.id)) return false; seen.add(g.id); return true; }).sort((a, b) => (GENRE_LABELS[a.id] ?? a.name).localeCompare(GENRE_LABELS[b.id] ?? b.name, 'sv'));
-      })();
+    ? tvGenres?.genres.map(g => g.id)
+    : undefined;
+  const genres = tabGenreIds
+    ? GENRE_OPTIONS.filter(o => parseGenreFilter(o.value).some(id => tabGenreIds.includes(id)))
+    : GENRE_OPTIONS;
+
+  // Ett val som inte finns på den nya fliken (t.ex. Barn när man går till Filmer)
+  // nollställs, annars filtrerar listan på något dropdownen inte längre visar.
+  useEffect(() => {
+    if (genre && !genres.some(o => o.value === genre)) setGenre('');
+  }, [genre, genres]);
 
   const { data: trending, isLoading: trendingLoading } = useTrending('all', 'week');
 
@@ -80,7 +87,8 @@ export default function DiscoverPageClient({
   const discoverParams: Record<string, string> = {
     sort_by: sort,
     page: String(page),
-    ...(genre ? { with_genres: genre } : {}),
+    // Komma betyder "alla" hos TMDB, lodstreck "någon av".
+    ...(genre ? { with_genres: parseGenreFilter(genre).join('|') } : {}),
     ...(myServices && user?.myProviders.length
       ? { with_watch_providers: user.myProviders.join('|') }
       : {}),
@@ -123,7 +131,7 @@ export default function DiscoverPageClient({
 
   const isLoading = tab === 'trending' ? trendingLoading : discoverLoading;
   const hideNonLatin = user?.hideNonLatinTitles ?? false;
-  const genreId = genre ? parseInt(genre, 10) : null;
+  const genreIds = parseGenreFilter(genre);
   // Trending: live data vinner; innan den löst används build-seeden (som
   // redan är person- och non-Latin-filtrerad — filterkedjan är no-op på den
   // vid hydration, så statisk HTML == första klientrendern).
@@ -131,9 +139,10 @@ export default function DiscoverPageClient({
   const items = tab === 'trending'
     ? trendingBase.filter(r =>
         isAddableMediaType(r) &&
+        !hasNonLatinTitle(r.title ?? r.name) &&
         (!hideNonLatin || !hasNonLatinTitle(r.title ?? r.name, r.original_title ?? r.original_name)) &&
         !isFromHiddenCountry(r.origin_country, hiddenCountries) &&
-        (!genreId || r.genre_ids?.includes(genreId)))
+        (genreIds.length === 0 || genreIds.some(id => r.genre_ids?.includes(id))))
     : (hideNonLatin ? allResults.filter(r => !hasNonLatinTitle(r.title ?? r.name, r.original_title ?? r.original_name)) : allResults);
   const hasMore = tab !== 'trending' && discoverData && page < discoverData.total_pages;
 
@@ -185,8 +194,8 @@ export default function DiscoverPageClient({
             aria-label="Filtrera på genre"
           >
             <option value="">Alla genrer</option>
-            {(genres ?? []).map(g => (
-              <option key={g.id} value={String(g.id)}>{GENRE_LABELS[g.id] ?? g.name}</option>
+            {genres.map(g => (
+              <option key={g.value} value={g.value}>{g.label}</option>
             ))}
           </select>
 

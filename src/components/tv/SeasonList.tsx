@@ -13,6 +13,7 @@ import { useTVSeason } from '@/hooks/useTMDB';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { computeMaskBoundary, type MaskBoundary } from '@/lib/groupProgress';
 import { canonicalSpecialsFor, type CanonicalSpecials } from '@/lib/tv/canonicalSpecials';
+import { formatEpisodeCode } from '@/lib/utils';
 
 interface SeasonListProps {
   tmdbId: number;
@@ -302,7 +303,7 @@ function SpoilerProtectionBanner({
       : 'Någon i gruppen';
   const positionLabel = boundary.season === 0 && boundary.episode === 0
     ? 'inte påbörjat serien än'
-    : `sett t.o.m. S${boundary.season}E${boundary.episode}`;
+    : `sett t.o.m. ${formatEpisodeCode(boundary.season, boundary.episode)}`;
 
   return (
     <>

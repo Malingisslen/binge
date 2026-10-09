@@ -20,6 +20,7 @@ import { markedSeen } from '@/lib/markedSeen';
 import ShareButton from '@/components/share/ShareButton';
 import { Eyebrow } from '@/components/ui/Eyebrow';
 import { cardClass } from '@/components/ui/Card';
+import { formatDecimal } from '@/lib/formatDecimal';
 
 export default function UserProfilePageClient({ username }: { username: string }) {
   const { data, isLoading } = usePublicProfile(username);
@@ -126,7 +127,7 @@ export default function UserProfilePageClient({ username }: { username: string }
         <StatCard label="Totalt" value={(watchlist ?? []).length} />
         <StatCard label="Följer" value={following.length} />
         <StatCard label="Sedd" value={watched.length} />
-        <StatCard label="Medelbetyg" value={avgRating > 0 ? avgRating.toFixed(1) : '—'} />
+        <StatCard label="Medelbetyg" value={avgRating > 0 ? formatDecimal(avgRating) : '—'} />
       </div>
 
       <ProfileStatsPanel items={watchlist ?? []} />

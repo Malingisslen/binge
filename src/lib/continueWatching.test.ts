@@ -31,7 +31,7 @@ describe('pickContinueWatching (BIN-86)', () => {
     const res = pickContinueWatching([s]);
     expect(res).toHaveLength(1);
     expect(res[0].item.tmdbId).toBe(10);
-    expect(res[0].seen).toBe('S2E10');
+    expect(res[0].seen).toBe('S02E10');
   });
 
   it('excludes finished (avslutad) series — caught up on an ended show', () => {
@@ -58,7 +58,7 @@ describe('pickContinueWatching (BIN-86)', () => {
     const res = pickContinueWatching([s]);
     expect(res.map(e => e.item.tmdbId)).toEqual([7]);
     expect(res[0].behind).toBe(false);
-    expect(res[0].seen).toBe('S1E3');
+    expect(res[0].seen).toBe('S01E03');
   });
 
   it('caps at the limit', () => {

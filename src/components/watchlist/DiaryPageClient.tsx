@@ -19,11 +19,13 @@ import { Eyebrow } from '@/components/ui/Eyebrow';
 import { buttonClass } from '@/components/ui/Button';
 import { cardClass } from '@/components/ui/Card';
 import { formatLibraryDate } from '@/lib/utils';
+import { formatKr } from '@/lib/formatKr';
+import { formatDecimal } from '@/lib/formatDecimal';
 
 function StatBox({ value, label }: { value: number; label: string }) {
   return (
     <div className={cardClass('px-3 py-2 min-w-[92px]')}>
-      <div className="text-2xl font-bold text-ink leading-none tabular-nums">{value}</div>
+      <div className="text-2xl font-bold text-ink leading-none tabular-nums">{formatKr(value)}</div>
       <div className="text-xxs text-ink-3 mt-1">{label}</div>
     </div>
   );
@@ -32,6 +34,7 @@ function StatBox({ value, label }: { value: number; label: string }) {
 // Ett bibliotek med hundratals serier har tusentals sedda avsnitt, och att rita alla
 // rader på en gång låste fliken. Dagboken visar de senaste först och fler på begäran.
 const PAGE_SIZE = 150;
+const MAX_PLAUSIBLE_DAY = 50;
 
 // BIN-103 — activity diary. Reverse-chron list of watched films (by watchedAt)
 // merged with watched TV episodes (per-show episodeProgress), grouped by month.
@@ -62,7 +65,7 @@ export default function DiaryPageClient() {
         crumb="Bibliotek"
         title="Dagbok"
         standfirst={total > 0
-          ? `${total} ${total === 1 ? 'inlägg' : 'inlägg'} — senast först.`
+          ? `${formatKr(total)} inlägg, senast först.`
           : 'Din tittarhistorik — filmer och avsnitt, när du såg vad.'}
       />
       <LibrarySubnav activeKey="diary" />
@@ -85,7 +88,8 @@ export default function DiaryPageClient() {
               {stats.currentStreakDays > 0 && (
                 <StatBox value={stats.currentStreakDays} label={stats.currentStreakDays === 1 ? 'dag i rad' : 'dagar i rad'} />
               )}
-              {stats.biggestDayEpisodes >= 2 && (
+              {/* Över MAX_PLAUSIBLE_DAY avsnitt visas inte som en tittarsiffra. */}
+              {stats.biggestDayEpisodes >= 2 && stats.biggestDayEpisodes <= MAX_PLAUSIBLE_DAY && (
                 <StatBox value={stats.biggestDayEpisodes} label="avsnitt på en dag" />
               )}
               {stats.episodesLast30 > 0 && (
@@ -106,7 +110,7 @@ export default function DiaryPageClient() {
                   const poster = posterUrl(item.posterPath, 'w92');
                   return (
                     <Link
-                      key={`${item.tmdbId}-${episodeCode ?? 'film'}`}
+                      key={`${item.tmdbId}-${date.getTime()}-${episodeCode ?? 'film'}`}
                       href={titleHref(item.mediaType, item.tmdbId)}
                       className={cardClass('flex items-center gap-2.5 px-2.5 py-2 no-underline hover:border-rule-2 transition-colors')}
                     >
@@ -125,7 +129,7 @@ export default function DiaryPageClient() {
                       {!episodeCode && item.rating !== null && (
                         <span className="shrink-0 inline-flex items-center gap-1">
                           <RatingStars rating={item.rating} readonly size="sm" />
-                          <span className="text-xxs text-ink-3">{item.rating.toFixed(1)}</span>
+                          <span className="text-xxs text-ink-3">{formatDecimal(item.rating)}</span>
                         </span>
                       )}
                     </Link>
@@ -139,7 +143,7 @@ export default function DiaryPageClient() {
               <button type="button" className={buttonClass({ size: 'sm' })} onClick={() => setShownCount(n => n + PAGE_SIZE * 2)}>
                 Visa fler
               </button>
-              <span className="text-xxs text-ink-3 tabular-nums">{shownCount} av {total} visas</span>
+              <span className="text-xxs text-ink-3 tabular-nums">{formatKr(Math.min(shownCount, total))} av {formatKr(total)} visas</span>
             </div>
           )}
         </div>

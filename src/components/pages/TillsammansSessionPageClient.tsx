@@ -25,6 +25,7 @@ import { thClass } from '@/components/ui/tableHead';
 import { fieldClass } from '@/components/ui/Field';
 import { cardClass } from '@/components/ui/Card';
 import { tagClass } from '@/components/ui/Badge';
+import { formatDecimal } from '@/lib/formatDecimal';
 
 export default function TillsammansSessionPageClient({ id }: { id: string }) {
   const { session, participants, swipes, loading, notFound, expired } = useSession(id);
@@ -467,7 +468,7 @@ function SwipeCard({
           <div className="text-lg font-bold leading-tight">{cand.title}</div>
           <div className="text-xxs text-ink-3 mt-0.5">
             {cand.year ?? '—'} · {cand.mediaType === 'movie' ? 'Film' : 'Serie'}
-            {cand.voteAverage > 0 && <> · <span className="text-acc-deep">★ {cand.voteAverage.toFixed(1)}</span></>}
+            {cand.voteAverage > 0 && <> · <span className="text-acc-deep">★ {formatDecimal(cand.voteAverage)}</span></>}
           </div>
           <p className="text-xs text-ink-2 mt-2 leading-relaxed line-clamp-6">
             {cand.overview || 'Ingen beskrivning på svenska.'}
@@ -555,7 +556,7 @@ function CandidateTable({
                 <td className="px-2 py-1 font-semibold truncate max-w-[260px]">{r.candidate.title}</td>
                 <td className="px-2 py-1 text-ink-3">{r.candidate.year ?? '—'}</td>
                 <td className="px-2 py-1 text-ink-3">{r.candidate.mediaType === 'movie' ? 'Film' : 'Serie'}</td>
-                <td className="px-2 py-1 text-acc-deep">{r.candidate.voteAverage > 0 ? r.candidate.voteAverage.toFixed(1) : '—'}</td>
+                <td className="px-2 py-1 text-acc-deep">{r.candidate.voteAverage > 0 ? formatDecimal(r.candidate.voteAverage) : '—'}</td>
                 <td className="px-2 py-1 text-ink-3 whitespace-nowrap">{summary}</td>
                 <td className="px-2 py-1 text-right">
                   <div className="inline-flex gap-0.5">
@@ -659,7 +660,7 @@ function MatchList({
                   <div className="text-xs font-semibold truncate">{m.candidate.title}</div>
                   <div className="text-xxs text-ink-3">
                     {m.candidate.year ?? '—'} · {m.candidate.mediaType === 'movie' ? 'Film' : 'Serie'}
-                    {m.candidate.voteAverage > 0 && <> · <span className="text-acc-deep">★ {m.candidate.voteAverage.toFixed(1)}</span></>}
+                    {m.candidate.voteAverage > 0 && <> · <span className="text-acc-deep">★ {formatDecimal(m.candidate.voteAverage)}</span></>}
                   </div>
                 </div>
               </Link>

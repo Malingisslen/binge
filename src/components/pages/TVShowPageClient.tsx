@@ -19,6 +19,7 @@ import CommunityRating from '@/components/title/CommunityRating';
 import ProviderTag from '@/components/title/ProviderTag';
 import FreeWatchBadge from '@/components/title/FreeWatchBadge';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
+import SynopsisText from '@/components/title/SynopsisText';
 import RecapPanel from '@/components/title/RecapPanel';
 import { contiguousWatchedBoundary, inventoryFromSeasons } from '@/lib/recaps/progress';
 import TrailerSection from '@/components/ui/TrailerSection';
@@ -312,7 +313,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
           </div>
           <h1>{displayTitle}</h1>
           {creators.length > 0 && (
-            <div style={{ marginTop: 10, fontSize: 'var(--fs-sm)', color: 'var(--ink-3)', letterSpacing: 0.04 }}>
+            <div className="creators" style={{ marginTop: 10, fontSize: 'var(--fs-sm)', color: 'var(--ink-3)', letterSpacing: 0.04 }}>
               {creators.length === 1 ? 'skapare' : 'skapare'}:{' '}
               {creators.map((c, i) => (
                 <span key={c.id}>
@@ -328,7 +329,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
               any, and the generated sentence is ADDED (not substituted) when they
               are too thin to carry the page — see the movie sibling for the full
               reasoning. The meta description keeps the 60-char rule unchanged. */}
-          {overviewText && <p className="syn">{overviewText}</p>}
+          {overviewText && <SynopsisText text={overviewText} />}
           {needsContentFloorParagraph && <p className="syn">{contentFloor?.paragraph}</p>}
           {!needsContentFloorParagraph && availability && (
             <p style={{ marginTop: 10, fontSize: 'var(--fs-base)', color: 'var(--ink-2)' }}>{availability}</p>
@@ -375,6 +376,9 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
             </div>
           </ClientOnly>
 
+          {/* Var titeln går att se. I mobilen flyttas blocket upp under titeln
+              (globals.css, .where-block), före beskrivningen. */}
+          <div className="where-block">
           {mounted && (
             <CheapestPathVerdict
               subscriptionProviderIds={subForVerdict.map(p => canonicalProviderId(p.provider_id))}
@@ -449,6 +453,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
               <JustWatchCredit />{' · '}<span className="text-ink-3 text-xs">Tillgänglighet via Movie of the Night</span>
             </div>
           )}
+          </div>
         </div>
       </div>
 

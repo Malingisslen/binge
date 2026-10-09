@@ -94,7 +94,7 @@ export default function RotationPlanner({ advisor, now }: { advisor: AdvisorResu
               background: m.provider ? 'var(--cal-soft)' : 'var(--bg-2)',
             }}
           >
-            <div className="text-xxs text-ink-3 font-bold capitalize">
+            <div className="text-xxs text-ink-3 font-bold first-letter:uppercase">
               {monthLabel(m.monthOffset, base)}
             </div>
             {m.provider ? (

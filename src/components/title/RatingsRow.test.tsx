@@ -6,7 +6,7 @@ import { RatingsRow } from './RatingsRow';
 describe('RatingsRow', () => {
   it('renders IMDb score when present', () => {
     render(<RatingsRow imdbId="tt1" ratings={{ imdb: { score: 8.4, votes: 100 }, rottenTomatoes: null, metacritic: null }} />);
-    expect(screen.getByText(/8\.4/)).toBeInTheDocument();
+    expect(screen.getByText(/8,4/)).toBeInTheDocument(); // svenskt decimalkomma
   });
 
   it('renders RT only when present', () => {

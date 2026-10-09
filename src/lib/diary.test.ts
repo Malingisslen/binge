@@ -87,7 +87,7 @@ describe('buildDiary with episodes (BIN-103)', () => {
     const months = buildDiary(items, episodes);
     expect(months).toHaveLength(1);
     expect(months[0].entries.map(e => [e.item.title, e.episodeCode])).toEqual([
-      ['En serie', 'S2E5'], // newest first
+      ['En serie', 'S02E05'], // newest first
       ['En film', null],
     ]);
     expect(diaryEntryCount(months)).toBe(2); // orphan episode excluded
@@ -110,5 +110,31 @@ describe('firstEntries', () => {
   it('returns everything when the limit covers it, and nothing for zero', () => {
     expect(diaryEntryCount(firstEntries(months, 100))).toBe(12);
     expect(firstEntries(months, 0)).toEqual([]);
+  });
+});
+
+describe('buildDiary — same show, same day collapses to one row', () => {
+  const show = mk({ tmdbId: 7, title: 'Silo', mediaType: 'tv', status: 'mina', watchedAt: null });
+  const at = (h: number, day = 8) => new Date(2026, 8, day, h, 0, 0);
+
+  it('folds an imported season into one entry with the range and the count', () => {
+    const episodes = [
+      { tmdbId: 7, season: 2, episode: 1, watchedAt: at(10) },
+      { tmdbId: 7, season: 1, episode: 1, watchedAt: at(10) },
+      { tmdbId: 7, season: 1, episode: 2, watchedAt: at(11) },
+    ];
+    const entries = buildDiary([show], episodes).flatMap(m => m.entries);
+    expect(entries).toHaveLength(1);
+    expect(entries[0].episodeCode).toBe('S01E01–S02E01 · 3 avsnitt');
+    expect(entries[0].episodeCount).toBe(3);
+  });
+
+  it('keeps different days apart, and a lone episode keeps its plain code', () => {
+    const episodes = [
+      { tmdbId: 7, season: 1, episode: 1, watchedAt: at(10, 8) },
+      { tmdbId: 7, season: 1, episode: 2, watchedAt: at(10, 9) },
+    ];
+    const codes = buildDiary([show], episodes).flatMap(m => m.entries).map(e => e.episodeCode);
+    expect(codes).toEqual(['S01E02', 'S01E01']);
   });
 });

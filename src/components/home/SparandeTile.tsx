@@ -102,7 +102,7 @@ export default function SparandeTile() {
         </>
       ) : (
         <p className="note">
-          Alla dina tjänster används aktivt — inget att pausa just nu.
+          Inget att pausa just nu. Alla dina tjänster har något du följer eller vill se.
         </p>
       )}
     </section>

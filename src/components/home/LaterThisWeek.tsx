@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import Link from 'next/link';
 import { posterUrl } from '@/lib/tmdb/client';
 import { toneForId } from '@/lib/duotone';
-import { shortSwedishWeekday } from '@/lib/utils';
+import { localIsoDate, shortSwedishWeekday } from '@/lib/utils';
 import type { CalendarEntry } from '@/hooks/useCalendar';
 import { entryKey, entryHref, entryMetaLine } from '@/lib/calendar/entry';
 
@@ -29,7 +29,7 @@ interface Props {
 }
 
 export default function LaterThisWeek({ entries, excludeKey }: Props) {
-  const { upcoming, total } = useMemo(() => {
+  const { upcoming, total, nextMondayIso } = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const weekAhead = new Date(today);
@@ -42,7 +42,12 @@ export default function LaterThisWeek({ entries, excludeKey }: Props) {
         return d >= today && d < weekAhead;
       })
       .sort((a, b) => a.airDate.localeCompare(b.airDate));
-    return { upcoming: all.slice(0, MAX_CARDS), total: all.length };
+    // Fönstret är sju dagar framåt, så det når in i nästa vecka. En dag där
+    // får datum också — "ONS" ensamt läses som onsdagen som redan varit.
+    const nextMonday = new Date(today);
+    nextMonday.setDate(today.getDate() + ((8 - today.getDay()) % 7 || 7));
+    const nextMondayIso = localIsoDate(nextMonday);
+    return { upcoming: all.slice(0, MAX_CARDS), total: all.length, nextMondayIso };
   }, [entries, excludeKey]);
 
   const overflow = total - upcoming.length;
@@ -52,7 +57,7 @@ export default function LaterThisWeek({ entries, excludeKey }: Props) {
   return (
     <section aria-labelledby="hem-later-h3">
       <div className="sect-h">
-        <h3 id="hem-later-h3">Senare i veckan</h3>
+        <h3 id="hem-later-h3">Kommande sju dagar</h3>
         <span className="meta">
           {overflow > 0 ? (
             <>
@@ -70,7 +75,9 @@ export default function LaterThisWeek({ entries, excludeKey }: Props) {
         {upcoming.map(e => {
           const poster = posterUrl(e.posterPath, 'w342');
           const tone = toneForId(e.tmdbId);
-          const day = shortSwedishWeekday(e.airDate);
+          const day = e.airDate >= nextMondayIso
+            ? `${shortSwedishWeekday(e.airDate)} ${new Date(e.airDate + 'T00:00:00').toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' })}`
+            : shortSwedishWeekday(e.airDate);
           return (
             <Link key={entryKey(e)} href={entryHref(e)} className="film-card">
               <div className={`poster duo-${tone}`}>

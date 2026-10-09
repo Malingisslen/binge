@@ -32,7 +32,8 @@ describe('AvailabilityTable (BIN-1439)', () => {
     expect(priceOf('Pluto TV')).toBe('');
     expect(priceOf('Netflix')).toBe('Från 1 299 kr/mån (Standard med reklam)');
     expect(priceOf('HBO Max')).toBe('–');
-    expect(priceOf('SF Anytime')).toBe('');
+    // Hyr/köp-priset varierar per titel och hämtas inte här — cellen säger var det finns.
+    expect(priceOf('SF Anytime')).toBe('Pris hos tjänsten');
   });
 
   it('märker den billigaste raden med text, och ingen rad utan billigast', () => {
@@ -45,8 +46,8 @@ describe('AvailabilityTable (BIN-1439)', () => {
   });
 
   it('daterar priserna bara när ett datum finns', () => {
-    expect(renderTable(full).doc.body.textContent).toContain('Priser ur binges prislista, kontrollerade 2 juli 2026.');
-    expect(renderTable({ ...full, pricesVerifiedOn: null }).doc.body.textContent).not.toContain('Priser ur binges prislista');
+    expect(renderTable(full).doc.body.textContent).toContain('Priser ur Binges prislista, kontrollerade 2 juli 2026.');
+    expect(renderTable({ ...full, pricesVerifiedOn: null }).doc.body.textContent).not.toContain('Priser ur Binges prislista');
   });
 
   it('ger varje länk en egen text och en riktig adress', () => {

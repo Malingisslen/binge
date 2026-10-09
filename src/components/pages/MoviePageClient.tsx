@@ -17,6 +17,7 @@ import CommunityRating from '@/components/title/CommunityRating';
 import ProviderTag from '@/components/title/ProviderTag';
 import FreeWatchBadge from '@/components/title/FreeWatchBadge';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
+import SynopsisText from '@/components/title/SynopsisText';
 import TrailerSection from '@/components/ui/TrailerSection';
 import { pickTrailer } from '@/lib/trailer';
 import { LoadingView } from '@/components/ui/LoadingView';
@@ -342,7 +343,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
           </div>
           <h1>{displayTitle}</h1>
           {(directors.length > 0 || writers.length > 0) && (
-            <div style={{ marginTop: 10, fontSize: 'var(--fs-sm)', color: 'var(--ink-3)', letterSpacing: 0.04 }}>
+            <div className="creators" style={{ marginTop: 10, fontSize: 'var(--fs-sm)', color: 'var(--ink-3)', letterSpacing: 0.04 }}>
               {directors.length > 0 && (
                 <>
                   regi:{' '}
@@ -382,7 +383,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
               generated sentence — the page loses nothing and still gains the extra
               prose. The meta description keeps the 60-char rule untouched, and the
               body still contains every word the snippet uses. */}
-          {overviewText && <p className="syn">{overviewText}</p>}
+          {overviewText && <SynopsisText text={overviewText} />}
           {needsContentFloorParagraph && <p className="syn">{contentFloor?.paragraph}</p>}
           {!needsContentFloorParagraph && availability && (
             <p style={{ marginTop: 10, fontSize: 'var(--fs-base)', color: 'var(--ink-2)' }}>{availability}</p>
@@ -486,6 +487,9 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
             )}
           </ClientOnly>
 
+          {/* Var titeln går att se. I mobilen flyttas blocket upp under titeln
+              (globals.css, .where-block), före beskrivningen. */}
+          <div className="where-block">
           {mounted && (
             <CheapestPathVerdict
               subscriptionProviderIds={subForVerdict.map(p => canonicalProviderId(p.provider_id))}
@@ -583,6 +587,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
               <JustWatchCredit />{' · '}<span className="text-ink-3 text-xs">Tillgänglighet via Movie of the Night</span>
             </div>
           )}
+          </div>
         </div>
       </div>
 

@@ -41,8 +41,8 @@ function GrupperList() {
         <div className="crumb">Grupper · {groups.length} {groups.length === 1 ? 'grupp' : 'grupper'}</div>
         <h1 className="page-h1">Mina grupper</h1>
         <p className="stand">
-          Permanenta konstellationer — slipp bjuda in varje kväll. Bygg en delad
-          watchlist, jämför betyg och starta en ny session med ett klick.
+          Spara de personer du brukar titta med, så slipper du bjuda in varje
+          kväll. Bygg en delad lista, jämför betyg och starta en ny kväll med ett klick.
         </p>
         {groups.length > 0 && (
           <div className="actions">

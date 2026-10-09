@@ -312,3 +312,39 @@ describe('LoginPage — Google-registrering räknas som registrering', () => {
     expect(trackEvent).not.toHaveBeenCalled();
   });
 });
+
+const resetMock = vi.hoisted(() => vi.fn(async () => {}));
+vi.mock('firebase/auth', () => ({ sendPasswordResetEmail: resetMock }));
+vi.mock('@/lib/firebase/config', () => ({ auth: { languageCode: null } }));
+
+describe('LoginPage — glömt lösenord och vad som sparas', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    window.sessionStorage.clear();
+    auth.user = null;
+    auth.uid = null;
+  });
+
+  it('asks for the e-mail first instead of sending to an empty address', async () => {
+    const { getByText, getByRole } = await act(async () => render(<LoginPage />));
+    await act(async () => { fireEvent.click(getByText('Glömt lösenordet?')); });
+    expect(getByRole('alert').textContent).toContain('Skriv din e-postadress');
+    expect(resetMock).not.toHaveBeenCalled();
+  });
+
+  it('sends the reset link and answers the same whether or not the account exists', async () => {
+    const { getByText, getByLabelText, getByRole } = await act(async () => render(<LoginPage />));
+    fireEvent.change(getByLabelText('E-post'), { target: { value: 'a@b.se' } });
+    await act(async () => { fireEvent.click(getByText('Glömt lösenordet?')); });
+    expect(resetMock).toHaveBeenCalledWith(expect.anything(), 'a@b.se');
+    expect(getByRole('status').textContent).toContain('Om adressen har ett konto');
+  });
+
+  it('names the title a signed-out tap is waiting to save', async () => {
+    window.sessionStorage.setItem('binge:pendingAdd', JSON.stringify({
+      tmdbId: 1, mediaType: 'movie', title: 'Dune', posterPath: null, releaseYear: 2021, savedAt: Date.now(),
+    }));
+    const { getByText } = await act(async () => render(<LoginPage />));
+    expect(getByText(/så sparas Dune i ditt bibliotek/)).toBeTruthy();
+  });
+});

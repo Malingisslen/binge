@@ -3,16 +3,15 @@
 import { useCallback, useId, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutGrid, Calendar, Search, BarChart3, Menu, Home, Tag, Calculator, BookOpen } from 'lucide-react';
+import { LayoutGrid, Calendar, Search, Menu, Home, Tag, Calculator, BookOpen } from 'lucide-react';
 import { useClickOutside } from '@/hooks/useClickOutside';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import ChromePart from './ChromePart';
 import type { ChromeMode } from './chromeMode';
 
 // Mobile bottom tab bar — on phones the ONLY navigation (the subnav is hidden
-// ≤980px). Malin picked variant B on 2026-10-05: the money layer (Rådgivaren)
-// keeps its own tab, Hem moves into Mer and stays reachable via the logo.
-// Sök is the center tab in the thumb zone, and it opens the topbar's own
+// ≤980px). Malin's choice on 2026-10-09: Hem has its own tab and Rådgivaren
+// sits under Mer. Sök is the center tab in the thumb zone, and it opens the topbar's own
 // search field instead of a separate page.
 
 // The topbar's search input carries this id, and Sök focuses it directly.
@@ -26,11 +25,12 @@ type NavItem = {
 
 const BIBLIOTEK: NavItem = { label: 'Bibliotek', href: '/my/all/', matches: ['/my/all', '/my/series', '/my/films', '/my/vill-se', '/my/avbrutna'] };
 const KALENDER: NavItem = { label: 'Kalender', href: '/calendar/' };
-const RADGIVAREN: NavItem = { label: 'Rådgivaren', href: '/savings/' };
+const HEM: NavItem = { label: 'Hem', href: '/' };
 
-// Everything the desktop subnav reaches that has no tab of its own.
+// Everything the desktop subnav reaches that has no tab of its own. Hem har egen
+// flik (Malins val 2026-10-09): startsidan med dagens avsnitt är den man öppnar oftast.
 export const MORE_ITEMS: readonly NavItem[] = [
-  { label: 'Hem', href: '/' },
+  { label: 'Rådgivaren', href: '/savings/' },
   { label: 'Rekommendationer', href: '/recommendations/', matches: ['/kalibrera'] },
   { label: 'Fråga Binge', href: '/ask/' },
   { label: 'Vänner', href: '/my/friends/', matches: ['/feed', '/user/'] },
@@ -122,10 +122,10 @@ function AppTabBar() {
 
   return (
     <nav className="m-tabs" aria-label="Huvudmeny">
+      <TabLink item={HEM} icon={Home} active={isActive(pathname, HEM)} />
       <TabLink item={BIBLIOTEK} icon={LayoutGrid} active={isActive(pathname, BIBLIOTEK)} />
-      <TabLink item={KALENDER} icon={Calendar} active={isActive(pathname, KALENDER)} />
       <SearchTab pathname={pathname} onOpen={openSearch} />
-      <TabLink item={RADGIVAREN} icon={BarChart3} active={isActive(pathname, RADGIVAREN)} />
+      <TabLink item={KALENDER} icon={Calendar} active={isActive(pathname, KALENDER)} />
       <div ref={moreRef} className="m-more">
         <button
           ref={moreButtonRef}

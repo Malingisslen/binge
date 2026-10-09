@@ -182,11 +182,11 @@ describe('SeasonList — curated season-0 specials (BIN-580)', () => {
   // 57243_1_2 — the same thread as S1E02 "The End of the World", whose reactions are
   // spoiler-gated on having watched THAT episode. The section comment stakes #18
   // Community Manager's sign-off on this exact literal, so it gets pinned, not hoped.
-  it('hands season 0 to the reactions thread, and labels the row S0', () => {
+  it('hands season 0 to the reactions thread, and labels the row S00', () => {
     renderList(DW_REVIVAL);
     fireEvent.click(screen.getByText('Specialavsnitt'));
 
-    expect(screen.getByText('S0E83')).toBeTruthy();
+    expect(screen.getByText('S00E83')).toBeTruthy();
     for (const call of episodeReactions.mock.calls) {
       expect(call[0].season).toBe(0);
       expect(call[0].tmdbId).toBe(DW_REVIVAL);

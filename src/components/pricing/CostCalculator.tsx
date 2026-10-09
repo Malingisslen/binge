@@ -119,7 +119,7 @@ export default function CostCalculator() {
                   <option value="">Vet inte</option>
                   {p.tiers.map(t => (
                     <option key={t.id} value={t.id}>
-                      {t.kind === 'sport' ? `${t.name} (sport)` : t.name}
+                      {t.kind === 'sport' && !/sport/i.test(t.name) ? `${t.name} (sport)` : t.name}
                     </option>
                   ))}
                 </select>
@@ -128,7 +128,11 @@ export default function CostCalculator() {
                 <span className={checked ? 'font-semibold text-ink' : 'text-ink-3'}>
                   {cost == null ? '–' : `${formatKr(cost)} kr`}
                 </span>
-                {estimated && <span className="text-xxs text-ink-3">uppskattat</span>}
+                {/* Raden med nivåval håller platsen för "uppskattat" även oikryssad, så
+                    den inte växer vid kryss och nästa kryssruta flyttar sig. */}
+                {(p.tiers?.length ?? 0) > 0 && (
+                  <span className="text-xxs text-ink-3">{estimated ? 'uppskattat' : ' '}</span>
+                )}
               </span>
             </li>
           );

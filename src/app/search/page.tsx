@@ -2,6 +2,7 @@
 
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useState, useMemo, useEffect } from 'react';
+import Link from 'next/link';
 import { useSearch } from '@/hooks/useTMDB';
 import { useSearchProviders } from '@/hooks/useSearchProviders';
 import { useAuth } from '@/hooks/useAuth';
@@ -26,6 +27,13 @@ function SearchResults() {
 
   const [mediaFilter, setMediaFilter] = useState<MediaFilter>('all');
   const [onlyMyServices, setOnlyMyServices] = useState(false);
+
+  // Sökfältet lovar "titel, person" — personträffar visas som länkar ovanför
+  // titlarna i stället för att filtreras bort.
+  const people = useMemo(() =>
+    (data?.results ?? []).filter(r => r.media_type === 'person').slice(0, 6),
+    [data]
+  );
 
   const allResults = useMemo(() =>
     (data?.results ?? []).filter(isAddableMediaType),
@@ -73,11 +81,11 @@ function SearchResults() {
       <header>
         <div className="crumb">Sök · {results.length} resultat</div>
         <h1 className="page-h1">Sökresultat för &ldquo;{query}&rdquo;</h1>
-        <p className="stand">
-          {results.length === 0
-            ? 'Inga träffar. Försök med ett annat namn eller stavning.'
-            : `${results.length} ${results.length === 1 ? 'titel matchar' : 'titlar matchar'} din sökning.`}
-        </p>
+        {results.length > 0 && (
+          <p className="stand">
+            {`${results.length} ${results.length === 1 ? 'titel matchar' : 'titlar matchar'} din sökning.`}
+          </p>
+        )}
       </header>
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 22, flexWrap: 'wrap' }}>
@@ -89,7 +97,7 @@ function SearchResults() {
               onClick={() => setMediaFilter(f)}
               className={`chip${mediaFilter === f ? ' is-on' : ''}`}
             >
-              {f === 'all' ? 'Alla' : f === 'tv' ? 'Serier' : 'Film'}
+              {f === 'all' ? 'Alla' : f === 'tv' ? 'Serier' : 'Filmer'}
             </button>
           ))}
         </div>
@@ -104,10 +112,21 @@ function SearchResults() {
         )}
       </div>
 
+      {people.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 14, flexWrap: 'wrap' }}>
+          <span className="text-sm text-ink-2">Personer:</span>
+          {people.map(p => (
+            <Link key={p.id} href={`/person/${p.id}/`} className="chip no-underline">
+              {p.name}
+            </Link>
+          ))}
+        </div>
+      )}
+
       {isLoading ? (
         <LoadingView label="Söker…" />
       ) : results.length === 0 ? (
-        <EmptyState title="Inga träffar" body="Prova ett annat sökord." />
+        <EmptyState title="Inga träffar" body="Försök med ett annat namn eller stavning." />
       ) : (
         <div className={cardClass()}>
           <TitleGrid items={results} providerMap={providerMap} />

@@ -95,6 +95,15 @@ export function parsePendingAdd(raw: string | null, now: number): PendingAdd | n
   return add;
 }
 
+/** Läs utan att förbruka — inloggningssidan visar vilken titel som sparas efteråt. */
+export function peekPendingAdd(now = Date.now()): PendingAdd | null {
+  try {
+    return parsePendingAdd(window.sessionStorage.getItem(KEY), now);
+  } catch {
+    return null;
+  }
+}
+
 /** Read and CONSUME the pending add. */
 export function takePendingAdd(now = Date.now()): PendingAdd | null {
   try {

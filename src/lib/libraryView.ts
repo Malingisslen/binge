@@ -2,7 +2,7 @@
 // Extraherade hit så de kan testas utan Firebase/React Query-imports.
 
 import { isEndedStatus } from '@/lib/airingState';
-import { pluralSv } from '@/lib/utils';
+import { formatEpisodeCode, pluralSv } from '@/lib/utils';
 import { GENRE_OPTIONS, parseGenreFilter, type GenreOption } from '@/lib/tmdb/genreLabels';
 import { canonicalProviderId } from '@/lib/tmdb/providers';
 import {
@@ -83,8 +83,8 @@ export const LIBRARY_SECTION_LABELS: Record<LibrarySubState, string> = {
 export function seenEpisodeCode(item: WatchlistItem): string | null {
   if (item.lastWatchedSeason == null) return null;
   return item.lastWatchedEpisode != null
-    ? `S${item.lastWatchedSeason}E${item.lastWatchedEpisode}`
-    : `S${item.lastWatchedSeason}`;
+    ? formatEpisodeCode(item.lastWatchedSeason, item.lastWatchedEpisode)
+    : `S${String(item.lastWatchedSeason).padStart(2, '0')}`;
 }
 
 export type ProgressTone = 'done' | 'accent' | 'muted';
@@ -131,7 +131,7 @@ export function buildStandfirst(
     return `Inga ${plur} matchar dina filter. Justera ovan eller rensa.`;
   }
   if (visible === total) {
-    return `${pluralSv(visible, sing, plur)} i ${status ? 'denna lista' : 'biblioteket'}. Vi räknade åt dig.`;
+    return `${pluralSv(visible, sing, plur)} i ${status ? 'denna lista' : 'biblioteket'}.`;
   }
   return `${visible} av ${total} ${plur} visas. Filtrera mer eller justera vyn.`;
 }

@@ -131,7 +131,7 @@ export default function EventCard({ entry, isTonight = false }: Props) {
             style={footerLabelStyle}
           >
             <span className={`ev-toggle block${watched ? ' is-on' : ''}`} aria-hidden="true" />
-            {watched ? 'sett' : 'markera sedd'}
+            {watched ? 'Sett' : 'Markera sedd'}
           </button>
         </div>
       )}

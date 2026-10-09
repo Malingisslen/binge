@@ -1,3 +1,5 @@
+import { formatEpisodeCode } from '@/lib/utils';
+
 // T4: TMDB ger generiska avsnittsnamn ("Avsnitt 1" / "Episode 1") när inget
 // riktigt namn finns. "S3E1 — Avsnitt 1" är dubbel avsnittsangivelse — visa
 // bara koden + datum då. Riktiga avsnittstitlar visas som vanligt.
@@ -20,7 +22,7 @@ export function isGenericEpisodeName(name: string, episodeNumber: number): boole
 
 /** "S3E1 — Riktigt namn (2026-07-02)" eller "S3E1 (2026-07-02)" vid generiskt namn. */
 export function formatNextEpisodeLabel(ep: EpisodeLabelInput): string {
-  const code = `S${ep.season_number}E${ep.episode_number}`;
+  const code = formatEpisodeCode(ep.season_number, ep.episode_number);
   const showName = ep.name && !isGenericEpisodeName(ep.name, ep.episode_number);
   const base = showName ? `${code} — ${ep.name}` : code;
   return ep.air_date ? `${base} (${ep.air_date})` : base;

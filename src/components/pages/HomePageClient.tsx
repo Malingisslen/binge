@@ -68,6 +68,7 @@ function LandingPage({ trending, guestDemo }: { trending?: React.ReactNode; gues
               <input
                 type="text"
                 placeholder="Sök film eller serie…"
+                aria-label="Sök film eller serie"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 onFocus={() => setSearchFocused(true)}
@@ -107,15 +108,15 @@ function LandingPage({ trending, guestDemo }: { trending?: React.ReactNode; gues
           <div className="flex justify-center gap-8 flex-wrap max-w-[520px] mx-auto">
             <div className="text-center">
               <div className="text-xs font-bold text-acc mb-1">Streaming-koll</div>
-              <div className="text-xxs text-white/50 leading-snug max-w-[140px]">Se direkt vilken tjänst som har titeln.</div>
+              <div className="text-xs text-white/60 leading-snug max-w-[150px]">Se direkt vilken tjänst som har titeln.</div>
             </div>
             <div className="text-center">
               <div className="text-xs font-bold text-acc mb-1">Avsnittskalender</div>
-              <div className="text-xxs text-white/50 leading-snug max-w-[140px]">Missa aldrig ett nytt avsnitt.</div>
+              <div className="text-xs text-white/60 leading-snug max-w-[150px]">Missa aldrig ett nytt avsnitt.</div>
             </div>
             <div className="text-center">
               <div className="text-xs font-bold text-acc mb-1">Streamingrådgivaren</div>
-              <div className="text-xxs text-white/50 leading-snug max-w-[140px]">Pausa tjänster du inte använder.</div>
+              <div className="text-xs text-white/60 leading-snug max-w-[150px]">Pausa tjänster du inte använder.</div>
             </div>
           </div>
         </div>

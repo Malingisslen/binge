@@ -37,7 +37,15 @@ export default function RatingStars({ rating, onChange, size = 'sm', readonly = 
               onChange(isLeftHalf ? star - 0.5 : star);
             }}
           >
-            {full ? '★' : half ? '⯪' : '☆'}
+            {full ? '★' : half ? (
+              // En ritad halvstjärna: tecknet ⯪ saknas i många typsnitt och
+              // såg olika ut i olika webbläsare.
+              <>
+                <span aria-hidden="true">☆</span>
+                <span aria-hidden="true" className="absolute left-0 top-0 overflow-hidden" style={{ width: '50%' }}>★</span>
+                <span className="sr-only">halv stjärna</span>
+              </>
+            ) : '☆'}
           </span>
         );
       })}

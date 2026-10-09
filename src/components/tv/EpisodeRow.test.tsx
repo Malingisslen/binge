@@ -100,7 +100,7 @@ describe('EpisodeRow — the group spoiler mask (BIN-821)', () => {
     expect(screen.queryByTestId('reactions')).toBeNull();
 
     // What IS shown: the position in the season, and why the row is blank.
-    expect(screen.getByText('S2E05')).toBeInTheDocument();
+    expect(screen.getByText('S02E05')).toBeInTheDocument();
     expect(screen.getByText('Avsnitt 5')).toBeInTheDocument();
     expect(screen.getByText('Visa ändå')).toBeInTheDocument();
   });
@@ -137,7 +137,7 @@ describe('EpisodeRow — the group spoiler mask (BIN-821)', () => {
     // proof is the role and its name, plus the press itself.
     renderRow({}, { spoilerMasked: true });
 
-    const reveal = screen.getByRole('button', { name: /S2E05.*Visa ändå/ });
+    const reveal = screen.getByRole('button', { name: /S02E05.*Visa ändå/ });
     expect(reveal.tagName).toBe('BUTTON');
     expect(reveal).toHaveAttribute('type', 'button');
     fireEvent.click(reveal);
@@ -163,15 +163,15 @@ describe('EpisodeRow — episode code, runtime and air state (BIN-821)', () => {
     reactions.mockClear();
   });
 
-  it('zero-pads the episode number but never the season number', () => {
-    // Both halves in one place: padding the season would print S02E05, and padding a
-    // two-digit episode would print S2E012. Season 2 / episode 5 alone cannot see either.
+  it('prints the same two-digit code as every other surface (formatEpisodeCode)', () => {
+    // A single-digit episode must gain its zero, and a two-digit one must not gain a
+    // third: S02E05 and S02E12, never S2E5 or S02E012.
     const { unmount } = renderRow({ episode_number: 5 });
-    expect(screen.getByText('S2E05')).toBeInTheDocument();
+    expect(screen.getByText('S02E05')).toBeInTheDocument();
     unmount();
 
     renderRow({ episode_number: 12 });
-    expect(screen.getByText('S2E12')).toBeInTheDocument();
+    expect(screen.getByText('S02E12')).toBeInTheDocument();
   });
 
   it('shows the runtime for an aired episode', () => {

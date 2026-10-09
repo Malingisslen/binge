@@ -91,7 +91,9 @@ function costsMoney(id: number, user: BillUser, month: NotifyMonth): boolean {
   const tier = user.providerTiers?.[String(id)];
   const custom = user.providerCosts?.[String(id)];
   let ordinaryPaid: boolean | null;
-  if (tier && Object.prototype.hasOwnProperty.call(entry.tiers, tier)) ordinaryPaid = entry.tiers[tier];
+  // Same order as the client's resolveProviderMonthlyCost: a free service is free first.
+  if (entry.free) ordinaryPaid = false;
+  else if (tier && Object.prototype.hasOwnProperty.call(entry.tiers, tier)) ordinaryPaid = entry.tiers[tier];
   else if (typeof custom === 'number') ordinaryPaid = custom > 0;
   else ordinaryPaid = entry.hasDefault ? entry.defaultPaid : null;
   if (ordinaryPaid == null) return false;

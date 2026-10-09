@@ -1,6 +1,7 @@
 import type { WatchlistItem } from '@/types';
 import { resolveTmdbId } from '@/lib/mediaTypeDocId';
 import { seenDate } from '@/lib/seenDate';
+import { formatEpisodeCode } from '@/lib/utils';
 
 // BIN-103 — activity diary. Merges FILM watched-dates (WatchlistItem.watchedAt,
 // already in the loaded watchlist) with TV per-episode watched-dates
@@ -14,7 +15,7 @@ export const MONTHS_SV = [
 ];
 
 export interface WatchedEpisode { tmdbId: number; season: number; episode: number; watchedAt: Date }
-export interface DiaryEntry { item: WatchlistItem; date: Date; episodeCode: string | null }
+export interface DiaryEntry { item: WatchlistItem; date: Date; episodeCode: string | null; episodeCount?: number }
 export interface DiaryMonth { key: string; label: string; entries: DiaryEntry[] }
 
 // Raw shapes from a Firestore episodeProgress doc — kept loose so the flattener
@@ -67,11 +68,34 @@ function episodeDiaryEntries(items: WatchlistItem[], episodes: WatchedEpisode[])
   // Without this, a movie sharing an episode's tmdbId could shadow the real show
   // (the map has no discriminant, so it's a source-filter fix, not a key-shape one).
   const showById = new Map(items.filter(i => i.mediaType === 'tv').map(i => [i.tmdbId, i]));
-  const out: DiaryEntry[] = [];
+  // Flera avsnitt av samma serie samma dag blir EN rad ("S01E01–S03E03 · 28 avsnitt"),
+  // så en import eller en hel säsong markerad på en gång inte blir en rad per avsnitt.
+  const groups = new Map<string, { show: WatchlistItem; eps: WatchedEpisode[] }>();
   for (const ep of episodes) {
     const show = showById.get(ep.tmdbId);
     if (!show) continue; // orphan progress — show no longer in the library
-    out.push({ item: show, date: ep.watchedAt, episodeCode: `S${ep.season}E${ep.episode}` });
+    const d = ep.watchedAt;
+    const key = `${ep.tmdbId}|${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    const g = groups.get(key);
+    if (g) g.eps.push(ep); else groups.set(key, { show, eps: [ep] });
+  }
+  const out: DiaryEntry[] = [];
+  for (const { show, eps } of groups.values()) {
+    if (eps.length === 1) {
+      const ep = eps[0];
+      out.push({ item: show, date: ep.watchedAt, episodeCode: formatEpisodeCode(ep.season, ep.episode) });
+      continue;
+    }
+    const ordered = [...eps].sort((x, y) => x.season - y.season || x.episode - y.episode);
+    const first = ordered[0];
+    const last = ordered[ordered.length - 1];
+    const latest = eps.reduce((m, e) => (e.watchedAt > m ? e.watchedAt : m), eps[0].watchedAt);
+    out.push({
+      item: show,
+      date: latest,
+      episodeCode: `${formatEpisodeCode(first.season, first.episode)}–${formatEpisodeCode(last.season, last.episode)} · ${eps.length} avsnitt`,
+      episodeCount: eps.length,
+    });
   }
   return out;
 }

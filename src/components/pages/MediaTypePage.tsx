@@ -20,7 +20,8 @@ const CONFIG = {
     title: 'Serier',
     standfirst: 'Populära TV-serier just nu och var de går att streama i Sverige. Följ det du tittar på, så håller Binge koll på nya avsnitt och var serien finns.',
     popularLabel: 'Populära serier',
-    emptyText: 'Du tittar inte på några serier ännu. Lägg till nedan!',
+    emptyText: 'Du följer inga serier ännu. Tryck + på en serie nedan.',
+    guestText: 'Skapa ett gratis konto, så håller Binge koll på nya avsnitt i serierna du följer.',
     hrefPrefix: '/tv/',
     path: '/series/',
   },
@@ -28,7 +29,8 @@ const CONFIG = {
     title: 'Filmer',
     standfirst: 'Populära filmer just nu och var de går att streama i Sverige. Spara det du vill se, så håller Binge koll på när det dyker upp på dina tjänster.',
     popularLabel: 'Populära filmer',
-    emptyText: 'Du tittar inte på några filmer ännu. Lägg till nedan!',
+    emptyText: 'Du har inga sedda filmer ännu. Tryck + på en film nedan.',
+    guestText: 'Skapa ett gratis konto, så säger Binge till när filmerna du vill se dyker upp på dina tjänster.',
     hrefPrefix: '/movie/',
     path: '/films/',
   },
@@ -115,7 +117,12 @@ export default function MediaTypePage({
         </div>
       ) : (
         <div className={cardClass('mb-3.5 px-3 py-4 text-center text-sm text-ink-3')}>
-          {cfg.emptyText}
+          {user ? cfg.emptyText : (
+            <>
+              {cfg.guestText}{' '}
+              <Link href="/login/" className="text-acc-deep">Skapa konto</Link>
+            </>
+          )}
         </div>
       )}
 
@@ -125,6 +132,9 @@ export default function MediaTypePage({
         </div>
         <TitleGrid
           items={allResults.filter(r =>
+            // En titel utan svenskt eller engelskt namn (t.ex. bara koreanska tecken)
+            // säger ingenting för en svensk besökare i en topplista — den döljs alltid.
+            !hasNonLatinTitle(r.title ?? r.name) &&
             (!hideNonLatin || !hasNonLatinTitle(r.title ?? r.name, r.original_title ?? r.original_name)) &&
             !isFromHiddenCountry(r.origin_country, hiddenCountries))}
           loading={isLoading && allResults.length === 0}

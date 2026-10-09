@@ -315,13 +315,22 @@ export function getTrending(mediaType: 'all' | 'movie' | 'tv' = 'all', timeWindo
   return tmdbFetch(`/trending/${mediaType}/${timeWindow}`, params, opts);
 }
 
-// Popular
+// Popular — det som är populärt OCH går att se på en tjänst i Sverige.
+// /movie/popular och /tv/popular är globala listor (region påverkar bara
+// premiärdatum). Discover med watch_region=SE och abonnemang/gratis begränsar
+// till titlar som finns på en tjänst i Sverige.
+const SWEDISH_POPULAR: Record<string, string> = {
+  sort_by: 'popularity.desc',
+  with_watch_monetization_types: 'flatrate|free|ads',
+  include_adult: 'false',
+};
+
 export function getPopularMovies(page = 1, opts?: TmdbFetchOpts): Promise<TMDBListResponse<TMDBSearchResult>> {
-  return tmdbFetch('/movie/popular', { region: 'SE', page: String(page) }, opts);
+  return discoverMovies({ ...SWEDISH_POPULAR, page: String(page) }, opts);
 }
 
 export function getPopularTV(page = 1, opts?: TmdbFetchOpts): Promise<TMDBListResponse<TMDBSearchResult>> {
-  return tmdbFetch('/tv/popular', { region: 'SE', page: String(page) }, opts);
+  return discoverTV({ ...SWEDISH_POPULAR, without_genres: '10763,10767', page: String(page) }, opts);
 }
 
 export function getTopRatedMovies(page = 1, opts?: TmdbFetchOpts): Promise<TMDBListResponse<TMDBSearchResult>> {

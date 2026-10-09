@@ -69,6 +69,19 @@ describe('buildContentFloor — availability (the Swedish wedge, honest)', () =>
     expect(paragraph).toContain('Netflix');
     expect(paragraph).not.toContain('SkyShowtime');
   });
+
+  it('never doubles the full stop after a capped rent/buy list', () => {
+    const { paragraph } = buildContentFloor({
+      ...movieBase,
+      providers: {
+        stream: [],
+        rent: ['Apple TV', 'Viaplay', 'Rakuten TV', 'SF Anytime', 'Amazon Video'],
+        buy: [],
+      },
+    });
+    expect(paragraph).toContain('m.fl.');
+    expect(paragraph).not.toContain('m.fl..');
+  });
 });
 
 describe('buildContentFloor — natural Swedish genre phrasing (Content Strategist condition)', () => {

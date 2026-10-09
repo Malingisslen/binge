@@ -69,7 +69,8 @@ describe('CostCalculator', () => {
   it('labels sport tiers in the select', async () => {
     await act(async () => { render(<CostCalculator />); });
     const select = screen.getByRole('combobox', { name: 'Nivå för Viaplay' });
-    expect(within(select).getByRole('option', { name: 'Total (all sport) (sport)' })).toBeInTheDocument();
+    // A tier whose name already says sport gets no second "(sport)".
+    expect(within(select).getByRole('option', { name: 'Total (all sport)' })).toBeInTheDocument();
     expect(within(select).getAllByRole('option')[0]).toHaveTextContent('Vet inte');
   });
 

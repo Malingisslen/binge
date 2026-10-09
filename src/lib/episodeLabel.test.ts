@@ -25,17 +25,17 @@ describe('isGenericEpisodeName', () => {
 describe('formatNextEpisodeLabel', () => {
   it('drops the generic name — only code + date', () => {
     expect(formatNextEpisodeLabel({ season_number: 3, episode_number: 1, name: 'Avsnitt 1', air_date: '2026-07-02' }))
-      .toBe('S3E1 (2026-07-02)');
+      .toBe('S03E01 (2026-07-02)');
   });
 
   it('keeps real episode titles', () => {
     expect(formatNextEpisodeLabel({ season_number: 2, episode_number: 5, name: 'The Engineer', air_date: '2026-07-02' }))
-      .toBe('S2E5 — The Engineer (2026-07-02)');
+      .toBe('S02E05 — The Engineer (2026-07-02)');
   });
 
   it('handles missing air_date', () => {
     expect(formatNextEpisodeLabel({ season_number: 1, episode_number: 1, name: '', air_date: '' }))
-      .toBe('S1E1');
+      .toBe('S01E01');
   });
 });
 

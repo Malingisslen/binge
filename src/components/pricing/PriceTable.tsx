@@ -58,7 +58,8 @@ export default function PriceTable({ rows = buildPriceRows() }: { rows?: PriceRo
               <th scope="col" className={thClass('text-left px-3')}>Tjänst</th>
               <th scope="col" className={thClass('text-left px-3')}>Nivå</th>
               <th scope="col" className={thClass('text-right px-3')}>kr/mån</th>
-              <th scope="col" className={thClass('text-left px-3')}>Kontrollerat</th>
+              {/* På en telefon får de tre viktiga kolumnerna plats utan sidoscroll; datumet döljs. */}
+              <th scope="col" className={thClass('text-left px-3 hidden sm:table-cell')}>Kontrollerat</th>
             </tr>
           </thead>
           <tbody>
@@ -70,7 +71,7 @@ export default function PriceTable({ rows = buildPriceRows() }: { rows?: PriceRo
                   {r.sport && <span className="chip ml-2">sport</span>}
                 </td>
                 <td className="px-3 py-1.5 text-right tabular-nums font-semibold text-ink">{formatKr(r.kr)}</td>
-                <td className="px-3 py-1.5 text-xs text-ink-2 tabular-nums whitespace-nowrap">
+                <td className="px-3 py-1.5 text-xs text-ink-2 tabular-nums whitespace-nowrap hidden sm:table-cell">
                   <CheckedCell date={r.verifiedDate} now={now} />
                 </td>
               </tr>

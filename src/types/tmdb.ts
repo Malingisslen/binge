@@ -18,6 +18,9 @@ export interface TMDBSearchResult {
   genre_ids: number[];
   origin_country?: string[];
   popularity?: number;
+  /** Bara på personträffar från /search/multi. */
+  profile_path?: string | null;
+  known_for_department?: string;
 }
 
 export interface TMDBMovie {

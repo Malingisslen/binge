@@ -18,6 +18,7 @@ import {
 } from '@/lib/libraryView';
 import type { WatchlistItem } from '@/types';
 import { tagClass } from '@/components/ui/Badge';
+import { formatDecimal } from '@/lib/formatDecimal';
 
 function upcomingWeekday(isoDate: string | undefined): string | null {
   if (!isoDate) return null;
@@ -154,7 +155,7 @@ export function WatchlistCard({
             <span className="inline-flex items-center gap-1">
               <RatingStars rating={item.rating} readonly size="sm" dim={item.rating === null} />
               {item.rating !== null && (
-                <span className="text-xxs text-ink-3">{item.rating.toFixed(1)}</span>
+                <span className="text-xxs text-ink-3">{formatDecimal(item.rating)}</span>
               )}
             </span>
           </span>

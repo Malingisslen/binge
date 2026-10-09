@@ -125,6 +125,11 @@ function joinSv(names: string[]): string {
   return `${head} och ${names[names.length - 1]}`;
 }
 
+/** "m.fl." bär redan sin punkt — en mening som slutar på den får ingen till. */
+function endSentence(s: string): string {
+  return s.endsWith('.') ? s : `${s}.`;
+}
+
 /** Cap a provider list to keep it from reading as keyword stuffing. */
 function providerPhrase(names: string[]): string {
   if (names.length <= PROVIDER_CAP) return joinSv(names);
@@ -148,7 +153,7 @@ function availabilityLead(input: ContentFloorInput): string {
   }
   const rentBuy = Array.from(new Set([...providers.rent, ...providers.buy]));
   if (rentBuy.length > 0) {
-    return `${title} går att hyra eller köpa digitalt i Sverige, till exempel via ${providerPhrase(rentBuy)}.`;
+    return endSentence(`${title} går att hyra eller köpa digitalt i Sverige, till exempel via ${providerPhrase(rentBuy)}`);
   }
   return `${title} finns ännu inte på någon streamingtjänst i Sverige.`;
 }
@@ -164,7 +169,7 @@ export function availabilityLine(input: ContentFloorInput): string {
   const { stream, rent, buy } = input.providers;
   const rentBuy = Array.from(new Set([...rent, ...buy]));
   if (stream.length === 0 || rentBuy.length === 0) return lead;
-  return `${lead} Den går också att hyra eller köpa via ${providerPhrase(rentBuy)}.`;
+  return endSentence(`${lead} Den går också att hyra eller köpa via ${providerPhrase(rentBuy)}`);
 }
 
 function capFirst(s: string): string {

@@ -104,6 +104,9 @@ const CASES: Record<string, { fixture: Fixture; notifies: boolean }> = {
   'only a free service': {
     fixture: { user: { myProviders: [520] }, watchlist: [{ ...viaplayShow, providers: [520] }], progress: [episodeOn('tv_1', inSeptember)] }, notifies: false,
   },
+  'a free service with an old own price': {
+    fixture: { user: { myProviders: [520], providerCosts: { '520': 69 } }, watchlist: [{ ...viaplayShow, providers: [520] }], progress: [episodeOn('tv_1', inSeptember)] }, notifies: false,
+  },
   'own price of 0 kr': {
     fixture: { user: { myProviders: [76], providerCosts: { '76': 0 } }, watchlist: [viaplayShow], progress: [episodeOn('tv_1', inSeptember)] }, notifies: false,
   },

@@ -149,12 +149,17 @@ export default function RecommendationsHub() {
   return (
     <>
       <header>
-        <div className="crumb">Rekommendationer{rowsPending ? '' : ` · ${shownRowCount} rader`}</div>
+        <div className="crumb">
+          Rekommendationer
+          {/* Visa hur många rader som syns av hur många som finns, så rubriken
+              inte lovar fler rader än sidan visar innan "Visa fler rader". */}
+          {rowsPending ? '' : ` · ${Math.min(visibleRowCount, shownRowCount)} av ${shownRowCount} rader`}
+        </div>
         <h1 className="page-h1">Vad du kan se — och varför.</h1>
         <p className="stand">
-          Sju kategorier sorterade efter vad du har tittat på senast. Varje rad
-          säger varför den finns där; tryck <strong style={{ color: 'var(--ink)', fontWeight: 500 }}>visa fler</strong> för
-          en utvidgad vy. Inga mystery-rader.
+          Rader sorterade efter vad du har tittat på senast. Varje rad säger varför
+          den finns där, och <strong style={{ color: 'var(--ink)', fontWeight: 500 }}>Visa fler</strong> på
+          en rad visar fler titlar.
         </p>
       </header>
 

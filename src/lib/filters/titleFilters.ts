@@ -1,5 +1,6 @@
 import { canonicalProviderId } from '@/lib/tmdb/providers';
 import { GENRE_OPTIONS, parseGenreFilter } from '@/lib/tmdb/genreLabels';
+import { formatDecimal } from '@/lib/formatDecimal';
 
 /**
  * The filter axes Rekommendationer and Bibliotek share, so a user learns one set of
@@ -67,7 +68,7 @@ export function tmdbVoteFloor(minStars: number): number | null {
 }
 
 export const formatStars = (stars: number): string =>
-  Number.isInteger(stars) ? String(stars) : stars.toFixed(1).replace('.', ',');
+  Number.isInteger(stars) ? String(stars) : formatDecimal(stars);
 
 export const genreIdsOf = (genres: readonly string[]): number[] =>
   [...new Set(genres.flatMap(parseGenreFilter))];

@@ -2,6 +2,8 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { fsdb } from '@/lib/firebase/db';
+import { todayIso } from '@/lib/utils';
+import { dropPassed } from '@/hooks/useStreamingLeaving.helpers';
 
 /** One title leaving a service (BIN-178). Mirrors functions/leavingRollup/logic. */
 export interface LeavingEntry {
@@ -35,6 +37,8 @@ export function useStreamingLeaving(providerId: number | undefined): {
       };
     },
   });
-  const entries = providerId != null ? (data?.byProvider[String(providerId)] ?? []) : [];
+  const all = providerId != null ? (data?.byProvider[String(providerId)] ?? []) : [];
+  // Rollupen kan vara några dagar gammal; en titel vars datum passerat är redan borta.
+  const entries = dropPassed(all, todayIso());
   return { entries, loading: isLoading, error: isError, today: data?.today ?? null };
 }

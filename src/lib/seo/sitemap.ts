@@ -155,8 +155,7 @@ function franchiseEntries(): MetadataRoute.Sitemap {
 }
 
 // "Vad försvinner från [provider]" (BIN-178) — MÅSTE matcha generateStaticParams
-// i src/app/forsvinner/[id]/page.tsx (samma SEO_PROVIDER_IDS). Innehållet
-// uppdateras dagligen (klient-läst rollup) → daily changeFrequency.
+// i src/app/forsvinner/[id]/page.tsx (samma SEO_PROVIDER_IDS).
 function forsvinnerEntries(): MetadataRoute.Sitemap {
   return SEO_PROVIDER_IDS.map(id => ({
     url: `${SITE_URL}/forsvinner/${id}/`,

@@ -10,7 +10,7 @@ import { scorePassword } from '@/lib/passwordStrength';
 import { PasswordStrengthMeter } from '@/components/auth/PasswordStrengthMeter';
 import { CURRENT_TERMS_VERSION, MIN_AGE } from '@/lib/legal';
 import { takeNextPath } from '@/lib/nextPath';
-import { dropStalePendingAdd } from '@/lib/pendingAdd';
+import { dropStalePendingAdd, peekPendingAdd } from '@/lib/pendingAdd';
 import { needsOnboarding } from '@/lib/onboarding';
 import { MAX_DISPLAY_NAME } from '@/lib/clampText';
 import { fieldClass } from '@/components/ui/Field';
@@ -66,7 +66,14 @@ export default function LoginPage() {
   // else's — is dropped when this page opens. A form left open and used by the
   // next person is not covered; see pendingAdd.ts. Idempotent, so the StrictMode
   // double-run is harmless.
-  useEffect(() => { dropStalePendingAdd(); }, []);
+  // Titeln besökaren tryckte "Lägg till" på, så sidan kan säga varför den visas.
+  // Läses efter att en gammal tryckning släppts, och förbrukas inte här.
+  const [pendingTitle, setPendingTitle] = useState<string | null>(null);
+  const [resetSent, setResetSent] = useState(false);
+  useEffect(() => {
+    dropStalePendingAdd();
+    setPendingTitle(peekPendingAdd()?.title ?? null);
+  }, []);
 
   // Gated on `uid` — the AUTH verdict — not on `user`, the Firestore profile.
   // AuthContext deliberately KEEPS uid and nulls the profile when a profile read
@@ -109,6 +116,27 @@ export default function LoginPage() {
       console.error('Google sign-in failed:', err);
       const code = (err as { code?: string })?.code ?? '';
       setError(accountStateMessage(code) ?? 'Inloggningen misslyckades. Försök igen om en stund.');
+    }
+  }
+
+  async function handleResetPassword() {
+    setError('');
+    setResetSent(false);
+    if (!email.trim()) { setError('Skriv din e-postadress ovan först.'); return; }
+    try {
+      // Laddas först vid klick: sidan behöver inte Auth-SDK:ns återställningsdel annars.
+      const [{ auth }, { sendPasswordResetEmail }] = await Promise.all([
+        import('@/lib/firebase/config'),
+        import('firebase/auth'),
+      ]);
+      auth.languageCode = 'sv';
+      await sendPasswordResetEmail(auth, email.trim());
+      setResetSent(true);
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code ?? '';
+      if (code === 'auth/invalid-email') setError('Skriv en giltig e-postadress.');
+      else if (code === 'auth/user-not-found') setResetSent(true); // avslöja inte om kontot finns
+      else setError(accountStateMessage(code) ?? 'Kunde inte skicka länken. Försök igen om en stund.');
     }
   }
 
@@ -166,7 +194,9 @@ export default function LoginPage() {
             binge.nu
           </h1>
           <p className="text-sm text-ink-3 mt-1">
-            Se vad du betalar för streaming, och vad du kan pausa.
+            {pendingTitle
+              ? `Logga in eller skapa ett konto, så sparas ${pendingTitle} i ditt bibliotek.`
+              : 'Se vad du betalar för streaming, och vad du kan pausa.'}
           </p>
         </div>
 
@@ -175,13 +205,13 @@ export default function LoginPage() {
           disabled={loading}
           variant="acc" className="w-full disabled:opacity-50 mb-2"
         >
-          Logga in med Google
+          Fortsätt med Google
         </Button>
 
         {/* BIN-275/348: browse-wrap consent + 13+ age notice at the Google entry
             point. Continuing past this records terms acceptance + age confirmation
             at account creation (AuthContext.ensureUserProfile). */}
-        <p className="text-xxs text-ink-3 text-center leading-snug mb-3">
+        <p className="text-xs text-ink-3 text-center leading-snug mb-3">
           Genom att fortsätta godkänner du Binges{' '}
           <Link href="/villkor" target="_blank" className="text-acc-deep underline">användarvillkor</Link>
           {' '}och{' '}
@@ -191,7 +221,7 @@ export default function LoginPage() {
 
         <div className="flex items-center gap-2 mb-3">
           <div className="flex-1 h-px bg-rule" />
-          <span className="text-xxs text-ink-3">eller</span>
+          <span className="text-xs text-ink-3">eller</span>
           <div className="flex-1 h-px bg-rule" />
         </div>
 
@@ -260,6 +290,11 @@ export default function LoginPage() {
             </div>
           )}
           {error && <div role="alert" className="text-xs text-danger-ink mb-2">{error}</div>}
+          {resetSent && (
+            <div role="status" className="text-xs text-ink-2 mb-2">
+              Om adressen har ett konto har vi mejlat en länk för att välja nytt lösenord.
+            </div>
+          )}
           <button
             type="submit"
             disabled={registerDisabled}
@@ -271,11 +306,23 @@ export default function LoginPage() {
 
         <div className="text-center mt-3">
           <button
-            onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); }}
+            type="button"
+            onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); setResetSent(false); }}
             className="text-xs text-acc-deep bg-transparent border-none cursor-pointer font-[inherit]"
           >
             {mode === 'login' ? 'Har du inget konto? Skapa ett' : 'Har du redan konto? Logga in'}
           </button>
+          {mode === 'login' && (
+            <div className="mt-1">
+              <button
+                type="button"
+                onClick={handleResetPassword}
+                className="text-xs text-ink-3 bg-transparent border-none cursor-pointer font-[inherit] underline"
+              >
+                Glömt lösenordet?
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

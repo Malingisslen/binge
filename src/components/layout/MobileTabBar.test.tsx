@@ -28,10 +28,10 @@ describe('MobileTabBar (variant B)', () => {
     render(<MobileTabBar />);
     const bar = screen.getByRole('navigation', { name: 'Huvudmeny' });
     const names = Array.from(bar.children).map(el => el.textContent);
-    expect(names[0]).toBe('Bibliotek');
-    expect(names[1]).toBe('Kalender');
+    expect(names[0]).toBe('Hem');
+    expect(names[1]).toBe('Bibliotek');
     expect(names[2]).toBe('Sök');
-    expect(names[3]).toBe('Rådgivaren');
+    expect(names[3]).toBe('Kalender');
     expect(names[4]?.startsWith('Mer')).toBe(true);
   });
 
@@ -58,7 +58,7 @@ describe('MobileTabBar (variant B)', () => {
     fireEvent.click(moreButton());
     expect(moreButton()).toHaveAttribute('aria-expanded', 'true');
     const links = within(panel()).getAllByRole('link').map(a => a.textContent);
-    expect(links).toEqual(['Hem', 'Rekommendationer', 'Fråga Binge', 'Vänner', 'Inställningar']);
+    expect(links).toEqual(['Rådgivaren', 'Rekommendationer', 'Fråga Binge', 'Vänner', 'Inställningar']);
   });
 
   it('Escape closes Mer and returns focus to the button', () => {
@@ -92,7 +92,7 @@ describe('MobileTabBar (variant B)', () => {
   });
 
   it.each([
-    ['/', 'Mer'],
+    ['/', 'Hem'],
     ['/recommendations/', 'Mer'],
     ['/kalibrera/', 'Mer'],
     ['/ask/', 'Mer'],
@@ -103,7 +103,7 @@ describe('MobileTabBar (variant B)', () => {
     ['/my/all/', 'Bibliotek'],
     ['/my/series/', 'Bibliotek'],
     ['/calendar/', 'Kalender'],
-    ['/savings/', 'Rådgivaren'],
+    ['/savings/', 'Mer'],
   ])('on %s only %s is marked active', (path, expected) => {
     nav.pathname = path;
     render(<MobileTabBar />);

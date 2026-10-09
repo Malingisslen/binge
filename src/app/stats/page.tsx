@@ -11,6 +11,7 @@ import { getProvider } from '@/lib/tmdb/providers';
 import { seenDate } from '@/lib/seenDate';
 import { markedSeen } from '@/lib/markedSeen';
 import { cardClass } from '@/components/ui/Card';
+import { formatDecimal } from '@/lib/formatDecimal';
 
 const MONTH_NAMES = ['jan', 'feb', 'mar', 'apr', 'maj', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
 
@@ -103,7 +104,7 @@ function StatsContent() {
         <div className="crumb">Statistik · {stats.total} titlar totalt</div>
         <h1 className="page-h1">Statistik</h1>
         <p className="stand">
-          {stats.watched.length} sedda · {stats.rated.length} betygsatta · snittbetyg {stats.avgRating.toFixed(1)}.
+          {stats.watched.length} sedda · {stats.rated.length} betygsatta · snittbetyg {formatDecimal(stats.avgRating)}.
         </p>
       </header>
       <div style={{ marginTop: 28 }}>
@@ -112,7 +113,7 @@ function StatsContent() {
         <StatCard label="Totalt" value={stats.total} />
         <StatCard label="Följer" value={stats.following.length} />
         <StatCard label="Sedd" value={stats.watched.length} />
-        <StatCard label="Medelbetyg" value={stats.avgRating > 0 ? stats.avgRating.toFixed(1) : '—'} />
+        <StatCard label="Medelbetyg" value={stats.avgRating > 0 ? formatDecimal(stats.avgRating) : '—'} />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 mb-4">

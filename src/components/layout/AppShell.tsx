@@ -9,6 +9,7 @@ import AppTopbar from '@/components/layout/AppTopbar';
 import Subnav from '@/components/layout/Subnav';
 import MobileTabBar from '@/components/layout/MobileTabBar';
 import Footer from '@/components/layout/Footer';
+import LandingTopbar from '@/components/layout/LandingTopbar';
 import { EmailVerificationBanner } from '@/components/layout/EmailVerificationBanner';
 import { ProfileOfflineBanner } from '@/components/layout/ProfileOfflineBanner';
 import { DeletionLimbo } from '@/components/layout/DeletionLimbo';
@@ -97,6 +98,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return (
       <>
         <ShellChrome />
+        <LandingTopbar />
         <main id="main" tabIndex={-1} className="outline-none">{children}</main>
         <Footer />
       </>

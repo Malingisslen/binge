@@ -80,18 +80,17 @@ export default function TitleCard({ item, providers, showNotInterested }: TitleC
               padding: 8, gap: 4,
               background: 'var(--bg-2)',
             }}>
-              <Icon size={20} style={{ color: 'var(--ink-3)', opacity: 0.4 }} />
-              <span style={{
-                fontSize: 'var(--fs-xxs)', color: 'var(--ink-3)', textAlign: 'center',
-                lineHeight: 1.2, overflow: 'hidden',
-                display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical',
-              }}>{title}</span>
+              {/* Titeln står redan under affischen; här räcker ikonen. */}
+              <Icon size={24} style={{ color: 'var(--ink-3)', opacity: 0.5 }} aria-hidden="true" />
             </div>
           )}
           {visibleBadges.length > 0 && (
             <div style={{
               position: 'absolute', bottom: 2, left: 2,
-              display: 'flex', gap: 1,
+              // Hela tjänstenamn (HBO Max, SkyShowtime) får inte klippas av affischens
+              // kant: raden bryts i stället för att rinna ut.
+              display: 'flex', flexWrap: 'wrap', gap: 1,
+              maxWidth: 'calc(100% - 4px)', minWidth: 0,
               zIndex: 1,
             }}>
               {visibleBadges.map(p => {
@@ -182,7 +181,10 @@ export default function TitleCard({ item, providers, showNotInterested }: TitleC
           letterSpacing: 0.02,
         }}>
           {/* 0 betyder att ingen har röstat än (ofta osläppt), inte betyget noll. */}
-          {year ?? '—'} · {starsFromTmdb(item.vote_average) > 0 ? `${formatStars(starsFromTmdb(item.vote_average))}★` : '—'}
+          {[
+            year,
+            starsFromTmdb(item.vote_average) > 0 ? `${formatStars(starsFromTmdb(item.vote_average))}★` : null,
+          ].filter(Boolean).join(' · ') || 'Inget betyg än'}
         </div>
       </Link>
     </div>

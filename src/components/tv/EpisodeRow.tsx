@@ -4,7 +4,7 @@ import { memo, useState } from 'react';
 import { Lock, Check } from 'lucide-react';
 import type { TMDBEpisode } from '@/types';
 import { stillUrl } from '@/lib/tmdb/client';
-import { todayIso, shortSwedishWeekday } from '@/lib/utils';
+import { formatEpisodeCode, todayIso, shortSwedishWeekday } from '@/lib/utils';
 import EpisodeReactions from './EpisodeReactions';
 
 interface EpisodeRowProps {
@@ -19,10 +19,6 @@ interface EpisodeRowProps {
   // minsta-position. Maskar titel, still-bild, synopsis och air-date —
   // klick på kortet togglar lokal "revealed"-state som visar allt.
   spoilerMasked?: boolean;
-}
-
-function pad2(n: number): string {
-  return n < 10 ? `0${n}` : `${n}`;
 }
 
 function formatUnairedRunt(iso: string): string {
@@ -47,7 +43,7 @@ function EpisodeRow({
   const isToday = !!airDate && airDate === today;
   const isUnaired = !!airDate && airDate > today;
 
-  const code = `S${seasonNumber}E${pad2(episode.episode_number)}`;
+  const code = formatEpisodeCode(seasonNumber, episode.episode_number);
   const runt = isUnaired && airDate
     ? formatUnairedRunt(airDate)
     : episode.runtime

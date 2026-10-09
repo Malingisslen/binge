@@ -10,6 +10,7 @@ describe('PROVIDER_PAID parity (BIN-1449)', () => {
       aliases: p.aliases ?? [],
       hasDefault: p.defaultMonthlyCost != null,
       defaultPaid: (p.defaultMonthlyCost ?? 0) > 0,
+      free: p.isFree === true,
       tiers: Object.fromEntries((p.tiers ?? []).map(t => [t.id, t.cost > 0])),
     }]));
     expect(PROVIDER_PAID).toEqual(client);

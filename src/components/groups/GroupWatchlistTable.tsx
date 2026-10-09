@@ -16,6 +16,8 @@ import { Eyebrow } from '@/components/ui/Eyebrow';
 import { thClass } from '@/components/ui/tableHead';
 import { Button } from '@/components/ui/Button';
 import { cardClass } from '@/components/ui/Card';
+import { formatEpisodeCode } from '@/lib/utils';
+import { formatDecimal } from '@/lib/formatDecimal';
 
 /**
  * Gemensam watchlist för en grupp. Varje medlem får en kolumn för sitt
@@ -233,7 +235,7 @@ export function GroupWatchlistTable({
                     );
                   })}
                   <td className="text-right px-3 py-1.5 text-ink-2">
-                    {avg != null ? avg.toFixed(1) : '—'}
+                    {avg != null ? formatDecimal(avg) : '—'}
                   </td>
                   <td className="text-right px-2 py-1.5">
                     {canDelete && (
@@ -308,7 +310,7 @@ function TvAsymmetryRow({
       return {
         uid: m.uid,
         initial: abbrev(m.displayName),
-        code: `S${p.lastWatchedSeason}${p.lastWatchedEpisode ? `E${p.lastWatchedEpisode}` : ''}`,
+        code: p.lastWatchedEpisode ? formatEpisodeCode(p.lastWatchedSeason, p.lastWatchedEpisode) : `S${String(p.lastWatchedSeason).padStart(2, '0')}`,
         sortKey: (p.lastWatchedSeason ?? 0) * 1000 + (p.lastWatchedEpisode ?? 0),
       };
     })

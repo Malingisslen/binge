@@ -56,7 +56,7 @@ export function AvailabilityTable({ title, availability }: { title: string; avai
                       ? '0 kr'
                       : r.monthlyFrom !== null
                         ? `Från ${formatKr(r.monthlyFrom)} kr/mån${r.tierName ? ` (${r.tierName})` : ''}`
-                        : r.how === 'abonnemang' ? '–' : ''}
+                        : r.how === 'abonnemang' ? '–' : r.how === 'hyr-kop' ? 'Pris hos tjänsten' : ''}
                   </td>
                   <td style={cell}>
                     {r.hubHref && <Link href={r.hubHref} style={linkStyle}>Mer på {r.name}</Link>}
@@ -69,7 +69,7 @@ export function AvailabilityTable({ title, availability }: { title: string; avai
       </div>
       <p className="text-ink-3" style={{ fontSize: 'var(--fs-sm)', marginTop: 8 }}>
         Tjänsterna gäller när sidan senast byggdes.
-        {pricesVerifiedOn && ` Priser ur binges prislista, kontrollerade ${svDate(pricesVerifiedOn)}.`}
+        {pricesVerifiedOn && ` Priser ur Binges prislista, kontrollerade ${svDate(pricesVerifiedOn)}.`}
         {' '}<Link href="/streamingkostnad/" style={linkStyle}>Räkna ut vad din streaming kostar</Link>
       </p>
     </section>

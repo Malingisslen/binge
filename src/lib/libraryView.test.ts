@@ -132,13 +132,13 @@ describe('seenEpisodeCode', () => {
     expect(seenEpisodeCode(makeItem({}))).toBeNull();
   });
   it('returns SxEy when both persisted', () => {
-    expect(seenEpisodeCode(makeItem({ lastWatchedSeason: 2, lastWatchedEpisode: 10 }))).toBe('S2E10');
+    expect(seenEpisodeCode(makeItem({ lastWatchedSeason: 2, lastWatchedEpisode: 10 }))).toBe('S02E10');
   });
   it('returns Sx when only season persisted', () => {
-    expect(seenEpisodeCode(makeItem({ lastWatchedSeason: 3 }))).toBe('S3');
+    expect(seenEpisodeCode(makeItem({ lastWatchedSeason: 3 }))).toBe('S03');
   });
   it('handles season 0 (Specials)', () => {
-    expect(seenEpisodeCode(makeItem({ lastWatchedSeason: 0, lastWatchedEpisode: 2 }))).toBe('S0E2');
+    expect(seenEpisodeCode(makeItem({ lastWatchedSeason: 0, lastWatchedEpisode: 2 }))).toBe('S00E02');
   });
 });
 
@@ -155,7 +155,7 @@ describe('libraryProgressLabel', () => {
 
   it('ligger_efter → claims behind + states what was seen', () => {
     const item = makeItem({ lastWatchedSeason: 2, lastWatchedEpisode: 8 });
-    expect(libraryProgressLabel(item, 'ligger_efter', null)).toEqual({ text: 'Ligger efter · S2E8 sedd', tone: 'accent' });
+    expect(libraryProgressLabel(item, 'ligger_efter', null)).toEqual({ text: 'Ligger efter · S02E08 sedd', tone: 'accent' });
   });
 
   it('ligger_efter without persisted progress (defensive) still labels honestly', () => {
@@ -164,7 +164,7 @@ describe('libraryProgressLabel', () => {
 
   it('paborjad → states only what we know: seen episode code, no behind/ikapp claim', () => {
     const item = makeItem({ lastWatchedSeason: 2, lastWatchedEpisode: 10 });
-    expect(libraryProgressLabel(item, 'paborjad', null)).toEqual({ text: 'S2E10 sedd', tone: 'muted' });
+    expect(libraryProgressLabel(item, 'paborjad', null)).toEqual({ text: 'S02E10 sedd', tone: 'muted' });
   });
 
   it('paborjad with upcoming air date → "Nytt {dag}"', () => {
@@ -176,11 +176,11 @@ describe('libraryProgressLabel', () => {
 // === buildStandfirst — pluralisering (B5) + en källa för räknare (B1) ===
 describe('buildStandfirst', () => {
   it('uses singular "titel" for exactly one visible title (B5)', () => {
-    expect(buildStandfirst(1, 1, 'mina', 'all')).toBe('1 titel i denna lista. Vi räknade åt dig.');
+    expect(buildStandfirst(1, 1, 'mina', 'all')).toBe('1 titel i denna lista.');
   });
 
   it('uses plural for multiple titles', () => {
-    expect(buildStandfirst(194, 194, 'mina', 'all')).toBe('194 titlar i denna lista. Vi räknade åt dig.');
+    expect(buildStandfirst(194, 194, 'mina', 'all')).toBe('194 titlar i denna lista.');
   });
 
   it('says "X av Y" when filters hide some titles (search → 1 match, B5-reprot)', () => {
@@ -188,13 +188,13 @@ describe('buildStandfirst', () => {
   });
 
   it('pluralizes per media filter', () => {
-    expect(buildStandfirst(1, 1, 'vill_se', 'tv')).toBe('1 serie i denna lista. Vi räknade åt dig.');
-    expect(buildStandfirst(1, 1, 'vill_se', 'movie')).toBe('1 film i denna lista. Vi räknade åt dig.');
-    expect(buildStandfirst(2, 2, 'vill_se', 'movie')).toBe('2 filmer i denna lista. Vi räknade åt dig.');
+    expect(buildStandfirst(1, 1, 'vill_se', 'tv')).toBe('1 serie i denna lista.');
+    expect(buildStandfirst(1, 1, 'vill_se', 'movie')).toBe('1 film i denna lista.');
+    expect(buildStandfirst(2, 2, 'vill_se', 'movie')).toBe('2 filmer i denna lista.');
   });
 
   it('says "biblioteket" when no status (the /my/all view)', () => {
-    expect(buildStandfirst(5, 5, undefined, 'all')).toBe('5 titlar i biblioteket. Vi räknade åt dig.');
+    expect(buildStandfirst(5, 5, undefined, 'all')).toBe('5 titlar i biblioteket.');
   });
 
   it('handles empty library and empty filter results', () => {

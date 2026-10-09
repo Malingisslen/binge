@@ -10,6 +10,7 @@ import CancelHint from '@/components/savings/CancelHint';
 import type { ProviderAdvisory, ActivePause } from '@/types';
 import { Eyebrow } from '@/components/ui/Eyebrow';
 import { cardClass } from '@/components/ui/Card';
+import { formatDecimal } from '@/lib/formatDecimal';
 
 // "Dina tjänster" sorterad efter kr/aktiv-serie — ersätter den gamla
 // KPI-3-griden. Bäst valuta överst, sämst nedanför så ögat naturligt
@@ -111,7 +112,7 @@ export default function ProvidersByValue({ providers, activePauses }: Props) {
                     {row.isFree
                       ? 'gratis'
                       : row.krPerShow != null
-                        ? `${row.krPerShow.toFixed(1).replace('.', ',')} kr/serie`
+                        ? `${formatDecimal(row.krPerShow)} kr/serie`
                         : '—'}
                   </td>
                 </tr>

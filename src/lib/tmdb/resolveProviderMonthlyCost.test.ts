@@ -24,6 +24,10 @@ describe('resolveProviderMonthlyCost — live tier pricing', () => {
     expect(cost).toBe(59);
   });
 
+  it('a free service costs 0 even when a custom cost was saved for it', () => {
+    expect(resolveProviderMonthlyCost(520, { providerTiers: {}, providerCosts: { 520: 69 } })).toBe(0);
+  });
+
   it('falls back to defaultMonthlyCost when neither tier nor custom cost is set', () => {
     expect(resolveProviderMonthlyCost(119, { providerTiers: {}, providerCosts: {} })).toBe(69);
   });

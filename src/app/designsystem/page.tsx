@@ -25,8 +25,7 @@ const COLOR_TOKENS = [
 const TYPE_SCALE = [
   ['text-6xl', '44px'], ['text-5xl', '32px'], ['text-4xl', '24px'], ['text-3xl', '22px'],
   ['text-2xl', '20px'], ['text-xl', '17px'], ['text-lg', '15px'], ['text-md', '14px'],
-  ['text-base', '13.5px'], ['text-sm', '12.5px'], ['text-xs', '11px'], ['text-xxs', '10px'],
-  ['text-micro', '9px'], ['text-nano', '8px'],
+  ['text-base', '13.5px'], ['text-sm', '12.5px'], ['text-xs', '12px'],
 ] as const;
 
 // A plain gradient stands in for a poster, so the page needs no network.

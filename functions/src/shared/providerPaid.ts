@@ -13,33 +13,35 @@ export interface PaidEntry {
   /** The catalog has a default price; without one a campaign has nothing to replace. */
   hasDefault: boolean;
   defaultPaid: boolean;
+  /** Always free (SVT Play): costs nothing whatever own price the user once saved. */
+  free: boolean;
   tiers: Readonly<Record<string, boolean>>;
 }
 
 export const PROVIDER_PAID: Readonly<Record<number, PaidEntry>> = {
-  8: { aliases: [175], hasDefault: true, defaultPaid: true, tiers: { basic: true, standard: true, premium: true } },
-  119: { aliases: [], hasDefault: true, defaultPaid: true, tiers: {} },
-  337: { aliases: [], hasDefault: true, defaultPaid: true, tiers: { ads: true, standard: true, premium: true } },
-  384: { aliases: [1899, 1825], hasDefault: true, defaultPaid: true, tiers: { ads: true, standard: true, premium: true } },
-  76: { aliases: [], hasDefault: true, defaultPaid: true, tiers: { reklam: true, standard: true, medium: true, total: true } },
-  520: { aliases: [493], hasDefault: true, defaultPaid: false, tiers: {} },
-  489: { aliases: [1944, 1759], hasDefault: true, defaultPaid: true, tiers: { 'plus-ads': true, plus: true, 'sport-bas': true, 'sport-fotboll': true, 'sport-hockey': true, sport: true } },
-  350: { aliases: [2243], hasDefault: true, defaultPaid: true, tiers: {} },
-  510: { aliases: [], hasDefault: true, defaultPaid: true, tiers: { ads: true, standard: true, sport: true } },
-  323: { aliases: [1968, 283], hasDefault: true, defaultPaid: true, tiers: { fan: true, megafan: true } },
-  431: { aliases: [1773, 531], hasDefault: true, defaultPaid: true, tiers: { ads: true, standard: true, premium: true } },
-  335: { aliases: [188], hasDefault: true, defaultPaid: true, tiers: { lite: true, student: true, solo: true, family: true } },
-  521: { aliases: [497], hasDefault: true, defaultPaid: true, tiers: {} },
-  300: { aliases: [], hasDefault: true, defaultPaid: false, tiers: {} },
-  538: { aliases: [], hasDefault: true, defaultPaid: false, tiers: {} },
-  11: { aliases: [], hasDefault: true, defaultPaid: true, tiers: {} },
-  435: { aliases: [], hasDefault: true, defaultPaid: true, tiers: { bas: true, standard: true, premium: true } },
-  578: { aliases: [517], hasDefault: false, defaultPaid: false, tiers: {} },
-  35: { aliases: [], hasDefault: false, defaultPaid: false, tiers: {} },
-  3: { aliases: [], hasDefault: false, defaultPaid: false, tiers: {} },
-  2: { aliases: [], hasDefault: false, defaultPaid: false, tiers: {} },
-  426: { aliases: [], hasDefault: false, defaultPaid: false, tiers: {} },
-  423: { aliases: [], hasDefault: false, defaultPaid: false, tiers: {} },
+  8: { aliases: [175], hasDefault: true, defaultPaid: true, free: false, tiers: { basic: true, standard: true, premium: true } },
+  119: { aliases: [], hasDefault: true, defaultPaid: true, free: false, tiers: {} },
+  337: { aliases: [], hasDefault: true, defaultPaid: true, free: false, tiers: { ads: true, standard: true, premium: true } },
+  384: { aliases: [1899, 1825], hasDefault: true, defaultPaid: true, free: false, tiers: { ads: true, standard: true, premium: true } },
+  76: { aliases: [], hasDefault: true, defaultPaid: true, free: false, tiers: { reklam: true, standard: true, medium: true, total: true } },
+  520: { aliases: [493], hasDefault: true, defaultPaid: false, free: true, tiers: {} },
+  489: { aliases: [1944, 1759], hasDefault: true, defaultPaid: true, free: false, tiers: { 'plus-ads': true, plus: true, 'sport-bas': true, 'sport-fotboll': true, 'sport-hockey': true, sport: true } },
+  350: { aliases: [2243], hasDefault: true, defaultPaid: true, free: false, tiers: {} },
+  510: { aliases: [], hasDefault: true, defaultPaid: true, free: false, tiers: { ads: true, standard: true, sport: true } },
+  323: { aliases: [1968, 283], hasDefault: true, defaultPaid: true, free: false, tiers: { fan: true, megafan: true } },
+  431: { aliases: [1773, 531], hasDefault: true, defaultPaid: true, free: false, tiers: { ads: true, standard: true, premium: true } },
+  335: { aliases: [188], hasDefault: true, defaultPaid: true, free: false, tiers: { lite: true, student: true, solo: true, family: true } },
+  521: { aliases: [497], hasDefault: true, defaultPaid: true, free: false, tiers: {} },
+  300: { aliases: [], hasDefault: true, defaultPaid: false, free: false, tiers: {} },
+  538: { aliases: [], hasDefault: true, defaultPaid: false, free: false, tiers: {} },
+  11: { aliases: [], hasDefault: true, defaultPaid: true, free: false, tiers: {} },
+  435: { aliases: [], hasDefault: true, defaultPaid: true, free: false, tiers: { bas: true, standard: true, premium: true } },
+  578: { aliases: [517], hasDefault: false, defaultPaid: false, free: false, tiers: {} },
+  35: { aliases: [], hasDefault: false, defaultPaid: false, free: false, tiers: {} },
+  3: { aliases: [], hasDefault: false, defaultPaid: false, free: false, tiers: {} },
+  2: { aliases: [], hasDefault: false, defaultPaid: false, free: false, tiers: {} },
+  426: { aliases: [], hasDefault: false, defaultPaid: false, free: false, tiers: {} },
+  423: { aliases: [], hasDefault: false, defaultPaid: false, free: false, tiers: {} },
 };
 
 const CANONICAL = new Map<number, number>();

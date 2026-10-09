@@ -2,11 +2,11 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { Film, Tv } from 'lucide-react';
+import { Film, Tv, User } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useSearch } from '@/hooks/useTMDB';
 import { useUserSearch } from '@/hooks/useUserSearch';
-import { posterUrl, getDisplayTitle, getReleaseYear, isAddableMediaType, titleHref } from '@/lib/tmdb/client';
+import { posterUrl, profileUrl, getDisplayTitle, getReleaseYear, isAddableMediaType, titleHref } from '@/lib/tmdb/client';
 import { toneForId } from '@/lib/duotone';
 import { rankSearchResults } from '@/lib/searchRanking';
 import type { ResolvedUser } from '@/lib/firebase/username';
@@ -26,7 +26,12 @@ interface SearchDropdownProps {
 // rader (användare först, sedan titlar), Enter aktiverar den markerade.
 type Row =
   | { kind: 'user'; user: ResolvedUser }
+  | { kind: 'person'; id: number }
   | { kind: 'title'; item: { media_type: 'movie' | 'tv'; id: number } };
+
+// Sökfältet lovar "titel, person", så personträffar från TMDB visas som en egen
+// grupp. Tre räcker: den som söker ett namn vill nästan alltid ha den första.
+const MAX_PEOPLE = 3;
 
 export default function SearchDropdown({ query, onSelect, onActiveOptionChange }: SearchDropdownProps) {
   const { data: titleData, isLoading: titlesLoading } = useSearch(query);
@@ -39,14 +44,19 @@ export default function SearchDropdown({ query, onSelect, onActiveOptionChange }
     [titleData, query],
   );
   const userResults = useMemo(() => userData ?? [], [userData]);
+  const personResults = useMemo(
+    () => (titleData?.results ?? []).filter(r => r.media_type === 'person').slice(0, MAX_PEOPLE),
+    [titleData],
+  );
 
   const rows: Row[] = useMemo(() => [
     ...userResults.map(u => ({ kind: 'user' as const, user: u })),
+    ...personResults.map(p => ({ kind: 'person' as const, id: p.id })),
     ...titleResults.map(item => ({
       kind: 'title' as const,
       item: { media_type: item.media_type as 'movie' | 'tv', id: item.id },
     })),
-  ], [userResults, titleResults]);
+  ], [userResults, personResults, titleResults]);
 
   useEffect(() => { setActiveIndex(-1); }, [query]);
 
@@ -73,6 +83,8 @@ export default function SearchDropdown({ query, onSelect, onActiveOptionChange }
         const row = rows[activeIndex];
         if (row.kind === 'user') {
           router.push(`/user/${row.user.username}/`);
+        } else if (row.kind === 'person') {
+          router.push(`/person/${row.id}/`);
         } else {
           router.push(titleHref(row.item.media_type, row.item.id));
         }
@@ -88,7 +100,7 @@ export default function SearchDropdown({ query, onSelect, onActiveOptionChange }
   }, [activeIndex, rows, query, router, onSelect]);
 
   const isLoading = titlesLoading || usersLoading;
-  const hasAny = userResults.length > 0 || titleResults.length > 0;
+  const hasAny = userResults.length > 0 || personResults.length > 0 || titleResults.length > 0;
 
   return (
     <div
@@ -134,15 +146,52 @@ export default function SearchDropdown({ query, onSelect, onActiveOptionChange }
         </>
       )}
 
+      {personResults.length > 0 && (
+        <>
+          <div role="presentation" className={eyebrowClass({ className: `px-3 pt-2 pb-0.5${userResults.length > 0 ? ' border-t border-rule-2' : ''}` })}>
+            Personer
+          </div>
+          {personResults.map((person, i) => {
+            const rowIndex = userResults.length + i;
+            const photo = profileUrl(person.profile_path ?? null, 'w45');
+            return (
+              <Link
+                key={`person-${person.id}`}
+                href={`/person/${person.id}/`}
+                onClick={onSelect}
+                role="option"
+                id={`search-opt-${rowIndex}`}
+                aria-selected={rowIndex === activeIndex}
+                className={`flex items-center gap-2 px-3 py-1.5 no-underline text-ink-2 ${
+                  rowIndex === activeIndex ? 'bg-bg-2' : 'hover:bg-rule-2'
+                }`}
+              >
+                {photo ? (
+                  <img src={photo} alt="" className="w-[26px] h-[26px] rounded-full object-cover shrink-0" loading="lazy" decoding="async" width={26} height={26} />
+                ) : (
+                  <div className="w-[26px] h-[26px] rounded-full bg-rule-2 shrink-0 flex items-center justify-center text-ink-3" aria-hidden>
+                    <User size={12} />
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <div className="text-sm text-ink font-semibold truncate">{person.name}</div>
+                  <div className="text-xs text-ink-3">{departmentLabel(person.known_for_department)}</div>
+                </div>
+              </Link>
+            );
+          })}
+        </>
+      )}
+
       {titleResults.length > 0 && (
         <>
-          {userResults.length > 0 && (
+          {(userResults.length > 0 || personResults.length > 0) && (
             <div role="presentation" className={eyebrowClass({ className: 'px-3 pt-2 pb-0.5 border-t border-rule-2' })}>
               Titlar
             </div>
           )}
           {titleResults.map((item, i) => {
-            const rowIndex = userResults.length + i;
+            const rowIndex = userResults.length + personResults.length + i;
             const href = titleHref(item.media_type, item.id);
             const title = getDisplayTitle(item);
             const year = getReleaseYear(item);
@@ -198,6 +247,13 @@ export default function SearchDropdown({ query, onSelect, onActiveOptionChange }
       )}
     </div>
   );
+}
+
+function departmentLabel(dept: string | undefined): string {
+  if (dept === 'Acting') return 'Skådespelare';
+  if (dept === 'Directing') return 'Regissör';
+  if (dept === 'Writing') return 'Manusförfattare';
+  return 'Person';
 }
 
 function UserAvatar({ name, photoURL }: { name: string; photoURL: string | null }) {
