@@ -1,6 +1,6 @@
 import type { CalendarEntry, EpisodeEntry } from './types';
 import { entryKey } from './entry';
-import { getDisplayTitle } from '@/lib/tmdb/client';
+import { resolveDisplayName } from '@/lib/utils/displayName';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import type { TMDBSearchResult, TMDBTVShow, WatchlistItem } from '@/types';
 
@@ -198,9 +198,23 @@ export function groupEntriesByMonth(
   return groups;
 }
 
+function discoveryTitle(
+  item: { name?: string; original_name?: string },
+  english: string | undefined,
+): { title: string; originalTitle?: string } {
+  const { primary, secondary } = resolveDisplayName({
+    localized: item.name,
+    original: item.original_name,
+    english,
+  });
+  return secondary ? { title: primary, originalTitle: secondary } : { title: primary };
+}
+
 export interface DiscoveryPremiere {
   tmdbId: number;
   title: string;
+  /** Originalskriftens namn, bara när titeln ovan är ett latinskt namn och originalet inte är det. */
+  originalTitle?: string;
   posterPath: string | null;
   /** Premiärdatum: first_air_date för nya serier (S1), next_episode_to_air.air_date för återkomster. */
   airDate: string;
@@ -215,7 +229,8 @@ export interface DiscoveryPremiere {
  * användaren inte redan följer/avfärdat. Filtrerar bort: saknat/utanför-fönster
  * first_air_date, exkluderade ids, saknad poster. Deduplicerar över sidor,
  * behåller TMDB:s popularitetsordning, cappar till `cap`. Titel via
- * getDisplayTitle (föredrar originaltitel i latinsk skrift, annars sv-SE).
+ * resolveDisplayName; `englishNames` (id → en-US-namn) fyller i när TMDB saknar
+ * latinskt namn på sv-SE.
  */
 export function selectDiscoveryPremieres(
   results: readonly TMDBSearchResult[],
@@ -225,6 +240,7 @@ export function selectDiscoveryPremieres(
   excludedIds: ReadonlySet<string>,
   window: PremiereWindow,
   cap = 12,
+  englishNames: ReadonlyMap<number, string> = new Map(),
 ): DiscoveryPremiere[] {
   const seen = new Set<number>();
   const out: DiscoveryPremiere[] = [];
@@ -238,7 +254,7 @@ export function selectDiscoveryPremieres(
     seen.add(r.id);
     out.push({
       tmdbId: r.id,
-      title: getDisplayTitle(r),
+      ...discoveryTitle(r, englishNames.get(r.id)),
       posterPath: r.poster_path,
       airDate: firstAir,
       seasonNumber: 1,
@@ -262,6 +278,7 @@ export function selectSeasonPremiereDiscoveries(
   excludedIds: ReadonlySet<string>, // composite-keyed; probed with 'tv_' (BIN-560 Phase 4)
   window: PremiereWindow,
   cap = 12,
+  englishNames: ReadonlyMap<number, string> = new Map(),
 ): DiscoveryPremiere[] {
   const seen = new Set<number>();
   const out: DiscoveryPremiere[] = [];
@@ -277,7 +294,7 @@ export function selectSeasonPremiereDiscoveries(
     seen.add(show.id);
     out.push({
       tmdbId: show.id,
-      title: getDisplayTitle(show),
+      ...discoveryTitle(show, englishNames.get(show.id)),
       posterPath: show.poster_path,
       airDate: next.air_date,
       seasonNumber: next.season_number,

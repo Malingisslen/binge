@@ -113,6 +113,17 @@ describe('MobileTabBar (variant B)', () => {
     expect(on).toEqual([expected]);
   });
 
+  it.each([
+    ['/search/', 'Sök'],
+    ['/calendar/', 'Kalender'],
+  ])('on %s the current tab is %s and Sök is current only on /search', (path, expected) => {
+    nav.pathname = path;
+    render(<MobileTabBar />);
+    const current = Array.from(document.querySelectorAll('.m-tabs [aria-current="page"]')).map(el => el.textContent);
+    expect(current).toEqual([expected]);
+    expect(screen.getByRole('button', { name: 'Sök' }).classList.contains('center')).toBe(false);
+  });
+
   // The subnav is hidden on phones, so anything it links to must be reachable here.
   it('reaches every section the desktop subnav links to', () => {
     render(<><Subnav /><MobileTabBar /></>);
@@ -157,6 +168,12 @@ describe('MobileTabBar for signed-out visitors', () => {
     nav.pathname = path;
     render(<MobileTabBar chrome="guest" />);
     expect(Array.from(document.querySelectorAll('[aria-current="page"]')).map(el => el.textContent)).toEqual([expected]);
+  });
+
+  it('Sök is current in the guest bar only on /search', () => {
+    nav.pathname = '/search/';
+    render(<MobileTabBar chrome="guest" />);
+    expect(Array.from(document.querySelectorAll('[aria-current="page"]')).map(el => el.textContent)).toEqual(['Sök']);
   });
 
   it('Sök focuses the topbar search field', () => {

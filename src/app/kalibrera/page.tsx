@@ -143,7 +143,7 @@ function CalibrationCard({
   const year = (item.release_date ?? item.first_air_date ?? '').slice(0, 4);
 
   return (
-    <div className={cardClass('overflow-hidden')}>
+    <div className={cardClass('overflow-hidden cal-scroll-pad')}>
       <div className="text-xxs text-ink-3 px-3 py-1 border-b border-rule-2">
         {progress.current}/{progress.total}
       </div>
@@ -169,7 +169,7 @@ function CalibrationCard({
       <p className="text-xs text-ink-2 leading-relaxed px-3 py-2 m-0 min-h-[50px]">
         {item.overview || <span className="text-ink-3 italic">Ingen beskrivning.</span>}
       </p>
-      <div className="flex gap-1 px-3 py-2 border-t border-rule-2">
+      <div className="cal-actions flex gap-1 px-3 py-2 border-t border-rule-2">
         <Button
           onClick={() => onVote('down')}
           variant="ghost" size="sm" className="flex-1 inline-flex items-center justify-center gap-1"

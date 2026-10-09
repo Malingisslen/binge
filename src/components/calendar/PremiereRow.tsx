@@ -58,6 +58,7 @@ export function DiscoveryRow({ premiere }: { premiere: DiscoveryPremiere }) {
         <div className="prow-ttl">{premiere.title}</div>
         <div className="prow-meta">
           <span>{fmtDate(premiere.airDate)}</span>
+          {premiere.originalTitle ? <> · <span lang="und">{premiere.originalTitle}</span></> : null}
         </div>
       </div>
       <span className="prow-badge">{badge}</span>

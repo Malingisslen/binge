@@ -14,7 +14,7 @@ import {
   type PremiereWindow,
   type DiscoveryPremiere,
 } from '@/lib/calendar/premieres';
-import type { TMDBTVShow } from '@/types';
+import type { TMDBSearchResult, TMDBTVShow } from '@/types';
 
 // Upptäckt för Premiärer & finaler-sidan. TVÅ källor slås ihop till en rad:
 //
@@ -35,6 +35,15 @@ const PAGES = [1, 2] as const;
 // useRecommendationsCascade (SEED_FETCH_CAP). Höj inte för att fylla en tunn lista;
 // bredda hellre discover-sidorna (billiga + persisterade).
 const CANDIDATE_CAP = 20;
+
+function englishNameMap(results: readonly TMDBSearchResult[]): Map<number, string> {
+  const map = new Map<number, string>();
+  for (const r of results) {
+    const name = r.name ?? r.title;
+    if (name) map.set(r.id, name);
+  }
+  return map;
+}
 
 export interface DiscoveryPremieresResult {
   premieres: DiscoveryPremiere[];
@@ -74,15 +83,37 @@ export function useDiscoveryPremieres(
       staleTime: TMDB_STALE.DISCOVER,
     })),
   });
+  // Samma sidor på en-US: TMDB ger bara original-skriftens namn på sv-SE när
+  // svensk titel saknas, och en-US ger då ett latinskt namn. En request per
+  // listsida, aldrig per titel. Ett fel här ger bara originalnamnet som förut.
+  const s1EnQueries = useQueries({
+    queries: PAGES.map(page => ({
+      queryKey: ['discover-tv', 'premiere-window-en', window.startIso, page] as const,
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        discoverTV({
+          language: 'en-US',
+          'first_air_date.gte': window.startIso,
+          'first_air_date.lte': window.endIso,
+          sort_by: 'popularity.desc',
+          ...(page > 1 ? { page: String(page) } : {}),
+        }, { signal }),
+      staleTime: TMDB_STALE.DISCOVER,
+    })),
+  });
   const s1Pending = s1Queries.some(q => q.isPending);
   const s1Results = useMemo(
     () => s1Queries.flatMap(q => q.data?.results ?? []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [s1Queries.map(q => q.dataUpdatedAt).join(',')],
   );
+  const s1EnNames = useMemo(
+    () => englishNameMap(s1EnQueries.flatMap(q => q.data?.results ?? [])),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [s1EnQueries.map(q => q.dataUpdatedAt).join(',')],
+  );
   const s1 = useMemo(
-    () => selectDiscoveryPremieres(s1Results, excludedIds, window),
-    [s1Results, excludedIds, window],
+    () => selectDiscoveryPremieres(s1Results, excludedIds, window, undefined, s1EnNames),
+    [s1Results, excludedIds, window, s1EnNames],
   );
 
   // --- Fas 2: återkommande säsongspremiärer (S≥2 E1) — VISIBILITY-GATED ---
@@ -104,6 +135,27 @@ export function useDiscoveryPremieres(
       enabled: seasonPremieresEnabled,
     })),
   });
+  const poolEnQueries = useQueries({
+    queries: PAGES.map(page => ({
+      queryKey: ['discover-tv', 'season-premiere-window-en', window.startIso, page] as const,
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        discoverTV({
+          language: 'en-US',
+          'air_date.gte': window.startIso,
+          'air_date.lte': window.endIso,
+          with_status: '0',
+          sort_by: 'popularity.desc',
+          ...(page > 1 ? { page: String(page) } : {}),
+        }, { signal }),
+      staleTime: TMDB_STALE.DISCOVER,
+      enabled: seasonPremieresEnabled,
+    })),
+  });
+  const poolEnNames = useMemo(
+    () => englishNameMap(poolEnQueries.flatMap(q => q.data?.results ?? [])),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [poolEnQueries.map(q => q.dataUpdatedAt).join(',')],
+  );
   const poolPending = seasonPremieresEnabled && poolQueries.some(q => q.isPending);
   const poolResults = useMemo(
     () => poolQueries.flatMap(q => q.data?.results ?? []),
@@ -144,8 +196,8 @@ export function useDiscoveryPremieres(
     [showQueries.map(q => q.dataUpdatedAt).join(',')],
   );
   const s2 = useMemo(
-    () => selectSeasonPremiereDiscoveries(shows, excludedIds, window),
-    [shows, excludedIds, window],
+    () => selectSeasonPremiereDiscoveries(shows, excludedIds, window, undefined, poolEnNames),
+    [shows, excludedIds, window, poolEnNames],
   );
 
   const premieres = useMemo(() => mergeDiscoveries(s1, s2), [s1, s2]);

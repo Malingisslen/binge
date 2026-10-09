@@ -84,7 +84,6 @@ function SearchTab({ pathname, onOpen }: { pathname: string | null; onOpen: () =
   return (
     <button
       type="button"
-      className="center"
       onClick={onOpen}
       aria-current={pathname?.startsWith('/search') ? 'page' : undefined}
     >

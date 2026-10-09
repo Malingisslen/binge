@@ -7,6 +7,7 @@ import { useSearch } from '@/hooks/useTMDB';
 import { useSearchProviders } from '@/hooks/useSearchProviders';
 import { useAuth } from '@/hooks/useAuth';
 import TitleGrid from '@/components/title/TitleGrid';
+import TitleRow from '@/components/title/TitleRow';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -129,7 +130,19 @@ function SearchResults() {
         <EmptyState title="Inga träffar" body="Försök med ett annat namn eller stavning." />
       ) : (
         <div className={cardClass()}>
-          <TitleGrid items={results} providerMap={providerMap} />
+          {/* Switched in CSS, not on window width, so server and client render the same. */}
+          <div className="md:hidden px-3 divide-y divide-rule-2">
+            {results.map(item => (
+              <TitleRow
+                key={`${item.media_type}-${item.id}`}
+                item={item}
+                providers={providerMap[`${item.media_type}-${item.id}`]}
+              />
+            ))}
+          </div>
+          <div className="hidden md:block">
+            <TitleGrid items={results} providerMap={providerMap} />
+          </div>
           <div className="px-3 py-1.5 border-t border-rule-2">
             <JustWatchCredit />
           </div>

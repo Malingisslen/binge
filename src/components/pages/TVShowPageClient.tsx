@@ -46,6 +46,7 @@ import FriendsWhoSaw from '@/components/title/FriendsWhoSaw';
 import { useEpisodeProgressWithSync } from '@/hooks/useEpisodeProgressWithSync';
 import { tvShowStatusLabel } from '@/lib/watchStatus';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
+import { personName } from '@/lib/utils/displayName';
 import { availabilityLine, buildContentFloor, hasSubstantialText } from '@/lib/seo/contentFloor';
 import { tvContentFloorInput } from '@/lib/seo/contentFloorInput';
 import { formatNextEpisodeLabel, seriesYearSpan, upcomingEpisode } from '@/lib/episodeLabel';
@@ -319,7 +320,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
                 <span key={c.id}>
                   {i > 0 && ', '}
                   <Link href={`/person/${c.id}/`} style={{ color: 'var(--ink-2)', textDecoration: 'none', borderBottom: '1px solid var(--rule)' }}>
-                    {c.name}
+                    {personName(c).primary}
                   </Link>
                 </span>
               ))}
@@ -553,17 +554,22 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={profileUrl(person.profile_path)!}
-                      alt={person.name}
+                      alt={personName(person).primary}
                       loading="lazy"
                       decoding="async"
                       width={72}
                       height={72}
                     />
                   ) : (
-                    <AvatarInitials name={person.name} size={72} />
+                    <AvatarInitials name={personName(person).primary} size={72} />
                   )}
                 </div>
-                <div style={{ fontSize: 'var(--fs-base)', fontWeight: 500, lineHeight: 1.25 }}>{person.name}</div>
+                <div style={{ fontSize: 'var(--fs-base)', fontWeight: 500, lineHeight: 1.25 }}>{personName(person).primary}</div>
+                {personName(person).secondary && (
+                  <div lang="und" style={{ fontSize: 'var(--fs-xs)', color: 'var(--ink-3)', lineHeight: 1.2 }}>
+                    {personName(person).secondary}
+                  </div>
+                )}
                 <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--ink-3)', marginTop: 2, lineHeight: 1.2 }}>
                   {person.character}
                 </div>

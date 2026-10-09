@@ -22,6 +22,7 @@ import { NotFound } from '@/components/ui/NotFound';
 import { EmptyState } from '@/components/ui/EmptyState';
 import type { TMDBPerson } from '@/types';
 import { cardClass } from '@/components/ui/Card';
+import { resolveDisplayName, firstLatinAlias } from '@/lib/utils/displayName';
 
 export default function PersonPageClient({ id, initialData }: { id: string; initialData?: TMDBPerson }) {
   const personId = parseInt(id, 10);
@@ -154,6 +155,7 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
   if (isLoading) return <LoadingView variant="detail" label="Laddar person…" />;
   if (!person) return <NotFound crumb="Person" title="Personen hittades inte." body="Den här personen gick inte att hitta." />;
 
+  const shownName = resolveDisplayName({ localized: person.name, english: firstLatinAlias(person.also_known_as) });
   const photo = profileUrl(person.profile_path, 'w500');
   const birthYear = person.birthday?.substring(0, 4);
 
@@ -166,18 +168,18 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
       {/* BIN-423 WP4: breadcrumb structured data (speglar movie/tv-sidorna) */}
       <JsonLd data={breadcrumbSchema([
         { name: 'Binge.nu', url: 'https://binge.nu/' },
-        { name: person.name, url: `https://binge.nu/person/${person.id}/` },
+        { name: shownName.primary, url: `https://binge.nu/person/${person.id}/` },
       ])} />
       <PageHeader
         crumb={translateDepartment(person.known_for_department)}
-        title={person.name}
-        standfirst={[birthYear && `Född ${birthYear}`, person.place_of_birth].filter(Boolean).join(' · ') || undefined}
+        title={shownName.primary}
+        standfirst={[shownName.secondary, birthYear && `Född ${birthYear}`, person.place_of_birth].filter(Boolean).join(' · ') || undefined}
       />
 
       <div className="flex flex-col md:flex-row gap-4 mb-4 mt-3">
         <div className="shrink-0">
           {photo ? (
-            <img src={photo} alt={person.name} className="w-[120px] md:w-[180px] rounded-sm" loading="eager" fetchPriority="high" decoding="async" width={180} height={270} />
+            <img src={photo} alt={shownName.primary} className="w-[120px] md:w-[180px] rounded-sm" loading="eager" fetchPriority="high" decoding="async" width={180} height={270} />
           ) : (
             <div className="w-[180px] aspect-[2/3] bg-rule-2 rounded-sm" />
           )}

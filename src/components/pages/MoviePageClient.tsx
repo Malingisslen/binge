@@ -38,6 +38,7 @@ import { useSignedOutRedirect } from '@/hooks/useSignedOutRedirect';
 import { useTitleRatings } from '@/hooks/useTitleRatings';
 import { RatingsRow } from '@/components/title/RatingsRow';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
+import { personName } from '@/lib/utils/displayName';
 import { availabilityLine, buildContentFloor, hasSubstantialText } from '@/lib/seo/contentFloor';
 import { movieContentFloorInput } from '@/lib/seo/contentFloorInput';
 import { franchiseByCollectionId } from '@/lib/seo/franchises';
@@ -351,7 +352,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
                     <span key={d.id}>
                       {i > 0 && ', '}
                       <Link href={`/person/${d.id}/`} style={{ color: 'var(--ink-2)', textDecoration: 'none', borderBottom: '1px solid var(--rule)' }}>
-                        {d.name}
+                        {personName(d).primary}
                       </Link>
                     </span>
                   ))}
@@ -365,7 +366,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
                     <span key={w.id}>
                       {i > 0 && ', '}
                       <Link href={`/person/${w.id}/`} style={{ color: 'var(--ink-2)', textDecoration: 'none', borderBottom: '1px solid var(--rule)' }}>
-                        {w.name}
+                        {personName(w).primary}
                       </Link>
                     </span>
                   ))}
@@ -615,17 +616,22 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={profileUrl(person.profile_path)!}
-                      alt={person.name}
+                      alt={personName(person).primary}
                       loading="lazy"
                       decoding="async"
                       width={72}
                       height={72}
                     />
                   ) : (
-                    <AvatarInitials name={person.name} size={72} />
+                    <AvatarInitials name={personName(person).primary} size={72} />
                   )}
                 </div>
-                <div style={{ fontSize: 'var(--fs-base)', fontWeight: 500, lineHeight: 1.25 }}>{person.name}</div>
+                <div style={{ fontSize: 'var(--fs-base)', fontWeight: 500, lineHeight: 1.25 }}>{personName(person).primary}</div>
+                {personName(person).secondary && (
+                  <div lang="und" style={{ fontSize: 'var(--fs-xs)', color: 'var(--ink-3)', lineHeight: 1.2 }}>
+                    {personName(person).secondary}
+                  </div>
+                )}
                 <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--ink-3)', marginTop: 2, lineHeight: 1.2 }}>
                   {person.character}
                 </div>

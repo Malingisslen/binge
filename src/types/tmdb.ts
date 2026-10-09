@@ -145,6 +145,7 @@ export interface TMDBVideo {
 export interface TMDBPerson {
   id: number;
   name: string;
+  also_known_as?: string[];
   biography: string;
   birthday: string | null;
   deathday: string | null;
@@ -208,6 +209,7 @@ export interface TMDBEpisode {
 export interface TMDBCastMember {
   id: number;
   name: string;
+  original_name?: string;
   character: string;
   profile_path: string | null;
   order: number;
@@ -216,6 +218,7 @@ export interface TMDBCastMember {
 export interface TMDBCrewMember {
   id: number;
   name: string;
+  original_name?: string;
   job: string;
   department: string;
   profile_path: string | null;

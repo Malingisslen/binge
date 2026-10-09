@@ -936,25 +936,23 @@ button { font: inherit; cursor: pointer; }
 }
 .m-tabs a:focus-visible,
 .m-tabs button:focus-visible { outline: 2px solid var(--ink); outline-offset: -4px; }
-.m-tabs .is-on { color: var(--ink); }
-.m-tabs .is-on .icn { color: var(--ink); }
-.m-tabs .is-on::before {
-  content: "";
-  position: absolute;
-  top: 4px; left: 50%;
-  transform: translateX(-50%);
-  width: 8px; height: 2px;
-  background: var(--acc);
-  border-radius: 1px;
+.m-tabs > a,
+.m-tabs > button,
+.m-more > button {
+  margin: 6px 4px;
+  border-radius: 8px;
 }
-.m-tabs .center {
-  color: var(--bg);
-  background: var(--ink);
-  margin: 8px 8px;
-  border-radius: 14px;
+/* The current page is a soft saffron plate. */
+.m-tabs > .is-on,
+.m-tabs > [aria-current="page"],
+.m-more > button.is-on {
+  background: var(--acc-soft);
+  color: var(--acc-deep);
+  font-weight: 600;
 }
-.m-tabs .center .icn { color: var(--bg); }
-.m-tabs .center::before { display: none; }
+.m-tabs > .is-on .icn,
+.m-tabs > [aria-current="page"] .icn,
+.m-more > button.is-on .icn { color: var(--acc-deep); }
 /* Mer: the button fills its grid cell; the panel hangs from the whole bar. */
 .m-more { display: grid; min-width: 0; }
 .m-more-panel {
@@ -2700,4 +2698,19 @@ html.returning-user .pre-guest { display: none; }
 @media (max-width: 980px) {
   /* Phones reach these pages from the guest tab bar. */
   .guest-nav { display: none; }
+}
+
+/* ─── Calibration answer bar ─── */
+/* On phones the answers stay reachable while the card scrolls: pinned above the
+   64px .m-tabs (shown at the same ≤980px breakpoint), clear of the home indicator. */
+@media (max-width: 980px) {
+  .cal-actions {
+    position: fixed;
+    left: 0; right: 0;
+    bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+    z-index: 35;
+    background: var(--surface);
+    border-top: 1px solid var(--rule);
+  }
+  .cal-scroll-pad { padding-bottom: 72px; }
 }

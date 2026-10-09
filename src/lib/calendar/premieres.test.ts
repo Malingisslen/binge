@@ -342,6 +342,23 @@ describe('selectDiscoveryPremieres', () => {
     expect(out.map(d => d.tmdbId)).toEqual([10, 11]);
   });
 
+  it('uses the English name for a title with no Latin name on sv-SE and keeps the original underneath', () => {
+    const results: TMDBSearchResult[] = [
+      searchResult({ id: 7, first_air_date: '2026-08-01', name: '닥터X', original_name: '닥터X' }),
+    ];
+    const out = selectDiscoveryPremieres(results, new Set(), WINDOW, 12, new Map([[7, 'Doctor X']]));
+    expect(out[0]).toMatchObject({ title: 'Doctor X', originalTitle: '닥터X' });
+  });
+
+  it('keeps the original-script title when no English name is available', () => {
+    const results: TMDBSearchResult[] = [
+      searchResult({ id: 8, first_air_date: '2026-08-01', name: '닥터X', original_name: '닥터X' }),
+    ];
+    const out = selectDiscoveryPremieres(results, new Set(), WINDOW);
+    expect(out[0].title).toBe('닥터X');
+    expect(out[0].originalTitle).toBeUndefined();
+  });
+
   it('caps the list length', () => {
     const results = Array.from({ length: 20 }, (_, i) =>
       searchResult({ id: 100 + i, first_air_date: '2026-07-10' }));
