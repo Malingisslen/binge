@@ -225,9 +225,6 @@ om det, från den e-postadress kontot har. Vänskaper och följningar läggs til
 och den andra får en notis. Recensioner, listor, grupper, Tillsammans-sessioner, notiser,
 pushtokens, vänförfrågningar och gruppinbjudningar kommer inte tillbaka.
 
-Inte provat skarpt: emulatortestet kör flytten, men ingen har ännu kört verktyget mot en
-riktig återställd kopia. Gör det i ett prov innan första skarpa ärendet.
-
 Ordning:
 
 1. En gång per projekt: slå på utgångsdatum för loggen, så att poster i `restoreLog` raderas
