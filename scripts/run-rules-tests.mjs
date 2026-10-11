@@ -124,7 +124,10 @@ const REPO = resolve(HERE, '..');
 // named `(BIN-1438, emulator)` in place. Measured with `npm run test:rules -- --port 8123`.
 // Tipsa en vän, 2026-10-11: raised to what `numTotalTests` reported with
 // src/test/rules/tips.test.ts and the tips sweep cases in place. Measured with `npm run test:rules`.
-export const MIN_TESTS = 937;
+// "Någon följer dig nu", 2026-10-11: raised to what `numTotalTests` reported with
+// src/test/rules/follow-push.test.ts and the follow-notice marker sweep cases in place.
+// Measured with `npm run test:rules -- --port 8123`.
+export const MIN_TESTS = 954;
 
 const VITEST_ARGS = ['run', '--config', 'vitest.rules.config.ts'];
 

@@ -179,6 +179,11 @@ export const onSessionPickCreate = onDocumentCreated(
   },
 );
 
+// ── "Någon följer dig nu" ────────────────────────────────────────────────────
+// onFollowCreate: users/{recipientUid}/followers/{followerUid} skapad → inbox-kort
+// och push till mottagaren, bakom spärrarna i followPush/logic.ts.
+export { onFollowCreate } from './followPush';
+
 // ── Insikter (intern analys-dashboard) ───────────────────────────────────────
 // rollupInsights: schemalagd Firestore-aggregering → insights/daily.
 // apiInsights: HTTP-endpoint bakom /api/insights (admin-token + eventStats-summor).

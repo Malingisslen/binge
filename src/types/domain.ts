@@ -230,6 +230,10 @@ export interface UserProfile {
     // firestore.rules läser nyckeln och nekar ett tips bara vid ett uttryckligt false,
     // så ett konto som saknar den tar emot tips.
     acceptTips: boolean;
+    // "Någon följer dig nu": a bell card, and a push when push is on, when someone
+    // starts following me. onFollowCreate reads the key and stays silent only on an
+    // explicit false, so an account that lacks it gets the notice.
+    followNotify: boolean;
   };
   // BIN-181 — klient-persistad rotationskalender-snapshot (paus/återkom-datum)
   // som rotationReminderNotify läser. Skrivs när användaren slår på påminnelser.

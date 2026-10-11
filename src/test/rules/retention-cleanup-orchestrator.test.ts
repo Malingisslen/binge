@@ -14,6 +14,7 @@ import {
 import { isEmptyExcept, planClaim } from '../../../functions/src/groupHandover/logic';
 import { rosterMismatches } from './memberTraceRoster';
 import { FRIEND_REQUEST_PUSH_MARKER_MAX_AGE_MS } from '../../../functions/src/friendRequestPush/logic';
+import { FOLLOW_PUSH_MARKER_MAX_AGE_MS } from '../../../functions/src/followPush/logic';
 import {
   FIELD_OWNED_CATEGORIES,
   FIELD_OWNED_MAX_DOCS_PER_UID,
@@ -184,6 +185,7 @@ const SCAN_SOURCE: Record<ScanKind, { group: boolean; id: string }> = {
   joinAttempts: { group: true, id: 'joinAttempts' },
   releaseMarkers: { group: true, id: 'notified' },
   friendRequestPushMarkers: { group: false, id: 'friendRequestPushes' },
+  followPushMarkers: { group: false, id: 'followPushes' },
   fcmTokens: { group: true, id: 'fcmTokens' },
   usernames: { group: false, id: 'usernames' },
   orphanWatch: { group: false, id: 'orphanWatch' },
@@ -1906,5 +1908,63 @@ describe('retentionCleanup orchestrator — tips (Tipsa en vän)', () => {
     expect(summary.deletedTips).toBe(0);
     expect(await exists(db, 'users/alive/tips/friend_movie_1')).toBe(true);
     expect(summary.deletedNotifications).toBe(1);
+  });
+});
+
+// "Någon följer dig nu": the sweep is the follow-notice markers' only erasure path, and
+// it reaps both shapes the collection holds (pair marker and per-recipient cap marker).
+describe('retentionCleanup orchestrator — follow-notice markers', () => {
+  async function seedFollowPushes(db: Firestore): Promise<void> {
+    await setDoc(doc(db, 'followPushes', 'alive_oldfollower'), { lastPushedAt: ts(NOW - FOLLOW_PUSH_MARKER_MAX_AGE_MS - 1) });
+    await setDoc(doc(db, 'followPushes', 'alive_edgefollower'), { lastPushedAt: ts(NOW - FOLLOW_PUSH_MARKER_MAX_AGE_MS) });
+    await setDoc(doc(db, 'followPushes', 'alive_freshfollower'), { lastPushedAt: ts(NOW - 1000) });
+    await setDoc(doc(db, 'followPushes', 'oldrecipient'), {
+      windowStartedAt: ts(NOW - FOLLOW_PUSH_MARKER_MAX_AGE_MS - 60_000),
+      count: 2,
+      lastPushedAt: ts(NOW - FOLLOW_PUSH_MARKER_MAX_AGE_MS - 1),
+    });
+    await setDoc(doc(db, 'followPushes', 'alive'), { windowStartedAt: ts(NOW - 1000), count: 1, lastPushedAt: ts(NOW - 1000) });
+    await setDoc(doc(db, 'followPushes', 'alive_undated'), { note: 'no timestamp' });
+  }
+
+  it('reaps a pair marker and a cap marker past the max age and keeps the edge, fresh and undateable ones', async () => {
+    const db = adminLikeDb();
+    const auth = makeAuth(FULL_ACCOUNTS);
+    await seedFollowPushes(db);
+
+    const summary = await runRetentionCleanup(makeIo(db, auth));
+
+    expect(summary.staleFollowPushMarkers).toBe(2);
+    expect(summary.deletedFollowPushMarkers).toBe(2);
+    expect(await exists(db, 'followPushes/alive_oldfollower')).toBe(false);
+    expect(await exists(db, 'followPushes/oldrecipient')).toBe(false);
+    expect(await exists(db, 'followPushes/alive_edgefollower')).toBe(true);
+    expect(await exists(db, 'followPushes/alive_freshfollower')).toBe(true);
+    expect(await exists(db, 'followPushes/alive')).toBe(true);
+    expect(await exists(db, 'followPushes/alive_undated')).toBe(true);
+
+    const second = await runRetentionCleanup(makeIo(db, auth));
+    expect(second.deletedFollowPushMarkers).toBe(0);
+  });
+
+  it('a thrown follow-marker scan leaves the friend-request marker sweep completed', async () => {
+    const db = adminLikeDb();
+    const auth = makeAuth(FULL_ACCOUNTS);
+    await seedFollowPushes(db);
+    await setDoc(doc(db, 'friendRequestPushes', 'alive_old'), {
+      lastPushedAt: ts(NOW - FRIEND_REQUEST_PUSH_MARKER_MAX_AGE_MS - 1),
+    });
+
+    const io = makeIo(db, auth, {
+      scanPage: async (kind, cursor, pageSize) => {
+        if (kind === 'followPushMarkers') throw new Error('missing index');
+        return makeIo(db, auth).scanPage(kind, cursor, pageSize);
+      },
+    });
+    const summary = await runRetentionCleanup(io);
+
+    expect(summary.deletedFollowPushMarkers).toBe(0);
+    expect(await exists(db, 'followPushes/alive_oldfollower')).toBe(true);
+    expect(summary.deletedFriendRequestPushMarkers).toBe(1);
   });
 });

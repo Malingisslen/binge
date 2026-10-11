@@ -2703,3 +2703,24 @@ tipset. Ett tips som ligger kvar efter 91 dagar är en bugg att fila.
 
 **Re-open when:** någon begär radering av ett skickat tips före 90 dagar, eller tips får ett
 fält som bär mer än uid, titel och hälsning.
+
+## Följnotisens markörer exporteras inte och raderas av svepet, inte av kontoraderingen — 2026-10-11
+
+Paket 7 skriver `followPushes/{mottagare}_{följare}` och `followPushes/{mottagare}`, båda med
+bara `lastPushedAt` och räknarens fönsterstart. De ligger utanför `users/` och skrivs av
+Admin SDK, precis som `friendRequestPushes`. Därför når varken `collectUserDataSnapshots`
+(exporten) eller kontoradering-kaskaden dem. Att bygga ut dem hade varit ny infrastruktur i
+en känslig väg för uppgifter som bara bär två uid och en tidpunkt.
+
+**Vad som gäller i stället.** `retentionCleanup` raderar en markör när `lastPushedAt` är äldre
+än markörernas maxålder, vilket är längre än både 24-timmarsfönstret och timtaket.
+Integritetssidan v1.16 (§2 och §6) och retentionspolicyn säger att markörerna ligger kvar efter
+en radering tills svepet tar dem. Beslutet om att markörer utan namn inte tas med i
+tillgångsutdraget (art. 15) är dataskydds- och juridikrollernas; posten dokumenterar läget, den
+avgör det inte.
+
+**Vad som INTE är accepterat:** en markör som överlever svepet, ett svep som slutar köra utan
+larm, och att markörerna får bära namn, användarnamn eller annan identitet.
+
+**Re-open when:** någon begär radering av markörerna före svepet, eller markörerna får ett fält
+som bär mer än uid och tidpunkter.

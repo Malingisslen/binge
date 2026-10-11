@@ -15,6 +15,7 @@
     "logRecapMiss",
     "monthlyBillNotify",
     "notifyReportDecided",
+    "onFollowCreate",
     "onFriendRequestCreate",
     "onSessionPickCreate",
     "priceChangeNotify",

@@ -246,6 +246,12 @@
       "path": "functions/src/push.ts"
     },
     {
+      "id": "cf-follow-push",
+      "label": "onFollowCreate",
+      "context": "backend-api",
+      "path": "functions/src/followPush/index.ts, functions/src/followPush/logic.ts"
+    },
+    {
       "id": "askbinge-parse",
       "label": "askBingeParse (callable)",
       "context": "backend-api",
@@ -693,7 +699,7 @@
       "id": "cf-retentionCleanup",
       "label": "retentionCleanup scheduled sweep",
       "context": "backend-api",
-      "path": "functions/src/retentionCleanup/index.ts, functions/src/retentionCleanup/runCleanup.ts, functions/src/retentionCleanup/logic.ts, functions/src/retentionCleanup/orphans.ts, functions/src/retentionCleanup/fieldOwned.ts, functions/src/retentionCleanup/runHealth.ts, functions/src/groupHandover/runHandover.ts, functions/src/groupHandover/logic.ts, functions/src/friendRequestPush/logic.ts"
+      "path": "functions/src/retentionCleanup/index.ts, functions/src/retentionCleanup/runCleanup.ts, functions/src/retentionCleanup/logic.ts, functions/src/retentionCleanup/orphans.ts, functions/src/retentionCleanup/fieldOwned.ts, functions/src/retentionCleanup/runHealth.ts, functions/src/groupHandover/runHandover.ts, functions/src/groupHandover/logic.ts, functions/src/friendRequestPush/logic.ts, functions/src/followPush/logic.ts"
     },
     {
       "id": "data-export-section",
@@ -1584,6 +1590,59 @@
           "to": "firestore",
           "payload": "BIN-1174: after a rename, publishIdentityChange also calls updateSentFriendRequestIdentity(uid, {displayName, username}). It reads my own users/{uid}/friendRequestsSent, bounded by SENT_REQUESTS_IDENTITY_LIMIT, and runs a two-key updateDoc on each users/{toUid}/friendRequests/{uid}. It never uses set or merge, so a request that was already answered is not recreated. The update rule lets only the sender change fromDisplayName and fromUsername, each unchanged or non-null and equal to the sender's live profile. Every failed write is reported (captureError kind identityFanOut-friendRequest) and never fails the rename. Group invites are not rewritten; that is a dated entry in accepted-deviations.md.",
           "transport": "Firestore write (fan-out)",
+          "verified": true
+        }
+      ],
+      "area": "social"
+    },
+    {
+      "id": "flow-follow-notify",
+      "label": "Follow → \"följer dig nu\" notice",
+      "description": "FollowButton writes the follower's following doc and the mirrored followers doc in the recipient's tree in one batch. A Firestore trigger on the mirror tells the recipient who started following them: a card in the bell and, when the recipient has push on, an FCM push, both linking to the follower's profile. The trigger trusts only the document id for who followed and reads the name from the follower's own profile with the Admin SDK. Two markers in followPushes hold the notice back: a pair marker per (recipient, follower) for the follow/unfollow/follow loop, and a per-recipient marker that caps notices per hour. The windows, the cap and the freshness check live in functions/src/followPush/logic.ts. The follow itself always lands.",
+      "covers": [
+        "onFollowCreate"
+      ],
+      "steps": [
+        {
+          "from": "follow-button",
+          "to": "firestore",
+          "payload": "followUser(targetUid) — batch: set users/{myUid}/following/{targetUid} + set users/{targetUid}/followers/{myUid}, each {followedAt: serverTimestamp()}. firestore.rules binds the followers doc to the writer (isOwner(followerUid) + existsAfter on the following doc) and pins its keys. A re-follow while already following is an update, not a create, so the trigger does not fire.",
+          "transport": "Firestore batch write",
+          "verified": true
+        },
+        {
+          "from": "firestore",
+          "to": "cf-follow-push",
+          "payload": "onDocumentCreated fires on users/{recipientUid}/followers/{followerUid}",
+          "transport": "Firestore trigger",
+          "verified": true
+        },
+        {
+          "from": "cf-follow-push",
+          "to": "firestore",
+          "payload": "getAll(users/{recipientUid}, users/{recipientUid}/blocked/{followerUid}, users/{followerUid}). Nothing is sent when: the follower is the recipient; followedAt is missing or older than the freshness window (an admin copy such as the account-restore script, not a tap); the recipient profile is missing; notificationSettings.followNotify is an explicit false; the recipient has blocked the follower; the follower has no profile. Then one transaction reads followPushes/{recipientUid}_{followerUid} {lastPushedAt} and followPushes/{recipientUid} {windowStartedAt, count, lastPushedAt} and stamps both only when the notice may go: not within the pair window, and under the hourly cap. Both are sealed by a deny-all rule and reaped by retentionCleanup.",
+          "transport": "Admin SDK reads + transaction",
+          "verified": true
+        },
+        {
+          "from": "cf-follow-push",
+          "to": "firestore",
+          "payload": "create users/{recipientUid}/notifications/follow-{eventId} {kind:'system', title:'Ny följare', body:'{namn} följer dig nu', actionUrl:'/user/{username}/' or '/my/friends/' without a valid handle, read:false, createdAt}. The name is the follower's displayName with control characters removed and cut to a maximum length, else @username, else 'Någon'.",
+          "transport": "Admin SDK write",
+          "verified": true
+        },
+        {
+          "from": "cf-follow-push",
+          "to": "cf-sendPush",
+          "payload": "sendPushToUser(recipientUid, {title:'Ny följare', body:'{namn} följer dig nu', actionUrl, tag:'follow-{followerUid}'}, {pushEnabled}) — pushEnabled read from the same recipient profile, so no second read; the card and the push are settled separately and each failure is logged on its own.",
+          "transport": "in-process call",
+          "verified": true
+        },
+        {
+          "from": "cf-sendPush",
+          "to": "fcm-sw",
+          "payload": "push notification (tab closed); click opens the follower's profile",
+          "transport": "FCM / Web Push",
           "verified": true
         }
       ],

@@ -256,3 +256,36 @@ describe('NotificationsSection — the hint also speaks to a second device', () 
     expect(text).not.toMatch(/slå på push igen/i);
   });
 });
+
+// "Någon följer dig nu". The box mirrors the server's reading: only an explicit false
+// is off, so an account whose settings predate the key shows it ticked.
+describe('NotificationsSection — the follow-notice toggle', () => {
+  const followBox = () => screen.getByRole('checkbox', { name: /någon börjar följa mig/i }) as HTMLInputElement;
+
+  it('is ticked for an account that has no followNotify key', async () => {
+    auth.user = { notificationSettings: { pushEnabled: true } };
+    await act(async () => { render(<NotificationsSection />); });
+    expect(followBox().checked).toBe(true);
+  });
+
+  it('is unticked for an explicit false', async () => {
+    auth.user = { notificationSettings: { pushEnabled: true, followNotify: false } };
+    await act(async () => { render(<NotificationsSection />); });
+    expect(followBox().checked).toBe(false);
+  });
+
+  it('writes followNotify false when a ticked box is clicked', async () => {
+    auth.user = { notificationSettings: { pushEnabled: true } };
+    await act(async () => { render(<NotificationsSection />); });
+    await act(async () => { fireEvent.click(followBox()); });
+    expect(auth.updateNotificationSettings).toHaveBeenLastCalledWith({ followNotify: false });
+  });
+
+  it('writes followNotify true when an unticked box is clicked', async () => {
+    auth.user = { notificationSettings: { pushEnabled: true, followNotify: false } };
+    await act(async () => { render(<NotificationsSection />); });
+    await act(async () => { fireEvent.click(followBox()); });
+    expect(auth.updateNotificationSettings).toHaveBeenLastCalledWith({ followNotify: true });
+  });
+});
+

@@ -177,6 +177,19 @@ export function NotificationsSection() {
     }
   }
 
+  async function handleFollowNotifyToggle(next: boolean) {
+    if (busyKeys.has('followNotify')) return;
+    setBusyKey('followNotify', true);
+    try {
+      await updateNotificationSettings({ followNotify: next });
+      toast(next ? 'Notiser om nya följare på' : 'Notiser om nya följare av');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Kunde inte ändra notisinställningar. Försök igen om en stund.');
+    } finally {
+      setBusyKey('followNotify', false);
+    }
+  }
+
   async function handleToggle(next: boolean) {
     if (busyKeys.has('push')) return;
     setBusyKey('push', true);
@@ -309,6 +322,16 @@ export function NotificationsSection() {
       </label>
       <p className="text-xs text-ink-3 mt-1 ml-6">
         Vänner kan tipsa dig om en film eller serie. Tipsen visas under Vänner och sparas i 90 dagar. Skickas inte som push.
+      </p>
+
+      <label className="flex items-center gap-2 cursor-pointer text-base mt-3">
+        <input type="checkbox" checked={user.notificationSettings.followNotify !== false} disabled={busyKeys.has('followNotify')}
+          onChange={(e) => { void handleFollowNotifyToggle(e.target.checked); }}
+          className="accent-acc-deep w-[14px] h-[14px]" />
+        Någon börjar följa mig
+      </label>
+      <p className="text-xs text-ink-3 mt-1 ml-6">
+        Visas i appens klocka med personens namn, och som push om push-notiser är på.
       </p>
     </SettingsSection>
   );

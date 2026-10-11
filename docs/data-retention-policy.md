@@ -737,6 +737,29 @@ så samma användare inte får en andra push för samma digitala släppdatum. Do
   Maxåldern är längre än pushfönstret; ett test i `logic.test.ts` pinnar det, eftersom en
   bortstädad markör läses som "aldrig pushat".
 
+### Spärr mot upprepade följ-notiser ("Någon följer dig nu", 2026-10-11) — 7-dygns svep
+
+`followPushes/{mottagarUid}_{följarUid}` — `{ lastPushedAt }`, och `followPushes/{mottagarUid}`
+— `{ windowStartedAt, count, lastPushedAt }`. Båda skrivs av `onFollowCreate`. Finns
+parmarkören och är yngre än ett dygn får mottagaren ingen ny notis från samma följare;
+mottagarmarkören räknar notiser inom en timme och håller tillbaka dem över taket i
+`functions/src/followPush/logic.ts`. Följet landar ändå.
+
+- **Vad den säger om en person:** att ett konto har börjat följa ett annat, och när
+  mottagaren senast fick en följ-notis. Inget innehåll.
+- **Rättslig grund:** berättigat intresse (missbruksskydd mot notisspam).
+- **Utanför exporten:** operationell metadata utan användarsynlig funktion, samma bucket
+  som `friendRequestPushes` ovan. Den ligger utanför `users/`, så varken exporten eller
+  klientens kontoradering når den. `firestore.rules` nekar all klientåtkomst uttryckligen.
+- **Radering:** `retentionCleanup` raderar varje markör vars `lastPushedAt` är äldre än
+  `FOLLOW_PUSH_MARKER_MAX_AGE_MS` i `functions/src/followPush/logic.ts`, båda formerna i
+  samma pass. Maxåldern är längre än båda fönstren; ett test i `logic.test.ts` pinnar det,
+  eftersom en bortstädad markör läses som "aldrig notifierat". Klientens kontoradering når
+  dem inte, så ett raderat kontos markörer ligger kvar tills svepet tar dem.
+- **Själva notisen** är ett kort i `users/{uid}/notifications` och följer de korten: med i
+  exporten, raderas med kontot och efter 90 dagar. Mottagaren stänger av den under
+  Inställningar, Notiser (`notificationSettings.followNotify`).
+
 ### Push-tokens för konton Auth inte längre erkänner (BIN-848, 2026-08-10)
 
 `users/{uid}/fcmTokens/*` för uid vars Auth-användare **saknas eller är spärrad**.
