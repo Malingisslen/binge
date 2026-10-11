@@ -417,6 +417,9 @@
       "title": "Community Manager",
       "slug": "community-manager",
       "patterns": [
+        "functions/src/followPush/index.ts",
+        "functions/src/followPush/logic.test.ts",
+        "functions/src/followPush/logic.ts",
         "src/app/feed/page.tsx",
         "src/components/groups/GroupMembersPanel.test.tsx",
         "src/components/groups/GroupMembersPanel.tsx",
@@ -488,6 +491,7 @@
         "src/lib/taste/",
         "src/lib/tips.test.ts",
         "src/lib/tips.ts",
+        "src/test/rules/follow-push.test.ts",
         "src/test/rules/tips.test.ts",
         "src/types/social.ts"
       ]

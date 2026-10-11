@@ -3354,6 +3354,18 @@ describe('monthly bill setting', () => {
   });
 });
 
+describe('friend-related notification settings', () => {
+  it.each(['followNotify', 'acceptTips'] as const)('%s reads as on when the account has no such key, off only for an explicit false', async (key) => {
+    const { unmount } = renderAuth();
+    await login({ username: 'malin', notificationSettings: { weeklyDigest: true } });
+    expect(ctx!.user?.notificationSettings[key]).toBe(true);
+    unmount();
+    renderAuth();
+    await login({ username: 'malin', notificationSettings: { [key]: false } });
+    expect(ctx!.user?.notificationSettings[key]).toBe(false);
+  });
+});
+
 describe('second-week visit stamp (BIN-1442)', () => {
   const daysAgo = (n: number) => { const d = new Date(Date.now() - n * 86_400_000); return { toDate: () => d }; };
   const stamps = () => userDocWrites().filter(c => 'secondWeekVisitAt' in (c[1] as Record<string, unknown>));

@@ -19,4 +19,5 @@ export const NEW_ACCOUNT_NOTIFICATION_SETTINGS: UserProfile['notificationSetting
   weeklyDigest: true,
   monthlyBill: true,
   acceptTips: true,
+  followNotify: true,
 };

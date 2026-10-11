@@ -23,3 +23,9 @@ describe('NEW_ACCOUNT_NOTIFICATION_SETTINGS (BIN-1442)', () => {
     expect(src).not.toMatch(/notificationSettings: \{\s*newEpisodes: true/);
   });
 });
+
+describe('NEW_ACCOUNT_NOTIFICATION_SETTINGS — follow notices', () => {
+  it('tells a new account when someone starts following it', () => {
+    expect(NEW_ACCOUNT_NOTIFICATION_SETTINGS.followNotify).toBe(true);
+  });
+});

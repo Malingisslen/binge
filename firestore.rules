@@ -1311,6 +1311,13 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // "Någon följer dig nu": the brake markers onFollowCreate stamps (Admin SDK).
+    // They say who followed whom and when, so no client may read them, and a
+    // client that could write one could silence or unblock someone else's notices.
+    match /followPushes/{id} {
+      allow read, write: if false;
+    }
+
     // Recap coverage-gap counters (BIN-544) — per-show counts of "user hit a
     // title with no spoiler-safe recap available," written EXCLUSIVELY by the
     // logRecapMiss callable (Admin SDK bypasses rules). Sealed: clients can

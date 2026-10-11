@@ -45,6 +45,7 @@ import {
   type UserLookupResult,
 } from './logic';
 import { isStaleFriendRequestPushMarker } from '../friendRequestPush/logic';
+import { isStaleFollowPushMarker } from '../followPush/logic';
 import {
   FIELD_OWNED_CATEGORIES,
   withinDocumentBudget,
@@ -77,6 +78,8 @@ export type ScanKind =
   | 'releaseMarkers'
   // BIN-1129: `friendRequestPushes/{recipient}_{sender}` — the repeat-push brake.
   | 'friendRequestPushMarkers'
+  // "Någon följer dig nu": `followPushes/{id}`, the follow-notice brake, reaped on `lastPushedAt`.
+  | 'followPushMarkers'
   | 'fcmTokens'
   | 'usernames'
   // BIN-1023: `orphanWatch/{uid}` holds `firstSeenAt` — the run-to-run memory
@@ -285,6 +288,8 @@ export interface CleanupSummary {
   deletedReleaseMarkers: number;
   staleFriendRequestPushMarkers: number;
   deletedFriendRequestPushMarkers: number;
+  staleFollowPushMarkers: number;
+  deletedFollowPushMarkers: number;
   revokedPushTokens: number;
   deletedRevokedTokens: number;
   skippedAuthBatches: number;
@@ -987,6 +992,7 @@ export async function runRetentionCleanup(io: CleanupIo): Promise<CleanupSummary
     staleJoinAttempts,
     staleReleaseMarkers,
     staleFriendRequestPushMarkers,
+    staleFollowPushMarkers,
     revokedPushTokens,
   ] =
     await Promise.all([
@@ -1016,6 +1022,10 @@ export async function runRetentionCleanup(io: CleanupIo): Promise<CleanupSummary
         io.log.error('retentionCleanup: friendRequestPushMarkers scan failed', err);
         return [] as string[];
       }),
+      collectStaleByField(io, 'followPushMarkers', 'lastPushedAt', isStaleFollowPushMarker, nowMs).catch((err) => {
+        io.log.error('retentionCleanup: followPushMarkers scan failed', err);
+        return [] as string[];
+      }),
       collectRevokedPushTokens(io).catch((err) => {
         io.log.error('retentionCleanup: revoked push token scan failed', err);
         // -1, not 0: the whole scan died, so nothing was checked. A 0 here would
@@ -1031,6 +1041,7 @@ export async function runRetentionCleanup(io: CleanupIo): Promise<CleanupSummary
   const deletedJoinAttempts = await deleteInBatches(io, staleJoinAttempts);
   const deletedReleaseMarkers = await deleteInBatches(io, staleReleaseMarkers);
   const deletedFriendRequestPushMarkers = await deleteInBatches(io, staleFriendRequestPushMarkers);
+  const deletedFollowPushMarkers = await deleteInBatches(io, staleFollowPushMarkers);
   const deletedRevokedTokens = await deleteInBatches(io, revokedPushTokens.paths);
 
   // The sweeps above are done; say so BEFORE the ones below start. Those reach
@@ -1050,6 +1061,8 @@ export async function runRetentionCleanup(io: CleanupIo): Promise<CleanupSummary
     deletedReleaseMarkers,
     staleFriendRequestPushMarkers: staleFriendRequestPushMarkers.length,
     deletedFriendRequestPushMarkers,
+    staleFollowPushMarkers: staleFollowPushMarkers.length,
+    deletedFollowPushMarkers,
     revokedPushTokens: revokedPushTokens.paths.length,
     deletedRevokedTokens,
   });
@@ -1160,6 +1173,8 @@ export async function runRetentionCleanup(io: CleanupIo): Promise<CleanupSummary
     deletedReleaseMarkers,
     staleFriendRequestPushMarkers: staleFriendRequestPushMarkers.length,
     deletedFriendRequestPushMarkers,
+    staleFollowPushMarkers: staleFollowPushMarkers.length,
+    deletedFollowPushMarkers,
     revokedPushTokens: revokedPushTokens.paths.length,
     deletedRevokedTokens,
     // >0: some uids went unchecked. -1: the scan itself died, nothing was checked

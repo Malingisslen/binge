@@ -87,3 +87,4 @@ headings differ.
 ## BIN-1450: paket P:s commits utan biljett-id kopplas via sin sha — 2026-10-06
 ## BIN-1422 del 2: ett raderat konto kan flyttas tillbaka, och relationerna skrivs hos den andra — 2026-10-07
 ## Tipsa en vän: skickade tips raderas av 90-dagarssvepet, inte av avsändarens kontoradering — 2026-10-11
+## Följnotisens markörer exporteras inte och raderas av svepet, inte av kontoraderingen — 2026-10-11

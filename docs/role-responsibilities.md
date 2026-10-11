@@ -492,6 +492,10 @@ Owns every Swedish word.
   tree; the recipient dismisses it on Vänner. The rules gate (friendship, block,
   acceptTips) and the 90-day sweep are owned where they live, not here.
   → `src/lib/tips.ts`, `src/lib/tips.test.ts`, `src/lib/firebase/tips.ts`, `src/hooks/useTips.ts`, `src/hooks/useTips.test.tsx`, `src/lib/firebase/tips.test.ts`, `src/components/title/TipFriendButton.tsx`, `src/components/title/TipFriendButton.test.tsx`, `src/components/social/TipRow.tsx`, `src/components/social/TipRow.test.tsx`, `src/test/rules/tips.test.ts`, `src/lib/firebase/friends.sent.test.ts`
+- "Någon följer dig nu" (2026-10-11): a new follower gives the recipient a bell card and,
+  with push on, a push. The pair and hourly-cap brake, the block and opt-out checks and the
+  server-side name lookup live with the trigger; the marker sweep is owned where it lives.
+  → `functions/src/followPush/index.ts`, `functions/src/followPush/logic.ts`, `functions/src/followPush/logic.test.ts`, `src/test/rules/follow-push.test.ts`
 - Per-episode reaction threads (BIN-95) — UGC keyed per episode, double
   spoiler-gated: the thread stays shut until the viewer has marked that episode
   watched, and inside it a reaction its author flagged as a spoiler is blurred
