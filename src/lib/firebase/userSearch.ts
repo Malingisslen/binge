@@ -6,10 +6,7 @@ import type { ResolvedUser } from './username';
 // doc-id är range-queryn `>= q && < q + ` ett gratis-index — ingen
 // composite-index behövs. Filtrerar tomt om query är < 2 tecken (matchar
 // useSearchBox debounce-policy + sänker oavsiktliga reads).
-//
-// Per-doc-read av users/{uid} faller automatiskt bort för icke-publika
-// profiler eftersom Firestore-regeln kräver isPublic == true för att läsa
-// någon annans user-doc. Vi sväljer permission-fel och hoppar.
+
 const MAX_RESULTS = 5;
 
 //  = Unicode Private Use Area — konventionellt använd som
@@ -17,9 +14,17 @@ const MAX_RESULTS = 5;
 // en prefix-sökning.
 const PREFIX_END_SUFFIX = '';
 
+// A private or friends-only account is otherwise unreachable for a stranger: the card
+// read is denied, so the account vanishes from search and can never receive a friend
+// request (Malin 2026-10-11). Only the FULL username surfaces it, and only as the handle
+// that is already public in `usernames/`, so prefix typing cannot list such accounts.
+// Three characters at least, so two-letter guesses do not double as a lookup service.
+export const EXACT_PRIVATE_MIN_LENGTH = 3;
+
 export async function searchUsersByPrefix(
   prefix: string,
   myUid: string | null = null,
+  { includeExactPrivate = false }: { includeExactPrivate?: boolean } = {},
 ): Promise<ResolvedUser[]> {
   const q = prefix.trim().toLowerCase().replace(/^@/, '');
   if (q.length < 2) return [];
@@ -47,7 +52,12 @@ export async function searchUsersByPrefix(
       // sökbarhets-beviset; ingen manuell tier-läsning + friend-getDoc behövs,
       // och användarens känsliga profil-doc nås aldrig.
       const card = await getPublicProfileCard(m.uid);
-      if (!card) return null;
+      if (!card) {
+        if (includeExactPrivate && m.username === q && q.length >= EXACT_PRIVATE_MIN_LENGTH) {
+          return { uid: m.uid, displayName: m.username, username: m.username, photoURL: null, limited: true } as ResolvedUser;
+        }
+        return null;
+      }
       return {
         uid: m.uid,
         displayName: card.displayName || m.username,

@@ -20,15 +20,15 @@ vi.mock('@/hooks/useBlockedUsers', () => ({
 }));
 
 const watchlist: unknown[] = [];
+const PUBLIC_PROFILE = { uid: 'u1', card: { displayName: 'Malin', bio: '', isPublic: true } };
+const profile = vi.hoisted(() => ({ data: null as unknown }));
+const auth = vi.hoisted(() => ({ uid: 'me' as string | null }));
 
 vi.mock('@/hooks/usePublicProfile', () => ({
-  usePublicProfile: () => ({
-    data: { uid: 'u1', card: { displayName: 'Malin', bio: '', isPublic: true } },
-    isLoading: false,
-  }),
+  usePublicProfile: () => ({ data: profile.data, isLoading: false }),
   usePublicWatchlist: () => ({ data: watchlist, isLoading: false }),
 }));
-vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ uid: 'me' }) }));
+vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ uid: auth.uid }) }));
 vi.mock('@/hooks/useFollow', () => ({
   useFollowerCount: () => ({ data: 0 }),
   useFollowingCount: () => ({ data: 0 }),
@@ -36,7 +36,9 @@ vi.mock('@/hooks/useFollow', () => ({
 vi.mock('@/hooks/useTasteVector', () => ({ useTasteMatch: () => ({ percent: null }) }));
 vi.mock('@/hooks/usePageMeta', () => ({ usePageMeta: () => {} }));
 vi.mock('@/components/social/FollowButton', () => ({ default: () => null }));
-vi.mock('@/components/social/FriendButton', () => ({ default: () => null }));
+vi.mock('@/components/social/FriendButton', () => ({
+  default: ({ targetUid }: { targetUid: string }) => <button>Lägg till vän {targetUid}</button>,
+}));
 vi.mock('@/components/social/ProfileStatsPanel', () => ({ default: () => null }));
 vi.mock('next/link', () => ({ default: ({ children }: { children: React.ReactNode }) => children }));
 
@@ -60,7 +62,11 @@ function seenTile(): string {
   return card.textContent!.replace('Sedd', '').trim();
 }
 
-beforeEach(() => { watchlist.length = 0; });
+beforeEach(() => {
+  watchlist.length = 0;
+  profile.data = PUBLIC_PROFILE;
+  auth.uid = 'me';
+});
 
 describe('Publik profil — the Sedd tile (BIN-1027)', () => {
   it('counts a sedd film that has no watchedAt', () => {
@@ -85,5 +91,24 @@ describe('Publik profil — the Sedd tile (BIN-1027)', () => {
     render(<UserProfilePageClient username="malin" />);
 
     expect(seenTile()).toBe('1');
+  });
+});
+
+// Malin 2026-10-11: a non-public profile was a dead end with no way to send the request
+// that would open it. The handle is already public in `usernames/`; nothing else is shown.
+describe('Profil som inte är publik', () => {
+  beforeEach(() => { profile.data = { uid: 'u-lisa', username: 'lisa', isPrivate: true }; });
+
+  it('visar handtaget och en vänknapp riktad mot rätt konto', () => {
+    render(<UserProfilePageClient username="lisa" />);
+    expect(screen.getByRole('heading', { name: '@lisa' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Lägg till vän u-lisa' })).toBeTruthy();
+    expect(screen.queryByText('Sedd')).toBeNull();
+  });
+
+  it('ber en utloggad besökare logga in', () => {
+    auth.uid = null;
+    render(<UserProfilePageClient username="lisa" />);
+    expect(screen.getByText('Logga in för att skicka en vänförfrågan.')).toBeTruthy();
   });
 });

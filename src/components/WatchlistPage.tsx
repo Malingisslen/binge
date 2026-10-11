@@ -934,6 +934,7 @@ const LIBRARY_VIEWS: { label: string; href: string; status: WatchStatus | null; 
   { label: 'Avbrutna', href: '/my/avbrutna/', status: 'avbruten' },
   { label: 'Alla',     href: '/my/all/',      status: null },
   { label: 'Dagbok',   href: '/my/diary/',    status: null, key: 'diary' },
+  { label: 'Listor',   href: '/my/lists/',    status: null, key: 'lists' },
 ];
 
 // Kompakt dropdown-vy-väljare (variant 2): ersätter den 6-chips-breda flikraden

@@ -10,17 +10,20 @@ import {
   getFriendStatus,
   listFriends,
   listFriendRequests,
+  listSentFriendRequests,
   removeFriend as remove,
   sendFriendRequest as sendRequest,
   type FriendStatus,
   type FriendUser,
   type FriendRequest,
+  type SentFriendRequest,
 } from '@/lib/firebase/friends';
 
 // Query-key fabriker för cache-invalidering. Konsekvent prefix gör det enkelt
 // att invalidera alla friend-queries på en gång efter en mutation.
 const friendsKey = (uid: string | null) => ['friends', uid] as const;
 const requestsKey = (uid: string | null) => ['friend-requests', uid] as const;
+const sentRequestsKey = (uid: string | null) => ['friend-requests-sent', uid] as const;
 const statusKey = (myUid: string | null, targetUid: string) =>
   ['friend-status', myUid, targetUid] as const;
 
@@ -43,6 +46,18 @@ export function useFriendRequests() {
   return useQuery<FriendRequest[]>({
     queryKey: requestsKey(uid),
     queryFn: () => uid ? listFriendRequests(uid) : Promise.resolve([]),
+    enabled: !!uid,
+    staleTime: 60_000,
+  });
+}
+
+// useSentFriendRequests — mina obesvarade utgående förfrågningar. Samma 60s som de
+// inkomna; cancel/accept/decline invaliderar nyckeln.
+export function useSentFriendRequests() {
+  const { uid } = useAuth();
+  return useQuery<SentFriendRequest[]>({
+    queryKey: sentRequestsKey(uid),
+    queryFn: () => uid ? listSentFriendRequests(uid) : Promise.resolve([]),
     enabled: !!uid,
     staleTime: 60_000,
   });
@@ -71,6 +86,7 @@ export function useFriendActions() {
   const invalidate = useCallback((targetUid?: string) => {
     queryClient.invalidateQueries({ queryKey: friendsKey(uid) });
     queryClient.invalidateQueries({ queryKey: requestsKey(uid) });
+    queryClient.invalidateQueries({ queryKey: sentRequestsKey(uid) });
     if (targetUid) {
       queryClient.invalidateQueries({ queryKey: statusKey(uid, targetUid) });
     }

@@ -10,9 +10,9 @@ import { Button } from '@/components/ui/Button';
 import { fieldClass } from '@/components/ui/Field';
 
 const VISIBILITY_OPTIONS: { value: ItemVisibility; label: string; description: string }[] = [
-  { value: 'private', label: 'Privat', description: 'Bara jag ser mina titlar.' },
-  { value: 'friends', label: 'Endast vänner', description: 'Bekräftade vänner ser min profil och mitt bibliotek.' },
-  { value: 'public', label: 'Publik', description: 'Alla med länken till min profil kan se biblioteket och betyg.' },
+  { value: 'private', label: 'Privat', description: 'Bara du ser dina titlar. Andra hittar dig bara på hela användarnamnet och kan skicka en vänförfrågan.' },
+  { value: 'friends', label: 'Endast vänner', description: 'Bara bekräftade vänner ser din profil och ditt bibliotek. Andra hittar dig bara på hela användarnamnet och kan skicka en vänförfrågan.' },
+  { value: 'public', label: 'Publik', description: 'Alla kan söka fram dig och se ditt bibliotek och dina betyg.' },
 ];
 
 export function UsernameSection() {

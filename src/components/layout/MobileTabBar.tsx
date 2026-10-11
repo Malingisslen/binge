@@ -6,6 +6,8 @@ import { usePathname, useRouter } from 'next/navigation';
 import { LayoutGrid, Calendar, Search, Menu, Home, Tag, Calculator, BookOpen } from 'lucide-react';
 import { useClickOutside } from '@/hooks/useClickOutside';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
+import { useFriendRequests } from '@/hooks/useFriends';
+import { useBlockedUsers } from '@/hooks/useBlockedUsers';
 import ChromePart from './ChromePart';
 import type { ChromeMode } from './chromeMode';
 
@@ -23,17 +25,17 @@ type NavItem = {
   matches?: readonly string[];
 };
 
-const BIBLIOTEK: NavItem = { label: 'Bibliotek', href: '/my/all/', matches: ['/my/all', '/my/series', '/my/films', '/my/vill-se', '/my/avbrutna'] };
+const BIBLIOTEK: NavItem = { label: 'Bibliotek', href: '/my/all/', matches: ['/my/all', '/my/series', '/my/films', '/my/vill-se', '/my/avbrutna', '/my/lists'] };
 const KALENDER: NavItem = { label: 'Kalender', href: '/calendar/' };
 const HEM: NavItem = { label: 'Hem', href: '/' };
 
 // Everything the desktop subnav reaches that has no tab of its own. Hem har egen
 // flik (Malins val 2026-10-09): startsidan med dagens avsnitt är den man öppnar oftast.
 export const MORE_ITEMS: readonly NavItem[] = [
+  { label: 'Vänner', href: '/my/friends/', matches: ['/feed', '/user/'] },
   { label: 'Rådgivaren', href: '/savings/' },
   { label: 'Rekommendationer', href: '/recommendations/', matches: ['/kalibrera'] },
   { label: 'Fråga Binge', href: '/ask/' },
-  { label: 'Vänner', href: '/my/friends/', matches: ['/feed', '/user/'] },
   { label: 'Inställningar', href: '/settings/' },
 ];
 
@@ -117,6 +119,12 @@ function AppTabBar() {
     openTopbarSearch(router);
   }
 
+  // The bell's own sources and filter (useNotifications), so Mer and the bell never
+  // disagree; not the bell hook itself, which would open a second inbox listener.
+  const { data: friendRequests = [] } = useFriendRequests();
+  const { isBlocked } = useBlockedUsers();
+  const friendRequestsCount = friendRequests.filter(r => !isBlocked(r.fromUid)).length;
+  const moreLabel = friendRequestsCount > 0 ? `Mer, ${friendRequestsCount} ${friendRequestsCount === 1 ? 'vänförfrågan' : 'vänförfrågningar'}` : undefined;
   const moreActive = MORE_ITEMS.some(item => isActive(pathname, item));
 
   return (
@@ -132,9 +140,13 @@ function AppTabBar() {
           className={moreActive ? 'is-on' : undefined}
           aria-expanded={open}
           aria-controls={panelId}
+          aria-label={moreLabel}
           onClick={() => setOpenOn(open ? null : pathname)}
         >
-          <span className="icn"><Menu size={22} strokeWidth={1.5} aria-hidden="true" /></span>
+          <span className="icn">
+            <Menu size={22} strokeWidth={1.5} aria-hidden="true" />
+            {friendRequestsCount > 0 && <span className="m-dot" aria-hidden="true" />}
+          </span>
           Mer
         </button>
         <ul id={panelId} className="m-more-panel" hidden={!open}>
@@ -149,6 +161,7 @@ function AppTabBar() {
                   onClick={close}
                 >
                   {item.label}
+                  {item.href === '/my/friends/' && friendRequestsCount > 0 && <span className="m-dot m-dot-inline" aria-hidden="true" />}
                 </Link>
               </li>
             );

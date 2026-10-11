@@ -22,6 +22,8 @@ const auth = vi.hoisted(() => ({
   updateProviders: vi.fn<(providers: number[]) => Promise<void>>(async () => {}),
   updateProviderTiers: vi.fn<(changes: Record<number, string | null>) => Promise<void>>(async () => {}),
   updateNotificationSettings: vi.fn<(patch: Record<string, unknown>) => Promise<void>>(async () => {}),
+  updateDefaultVisibility: vi.fn<(v: string) => Promise<void>>(async () => {}),
+  updateUsername: vi.fn<(u: string) => Promise<void>>(async () => {}),
 }));
 const watchlist = vi.hoisted(() => ({
   items: [] as WatchlistItem[],
@@ -70,11 +72,19 @@ const gotSeries = {
 const item = (tmdbId: number, mediaType: 'movie' | 'tv') =>
   ({ tmdbId, mediaType, status: 'vill_se', title: 'Något' }) as WatchlistItem;
 
-/** Step 1 → 4. Needs one tracked title so step 3's own "Hoppa över" is absent. */
-async function goToLastStep() {
+/** Step 1 → 4 (Din profil). Needs one tracked title so step 3's own "Hoppa över" is absent. */
+async function goToProfileStep() {
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Börja/ })); });
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Nästa/ })); });
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Nästa/ })); });
+  expect(screen.getByRole('heading', { name: 'Din profil' })).toBeInTheDocument();
+}
+
+/** Step 1 → 5, actively choosing "Privat" on the profile step. */
+async function goToLastStep() {
+  await goToProfileStep();
+  await act(async () => { fireEvent.click(screen.getByRole('radio', { name: /Privat/ })); });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Fortsätt/ })); });
   expect(screen.getByRole('heading', { name: 'Klar.' })).toBeInTheDocument();
 }
 
@@ -87,6 +97,8 @@ beforeEach(() => {
   auth.user = { uid: 'u1', myProviders: [] };
   auth.updateProviders.mockResolvedValue(undefined);
   auth.updateProviderTiers.mockResolvedValue(undefined);
+  auth.updateDefaultVisibility.mockResolvedValue(undefined);
+  auth.updateUsername.mockResolvedValue(undefined);
   watchlist.items = [];
   watchlist.upsertTitle.mockResolvedValue(undefined);
   watchlist.snapshotSettled = true;
@@ -690,5 +702,87 @@ describe('step 3 — copy, ranking and navigation polish', () => {
     await toStepThree();
     expect(screen.getByRole('button', { name: 'Hoppa över steget' })).toHaveClass('btn-ghost');
     expect(screen.getAllByRole('button', { name: 'Hoppa över' })).toHaveLength(1);
+  });
+});
+
+describe('step 4 — Din profil: an active visibility choice (GDPR art. 25.2)', () => {
+  beforeEach(() => { watchlist.items = [item(1, 'movie')]; });
+
+  it('renders with no radio checked and Fortsätt disabled', async () => {
+    render(<OnboardingFlow />);
+    await goToProfileStep();
+    const radios = screen.getAllByRole('radio');
+    expect(radios).toHaveLength(3);
+    expect(radios.map(r => (r as HTMLInputElement).checked)).toEqual([false, false, false]);
+    expect(screen.getByRole('radiogroup')).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /Publik \(rekommenderas\)/ })).toBe(radios[0]);
+    expect(screen.getByRole('button', { name: /Fortsätt/ })).toBeDisabled();
+    expect(auth.updateDefaultVisibility).not.toHaveBeenCalled();
+  });
+
+  it('writes nothing on choosing; Publik + Fortsätt writes public once and advances', async () => {
+    render(<OnboardingFlow />);
+    await goToProfileStep();
+    await act(async () => { fireEvent.click(screen.getByRole('radio', { name: /Publik/ })); });
+    expect(auth.updateDefaultVisibility).not.toHaveBeenCalled();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Fortsätt/ })); });
+    expect(auth.updateDefaultVisibility).toHaveBeenCalledTimes(1);
+    expect(auth.updateDefaultVisibility).toHaveBeenCalledWith('public');
+    expect(screen.getByRole('heading', { name: 'Klar.' })).toBeInTheDocument();
+  });
+
+  it('"Hoppa över" on this step never writes a visibility', async () => {
+    render(<OnboardingFlow />);
+    await goToProfileStep();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Hoppa över' })); });
+    expect(auth.updateDefaultVisibility).not.toHaveBeenCalled();
+    expect(push).toHaveBeenCalled();
+  });
+
+  it('"Tillbaka" returns to step 3', async () => {
+    render(<OnboardingFlow />);
+    await goToProfileStep();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Tillbaka/ })); });
+    expect(screen.getByRole('heading', { name: 'Lägg till din första titel' })).toBeInTheDocument();
+  });
+
+  it('stays on the step with a banner when the save fails, and the same button retries', async () => {
+    auth.updateDefaultVisibility.mockRejectedValueOnce(new Error('offline'));
+    render(<OnboardingFlow />);
+    await goToProfileStep();
+    await act(async () => { fireEvent.click(screen.getByRole('radio', { name: /Endast vänner/ })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Fortsätt/ })); });
+    expect(screen.getByRole('alert')).toHaveTextContent('Kunde inte spara din profil');
+    expect(screen.getByRole('heading', { name: 'Din profil' })).toBeInTheDocument();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Fortsätt/ })); });
+    expect(screen.getByRole('heading', { name: 'Klar.' })).toBeInTheDocument();
+  });
+
+  it('says the account is being deleted instead of offering a retry', async () => {
+    auth.updateDefaultVisibility.mockRejectedValueOnce(new Error(DELETION_IN_PROGRESS));
+    render(<OnboardingFlow />);
+    await goToProfileStep();
+    await act(async () => { fireEvent.click(screen.getByRole('radio', { name: /Privat/ })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Fortsätt/ })); });
+    expect(toast).toHaveBeenCalledWith(DELETION_IN_PROGRESS_MESSAGE);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('offers no "Kopiera min länk" without a username', async () => {
+    render(<OnboardingFlow />);
+    await goToProfileStep();
+    expect(screen.queryByRole('button', { name: /Kopiera min länk/ })).not.toBeInTheDocument();
+  });
+
+  it('copies https://binge.nu/user/{username}/ and confirms with a toast', async () => {
+    const writeText = vi.fn(async () => {});
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    auth.user = { uid: 'u1', myProviders: [], username: 'filmnerd' };
+    render(<OnboardingFlow />);
+    await goToProfileStep();
+    expect(screen.getByText('binge.nu/user/filmnerd')).toBeInTheDocument();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Kopiera min länk/ })); });
+    expect(writeText).toHaveBeenCalledWith('https://binge.nu/user/filmnerd/');
+    expect(toast).toHaveBeenCalledWith('Länken är kopierad');
   });
 });

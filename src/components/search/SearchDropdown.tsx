@@ -33,7 +33,7 @@ type Row =
 
 export default function SearchDropdown({ query, onSelect, onActiveOptionChange }: SearchDropdownProps) {
   const { data: titleData, isLoading: titlesLoading } = useSearch(query);
-  const { data: userData, isLoading: usersLoading } = useUserSearch(query);
+  const { data: userData, isLoading: usersLoading } = useUserSearch(query, { includeExactPrivate: true });
   const router = useRouter();
   const [activeIndex, setActiveIndex] = useState(-1);
 
@@ -111,7 +111,15 @@ export default function SearchDropdown({ query, onSelect, onActiveOptionChange }
         <div role="presentation" className="px-3 py-2 text-sm text-ink-3">Söker…</div>
       )}
       {!isLoading && !hasAny && (
-        <div role="presentation" className="px-3 py-2 text-sm text-ink-3">Inga träffar.</div>
+        <div role="presentation" className="px-3 py-2 text-sm text-ink-3">
+          Inga träffar.
+          {/* Non-public accounts only match on the full username, so a partial one looks like a typo. */}
+          {query.trim().length >= 2 && (
+            <span className="block text-xs mt-1">
+              Hittar du inte en vän? Konton som inte är publika hittas bara på hela användarnamnet. Be om länken till profilen.
+            </span>
+          )}
+        </div>
       )}
 
       {userResults.length > 0 && (
@@ -135,8 +143,8 @@ export default function SearchDropdown({ query, onSelect, onActiveOptionChange }
               >
                 <UserAvatar name={user.displayName} photoURL={user.photoURL} />
                 <div className="min-w-0">
-                  <div className="text-sm text-ink font-semibold truncate">{user.displayName}</div>
-                  <div className="text-xs text-ink-3 truncate">@{user.username}</div>
+                  <div className="text-sm text-ink font-semibold truncate">{user.limited ? `@${user.username}` : user.displayName}</div>
+                  <div className="text-xs text-ink-3 truncate">{user.limited ? 'Profilen är inte publik' : `@${user.username}`}</div>
                 </div>
               </Link>
             );

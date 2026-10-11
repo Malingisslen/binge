@@ -120,4 +120,53 @@ describe('searchUsersByPrefix', () => {
     const result = await searchUsersByPrefix('nak');
     expect(result[0].displayName).toBe('naked');
   });
+
+  // Malin 2026-10-11: a non-public account is reachable on its FULL username only,
+  // and only where the caller asks for it (the topbar search, not group invites).
+  describe('exakt användarnamn för icke-publika konton', () => {
+    const denied = async () => { throw new Error('Missing or insufficient permissions'); };
+    const twoPrivate = {
+      empty: false,
+      docs: [
+        { id: 'lisa', data: () => ({ uid: 'uid-lisa' }) },
+        { id: 'lisab', data: () => ({ uid: 'uid-lisab' }) },
+      ],
+    };
+
+    it('tar med det exakta privata kontot som handtag, men inte prefixträffen', async () => {
+      getDocsMock.mockResolvedValueOnce(twoPrivate);
+      getDocMock.mockImplementation(denied);
+      const result = await searchUsersByPrefix('lisa', 'uid-me', { includeExactPrivate: true });
+      expect(result).toEqual([
+        { uid: 'uid-lisa', displayName: 'lisa', username: 'lisa', photoURL: null, limited: true },
+      ]);
+    });
+
+    it('tar inte med det privata kontot när anroparen inte ber om det', async () => {
+      getDocsMock.mockResolvedValueOnce(twoPrivate);
+      getDocMock.mockImplementation(denied);
+      expect(await searchUsersByPrefix('lisa', 'uid-me')).toEqual([]);
+    });
+
+    it('kräver minst tre tecken även för exakt träff', async () => {
+      getDocsMock.mockResolvedValueOnce({ empty: false, docs: [{ id: 'li', data: () => ({ uid: 'uid-li' }) }] });
+      getDocMock.mockImplementation(denied);
+      expect(await searchUsersByPrefix('li', 'uid-me', { includeExactPrivate: true })).toEqual([]);
+    });
+
+    it('tar med en exakt träff på precis tre tecken', async () => {
+      getDocsMock.mockResolvedValueOnce({ empty: false, docs: [{ id: 'liv', data: () => ({ uid: 'uid-liv' }) }] });
+      getDocMock.mockImplementation(denied);
+      const result = await searchUsersByPrefix('@LIV', 'uid-me', { includeExactPrivate: true });
+      expect(result.map(r => r.username)).toEqual(['liv']);
+    });
+
+    it('visar ett läsbart kort som vanligt även med flaggan på', async () => {
+      getDocsMock.mockResolvedValueOnce({ empty: false, docs: [{ id: 'lisa', data: () => ({ uid: 'uid-lisa' }) }] });
+      getDocMock.mockResolvedValueOnce({ exists: () => true, data: () => ({ displayName: 'Lisa Berg', username: 'lisa', photoURL: null }) });
+      const [hit] = await searchUsersByPrefix('lisa', 'uid-me', { includeExactPrivate: true });
+      expect(hit.displayName).toBe('Lisa Berg');
+      expect(hit.limited).toBeUndefined();
+    });
+  });
 });

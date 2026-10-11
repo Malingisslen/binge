@@ -10,11 +10,11 @@ import { searchUsersByPrefix } from '@/lib/firebase/userSearch';
 //
 // myUid passas så icke-public-konton som ändå är mina vänner kommer med
 // (sökresultaten visar dem trots tier-filtret).
-export function useUserSearch(prefix: string) {
+export function useUserSearch(prefix: string, { includeExactPrivate = false }: { includeExactPrivate?: boolean } = {}) {
   const { uid } = useAuth();
   return useQuery({
-    queryKey: ['user-search', prefix.trim().toLowerCase().replace(/^@/, ''), uid],
-    queryFn: () => searchUsersByPrefix(prefix, uid),
+    queryKey: ['user-search', prefix.trim().toLowerCase().replace(/^@/, ''), uid, includeExactPrivate],
+    queryFn: () => searchUsersByPrefix(prefix, uid, { includeExactPrivate }),
     enabled: prefix.trim().length >= 2,
     staleTime: 60_000,
     gcTime: 5 * 60_000,

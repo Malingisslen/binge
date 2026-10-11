@@ -10,8 +10,8 @@ export default function IntegritetPage() {
   return (
     <LegalPageShell
       title="Integritetspolicy"
-      lastUpdated="2026-10-08"
-      version="1.13"
+      lastUpdated="2026-10-11"
+      version="1.14"
       toc={[
         { id: 'ansvarig', label: '1. Vem är ansvarig?' },
         { id: 'uppgifter', label: '2. Vilka uppgifter vi samlar in' },
@@ -73,6 +73,15 @@ export default function IntegritetPage() {
           <li><strong>Det du gör i en grupp</strong> — titlar du lägger till i gruppens lista, betyg du sätter på dem och vilken titel ni valde på en filmkväll. Det visas för gruppens medlemmar tillsammans med vem som lade till eller valde den.</li>
           <li><strong>Teknisk logg-data</strong> — IP-adress och webbläsarens User-Agent hanteras av Firebase och Cloudflare för säkerhet och drift.</li>
         </ul>
+        <p>
+          Du väljer själv hur synlig din profil är: <strong>Publik</strong> betyder att alla kan hitta
+          dig och se vad du tittar på och dina betyg, <strong>Endast vänner</strong> att bara dina vänner
+          ser ditt bibliotek, och <strong>Privat</strong> att bara du ser det. Ett nytt konto är privat
+          tills du väljer något annat i introduktionen, och du kan ändra valet när som helst i
+          Inställningar. Den som känner till ditt exakta användarnamn eller har din profillänk kan se
+          ditt användarnamn, och den som är inloggad kan då skicka en vänförfrågan till dig, även när
+          din profil inte är publik.
+        </p>
         <p>
           Vi samlar <strong>inte</strong> in din geografiska position (bara den
           kommun du själv väljer, se ovan), kontaktlista, kalender eller innehåll
