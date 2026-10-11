@@ -4,8 +4,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 // The horizontal section nav that lives directly below the topbar on every
-// authenticated page. Order matches Direction H's subnav exactly:
-// Hem · Bibliotek · Kalender · Rekommendationer · Fråga Binge · Streamingrådgivaren · Vänner.
+// authenticated page. Order: Hem · Bibliotek · Kalender · Vänner · Rekommendationer ·
+// Fråga Binge · Streamingrådgivaren.
 // Grupper is out of the menus while the feature is paused (plan round 2, decision 4).
 
 type NavItem = {
@@ -19,12 +19,12 @@ type NavItem = {
 
 const ITEMS: readonly NavItem[] = [
   { label: 'Hem', href: '/' },
-  { label: 'Bibliotek', href: '/my/all/', matches: ['/my/all', '/my/series', '/my/films', '/my/vill-se', '/my/avbrutna'] },
+  { label: 'Bibliotek', href: '/my/all/', matches: ['/my/all', '/my/series', '/my/films', '/my/vill-se', '/my/avbrutna', '/my/lists'] },
   { label: 'Kalender', href: '/calendar/' },
+  { label: 'Vänner', href: '/my/friends/', matches: ['/feed', '/user/'] },
   { label: 'Rekommendationer', href: '/recommendations/', matches: ['/kalibrera'] },
   { label: 'Fråga Binge', href: '/ask/' },
   { label: 'Streamingrådgivaren', href: '/savings/' },
-  { label: 'Vänner', href: '/my/friends/', matches: ['/feed', '/user/'] },
 ];
 
 export default function Subnav() {

@@ -71,6 +71,13 @@ async function open(label: string) {
   return view;
 }
 
+// Removing a friend asks first; the write happens only on the dialog's own button.
+async function confirmRemoval(trigger: HTMLElement, view: ReturnType<typeof render>) {
+  await act(async () => { fireEvent.click(trigger); });
+  const dialog = view.getByRole('dialog');
+  await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: 'Ta bort' })); });
+}
+
 /** The <li> that renders `name`, so an assertion can be scoped to one person's row. */
 function rowFor(view: ReturnType<typeof render>, name: string) {
   const row = view.getByText(name).closest('li');
@@ -107,17 +114,28 @@ describe('FriendsPageClient — a refused friend write says so, on its own row',
     );
     const view = await open('Vänner');
 
-    await act(async () => { fireEvent.click(view.getByText('Ta bort')); });
+    await confirmRemoval(view.getByText('Ta bort'), view);
 
     expect(actions.removeFriend).toHaveBeenCalledWith('a');
     expect(view.getByRole('alert').textContent).toBe('Kunde inte ta bort vännen.');
+  });
+
+  it('cancelling the confirmation removes nobody', async () => {
+    data.friends = [friend('a', 'Anna')];
+    const view = await open('Vänner');
+
+    await act(async () => { fireEvent.click(view.getByText('Ta bort')); });
+    await act(async () => { fireEvent.click(view.getByRole('button', { name: 'Avbryt' })); });
+
+    expect(actions.removeFriend).not.toHaveBeenCalled();
+    expect(view.queryByRole('dialog')).toBeNull();
   });
 
   it('a removal that succeeds says nothing', async () => {
     data.friends = [friend('a', 'Anna')];
     const view = await open('Vänner');
 
-    await act(async () => { fireEvent.click(view.getByText('Ta bort')); });
+    await confirmRemoval(view.getByText('Ta bort'), view);
 
     expect(view.queryByRole('alert')).toBeNull();
   });
@@ -131,7 +149,7 @@ describe('FriendsPageClient — a refused friend write says so, on its own row',
     );
     const view = await open('Vänner');
 
-    await act(async () => { fireEvent.click(view.getByText('Ta bort')); });
+    await confirmRemoval(view.getByText('Ta bort'), view);
 
     expect(view.getByRole('alert').textContent).toBe('Kunde inte ta bort vännen.');
   });
@@ -144,7 +162,7 @@ describe('FriendsPageClient — a refused friend write says so, on its own row',
     const view = await open('Vänner');
 
     const annaRow = rowFor(view, 'Anna');
-    await act(async () => { fireEvent.click(within(annaRow).getByText('Ta bort')); });
+    await confirmRemoval(within(annaRow).getByText('Ta bort'), view);
 
     expect(within(annaRow).getByRole('alert').textContent).toBe('Kunde inte ta bort vännen.');
     expect(within(rowFor(view, 'Bertil')).queryByRole('alert')).toBeNull();

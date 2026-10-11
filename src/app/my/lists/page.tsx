@@ -12,6 +12,7 @@ import { Eyebrow } from '@/components/ui/Eyebrow';
 import { Button } from '@/components/ui/Button';
 import { fieldClass } from '@/components/ui/Field';
 import { cardClass } from '@/components/ui/Card';
+import { LibrarySubnav } from '@/components/WatchlistPage';
 
 export default function ListsPage() {
   usePageMeta({ title: 'Mina listor' });
@@ -50,6 +51,7 @@ function ListsContent() {
           </Button>
         )}
       />
+      <LibrarySubnav activeKey="lists" />
 
       {showForm && (
         <div className={cardClass('p-3 mb-3')}>

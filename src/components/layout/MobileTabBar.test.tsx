@@ -10,6 +10,14 @@ vi.mock('next/navigation', () => {
   return { usePathname: () => nav.pathname, useRouter: () => router };
 });
 
+const notifications = vi.hoisted(() => ({ friendRequestsCount: 0 }));
+vi.mock('@/hooks/useFriends', () => ({
+  useFriendRequests: () => ({
+    data: Array.from({ length: notifications.friendRequestsCount }, (_, i) => ({ fromUid: `u${i}` })),
+  }),
+}));
+vi.mock('@/hooks/useBlockedUsers', () => ({ useBlockedUsers: () => ({ isBlocked: () => false }) }));
+
 function moreButton() {
   return screen.getByRole('button', { name: 'Mer' });
 }
@@ -19,11 +27,30 @@ function panel() {
 
 beforeEach(() => {
   nav.pathname = '/my/all/';
+  notifications.friendRequestsCount = 0;
   push.mockReset();
   document.body.innerHTML = '';
 });
 
 describe('MobileTabBar (variant B)', () => {
+  it('marks Mer with the pending friend-request count', () => {
+    notifications.friendRequestsCount = 2;
+    render(<MobileTabBar />);
+    const more = screen.getByRole('button', { name: 'Mer, 2 vänförfrågningar' });
+    expect(more.querySelector('.m-dot')).not.toBeNull();
+  });
+
+  it('uses the singular for one pending request', () => {
+    notifications.friendRequestsCount = 1;
+    render(<MobileTabBar />);
+    expect(screen.getByRole('button', { name: 'Mer, 1 vänförfrågan' })).toBeTruthy();
+  });
+
+  it('keeps the plain Mer label and no dot with no pending requests', () => {
+    render(<MobileTabBar />);
+    expect(moreButton().querySelector('.m-dot')).toBeNull();
+  });
+
   it('shows the five tabs with full words', () => {
     render(<MobileTabBar />);
     const bar = screen.getByRole('navigation', { name: 'Huvudmeny' });
@@ -58,7 +85,7 @@ describe('MobileTabBar (variant B)', () => {
     fireEvent.click(moreButton());
     expect(moreButton()).toHaveAttribute('aria-expanded', 'true');
     const links = within(panel()).getAllByRole('link').map(a => a.textContent);
-    expect(links).toEqual(['Rådgivaren', 'Rekommendationer', 'Fråga Binge', 'Vänner', 'Inställningar']);
+    expect(links).toEqual(['Vänner', 'Rådgivaren', 'Rekommendationer', 'Fråga Binge', 'Inställningar']);
   });
 
   it('Escape closes Mer and returns focus to the button', () => {

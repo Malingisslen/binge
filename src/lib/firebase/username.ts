@@ -73,6 +73,8 @@ export interface ResolvedUser {
   displayName: string;
   username: string | null;
   photoURL: string | null;
+  // Set when only the public handle is known: the profile card is not readable to the viewer.
+  limited?: true;
 }
 
 export async function lookupUserByHandle(handle: string): Promise<ResolvedUser | null> {

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { rankSearchResults } from '@/lib/searchRanking';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, ArrowLeft, Check, Search, Target } from 'lucide-react';
+import { ArrowRight, ArrowLeft, Check, Copy, Search, Target } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useSearch } from '@/hooks/useTMDB';
@@ -27,17 +27,19 @@ import {
   LIBRARY_RETRY_LABEL,
   LIBRARY_LOADING,
 } from '@/lib/watchlist/libraryHoldCopy';
-import type { TMDBSearchResult, WatchStatus } from '@/types';
+import type { ItemVisibility, TMDBSearchResult, WatchStatus } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { cardClass } from '@/components/ui/Card';
+import { fieldClass } from '@/components/ui/Field';
 
 /**
- * Onboarding-flöde för nya användare. 4 steg:
+ * Onboarding-flöde för nya användare. 5 steg:
  *
  * 1. Välkommen + value prop
  * 2. Välj streamingtjänster och nivå (inget förvalt — paket I, 2026-10-05)
  * 3. Lägg till första titeln (med förslag + sök)
- * 4. Besked i kr för de valda tjänsterna + valfri /kalibrera
+ * 4. Din profil: aktivt val av synlighet (inget förvalt, GDPR art. 25.2)
+ * 5. Besked i kr för de valda tjänsterna + valfri /kalibrera
  *
  * State hålls i ett enkelt step-index. Vi persisterar inte mid-flow — om
  * användaren laddar om får de börja från början. Enkelt och OK för v1.
@@ -75,7 +77,7 @@ export function OnboardingFlow() {
   const router = useRouter();
   const { uid, user } = useAuth();
   const { show: toast } = useToast();
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
   const [saving, setSaving] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
 
@@ -86,11 +88,11 @@ export function OnboardingFlow() {
    * never outlive the step it was raised on. `saveFailed` belongs to `finish`,
    * and "Hoppa över" reaches `finish` from EVERY step — so a failed skip on
    * step 1 would otherwise leave "Kunde inte spara att du är klar" sitting under
-   * the card while the visitor works through steps 2-4 for unrelated reasons.
+   * the card while the visitor works through steps 2-5 for unrelated reasons.
    * The per-step errors need no such reset: those components unmount on a step
    * change and lose their local state for free.
    */
-  const goToStep = (next: 1 | 2 | 3 | 4) => {
+  const goToStep = (next: 1 | 2 | 3 | 4 | 5) => {
     setSaveFailed(false);
     setStep(next);
     // The card is shorter than the step before it on a phone, so without this the
@@ -148,12 +150,13 @@ export function OnboardingFlow() {
 
   return (
     <div className="max-w-[640px] mx-auto py-8 px-4">
-      <StepIndicator current={step} total={4} />
+      <StepIndicator current={step} total={5} />
       <div className={cardClass('mt-6 p-6')}>
         {step === 1 && <StepWelcome onNext={() => goToStep(2)} />}
         {step === 2 && <StepProviders onBack={() => goToStep(1)} onNext={() => goToStep(3)} />}
         {step === 3 && <StepFirstTitle onBack={() => goToStep(2)} onNext={() => goToStep(4)} onFinish={finish} saving={saving} />}
-        {step === 4 && <StepDone onBack={() => goToStep(3)} onFinish={finish} saving={saving} />}
+        {step === 4 && <StepProfile onBack={() => goToStep(3)} onNext={() => goToStep(5)} />}
+        {step === 5 && <StepDone onBack={() => goToStep(4)} onFinish={finish} saving={saving} />}
       </div>
       {/* Below the card: `finish` is reachable from both the card's buttons and
           "Hoppa över", so its error belongs to neither one alone. */}
@@ -657,7 +660,150 @@ function StepFirstTitle({
   );
 }
 
-// ---- Step 4: Klar / kalibrera ----
+// ---- Step 4: Din profil ----
+
+// Order and wording are the founder's decision (2026-10-11): "Publik" first and
+// recommended, and none of them checked until the visitor picks.
+const PROFILE_VISIBILITY_OPTIONS: { value: ItemVisibility; label: string; description: string }[] = [
+  { value: 'public', label: 'Publik (rekommenderas)', description: 'Alla kan hitta dig och se vad du tittar på och dina betyg.' },
+  { value: 'friends', label: 'Endast vänner', description: 'Bara vänner ser ditt bibliotek. Andra kan skicka en vänförfrågan om de har din länk eller ditt exakta användarnamn.' },
+  { value: 'private', label: 'Privat', description: 'Bara du ser ditt bibliotek. Andra kan skicka en vänförfrågan om de har din länk eller ditt exakta användarnamn.' },
+];
+
+function StepProfile({ onBack, onNext }: { onBack: () => void; onNext: () => void }) {
+  const { user, updateUsername, updateDefaultVisibility } = useAuth();
+  const { show: toast } = useToast();
+  // Deliberately null: the account stays private (AuthContext's default) unless
+  // the visitor picks, so 'public' is only ever written from an active choice.
+  const [choice, setChoice] = useState<ItemVisibility | null>(null);
+  const [usernameInput, setUsernameInput] = useState(user?.username ?? '');
+  const [saving, setSaving] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
+
+  const currentUsername = user?.username ?? null;
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(`https://binge.nu/user/${currentUsername}/`);
+      toast('Länken är kopierad');
+    } catch {
+      toast('Kunde inte kopiera länken');
+    }
+  };
+
+  const save = async () => {
+    if (!choice) return;
+    setSaving(true);
+    setSaveFailed(false);
+    try {
+      // The username edit is optional; same validation and error wording as the
+      // settings page, so the two surfaces cannot disagree about what is valid.
+      if (usernameInput !== '' && usernameInput !== currentUsername) {
+        const { validateUsername, isUsernameAvailable } = await import('@/lib/firebase/username');
+        const error = validateUsername(usernameInput);
+        if (error) { toast(error); return; }
+        if (!(await isUsernameAvailable(usernameInput))) { toast('Användarnamnet är redan taget'); return; }
+        await updateUsername(usernameInput);
+      }
+      await updateDefaultVisibility(choice);
+      onNext();
+    } catch (err) {
+      // Same refusal as `finish`: the deletion marker does not clear, so a retry banner would lie.
+      if (isDeletionInProgressError(err)) {
+        toast(DELETION_IN_PROGRESS_MESSAGE);
+        return;
+      }
+      console.error('Onboarding profile save failed:', err);
+      setSaveFailed(true);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div>
+      <h1 className="page-h1" style={{ marginBottom: 12 }}>
+        Din profil
+      </h1>
+      <p className="text-sm text-ink-2 mb-4">
+        Binge är roligare med vänner. Välj vad andra får se.
+      </p>
+
+      <div className="mb-4">
+        <label htmlFor="onboarding-username" className="text-xs text-ink-3 block mb-0.5">
+          {currentUsername ? 'Användarnamn' : 'Välj ett användarnamn (valfritt)'}
+        </label>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-ink-3" aria-hidden="true">@</span>
+          <input
+            id="onboarding-username"
+            // The public handle, not the login identity: nothing should autofill it (BIN-1169).
+            autoComplete="off"
+            value={usernameInput}
+            onChange={e => setUsernameInput(e.target.value.toLowerCase())}
+            placeholder="filmnerden"
+            maxLength={20}
+            aria-describedby={usernameInput ? 'onboarding-username-help' : undefined}
+            className={fieldClass({ size: 'sm', className: 'flex-1' })}
+          />
+        </div>
+        {usernameInput && (
+          <div id="onboarding-username-help" className="text-xxs text-ink-3 mt-0.5">
+            binge.nu/user/{usernameInput}
+          </div>
+        )}
+      </div>
+
+      <div className="mb-4">
+        <span id="onboarding-visibility-label" className="text-xs text-ink-3 block mb-1">
+          Vem får se din profil och ditt bibliotek?
+        </span>
+        <div role="radiogroup" aria-labelledby="onboarding-visibility-label" className="space-y-2">
+          {PROFILE_VISIBILITY_OPTIONS.map(opt => (
+            <label key={opt.value} className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="onboardingVisibility"
+                value={opt.value}
+                checked={choice === opt.value}
+                onChange={() => setChoice(opt.value)}
+                className="accent-acc-deep mt-0.5 w-[13px] h-[13px] shrink-0"
+              />
+              <span className="leading-tight">
+                <span className="text-sm text-ink block">{opt.label}</span>
+                <span className="text-xs text-ink-3">{opt.description}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+        <p className="text-xs text-ink-3 mt-2">Du kan ändra det när som helst i Inställningar.</p>
+      </div>
+
+      {saveFailed && (
+        <SaveError message="Kunde inte spara din profil. Kontrollera anslutningen och försök igen." />
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button onClick={onBack} disabled={saving} variant="ghost" className="inline-flex items-center gap-1 disabled:opacity-50">
+          <ArrowLeft size={14} /> Tillbaka
+        </Button>
+        <Button
+          onClick={save}
+          disabled={choice === null || saving}
+          variant="acc" className="inline-flex items-center gap-2 disabled:opacity-50"
+        >
+          {saving ? 'Sparar…' : 'Fortsätt'} <ArrowRight size={14} />
+        </Button>
+        {currentUsername && (
+          <Button onClick={copyLink} variant="ghost" className="ml-auto inline-flex items-center gap-1">
+            <Copy size={12} aria-hidden="true" /> Kopiera min länk
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---- Step 5: Klar / kalibrera ----
 
 function StepDone({
   onBack,

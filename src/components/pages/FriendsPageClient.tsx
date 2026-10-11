@@ -16,6 +16,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { usePageMeta } from '@/hooks/usePageMeta';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { Button } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { cardClass } from '@/components/ui/Card';
 import { shownSenderName } from '@/lib/friendName';
 
@@ -75,7 +76,7 @@ export default function FriendsPageClient() {
       {empty && tab === 'friends' && (
         <EmptyState
           headline="Inga vänner än"
-          body="Vänner ser varandras privata bibliotek. Skicka förfrågan från en användares profil."
+          body="Sök på ett användarnamn i sökfältet högst upp, eller dela din profillänk så kan vänner skicka en förfrågan till dig."
         />
       )}
       {empty && tab === 'requests' && (
@@ -140,6 +141,7 @@ function FriendRow({ friend }: { friend: FriendUser }) {
   const { uid: myUid } = useAuth();
   const { removeFriend } = useFriendActions();
   const { failedAction, run } = useFriendActionAlert();
+  const [confirming, setConfirming] = useState(false);
   const isMe = friend.uid === myUid;
   const profileLink = friend.username ? `/user/${friend.username}/` : null;
   return (
@@ -158,7 +160,7 @@ function FriendRow({ friend }: { friend: FriendUser }) {
       {!isMe && (
         <div className="flex flex-col items-end gap-1">
           <Button
-            onClick={run('remove', () => removeFriend(friend.uid))}
+            onClick={() => setConfirming(true)}
             variant="ghost" size="xs"
           >
             Ta bort
@@ -167,6 +169,18 @@ function FriendRow({ friend }: { friend: FriendUser }) {
             <span role="alert" className="text-xs text-danger-ink">{FRIEND_FAILURE_TEXT.remove}</span>
           )}
         </div>
+      )}
+      {confirming && (
+        <ConfirmDialog
+          title={`Ta bort ${friend.displayName} som vän?`}
+          body="Ni ser inte längre varandras bibliotek. Du kan skicka en ny förfrågan senare."
+          confirmLabel="Ta bort"
+          onCancel={() => setConfirming(false)}
+          onConfirm={() => {
+            setConfirming(false);
+            void run('remove', () => removeFriend(friend.uid))();
+          }}
+        />
       )}
     </li>
   );

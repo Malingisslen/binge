@@ -69,8 +69,34 @@ export default function UserProfilePageClient({ username }: { username: string }
 
   // Tre-state från usePublicProfile: null (ej användare), { isPrivate }
   // (finns men ej läsbar), { profile, uid } (full).
+  // A non-public profile used to be a dead end: no way to send the request that would
+  // make it readable. Only the handle is shown, which `usernames/` already makes public.
   if ('isPrivate' in data) {
-    return <NotFound crumb={`@${username}`} title="Privat profil" body="Den här profilen är privat." />;
+    return (
+      <div>
+        <PageHeader
+          crumb="Profil"
+          title={`@${data.username}`}
+          standfirst="Profilen är inte publik. Det som visas här beror på vad personen själv har valt."
+          actions={
+            <>
+              <FriendButton targetUid={data.uid} />
+              <UgcActionsMenu
+                targetType="user"
+                targetId={data.uid}
+                targetOwnerUid={data.uid}
+                targetOwnerName={`@${data.username}`}
+              />
+            </>
+          }
+        />
+        <p className="text-sm text-ink-2 mt-3">
+          {myUid
+            ? 'Skicka en vänförfrågan. När ni är vänner ser du det personen delar med sina vänner.'
+            : 'Logga in för att skicka en vänförfrågan.'}
+        </p>
+      </div>
+    );
   }
 
   const { card, uid } = data;
@@ -102,8 +128,7 @@ export default function UserProfilePageClient({ username }: { username: string }
             {!isOwnProfile && <FriendButton targetUid={uid} />}
             {/* BIN-1211: profilen är den första ytan i appen som kan skapa en anmälan mot
                 en person. Servern tog emot `user` långt innan den här knappen fanns.
-                Menyn gömmer sig själv för den egna profilen och för utloggade, och den
-                privata profilen returnerar innan PageHeader monteras. */}
+                Menyn gömmer sig själv för den egna profilen och för utloggade. */}
             <UgcActionsMenu
               targetType="user"
               targetId={uid}
@@ -123,9 +148,15 @@ export default function UserProfilePageClient({ username }: { username: string }
         }
       />
 
+      {!isOwnProfile && (
+        <p className="text-xs text-ink-3 mt-3">
+          Följ: deras aktivitet syns i ditt flöde. Vän: ni kan se varandras bibliotek.
+        </p>
+      )}
+
       <div className="grid grid-cols-4 gap-2.5 mb-4 mt-3">
         <StatCard label="Totalt" value={(watchlist ?? []).length} />
-        <StatCard label="Följer" value={following.length} />
+        <StatCard label="Bevakar" value={following.length} />
         <StatCard label="Sedd" value={watched.length} />
         <StatCard label="Medelbetyg" value={avgRating > 0 ? formatDecimal(avgRating) : '—'} />
       </div>
@@ -157,7 +188,7 @@ export default function UserProfilePageClient({ username }: { username: string }
       {following.length > 0 && (
         <div className={cardClass('mb-3.5')}>
           <div className="px-3 py-1.5 border-b border-rule-2">
-            <span className="text-sm font-bold text-ink-2">Följer just nu</span>
+            <span className="text-sm font-bold text-ink-2">Bevakar just nu</span>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(100px,1fr))] gap-2 px-3 py-2">
             {following.slice(0, 10).map(item => (
