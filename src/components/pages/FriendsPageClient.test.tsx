@@ -19,6 +19,7 @@ const actions = vi.hoisted(() => ({
   acceptFriendRequest: vi.fn(async (_uid: string) => {}),
   declineFriendRequest: vi.fn(async (_uid: string) => {}),
   removeFriend: vi.fn(async (_uid: string) => {}),
+  cancelFriendRequest: vi.fn(async (_uid: string) => {}),
 }));
 
 const data = vi.hoisted(() => ({
@@ -27,9 +28,19 @@ const data = vi.hoisted(() => ({
   following: [] as { uid: string; displayName: string; photoURL: string | null; username?: string }[],
   followers: [] as { uid: string; displayName: string; photoURL: string | null; username?: string }[],
   blocked: new Set<string>(),
+  sent: [] as { toUid: string; displayName: string | null; username: string | null; sentAt: Date }[],
+  username: 'malin' as string | null,
 }));
+const toast = vi.hoisted(() => vi.fn());
 
-vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ uid: 'me' }) }));
+vi.mock('@/hooks/useAuth', () => ({
+  useAuth: () => ({ uid: 'me', user: { username: data.username } }),
+}));
+vi.mock('@/contexts/ToastContext', () => ({ useToast: () => ({ show: toast }) }));
+// The feed fans out reads of its own; this page only decides WHEN it is mounted.
+vi.mock('@/components/social/FriendsFeed', () => ({
+  FriendsFeed: () => <div data-testid="feed" />,
+}));
 vi.mock('@/hooks/usePageMeta', () => ({ usePageMeta: () => {} }));
 const senders = vi.hoisted(() => new Map<string, { displayName: string | null; username: string | null }>());
 vi.mock('@/hooks/useSenderProfile', () => ({
@@ -52,6 +63,7 @@ vi.mock('@/hooks/useFollow', () => ({
 vi.mock('@/hooks/useFriends', () => ({
   useFriends: () => ({ data: data.friends, isLoading: false }),
   useFriendRequests: () => ({ data: data.requests, isLoading: false }),
+  useSentFriendRequests: () => ({ data: data.sent, isLoading: false }),
   useFriendActions: () => actions,
 }));
 
@@ -65,6 +77,7 @@ const request = (uid: string, name: string) => ({
 /** Render, then switch to the tab whose button label starts with `label`. */
 async function open(label: string) {
   const view = render(<FriendsPageClient />);
+  if (label === 'Flöde') return view;
   const tab = view.getAllByRole('button').find((b) => b.textContent?.startsWith(label));
   if (!tab) throw new Error(`no tab starting with ${label}`);
   await act(async () => { fireEvent.click(tab); });
@@ -92,6 +105,8 @@ beforeEach(() => {
   data.following = [];
   data.followers = [];
   data.blocked = new Set();
+  data.sent = [];
+  data.username = 'malin';
   senders.clear();
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
@@ -102,6 +117,7 @@ describe('FriendsPageClient — a refused friend write says so, on its own row',
   it('covers every friend write this page can start', () => {
     expect(Object.keys(actions).sort()).toEqual([
       'acceptFriendRequest',
+      'cancelFriendRequest',
       'declineFriendRequest',
       'removeFriend',
     ]);
@@ -171,7 +187,7 @@ describe('FriendsPageClient — a refused friend write says so, on its own row',
   it('a refused accept says so, naming the accept', async () => {
     data.requests = [request('a', 'Anna')];
     actions.acceptFriendRequest.mockRejectedValueOnce(new Error('x'));
-    const view = await open('Förfrågningar');
+    const view = render(<FriendsPageClient />);
 
     await act(async () => { fireEvent.click(view.getByText('Acceptera')); });
 
@@ -184,7 +200,7 @@ describe('FriendsPageClient — a refused friend write says so, on its own row',
   it('a refused decline says so, naming the decline', async () => {
     data.requests = [request('a', 'Anna')];
     actions.declineFriendRequest.mockRejectedValueOnce(new Error('x'));
-    const view = await open('Förfrågningar');
+    const view = render(<FriendsPageClient />);
 
     await act(async () => { fireEvent.click(view.getByText('Avböj')); });
 
@@ -195,7 +211,7 @@ describe('FriendsPageClient — a refused friend write says so, on its own row',
   it('leaves the other request rows alone when one accept fails', async () => {
     data.requests = [request('a', 'Anna'), request('b', 'Bertil')];
     actions.acceptFriendRequest.mockRejectedValueOnce(new Error('x'));
-    const view = await open('Förfrågningar');
+    const view = render(<FriendsPageClient />);
 
     const annaRow = rowFor(view, 'Anna');
     await act(async () => { fireEvent.click(within(annaRow).getByText('Acceptera')); });
@@ -212,7 +228,7 @@ describe('FriendsPageClient — a refused friend write says so, on its own row',
     actions.acceptFriendRequest.mockImplementationOnce(
       () => new Promise<void>((_resolve, reject) => { rejectAccept = reject; }),
     );
-    const view = await open('Förfrågningar');
+    const view = render(<FriendsPageClient />);
 
     await act(async () => { fireEvent.click(view.getByText('Acceptera')); });
     await act(async () => { fireEvent.click(view.getByText('Avböj')); });
@@ -232,7 +248,6 @@ describe('FriendsPageClient — a refused friend write says so, on its own row',
 describe('FriendsPageClient — a blocked person is left out of every tab', () => {
   const tabs = [
     { label: 'Vänner', seed: () => { data.friends = [friend('x', 'Xerxes'), friend('a', 'Anna')]; } },
-    { label: 'Förfrågningar', seed: () => { data.requests = [request('x', 'Xerxes'), request('a', 'Anna')]; } },
     { label: 'Följer', seed: () => { data.following = [friend('x', 'Xerxes'), friend('a', 'Anna')]; } },
     { label: 'Följare', seed: () => { data.followers = [friend('x', 'Xerxes'), friend('a', 'Anna')]; } },
   ];
@@ -242,9 +257,10 @@ describe('FriendsPageClient — a blocked person is left out of every tab', () =
   it('has a case for every tab the page renders', () => {
     const view = render(<FriendsPageClient />);
     const rendered = view.getAllByRole('button')
+      .filter((b) => b.textContent === 'Flöde' || /\(\d+\)$/.test(b.textContent ?? ''))
       .map((b) => b.textContent?.replace(/ \(\d+\)$/, ''))
       .sort();
-    expect(rendered).toEqual(tabs.map((t) => t.label).sort());
+    expect(rendered).toEqual(['Flöde', ...tabs.map((t) => t.label)].sort());
   });
 
   it.each(tabs)('$label hides the blocked person and does not count them', async ({ label, seed }) => {
@@ -265,6 +281,114 @@ describe('FriendsPageClient — a blocked person is left out of every tab', () =
     expect(view.getByText('Xerxes')).toBeTruthy();
     const tab = view.getAllByRole('button').find((b) => b.textContent?.startsWith(label));
     expect(tab?.textContent).toBe(`${label} (2)`);
+  });
+});
+
+describe('FriendsPageClient — a blocked person in the Väntar på dig box', () => {
+  it('is left out of incoming and sent requests', () => {
+    data.requests = [request('x', 'Xerxes'), request('a', 'Anna')];
+    data.sent = [
+      { toUid: 'y', displayName: 'Yngve', username: null, sentAt: new Date() },
+      { toUid: 'b', displayName: 'Bertil', username: null, sentAt: new Date() },
+    ];
+    data.blocked = new Set(['x', 'y']);
+    const view = render(<FriendsPageClient />);
+    expect(view.getByText('Anna')).toBeTruthy();
+    expect(view.getByText('Bertil')).toBeTruthy();
+    expect(view.queryByText('Xerxes')).toBeNull();
+    expect(view.queryByText('Yngve')).toBeNull();
+  });
+});
+
+describe('FriendsPageClient — tabs and the Flöde default', () => {
+  it('opens on Flöde and mounts the feed only there', async () => {
+    data.friends = [friend('a', 'Anna')];
+    const view = render(<FriendsPageClient />);
+    expect(view.getByTestId('feed')).toBeTruthy();
+    expect(view.queryByText('Anna')).toBeNull();
+    const flode = view.getByRole('button', { name: 'Flöde' });
+    expect(flode.className).toContain('text-acc-deep');
+
+    await act(async () => { fireEvent.click(view.getByRole('button', { name: /^Vänner \(/ })); });
+    expect(view.queryByTestId('feed')).toBeNull();
+    expect(view.getByText('Anna')).toBeTruthy();
+  });
+
+  it('has no Förfrågningar tab any more', () => {
+    const view = render(<FriendsPageClient />);
+    expect(view.queryByRole('button', { name: /Förfrågningar/ })).toBeNull();
+  });
+});
+
+describe('FriendsPageClient — the Väntar på dig box', () => {
+  it('is absent when there are no incoming or sent requests', () => {
+    const view = render(<FriendsPageClient />);
+    expect(view.queryByText('Väntar på dig')).toBeNull();
+  });
+
+  it('shows a sent request by name, and Ångra cancels that uid', async () => {
+    data.sent = [{ toUid: 'u1', displayName: 'Greta', username: 'greta', sentAt: new Date() }];
+    const view = render(<FriendsPageClient />);
+    expect(view.getByText('Väntar på dig')).toBeTruthy();
+    expect(view.getByText('Greta')).toBeTruthy();
+    await act(async () => { fireEvent.click(view.getByRole('button', { name: 'Ångra' })); });
+    expect(actions.cancelFriendRequest).toHaveBeenCalledWith('u1');
+  });
+
+  it('shows the handle when the name is unreadable, and a placeholder when nothing resolves', () => {
+    data.sent = [
+      { toUid: 'u1', displayName: null, username: 'greta', sentAt: new Date() },
+      { toUid: 'u2', displayName: null, username: null, sentAt: new Date() },
+    ];
+    const view = render(<FriendsPageClient />);
+    expect(view.getByText('@greta')).toBeTruthy();
+    expect(view.getByText('Okänd användare')).toBeTruthy();
+  });
+
+  it('a refused cancel says so on that row', async () => {
+    data.sent = [{ toUid: 'u1', displayName: 'Greta', username: null, sentAt: new Date() }];
+    actions.cancelFriendRequest.mockRejectedValueOnce(new Error('x'));
+    const view = render(<FriendsPageClient />);
+    await act(async () => { fireEvent.click(view.getByRole('button', { name: 'Ångra' })); });
+    expect(view.getByRole('alert').textContent).toBe('Kunde inte avbryta förfrågan.');
+  });
+});
+
+describe('FriendsPageClient — header actions', () => {
+  it('copies the profile link and says so', async () => {
+    const writeText = vi.fn(async () => {});
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const view = render(<FriendsPageClient />);
+    expect(view.getByText('Du heter @malin. Dela länken så kan vänner hitta dig.')).toBeTruthy();
+    await act(async () => { fireEvent.click(view.getByRole('button', { name: 'Kopiera min länk' })); });
+    expect(writeText).toHaveBeenCalledWith('https://binge.nu/user/malin/');
+    expect(toast).toHaveBeenCalledWith('Länken är kopierad');
+  });
+
+  it('says the copy failed when the clipboard refuses', async () => {
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: vi.fn(async () => { throw new Error('denied'); }) },
+      configurable: true,
+    });
+    const view = render(<FriendsPageClient />);
+    await act(async () => { fireEvent.click(view.getByRole('button', { name: 'Kopiera min länk' })); });
+    expect(toast).toHaveBeenCalledWith('Kunde inte kopiera länken');
+  });
+
+  it('points to Inställningar and offers no copy button without a username', () => {
+    data.username = null;
+    const view = render(<FriendsPageClient />);
+    expect(view.queryByRole('button', { name: 'Kopiera min länk' })).toBeNull();
+    expect(view.getByRole('link', { name: 'Inställningar' }).getAttribute('href')?.replace(/\/$/, '')).toBe('/settings');
+  });
+
+  it('has one Välj film med en vän link to /tillsammans/ny/', () => {
+    data.friends = [friend('a', 'Anna'), friend('b', 'Bertil')];
+    const view = render(<FriendsPageClient />);
+    const links = view.getAllByRole('link', { name: 'Välj film med en vän' });
+    expect(links).toHaveLength(1);
+    // Next's Link drops the trailing slash in jsdom; the route itself is the claim.
+    expect(links[0].getAttribute('href')?.replace(/\/$/, '')).toBe('/tillsammans/ny');
   });
 });
 
@@ -289,7 +413,7 @@ describe('FriendsPageClient — a request from a sender whose profile has no nam
   it('shows the username from the profile, once', async () => {
     data.requests = [request('s', 'Användare')];
     senders.set('s', { displayName: '  ', username: 'sara' });
-    const view = await open('Förfrågningar');
+    const view = render(<FriendsPageClient />);
     const row = rowFor(view, 'sara');
     expect(within(row).queryByText('Användare')).toBeNull();
     expect(within(row).queryByText('@sara')).toBeNull();
@@ -298,7 +422,7 @@ describe('FriendsPageClient — a request from a sender whose profile has no nam
   it('keeps the @-line when the name and username differ', async () => {
     data.requests = [request('s', 'Sara')];
     senders.set('s', { displayName: 'Sara', username: 'sara' });
-    const view = await open('Förfrågningar');
+    const view = render(<FriendsPageClient />);
     expect(within(rowFor(view, 'Sara')).getByText('@sara')).toBeTruthy();
   });
 });

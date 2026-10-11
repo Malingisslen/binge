@@ -3,24 +3,26 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Search } from 'lucide-react';
+import { useToast } from '@/contexts/ToastContext';
 import { useFollowList, type FollowListUser } from '@/hooks/useFollowList';
 import { useFollowing } from '@/hooks/useFollow';
-import { useFriends, useFriendRequests, useFriendActions } from '@/hooks/useFriends';
+import { useFriends, useFriendRequests, useSentFriendRequests, useFriendActions } from '@/hooks/useFriends';
 import { useAuth } from '@/hooks/useAuth';
 import { useBlockedUsers } from '@/hooks/useBlockedUsers';
 import { useSenderProfile } from '@/hooks/useSenderProfile';
 import { useFriendActionAlert } from '@/hooks/useFriendActionAlert';
 import { FRIEND_FAILURE_TEXT } from '@/lib/friendActionText';
-import type { FriendRequest, FriendUser } from '@/lib/firebase/friends';
+import type { FriendRequest, FriendUser, SentFriendRequest } from '@/lib/firebase/friends';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { usePageMeta } from '@/hooks/usePageMeta';
 import { LoadingView } from '@/components/ui/LoadingView';
-import { Button } from '@/components/ui/Button';
+import { Button, buttonClass } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { cardClass } from '@/components/ui/Card';
+import { FriendsFeed } from '@/components/social/FriendsFeed';
 import { shownSenderName } from '@/lib/friendName';
 
-type Tab = 'friends' | 'requests' | 'following' | 'followers';
+type Tab = 'feed' | 'friends' | 'following' | 'followers';
 
 export default function FriendsPageClient() {
   // X5: 'Vänner' saknade — Binge.nu-suffix i dokumenttiteln.
@@ -28,7 +30,10 @@ export default function FriendsPageClient() {
   const { following: allFollowing, followers: allFollowers, isLoading: followLoading } = useFollowList();
   const { data: allFriends = [], isLoading: friendsLoading } = useFriends();
   const { data: allRequests = [], isLoading: requestsLoading } = useFriendRequests();
-  const [tab, setTab] = useState<Tab>('friends');
+  const { data: allSent = [] } = useSentFriendRequests();
+  const { user } = useAuth();
+  const { show: toast } = useToast();
+  const [tab, setTab] = useState<Tab>('feed');
 
   // BIN-1341. Someone I blocked is left out of every tab, the same client-side
   // hygiene filter the feed and reviews use. The tab counts read the filtered lists,
@@ -36,6 +41,7 @@ export default function FriendsPageClient() {
   const { isBlocked } = useBlockedUsers();
   const friends = allFriends.filter(f => !isBlocked(f.uid));
   const requests = allRequests.filter(r => !isBlocked(r.fromUid));
+  const sent = allSent.filter(r => !isBlocked(r.toUid));
   const following = allFollowing.filter(u => !isBlocked(u.uid));
   const followers = allFollowers.filter(u => !isBlocked(u.uid));
 
@@ -43,25 +49,67 @@ export default function FriendsPageClient() {
   const list = tab === 'following' ? following : tab === 'followers' ? followers : [];
   const empty = !isLoading && (
     (tab === 'friends' && friends.length === 0)
-    || (tab === 'requests' && requests.length === 0)
     || (tab === 'following' && following.length === 0)
     || (tab === 'followers' && followers.length === 0)
   );
+
+  const username = user?.username ?? null;
+  async function copyProfileLink() {
+    try {
+      await navigator.clipboard.writeText(`https://binge.nu/user/${username}/`);
+      toast('Länken är kopierad');
+    } catch {
+      toast('Kunde inte kopiera länken');
+    }
+  }
 
   return (
     <div>
       <PageHeader
         crumb="Vänner"
         title="Vänner"
-        standfirst="Hitta personer att följa via sökfältet i toppraden — eller dela din profillänk."
+        standfirst={username ? (
+          `Du heter @${username}. Dela länken så kan vänner hitta dig.`
+        ) : (
+          <>Du har inget användarnamn än. Välj ett under <Link href="/settings/">Inställningar</Link> så kan vänner hitta dig.</>
+        )}
+        actions={(
+          <>
+            {username && (
+              <Button type="button" onClick={copyProfileLink} variant="ghost">Kopiera min länk</Button>
+            )}
+            <Link href="/tillsammans/ny/" className={buttonClass({ variant: 'acc', className: 'no-underline' })}>
+              Välj film med en vän
+            </Link>
+          </>
+        )}
       />
 
+      {(requests.length > 0 || sent.length > 0) && (
+        <section aria-label="Väntar på dig" className="bg-acc-soft border border-acc rounded-md px-3 py-2 mb-4">
+          <h2 className="text-xs font-semibold text-acc-deep mb-1">Väntar på dig</h2>
+          {requests.length > 0 && (
+            <ul className="divide-y divide-rule-2">
+              {requests.map(r => <RequestRow key={r.fromUid} request={r} />)}
+            </ul>
+          )}
+          {sent.length > 0 && (
+            <>
+              <div className="text-xxs text-ink-2 mt-2">Du har väntande förfrågningar som ingen svarat på</div>
+              <ul className="divide-y divide-rule-2">
+                {sent.map(r => <SentRequestRow key={r.toUid} request={r} />)}
+              </ul>
+            </>
+          )}
+        </section>
+      )}
+
       <div className="flex border-b border-rule mb-3">
+        <TabButton active={tab === 'feed'} onClick={() => setTab('feed')}>
+          Flöde
+        </TabButton>
         <TabButton active={tab === 'friends'} onClick={() => setTab('friends')}>
           Vänner ({friends.length})
-        </TabButton>
-        <TabButton active={tab === 'requests'} onClick={() => setTab('requests')}>
-          Förfrågningar ({requests.length})
         </TabButton>
         <TabButton active={tab === 'following'} onClick={() => setTab('following')}>
           Följer ({following.length})
@@ -71,18 +119,14 @@ export default function FriendsPageClient() {
         </TabButton>
       </div>
 
-      {isLoading && <LoadingView label="Laddar…" />}
+      {tab === 'feed' && <FriendsFeed />}
+
+      {isLoading && tab !== 'feed' && <LoadingView label="Laddar…" />}
 
       {empty && tab === 'friends' && (
         <EmptyState
           headline="Inga vänner än"
           body="Sök på ett användarnamn i sökfältet högst upp, eller dela din profillänk så kan vänner skicka en förfrågan till dig."
-        />
-      )}
-      {empty && tab === 'requests' && (
-        <EmptyState
-          headline="Inga väntande förfrågningar"
-          body="När någon skickar en vänskapsförfrågan dyker den upp här att acceptera eller avböja."
         />
       )}
       {empty && tab === 'following' && (
@@ -101,12 +145,6 @@ export default function FriendsPageClient() {
       {!empty && tab === 'friends' && (
         <ul className={cardClass('divide-y divide-rule-2')}>
           {friends.map(f => <FriendRow key={f.uid} friend={f} />)}
-        </ul>
-      )}
-
-      {!empty && tab === 'requests' && (
-        <ul className={cardClass('divide-y divide-rule-2')}>
-          {requests.map(r => <RequestRow key={r.fromUid} request={r} />)}
         </ul>
       )}
 
@@ -186,6 +224,39 @@ function FriendRow({ friend }: { friend: FriendUser }) {
   );
 }
 
+// The recipient's card may be unreadable to me, so the row falls back to the handle and
+// then to a placeholder rather than showing a bare uid.
+function SentRequestRow({ request }: { request: SentFriendRequest }) {
+  const { cancelFriendRequest } = useFriendActions();
+  const { failedAction, run } = useFriendActionAlert();
+  const name = request.displayName ?? (request.username ? `@${request.username}` : 'Okänd användare');
+  const profileLink = request.username ? `/user/${request.username}/` : null;
+  return (
+    <li className="py-2 flex items-center gap-2">
+      <div className="flex-1 min-w-0">
+        {profileLink ? (
+          <Link href={profileLink} className="text-xs font-semibold text-ink no-underline hover:text-acc-deep truncate block">
+            {name}
+          </Link>
+        ) : (
+          <div className="text-xs font-semibold text-ink-3 truncate">{name}</div>
+        )}
+        {request.displayName && request.username && request.username !== request.displayName && (
+          <div className="text-xxs text-ink-3">@{request.username}</div>
+        )}
+      </div>
+      <div className="flex flex-col items-end gap-1">
+        <Button onClick={run('cancel', () => cancelFriendRequest(request.toUid))} variant="ghost" size="xs">
+          Ångra
+        </Button>
+        {failedAction && (
+          <span role="alert" className="text-xs text-danger-ink">{FRIEND_FAILURE_TEXT[failedAction]}</span>
+        )}
+      </div>
+    </li>
+  );
+}
+
 function RequestRow({ request }: { request: FriendRequest }) {
   const { acceptFriendRequest, declineFriendRequest } = useFriendActions();
   const { failedAction, run } = useFriendActionAlert();
@@ -196,7 +267,7 @@ function RequestRow({ request }: { request: FriendRequest }) {
   const username = sender?.username ?? request.fromUsername;
   const profileLink = username ? `/user/${username}/` : null;
   return (
-    <li className="px-3 py-2 flex items-center gap-2">
+    <li className="py-2 flex items-center gap-2">
       <Avatar name={displayName} photoURL={request.fromPhotoURL} />
       <div className="flex-1 min-w-0">
         {profileLink ? (

@@ -241,3 +241,46 @@ export async function listFriendRequests(myUid: string): Promise<FriendRequest[]
     };
   });
 }
+
+export interface SentFriendRequest {
+  toUid: string;
+  // A private recipient's card is unreadable to me, so the name falls back to their
+  // handle and then to null; the UI words the last case.
+  displayName: string | null;
+  username: string | null;
+  sentAt: Date;
+}
+
+export const SENT_REQUESTS_LIST_LIMIT = 50;
+
+// Mina obesvarade förfrågningar. Raden bär bara {uid, sentAt}, så namnet slås upp:
+// först publicProfiles-kortet, och för dem jag inte får läsa handtaget i `usernames`
+// (världsläsbar) — en fråga per uppslag, bara för de kort som saknas.
+export async function listSentFriendRequests(myUid: string): Promise<SentFriendRequest[]> {
+  const { db, collection, getDocs, query, orderBy, limit, where } = await fsdb();
+  const snap = await getDocs(query(
+    collection(db, 'users', myUid, 'friendRequestsSent'),
+    orderBy('sentAt', 'desc'),
+    limit(SENT_REQUESTS_LIST_LIMIT),
+  ));
+  if (snap.empty) return [];
+  const cards = await getPublicProfileCards(snap.docs.map(d => d.id));
+  return Promise.all(snap.docs.map(async (d): Promise<SentFriendRequest> => {
+    const card = cards.get(d.id);
+    let username = card?.username ?? null;
+    if (!card) {
+      try {
+        const hit = await getDocs(query(collection(db, 'usernames'), where('uid', '==', d.id), limit(1)));
+        username = hit.docs[0]?.id ?? null;
+      } catch {
+        username = null;
+      }
+    }
+    return {
+      toUid: d.id,
+      displayName: card ? shownFriendName(card.displayName, card.username) : null,
+      username,
+      sentAt: d.data().sentAt?.toDate?.() ?? new Date(),
+    };
+  }));
+}
