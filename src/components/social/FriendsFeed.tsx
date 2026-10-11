@@ -7,12 +7,14 @@ import { Heart, MessageCircle, TrendingUp } from 'lucide-react';
 import QuickAddButton from '@/components/title/QuickAddButton';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { useFollowing } from '@/hooks/useFollow';
+import { useFriends } from '@/hooks/useFriends';
 import { useBlockedUsers } from '@/hooks/useBlockedUsers';
 import { useAuth } from '@/hooks/useAuth';
 import { fsdb } from '@/lib/firebase/db';
 import { toDate } from '@/lib/firebase/utils';
 import { getPublicProfileCard } from '@/lib/firebase/publicProfile';
 import { posterUrl, titleHref } from '@/lib/tmdb/client';
+import { buildSocialTargets, MAX_SOCIAL_FANOUT } from '@/lib/socialFanout';
 import { computeFollowTrending, type TrendingTitle } from '@/lib/feedTrending';
 import type { MediaType } from '@/types';
 import { Eyebrow, eyebrowClass } from '@/components/ui/Eyebrow';
@@ -50,22 +52,27 @@ interface FeedReviewItem {
 type FeedItem = FeedWatchlistItem | FeedReviewItem;
 
 // Mounted by both /feed and the Flöde tab. Callers mount it only while it is visible,
-// because the query fans out per followed user.
+// because the query fans out per friend and per followed user.
 export function FriendsFeed() {
   const { followingUids } = useFollowing();
-  const { isBlocked } = useBlockedUsers();
+  const { data: friends, isLoading: friendsLoading } = useFriends();
+  const { isBlocked, blockedUids } = useBlockedUsers();
   const { user } = useAuth();
 
+  // Vänner först så capen aldrig trycker ut en vän till förmån för en följd.
+  const feedUids = buildSocialTargets((friends ?? []).map(f => f.uid), followingUids, blockedUids, MAX_SOCIAL_FANOUT)
+    .map(t => t.uid);
+
   const { data: feedItems, isLoading } = useQuery({
-    queryKey: ['feed', followingUids],
+    queryKey: ['feed', [...feedUids].sort().join(',')],
     queryFn: async (): Promise<FeedItem[]> => {
-      if (followingUids.length === 0) return [];
+      if (feedUids.length === 0) return [];
       const { db, collection, getDocs, query, where, orderBy, limit } = await fsdb();
       const twoWeeksAgo = new Date();
       twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
 
       const results = await Promise.all(
-        followingUids.slice(0, 30).map(async uid => {
+        feedUids.map(async uid => {
           const [card, watchlistSnap, reviewsSnap] = await Promise.all([
             getPublicProfileCard(uid),
             getDocs(query(
@@ -132,7 +139,7 @@ export function FriendsFeed() {
       );
       return results.flat().sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
     },
-    enabled: followingUids.length > 0,
+    enabled: feedUids.length > 0,
     staleTime: 2 * 60 * 1000,
   });
 
@@ -150,10 +157,10 @@ export function FriendsFeed() {
 
       {!isLoading && trending.length > 0 && <TrendingRow titles={trending} />}
 
-      {!isLoading && followingUids.length === 0 && (
+      {!isLoading && !friendsLoading && feedUids.length === 0 && (
         <div className={cardClass('px-4 py-4')}>
           <p className="text-xs text-ink-2 mb-3 leading-relaxed">
-            Se vad dina vänner tittar på, betygsätter och lägger till. Följ andra användare för att se deras aktivitet här.
+            Se vad dina vänner och personer du följer tittar på, betygsätter och lägger till. Hitta vänner via sökfältet för att se deras aktivitet här.
           </p>
           <div className="border border-dashed border-rule rounded-sm p-2.5 mb-3">
             <div className={eyebrowClass({ className: 'mb-1.5' })}>Så här ser det ut</div>
@@ -174,7 +181,7 @@ export function FriendsFeed() {
           </div>
           <div className="text-center">
             <Link href="/search" className={buttonClass({ variant: 'acc', size: 'sm', className: 'inline-block no-underline' })}>
-              Sök användare att följa
+              Hitta vänner i sökfältet
             </Link>
             {user?.username && (
               <div className="text-xxs text-ink-3 mt-1">
@@ -185,7 +192,7 @@ export function FriendsFeed() {
         </div>
       )}
 
-      {feedItems && feedItems.length === 0 && followingUids.length > 0 && (
+      {feedItems && feedItems.length === 0 && feedUids.length > 0 && (
         <div className={cardClass('px-4 py-6 text-center')}>
           <p className="text-sm text-ink-3">Ingen aktivitet de senaste 2 veckorna.</p>
         </div>

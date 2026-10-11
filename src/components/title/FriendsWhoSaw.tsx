@@ -7,9 +7,10 @@ import type { MediaType } from '@/types';
 import { eyebrowClass } from '@/components/ui/Eyebrow';
 
 /**
- * BIN-97 — kompakt rad med personer man följer som har titeln publikt.
- * Renderar inget om ingen följd har den (eller man inte är inloggad/följer
- * ingen) — datat är redan integritetsfiltrerat i useFriendsWhoSaw.
+ * BIN-97 — kompakta rader med vänner ("Vänner", ömsesidigt) och personer man
+ * följer ("Du följer", enkelriktat) som har titeln publikt. Grupperna hålls isär
+ * så att en följd person aldrig läses som vän. Renderar inget om ingen har den —
+ * datat är redan integritetsfiltrerat i useFriendsWhoSaw.
  */
 
 const MAX_VISIBLE = 8;
@@ -25,17 +26,34 @@ function label(f: FriendWhoSaw): string {
   }
 }
 
+const GROUPS: { relation: FriendWhoSaw['relation']; heading: string }[] = [
+  { relation: 'friend', heading: 'Vänner' },
+  { relation: 'following', heading: 'Du följer' },
+];
+
 export default function FriendsWhoSaw({ mediaType, tmdbId }: { mediaType: MediaType; tmdbId: number }) {
   const { data } = useFriendsWhoSaw(mediaType, tmdbId);
   if (!data || data.length === 0) return null;
 
-  const visible = data.slice(0, MAX_VISIBLE);
-  const overflow = data.length - visible.length;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+      {GROUPS.map(({ relation, heading }) => {
+        const members = data.filter(f => f.relation === relation);
+        if (members.length === 0) return null;
+        return <Group key={relation} heading={heading} members={members} />;
+      })}
+    </div>
+  );
+}
+
+function Group({ heading, members }: { heading: string; members: FriendWhoSaw[] }) {
+  const visible = members.slice(0, MAX_VISIBLE);
+  const overflow = members.length - visible.length;
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>
+    <div role="group" aria-label={heading} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
       <span className={eyebrowClass({ size: 'xs' })}>
-        vänner som sett detta
+        {heading}
       </span>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         {visible.map(f => {
