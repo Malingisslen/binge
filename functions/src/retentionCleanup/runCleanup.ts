@@ -36,6 +36,7 @@
 import {
   isExpiredSession,
   isStaleNotification,
+  isStaleTip,
   isStaleJoinAttempt,
   isStaleReleaseMarker,
   tsToMillis,
@@ -70,6 +71,8 @@ export interface ScanDoc {
 export type ScanKind =
   | 'sessions'
   | 'notifications'
+  // Tipsa en vän: `users/{recipient}/tips/{id}`, reaped on `createdAt`.
+  | 'tips'
   | 'joinAttempts'
   | 'releaseMarkers'
   // BIN-1129: `friendRequestPushes/{recipient}_{sender}` — the repeat-push brake.
@@ -274,6 +277,8 @@ export interface CleanupSummary {
   deletedSessions: number;
   staleNotifications: number;
   deletedNotifications: number;
+  staleTips: number;
+  deletedTips: number;
   staleJoinAttempts: number;
   deletedJoinAttempts: number;
   staleReleaseMarkers: number;
@@ -978,6 +983,7 @@ export async function runRetentionCleanup(io: CleanupIo): Promise<CleanupSummary
   const [
     expiredSessions,
     staleNotifications,
+    staleTips,
     staleJoinAttempts,
     staleReleaseMarkers,
     staleFriendRequestPushMarkers,
@@ -990,6 +996,10 @@ export async function runRetentionCleanup(io: CleanupIo): Promise<CleanupSummary
       }),
       collectStaleByField(io, 'notifications', 'createdAt', isStaleNotification, nowMs).catch((err) => {
         io.log.error('retentionCleanup: notifications scan failed', err);
+        return [] as string[];
+      }),
+      collectStaleByField(io, 'tips', 'createdAt', isStaleTip, nowMs).catch((err) => {
+        io.log.error('retentionCleanup: tips scan failed', err);
         return [] as string[];
       }),
       collectStaleByField(io, 'joinAttempts', 'createdAt', isStaleJoinAttempt, nowMs).catch((err) => {
@@ -1017,6 +1027,7 @@ export async function runRetentionCleanup(io: CleanupIo): Promise<CleanupSummary
 
   const deletedSessions = await deleteSessions(io, expiredSessions);
   const deletedNotifications = await deleteInBatches(io, staleNotifications);
+  const deletedTips = await deleteInBatches(io, staleTips);
   const deletedJoinAttempts = await deleteInBatches(io, staleJoinAttempts);
   const deletedReleaseMarkers = await deleteInBatches(io, staleReleaseMarkers);
   const deletedFriendRequestPushMarkers = await deleteInBatches(io, staleFriendRequestPushMarkers);
@@ -1031,6 +1042,8 @@ export async function runRetentionCleanup(io: CleanupIo): Promise<CleanupSummary
     deletedSessions,
     staleNotifications: staleNotifications.length,
     deletedNotifications,
+    staleTips: staleTips.length,
+    deletedTips,
     staleJoinAttempts: staleJoinAttempts.length,
     deletedJoinAttempts,
     staleReleaseMarkers: staleReleaseMarkers.length,
@@ -1139,6 +1152,8 @@ export async function runRetentionCleanup(io: CleanupIo): Promise<CleanupSummary
     deletedSessions,
     staleNotifications: staleNotifications.length,
     deletedNotifications,
+    staleTips: staleTips.length,
+    deletedTips,
     staleJoinAttempts: staleJoinAttempts.length,
     deletedJoinAttempts,
     staleReleaseMarkers: staleReleaseMarkers.length,

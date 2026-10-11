@@ -889,6 +889,59 @@ service cloud.firestore {
       allow delete: if isOwner(uid) || isOwner(toUid);
     }
 
+    // ---- Tipsa en vän ----
+    // Ett tips från en vän om en titel. Ligger i MOTTAGARENS träd, och bara mottagaren
+    // läser det. Avsändarens identitet är bara `fromUid`: namnet läses från avsändarens
+    // publika kort när tipset visas, så inget namn lagras här som kan förfalskas eller
+    // bli inaktuellt.
+    //
+    // Dokument-id:t är `{fromUid}_{mediaType}_{tmdbId}` och binds mot fälten, så ett nytt
+    // tips om samma titel från samma vän skriver över det gamla i stället för att lägga
+    // till ett till, och ingen kan skriva under någon annans id.
+    //
+    // Varje nyckel bär ett typ- och storlekskrav, av samma skäl som `friendRequests`
+    // (BIN-1106/1119): dokumentet ligger på mottagarens lagring och går ordagrant in i
+    // mottagarens GDPR-export.
+    //
+    // Kostnad: en skrivning läser tre dokument (vänskapen, blockeringen och mottagarens
+    // profil för `acceptTips`). Det är en skrivväg som en människa trycker fram, inte en
+    // läsväg som varje sidvisning betalar.
+    match /users/{uid}/tips/{tipId} {
+      function isValidTip(d) {
+        return d.keys().hasOnly(['fromUid', 'mediaType', 'tmdbId', 'title', 'note', 'createdAt'])
+          && d.keys().hasAll(['fromUid', 'mediaType', 'tmdbId', 'title', 'createdAt'])
+          && d.fromUid == request.auth.uid
+          && (d.mediaType == 'movie' || d.mediaType == 'tv')
+          && d.tmdbId is int
+          && d.tmdbId > 0
+          && d.title is string
+          && d.title.size() > 0
+          && d.title.size() <= 200
+          && (!('note' in d) || (d.note is string && d.note.size() <= 140))
+          && d.createdAt == request.time
+          && tipId == request.auth.uid + '_' + d.mediaType + '_' + string(d.tmdbId);
+      }
+      // Bara en bekräftad vän får tipsa, aldrig någon mottagaren blockerat (samma
+      // kontroll som BIN-1129 gör på vänförfrågningar), och inte alls om mottagaren
+      // stängt av tips. En profil utan nyckeln tar emot tips.
+      function recipientAcceptsTipFromMe() {
+        return exists(/databases/$(database)/documents/users/$(uid)/friends/$(request.auth.uid))
+          && !exists(/databases/$(database)/documents/users/$(uid)/blocked/$(request.auth.uid))
+          && get(/databases/$(database)/documents/users/$(uid)).data
+            .get('notificationSettings', {}).get('acceptTips', true) != false;
+      }
+      allow read: if isOwner(uid);
+      // Update är samma vän som tipsar om samma titel igen, och prövas precis som en ny
+      // skrivning: den som slutat vara vän eller blivit blockerad får inte heller skriva
+      // över sitt gamla tips.
+      allow create, update: if isSignedIn()
+        && isValidTip(request.resource.data)
+        && recipientAcceptsTipFromMe();
+      // Bara mottagaren raderar. En avsändare som fick radera sitt tips skulle kunna se om
+      // mottagaren redan tagit bort det, och appen har ingen ångra-knapp som behöver det.
+      allow delete: if isOwner(uid);
+    }
+
     // ---- grupp-inbjudningar (samtyckesbaserade) ----
     // Spegel av friendRequests-mönstret. Ägaren av en grupp skapar en inbjudan
     // på mål-användarens väg; mål-användaren ser den, kan acceptera (lägger då

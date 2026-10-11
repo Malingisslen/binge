@@ -148,6 +148,7 @@ vi.mock('@/components/title/ProviderTag', () => ({ default: () => null }));
 vi.mock('@/components/title/FreeWatchBadge', () => ({ default: () => null }));
 vi.mock('@/components/title/AddToListButton', () => ({ default: () => null }));
 vi.mock('@/components/title/AddToGroupButton', () => ({ default: () => null }));
+vi.mock('@/components/title/TipFriendButton', () => ({ default: () => null }));
 vi.mock('@/components/title/NotInterestedButton', () => ({ default: () => null }));
 vi.mock('@/components/title/WatchedDateEditor', () => ({ default: () => null }));
 vi.mock('@/components/title/NotesBlock', () => ({ default: () => null }));

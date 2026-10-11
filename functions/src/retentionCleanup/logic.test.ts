@@ -18,6 +18,7 @@ import {
   GET_USERS_BATCH,
   revokedUidsInBatches,
 } from './logic';
+import { isStaleTip, TIP_MAX_AGE_MS } from './logic';
 
 // Anchored on THIS file rather than on the working directory, the same form
 // `groupHandover/logic.test.ts` uses: a source-reading test that resolves against
@@ -365,5 +366,24 @@ describe('BIN-1152: svepet raderar projektionen, och gor det fore gruppen', () =
     expect(proj).toBeGreaterThanOrEqual(0);
     expect(group).toBeGreaterThanOrEqual(0);
     expect(proj).toBeLessThan(group);
+  });
+});
+
+describe('isStaleTip (Tipsa en vän)', () => {
+  const now = Date.UTC(2026, 9, 11);
+
+  it('is 90 days', () => {
+    expect(TIP_MAX_AGE_MS).toBe(90 * 24 * 60 * 60 * 1000);
+  });
+
+  it('reaps a tip one millisecond past the threshold, never one on or inside it', () => {
+    expect(isStaleTip(now - TIP_MAX_AGE_MS - 1, now)).toBe(true);
+    expect(isStaleTip(now - TIP_MAX_AGE_MS, now)).toBe(false);
+    expect(isStaleTip(now - TIP_MAX_AGE_MS + 1, now)).toBe(false);
+    expect(isStaleTip(now, now)).toBe(false);
+  });
+
+  it('never reaps an undateable tip (no createdAt)', () => {
+    expect(isStaleTip(null, now)).toBe(false);
   });
 });

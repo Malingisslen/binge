@@ -40,6 +40,7 @@ import {
   ORPHAN_AUTH_MIN_CEILING,
   ORPHAN_AUTH_MAX_FRACTION,
 } from '../../../functions/src/retentionCleanup/orphans';
+import { TIP_MAX_AGE_MS } from '../../../functions/src/retentionCleanup/logic';
 
 /**
  * BIN-727 — the retentionCleanup ORCHESTRATOR against a real Firestore emulator.
@@ -179,6 +180,7 @@ function makeAuth(accounts: readonly FakeAccount[], pageSize = 2): FakeAuth {
 const SCAN_SOURCE: Record<ScanKind, { group: boolean; id: string }> = {
   sessions: { group: false, id: 'sessions' },
   notifications: { group: true, id: 'notifications' },
+  tips: { group: true, id: 'tips' },
   joinAttempts: { group: true, id: 'joinAttempts' },
   releaseMarkers: { group: true, id: 'notified' },
   friendRequestPushMarkers: { group: false, id: 'friendRequestPushes' },
@@ -1856,5 +1858,53 @@ it('does not count a stamp that never committed', async () => {
     expect(summary.orphanDataSkippedAuthBatches).toBe(-1);
     expect(summary.erasedOrphanDataUids).toBe(0);
     expect(await exists(db, 'users/consoled')).toBe(true);
+  });
+});
+
+// Tipsa en vän: the sweep is the promise on the privacy page, and it also reaps a tip
+// whose sender deleted their account.
+describe('retentionCleanup orchestrator — tips (Tipsa en vän)', () => {
+  async function seedTips(db: Firestore): Promise<void> {
+    await setDoc(doc(db, 'users', 'alive', 'tips', 'friend_movie_1'), { fromUid: 'friend', createdAt: ts(NOW - TIP_MAX_AGE_MS - 1) });
+    await setDoc(doc(db, 'users', 'alive', 'tips', 'friend_movie_2'), { fromUid: 'friend', createdAt: ts(NOW - TIP_MAX_AGE_MS) });
+    await setDoc(doc(db, 'users', 'alive', 'tips', 'friend_tv_3'), { fromUid: 'friend', createdAt: ts(NOW - 1000) });
+    await setDoc(doc(db, 'users', 'alive', 'tips', 'friend_tv_4'), { fromUid: 'friend', note: 'no timestamp' });
+  }
+
+  it('reaps a tip past 90 days and keeps the one on the threshold, a fresh one and an undateable one', async () => {
+    const db = adminLikeDb();
+    const auth = makeAuth(FULL_ACCOUNTS);
+    await seedTips(db);
+
+    const summary = await runRetentionCleanup(makeIo(db, auth));
+
+    expect(summary.staleTips).toBe(1);
+    expect(summary.deletedTips).toBe(1);
+    expect(await exists(db, 'users/alive/tips/friend_movie_1')).toBe(false);
+    expect(await exists(db, 'users/alive/tips/friend_movie_2')).toBe(true);
+    expect(await exists(db, 'users/alive/tips/friend_tv_3')).toBe(true);
+    expect(await exists(db, 'users/alive/tips/friend_tv_4')).toBe(true);
+
+    const second = await runRetentionCleanup(makeIo(db, auth));
+    expect(second.deletedTips).toBe(0);
+  });
+
+  it('a thrown tips scan leaves the notification sweep completed', async () => {
+    const db = adminLikeDb();
+    const auth = makeAuth(FULL_ACCOUNTS);
+    await seedTips(db);
+    await setDoc(doc(db, 'users', 'alive', 'notifications', 'old'), { createdAt: ts(NOW - NOTIFICATION_MAX_AGE_MS - 1) });
+
+    const io = makeIo(db, auth, {
+      scanPage: async (kind, cursor, pageSize) => {
+        if (kind === 'tips') throw new Error('missing index');
+        return makeIo(db, auth).scanPage(kind, cursor, pageSize);
+      },
+    });
+    const summary = await runRetentionCleanup(io);
+
+    expect(summary.deletedTips).toBe(0);
+    expect(await exists(db, 'users/alive/tips/friend_movie_1')).toBe(true);
+    expect(summary.deletedNotifications).toBe(1);
   });
 });

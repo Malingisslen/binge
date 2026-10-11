@@ -21,6 +21,12 @@ export const SESSION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
 /** Notifications are reaped once older than this. */
 export const NOTIFICATION_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
 /**
+ * Tipsa en vän: a tip in `users/{recipient}/tips/{id}` is reaped once older than this.
+ * The privacy page promises this age. A tip whose SENDER deleted their account is reaped
+ * the same way: it sits in the recipient's tree, which the sender's client cannot list.
+ */
+export const TIP_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
+/**
  * joinAttempts (BIN-329) are reaped once older than this — 1 hour. A token-join
  * is a single synchronous two-step flow (write `joinAttempts/{uid}` with the
  * plaintext token, then immediately update the group); a successful join deletes
@@ -90,6 +96,14 @@ export function isExpiredSession(
  */
 export function isStaleNotification(createdAtMs: number | null, nowMs: number): boolean {
   return createdAtMs !== null && createdAtMs < nowMs - NOTIFICATION_MAX_AGE_MS;
+}
+
+/**
+ * A tip is reapable once its `createdAt` is older than TIP_MAX_AGE_MS. A re-tip rewrites
+ * `createdAt`, so the clock restarts. An undateable tip is kept, like every sibling here.
+ */
+export function isStaleTip(createdAtMs: number | null, nowMs: number): boolean {
+  return createdAtMs !== null && createdAtMs < nowMs - TIP_MAX_AGE_MS;
 }
 
 /**

@@ -38,7 +38,9 @@ import type { QuerySnapshot } from 'firebase/firestore';
 // 2.4 (BIN-1357, 2026-09-30): additive — new `skippedGroups` array: each group whose
 //     household, member-row or title-list read threw, with the export fields that lack
 //     that group's data. Before this the group was dropped without a trace.
-export const SCHEMA_VERSION = '2.4' as const;
+// 2.5 (Tipsa en vän, 2026-10-11): additive — new `tips` array: title tips friends sent
+//     you (id = "<fromUid>_<mediaType>_<tmdbId>").
+export const SCHEMA_VERSION = '2.5' as const;
 
 export interface ExportDoc {
   id: string;
@@ -83,6 +85,8 @@ export interface BingeExport {
   friendRequests: ExportDoc[];
   friendRequestsSent: ExportDoc[];
   groupInvites: ExportDoc[];
+  // Tipsa en vän: tips om titlar som vänner skickat till dig.
+  tips: ExportDoc[];
   pauseHistory: ExportDoc[];
   listFollows: ExportDoc[];
   reviews: ExportDoc[];
@@ -120,6 +124,7 @@ Filen innehåller:
 - Inkomna vänförfrågningar (friendRequests)
 - Skickade vänförfrågningar (friendRequestsSent)
 - Inkomna grupp-inbjudningar (groupInvites)
+- Tips om titlar som vänner skickat till dig (tips)
 - Sparbeslut-historik från Streamingrådgivaren (pauseHistory)
 - Dina recensioner (reviews)
 - Gillamarkeringar du gjort (reviewLikes)
@@ -299,6 +304,7 @@ export async function buildUserExport(uid: string): Promise<BingeExport> {
     friendRequests: toExportDocs(s.friendRequestsSnap),
     friendRequestsSent: toExportDocs(s.friendRequestsSentSnap),
     groupInvites: toExportDocs(s.groupInvitesSnap),
+    tips: toExportDocs(s.tipsSnap),
     pauseHistory: toExportDocs(s.pauseHistorySnap),
     listFollows: toExportDocs(s.listFollowsSnap),
     reviews: toExportDocs(s.reviewsSnap),

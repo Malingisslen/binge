@@ -18,4 +18,5 @@ export const NEW_ACCOUNT_NOTIFICATION_SETTINGS: UserProfile['notificationSetting
   priceChanges: false,
   weeklyDigest: true,
   monthlyBill: true,
+  acceptTips: true,
 };

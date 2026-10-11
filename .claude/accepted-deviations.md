@@ -2679,3 +2679,27 @@ ta bort relationen. Verktyget är `functions/scripts/restore-account.mjs`, förl
 
 **INTE accepterat:** en återställning utan ägarens begäran, eller utan att kopian raderas
 inom 7 dagar. Ett skarpt prov mot en riktig återställd kopia är inte gjort; det står öppet.
+
+## Tipsa en vän: skickade tips raderas av 90-dagarssvepet, inte av avsändarens kontoradering — 2026-10-11
+
+Paket 6 lägger tips i MOTTAGARENS träd, `users/{mottagare}/tips/{fromUid}_{mediaType}_{tmdbId}`,
+och bara mottagaren får läsa dem (panelens villkor 3). När AVSÄNDAREN raderar sitt konto når
+kaskaden därför inte de tips hen skickat: `collectDeletionRefs` arbetar på det kontot kan läsa,
+och avsändaren har varken en spegel av skickade tips (som `friendRequestsSent`) eller rätt att
+fråga över andras träd. Den väg som finns för skickade gruppinbjudningar (BIN-1147) är en
+serverfråga i `handOverOwnedGroups` och i `retentionCleanup`s fältägda svep, och att bygga ut
+den hade varit ny infrastruktur i en känslig väg. Panelens villkor 5 sa uttryckligen att inte
+göra det.
+
+**Vad som gäller i stället.** `retentionCleanup` raderar varje tips när `createdAt` är äldre
+än `TIP_MAX_AGE_MS` (90 dagar), vems det än är. Ett skickat tips finns alltså kvar hos
+mottagaren i högst `TIP_MAX_AGE_MS` plus ett dygn efter att avsändaren raderat sitt konto. Det bär
+bara avsändarens uid, titeln och en hälsning (längd enligt `TIP_NOTE_MAX`); namnet lagras inte och
+visas inte när kortet inte längre går att läsa. Integritetssidan v1.15 säger det i §6.
+
+**Vad som INTE är accepterat:** ett tips som överlever svepet, ett svep som slutar köra utan
+larm (BIN-1317-larmet täcker det), och att bära avsändarens namn eller annan identitet i
+tipset. Ett tips som ligger kvar efter 91 dagar är en bugg att fila.
+
+**Re-open when:** någon begär radering av ett skickat tips före 90 dagar, eller tips får ett
+fält som bär mer än uid, titel och hälsning.

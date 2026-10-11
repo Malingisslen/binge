@@ -99,6 +99,8 @@ export async function collectDeletionRefs(
   });
   // 2d. Inkomna grupp-inbjudningar.
   snaps.groupInvitesSnap.docs.forEach(d => refs.push(d.ref));
+  // 2e. Tips vänner skickat till mig.
+  snaps.tipsSnap.docs.forEach(d => refs.push(d.ref));
 
   // 3. My reviews + all their subcollections (likes + comments on my reviews).
   for (const reviewDoc of snaps.reviewsSnap.docs) {

@@ -12,6 +12,7 @@ import WatchedDateEditor from '@/components/title/WatchedDateEditor';
 import NotInterestedButton from '@/components/title/NotInterestedButton';
 import AddToListButton from '@/components/title/AddToListButton';
 import AddToGroupButton from '@/components/title/AddToGroupButton';
+import TipFriendButton from '@/components/title/TipFriendButton';
 import RatingStars from '@/components/title/RatingStars';
 import CommunityRating from '@/components/title/CommunityRating';
 import ProviderTag from '@/components/title/ProviderTag';
@@ -482,6 +483,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
                 posterPath={movie.poster_path}
                 releaseYear={movie.release_date ? parseInt(movie.release_date.substring(0, 4), 10) : null}
               />
+              <TipFriendButton tmdbId={movie.id} mediaType="movie" title={displayTitle} />
               <NotInterestedButton tmdbId={movie.id} mediaType="movie" title={displayTitle} />
               <ShareButton path={`/movie/${movie.id}/`} title={displayTitle} text={`Se var ${displayTitle} går att streama.`} surface="title" />
             </div>

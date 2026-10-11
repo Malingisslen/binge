@@ -122,7 +122,9 @@ const REPO = resolve(HERE, '..');
 // blocks named `(SEC-1)` and `(SEC-4)` in place. Measured with `npm run test:rules`.
 // BIN-1438, 2026-10-05: raised to what `numTotalTests` reported with the describe block
 // named `(BIN-1438, emulator)` in place. Measured with `npm run test:rules -- --port 8123`.
-export const MIN_TESTS = 894;
+// Tipsa en vän, 2026-10-11: raised to what `numTotalTests` reported with
+// src/test/rules/tips.test.ts and the tips sweep cases in place. Measured with `npm run test:rules`.
+export const MIN_TESTS = 937;
 
 const VITEST_ARGS = ['run', '--config', 'vitest.rules.config.ts'];
 

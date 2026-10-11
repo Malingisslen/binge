@@ -60,6 +60,12 @@ vi.mock('@/hooks/useBlockedUsers', () => ({
 vi.mock('@/hooks/useFollow', () => ({
   useFollowing: () => ({ isFollowing: () => false, followUser: vi.fn(), unfollowUser: vi.fn() }),
 }));
+// Tipsa en vän: the tip list and its rows. The row has its own test file.
+const tipData = vi.hoisted(() => ({ tips: [] as { id: string; fromUid: string; mediaType: string; tmdbId: number; title: string; note: string | null; createdAt: Date }[] }));
+vi.mock('@/hooks/useTips', () => ({ useTips: () => ({ data: tipData.tips }) }));
+vi.mock('@/components/social/TipRow', () => ({
+  TipRow: ({ tip }: { tip: { fromUid: string; title: string } }) => <li data-testid="tip">{tip.fromUid}:{tip.title}</li>,
+}));
 vi.mock('@/hooks/useFriends', () => ({
   useFriends: () => ({ data: data.friends, isLoading: false }),
   useFriendRequests: () => ({ data: data.requests, isLoading: false }),
@@ -424,5 +430,35 @@ describe('FriendsPageClient — a request from a sender whose profile has no nam
     senders.set('s', { displayName: 'Sara', username: 'sara' });
     const view = render(<FriendsPageClient />);
     expect(within(rowFor(view, 'Sara')).getByText('@sara')).toBeTruthy();
+  });
+});
+
+describe('FriendsPageClient — tips in the Väntar på dig box (Tipsa en vän)', () => {
+  const tip = (fromUid: string, title: string) => ({
+    id: `${fromUid}_movie_603`, fromUid, mediaType: 'movie', tmdbId: 603, title, note: null, createdAt: new Date(),
+  });
+
+  beforeEach(() => { tipData.tips = []; });
+
+  it('shows the box for tips alone, with no friend request waiting', () => {
+    tipData.tips = [tip('anna', 'The Matrix')];
+    const view = render(<FriendsPageClient />);
+    const box = view.getByRole('region', { name: 'Väntar på dig' });
+    expect(within(box).getByTestId('tip').textContent).toBe('anna:The Matrix');
+  });
+
+  it('leaves out a tip from someone I blocked, and the box with it when nothing else waits', () => {
+    data.blocked = new Set(['bo']);
+    tipData.tips = [tip('bo', 'Alien')];
+    const view = render(<FriendsPageClient />);
+    expect(view.queryByTestId('tip')).toBeNull();
+    expect(view.queryByRole('region', { name: 'Väntar på dig' })).toBeNull();
+  });
+
+  it('keeps a tip from someone else when one sender is blocked', () => {
+    data.blocked = new Set(['bo']);
+    tipData.tips = [tip('bo', 'Alien'), tip('anna', 'The Matrix')];
+    const view = render(<FriendsPageClient />);
+    expect(view.getAllByTestId('tip').map(t => t.textContent)).toEqual(['anna:The Matrix']);
   });
 });

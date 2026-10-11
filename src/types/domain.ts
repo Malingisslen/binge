@@ -226,6 +226,10 @@ export interface UserProfile {
     // Ingen push. På som standard; bara ett uttryckligt false stänger av det, så
     // ett konto som saknar nyckeln får kortet.
     monthlyBill: boolean;
+    // Tipsa en vän: om vänner får lägga tips om titlar i min lista under Vänner.
+    // firestore.rules läser nyckeln och nekar ett tips bara vid ett uttryckligt false,
+    // så ett konto som saknar den tar emot tips.
+    acceptTips: boolean;
   };
   // BIN-181 — klient-persistad rotationskalender-snapshot (paus/återkom-datum)
   // som rotationReminderNotify läser. Skrivs när användaren slår på påminnelser.

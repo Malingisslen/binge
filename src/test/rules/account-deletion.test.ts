@@ -264,6 +264,7 @@ async function seedFullAccount() {
     await set(['users', ME, 'friendRequestsSent', OTHER], { toUid: OTHER });
     await set(['users', OTHER, 'friendRequests', ME], { fromUid: ME });   // mirror of outgoing
     await set(['users', ME, 'groupInvites', 'G1'], { fromUid: OTHER });
+    await set(['users', ME, 'tips', `${OTHER}_movie_603`], { fromUid: OTHER, mediaType: 'movie', tmdbId: 603, title: 'The Matrix' });
 
     // My review + a like/comment OTHER left on it (like carries uid == doc-id).
     await set(['reviews', 'myrev'], { uid: ME, tmdbId: 1 });

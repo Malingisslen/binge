@@ -14,6 +14,7 @@ import StatusButton from '@/components/title/StatusButton';
 import NotInterestedButton from '@/components/title/NotInterestedButton';
 import AddToListButton from '@/components/title/AddToListButton';
 import AddToGroupButton from '@/components/title/AddToGroupButton';
+import TipFriendButton from '@/components/title/TipFriendButton';
 import RatingStars from '@/components/title/RatingStars';
 import CommunityRating from '@/components/title/CommunityRating';
 import ProviderTag from '@/components/title/ProviderTag';
@@ -377,6 +378,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
                 posterPath={show.poster_path}
                 releaseYear={show.first_air_date ? parseInt(show.first_air_date.substring(0, 4), 10) : null}
               />
+              <TipFriendButton tmdbId={show.id} mediaType="tv" title={displayTitle} />
               <NotInterestedButton tmdbId={show.id} mediaType="tv" title={displayTitle} />
               <ShareButton path={`/tv/${show.id}/`} title={displayTitle} text={`Se var ${displayTitle} går att streama.`} surface="title" />
             </div>

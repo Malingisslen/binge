@@ -7,6 +7,7 @@
  * than the policy allows:
  *   - sessions/{id}        — when `isExpiredSession` in ./logic.ts says so
  *   - users/{uid}/notifications/{id} — older than 90 days
+ *   - users/{uid}/tips/{id} — older than 90 days (Tipsa en vän)
  *   - groups/{id}/joinAttempts/{uid} — older than 1 hour (BIN-329): a spent
  *     plaintext invite token left by an abandoned/failed-cleanup token-join, or
  *     by an account deleted via the Firebase Console (which runs no client
@@ -140,6 +141,8 @@ function baseQuery(kind: ScanKind): Query {
       return db.collection('sessions').select('expiresAt', 'createdAt');
     case 'notifications':
       return db.collectionGroup('notifications').select('createdAt');
+    case 'tips':
+      return db.collectionGroup('tips').select('createdAt');
     case 'joinAttempts':
       return db.collectionGroup('joinAttempts').select('createdAt');
     case 'releaseMarkers':

@@ -11,7 +11,7 @@ export default function IntegritetPage() {
     <LegalPageShell
       title="Integritetspolicy"
       lastUpdated="2026-10-11"
-      version="1.14"
+      version="1.15"
       toc={[
         { id: 'ansvarig', label: '1. Vem är ansvarig?' },
         { id: 'uppgifter', label: '2. Vilka uppgifter vi samlar in' },
@@ -67,6 +67,7 @@ export default function IntegritetPage() {
           <li><strong>Veckobrevet</strong> — Nya konton får veckobrevet &quot;Din streamingvecka&quot; i appens klocka varje måndag. Det byggs av det du redan sparat i Binge och skickas inte som e-post eller notis. Du stänger av det under Inställningar, Notiser.</li>
           <li><strong>Månadssammanfattningen</strong> — Den 1:a varje månad kan du få kortet &quot;Din streaming i [månad]&quot; i appens klocka, om du hade en betald tjänst och bockade av något förra månaden. Det byggs av det du redan sparat i Binge och skickas inte som e-post eller notis. Du stänger av det under Inställningar, Notiser.</li>
           <li><strong>Andra veckan</strong> — Binge sparar en gång per konto datumet när du öppnar appen under din andra vecka. Det används bara för att räkna hur många nya konton som kommer tillbaka, som en summa, och raderas när du raderar kontot.</li>
+          <li><strong>Tips från vänner</strong> — en vän kan tipsa dig om en film eller serie, med en kort hälsning om hen vill. Tipset sparas i ditt konto, syns bara för dig under Vänner och raderas automatiskt efter 90 dagar. Det skickas inte som notis. Du kan ta bort ett tips när som helst och stänga av tips helt under Inställningar, Notiser.</li>
           <li><strong>Push-notistoken</strong> — om du aktiverat push-notiser sparar vi en enhetsspecifik token (Firebase Cloud Messaging) för att kunna skicka notiser.</li>
           <li><strong>Hemkommun</strong> — om du själv väljer en kommun för att se vad som finns på ditt bibliotek. Den är frivillig och går att ta bort i inställningarna.</li>
           <li><strong>Avsnittsreaktioner</strong> — reaktioner du lämnar på enskilda avsnitt. De är publika och visar att de kommer från ditt konto.</li>
@@ -160,6 +161,7 @@ export default function IntegritetPage() {
         <ul>
           <li>Din profil och bevakningslista sparas så länge ditt konto är aktivt.</li>
           <li>Notifikationer raderas automatiskt när de är 90 dagar gamla.</li>
+          <li>Tips från vänner raderas automatiskt när de är 90 dagar gamla. Det gäller också tips du skickat till någon annan, som ligger kvar hos mottagaren tills dess även om du tar bort ditt konto.</li>
           <li>Tillsammans-sessioner raderas automatiskt senast ett dygn efter att de blivit 7 dagar gamla.</li>
           <li>Teknisk logg-data i Firebase/Cloudflare sparas enligt respektive leverantörs standardtid (typiskt 30 dagar).</li>
           <li>
