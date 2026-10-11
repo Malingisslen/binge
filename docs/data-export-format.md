@@ -7,7 +7,7 @@ Filen är en JSON med följande top-level-struktur (se
 
 ```jsonc
 {
-  "schemaVersion": "2.4",
+  "schemaVersion": "2.5",
   "exportedAt": "2026-04-24T10:30:00.000Z",
   "userId": "firebase-uid",
   "readme": "…",
@@ -29,6 +29,7 @@ Filen är en JSON med följande top-level-struktur (se
   "friendRequests":     [ … ],
   "friendRequestsSent": [ … ],
   "groupInvites":       [ … ],
+  "tips":               [ … ],
   "pauseHistory":       [ … ],
   "listFollows":        [ … ],
   "reviews":         [ … ],
@@ -64,6 +65,7 @@ Filen är en JSON med följande top-level-struktur (se
 | `friendRequests` | `users/{uid}/friendRequests/{fromUid}` | Inkomna vänförfrågningar |
 | `friendRequestsSent` | `users/{uid}/friendRequestsSent/{toUid}` | Skickade vänförfrågningar |
 | `groupInvites` | `users/{uid}/groupInvites/{groupId}` | Inkomna grupp-inbjudningar |
+| `tips` | `users/{uid}/tips/{fromUid}_{mediaType}_{tmdbId}` | Tips om titlar som vänner skickat till dig: avsändarens uid, titel, valfri hälsning och tidpunkt. Tips du själv skickat ligger hos mottagaren och ingår inte. |
 | `pauseHistory` | `users/{uid}/pauseHistory/{historyId}` | Sparbeslut-historik från Streamingrådgivaren |
 | `reviews` | `reviews/{reviewId}` (where uid==me) | Dina recensioner med text, betyg, spoiler-flagga |
 | `reviewLikes` | `reviews/*/likes/{uid}` | Likes du gjort på andras recensioner (doc-id = ditt uid) |
@@ -179,3 +181,6 @@ Dokumentera ändringar i CHANGELOG.md-sektionen nedan.
   läsning av hushållsbidrag, medlemsrad eller titellista misslyckades, med de
   fält som saknar gruppens data). Förut hoppades en sådan grupp över utan spår,
   och `readme` kallade filen komplett. Additivt fält → minor-bump 2.3 → 2.4.
+- **2.5 (2026-10-11, Tipsa en vän)** — Lade till `tips` (tips om titlar som
+  vänner skickat till dig, `users/{uid}/tips/*`). Additivt fält → minor-bump
+  2.4 → 2.5.

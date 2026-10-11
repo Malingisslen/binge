@@ -488,6 +488,10 @@ Owns every Swedish word.
   reviews/comments/likes; three-tier visibility; **taste-match** compatibility
   scoring.
   → `src/lib/firebase/friends.ts`, `src/lib/blockRelationship.ts`, `src/hooks/{useFollow,useReviewSocial,useTasteVector}.ts`, `src/app/feed/page.tsx`, `src/lib/taste/`
+- Tipsa en vän (2026-10-11): a confirmed friend tips a title into the recipient's own
+  tree; the recipient dismisses it on Vänner. The rules gate (friendship, block,
+  acceptTips) and the 90-day sweep are owned where they live, not here.
+  → `src/lib/tips.ts`, `src/lib/tips.test.ts`, `src/lib/firebase/tips.ts`, `src/hooks/useTips.ts`, `src/hooks/useTips.test.tsx`, `src/lib/firebase/tips.test.ts`, `src/components/title/TipFriendButton.tsx`, `src/components/title/TipFriendButton.test.tsx`, `src/components/social/TipRow.tsx`, `src/components/social/TipRow.test.tsx`, `src/test/rules/tips.test.ts`, `src/lib/firebase/friends.sent.test.ts`
 - Per-episode reaction threads (BIN-95) — UGC keyed per episode, double
   spoiler-gated: the thread stays shut until the viewer has marked that episode
   watched, and inside it a reaction its author flagged as a spoiler is blurred

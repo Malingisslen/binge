@@ -446,3 +446,11 @@ describe('restore-account.mjs — the Admin port', () => {
     expect(CODE).not.toContain('setCustomUserClaims');
   });
 });
+
+describe('tips (Tipsa en vän)', () => {
+  it('are never copied back: a tip is pending state that expires on its own', () => {
+    expect(NEVER_COPIED_SUBCOLLECTIONS).toContain('tips');
+    expect(OWNED_SUBCOLLECTIONS).not.toContain('tips');
+    expect(RELATION_SUBCOLLECTIONS).not.toContain('tips');
+  });
+});

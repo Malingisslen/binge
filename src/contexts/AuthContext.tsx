@@ -309,6 +309,8 @@ async function buildExistingProfile(data: Record<string, unknown>, firebaseUser:
       weeklyDigest: (data.notificationSettings as UserProfile['notificationSettings'])?.weeklyDigest ?? false,
       // Same reading as the server: only an explicit false turns the card off.
       monthlyBill: (data.notificationSettings as UserProfile['notificationSettings'])?.monthlyBill !== false,
+      // Same reading as firestore.rules: only an explicit false turns tips off.
+      acceptTips: (data.notificationSettings as UserProfile['notificationSettings'])?.acceptTips !== false,
     },
     rotationSchedule: (data.rotationSchedule as UserProfile['rotationSchedule']) ?? undefined,
   };

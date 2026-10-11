@@ -74,6 +74,8 @@ const COVERAGE: Record<keyof UserDataSnapshots, CoverageSpec> = {
   friendRequestsSnap: { export: 'friendRequests', deleteCascade: true },
   friendRequestsSentSnap: { export: 'friendRequestsSent', deleteCascade: true },
   groupInvitesSnap: { export: 'groupInvites', deleteCascade: true },
+  // Tipsa en vän: tips friends sent me — exported and erased with the account.
+  tipsSnap: { export: 'tips', deleteCascade: true },
   fcmTokensSnap: {
     export: null,
     exportSkipReason:

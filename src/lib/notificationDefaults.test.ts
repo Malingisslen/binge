@@ -11,6 +11,10 @@ describe('NEW_ACCOUNT_NOTIFICATION_SETTINGS (BIN-1442)', () => {
     expect(NEW_ACCOUNT_NOTIFICATION_SETTINGS.priceChanges).toBe(false);
   });
 
+  it('lets a new account receive tips from friends', () => {
+    expect(NEW_ACCOUNT_NOTIFICATION_SETTINGS.acceptTips).toBe(true);
+  });
+
   // Both creation sites — Google sign-in and register() — must write the shared
   // object; a literal at either one would let a new account miss the default.
   it('is what both profile-creation sites write', () => {

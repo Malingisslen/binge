@@ -164,6 +164,19 @@ export function NotificationsSection() {
     }
   }
 
+  async function handleAcceptTipsToggle(next: boolean) {
+    if (busyKeys.has('acceptTips')) return;
+    setBusyKey('acceptTips', true);
+    try {
+      await updateNotificationSettings({ acceptTips: next });
+      toast(next ? 'Tips från vänner på' : 'Tips från vänner av');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Kunde inte ändra notisinställningar. Försök igen om en stund.');
+    } finally {
+      setBusyKey('acceptTips', false);
+    }
+  }
+
   async function handleToggle(next: boolean) {
     if (busyKeys.has('push')) return;
     setBusyKey('push', true);
@@ -286,6 +299,16 @@ export function NotificationsSection() {
       </label>
       <p className="text-xs text-ink-3 mt-1 ml-6">
         Visas i appens klocka den 1:a varje månad. Skickas inte som push.
+      </p>
+
+      <label className="flex items-center gap-2 cursor-pointer text-base mt-3">
+        <input type="checkbox" checked={user.notificationSettings.acceptTips !== false} disabled={busyKeys.has('acceptTips')}
+          onChange={(e) => { void handleAcceptTipsToggle(e.target.checked); }}
+          className="accent-acc-deep w-[14px] h-[14px]" />
+        Ta emot tips från vänner
+      </label>
+      <p className="text-xs text-ink-3 mt-1 ml-6">
+        Vänner kan tipsa dig om en film eller serie. Tipsen visas under Vänner och sparas i 90 dagar. Skickas inte som push.
       </p>
     </SettingsSection>
   );

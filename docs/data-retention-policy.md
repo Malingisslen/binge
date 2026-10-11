@@ -35,6 +35,10 @@ Allt som bara användaren själv ser tas bort helt:
   SKICKAT ligger inte här utan i mottagarnas träd — de raderas också, men av
   servern och genom en fråga, inte genom den här listan. Se avsnittet om
   grupp-medlemskap.
+- `users/{uid}/tips/*` (tips om titlar som vänner skickat till mig). De tips jag
+  SKICKAT ligger i mottagarnas träd och nås inte av kaskaden — mottagarens tips går
+  inte att lista för någon annan än mottagaren. De raderas av 90-dagarssvepet nedan.
+  Se den accepterade avvikelsen "Tipsa en vän: skickade tips raderas av 90-dagarssvepet".
 - `users/{uid}/listFollows/*` (följda listor, BIN-96)
 - `users/{uid}/pauseHistory/*` (paus-/återupptag-historik från Sparande)
 
@@ -937,9 +941,14 @@ lades tillbaka.
   `createdAt` är äldre än `SESSION_MAX_AGE_MS` (30 dagar).
 - **`users/{uid}/notifications/{id}`** när `createdAt` är äldre än
   `NOTIFICATION_MAX_AGE_MS` (90 dagar).
+- **`users/{uid}/tips/{id}`** (Tipsa en vän) när `createdAt` är äldre än
+  `TIP_MAX_AGE_MS` (90 dagar). Ett nytt tips om samma titel från samma vän skriver
+  över det gamla och startar om klockan. Mottagaren kan stänga av tips under
+  Inställningar, Notiser (`notificationSettings.acceptTips`), och kan ta bort ett
+  tips när som helst.
 
-Ett dokument utan tidsstämpel raderas inte. Regeln står i `isExpiredSession` och
-`isStaleNotification` i `functions/src/retentionCleanup/logic.ts`.
+Ett dokument utan tidsstämpel raderas inte. Regeln står i `isExpiredSession`,
+`isStaleNotification` och `isStaleTip` i `functions/src/retentionCleanup/logic.ts`.
 
 ## Re-visit triggers
 
@@ -960,6 +969,10 @@ Policy ska omvärderas om:
 - **Moderation-runbook** (`docs/moderation.md`).
 
 ## Ändringslogg
+
+- **2026-10-11 (Tipsa en vän)** — tips från vänner sparas i mottagarens konto i 90
+  dagar och raderas sedan av `retentionCleanup`. De ingår i mottagarens export och
+  radering. Integritetssidan v1.15 säger det i §2 och §6.
 
 - **2026-10-07 (BIN-1422)** — ett raderat konto kan återställas på ägarens begäran. Se
   avsnittet "Återställt konto" ovan; integritetssidan v1.11 säger det i §6.

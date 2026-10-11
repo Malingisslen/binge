@@ -69,6 +69,10 @@ export interface UserDataSnapshots {
   // Inkomna grupp-inbjudningar (samtyckesflöde). Inkluderas i export +
   // delete-cascade så ingen pending inbjudan blir kvar efter radering.
   groupInvitesSnap: QuerySnapshot;
+  // Tipsa en vän: tips vänner skickat TILL mig. I export + delete-cascade. Tips jag
+  // själv skickat ligger i mottagarens träd och når inte hit — se
+  // docs/data-retention-policy.md.
+  tipsSnap: QuerySnapshot;
   // FCM web-push tokens (Fas 4). Inkluderas i delete-cascade. För export
   // behöver vi inte exponera tokens (de är device-specifika och meningslösa
   // utanför Firebase) — buildUserExport kan hoppa över detta fält.
@@ -138,6 +142,7 @@ export const KNOWN_USER_SUBCOLLECTIONS = [
   'friendRequests',
   'friendRequestsSent',
   'groupInvites',
+  'tips',
 ] as const;
 
 export async function collectUserDataSnapshots(
@@ -161,6 +166,7 @@ export async function collectUserDataSnapshots(
     friendRequestsSnap,
     friendRequestsSentSnap,
     groupInvitesSnap,
+    tipsSnap,
     fcmTokensSnap,
     reportMetaSnap,
     askBingeMetaSnap,
@@ -190,6 +196,7 @@ export async function collectUserDataSnapshots(
     getDocs(collection(db, 'users', uid, 'friendRequests')),
     getDocs(collection(db, 'users', uid, 'friendRequestsSent')),
     getDocs(collection(db, 'users', uid, 'groupInvites')),
+    getDocs(collection(db, 'users', uid, 'tips')),
     getDocs(collection(db, 'users', uid, 'fcmTokens')),
     getDocs(collection(db, 'users', uid, 'reportMeta')),
     getDocs(collection(db, 'users', uid, 'askBingeMeta')),
@@ -226,6 +233,7 @@ export async function collectUserDataSnapshots(
     friendRequestsSnap,
     friendRequestsSentSnap,
     groupInvitesSnap,
+    tipsSnap,
     fcmTokensSnap,
     reportMetaSnap,
     askBingeMetaSnap,

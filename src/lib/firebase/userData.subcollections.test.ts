@@ -399,3 +399,14 @@ describe('group subtree roster (BIN-1111)', () => {
     },
   );
 });
+
+// Tipsa en vän: tips live in the RECIPIENT's tree, so the recipient's export and erasure
+// must reach them. Pinned by name so a later edit cannot drop all three sides together
+// and still leave the set-equality checks above green.
+describe('tips subcollection (Tipsa en vän)', () => {
+  it('is declared in firestore.rules, in KNOWN_USER_SUBCOLLECTIONS and read by the helper', () => {
+    expect(rulesUserSubcollections().has('tips')).toBe(true);
+    expect(known.has('tips')).toBe(true);
+    expect(helperUserSubcollectionReads().has('tips')).toBe(true);
+  });
+});
