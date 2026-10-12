@@ -182,7 +182,7 @@
           "note": "Catch-all with AI/data-protection/digital-services filters."
         }
       ],
-      "lastScan": "2026-08-31",
+      "lastScan": "2026-10-12",
       "snapshot": {
         "edpb-news": "2026-07-27: no update to the right-to-object/erasure OSS case digest since the 2026-06-25 version already escalated as BIN-214. Newest EDPB activity is the 2026-07-16/17 Dublin meeting on cross-DPA/cross-regulator information sharing (institutional cooperation, not a rights-shape change) — nothing affecting Art.17/Art.20 export or erasure shape this cycle.",
         "imy-nyheter": "2026-07-27: since the 2026-06-15 AI-Act-supervisor item (BIN-215, no change to that role this cycle), newest IMY items are: EDPB guidelines on web-scraping for generative-AI training (2026-07-08, IMY as rapporteur — N/A, Binge doesn't scrape to train models), EDPB guidelines on anonymisation and on blockchain processing (2026-07-09), an EU Court ruling on a Swedish publisher-credentialed search engine republishing criminal court decisions (2026-07-09, not analogous to Binge's UGC model), and the 2026-07-16/17 Dublin cross-DPA meeting. IMY's 2026 priorities (AI, children, law enforcement) unchanged.",
@@ -196,6 +196,11 @@
           "date": "2026-08-31",
           "via": "weekly-janitor-sweep",
           "note": "Lean WebSearch check (monthly cadence, 35 days since 2026-07-27 full scan). DPF/noyb (issue #45): noyb's threatened CJEU challenge ('Schrems III') still not confirmed filed — most recent coverage still says 'coming weeks' as of the last dateable reporting found; Latombe appeal C-703/25 P still pending at CJEU, no hearing date, experts expect a ruling late 2026/2027. Status quo vs issue #45, not re-filed. EDPB anonymisation guidelines (issue #46): still in public consultation to 2026-10-30, no final text yet. Status quo, not re-filed. AI Act Art.50 transparency duties went live 2026-08-02 as already tracked in the 2026-07-27 baseline; no new milestone found. No new EDPB/EC item found affecting Art.17/Art.20 export-erasure shape or DSA scope. Full per-source re-snapshot not refreshed this cycle (lean budget)."
+        },
+        {
+          "date": "2026-10-12",
+          "via": "weekly-janitor-sweep (cloud sandbox, no Linear)",
+          "note": "Lean WebSearch check; this role's lastScan had been stuck at 2026-08-31 for several weekly cycles (only the weekly Security Architect role got refreshed) — 42 days overdue vs the monthly cadence, now caught up. DPF/noyb (issue #45): status quo — noyb's 'Trump v. Slaughter puts the DPF under pressure' argument and the Latombe CJEU appeal are the same standing items, no CJEU ruling or formal withdrawal filing found. EDPB anonymisation guidelines (issue #46): still in consultation to 2026-10-30, no final text. EDPB CEF right-to-erasure coordinated-enforcement report (adopted Feb 2026, 32 DPAs) found but predates this baseline and is process/aggregate, not a shape change to Binge's export/erasure code — not material. No new EC AI Act or DSA-scope item found. No new issues filed this cycle."
         }
       ]
     },
@@ -266,7 +271,7 @@
           "note": "Actively-maintained Google inventory; freshness cross-check for the Firebase list."
         }
       ],
-      "lastScan": "2026-08-31",
+      "lastScan": "2026-10-12",
       "snapshot": {
         "sentry-subprocessors": "2026-07-27 (WebSearch, 403'd direct on both RSS and HTML): current published list still version 2.3.0 dated 2026-06-01 — same version already escalated as BIN-216. No new subprocessor change detected. Not re-filed.",
         "imy-nyheter-rss": "2026-07-27 (WebSearch, 403'd direct): no new IMY item matching DPO watch items since the prior 2026-06-15/2026-06-11 items. New but Legal/AI-Act-adjacent, not filed here: IMY confirmed as AI Act market-surveillance authority; IMY lead rapporteur on EDPB's generative-AI web-scraping guidelines.",
@@ -281,6 +286,11 @@
           "date": "2026-08-31",
           "via": "weekly-janitor-sweep",
           "note": "Lean WebSearch check (monthly cadence, 35 days since 2026-07-27 full scan). Sentry subprocessors: still version 2.3.0 (2026-06-01), same as tracked in BIN-216 — no change. IMY nyheter: newest item found is 2026-08-25 guidance on streaming of children's/youth sports (GDPR compliance for sports clubs) — not analogous to Binge's TV/movie-tracking UGC model, not filed. No EU-US transfer or subprocessor delta beyond what issue #45 already tracks. Full per-source re-snapshot not refreshed this cycle (lean budget)."
+        },
+        {
+          "date": "2026-10-12",
+          "via": "weekly-janitor-sweep (cloud sandbox, no Linear)",
+          "note": "Lean WebSearch check; this role's lastScan had been stuck at 2026-08-31 for several weekly cycles (only the weekly Security Architect role got refreshed) — 42 days overdue vs the monthly cadence, now caught up. Sentry subprocessors: a third-party monitor reports the page's last-updated date is still 2026-06-01 (same version already tracked as BIN-216) — no change. No new IMY item found. EU-US DPF: same standing noyb/Latombe situation as issue #45, no CJEU ruling or Commission withdrawal found. Firebase/GCP subprocessor lists not independently re-checked this cycle (lean budget, no change signal elsewhere). No new issues filed this cycle."
         }
       ]
     }

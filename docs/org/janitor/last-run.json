@@ -1,11 +1,11 @@
 {
-  "lastRun": "2026-10-08",
+  "lastRun": "2026-10-12",
   "dossiersRefreshed": 0,
-  "worldWatchRoles": 1,
+  "worldWatchRoles": 2,
   "retroFired": false,
   "retroDue": false,
   "acceptRate": null,
   "scratchCleared": 0,
   "healthChecks": null,
-  "notes": "Cloud-sandbox weekly sweep (no access to the gitignored .claude/state dossier-staleness markers — that step stays with the local session, per the prior 09-15 run's note). Security Architect world-watch scan found a material Next.js critical RCE (CVE-2026-94545, binge pins the vulnerable 16.3.5) — filed GitHub issue #133, needs a Linear mirror. Retro schedule already satisfied (shakedown + full both logged), none due."
+  "notes": "Cloud-sandbox weekly sweep. Legal/GDPR Counsel and Data Protection Officer had both been stuck at 2026-08-31 for several weekly cycles (42 days overdue vs their monthly cadence, only the weekly Security Architect role was getting refreshed) — lean pass run this cycle on both, no material item found, caught up to 2026-10-12. Security Architect not due (scanned 2026-10-08; the open Next.js RCE issue #133 from that scan is still open and still needs its Linear mirror). Archived tasks/manadsnota-notis-plan.md to tasks/archive/ — the monthlyBillNotify function it describes is shipped and wired into functions/src/index.ts. Retro schedule already satisfied (shakedown + full both logged), none due."
 }
