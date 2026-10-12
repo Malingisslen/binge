@@ -45,6 +45,8 @@ const EXAMPLES = [
 ];
 
 const VISIBLE_CAP = 60;
+const SHALLOW_PAGES = 2;
+const DEEP_PAGES = 5;
 
 export default function AskPage() {
   const { user, uid } = useAuth();
@@ -120,7 +122,7 @@ export default function AskPage() {
   // "På mina tjänster" but the user never picked any → askFilterToDiscoverParams
   // would silently drop the constraint and return ALL services. For a
   // streaming-first product that's the most damaging silent failure, so we stop
-  // and nudge to settings instead (and skip the 4 TMDB calls entirely).
+  // and nudge to settings instead (and skip the TMDB calls entirely).
   const needsProviderSetup =
     hasQuery && !!filter.myProvidersOnly && !filter.providerIds?.length && myProviders.length === 0;
   // Don't spend TMDB discover quota on a parse that yielded nothing — the
@@ -155,25 +157,37 @@ export default function AskPage() {
   const mKey = JSON.stringify(plan.movieParams);
   const tKey = JSON.stringify(plan.tvParams);
 
+  // Hiding countries/scripts throws away most of a page of popular titles, so look
+  // deeper when one is on.
+  const pageCount = hideNonLatinTitles || hiddenCountries.length ? DEEP_PAGES : SHALLOW_PAGES;
+  const pages = Array.from({ length: pageCount }, (_, i) => i + 1);
   const queries = useQueries({
     queries: [
-      { queryKey: ['ask-movie', mKey, 1], queryFn: ({ signal }: { signal?: AbortSignal }) => discoverMovies({ ...plan.movieParams }, { signal }), staleTime: TMDB_STALE.DISCOVER, enabled: canQuery && plan.wantMovies },
-      { queryKey: ['ask-movie', mKey, 2], queryFn: ({ signal }: { signal?: AbortSignal }) => discoverMovies({ ...plan.movieParams, page: '2' }, { signal }), staleTime: TMDB_STALE.DISCOVER, enabled: canQuery && plan.wantMovies },
-      { queryKey: ['ask-tv', tKey, 1], queryFn: ({ signal }: { signal?: AbortSignal }) => discoverTV({ ...plan.tvParams }, { signal }), staleTime: TMDB_STALE.DISCOVER, enabled: canQuery && plan.wantTV },
-      { queryKey: ['ask-tv', tKey, 2], queryFn: ({ signal }: { signal?: AbortSignal }) => discoverTV({ ...plan.tvParams, page: '2' }, { signal }), staleTime: TMDB_STALE.DISCOVER, enabled: canQuery && plan.wantTV },
+      ...pages.map((page) => ({
+        queryKey: ['ask-movie', mKey, page],
+        queryFn: ({ signal }: { signal?: AbortSignal }) => discoverMovies({ ...plan.movieParams, page: String(page) }, { signal }),
+        staleTime: TMDB_STALE.DISCOVER,
+        enabled: canQuery && plan.wantMovies,
+      })),
+      ...pages.map((page) => ({
+        queryKey: ['ask-tv', tKey, page],
+        queryFn: ({ signal }: { signal?: AbortSignal }) => discoverTV({ ...plan.tvParams, page: String(page) }, { signal }),
+        staleTime: TMDB_STALE.DISCOVER,
+        enabled: canQuery && plan.wantTV,
+      })),
     ],
   });
 
   const isLoading = hasQuery && queries.some((q) => q.isLoading);
 
+  // useQueries returns fresh arrays each render; key the memo on what changed.
+  const dataSig = queries.map((q) => q.dataUpdatedAt).join(',');
+
   const results = useMemo(() => {
     const items: RowTitle[] = [];
     const push = (arr: TMDBSearchResult[] | undefined, media: 'movie' | 'tv') =>
       (arr ?? []).forEach((r) => items.push({ ...r, media_type: media }));
-    push(queries[0]?.data?.results, 'movie');
-    push(queries[1]?.data?.results, 'movie');
-    push(queries[2]?.data?.results, 'tv');
-    push(queries[3]?.data?.results, 'tv');
+    queries.forEach((q, i) => push(q.data?.results, i < pageCount ? 'movie' : 'tv'));
     const deduped = applySavedFilters(
       dedupeAndExclude(items, excludedIds).filter(isAddableMediaType),
       filter,
@@ -182,7 +196,7 @@ export default function AskPage() {
     // Honor an explicit "högst betyg"-request; otherwise rank by popularity blend.
     return rankAskResults(deduped, filter.sortBy).slice(0, VISIBLE_CAP);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queries[0]?.data, queries[1]?.data, queries[2]?.data, queries[3]?.data, filter.sortBy, filter.originalLanguage, excludedIds, hideNonLatinTitles, hiddenCountries]);
+  }, [dataSig, pageCount, filter.sortBy, filter.originalLanguage, excludedIds, hideNonLatinTitles, hiddenCountries]);
 
   // Telemetry: record how each settled search turned out, keyed off the CURRENT
   // filter (after any chip removals) — a parsed-fine-but-empty grid is our most
