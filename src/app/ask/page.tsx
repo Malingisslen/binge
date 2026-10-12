@@ -44,7 +44,6 @@ const EXAMPLES = [
   'sci-fi-serie på mina tjänster',
 ];
 
-const EMPTY_SET: ReadonlySet<string> = new Set();
 const VISIBLE_CAP = 60;
 
 export default function AskPage() {
@@ -130,9 +129,9 @@ export default function AskPage() {
   const plan = useMemo(() => askFilterToDiscoverParams(filter, { myProviders, hiddenCountries }), [filter, myProviders, hiddenCountries]);
   const chips = useMemo(() => describeFilter(filter), [filter]);
 
-  // Titles the user has already seen / started / dropped / hidden — only used when
-  // the query asked to exclude them.
-  const excludedIds = useMemo(() => {
+  // Titles the user has already seen / started / dropped — only used when the query
+  // asked to exclude them.
+  const seenIds = useMemo(() => {
     // BIN-560 Phase 4: composite-keyed (mediaTypeDocId) — a movie/TV tmdbId clash
     // must not cross-exclude in the Ask-Binge recommendation filter.
     const s = new Set<string>();
@@ -140,9 +139,18 @@ export default function AskPage() {
       if (it.status === 'sedd' || it.status === 'avbruten') s.add(mediaTypeDocId(it.mediaType, it.tmdbId));
       else if (it.mediaType === 'tv' && it.status === 'mina' && it.lastWatchedSeason != null) s.add(mediaTypeDocId(it.mediaType, it.tmdbId));
     }
-    for (const n of notInterested) s.add(mediaTypeDocId(n.mediaType, n.tmdbId));
     return s;
-  }, [watchlist, notInterested]);
+  }, [watchlist]);
+
+  // "Inte intresserad" is a standing choice, so it holds for every question.
+  const notInterestedIds = useMemo(
+    () => new Set(notInterested.map((n) => mediaTypeDocId(n.mediaType, n.tmdbId))),
+    [notInterested],
+  );
+  const excludedIds = useMemo(
+    () => (filter.excludeSeen ? new Set([...seenIds, ...notInterestedIds]) : notInterestedIds),
+    [filter.excludeSeen, seenIds, notInterestedIds],
+  );
 
   const mKey = JSON.stringify(plan.movieParams);
   const tKey = JSON.stringify(plan.tvParams);
@@ -166,16 +174,15 @@ export default function AskPage() {
     push(queries[1]?.data?.results, 'movie');
     push(queries[2]?.data?.results, 'tv');
     push(queries[3]?.data?.results, 'tv');
-    const excl = filter.excludeSeen ? excludedIds : EMPTY_SET;
     const deduped = applySavedFilters(
-      dedupeAndExclude(items, excl).filter(isAddableMediaType),
+      dedupeAndExclude(items, excludedIds).filter(isAddableMediaType),
       filter,
       { hideNonLatinTitles, hiddenCountries },
     );
     // Honor an explicit "högst betyg"-request; otherwise rank by popularity blend.
     return rankAskResults(deduped, filter.sortBy).slice(0, VISIBLE_CAP);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queries[0]?.data, queries[1]?.data, queries[2]?.data, queries[3]?.data, filter.excludeSeen, filter.sortBy, filter.originalLanguage, excludedIds, hideNonLatinTitles, hiddenCountries]);
+  }, [queries[0]?.data, queries[1]?.data, queries[2]?.data, queries[3]?.data, filter.sortBy, filter.originalLanguage, excludedIds, hideNonLatinTitles, hiddenCountries]);
 
   // Telemetry: record how each settled search turned out, keyed off the CURRENT
   // filter (after any chip removals) — a parsed-fine-but-empty grid is our most
