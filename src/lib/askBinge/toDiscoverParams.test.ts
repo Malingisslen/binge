@@ -96,3 +96,47 @@ describe('askFilterToDiscoverParams hidden countries', () => {
     expect(plan.tvParams.without_origin_country).toBeUndefined();
   });
 });
+
+describe('askFilterToDiscoverParams genres per media type', () => {
+  it('asks series for the romance keyword, since TMDB series have no romance genre', () => {
+    const { tvParams, movieParams } = askFilterToDiscoverParams({ mediaType: 'tv', genreIds: [10749] });
+    expect(tvParams.with_keywords).toBe('9840');
+    expect(tvParams.with_genres).toBeUndefined();
+    expect(movieParams.with_genres).toBe('10749');
+  });
+
+  it('turns horror, thriller, history and music into series keywords', () => {
+    const { tvParams } = askFilterToDiscoverParams({ genreIds: [27, 53, 36, 10402] });
+    expect(tvParams.with_keywords?.split('|').map(Number).sort((a, b) => a - b)).toEqual([4344, 192772, 315058, 316362]);
+  });
+
+  it('translates genres that exist under another id on each side', () => {
+    const plan = askFilterToDiscoverParams({ genreIds: [28, 878] });
+    expect(plan.tvParams.with_genres).toBe('10759|10765');
+    expect(plan.movieParams.with_genres).toBe('28|878');
+    expect(askFilterToDiscoverParams({ genreIds: [10759] }).movieParams.with_genres).toBe('28');
+  });
+
+  it('keeps a romantic comedy series to comedies tagged romance', () => {
+    const { tvParams } = askFilterToDiscoverParams({ mediaType: 'tv', genreIds: [10749, 35] });
+    expect(tvParams.with_genres).toBe('35');
+    expect(tvParams.with_keywords).toBe('9840');
+  });
+
+  it('never narrows a mood to a keyword on the series side', () => {
+    const { tvParams } = askFilterToDiscoverParams({ mood: 'mysig' });
+    expect(tvParams.with_keywords).toBeUndefined();
+    expect(tvParams.with_genres?.split('|').map(Number).sort((a, b) => a - b)).toEqual([16, 35, 10751]);
+  });
+
+  it('a mood with no series genre falls back to its keyword', () => {
+    const { tvParams } = askFilterToDiscoverParams({ mood: 'skrack' });
+    expect(tvParams.with_keywords).toBe('315058');
+    expect(tvParams.with_genres).toBeUndefined();
+  });
+
+  it('skips a side that cannot express the named genre instead of asking unfiltered', () => {
+    expect(askFilterToDiscoverParams({ genreIds: [10770] })).toMatchObject({ wantMovies: true, wantTV: false });
+    expect(askFilterToDiscoverParams({ genreIds: [10763] })).toMatchObject({ wantMovies: false, wantTV: true });
+  });
+});
