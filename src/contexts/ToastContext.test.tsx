@@ -89,10 +89,8 @@ describe('ToastProvider showRating (betyg-vid-sedd)', () => {
     act(() => { fireEvent.click(screen.getByText('betygsätt')); });
     expect(screen.getByText('Betygsätt Dune?')).toBeTruthy();
 
-    const stars = document.querySelectorAll('span[class*="cursor-pointer"]');
-    expect(stars.length).toBe(5);
-    // jsdom getBoundingClientRect är noll → klick landar på en hel stjärna.
-    act(() => { fireEvent.click(stars[3]); });
+    expect(screen.getAllByRole('button', { name: /^Betyg .* av 5$/ })).toHaveLength(10);
+    act(() => { fireEvent.click(screen.getByRole('button', { name: 'Betyg 4 av 5' })); });
 
     expect(onRate).toHaveBeenCalledWith(4);
     expect(screen.queryByText('Betygsätt Dune?')).toBeNull();

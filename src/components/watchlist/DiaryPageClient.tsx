@@ -128,7 +128,7 @@ export default function DiaryPageClient() {
                       </div>
                       {!episodeCode && item.rating !== null && (
                         <span className="shrink-0 inline-flex items-center gap-1">
-                          <RatingStars rating={item.rating} readonly size="sm" />
+                          <RatingStars rating={item.rating} size="sm" />
                           <span className="text-xxs text-ink-3">{formatDecimal(item.rating)}</span>
                         </span>
                       )}

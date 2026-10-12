@@ -20,6 +20,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useCalendarEntries } from '@/hooks/useCalendar';
 import { useSubscriptionAdvisor } from '@/hooks/useSubscriptionAdvisor';
 import RatingStars from '@/components/title/RatingStars';
+import { RatingInput } from '@/components/ui/RatingInput';
 import {
   ProviderChips,
   PosterProviderDots,
@@ -43,7 +44,7 @@ import {
   LIBRARY_SUB_STATE_ORDER,
   type LibraryFilters,
 } from '@/lib/libraryView';
-import { countSharedFilters, formatStars, hasRuntimeFilter, genreIdsOf, wantedProviderIds, withoutEmptyMine, yearCeiling } from '@/lib/filters/titleFilters';
+import { countSharedFilters, hasRuntimeFilter, genreIdsOf, wantedProviderIds, withoutEmptyMine, yearCeiling } from '@/lib/filters/titleFilters';
 import {
   ActiveFilterChips,
   FilterPanel,
@@ -813,17 +814,14 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                       <ProviderChips providers={item.providers} myProviders={user?.myProviders ?? []} providersCheckedAt={item.providersCheckedAt} />
                     </td>
                     <td className="px-2 py-1.5 border-b border-border-table" onClick={e => e.stopPropagation()}>
-                      <span className="inline-flex items-center gap-1">
-                        <RatingStars
-                          rating={item.rating}
-                          onChange={r => updateRating(item.mediaType, item.tmdbId, r)}
-                          size="sm"
-                          dim={item.rating === null}
-                        />
-                        {item.rating !== null && (
-                          <span className="text-xxs text-ink-3">{formatStars(item.rating)}</span>
-                        )}
-                      </span>
+                      <RatingInput
+                        value={item.rating ?? 0}
+                        onSelect={r => updateRating(item.mediaType, item.tmdbId, r)}
+                        size={22}
+                        showValue
+                        labelFor={n => `Betyg ${String(n).replace('.', ',')} av 5`}
+                        groupLabel={`Betyg för ${item.title}`}
+                      />
                     </td>
                   </tr>
                 );

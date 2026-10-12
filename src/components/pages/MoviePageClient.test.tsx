@@ -142,7 +142,7 @@ const statusButtonProps = vi.hoisted(() => ({ last: null as Record<string, unkno
 vi.mock('@/components/title/StatusButton', () => ({
   default: (props: Record<string, unknown>) => { statusButtonProps.last = props; return null; },
 }));
-vi.mock('@/components/title/RatingStars', () => ({ default: () => null }));
+vi.mock('@/components/ui/RatingInput', () => ({ RatingInput: () => null }));
 vi.mock('@/components/title/CommunityRating', () => ({ default: () => null }));
 vi.mock('@/components/title/ProviderTag', () => ({ default: () => null }));
 vi.mock('@/components/title/FreeWatchBadge', () => ({ default: () => null }));
