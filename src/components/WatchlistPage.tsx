@@ -69,14 +69,13 @@ import { Segmented } from '@/components/ui/Segmented';
 import { eyebrowClass } from '@/components/ui/Eyebrow';
 import { thClass } from '@/components/ui/tableHead';
 import { cardClass } from '@/components/ui/Card';
-import { compareTitles } from '@/lib/titleSort';
+import { compareLibraryItems, defaultSortDir, type SortDir, type SortKey } from '@/lib/librarySort';
+import { SortableTh } from '@/components/ui/SortableTh';
 
 // BIN-560 Phase 4: selection/next-air state is keyed by the composite doc id
 // `mediaTypeDocId(mediaType, tmdbId)`, not bare tmdbId — a movie and a TV show
 // sharing a tmdbId must not share a checkbox, a next-air date, or a bulk action.
 const keyOf = (i: Pick<WatchlistItem, 'mediaType' | 'tmdbId'>) => mediaTypeDocId(i.mediaType, i.tmdbId);
-
-type SortKey = 'updatedAt' | 'addedAt' | 'watchedAt' | 'title' | 'rating' | 'releaseYear';
 
 function fmtDate(d: Date | null): string {
   if (!d) return '—';
@@ -145,6 +144,15 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
   };
   const [mediaFilter, setMediaFilter] = useState<MediaFilter>('all');
   const [sort, setSort] = useState<SortKey>('updatedAt');
+  const [sortDir, setSortDir] = useState<SortDir>(defaultSortDir('updatedAt'));
+  const chooseSort = (key: SortKey) => {
+    setSort(key);
+    setSortDir(defaultSortDir(key));
+  };
+  const clickColumn = (key: SortKey) => {
+    if (key === sort) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
+    else chooseSort(key);
+  };
   // Filters survive a reload, per library view.
   const [storedLibFilters, setLibFiltersRaw] = usePersistedState<LibraryFilters>(
     `binge:filters:library:${status ?? 'all'}`, DEFAULT_LIBRARY_FILTERS, sanitizeLibraryFilters,
@@ -245,18 +253,9 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
       const q = searchQuery.toLowerCase();
       result = result.filter(i => i.title.toLowerCase().includes(q));
     }
-    result = [...result].sort((a, b) => {
-      switch (sort) {
-        case 'title': return compareTitles(a.title, b.title);
-        case 'rating': return (b.rating ?? 0) - (a.rating ?? 0);
-        case 'releaseYear': return (b.releaseYear ?? 0) - (a.releaseYear ?? 0);
-        case 'addedAt': return b.addedAt.getTime() - a.addedAt.getTime();
-        case 'watchedAt': return (seenDate(b)?.getTime() ?? 0) - (seenDate(a)?.getTime() ?? 0);
-        default: return b.updatedAt.getTime() - a.updatedAt.getTime();
-      }
-    });
+    result = [...result].sort(compareLibraryItems(sort, sortDir));
     return result;
-  }, [baseItems, mediaFilter, sort, searchQuery, providerFilterId, libFilters, selectedGenreIds, wantedProviders, runtimeOf, behindIds]);
+  }, [baseItems, mediaFilter, sort, sortDir, searchQuery, providerFilterId, libFilters, selectedGenreIds, wantedProviders, runtimeOf, behindIds]);
 
   // Genrer som finns i denna lista (base-filtrerad på status) → filterchips
   // visar bara relevanta val och försvinner inte när man filtrerar (BIN-44).
@@ -476,7 +475,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
 
         <select
           value={sort}
-          onChange={e => setSort(e.target.value as SortKey)}
+          onChange={e => chooseSort(e.target.value as SortKey)}
           aria-label="Sortera biblioteket"
           className="select"
         >
@@ -485,6 +484,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
           <option value="rating">Betyg</option>
           <option value="releaseYear">År</option>
           <option value="addedAt">Tillagd</option>
+          <option value="providers">Tjänster</option>
           {/* Samma villkor som Sedd-kolumnen: seenDate() ger null för allt som inte
               står som sedd, så i en vy utan sedda rader (t.ex. /my/avbrutna eller
               /my/series) vore det här valet en garanterad no-op. Erbjud det bara
@@ -739,13 +739,13 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                   />
                 </th>
                 <th className={thClass('text-left px-2 w-[44px]')}></th>
-                <th className={thClass('text-left px-2')}>Titel</th>
+                <SortableTh label="Titel" sortKey="title" activeKey={sort} dir={sortDir} onSort={clickColumn} className="text-left px-2" />
                 {showTypeCol && <th className={thClass('text-left px-2')}>Typ</th>}
-                <th className={thClass('text-left px-2')}>År</th>
-                {showAddedCol && <th className={thClass('hidden md:table-cell text-left px-2')}>Tillagd</th>}
-                {showWatchedCol && <th className={thClass('hidden md:table-cell text-left px-2')}>Sedd</th>}
-                <th className={thClass('hidden lg:table-cell text-left px-2')}>Tjänster</th>
-                <th className={thClass('text-left px-2')}>Betyg</th>
+                <SortableTh label="År" sortKey="releaseYear" activeKey={sort} dir={sortDir} onSort={clickColumn} className="text-left px-2" />
+                {showAddedCol && <SortableTh label="Tillagd" sortKey="addedAt" activeKey={sort} dir={sortDir} onSort={clickColumn} className="hidden md:table-cell text-left px-2" />}
+                {showWatchedCol && <SortableTh label="Sedd" sortKey="watchedAt" activeKey={sort} dir={sortDir} onSort={clickColumn} className="hidden md:table-cell text-left px-2" />}
+                <SortableTh label="Tjänster" sortKey="providers" activeKey={sort} dir={sortDir} onSort={clickColumn} className="hidden lg:table-cell text-left px-2" />
+                <SortableTh label="Betyg" sortKey="rating" activeKey={sort} dir={sortDir} onSort={clickColumn} className="text-left px-2" />
               </tr>
             </thead>
             <tbody>
