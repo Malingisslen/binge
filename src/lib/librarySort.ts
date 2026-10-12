@@ -30,3 +30,17 @@ export function compareLibraryItems<T extends SortableItem>(key: SortKey, dir: S
   };
   return (a, b) => sign * asc(a, b) || compareTitles(a.title, b.title);
 }
+
+export interface LibrarySort { key: SortKey; dir: SortDir }
+
+export const DEFAULT_LIBRARY_SORT: LibrarySort = { key: 'updatedAt', dir: defaultSortDir('updatedAt') };
+
+const SORT_KEYS: readonly SortKey[] = ['updatedAt', 'addedAt', 'watchedAt', 'title', 'rating', 'releaseYear', 'providers'];
+
+// Stored sorts come from localStorage, so anything unrecognised falls back to the default.
+export function sanitizeLibrarySort(raw: unknown): LibrarySort {
+  if (typeof raw !== 'object' || raw === null) return DEFAULT_LIBRARY_SORT;
+  const { key, dir } = raw as Record<string, unknown>;
+  if (!SORT_KEYS.includes(key as SortKey)) return DEFAULT_LIBRARY_SORT;
+  return { key: key as SortKey, dir: dir === 'asc' || dir === 'desc' ? dir : defaultSortDir(key as SortKey) };
+}

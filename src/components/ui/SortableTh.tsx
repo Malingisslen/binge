@@ -7,14 +7,16 @@ interface Props<K extends string> {
   dir: 'asc' | 'desc';
   onSort: (key: K) => void;
   className?: string;
+  title?: string;
 }
 
 // A column heading that sorts its table: the whole label is one button, and the arrow
 // shows direction only on the active column.
-export function SortableTh<K extends string>({ label, sortKey, activeKey, dir, onSort, className }: Props<K>) {
+export function SortableTh<K extends string>({ label, sortKey, activeKey, dir, onSort, className, title }: Props<K>) {
   const active = sortKey === activeKey;
   return (
     <th
+      title={title}
       className={thClass(className)}
       aria-sort={active ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}
     >

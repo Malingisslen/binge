@@ -69,7 +69,9 @@ import { Segmented } from '@/components/ui/Segmented';
 import { eyebrowClass } from '@/components/ui/Eyebrow';
 import { thClass } from '@/components/ui/tableHead';
 import { cardClass } from '@/components/ui/Card';
-import { compareLibraryItems, defaultSortDir, type SortDir, type SortKey } from '@/lib/librarySort';
+import {
+  compareLibraryItems, DEFAULT_LIBRARY_SORT, defaultSortDir, sanitizeLibrarySort, type LibrarySort, type SortKey,
+} from '@/lib/librarySort';
 import { SortableTh } from '@/components/ui/SortableTh';
 
 // BIN-560 Phase 4: selection/next-air state is keyed by the composite doc id
@@ -143,22 +145,24 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
     router.replace(qs ? `${pathname}?${qs}` : pathname);
   };
   const [mediaFilter, setMediaFilter] = useState<MediaFilter>('all');
-  const [sort, setSort] = useState<SortKey>('updatedAt');
-  const [sortDir, setSortDir] = useState<SortDir>(defaultSortDir('updatedAt'));
-  const chooseSort = (key: SortKey) => {
-    setSort(key);
-    setSortDir(defaultSortDir(key));
-  };
-  const clickColumn = (key: SortKey) => {
-    if (key === sort) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
-    else chooseSort(key);
-  };
+  // The chosen sort survives a reload, per library view, like the filters below.
+  const [storedSort, setStoredSort] = usePersistedState<LibrarySort>(
+    `binge:sort:library:${status ?? 'all'}`, DEFAULT_LIBRARY_SORT, sanitizeLibrarySort,
+  );
+  const chooseSort = (key: SortKey) => setStoredSort({ key, dir: defaultSortDir(key) });
+  const clickColumn = (key: SortKey) => setStoredSort(prev => (
+    key === prev.key ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: defaultSortDir(key) }
+  ));
   // Filters survive a reload, per library view.
   const [storedLibFilters, setLibFiltersRaw] = usePersistedState<LibraryFilters>(
     `binge:filters:library:${status ?? 'all'}`, DEFAULT_LIBRARY_FILTERS, sanitizeLibraryFilters,
   );
   const showAddedCol = status !== 'sedd';
   const showWatchedCol = status === 'sedd' || !status;
+  // A stored "Sedd datum" sort would be a no-op in a view that has no seen rows.
+  const { key: sort, dir: sortDir } = storedSort.key === 'watchedAt' && !showWatchedCol
+    ? DEFAULT_LIBRARY_SORT
+    : storedSort;
   // B10/B14: /my/series ('mina') och /my/films ('sedd') kan per schema bara
   // innehålla en medietyp — där är både TYP-kolumnen och medietyps-chipsen
   // redundanta. Mixade vyer (vill_se/avbruten/all) behåller båda.

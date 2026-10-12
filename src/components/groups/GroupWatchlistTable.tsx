@@ -13,7 +13,12 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { captureError } from '@/lib/sentry';
 import type { GroupMember, GroupWatchlistItem } from '@/types';
 import { Eyebrow } from '@/components/ui/Eyebrow';
+import { SortableTh } from '@/components/ui/SortableTh';
 import { thClass } from '@/components/ui/tableHead';
+import { usePersistedState } from '@/hooks/usePersistedState';
+import {
+  averageRating, compareGroupItems, DEFAULT_GROUP_SORT, defaultGroupSortDir, sanitizeGroupSort, type GroupSort, type GroupSortKey,
+} from '@/lib/groups/groupWatchlistSort';
 import { Button } from '@/components/ui/Button';
 import { cardClass } from '@/components/ui/Card';
 import { formatEpisodeCode } from '@/lib/utils';
@@ -37,9 +42,22 @@ export function GroupWatchlistTable({
   myUid: string;
   isOwner: boolean;
 }) {
+  // The chosen sort survives a reload, per group.
+  const [storedSort, setSort] = usePersistedState<GroupSort>(
+    `binge:sort:group:${groupId}`, DEFAULT_GROUP_SORT, sanitizeGroupSort,
+  );
+  const clickColumn = (key: GroupSortKey) => setSort(prev => (
+    key === prev.key ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: defaultGroupSortDir(key) }
+  ));
+  const memberUids = useMemo(() => members.map(m => m.uid), [members]);
+  // A stored sort on someone who has left the group matches no heading.
+  const { key: sortKey, dir: sortDir } = storedSort.key.startsWith('member:')
+    && !memberUids.includes(storedSort.key.slice('member:'.length))
+    ? DEFAULT_GROUP_SORT
+    : storedSort;
   const sorted = useMemo(
-    () => [...watchlist].sort((a, b) => b.addedAt.getTime() - a.addedAt.getTime()),
-    [watchlist],
+    () => [...watchlist].sort(compareGroupItems(sortKey, sortDir, memberUids)),
+    [watchlist, sortKey, sortDir, memberUids],
   );
 
   const memberProgress = useGroupMemberProgress(groupId);
@@ -147,25 +165,26 @@ export function GroupWatchlistTable({
         <table className="w-full text-xs">
           <thead>
             <tr>
-              <th className={thClass('text-left px-3')}>Titel</th>
+              <SortableTh label="Titel" sortKey="title" activeKey={sortKey} dir={sortDir} onSort={clickColumn} className="text-left px-3" />
               {members.map(m => (
-                <th
+                <SortableTh
                   key={m.uid}
-                  className={thClass('text-center px-2')}
+                  label={abbrev(m.displayName)}
                   title={m.displayName}
-                >
-                  {abbrev(m.displayName)}
-                </th>
+                  sortKey={`member:${m.uid}`}
+                  activeKey={sortKey}
+                  dir={sortDir}
+                  onSort={clickColumn}
+                  className="text-center px-2"
+                />
               ))}
-              <th className={thClass('text-right px-3')}>Snitt</th>
+              <SortableTh label="Snitt" sortKey="avg" activeKey={sortKey} dir={sortDir} onSort={clickColumn} className="text-right px-3" />
               <th className={thClass('px-2')}></th>
             </tr>
           </thead>
           <tbody>
             {sorted.map(item => {
-              const ratings = members.map(m => item.memberRatings[m.uid] ?? null);
-              const present = ratings.filter((r): r is number => r != null);
-              const avg = present.length > 0 ? (present.reduce((a, b) => a + b, 0) / present.length) : null;
+              const avg = averageRating(item, memberUids);
               const canDelete = isOwner || item.addedBy === myUid;
               // Skicka groupId i URL:en så title-page kan aktivera spoiler-skydd
               // (Fas 2b) — `?fromGroup={id}` läses av TVShowPageClient.

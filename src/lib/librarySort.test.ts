@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { compareLibraryItems, defaultSortDir, type SortKey } from './librarySort';
+import {
+  compareLibraryItems, DEFAULT_LIBRARY_SORT, defaultSortDir, sanitizeLibrarySort, type SortKey,
+} from './librarySort';
 
 const d = (s: string) => new Date(s);
 const item = (title: string, o: Record<string, unknown> = {}) => ({
@@ -59,5 +61,17 @@ describe('defaultSortDir', () => {
     expect(defaultSortDir('title')).toBe('asc');
     expect(defaultSortDir('rating')).toBe('desc');
     expect(defaultSortDir('addedAt')).toBe('desc');
+  });
+});
+
+describe('sanitizeLibrarySort', () => {
+  it('keeps a valid stored sort', () => {
+    expect(sanitizeLibrarySort({ key: 'rating', dir: 'asc' })).toEqual({ key: 'rating', dir: 'asc' });
+  });
+
+  it('falls back to the default for junk and fills a missing direction', () => {
+    expect(sanitizeLibrarySort(null)).toEqual(DEFAULT_LIBRARY_SORT);
+    expect(sanitizeLibrarySort({ key: 'nope', dir: 'asc' })).toEqual(DEFAULT_LIBRARY_SORT);
+    expect(sanitizeLibrarySort({ key: 'title', dir: 'sideways' })).toEqual({ key: 'title', dir: 'asc' });
   });
 });
