@@ -1,6 +1,6 @@
 'use client';
 
-import { StarInput } from '@/components/ui/StarInput';
+import { RatingInput } from '@/components/ui/RatingInput';
 import { formatStars } from '@/lib/filters/titleFilters';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -182,9 +182,10 @@ export default function QuickRateModal({ open, onClose }: Props) {
                       disabling it would strand the visitor in a modal whose only
                       exit is the footer. */}
                   <div className="flex flex-col items-start gap-1">
-                    <StarInput
+                    <RatingInput
                       value={0}
-                      size={16}
+                      size={28}
+                      showValue="below"
                       disabled={!libraryKnown}
                       onSelect={v => markRated(t, v)}
                       labelFor={v => `Sett, ${formatStars(v)} stjärnor`}

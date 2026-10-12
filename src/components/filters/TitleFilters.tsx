@@ -2,7 +2,7 @@
 
 import { type ReactNode } from 'react';
 import { SlidersHorizontal, X } from 'lucide-react';
-import { StarInput } from '@/components/ui/StarInput';
+import { RatingInput } from '@/components/ui/RatingInput';
 import { cardClass } from '@/components/ui/Card';
 import { eyebrowClass } from '@/components/ui/Eyebrow';
 import { Segmented } from '@/components/ui/Segmented';
@@ -268,7 +268,8 @@ export function StarFloor({ value, onChange }: { value: number; onChange: (stars
         </span>
       </div>
       <div className="flex items-center gap-2">
-        <StarInput
+        <RatingInput
+          size={26}
           value={value}
           onSelect={v => onChange(value === v ? 0 : v)}
           labelFor={v => `${formatStars(v)} stjärnor eller mer`}

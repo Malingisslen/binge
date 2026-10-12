@@ -13,7 +13,7 @@ import NotInterestedButton from '@/components/title/NotInterestedButton';
 import AddToListButton from '@/components/title/AddToListButton';
 import AddToGroupButton from '@/components/title/AddToGroupButton';
 import TipFriendButton from '@/components/title/TipFriendButton';
-import RatingStars from '@/components/title/RatingStars';
+import { RatingInput } from '@/components/ui/RatingInput';
 import CommunityRating from '@/components/title/CommunityRating';
 import ProviderTag from '@/components/title/ProviderTag';
 import FreeWatchBadge from '@/components/title/FreeWatchBadge';
@@ -468,11 +468,14 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
                     Ditt betyg
                   </div>
                 )}
-                <RatingStars
-                  rating={watchlistItem?.rating ?? null}
-                  onChange={r => watchlistItem && updateRating('movie', movie.id, r)}
-                  readonly={!watchlistItem}
-                  size="lg"
+                <RatingInput
+                  value={watchlistItem?.rating ?? 0}
+                  onSelect={r => watchlistItem && updateRating('movie', movie.id, r)}
+                  disabled={!watchlistItem}
+                  size={32}
+                  showValue
+                  labelFor={n => `Betyg ${String(n).replace('.', ',')} av 5`}
+                  groupLabel="Ditt betyg"
                 />
               </div>
               <AddToListButton tmdbId={movie.id} mediaType="movie" title={displayTitle} posterPath={movie.poster_path} />

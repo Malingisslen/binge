@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useState, useCallback, useRef, type ReactNode } from 'react';
 import { X } from 'lucide-react';
-import RatingStars from '@/components/title/RatingStars';
+import { RatingInput } from '@/components/ui/RatingInput';
 
 // Valfri åtgärdsknapp i toasten ("Rensa helt", "Ångra" …). Toasts med åtgärd
 // lever längre så användaren hinner läsa och välja; klick på knappen kör
@@ -94,10 +94,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           >
             <span>{t.message}</span>
             {t.onRate && (
-              <RatingStars
-                rating={null}
-                size="md"
-                onChange={(n) => { t.onRate!(n); dismiss(t.id); }}
+              <RatingInput
+                value={0}
+                size={22}
+                onSelect={(n) => { t.onRate!(n); dismiss(t.id); }}
+                labelFor={n => `Betyg ${String(n).replace('.', ',')} av 5`}
+                groupLabel="Betyg"
               />
             )}
             {t.actions.map(a => (

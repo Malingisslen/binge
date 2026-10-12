@@ -153,7 +153,7 @@ export function WatchlistCard({
             {/* B8: obetygsatt = dimmade stjärnor — samma visning som
                 Tabell-vyn, så de två vyerna inte säger olika saker. */}
             <span className="inline-flex items-center gap-1">
-              <RatingStars rating={item.rating} readonly size="sm" dim={item.rating === null} />
+              <RatingStars rating={item.rating} size="sm" dim={item.rating === null} />
               {item.rating !== null && (
                 <span className="text-xxs text-ink-3">{formatDecimal(item.rating)}</span>
               )}
