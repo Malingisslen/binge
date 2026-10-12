@@ -29,7 +29,7 @@ function genreSet(filter: AskFilter): number[] {
 
 export function askFilterToDiscoverParams(
   filter: AskFilter,
-  opts: { myProviders?: number[] } = {},
+  opts: { myProviders?: number[]; hiddenCountries?: readonly string[] } = {},
 ): DiscoverPlan {
   const wantMovies = filter.mediaType !== 'tv';
   // TMDB reads a series' runtime as minutes per EPISODE, so "under 90 min" let
@@ -55,6 +55,11 @@ export function askFilterToDiscoverParams(
   if (filter.runtimeMax) shared['with_runtime.lte'] = String(filter.runtimeMax);
   if (filter.voteAverageMin) shared['vote_average.gte'] = String(filter.voteAverageMin);
   if (filter.originalLanguage) shared.with_original_language = filter.originalLanguage;
+  // Same server-side exclusion as Utforska, so hidden countries don't eat the
+  // 40 titles per kind this page fetches; an explicit language wins.
+  if (opts.hiddenCountries?.length && !filter.originalLanguage) {
+    shared.without_origin_country = opts.hiddenCountries.join(',');
+  }
 
   // Quality floor so discover doesn't surface obscure no-vote entries.
   const movieParams: Record<string, string> = { ...shared, 'vote_count.gte': '100' };

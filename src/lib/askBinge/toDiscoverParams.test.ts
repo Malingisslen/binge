@@ -84,3 +84,15 @@ describe('describeFilter', () => {
     expect(label('hi')).toBe('Indiskt');
   });
 });
+
+describe('askFilterToDiscoverParams hidden countries', () => {
+  it('excludes saved hidden countries on both movie and tv queries', () => {
+    const plan = askFilterToDiscoverParams({ mediaType: 'tv' }, { hiddenCountries: ['KR', 'JP'] });
+    expect(plan.tvParams.without_origin_country).toBe('KR,JP');
+  });
+
+  it('does not exclude when the question names a language', () => {
+    const plan = askFilterToDiscoverParams({ originalLanguage: 'ko' }, { hiddenCountries: ['KR'] });
+    expect(plan.tvParams.without_origin_country).toBeUndefined();
+  });
+});

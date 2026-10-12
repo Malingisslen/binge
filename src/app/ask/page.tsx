@@ -18,6 +18,7 @@ import { parseSearch, isLowConfidence } from '@/lib/askBinge/parseSearch';
 import { rankAskResults } from '@/lib/askBinge/rankResults';
 import { resultBucket, activeFilterSummary, mediaFilterOf } from '@/lib/askBinge/telemetry';
 import { recordAskBinge } from '@/lib/askBinge/record';
+import { applySavedFilters } from '@/lib/askBinge/savedFilters';
 import { llmParseFallback } from '@/lib/askBinge/llmFallback';
 import { askFilterToDiscoverParams, describeFilter } from '@/lib/askBinge/toDiscoverParams';
 import type { AskFilter } from '@/lib/askBinge/types';
@@ -49,6 +50,8 @@ const VISIBLE_CAP = 60;
 export default function AskPage() {
   const { user, uid } = useAuth();
   const myProviders = useMemo(() => user?.myProviders ?? [], [user?.myProviders]);
+  const hideNonLatinTitles = user?.hideNonLatinTitles ?? false;
+  const hiddenCountries = useMemo(() => user?.hiddenCountries ?? [], [user?.hiddenCountries]);
   const { items: watchlist } = useWatchlist();
   const { items: notInterested } = useNotInterested();
 
@@ -124,7 +127,7 @@ export default function AskPage() {
   // Don't spend TMDB discover quota on a parse that yielded nothing — the
   // low-confidence branch shows a help state instead of results.
   const canQuery = hasQuery && !currentEmpty && !needsProviderSetup;
-  const plan = useMemo(() => askFilterToDiscoverParams(filter, { myProviders }), [filter, myProviders]);
+  const plan = useMemo(() => askFilterToDiscoverParams(filter, { myProviders, hiddenCountries }), [filter, myProviders, hiddenCountries]);
   const chips = useMemo(() => describeFilter(filter), [filter]);
 
   // Titles the user has already seen / started / dropped / hidden — only used when
@@ -164,11 +167,15 @@ export default function AskPage() {
     push(queries[2]?.data?.results, 'tv');
     push(queries[3]?.data?.results, 'tv');
     const excl = filter.excludeSeen ? excludedIds : EMPTY_SET;
-    const deduped = dedupeAndExclude(items, excl).filter(isAddableMediaType);
+    const deduped = applySavedFilters(
+      dedupeAndExclude(items, excl).filter(isAddableMediaType),
+      filter,
+      { hideNonLatinTitles, hiddenCountries },
+    );
     // Honor an explicit "högst betyg"-request; otherwise rank by popularity blend.
     return rankAskResults(deduped, filter.sortBy).slice(0, VISIBLE_CAP);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queries[0]?.data, queries[1]?.data, queries[2]?.data, queries[3]?.data, filter.excludeSeen, filter.sortBy, excludedIds]);
+  }, [queries[0]?.data, queries[1]?.data, queries[2]?.data, queries[3]?.data, filter.excludeSeen, filter.sortBy, filter.originalLanguage, excludedIds, hideNonLatinTitles, hiddenCountries]);
 
   // Telemetry: record how each settled search turned out, keyed off the CURRENT
   // filter (after any chip removals) — a parsed-fine-but-empty grid is our most
