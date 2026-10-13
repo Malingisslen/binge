@@ -367,7 +367,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
                   value={watchlistItem?.rating ?? 0}
                   onSelect={r => watchlistItem && updateRating('tv', show.id, r)}
                   disabled={!watchlistItem}
-                  size={32}
+                  size={28}
                   showValue
                   labelFor={n => `Betyg ${String(n).replace('.', ',')} av 5`}
                   groupLabel="Ditt betyg"

@@ -62,28 +62,45 @@ describe('RatingInput', () => {
     render(<RatingInput value={0} onSelect={onSelect} showValue {...props} />);
     const group = screen.getByRole('group', { name: 'Betyg' });
     sizeTrack(group);
-    fireEvent.pointerDown(group, { pointerType: 'touch', pointerId: 1, clientX: 30 });
+    fireEvent.pointerDown(group, { pointerType: 'touch', pointerId: 1, clientX: 30, clientY: 10 });
     expect(screen.getByText('1,5 av 5')).toBeTruthy();
-    fireEvent.pointerMove(group, { pointerType: 'touch', pointerId: 1, clientX: 90 });
+    fireEvent.pointerMove(group, { pointerType: 'touch', pointerId: 1, clientX: 90, clientY: 10 });
     expect(screen.getByText('4,5 av 5')).toBeTruthy();
     expect(onSelect).not.toHaveBeenCalled();
-    fireEvent.pointerUp(group, { pointerType: 'touch', pointerId: 1, clientX: 90 });
+    fireEvent.pointerUp(group, { pointerType: 'touch', pointerId: 1, clientX: 90, clientY: 10 });
     // The click the browser sends after the lift must not set it a second time.
     fireEvent.click(screen.getByRole('button', { name: 'Sett 4.5' }));
     expect(onSelect).toHaveBeenCalledTimes(1);
     expect(onSelect).toHaveBeenCalledWith(4.5);
   });
 
-  it('a swipe the browser takes over for scrolling sets nothing', () => {
+  it('lifting the finger off the stars cancels instead of rating', () => {
     const onSelect = vi.fn();
     render(<RatingInput value={0} onSelect={onSelect} showValue {...props} />);
     const group = screen.getByRole('group', { name: 'Betyg' });
     sizeTrack(group);
-    fireEvent.pointerDown(group, { pointerType: 'touch', pointerId: 1, clientX: 30 });
+    fireEvent.pointerDown(group, { pointerType: 'touch', pointerId: 1, clientX: 30, clientY: 10 });
+    fireEvent.pointerMove(group, { pointerType: 'touch', pointerId: 1, clientX: 40, clientY: 200 });
+    expect(screen.getByText('Inget betyg')).toBeTruthy();
+    fireEvent.pointerUp(group, { pointerType: 'touch', pointerId: 1, clientX: 40, clientY: 200 });
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('a cancelled touch sets nothing', () => {
+    const onSelect = vi.fn();
+    render(<RatingInput value={0} onSelect={onSelect} showValue {...props} />);
+    const group = screen.getByRole('group', { name: 'Betyg' });
+    sizeTrack(group);
+    fireEvent.pointerDown(group, { pointerType: 'touch', pointerId: 1, clientX: 30, clientY: 10 });
     fireEvent.pointerCancel(group, { pointerType: 'touch', pointerId: 1 });
-    fireEvent.pointerUp(group, { pointerType: 'touch', pointerId: 1, clientX: 90 });
+    fireEvent.pointerUp(group, { pointerType: 'touch', pointerId: 1, clientX: 90, clientY: 10 });
     expect(onSelect).not.toHaveBeenCalled();
     expect(screen.getByText('Inget betyg')).toBeTruthy();
+  });
+
+  it('leaves sideways touch to the stars and vertical swipes to the page', () => {
+    render(<RatingInput value={0} onSelect={vi.fn()} {...props} />);
+    expect(screen.getByRole('group', { name: 'Betyg' }).style.touchAction).toBe('pan-y');
   });
 
   it('disabled holds every button and ignores touch', () => {

@@ -96,7 +96,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             {t.onRate && (
               <RatingInput
                 value={0}
-                size={22}
+                size={20}
                 onSelect={(n) => { t.onRate!(n); dismiss(t.id); }}
                 labelFor={n => `Betyg ${String(n).replace('.', ',')} av 5`}
                 groupLabel="Betyg"

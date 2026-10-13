@@ -184,7 +184,7 @@ export default function QuickRateModal({ open, onClose }: Props) {
                   <div className="flex flex-col items-start gap-1">
                     <RatingInput
                       value={0}
-                      size={28}
+                      size={24}
                       showValue="below"
                       disabled={!libraryKnown}
                       onSelect={v => markRated(t, v)}

@@ -472,7 +472,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
                   value={watchlistItem?.rating ?? 0}
                   onSelect={r => watchlistItem && updateRating('movie', movie.id, r)}
                   disabled={!watchlistItem}
-                  size={32}
+                  size={28}
                   showValue
                   labelFor={n => `Betyg ${String(n).replace('.', ',')} av 5`}
                   groupLabel="Ditt betyg"
