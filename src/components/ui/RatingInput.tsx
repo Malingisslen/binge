@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Star, StarHalf } from 'lucide-react';
 import { formatStars } from '@/lib/filters/titleFilters';
 
+// How far a finger may drift off the stars and still count as rating.
+const SLOP = 24;
 const HALF_STEPS = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5];
 
 /** The half-star step under a horizontal position, 0.5–5. */
@@ -17,8 +19,9 @@ export function valueAtPosition(x: number, left: number, width: number): number 
  * The one place a rating is set. Five stars in half steps; the pointer position
  * picks the step, so every half star is as easy to hit as half a star is wide.
  * A mouse previews on hover, a finger previews while it is down and the rating
- * is set when it lifts. A swipe that starts on the stars scrolls instead of rating. `showValue` puts the number in a fixed-size slot, beside
- * the stars or (`'below'`) under them, so nothing moves while the pointer crosses.
+ * is set when it lifts, unless it has drifted off the stars. `showValue` puts the
+ * number in a fixed-size slot, beside the stars or (`'below'`) under them, so
+ * nothing moves while the pointer crosses.
  *
  * Each half star is also a real button, so keyboard and screen readers get the
  * same ten choices as touch and mouse.
@@ -57,6 +60,11 @@ export function RatingInput({
     return r ? valueAtPosition(clientX, r.left, r.width) : 0.5;
   };
 
+  const onTrack = (x: number, y: number) => {
+    const r = trackRef.current?.getBoundingClientRect();
+    return !!r && x >= r.left - SLOP && x <= r.right + SLOP && y >= r.top - SLOP && y <= r.bottom + SLOP;
+  };
+
   return (
     <div className={`inline-flex gap-2 ${showValue === 'below' ? 'flex-col items-start gap-1' : 'items-center'} ${disabled ? 'opacity-50' : ''}`}>
       <div
@@ -64,12 +72,15 @@ export function RatingInput({
         role="group"
         aria-label={groupLabel}
         className="relative inline-flex text-acc-deep select-none"
-        // The browser keeps scrolling in both directions, so a swipe over the stars
-        // in a scrolling table scrolls it (pointercancel) instead of setting a rating.
-        style={{ touchAction: 'pan-x pan-y' }}
+        // The stars own sideways touch, otherwise the browser takes the drag for a
+        // scroll and the preview never follows the finger. Vertical swipes still
+        // scroll the page, and dragging off the stars cancels, so a finger that
+        // merely landed here does not set a rating.
+        style={{ touchAction: 'pan-y' }}
         onPointerMove={e => {
           if (disabled) return;
-          if (e.pointerType === 'mouse' || dragging.current) setPreview(at(e.clientX));
+          if (e.pointerType === 'mouse') setPreview(at(e.clientX));
+          else if (dragging.current) setPreview(onTrack(e.clientX, e.clientY) ? at(e.clientX) : null);
         }}
         onPointerLeave={e => { if (e.pointerType === 'mouse') setPreview(null); }}
         onPointerDown={e => {
@@ -82,6 +93,7 @@ export function RatingInput({
           if (!dragging.current) return;
           dragging.current = false;
           liftedAt.current = Date.now();
+          if (!onTrack(e.clientX, e.clientY)) { setPreview(null); return; }
           const picked = at(e.clientX);
           setPreview(picked);
           onSelect(picked);
@@ -92,7 +104,7 @@ export function RatingInput({
           const full = shown >= star;
           const half = !full && shown >= star - 0.5;
           return (
-            <span key={star} className="inline-flex items-center justify-center [@media(pointer:coarse)]:min-h-11" style={{ width: size + 4, height: size + 10 }} aria-hidden>
+            <span key={star} className="inline-flex items-center justify-center [@media(pointer:coarse)]:min-h-9" style={{ width: size + 4, height: size + 10 }} aria-hidden>
               {full ? <Star size={size} fill="currentColor" />
                 : half ? (
                   <span className="relative inline-flex">

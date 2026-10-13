@@ -817,7 +817,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                       <RatingInput
                         value={item.rating ?? 0}
                         onSelect={r => updateRating(item.mediaType, item.tmdbId, r)}
-                        size={22}
+                        size={20}
                         showValue
                         labelFor={n => `Betyg ${String(n).replace('.', ',')} av 5`}
                         groupLabel={`Betyg för ${item.title}`}
