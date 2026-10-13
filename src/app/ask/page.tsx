@@ -131,15 +131,14 @@ export default function AskPage() {
   const plan = useMemo(() => askFilterToDiscoverParams(filter, { myProviders, hiddenCountries }), [filter, myProviders, hiddenCountries]);
   const chips = useMemo(() => describeFilter(filter), [filter]);
 
-  // Fråga Binge suggests something new, so titles already seen, started or dropped
-  // and "Inte intresserad" stay out of every answer.
+  // Titles already seen or dropped and "Inte intresserad" stay out of every answer.
+  // A series in progress stays in: seeing it again is a useful reminder.
   const seenIds = useMemo(() => {
     // BIN-560 Phase 4: composite-keyed (mediaTypeDocId) — a movie/TV tmdbId clash
     // must not cross-exclude in the Ask-Binge recommendation filter.
     const s = new Set<string>();
     for (const it of watchlist) {
       if (it.status === 'sedd' || it.status === 'avbruten') s.add(mediaTypeDocId(it.mediaType, it.tmdbId));
-      else if (it.mediaType === 'tv' && it.status === 'mina' && it.lastWatchedSeason != null) s.add(mediaTypeDocId(it.mediaType, it.tmdbId));
     }
     return s;
   }, [watchlist]);
