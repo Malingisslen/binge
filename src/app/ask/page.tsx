@@ -131,8 +131,8 @@ export default function AskPage() {
   const plan = useMemo(() => askFilterToDiscoverParams(filter, { myProviders, hiddenCountries }), [filter, myProviders, hiddenCountries]);
   const chips = useMemo(() => describeFilter(filter), [filter]);
 
-  // Titles the user has already seen / started / dropped — only used when the query
-  // asked to exclude them.
+  // Fråga Binge suggests something new, so titles already seen, started or dropped
+  // and "Inte intresserad" stay out of every answer.
   const seenIds = useMemo(() => {
     // BIN-560 Phase 4: composite-keyed (mediaTypeDocId) — a movie/TV tmdbId clash
     // must not cross-exclude in the Ask-Binge recommendation filter.
@@ -143,15 +143,9 @@ export default function AskPage() {
     }
     return s;
   }, [watchlist]);
-
-  // "Inte intresserad" is a standing choice, so it holds for every question.
-  const notInterestedIds = useMemo(
-    () => new Set(notInterested.map((n) => mediaTypeDocId(n.mediaType, n.tmdbId))),
-    [notInterested],
-  );
   const excludedIds = useMemo(
-    () => (filter.excludeSeen ? new Set([...seenIds, ...notInterestedIds]) : notInterestedIds),
-    [filter.excludeSeen, seenIds, notInterestedIds],
+    () => new Set([...seenIds, ...notInterested.map((n) => mediaTypeDocId(n.mediaType, n.tmdbId))]),
+    [seenIds, notInterested],
   );
 
   const mKey = JSON.stringify(plan.movieParams);

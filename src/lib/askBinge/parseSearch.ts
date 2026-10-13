@@ -127,7 +127,9 @@ export function parseSearch(raw: string): AskFilter {
   return out;
 }
 
+// excludeSeen does not count: seen titles are always hidden, so "jag inte sett"
+// alone says nothing about what to show.
 /** True when the parser extracted essentially nothing — the signal to try an LLM fallback. */
 export function isLowConfidence(filter: AskFilter): boolean {
-  return Object.keys(filter).length === 0;
+  return Object.keys(filter).every((k) => k === 'excludeSeen');
 }

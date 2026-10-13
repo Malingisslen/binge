@@ -55,14 +55,14 @@ describe('askFilterToDiscoverParams', () => {
 describe('describeFilter', () => {
   it('produces readable chips in order, only for set fields', () => {
     const chips = describeFilter({ mediaType: 'movie', genreIds: [27], runtimeMax: 90, decade: '1980', excludeSeen: true, providerIds: [8] });
-    // display order is part of the contract
-    expect(chips.map((c) => c.key)).toEqual(['mediaType', 'genreIds', 'runtimeMax', 'providerIds', 'excludeSeen', 'decade']);
+    // display order is part of the contract; seen titles are always hidden, so
+    // "jag inte sett" gets no chip of its own
+    expect(chips.map((c) => c.key)).toEqual(['mediaType', 'genreIds', 'runtimeMax', 'providerIds', 'decade']);
     const byKey = Object.fromEntries(chips.map((c) => [c.key, c.label]));
     expect(byKey.mediaType).toBe('Filmer');
     expect(byKey.genreIds).toBe('Skräck');
     expect(byKey.runtimeMax).toBe('Filmer på högst 90 min');
     expect(byKey.decade).toBe('80-talet');
-    expect(byKey.excludeSeen).toBe('Osedda');
     expect(byKey.providerIds).toBe('Netflix');
   });
 

@@ -154,7 +154,6 @@ export function describeFilter(filter: AskFilter): FilterChip[] {
     chips.push({ key: 'providerIds', label: filter.providerIds.map((id) => getProvider(id)?.shortName ?? `#${id}`).join(', ') });
   }
   if (filter.myProvidersOnly) chips.push({ key: 'myProvidersOnly', label: 'Mina tjänster' });
-  if (filter.excludeSeen) chips.push({ key: 'excludeSeen', label: 'Osedda' });
   if (filter.voteAverageMin) chips.push({ key: 'voteAverageMin', label: `${formatStars(starsFromTmdb(filter.voteAverageMin))}★ eller mer` });
   if (filter.decade) chips.push({ key: 'decade', label: decadeLabel(filter.decade) });
   if (filter.originalLanguage) chips.push({ key: 'originalLanguage', label: LANG_LABEL[filter.originalLanguage] ?? filter.originalLanguage });

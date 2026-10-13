@@ -86,6 +86,8 @@ describe('parseSearch — dimension extraction', () => {
   it('flags an empty parse as low-confidence (LLM-fallback signal)', () => {
     expect(isLowConfidence(parseSearch('asdf qwerty'))).toBe(true);
     expect(isLowConfidence(parseSearch('skräckfilm'))).toBe(false);
+    expect(isLowConfidence(parseSearch('något jag inte sett'))).toBe(true);
+    expect(isLowConfidence({ excludeSeen: true, genreIds: [27] })).toBe(false);
   });
 
   it('understands everyday genre synonyms and slang', () => {
