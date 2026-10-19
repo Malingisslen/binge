@@ -1,11 +1,11 @@
 {
-  "lastRun": "2026-10-12",
+  "lastRun": "2026-10-19",
   "dossiersRefreshed": 0,
-  "worldWatchRoles": 2,
+  "worldWatchRoles": 1,
   "retroFired": false,
   "retroDue": false,
   "acceptRate": null,
   "scratchCleared": 0,
   "healthChecks": null,
-  "notes": "Cloud-sandbox weekly sweep. Legal/GDPR Counsel and Data Protection Officer had both been stuck at 2026-08-31 for several weekly cycles (42 days overdue vs their monthly cadence, only the weekly Security Architect role was getting refreshed) — lean pass run this cycle on both, no material item found, caught up to 2026-10-12. Security Architect not due (scanned 2026-10-08; the open Next.js RCE issue #133 from that scan is still open and still needs its Linear mirror). Archived tasks/manadsnota-notis-plan.md to tasks/archive/ — the monthlyBillNotify function it describes is shipped and wired into functions/src/index.ts. Retro schedule already satisfied (shakedown + full both logged), none due."
+  "notes": "Cloud-sandbox weekly sweep. Security Architect was due (scanned 2026-10-08) — filed issue #152: Next.js's 2026-10-14 out-of-band critical RCE pair (use-cache RCE + SVG/next-og RCE) and a high Server-Action DoS, fixed in 16.4.1, repo is on 16.4.0; mitigated by static export (output:'export', no Next server in production) and no use of the affected code paths, but not closed. Issue #133 (the prior Next.js RCE, fixed in 16.3.6) now appears resolved since the lockfile moved to 16.4.0 — flagged for closing once reconciled with Linear. Legal/GDPR Counsel and Data Protection Officer not due (both scanned 2026-10-12, monthly cadence). No plan files qualified for archiving (bin-505-plan and vart-det-plan both have open checklist items; recap-50-shows-progress is an ongoing log). Retro schedule already satisfied, none due. dossier-staleness directory does not exist in this checkout (gitignored local state)."
 }
