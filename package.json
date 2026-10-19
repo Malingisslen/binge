@@ -29,9 +29,9 @@
   },
   "dependencies": {
     "@sentry/react": "^10.71.0",
-    "@tanstack/query-sync-storage-persister": "^5.104.1",
-    "@tanstack/react-query": "^5.104.1",
-    "@tanstack/react-query-persist-client": "^5.104.1",
+    "@tanstack/query-sync-storage-persister": "^5.104.3",
+    "@tanstack/react-query": "^5.104.3",
+    "@tanstack/react-query-persist-client": "^5.104.3",
     "firebase": "^12.19.0",
     "lucide-react": "^1.52.0",
     "next": "^16.4.0",
