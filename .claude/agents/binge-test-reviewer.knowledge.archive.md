@@ -30023,3 +30023,135 @@ Diff: same 44 staged files; new since round 1: tips.test.ts fixtures `tmdbId: 60
 
 ## 2026-10-11 — Tipsa en vän, round 3 (full re-read of all staged test files)
 Diff: same staged set; read whole: restore-account.helpers.test.mjs, dataExport.coverage.test.ts, userData.subcollections.test.ts, account-deletion.test.ts, retention-cleanup-orchestrator.test.ts, logic.test.ts, rules/tips.test.ts, lib/tips.test.ts, notificationDefaults.test.ts, TipRow/TipFriendButton/FriendsPageClient tests. No assertion weakened, deleted or skipped (diffs are additions, two vi.mock stubs, one seed line). Full `npm run test:rules -- --port 8123` (run once; a second concurrent invocation hit the taken port and was ignored): numTotalTests 937 = MIN_TESTS, 937 passed, tips.test.ts 31, orchestrator 58, account-deletion 10; firestore.rules md5 767f1129... before and after. Worktree mutations (backup, restore by git hash-object, equal to index blob): tips.ts `createdAt`->`sentAt` plus useTips.ts `fromUid: uid`->`"x"` together: 57/57 green across tips/TipRow/TipFriendButton/FriendsPageClient/notificationDefaults; AuthContext `acceptTips !== false`->`?? false` and NotificationsSection `{ acceptTips: next }`->`{ acceptTip: next }`: 176/176 green. Not mutated, hand-traced: index.ts `case 'tips'` `.select('createdAt')` (harness reads whole docs, the file's own disclosed gap); dataExport `tips: toExportDocs(s.tipsSnap)` swapped for another snap stays green because every fake snap carries the same doc1 (pre-existing for every key). Verdict: pass (0 blocking), same grading as round 2: the sendTip/useTipActions/AuthContext/toggle survivors stay non-blocking.
+## 2026-10-01 — BIN-1379/1380 export read alarm + incomplete-export notice (test review)
+
+Diff reviewed: `src/lib/firebase/dataExport.coverage.test.ts` (new `BIN-1379` describe, 5 tests),
+new `src/components/settings/DataExportSection.test.tsx` (9 tests), against `dataExport.ts` and
+`DataExportSection.tsx`. Baseline 35/35 green over both files.
+
+Mutations (worktree edits, restored from scratchpad snapshot, `git hash-object` equal to the
+staged blobs b85a3bdd / c7da3017 after each):
+
+| Mutant | Result |
+|---|---|
+| dataExport: report call outside the try/catch | 1 red — "a reporter that throws does not break the export" |
+| dataExport: keep LAST error instead of first | 1 red — once-per-kind test |
+| dataExport: extra carries a uid | 2 red |
+| dataExport: member/title kinds swapped | 1 red |
+| dataExport: count never increments | 1 red |
+| dataExport: absent member row reported | 1 red — "a row that does not exist is not reported" |
+| Section: dedupe by display name instead of groupId | 1 red — the null/blank-name test |
+| Section: `setIncomplete(null)` moved from click to after `downloadExport` | 9/9 GREEN — survivor |
+| Section: `setIncomplete(null)` moved to after `buildUserExport` resolves (stale notice survives a failed 2nd export) | 9/9 GREEN — survivor |
+| Section: three-name join uses " och " instead of ", " | 9/9 GREEN — survivor (fixtures are 1, 2, 5 names) |
+| Section: no `.trim()` on a shown name | 9/9 GREEN — informational, not in the ticket |
+
+Verdict: fail, 2 blocking, both in `DataExportSection.test.tsx`. (1) "the notice goes away when the
+next export starts" awaits the second export to completion, so it cannot tell clear-at-start from
+clear-at-completion; a failing second export leaves a stale "nedladdad ... inte komplett" next to
+the error toast. Needs hold-pending + a failing-second-export case. (2) No fixture with exactly
+three names, so the multi-name comma join in the no-rest branch is unpinned. The dataExport side
+is clean. Lesson folded into the ui chapter's transient-state bullet.
+
+### Re-review, same day (BIN-1379/1380) — pass
+
+`DataExportSection.test.tsx` at blob e3ebaa00 (12 tests, 12/12 green). Held-pending second export plus
+a failed-second-export test, and three-name and four-name fixtures. Re-ran the survivors: clear moved
+to after `downloadExport` 2 red; clear moved to after `buildUserExport` resolves 2 red; clear never 2
+red; three-name join with " och " 1 red; `NAMED_GROUPS_SHOWN = 4` 2 red. Prod blobs unchanged
+(b85a3bdd, c7da3017) after every restore. Verdict: pass, 0 blocking.
+
+## 2026-10-02 — BIN-1408: map-flag pruner asks other worktrees + local branches (test review)
+
+Diff reviewed: staged `scripts/prune-map-flag.mjs` (blob 73fdd6ff) + `scripts/prune-map-flag.test.mjs` (blob ba97da93).
+New: `listOtherWorktrees` (porcelain parse; skips self/bare/prunable/missing dir, keeps detached, throws on empty/unparsable),
+`pruneTriggers` fourth question `editedInOtherWorktree` memoised once per run with a KEEP sentinel on failure,
+`hasCommitSince` rev list `--branches HEAD`. Two existing tests gained `otherWorktrees: () => []` (needed so the default
+probe does not throw-and-keep at '/irrelevant'; assertions untouched — not a weakening).
+
+Rig: staged blobs copied (LF) to scratchpad, `from 'vitest'` rewritten to the absolute file URL of C:/binge's vitest,
+lefthook.yml + freshness.mjs copied for the REPO_ROOT-relative tests; `npx vitest run --root <rig>`; real file never touched.
+Clean control 45/45. Mutations (failed tests):
+- drop `|| editedInOtherWorktree(rel)` → 6 red. unknown-list `return true`→`false` → 2 red. sentinel→`[]` → 2 red.
+- drop `--branches` → 1 red (branch test). memo removed → 1 red (count test). `some`→`every` → 9 red.
+- `workingTreeChange(wt…)`→`(root…)` → 3 red. parser: skip detached / no bare skip / no `prunable ` prefix / no self skip /
+  no exists check → each 1 red (the roster test); empty-ok → 1 red; unparsable→continue → 1 red.
+- SURVIVED: drop `HEAD` from the rev list (45 green); `--branches HEAD`→`--all` (45 green; benign keep-more direction);
+  drop bare `l === 'prunable'` (equivalent — git emits `prunable <reason>` only).
+Live probe (real git, staged script): main on a branch, sibling `worktree add --detach`, file changed and recorded there at
+13:00 after a 12:00 stamp, worktree clean → script printed "släppte 1 spöktrigger" and deleted the flag. An edit recorded
+on a DETACHED sibling's HEAD is reached by neither question 2 nor 4. Producer check: sprint-execute-parallel.js uses
+`worktree add -b`; 0 detached worktrees in C:/binge at review time — so filed non-blocking.
+Verdict: pass (0 blocking); Medium non-blocking x2 (HEAD unpinned; detached-sibling HEAD not walked), Info wording x1.
+
+## 2026-10-02 — BIN-1408 re-review: detached HEADs now walked, both gaps pinned
+
+Restaged blobs: `scripts/prune-map-flag.mjs` dca84e55, `scripts/prune-map-flag.test.mjs` 28ab70e5. Delta vs the first round:
+`editedInOtherWorktree(rel, since)` now also asks `commitSince(wt, rel, since)` FROM each other folder; new real-repo
+tests 'ser en commit på en frikopplad HEAD i huvudmappen' and 'BEHÅLLER en trigger som committats i en frikopplad andra
+arbetsmapp efter stämplingen'; the "HEAD stays named…" docblock sentence struck.
+Same isolated rig (staged blobs, LF, vitest via absolute file URL). Clean control 47/47. Mutations:
+- drop `'HEAD'` → 2 red (both new tests). drop `|| commitSince(wt…)` → 1 red. `commitSince(wt…)`→`(root…)` → 1 red.
+- wt-side `since`→epoch → 2 red (real-repo drop test + count test) — the date gate on the new clause is pinned.
+- root-side `since`→epoch → 10 red. drop the whole fourth question → 7 red. `some`→`every` → 9 red.
+- skip detached → 2 red (roster + new detached test). All first-round parser/memo/sentinel mutants still red.
+- Survivors unchanged and accepted: `--all` (keep-more direction), bare `prunable` (equivalent).
+The coordinator's own counts (1 red, 2 red) reproduced independently.
+Verdict: pass (0 blocking), no open findings.
+
+## 2026-10-02 — BIN-1420: trackBuildCall abandons a single call; union fixture hides a call-site regression
+Diff reviewed (staged): `src/lib/tmdb/buildFetch.ts` (`trackBuildCall` now races a non-aggregate call against `abandonAfter(work, STUCK_AFTER_MS, label)`; registry still released only when the call itself settles), `src/lib/tmdb/buildFetch.test.ts` (+4 tests: abandon at threshold with ABANDONED log, STUCK until settled, aggregate never abandoned, early-finisher untouched), `src/app/titleParams.watchdog.test.ts` (+1 per movie/tv: one never-answering page abandoned, selection resolves, `toContain('1002')`).
+Clean control: 47 passed | 5 skipped. Mutations (main worktree, scratchpad snapshot, restore verified by `git hash-object` = 36b96cf7… / a203c3a1… / 5347ab06…, vite cache cleared each run):
+- `return abandonAfter(...)` -> `return work` -> 3 red (buildFetch abandon test, movie + tv call-site tests). Author's claim reproduced.
+- drop `clearTimeout(timer)` in `abandonAfter`'s finally -> 1 red ("ett anrop som blir klart före tröskeln påverkas inte av den").
+- movie `collectIds`: `if (results.some(r => r.status === 'rejected')) return ids;` before the loop (one failed page voids the whole popular list) -> 47/47 GREEN. Cause: second mock yields the same `1000+p` ids, so `1002` arrives via top-rated. Probe: second mock `page(p + 4000)` -> the same mutant goes 1 red (movie), clean prod stays green.
+Verdict: fail (1 blocking) — call-site test's fixture cannot fail on the regression its name describes. Lesson folded into core card's pipeline bullet.
+
+## 2026-10-02 — BIN-1420 re-review: union fixture fixed, four new pins verified
+Restaged diff: call-site test now uses disjoint ids (1000+p / 5000+p) and asserts '1002', '5001' present and '1001' absent; STUCK test clears lines after 30 s and asserts `STUCK 60s`; new sync-throw test; ABANDONED line prefixed `::warning::` and pinned.
+Worktree == index for all five files (buildFetch.ts 07a9bd79, buildFetch.test.ts 2dc7efcc, watchdog test 0bb24873). Clean control 48 passed | 5 skipped. Mutations, restored by hash each time:
+- register cleared on abandon (`.catch` deleting the token) -> 2 red (STUCK-until-settled, oldest-five).
+- `::warning::` prefix dropped -> 1 red (abandon test).
+- sync-throw `inFlight.delete(token)` removed -> 1 red (new sync-throw test).
+- movie collectIds "one rejected page voids list" -> 1 red (movie); same in tv -> 1 red (tv). Prior survivor killed in both routes.
+Verdict: pass (0 blocking).
+
+## 2026-10-02 — BIN-1422 del 1: backup check in runWatched, outer try/catch unpinned
+Diff reviewed (staged): functions/src/retentionCleanup/runHealth.ts (backupProblems, newestUsableBackupMs, backupReadFromResponse, backupsListUrl, readBackupsBounded, backup block in runWatched), runHealth.test.ts ("backup check (BIN-1422)" describe + default healthy `readBackups` in the shared harness, additions only), index.ts (REST port readBackups). Plan: tasks/todo.md "PLAN 2026-10-02 — BIN-1422 del 1".
+Worktree == index for runHealth.ts (204ba817). File is CRLF (node count 329 CRLF / 330 lines; `grep -c $'\r'` reported 0 — unreliable, as the core card says). Clean control: 34 passed. Each mutation from scratchpad snapshot, `node_modules/.vite/vitest` cleared, restored and hash-verified 204ba817 == index:
+- READY filter removed -> 1 red (counts only READY...).
+- age limit widened by 1 h -> 1 red (35 h 59 / 36 h 01).
+- thrown read reported as `{ok:true,newestMs:null}` -> 1 red (port throws...).
+- Promise.race removed -> 1 red (never answers, timed out at 8000 ms).
+- OUTER try/catch around the backup block removed (body kept) -> 34/34 GREEN. Hand-traced consequence: stale/failed backup read + `notify` throwing -> runWatched rejects before `io.sweep` is called. The "port throws" test is absorbed by readBackupsBounded's own catch, so it never reaches the outer guard.
+Static only (not run): moving the backup block before the start stamp leaves every test green (no test observes the order); the "backup alert not sent — ADMIN_UID unbound" branch has no fixture.
+Default harness port: existing BIN-1317 tests keep exact `events` toEqual lists, so an unwanted backup notify would redden them; not weakened.
+Verdict: fail (1 blocking). Lesson folded into data chapter's "N guards" bullet (nested catches).
+
+## 2026-10-02 — BIN-1422 del 1 re-review: outer try/catch now pinned, order and unbound branches added
+Restaged runHealth.test.ts (index 1292c693, worktree equal) adds "a backup alert whose send throws is logged, and the sweep still runs", "a backup alert with no recipient is logged as not sent", "the backup check runs after the start stamp". runHealth.ts (204ba817) and index.ts (39e6e14d) unchanged since the first pass. No existing assertion touched.
+Clean control 37 passed. Mutations from scratchpad snapshot (CRLF-aware anchors), vitest cache cleared each run, restored and hash-verified 204ba817 == index, final control 37 passed:
+- outer try/catch around the backup block removed -> 1 red (the new send-throws test). Prior survivor killed.
+- start stamp moved after the backup block -> 2 red (new order test; BIN-1317 "a failing start stamp" also reddens because the moved stamp's failure is no longer logged under its own message).
+- "backup alert not sent — ADMIN_UID unbound" logError removed -> 1 red (new unbound test).
+Verdict: pass (0 blocking).
+
+## 2026-10-02 — BIN-1423: abandoned-call count in the [selection] line; marker-in-template false red
+Diff reviewed (staged): src/lib/tmdb/buildFetch.ts (per-group started/abandoned/labels stats, ABANDONED_REPORT_LIMIT cap + one pointer line), src/lib/tmdb/selectionManifest.ts (abandonedSince/abandonedNote; exchange line warning when N>0; count on timeout/throw/empty lines), call sites movie/tv page.tsx + seoPersonIds.ts pass `group`, tests in selectionResolve/buildFetch/titleParams.watchdog/seoPersonIds. Existing assertion "kortar av id-uppräkningen" now cuts at " Övergivna anrop" — judged legit: still an exact toBe on the sample, the new clause is pinned by the new describe.
+Rig: isolated `git worktree add --detach` in scratchpad + staged src patch (all 9 blobs hash-equal to index), own `npm ci`, torn down with `shared-guard worktree-cleanup` (shared node_modules 453 -> 453). Clean control 91 passed / 5 skipped. Vitest cache cleared each run; each restore hash-verified against index.
+- labels printed unsampled (`a.labels.join(", ")` for `sample(a.labels)`) -> FIRST run 3 red, but FALSE: the helper appended ` /*MUTANT*/` inside the template literal, so the marker printed into the line. Re-run with marker on its own line -> 91/91 GREEN. Binding condition 3's "kort urval ... … och N till" is unpinned. BLOCKING.
+- `abandoned: after.abandoned - before.abandoned` -> `after.abandoned` -> green; `labels` slice dropped -> green; `started` subtraction dropped -> green. Start side of condition 4's window unpinned (every fixture resets stats before derive). Non-blocking; production reachability (second same-type derive in one worker) not verified.
+- ABANDONED_REPORT_LIMIT 10 -> 200 -> green (fixture derived from the constant). Non-blocking.
+- killed: `<=`->`<` (1 red), `===`->`>=` on pointer line (1 red), level forced notice (1 red), abandoned += removed (7 red), aggregate counted (1 red), label push removed (9 red), tv group -> 'movie' (1 red), started += removed (8 red).
+Verdict: fail (1 blocking).
+
+## 2026-10-02 — BIN-1423 re-review: blocking finding closed
+Restaged diff adds "etiketterna på raden kortas av som de andra uppräkningarna" (6 of 7 abandoned, exact sample with "… och 1 till"), "ett anrop som övergavs innan härledningen startade räknas inte" (pre-derive movie abandon + one during, exact "1 av 3 (params:test/p2)." and no earlier label), `expect(ABANDONED_REPORT_LIMIT).toBe(10)`, overflow line text "se [selection]-raderna" with its assertion updated in step, stderr spy + restoreAllMocks in titleParams.watchdog.test.ts.
+Fresh isolated rig (detached worktree + staged patch, all 9 blobs hash-equal to index, own npm ci, torn down by shared-guard worktree-cleanup). Control 93 passed / 5 skipped. Marker placed on its own line at EOF this time. Each mutant 1 red, each restore hash-verified:
+- sample(a.labels) -> join: red (new truncation test). Prior blocking finding closed.
+- each `- before.*` dropped and the labels slice dropped: red (new pre-derive test). Prior non-blocking start-edge gap closed.
+- ABANDONED_REPORT_LIMIT 10 -> 200: red. Prior non-blocking gap closed.
+- level forced notice: red; pointer-line `===` -> `>=`: red.
+Verdict: pass (0 blocking).
+
+- (2026-10-19, flyttad från kärnkortet för längdtaket) **A "the rest still resolves" oracle over a UNION of sources needs DISJOINT ids per source** — BIN-1420's two list mocks both yielded `1000+p`, so "one failed page voids its whole list" stayed green via the sibling list; mutate the call site, not only the helper.
