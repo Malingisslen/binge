@@ -177,7 +177,7 @@
       "id": "ask-page",
       "label": "“Fråga Binge” page",
       "context": "web-app",
-      "path": "src/app/ask/page.tsx"
+      "path": "src/app/ask/page.tsx, src/lib/askBinge/savedFilters.ts, src/lib/askBinge/toDiscoverParams.ts"
     },
     {
       "id": "auth-context",
@@ -1056,12 +1056,12 @@
     {
       "id": "flow3",
       "label": "“Fråga Binge” NL search",
-      "description": "A deterministic Swedish/English parser tries first — the LLM only runs when it finds literally zero filter fields and the user is signed in. Gemini output is schema-forced, clamped to a closed vocabulary, cached 24 h, and capped (25/user/day, 2 000/day global).",
+      "description": "A deterministic Swedish/English parser tries first — the LLM only runs when it finds literally zero filter fields and the user is signed in. Gemini output is schema-forced, clamped to a closed vocabulary, cached 24 h, and capped (25/user/day, 2 000/day global). Answers always leave out titles already seen or dropped and those marked Inte intresserad (a series in progress stays in, as a reminder), and they follow the user’s saved content filters (non-Latin titles, hidden countries) unless the question names a language.",
       "steps": [
         {
           "from": "ask-page",
           "to": "local-parser",
-          "payload": "free-text query → regex/keyword parse (mediaType, decade, providers, excludeSeen …)",
+          "payload": "free-text query → regex/keyword parse (mediaType, decade, providers, genres, mood …); an excludeSeen-only parse counts as empty (isLowConfidence), since seen titles are always hidden",
           "transport": "method call",
           "verified": true
         },
@@ -1096,7 +1096,7 @@
         {
           "from": "ask-page",
           "to": "tmdb-api",
-          "payload": "/discover/movie · /discover/tv with parsed filters · region SE, sv-SE · api_key param · max 8 concurrent, one 429 retry",
+          "payload": "/discover/movie · /discover/tv with parsed filters · region SE, sv-SE · api_key param · max 8 concurrent, one 429 retry · 2 pages per kind, 5 when saved content filters are on · hidden countries sent as without_origin_country · series genres TMDB lacks (romance, horror, thriller, history, music) sent as with_keywords · results then cut by applySavedFilters + the seen/dropped/Inte intresserad set",
           "transport": "fetch (TMDB)",
           "verified": true
         }
