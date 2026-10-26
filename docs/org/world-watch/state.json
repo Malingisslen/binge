@@ -79,7 +79,7 @@
           "note": "How vuln alerts/grouping reach the repo."
         }
       ],
-      "lastScan": "2026-10-19",
+      "lastScan": "2026-10-26",
       "snapshot": {
         "nextjs-advisories": "2026-10-19: WebSearch (Netlify changelog cross-check, direct fetch not re-verified this cycle). next@16.4.0 resolved in package-lock.json — past the 16.3.6 fix for issue #133's CVE-2026-94545 (now likely resolvable), but one patch below the 2026-10-14 out-of-band fix (16.4.1) for GHSA-673q-mjm6-r5xr / GHSA-2464-fhr4-w9xw / GHSA-p3m5-59mp-jv5r. MATERIAL — filed issue #152. | 2026-09-07: Direct WebFetch worked. TWO NEW critical (CVSS 9.5) unauthenticated-RCE advisories published 2026-08-25: GHSA-2xp9-vwfh-vxw4 (Image Optimization API, AVIF/libheif via sharp, affects <15.5.24 and <16.3.3) and GHSA-p293-qw3h-jr36 (Windows-filesystem-hosted servers only, affects >=13.4<15.5.24 and >=16.0<16.3.3). Both patched in 15.5.24/16.3.3. Checked package-lock.json: binge already resolves next@16.3.3 — the exact patched version. NOT material — already safe, no ticket filed. Confirmed via package-lock, not assumed.",
         "ghsa-npm": "2026-09-07: Direct WebFetch worked. No advisories for react, react-dom, firebase, firebase-admin, firebase-functions, or @firebase/* surfaced among recent entries (unrelated packages: TypeSpec Spector, CodeWhale, TOML, Orval, Claude Code Templates, SimpleWebAuthn). next.js advisories covered directly above. No change.",
@@ -119,6 +119,11 @@
           "date": "2026-10-19",
           "via": "weekly-janitor-sweep (cloud sandbox, no Linear)",
           "note": "MATERIAL FINDING — filed GitHub issue #152. Next.js shipped an out-of-band release 2026-10-14 (postponed from September) fixing a critical `use cache`/Cache-Components RCE (GHSA-673q-mjm6-r5xr), a critical SVG-via-sharp Image-Optimization RCE reachable through next/og ImageResponse (GHSA-2464-fhr4-w9xw / CVE-2026-96889 — same surface as #133), and a high App-Router Server-Action DoS (GHSA-p3m5-59mp-jv5r), all fixed in 16.4.1/15.5.28. package-lock.json resolves next@16.4.0 — one patch short. Mitigating, not closing: next.config.mjs sets output:'export' + images.unoptimized:true (no Next.js server process in production, served static via Cloudflare), and a full-repo grep found no 'use cache', 'use server', or next/og/ImageResponse usage. Also noted in the issue: #133's own CVE (fixed in 16.3.6) now appears resolved since the lockfile moved past it to 16.4.0 — worth closing once reconciled with Linear. Other 5 sources not re-checked this cycle (lean budget, no new material signal expected on ghsa-npm/firebase-js-sdk/firestore-rules/recaptcha/dependabot-changelog based on last full pass)."
+        },
+        {
+          "date": "2026-10-26",
+          "via": "weekly-janitor-sweep (cloud sandbox, no Linear)",
+          "note": "Lean pass covering 2026-10-19 to 2026-10-26. No new Next.js/React/Firebase-JS-SDK CVE beyond the 2026-10-14 out-of-band RCE pair (use-cache RCE + next/og SVG RCE) + Server-Action DoS already filed as issue #152 last cycle; CSA's Oct 20 advisory is the same disclosure, not a new one. No new Firestore Security Rules language change or reCAPTCHA Enterprise/App Check change found. Issue #133 (prior Next.js RCE, fixed 16.3.6) still flagged for closing once reconciled with Linear -- not re-verified this cycle. No new issues filed."
         }
       ]
     },
