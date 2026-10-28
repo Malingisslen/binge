@@ -1,13 +1,13 @@
 import type { MetricKey, MetricValue } from './types';
-import type { InsightsData } from '../insights.types';
+import type { HistoryPoint, InsightsData } from '../insights.types';
 import { getProvider, canonicalProviderId } from '@/lib/tmdb/providers';
 import { genreLabel } from '@/lib/tmdb/genreLabels';
 import { MIN_COHORT } from '@/lib/secondWeek';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-const scalar = (value: number, previous?: number): MetricValue =>
-  previous === undefined ? { kind: 'scalar', value } : { kind: 'scalar', value, previous };
+const scalar = (value: number, note?: string): MetricValue =>
+  note === undefined ? { kind: 'scalar', value } : { kind: 'scalar', value, note };
 
 const emptyBreakdown: MetricValue = { kind: 'breakdown', entries: [] };
 
@@ -41,11 +41,14 @@ const topProviderEntries = (
 // Varför ett värde saknas. Komponenterna visar texten i stället för "–"/"Ingen data", så
 // att ett mått som inte mäts aldrig ser ut som noll eller som en tom lista.
 export const MISSING = {
-  noSource: 'Ingen källa',
   notCounted: 'Ingen räkning i intervallet',
   notMeasured: 'inte mätt',
   tooFewAccounts: 'för få konton än',
+  tooFewSearches: 'för få sökningar än',
 } as const;
+
+/** Under så här många sökningar visas ingen andel: en procent på ett par sökningar är inget mönster. */
+export const MIN_SEARCHES_FOR_RATE = 10;
 
 // ── Egen räkning (eventStats, BIN-1438) ──────────────────────────────────────
 // `events` är null när intervallet saknar eventStats-dokument: inget mättes, och rutan
@@ -53,12 +56,10 @@ export const MISSING = {
 // saknas i dem som noll — den mättes och hände inte.
 const notCountedScalar: MetricValue = { kind: 'scalar', value: NaN, missing: MISSING.notCounted };
 const notCountedBreakdown: MetricValue = { kind: 'breakdown', entries: [], missing: MISSING.notCounted };
+const notCountedSeries: MetricValue = { kind: 'series', points: [], missing: MISSING.notCounted };
 
 const eventCount = (d: InsightsData, event: string): MetricValue =>
   d.events ? scalar(d.events.counts[event] ?? 0) : notCountedScalar;
-
-const eventPropCount = (d: InsightsData, event: string, prop: string, value: string): number =>
-  d.events?.props[event]?.[prop]?.[value] ?? 0;
 
 const eventPropBreakdown = (
   d: InsightsData, event: string, prop: string, labels: Record<string, string>,
@@ -74,9 +75,11 @@ const eventPropBreakdown = (
   };
 };
 
-// Rena webbtrafikmått saknar källa: Binge räknar händelser, inte besök.
-const noSource = (): MetricValue => ({ kind: 'scalar', value: NaN, missing: MISSING.noSource });
-const noSourceBreakdown = (): MetricValue => ({ kind: 'breakdown', entries: [], missing: MISSING.noSource });
+// Bara dagar som HAR ett dokument blir punkter — en dag utan dokument mättes inte.
+const eventSeries = (d: InsightsData, event: string): MetricValue =>
+  d.events
+    ? { kind: 'series', points: d.events.daily.map((p) => ({ x: p.date, y: p.counts[event] ?? 0 })) }
+    : notCountedSeries;
 
 // ── Fråga Binge label maps ─────────────────────────────────────────────────────
 // Filter-TYPE names (telemetry.ts) → Swedish. A combo "decade+rating" renders as
@@ -98,42 +101,67 @@ const ASK_CHIP_LABEL: Record<string, string> = {
   voteAverageMin: 'Betyg', decade: 'Årtionde', originalLanguage: 'Språk', sortBy: 'Sortering',
 };
 
+// Andel av sökningarna, med antalet som rad under. Under MIN_SEARCHES_FOR_RATE sökningar
+// säger rutan varför i stället för att visa en procent på tre sökningar.
+const askRate = (d: InsightsData, numerator: (a: NonNullable<InsightsData['askBinge']>) => number): MetricValue => {
+  const a = d.askBinge;
+  if (!a || !Number.isFinite(a.searches)) return scalar(NaN);
+  if (a.searches < MIN_SEARCHES_FOR_RATE) return { kind: 'scalar', value: NaN, missing: MISSING.tooFewSearches };
+  const n = numerator(a);
+  return scalar(Math.round((n / a.searches) * 100), `${n.toLocaleString('sv-SE')} av ${a.searches.toLocaleString('sv-SE')} sökningar`);
+};
+
+// ── Kurvor för ögonblicksbilder (history, de daterade rollup-kopiorna) ─────────
+/** Under så här många dagar ritas ingen kurva: tre punkter ser ut som en trend utan att vara en. */
+export const MIN_TREND_POINTS = 7;
+
+// Ögonblicksbilden kommer ur dagens rollup; kurvan ur de daterade kopiorna i intervallet.
+// Dagar som saknar fältet (äldre dokument) hoppas över i stället för att ritas som noll.
+const snapshotWithTrend = (
+  d: InsightsData,
+  value: number | undefined,
+  pick: (h: HistoryPoint) => number | undefined,
+): MetricValue => {
+  const points = (d.history ?? [])
+    .flatMap((h) => { const y = pick(h); return y === undefined ? [] : [{ x: h.date, y }]; });
+  return points.length >= MIN_TREND_POINTS
+    ? { kind: 'scalar', value: value ?? NaN, trend: points }
+    : scalar(value ?? NaN);
+};
+
 // ── DATA_RESOLVERS ─────────────────────────────────────────────────────────────
 
 export const DATA_RESOLVERS: Record<MetricKey, (data: InsightsData) => MetricValue> = {
-  // ── Översikt ──────────────────────────────────────────────────────────────
-  totalUsers: (d) => scalar(d.rollup?.totals.users ?? NaN),
-  totalTitlesTracked: (d) => scalar(d.rollup?.totals.titlesTracked ?? NaN),
-  totalReviews: (d) => scalar(d.rollup?.totals.reviews ?? NaN),
-  newUsers: (d) => scalar(Math.max(0, d.window?.deltas.users ?? NaN)),
-  titlesAdded: (d) => scalar(Math.max(0, d.window?.deltas.titlesTracked ?? NaN)),
+  // ── Just nu ───────────────────────────────────────────────────────────────
+  totalUsers: (d) => snapshotWithTrend(d, d.rollup?.totals.users, (h) => h.users),
+  totalTitlesTracked: (d) => snapshotWithTrend(d, d.rollup?.totals.titlesTracked, (h) => h.titlesTracked),
+  totalReviews: (d) => snapshotWithTrend(d, d.rollup?.totals.reviews, (h) => h.reviews),
   // Snapshot from the latest rollup, not the picked range: Auth keeps one clock per account.
   activeUsers7d: (d) => scalar(d.rollup?.activeUsers?.d7 ?? NaN),
-  activeUsers30d: (d) => scalar(d.rollup?.activeUsers?.d30 ?? NaN),
+  activeUsers30d: (d) => snapshotWithTrend(d, d.rollup?.activeUsers?.d30, (h) => h.activeUsers30d),
+  activeSessions: (d) => scalar(d.rollup?.totals.activeSessions ?? NaN),
+  groupsCount: (d) => scalar(d.rollup?.totals.groups ?? NaN),
 
-  // ── Tillväxt ──────────────────────────────────────────────────────────────
-  signupsTrend: (d) => (!d.events ? { kind: 'series', points: [], missing: MISSING.notCounted } : {
-    kind: 'series',
-    // Bara dagar som HAR ett dokument blir punkter — en dag utan dokument mättes inte.
-    points: (d.events?.daily ?? []).map((p) => ({ x: p.date, y: p.counts.signed_up ?? 0 })),
-  }),
+  // ── I perioden ────────────────────────────────────────────────────────────
+  newUsers: (d) => scalar(Math.max(0, d.window?.deltas.users ?? NaN)),
+  titlesAdded: (d) => scalar(Math.max(0, d.window?.deltas.titlesTracked ?? NaN)),
+  signupsTrend: (d) => eventSeries(d, 'signed_up'),
+  signins: (d) => eventCount(d, 'signed_in'),
 
-  onboardingFunnel: (d) => {
-    if (!d.events) return { kind: 'funnel', steps: [], missing: MISSING.notCounted };
-    const byStep = d.events?.props.onboarding_completed?.step_reached ?? {};
-    const steps = Object.entries(byStep)
-      .map(([step, count]) => ({ step: Number(step), count }))
-      .filter((s) => Number.isInteger(s.step))
-      .sort((a, b) => a.step - b.step);
-    if (steps.length === 0) return { kind: 'funnel', steps: [] };
-    const first = steps[0].count;
+  signinMethodSplit: (d) => eventPropBreakdown(d, 'signed_in', 'method', { google: 'Google', email: 'E-post' }),
+
+  // Bara de som tryckte klar skickar händelsen (finish() i OnboardingFlow.tsx), så det
+  // här är en fördelning av avslut, ingen tratt: ingen procent av ett första steg.
+  onboardingFinishStep: (d) => {
+    if (!d.events) return notCountedBreakdown;
+    const byStep = d.events.props.onboarding_completed?.step_reached ?? {};
     return {
-      kind: 'funnel',
-      steps: steps.map((s) => ({
-        name: `Steg ${s.step}`,
-        count: s.count,
-        pctOfStart: first === 0 ? 0 : Math.round((s.count / first) * 1000) / 10,
-      })),
+      kind: 'breakdown',
+      entries: Object.entries(byStep)
+        .map(([step, count]) => ({ step: Number(step), count }))
+        .filter((s) => Number.isInteger(s.step) && s.count > 0)
+        .sort((a, b) => a.step - b.step)
+        .map((s) => ({ label: `Steg ${s.step}`, value: s.count })),
     };
   },
 
@@ -152,22 +180,8 @@ export const DATA_RESOLVERS: Record<MetricKey, (data: InsightsData) => MetricVal
     };
   },
 
-  signinMethodSplit: (d) => {
-    if (!d.events) return notCountedBreakdown;
-    return {
-      kind: 'breakdown',
-      entries: [
-        { label: 'Google', value: eventPropCount(d, 'signed_in', 'method', 'google') },
-        { label: 'E-post', value: eventPropCount(d, 'signed_in', 'method', 'email') },
-      ],
-    };
-  },
-
-  // donate_clicked har ingen anropsplats i appen och räknas inte.
-  donateClicks: () => ({ kind: 'scalar', value: NaN, missing: MISSING.notMeasured }),
-
-  // Landningssidor är webbtrafik — ingen källa.
-  signupLandingPages: noSourceBreakdown,
+  // ── Engagemang ────────────────────────────────────────────────────────────
+  titlesAddedTrend: (d) => eventSeries(d, 'title_added_watchlist'),
 
   providerClicks: (d) => eventCount(d, 'provider_clicked'),
 
@@ -181,10 +195,23 @@ export const DATA_RESOLVERS: Record<MetricKey, (data: InsightsData) => MetricVal
     title: 'Titel', list: 'Lista', profile: 'Profil',
   }),
 
+  shareClicksByMethod: (d) => eventPropBreakdown(d, 'share_clicked', 'method', {
+    native: 'Telefonens delningsark', copy: 'Kopiera länk',
+  }),
+
   priceCheckTotals: (d) => eventCount(d, 'price_check_total_shown'),
+
+  priceCheckBySurface: (d) => eventPropBreakdown(d, 'price_check_total_shown', 'surface', {
+    calculator: 'Kalkylatorn', home: 'Startsidans demo',
+  }),
+
   priceCheckSaves: (d) => eventCount(d, 'price_check_save_clicked'),
 
-  // ── Produktanvändning ───────────────────────────────────────────────────────
+  advisorActions: (d) => eventPropBreakdown(d, 'advisor_action_taken', 'action', {
+    pause: 'Pausa', resume: 'Återuppta', subscribe: 'Skaffa', catchup: 'Komma ikapp',
+  }),
+
+  // ── Biblioteket ───────────────────────────────────────────────────────────
   statusDistribution: (d) => {
     const s = d.rollup?.statusDistribution;
     if (!s) return emptyBreakdown;
@@ -192,9 +219,9 @@ export const DATA_RESOLVERS: Record<MetricKey, (data: InsightsData) => MetricVal
       kind: 'breakdown',
       entries: [
         { label: 'Vill se', value: s.vill_se },
-        { label: 'Mina', value: s.mina },
-        { label: 'Sedd', value: s.sedd },
-        { label: 'Avbruten', value: s.avbruten },
+        { label: 'Tittar', value: s.mina },
+        { label: 'Sett', value: s.sedd },
+        { label: 'Avbrutet', value: s.avbruten },
       ],
     };
   },
@@ -206,7 +233,7 @@ export const DATA_RESOLVERS: Record<MetricKey, (data: InsightsData) => MetricVal
       kind: 'breakdown',
       entries: [
         { label: 'Film', value: m.movie },
-        { label: 'TV', value: m.tv },
+        { label: 'Serie', value: m.tv },
       ],
     };
   },
@@ -239,19 +266,10 @@ export const DATA_RESOLVERS: Record<MetricKey, (data: InsightsData) => MetricVal
     };
   },
 
-  advisorPauses: (d) => (d.events ? scalar(eventPropCount(d, 'advisor_action_taken', 'action', 'pause')) : notCountedScalar),
-  activeSessions: (d) => scalar(d.rollup?.totals.activeSessions ?? NaN),
-  groupsCount: (d) => scalar(d.rollup?.totals.groups ?? NaN),
-
   // ── Fråga Binge ───────────────────────────────────────────────────────────
   askSearches: (d) => scalar(d.askBinge?.searches ?? NaN),
-  askZeroRate: (d) => {
-    const a = d.askBinge;
-    // Share of completed searches that returned nothing — the headline
-    // "are people getting stranded" number. NaN (→ "–") when no searches yet.
-    return scalar(a && a.searches > 0 ? Math.round((a.zeroResults / a.searches) * 100) : NaN);
-  },
-  askLowConfidence: (d) => scalar(d.askBinge?.lowConfidence ?? NaN),
+  askZeroRate: (d) => askRate(d, (a) => a.zeroResults),
+  askLowConfidenceRate: (d) => askRate(d, (a) => a.lowConfidence),
 
   askResultBuckets: (d) => {
     const b = d.askBinge?.resultBuckets;
@@ -282,10 +300,4 @@ export const DATA_RESOLVERS: Record<MetricKey, (data: InsightsData) => MetricVal
       value: c.count,
     })),
   }),
-
-  // ── Trafik ──────────────────────────────────────────────────────────────────
-  pageViews: noSource,
-  avgSessionDuration: noSource,
-  topPages: noSourceBreakdown,
-  topReferrers: noSourceBreakdown,
 };

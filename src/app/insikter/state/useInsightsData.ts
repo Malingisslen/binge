@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import type { InsightsData } from '../insights.types';
 import type { DateRange } from './useDateRange';
 import { fetchInsights, InsightsApiError } from '../api';
+import { previousRange } from '../metrics/comparison';
 
 /**
  * Fetches /api/insights, re-fetching when the range changes.
@@ -17,6 +18,11 @@ import { fetchInsights, InsightsApiError } from '../api';
  * latch "Ingen behörighet." for a real admin. When `enabled` flips true the
  * effect re-runs with a credential that can actually authenticate.
  *
+ * After the picked window lands, the equally long window before it is fetched
+ * for the "mot förra perioden" comparison. The server resolves preset dates, so
+ * the previous window is derived from the response, not guessed client-side. A
+ * failed previous fetch is not an error: the tiles say the comparison is missing.
+ *
  * Stale-while-error: on a failed refetch we keep the last good data and surface
  * `error` so the UI can show a ribbon without blanking the dashboard.
  */
@@ -26,6 +32,8 @@ export function useInsightsData(
   enabled: boolean,
 ) {
   const [data, setData] = useState<InsightsData | null>(null);
+  // undefined = not fetched yet (no comparison line); null = fetch failed or no previous period.
+  const [previous, setPrevious] = useState<InsightsData | null | undefined>(undefined);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null);
@@ -48,8 +56,20 @@ export function useInsightsData(
         }
         const d = await fetchInsights(token, range, controller.signal);
         setData(d);
+        setPrevious(undefined); // never compare the new range against the old range's previous window
         setLastFetchedAt(new Date());
         setError(null);
+        const prevRange = previousRange(d.range);
+        if (!prevRange) {
+          setPrevious(null);
+          return;
+        }
+        try {
+          setPrevious(await fetchInsights(token, prevRange, controller.signal));
+        } catch (err) {
+          if ((err as Error)?.name === 'AbortError') return;
+          setPrevious(null);
+        }
       } catch (err) {
         if ((err as Error)?.name === 'AbortError') return;
         setError(err instanceof InsightsApiError ? err.message : 'Kunde inte ladda data.');
@@ -64,5 +84,5 @@ export function useInsightsData(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, range.preset, range.from, range.to]);
 
-  return { data, loading, error, lastFetchedAt, isFirstLoad: !hasLoadedOnce };
+  return { data, previous, loading, error, lastFetchedAt, isFirstLoad: !hasLoadedOnce };
 }

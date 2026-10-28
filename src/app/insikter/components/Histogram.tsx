@@ -2,16 +2,14 @@
 
 import type { MetricKey } from '../metrics/types';
 import { DATA_RESOLVERS } from '../metrics/resolvers';
-import { METRICS } from '../metrics/catalog';
 import { useInsightsContext } from '../state/InsightsContext';
-import { eyebrowClass } from '@/components/ui/Eyebrow';
+import { CardHeader } from './CardHeader';
 import { cardClass } from '@/components/ui/Card';
 
 /** Vertical-bar histogram for a breakdown metric (e.g. ratings 1–10). */
 export function Histogram({ metricKey }: { metricKey: MetricKey }) {
-  const data = useInsightsContext();
+  const { data } = useInsightsContext();
   const value = DATA_RESOLVERS[metricKey](data);
-  const label = METRICS[metricKey].label;
 
   const entries = value.kind === 'breakdown' ? value.entries : [];
   const max = entries.reduce((m, e) => Math.max(m, e.value), 0);
@@ -19,13 +17,14 @@ export function Histogram({ metricKey }: { metricKey: MetricKey }) {
 
   return (
     <div className={cardClass('p-3')}>
-      <div className={eyebrowClass({ size: 'xs', className: 'mb-2' })}>{label}</div>
+      <CardHeader metricKey={metricKey} className="mb-2" />
       {!hasData ? (
         <div className="text-sm text-ink-3 py-2">{value.missing ?? 'Ingen data'}</div>
       ) : (
         <div className="flex items-end gap-1 h-28">
           {entries.map((e) => (
             <div key={e.label} className="flex-1 flex flex-col items-center justify-end gap-1" title={`${e.label}: ${e.value}`}>
+              <span className="text-xxs text-ink-2 tabular-nums">{e.value.toLocaleString('sv-SE')}</span>
               <div
                 className="w-full bg-acc rounded-sm min-h-[2px]"
                 style={{ height: `${max === 0 ? 0 : (e.value / max) * 100}%` }}

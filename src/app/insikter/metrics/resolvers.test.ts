@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { DATA_RESOLVERS, MISSING } from './resolvers';
+import { DATA_RESOLVERS, MISSING, MIN_TREND_POINTS } from './resolvers';
 import type { InsightsData } from '../insights.types';
 
 function emptyData(over: Partial<InsightsData> = {}): InsightsData {
@@ -29,12 +29,24 @@ const askBingeData = (over: Partial<NonNullable<InsightsData['askBinge']>> = {})
 });
 
 describe('Fråga Binge resolvers', () => {
-  it('askZeroRate is the zero-result percentage, NaN with no searches', () => {
+  it('askZeroRate and askLowConfidenceRate say "för få sökningar än" under 10 searches, even with no askBinge counts', () => {
+    const missing = { kind: 'scalar', value: NaN, missing: 'för få sökningar än' };
+    for (const key of ['askZeroRate', 'askLowConfidenceRate'] as const) {
+      expect(DATA_RESOLVERS[key](emptyData({ askBinge: askBingeData() })), key).toEqual(missing);
+      expect(DATA_RESOLVERS[key](emptyData({ askBinge: askBingeData({ searches: 9, zeroResults: 9, lowConfidence: 9 }) })), key).toEqual(missing);
+    }
+  });
+
+  it('from 10 searches the rate is a percent with the count behind it as a note', () => {
+    const d = emptyData({ askBinge: askBingeData({ searches: 10, zeroResults: 1, lowConfidence: 4 }) });
+    expect(DATA_RESOLVERS.askZeroRate(d)).toEqual({ kind: 'scalar', value: 10, note: '1 av 10 sökningar' });
+    expect(DATA_RESOLVERS.askLowConfidenceRate(d)).toEqual({ kind: 'scalar', value: 40, note: '4 av 10 sökningar' });
+    const d2 = emptyData({ askBinge: askBingeData({ searches: 20, zeroResults: 5 }) });
+    expect(DATA_RESOLVERS.askZeroRate(d2)).toEqual({ kind: 'scalar', value: 25, note: '5 av 20 sökningar' });
+  });
+
+  it('with no askBinge at all the rates are NaN without a reason (the read failed, nothing is claimed)', () => {
     expect(DATA_RESOLVERS.askZeroRate(emptyData())).toEqual({ kind: 'scalar', value: NaN });
-    expect(DATA_RESOLVERS.askZeroRate(emptyData({ askBinge: askBingeData() }))).toEqual({ kind: 'scalar', value: NaN });
-    expect(
-      DATA_RESOLVERS.askZeroRate(emptyData({ askBinge: askBingeData({ searches: 20, zeroResults: 5 }) })),
-    ).toEqual({ kind: 'scalar', value: 25 });
   });
 
   it('askStrandingFilters humanizes the filter-combo into Swedish', () => {
@@ -72,17 +84,7 @@ describe('scalar resolvers fall back to NaN when their source is missing', () =>
     expect(DATA_RESOLVERS.totalUsers(d)).toEqual({ kind: 'scalar', value: 42 });
   });
 
-  it('web-traffic metrics say "Ingen källa" even when events were counted', () => {
-    const d = emptyData({ events: eventsData({ counts: { signed_up: 3 } }) });
-    for (const key of ['avgSessionDuration', 'pageViews'] as const) {
-      expect(DATA_RESOLVERS[key](d), key).toEqual({ kind: 'scalar', value: NaN, missing: 'Ingen källa' });
-    }
-    for (const key of ['topPages', 'topReferrers', 'signupLandingPages'] as const) {
-      expect(DATA_RESOLVERS[key](d), key).toEqual({ kind: 'breakdown', entries: [], missing: 'Ingen källa' });
-    }
-  });
-
-  it('the three missing reasons read differently from each other', () => {
+  it('the missing reasons read differently from each other', () => {
     expect(new Set(Object.values(MISSING)).size).toBe(Object.keys(MISSING).length);
   });
 });
@@ -102,34 +104,35 @@ describe('statusDistribution resolves to a Swedish-labelled breakdown', () => {
       kind: 'breakdown',
       entries: [
         { label: 'Vill se', value: 5 },
-        { label: 'Mina', value: 3 },
-        { label: 'Sedd', value: 9 },
-        { label: 'Avbruten', value: 1 },
+        { label: 'Tittar', value: 3 },
+        { label: 'Sett', value: 9 },
+        { label: 'Avbrutet', value: 1 },
       ],
     });
   });
 });
 
-describe('onboardingFunnel builds funnel steps with pctOfStart', () => {
-  it('orders by step and computes pct relative to the first step', () => {
+describe('onboardingFinishStep is a distribution of finishes, not a funnel', () => {
+  it('is a breakdown sorted by step number, with the raw count and no percent', () => {
     const d = emptyData({
-      events: eventsData({ props: { onboarding_completed: { step_reached: { '3': 20, '1': 100, '2': 50 } } } }),
+      events: eventsData({ props: { onboarding_completed: { step_reached: { '3': 20, '1': 100, '2': 50, '10': 1 } } } }),
     });
-    const v = DATA_RESOLVERS.onboardingFunnel(d);
-    expect(v.kind).toBe('funnel');
-    if (v.kind !== 'funnel') return;
-    expect(v.steps.map((s) => s.name)).toEqual(['Steg 1', 'Steg 2', 'Steg 3']);
-    expect(v.steps.map((s) => s.count)).toEqual([100, 50, 20]);
-    expect(v.steps.map((s) => s.pctOfStart)).toEqual([100, 50, 20]);
+    expect(DATA_RESOLVERS.onboardingFinishStep(d)).toEqual({
+      kind: 'breakdown',
+      entries: [
+        { label: 'Steg 1', value: 100 }, { label: 'Steg 2', value: 50 },
+        { label: 'Steg 3', value: 20 }, { label: 'Steg 10', value: 1 },
+      ],
+    });
   });
 
   it('says "Ingen räkning i intervallet" when nothing was counted', () => {
-    expect(DATA_RESOLVERS.onboardingFunnel(emptyData()))
-      .toEqual({ kind: 'funnel', steps: [], missing: 'Ingen räkning i intervallet' });
+    expect(DATA_RESOLVERS.onboardingFinishStep(emptyData()))
+      .toEqual({ kind: 'breakdown', entries: [], missing: 'Ingen räkning i intervallet' });
   });
 
-  it('is an empty funnel with no missing reason when days were counted but no step reached', () => {
-    expect(DATA_RESOLVERS.onboardingFunnel(emptyData({ events: eventsData() }))).toEqual({ kind: 'funnel', steps: [] });
+  it('is an empty breakdown with no missing reason when days were counted but nobody finished', () => {
+    expect(DATA_RESOLVERS.onboardingFinishStep(emptyData({ events: eventsData() }))).toEqual({ kind: 'breakdown', entries: [] });
   });
 });
 
@@ -263,34 +266,46 @@ describe('Delning och mätning resolvers', () => {
 });
 
 describe('eventStats resolvers (BIN-1438) — inte mätt är aldrig noll', () => {
+  const NOT_COUNTED = 'Ingen räkning i intervallet';
+
   it('every event-backed metric says "Ingen räkning i intervallet" when the range has no eventStats docs', () => {
-    const missing = 'Ingen räkning i intervallet';
-    for (const key of ['providerClicks', 'shareClicks', 'priceCheckTotals', 'priceCheckSaves', 'advisorPauses'] as const) {
-      expect(DATA_RESOLVERS[key](emptyData()), key).toEqual({ kind: 'scalar', value: NaN, missing });
+    for (const key of ['signins', 'providerClicks', 'shareClicks', 'priceCheckTotals', 'priceCheckSaves'] as const) {
+      expect(DATA_RESOLVERS[key](emptyData()), key).toEqual({ kind: 'scalar', value: NaN, missing: NOT_COUNTED });
     }
-    for (const key of ['signinMethodSplit', 'providerClicksByType', 'shareClicksBySurface'] as const) {
-      expect(DATA_RESOLVERS[key](emptyData()), key).toEqual({ kind: 'breakdown', entries: [], missing });
+    for (const key of [
+      'signinMethodSplit', 'onboardingFinishStep', 'providerClicksByType', 'shareClicksBySurface',
+      'shareClicksByMethod', 'priceCheckBySurface', 'advisorActions',
+    ] as const) {
+      expect(DATA_RESOLVERS[key](emptyData()), key).toEqual({ kind: 'breakdown', entries: [], missing: NOT_COUNTED });
     }
-    expect(DATA_RESOLVERS.signupsTrend(emptyData())).toEqual({ kind: 'series', points: [], missing });
+  });
+
+  it('signupsTrend and titlesAddedTrend read missing "Ingen räkning i intervallet" when events is null', () => {
+    for (const key of ['signupsTrend', 'titlesAddedTrend'] as const) {
+      expect(DATA_RESOLVERS[key](emptyData()), key).toEqual({ kind: 'series', points: [], missing: NOT_COUNTED });
+    }
   });
 
   it('a counted range carries no missing reason — a zero is a measured zero', () => {
     const d = emptyData({ events: eventsData() });
-    for (const key of ['providerClicks', 'shareClicks', 'priceCheckTotals', 'priceCheckSaves', 'advisorPauses'] as const) {
+    for (const key of ['signins', 'providerClicks', 'shareClicks', 'priceCheckTotals', 'priceCheckSaves'] as const) {
       expect(DATA_RESOLVERS[key](d), key).toEqual({ kind: 'scalar', value: 0 });
     }
   });
 
-  it('donateClicks reads "inte mätt" even with counted days — donate_clicked has no call site', () => {
-    const d = emptyData({ events: eventsData({ counts: { donate_clicked: 4 } }) });
-    expect(DATA_RESOLVERS.donateClicks(d)).toEqual({ kind: 'scalar', value: NaN, missing: 'inte mätt' });
+  it('signins counts signed_in', () => {
+    const d = emptyData({ events: eventsData({ counts: { signed_in: 8, signed_up: 3 } }) });
+    expect(DATA_RESOLVERS.signins(d)).toEqual({ kind: 'scalar', value: 8 });
   });
 
-  it('advisorPauses reads advisor_action_taken with action=pause, not other actions', () => {
+  it('advisorActions labels the action prop of advisor_action_taken, largest first, ignoring unknown actions', () => {
     const d = emptyData({
-      events: eventsData({ props: { advisor_action_taken: { action: { pause: 3, resume: 5 } } } }),
+      events: eventsData({ props: { advisor_action_taken: { action: { pause: 3, resume: 5, subscribe: 1, other: 9 } } } }),
     });
-    expect(DATA_RESOLVERS.advisorPauses(d)).toEqual({ kind: 'scalar', value: 3 });
+    expect(DATA_RESOLVERS.advisorActions(d)).toEqual({
+      kind: 'breakdown',
+      entries: [{ label: 'Återuppta', value: 5 }, { label: 'Pausa', value: 3 }, { label: 'Skaffa', value: 1 }],
+    });
   });
 
   it('signinMethodSplit reads the method prop of signed_in', () => {
@@ -301,11 +316,30 @@ describe('eventStats resolvers (BIN-1438) — inte mätt är aldrig noll', () =>
     });
   });
 
-  it('signupsTrend has a point per day WITH a doc only — a missing day is not a 0', () => {
+  it('shareClicksByMethod and priceCheckBySurface read their own props', () => {
+    const d = emptyData({
+      events: eventsData({
+        props: {
+          share_clicked: { method: { copy: 2, native: 7 } },
+          price_check_total_shown: { surface: { home: 1, calculator: 6 } },
+        },
+      }),
+    });
+    expect(DATA_RESOLVERS.shareClicksByMethod(d)).toEqual({
+      kind: 'breakdown',
+      entries: [{ label: 'Telefonens delningsark', value: 7 }, { label: 'Kopiera länk', value: 2 }],
+    });
+    expect(DATA_RESOLVERS.priceCheckBySurface(d)).toEqual({
+      kind: 'breakdown',
+      entries: [{ label: 'Kalkylatorn', value: 6 }, { label: 'Startsidans demo', value: 1 }],
+    });
+  });
+
+  it('signupsTrend and titlesAddedTrend have a point per day WITH a doc only — a missing day is not a 0', () => {
     const d = emptyData({
       events: eventsData({
         daily: [
-          { date: '2026-10-01', counts: { signed_up: 2 } },
+          { date: '2026-10-01', counts: { signed_up: 2, title_added_watchlist: 5 } },
           { date: '2026-10-03', counts: { provider_clicked: 1 } },
         ],
         days: 2,
@@ -314,6 +348,10 @@ describe('eventStats resolvers (BIN-1438) — inte mätt är aldrig noll', () =>
     expect(DATA_RESOLVERS.signupsTrend(d)).toEqual({
       kind: 'series',
       points: [{ x: '2026-10-01', y: 2 }, { x: '2026-10-03', y: 0 }],
+    });
+    expect(DATA_RESOLVERS.titlesAddedTrend(d)).toEqual({
+      kind: 'series',
+      points: [{ x: '2026-10-01', y: 5 }, { x: '2026-10-03', y: 0 }],
     });
   });
 
@@ -331,5 +369,63 @@ describe('eventStats resolvers (BIN-1438) — inte mätt är aldrig noll', () =>
       kind: 'breakdown',
       entries: [{ label: 'Titel', value: 5 }, { label: 'Lista', value: 1 }],
     });
+  });
+});
+
+describe('kurvor för ögonblicksbilder (history, steg 3)', () => {
+  const base: InsightsData = emptyData({
+    rollup: {
+      computedAt: '2026-06-02T00:00:00.000Z',
+      totals: { users: 42, titlesTracked: 2000, reviews: 17, activeSessions: 0, groups: 0 },
+      activeUsers: { d7: 5, d30: 30 },
+      statusDistribution: { vill_se: 0, mina: 0, sedd: 0, avbruten: 0 },
+      mediaTypeSplit: { movie: 0, tv: 0 },
+      ratingsHistogram: Array(10).fill(0),
+      topTitles: [], topProviders: [], topGenres: [], readsUsed: 0, partial: false,
+    },
+  });
+  const day = (i: number) => `2026-10-${String(10 + i).padStart(2, '0')}`;
+  const points = (n: number) => Array.from({ length: n }, (_, i) => ({
+    date: day(i), users: 100 + i, titlesTracked: 1000 + i, reviews: 10 + i, activeUsers7d: 5, activeUsers30d: 20 + i,
+  }));
+
+  it('ritar en kurva för Användare, Titlar, Recensioner och Aktiva 30 d när perioden har minst MIN_TREND_POINTS dagar', () => {
+    const d = { ...base, history: points(MIN_TREND_POINTS) };
+    for (const key of ['totalUsers', 'totalTitlesTracked', 'totalReviews', 'activeUsers30d'] as const) {
+      const v = DATA_RESOLVERS[key](d);
+      expect(v.kind).toBe('scalar');
+      if (v.kind !== 'scalar') return;
+      expect(v.trend).toHaveLength(MIN_TREND_POINTS);
+      expect(v.trend?.[0]).toEqual({ x: day(0), y: expect.any(Number) });
+    }
+    const users = DATA_RESOLVERS.totalUsers(d);
+    expect(users.kind === 'scalar' && users.trend?.map((p) => p.y)).toEqual([100, 101, 102, 103, 104, 105, 106]);
+  });
+
+  it('ritar ingen kurva under MIN_TREND_POINTS dagar, utan history eller när läsningen misslyckades', () => {
+    for (const history of [points(MIN_TREND_POINTS - 1), [], null, undefined]) {
+      const v = DATA_RESOLVERS.totalUsers({ ...base, history });
+      expect(v.kind === 'scalar' && v.trend).toBeUndefined();
+    }
+  });
+
+  it('talet på rutan kommer fortfarande ur dagens rollup, inte ur kurvans sista punkt', () => {
+    const v = DATA_RESOLVERS.totalUsers({ ...base, history: points(MIN_TREND_POINTS) });
+    expect(v.kind === 'scalar' && v.value).toBe(base.rollup?.totals.users);
+  });
+
+  it('en dag utan aktiva-fält hoppas över i stället för att bli noll', () => {
+    const history = points(MIN_TREND_POINTS + 1).map((h, i) => (i === 0 ? { date: h.date, users: h.users, titlesTracked: h.titlesTracked, reviews: h.reviews } : h));
+    const v = DATA_RESOLVERS.activeUsers30d({ ...base, history });
+    expect(v.kind === 'scalar' && v.trend?.length).toBe(MIN_TREND_POINTS);
+    expect(v.kind === 'scalar' && v.trend?.[0].x).toBe(day(1));
+  });
+
+  it('Aktiva 7 d och de andra ögonblicksbilderna får ingen kurva', () => {
+    const d = { ...base, history: points(MIN_TREND_POINTS) };
+    for (const key of ['activeUsers7d', 'activeSessions', 'groupsCount'] as const) {
+      const v = DATA_RESOLVERS[key](d);
+      expect(v.kind === 'scalar' && v.trend).toBeUndefined();
+    }
   });
 });

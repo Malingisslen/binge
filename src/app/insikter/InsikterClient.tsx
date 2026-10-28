@@ -11,15 +11,17 @@ import { useInsightsData } from './state/useInsightsData';
 import { InsightsProvider } from './state/InsightsContext';
 import { Button } from '@/components/ui/Button';
 import { eyebrowClass } from '@/components/ui/Eyebrow';
+import { cardClass } from '@/components/ui/Card';
 import {
-  Toolbar, MetricGrid, MetricTile, TimeSeriesChart, Donut, Funnel,
+  Toolbar, MetricGrid, MetricTile, TimeSeriesChart, Donut,
   Histogram, TopList, ExplainDrawer,
 } from './components';
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({ title, intro, children }: { title: string; intro?: ReactNode; children: ReactNode }) {
   return (
     <section className="mt-7">
       <h2 className={eyebrowClass({ size: 'xs', className: 'mb-2' })}>{title}</h2>
+      {intro && <p className="text-base text-ink-3 mb-2">{intro}</p>}
       {children}
     </section>
   );
@@ -49,13 +51,13 @@ export default function InsikterClient() {
   // Hold the fetch until auth + profile have resolved; only then can getToken
   // mint a real ID token. Re-runs the moment this flips true.
   const ready = !authLoading && !profileLoading && hasAccess;
-  const { data, loading, error, lastFetchedAt, isFirstLoad } = useInsightsData(getToken, range, ready);
+  const { data, previous, loading, error, lastFetchedAt, isFirstLoad } = useInsightsData(getToken, range, ready);
 
   const header = (
     <PageHeader
       crumb="Insikter · internt"
       title="Insikter"
-      standfirst="Internt analysverktyg — inte länkat i menyn och inte indexerat."
+      standfirst="Internt analysverktyg — inte länkat i menyn och inte indexerat. Klicka på en ruta för att läsa vad den mäter."
     />
   );
 
@@ -105,9 +107,18 @@ export default function InsikterClient() {
     return <div>{header}<LoadingView label="Ingen data ännu." /></div>;
   }
 
+  // Händelsemått (sedan BIN-1438) räknar händelser, inte personer, och bara sedan den
+  // första räknade dagen — den står i svaret, aldrig hårdkodad här.
+  const eventsIntro = (
+    <>
+      Samma person tre gånger räknas som 3.
+      {data.eventsSince ? ` Händelser räknas sedan ${data.eventsSince}.` : ' Händelser har inte räknats än.'}
+    </>
+  );
+
   // ── Dashboard ───────────────────────────────────────────────────────────────
   return (
-    <InsightsProvider value={data}>
+    <InsightsProvider value={{ data, previous }}>
       <div className={loading ? 'opacity-70 transition-opacity' : undefined}>
         {header}
 
@@ -115,7 +126,7 @@ export default function InsikterClient() {
           <div className="mt-3 rounded-md border border-danger bg-danger-soft text-danger-ink px-3 py-2 text-sm" role="alert">
             {error
               ? <>{error} — <button type="button" onClick={() => window.location.reload()} className="underline">Försök igen</button></>
-              : 'Visar delvis data — någon datakälla var otillgänglig (t.ex. händelseräkningen eller rollupen har inte körts än).'}
+              : 'Någon siffra kunde inte hämtas just nu. Ladda om sidan om en stund.'}
           </div>
         )}
 
@@ -123,43 +134,50 @@ export default function InsikterClient() {
           <Toolbar lastFetchedAt={lastFetchedAt} />
         </div>
 
-        <Section title="Översikt">
+        <Section title="Just nu" intro="Ögonblicksbilder från den senaste beräkningen. Följer inte datumväljaren.">
           <MetricGrid>
             <MetricTile metricKey="totalUsers" />
-            <MetricTile metricKey="newUsers" />
-            <MetricTile metricKey="totalTitlesTracked" />
-            <MetricTile metricKey="totalReviews" />
-            <MetricTile metricKey="titlesAdded" />
             <MetricTile metricKey="activeUsers7d" />
             <MetricTile metricKey="activeUsers30d" />
+            <MetricTile metricKey="totalTitlesTracked" />
+            <MetricTile metricKey="totalReviews" />
+            <MetricTile metricKey="groupsCount" />
+            <MetricTile metricKey="activeSessions" />
           </MetricGrid>
         </Section>
 
-        <Section title="Tillväxt">
-          <p className="text-base text-ink-3 mb-2">
-            Registreringar och inloggningsmetod räknar händelser, inte personer.
-          </p>
-          <div className="grid lg:grid-cols-2 gap-3">
+        <Section title="Nya konton i perioden" intro={eventsIntro}>
+          <MetricGrid>
+            <MetricTile metricKey="newUsers" />
+            <MetricTile metricKey="titlesAdded" />
+            <MetricTile metricKey="signins" />
+          </MetricGrid>
+          <div className="grid lg:grid-cols-2 gap-3 mt-3">
             <TimeSeriesChart metricKey="signupsTrend" />
-            <Funnel metricKey="onboardingFunnel" />
             <Donut metricKey="signinMethodSplit" />
+            <TopList metricKey="onboardingFinishStep" />
             <Donut metricKey="secondWeekReturn" />
-            <div className="self-start">
-              <MetricGrid>
-                <MetricTile metricKey="donateClicks" />
-                <MetricTile metricKey="providerClicks" />
-                <MetricTile metricKey="shareClicks" />
-                <MetricTile metricKey="priceCheckTotals" />
-                <MetricTile metricKey="priceCheckSaves" />
-              </MetricGrid>
-            </div>
-            <TopList metricKey="signupLandingPages" />
-            <Donut metricKey="providerClicksByType" />
-            <Donut metricKey="shareClicksBySurface" />
           </div>
         </Section>
 
-        <Section title="Produktanvändning">
+        <Section title="Engagemang i perioden" intro={eventsIntro}>
+          <MetricGrid>
+            <MetricTile metricKey="providerClicks" />
+            <MetricTile metricKey="shareClicks" />
+            <MetricTile metricKey="priceCheckTotals" />
+            <MetricTile metricKey="priceCheckSaves" />
+          </MetricGrid>
+          <div className="grid lg:grid-cols-2 gap-3 mt-3">
+            <TimeSeriesChart metricKey="titlesAddedTrend" />
+            <Donut metricKey="providerClicksByType" />
+            <Donut metricKey="shareClicksBySurface" />
+            <Donut metricKey="shareClicksByMethod" />
+            <Donut metricKey="priceCheckBySurface" />
+            <TopList metricKey="advisorActions" />
+          </div>
+        </Section>
+
+        <Section title="Biblioteket" intro="Allt som ligger i användarnas bibliotek just nu. Följer inte datumväljaren.">
           <div className="grid lg:grid-cols-2 gap-3">
             <Donut metricKey="statusDistribution" />
             <Donut metricKey="mediaTypeSplit" />
@@ -168,20 +186,13 @@ export default function InsikterClient() {
             <TopList metricKey="topProviders" />
             <TopList metricKey="topGenres" />
           </div>
-          <div className="mt-3">
-            <MetricGrid>
-              <MetricTile metricKey="advisorPauses" />
-              <MetricTile metricKey="activeSessions" />
-              <MetricTile metricKey="groupsCount" />
-            </MetricGrid>
-          </div>
         </Section>
 
-        <Section title="Fråga Binge">
+        <Section title="Fråga Binge i perioden">
           <MetricGrid>
             <MetricTile metricKey="askSearches" />
             <MetricTile metricKey="askZeroRate" />
-            <MetricTile metricKey="askLowConfidence" />
+            <MetricTile metricKey="askLowConfidenceRate" />
           </MetricGrid>
           <div className="grid lg:grid-cols-2 gap-3 mt-3">
             <Donut metricKey="askResultBuckets" />
@@ -190,18 +201,10 @@ export default function InsikterClient() {
           </div>
         </Section>
 
-        <Section title="Trafik">
-          <p className="text-base text-ink-3 mb-2">
-            Ingen källa: Binge räknar händelser, inte besök. Besökare, sidvisningar och hänvisare mäts inte.
+        <Section title="Besök">
+          <p className={cardClass('p-3 text-sm text-ink-2')}>
+            Besök, sidvisningar och varifrån folk kommer mäts inte — Binge sätter inga cookies.
           </p>
-          <MetricGrid>
-            <MetricTile metricKey="pageViews" />
-            <MetricTile metricKey="avgSessionDuration" />
-          </MetricGrid>
-          <div className="grid lg:grid-cols-2 gap-3 mt-3">
-            <TopList metricKey="topPages" />
-            <TopList metricKey="topReferrers" />
-          </div>
         </Section>
 
         {/* ExplainDrawer self-renders from the ?metric URL param */}

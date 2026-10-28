@@ -2,6 +2,7 @@
 
 import { useSelectedMetric } from '../state/useSelectedMetric';
 import { METRICS } from '../metrics/catalog';
+import type { MetricKey } from '../metrics/types';
 import { EXPLANATIONS } from '../metrics/explanations';
 import { eyebrowClass } from '@/components/ui/Eyebrow';
 
@@ -10,7 +11,9 @@ export function ExplainDrawer() {
   const [selected, setSelected] = useSelectedMetric();
   if (!selected) return null;
 
-  const def = METRICS[selected];
+  // The URL param is untyped: a bookmark to a removed key must not crash the page.
+  const def = METRICS[selected] as (typeof METRICS)[MetricKey] | undefined;
+  if (!def) return null;
   const ex = EXPLANATIONS[selected];
   const close = () => setSelected(null);
 
@@ -22,28 +25,24 @@ export function ExplainDrawer() {
           <h2 className="text-xl font-semibold text-ink">{def.label}</h2>
           <button type="button" onClick={close} className="text-ink-3 hover:text-ink text-sm">Stäng</button>
         </div>
-        {ex ? (
-          <dl className="flex flex-col gap-3 text-sm">
-            <div>
-              <dt className={eyebrowClass({ size: 'xs' })}>Vad är det?</dt>
-              <dd className="text-ink-2">{ex.whatIsIt}</dd>
-            </div>
-            <div>
-              <dt className={eyebrowClass({ size: 'xs' })}>Hur beräknas det?</dt>
-              <dd className="text-ink-2">{ex.howCalculated}</dd>
-            </div>
-            <div>
-              <dt className={eyebrowClass({ size: 'xs' })}>Varför viktigt?</dt>
-              <dd className="text-ink-2">{ex.whyImportant}</dd>
-            </div>
-            <div>
-              <dt className={eyebrowClass({ size: 'xs' })}>Källa</dt>
-              <dd className="text-ink-2">{ex.source}</dd>
-            </div>
-          </dl>
-        ) : (
-          <p className="text-sm text-ink-2">Ingen förklaring tillgänglig för det här måttet ännu.</p>
-        )}
+        <dl className="flex flex-col gap-3 text-sm">
+          <div>
+            <dt className={eyebrowClass({ size: 'xs' })}>Vad är det?</dt>
+            <dd className="text-ink-2">{ex.whatIsIt}</dd>
+          </div>
+          <div>
+            <dt className={eyebrowClass({ size: 'xs' })}>Hur beräknas det?</dt>
+            <dd className="text-ink-2">{ex.howCalculated}</dd>
+          </div>
+          <div>
+            <dt className={eyebrowClass({ size: 'xs' })}>Varför viktigt?</dt>
+            <dd className="text-ink-2">{ex.whyImportant}</dd>
+          </div>
+          <div>
+            <dt className={eyebrowClass({ size: 'xs' })}>Källa</dt>
+            <dd className="text-ink-2">{ex.source}</dd>
+          </div>
+        </dl>
       </div>
     </div>
   );

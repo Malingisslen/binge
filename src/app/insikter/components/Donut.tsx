@@ -2,9 +2,8 @@
 
 import type { MetricKey } from '../metrics/types';
 import { DATA_RESOLVERS } from '../metrics/resolvers';
-import { METRICS } from '../metrics/catalog';
 import { useInsightsContext } from '../state/InsightsContext';
-import { eyebrowClass } from '@/components/ui/Eyebrow';
+import { CardHeader } from './CardHeader';
 import { cardClass } from '@/components/ui/Card';
 
 // A small, fixed palette built from binge tokens — saffran accent first, then
@@ -22,9 +21,8 @@ function arc(cx: number, cy: number, r: number, start: number, end: number): str
 
 /** Lightweight SVG donut for a breakdown metric (no chart library). */
 export function Donut({ metricKey }: { metricKey: MetricKey }) {
-  const data = useInsightsContext();
+  const { data } = useInsightsContext();
   const value = DATA_RESOLVERS[metricKey](data);
-  const label = METRICS[metricKey].label;
 
   const entries = value.kind === 'breakdown' ? value.entries.filter((e) => e.value > 0) : [];
   const total = entries.reduce((s, e) => s + e.value, 0);
@@ -41,7 +39,7 @@ export function Donut({ metricKey }: { metricKey: MetricKey }) {
 
   return (
     <div className={cardClass('p-3')}>
-      <div className={eyebrowClass({ size: 'xs', className: 'mb-2' })}>{label}</div>
+      <CardHeader metricKey={metricKey} className="mb-2" />
       {total === 0 ? (
         <div className="text-sm text-ink-3 py-2">{value.missing ?? 'Ingen data'}</div>
       ) : (

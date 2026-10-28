@@ -2,58 +2,60 @@ import type { MetricKey, MetricDef } from './types';
 
 /**
  * The single source of truth for what the dashboard shows and how. Adding a
- * metric = a catalog entry here + a resolver in resolvers.ts (+ a field in
- * InsightsData and a line in the rollup/API if it needs new data). The
- * components never hard-code a metric.
+ * metric = a catalog entry here + a resolver in resolvers.ts + an explanation in
+ * explanations.ts (+ a field in InsightsData and a line in the rollup/API if it
+ * needs new data). The components never hard-code a metric.
+ *
+ * `snapshot` metrics come from the latest once-a-day rollup and ignore the date
+ * picker; `comparable` metrics are period sums that get a "mot förra perioden"
+ * comparison (comparison.ts). A metric is never both — catalog.test.ts enforces it.
  */
 export const METRICS: Record<MetricKey, MetricDef> = {
-  // ── Översikt ──────────────────────────────────────────────────────────────
-  totalUsers: { key: 'totalUsers', label: 'Användare', category: 'overview', format: { kind: 'number' } },
-  newUsers: { key: 'newUsers', label: 'Nya användare', category: 'overview', format: { kind: 'number' } },
-  totalTitlesTracked: { key: 'totalTitlesTracked', label: 'Titlar spårade', category: 'overview', format: { kind: 'number' } },
-  totalReviews: { key: 'totalReviews', label: 'Recensioner', category: 'overview', format: { kind: 'number' } },
-  titlesAdded: { key: 'titlesAdded', label: 'Titlar tillagda', category: 'overview', format: { kind: 'number' } },
-  activeUsers7d: { key: 'activeUsers7d', label: 'Aktiva senaste 7 dagarna', category: 'overview', format: { kind: 'number' }, isNew: true },
-  activeUsers30d: { key: 'activeUsers30d', label: 'Aktiva senaste 30 dagarna', category: 'overview', format: { kind: 'number' }, isNew: true },
+  // ── Just nu ───────────────────────────────────────────────────────────────
+  totalUsers: { key: 'totalUsers', label: 'Användare', category: 'now', format: { kind: 'number' }, snapshot: true },
+  totalTitlesTracked: { key: 'totalTitlesTracked', label: 'Titlar i bibliotek', category: 'now', format: { kind: 'number' }, snapshot: true },
+  totalReviews: { key: 'totalReviews', label: 'Recensioner', category: 'now', format: { kind: 'number' }, snapshot: true },
+  activeUsers7d: { key: 'activeUsers7d', label: 'Aktiva senaste 7 dagarna', category: 'now', format: { kind: 'number' }, snapshot: true },
+  activeUsers30d: { key: 'activeUsers30d', label: 'Aktiva senaste 30 dagarna', category: 'now', format: { kind: 'number' }, snapshot: true },
+  activeSessions: { key: 'activeSessions', label: 'Pågående Tillsammans-kvällar', category: 'now', format: { kind: 'number' }, snapshot: true },
+  groupsCount: { key: 'groupsCount', label: 'Skapade grupper', category: 'now', format: { kind: 'number' }, snapshot: true },
 
-  // ── Tillväxt ──────────────────────────────────────────────────────────────
-  signupsTrend: { key: 'signupsTrend', label: 'Registreringar', category: 'growth', format: { kind: 'number' }, source: 'events' },
-  onboardingFunnel: { key: 'onboardingFunnel', label: 'Onboarding-tratt', category: 'growth', format: { kind: 'number' }, source: 'events' },
-  signinMethodSplit: { key: 'signinMethodSplit', label: 'Inloggningsmetod', category: 'growth', format: { kind: 'number' }, source: 'events' },
-  donateClicks: { key: 'donateClicks', label: 'Donate-klick', category: 'growth', format: { kind: 'number' }, source: 'events' },
-  secondWeekReturn: { key: 'secondWeekReturn', label: 'Nya konton som kom tillbaka andra veckan', category: 'growth', format: { kind: 'number' }, isNew: true },
-  signupLandingPages: { key: 'signupLandingPages', label: 'Registreringar per landningssida', category: 'growth', format: { kind: 'number' }, isNew: true },
-  providerClicks: { key: 'providerClicks', label: 'Klick till tjänster', category: 'growth', format: { kind: 'number' }, isNew: true, source: 'events' },
-  providerClicksByType: { key: 'providerClicksByType', label: 'Klick till tjänster per typ', category: 'growth', format: { kind: 'number' }, isNew: true, source: 'events' },
-  shareClicks: { key: 'shareClicks', label: 'Delningar', category: 'growth', format: { kind: 'number' }, isNew: true, source: 'events' },
-  shareClicksBySurface: { key: 'shareClicksBySurface', label: 'Delningar per yta', category: 'growth', format: { kind: 'number' }, isNew: true, source: 'events' },
-  priceCheckTotals: { key: 'priceCheckTotals', label: 'Priskollar med summa', category: 'growth', format: { kind: 'number' }, isNew: true, source: 'events' },
-  priceCheckSaves: { key: 'priceCheckSaves', label: 'Priskoll: logga in och spara', category: 'growth', format: { kind: 'number' }, isNew: true, source: 'events' },
+  // ── I perioden ────────────────────────────────────────────────────────────
+  newUsers: { key: 'newUsers', label: 'Nya användare', category: 'period', format: { kind: 'number' }, comparable: true, windowField: 'users' },
+  titlesAdded: { key: 'titlesAdded', label: 'Fler titlar i bibliotek', category: 'period', format: { kind: 'number' }, comparable: true, windowField: 'titlesTracked' },
+  signupsTrend: { key: 'signupsTrend', label: 'Registreringar per dag', category: 'period', format: { kind: 'number' }, source: 'events' },
+  signins: { key: 'signins', label: 'Inloggningar', category: 'period', format: { kind: 'number' }, source: 'events', comparable: true },
+  signinMethodSplit: { key: 'signinMethodSplit', label: 'Inloggningssätt', category: 'period', format: { kind: 'number' }, source: 'events' },
+  onboardingFinishStep: { key: 'onboardingFinishStep', label: 'Vilket steg nya användare avslutade på', category: 'period', format: { kind: 'number' }, source: 'events' },
+  secondWeekReturn: { key: 'secondWeekReturn', label: 'Nya konton som kom tillbaka andra veckan', category: 'period', format: { kind: 'number' }, snapshot: true },
 
-  // ── Produktanvändning ───────────────────────────────────────────────────────
-  statusDistribution: { key: 'statusDistribution', label: 'Status-fördelning', category: 'product', format: { kind: 'number' } },
-  mediaTypeSplit: { key: 'mediaTypeSplit', label: 'Film vs TV', category: 'product', format: { kind: 'number' } },
-  topTitles: { key: 'topTitles', label: 'Mest spårade titlar', category: 'product', format: { kind: 'number' } },
-  topProviders: { key: 'topProviders', label: 'Toppade streamingtjänster', category: 'product', format: { kind: 'number' } },
-  topGenres: { key: 'topGenres', label: 'Toppade genrer', category: 'product', format: { kind: 'number' } },
-  ratingsHistogram: { key: 'ratingsHistogram', label: 'Betygsfördelning', category: 'product', format: { kind: 'number' } },
-  advisorPauses: { key: 'advisorPauses', label: 'Rådgivar-pauser', category: 'product', format: { kind: 'number' }, source: 'events' },
-  activeSessions: { key: 'activeSessions', label: 'Aktiva sessioner', category: 'product', format: { kind: 'number' } },
-  groupsCount: { key: 'groupsCount', label: 'Grupper', category: 'product', format: { kind: 'number' } },
+  // ── Engagemang ────────────────────────────────────────────────────────────
+  titlesAddedTrend: { key: 'titlesAddedTrend', label: 'Titlar tillagda per dag', category: 'engagement', format: { kind: 'number' }, source: 'events' },
+  providerClicks: { key: 'providerClicks', label: 'Klick till tjänster', category: 'engagement', format: { kind: 'number' }, source: 'events', comparable: true },
+  providerClicksByType: { key: 'providerClicksByType', label: 'Klick till tjänster per typ', category: 'engagement', format: { kind: 'number' }, source: 'events' },
+  shareClicks: { key: 'shareClicks', label: 'Delningar', category: 'engagement', format: { kind: 'number' }, source: 'events', comparable: true },
+  shareClicksBySurface: { key: 'shareClicksBySurface', label: 'Delningar per yta', category: 'engagement', format: { kind: 'number' }, source: 'events' },
+  shareClicksByMethod: { key: 'shareClicksByMethod', label: 'Delningssätt', category: 'engagement', format: { kind: 'number' }, source: 'events' },
+  priceCheckTotals: { key: 'priceCheckTotals', label: 'Priskollar som gav en summa', category: 'engagement', format: { kind: 'number' }, source: 'events', comparable: true },
+  priceCheckBySurface: { key: 'priceCheckBySurface', label: 'Var priskollen används', category: 'engagement', format: { kind: 'number' }, source: 'events' },
+  priceCheckSaves: { key: 'priceCheckSaves', label: 'Priskoll: logga in och spara', category: 'engagement', format: { kind: 'number' }, source: 'events', comparable: true },
+  advisorActions: { key: 'advisorActions', label: 'Rådgivarens förslag folk tog', category: 'engagement', format: { kind: 'number' }, source: 'events' },
+
+  // ── Biblioteket ───────────────────────────────────────────────────────────
+  statusDistribution: { key: 'statusDistribution', label: 'Vad folk gör med titlarna', category: 'library', format: { kind: 'number' }, snapshot: true },
+  mediaTypeSplit: { key: 'mediaTypeSplit', label: 'Film eller serie', category: 'library', format: { kind: 'number' }, snapshot: true },
+  topTitles: { key: 'topTitles', label: 'Titlar flest har i biblioteket', category: 'library', format: { kind: 'number' }, snapshot: true },
+  topProviders: { key: 'topProviders', label: 'Vanligaste streamingtjänsterna', category: 'library', format: { kind: 'number' }, snapshot: true },
+  topGenres: { key: 'topGenres', label: 'Vanligaste genrerna', category: 'library', format: { kind: 'number' }, snapshot: true },
+  ratingsHistogram: { key: 'ratingsHistogram', label: 'Betygsfördelning', category: 'library', format: { kind: 'number' }, snapshot: true },
 
   // ── Fråga Binge (NL-sök, BIN-176) ───────────────────────────────────────────
-  askSearches: { key: 'askSearches', label: 'Sökningar', category: 'product', format: { kind: 'number' } },
-  askZeroRate: { key: 'askZeroRate', label: 'Tom-träff-andel', category: 'product', format: { kind: 'percent' } },
-  askLowConfidence: { key: 'askLowConfidence', label: 'Förstod-inte (antal)', category: 'product', format: { kind: 'number' } },
-  askResultBuckets: { key: 'askResultBuckets', label: 'Antal träffar per sökning', category: 'product', format: { kind: 'number' } },
-  askStrandingFilters: { key: 'askStrandingFilters', label: 'Filter som strandar (tomma träffar)', category: 'product', format: { kind: 'number' } },
-  askRemovedChips: { key: 'askRemovedChips', label: 'Mest borttagna tolkningar', category: 'product', format: { kind: 'number' } },
-
-  // ── Trafik ──────────────────────────────────────────────────────────────────
-  pageViews: { key: 'pageViews', label: 'Sidvisningar', category: 'traffic', format: { kind: 'number' } },
-  avgSessionDuration: { key: 'avgSessionDuration', label: 'Snitt sessionstid', category: 'traffic', format: { kind: 'duration', unit: 's' } },
-  topPages: { key: 'topPages', label: 'Toppsidor', category: 'traffic', format: { kind: 'number' } },
-  topReferrers: { key: 'topReferrers', label: 'Topp-hänvisare', category: 'traffic', format: { kind: 'number' } },
+  askSearches: { key: 'askSearches', label: 'Sökningar', category: 'ask', format: { kind: 'number' } },
+  askZeroRate: { key: 'askZeroRate', label: 'Sökningar utan träff', category: 'ask', format: { kind: 'percent' } },
+  askLowConfidenceRate: { key: 'askLowConfidenceRate', label: 'Frågor Binge inte förstod', category: 'ask', format: { kind: 'percent' } },
+  askResultBuckets: { key: 'askResultBuckets', label: 'Antal träffar per sökning', category: 'ask', format: { kind: 'number' } },
+  askStrandingFilters: { key: 'askStrandingFilters', label: 'Filterkombinationer som ger noll träffar', category: 'ask', format: { kind: 'number' } },
+  askRemovedChips: { key: 'askRemovedChips', label: 'Filter folk oftast tar bort', category: 'ask', format: { kind: 'number' } },
 };
 
 export const METRIC_KEYS = Object.keys(METRICS) as MetricKey[];

@@ -11,8 +11,6 @@ export function formatScalar(value: number, format: MetricFormat): string {
       return value.toLocaleString('sv-SE', { maximumFractionDigits: format.decimals ?? 0 });
     case 'percent':
       return `${Math.round(value)}%`;
-    case 'duration':
-      return format.unit === 's' ? `${value.toFixed(0)}s` : `${Math.round(value)}ms`;
     default:
       return assertNever(format);
   }
