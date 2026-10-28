@@ -115,18 +115,26 @@ const askRate = (d: InsightsData, numerator: (a: NonNullable<InsightsData['askBi
 /** Under så här många dagar ritas ingen kurva: tre punkter ser ut som en trend utan att vara en. */
 export const MIN_TREND_POINTS = 7;
 
+/** Shown under the number when the curve's history could not be read (#22: never a flat or empty curve). */
+export const TREND_NOT_FETCHED = 'kurvan kunde inte hämtas';
+
 // Ögonblicksbilden kommer ur dagens rollup; kurvan ur de daterade kopiorna i intervallet.
 // Dagar som saknar fältet (äldre dokument) hoppas över i stället för att ritas som noll.
+// Börjar kurvan senare än intervallet (historiken är kortare, eller taket på läsningar
+// slog till) står det under talet, så att en kort kurva inte läses som hela perioden.
 const snapshotWithTrend = (
   d: InsightsData,
   value: number | undefined,
   pick: (h: HistoryPoint) => number | undefined,
 ): MetricValue => {
+  if (d.history === null) return scalar(value ?? NaN, TREND_NOT_FETCHED);
   const points = (d.history ?? [])
     .flatMap((h) => { const y = pick(h); return y === undefined ? [] : [{ x: h.date, y }]; });
-  return points.length >= MIN_TREND_POINTS
+  if (points.length < MIN_TREND_POINTS) return scalar(value ?? NaN);
+  const note = points[0].x > d.range.from ? `kurvan börjar ${points[0].x}` : undefined;
+  return note === undefined
     ? { kind: 'scalar', value: value ?? NaN, trend: points }
-    : scalar(value ?? NaN);
+    : { kind: 'scalar', value: value ?? NaN, trend: points, note };
 };
 
 // ── DATA_RESOLVERS ─────────────────────────────────────────────────────────────

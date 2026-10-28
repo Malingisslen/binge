@@ -29,6 +29,29 @@ function ComparisonLine({ comparison, def }: { comparison: Comparison; def: Metr
   }
 }
 
+const DAY_MS = 86_400_000;
+const dayIndex = (x: string): number => Math.round(Date.parse(`${x}T00:00:00Z`) / DAY_MS);
+
+/**
+ * The curve's line segments: x follows the date, not the point's position in the list,
+ * and the line breaks at a missing day instead of drawing across the gap (#22). Each
+ * segment is one polyline's `points` attribute.
+ */
+export function sparkSegments(
+  spark: { x: string; y: number }[], W: number, H: number, minY: number, rangeY: number,
+): string[] {
+  const days = spark.map((p) => dayIndex(p.x));
+  const span = days[days.length - 1] - days[0] || 1;
+  const coord = (p: { y: number }, day: number) =>
+    `${(((day - days[0]) / span) * W).toFixed(1)},${(H - ((p.y - minY) / rangeY) * H).toFixed(1)}`;
+  const segments: string[][] = [];
+  spark.forEach((p, i) => {
+    if (i === 0 || days[i] - days[i - 1] > 1) segments.push([]);
+    segments[segments.length - 1].push(coord(p, days[i]));
+  });
+  return segments.map((s) => s.join(' '));
+}
+
 /** Compact KPI tile. Click/Enter opens the ExplainDrawer for the metric. */
 export function MetricTile({ metricKey }: { metricKey: MetricKey }) {
   const { data, previous } = useInsightsContext();
@@ -69,17 +92,14 @@ export function MetricTile({ metricKey }: { metricKey: MetricKey }) {
     const minY = Math.min(...ys);
     const rangeY = Math.max(...ys) - minY || 1;
     const W = 64; const H = 20;
-    const pts = spark.map((p, i) => {
-      const x = (i / (spark!.length - 1)) * W;
-      const y = H - ((p.y - minY) / rangeY) * H;
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    });
     const first = spark[0]; const last = spark[spark.length - 1];
     const title = `${first.x}: ${formatScalar(first.y, def.format)} → ${last.x}: ${formatScalar(last.y, def.format)}`;
     sparkEl = (
       <svg className="mt-1 text-acc" width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={title}>
         <title>{title}</title>
-        <polyline points={pts.join(' ')} fill="none" stroke="currentColor" strokeWidth="1.5" />
+        {sparkSegments(spark, W, H, minY, rangeY).map((seg, i) => (
+          <polyline key={i} points={seg} fill="none" stroke="currentColor" strokeWidth="1.5" />
+        ))}
       </svg>
     );
   }
