@@ -70,13 +70,13 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
   },
   { id: 119, name: 'Amazon Prime Video', shortName: 'Prime', color: '#00A8E1', type: 'flatrate', defaultMonthlyCost: 69, planName: 'Prime-medlemskap' },
   {
-    // live-verifierat 2026-10-01 — https://www.disneyplus.com/sv-se — prisagenten läste 69/109/159 (BIN-1398)
-    id: 337, name: 'Disney+', shortName: 'Disney+', color: '#0063E5', type: 'flatrate', defaultMonthlyCost: 109,
-    priceVerifiedDate: '2026-10-01',
+    // live-verifierat 2026-10-28 — https://www.disneyplus.com/sv-se — sidan anger 89/129/179 kr/månad (ordinarie, utan bindning)
+    id: 337, name: 'Disney+', shortName: 'Disney+', color: '#0063E5', type: 'flatrate', defaultMonthlyCost: 129,
+    priceVerifiedDate: '2026-10-28',
     tiers: [
-      { id: 'ads', name: 'Standard med reklam', cost: 69 },
-      { id: 'standard', name: 'Standard', cost: 109 },
-      { id: 'premium', name: 'Premium', cost: 159 },
+      { id: 'ads', name: 'Standard med reklam', cost: 89 },
+      { id: 'standard', name: 'Standard', cost: 129 },
+      { id: 'premium', name: 'Premium', cost: 179 },
     ],
   },
   {
@@ -300,6 +300,9 @@ export const PRICE_CHANGES: PriceChange[] = [
   { date: '2026-05', dateKind: 'effective', providerId: 8, tierId: 'premium', fromKr: 199, toKr: 219, source: 'https://help.netflix.com/en/node/24926' },
   { date: '2026-09-03', dateKind: 'noticed', providerId: 431, tierId: 'ads', fromKr: 59, toKr: 69, source: 'https://www.skyshowtime.com/se (BIN-1071)' },
   { date: '2026-09-03', dateKind: 'noticed', providerId: 335, tierId: 'student', fromKr: 95, toKr: 109, source: 'https://www.youtube.com/premium (BIN-1071)' },
+  { date: '2026-10-28', dateKind: 'noticed', providerId: 337, tierId: 'ads', fromKr: 69, toKr: 89, source: 'https://www.disneyplus.com/sv-se' },
+  { date: '2026-10-28', dateKind: 'noticed', providerId: 337, tierId: 'standard', fromKr: 109, toKr: 129, source: 'https://www.disneyplus.com/sv-se' },
+  { date: '2026-10-28', dateKind: 'noticed', providerId: 337, tierId: 'premium', fromKr: 159, toKr: 179, source: 'https://www.disneyplus.com/sv-se' },
 ];
 
 export const PROVIDER_MAP: Map<number, SwedishProvider> = (() => {
