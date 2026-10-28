@@ -19,8 +19,9 @@ import { logger } from 'firebase-functions/v2';
 import { readAskBingeStats } from './askbinge';
 import { readEventStats } from './eventStats';
 import { computeWindowDeltas, pickBaselineId } from './window';
+import { historyIds, toHistoryPoint } from './history';
 import { stockholmDayId } from '../askbinge/logic';
-import type { InsightsData, RangeInfo, RollupData } from './types';
+import type { HistoryPoint, InsightsData, RangeInfo, RollupData } from './types';
 
 const INSIGHTS_TOKEN = defineSecret('INSIGHTS_TOKEN');
 
@@ -92,24 +93,60 @@ async function readRollup(): Promise<RollupData | null> {
 }
 
 /**
- * Baseline snapshot for the window (`pickBaselineId`), chosen from listDocuments() ids,
- * the call the rollup's retention sweep already makes. Not an `orderBy(documentId,
- * 'desc')` query: that needs a __name__ DESCENDING index, and without it every call
- * failed with FAILED_PRECONDITION in production.
+ * The ids in the insights collection, from listDocuments() — the call the rollup's
+ * retention sweep already makes. Not an `orderBy(documentId, 'desc')` query: that
+ * needs a __name__ DESCENDING index, and without it every call failed with
+ * FAILED_PRECONDITION in production. One listing serves both the baseline and the
+ * history read. null = the listing failed.
  */
+async function listInsightIds(): Promise<string[] | null> {
+  try {
+    const refs = await getFirestore().collection('insights').listDocuments();
+    return refs.map((r) => r.id);
+  } catch (err) {
+    logger.error('listInsightIds failed', err);
+    return null;
+  }
+}
+
+/** Baseline snapshot for the window (`pickBaselineId`). */
 async function readBaseline(
+  ids: readonly string[],
   from: string,
 ): Promise<{ data: RollupData; date: string } | null> {
   const col = getFirestore().collection('insights');
   try {
-    const refs = await col.listDocuments();
-    const id = pickBaselineId(refs.map((r) => r.id), from);
+    const id = pickBaselineId(ids, from);
     if (!id) return null; // no dated history yet
     const doc = await col.doc(id).get();
     if (!doc.exists) return null;
     return { data: doc.data() as RollupData, date: doc.id };
   } catch (err) {
     logger.error('readBaseline failed', err);
+    return null;
+  }
+}
+
+/**
+ * The dated snapshots inside the range, as curve points. Only `totals` and
+ * `activeUsers` are selected and only named fields are copied (history.ts), so
+ * nothing but aggregates leaves the function. Capped by HISTORY_READ_LIMIT reads.
+ */
+async function readHistory(ids: readonly string[], range: RangeInfo): Promise<HistoryPoint[] | null> {
+  const col = getFirestore().collection('insights');
+  const wanted = historyIds(ids, range.from, range.to);
+  if (wanted.length === 0) return [];
+  try {
+    const snaps = await getFirestore().getAll(
+      ...wanted.map((id) => col.doc(id)),
+      { fieldMask: ['totals', 'activeUsers'] },
+    );
+    return snaps
+      .map((s) => (s.exists ? toHistoryPoint(s.id, s.data()) : null))
+      .filter((p): p is HistoryPoint => p !== null)
+      .sort((a, b) => a.date.localeCompare(b.date));
+  } catch (err) {
+    logger.error('readHistory failed', err);
     return null;
   }
 }
@@ -131,10 +168,12 @@ export const apiInsights = onRequest(
 
     const range = parseRange(req.query as Record<string, unknown>);
 
-    const [rollup, eventStats, baseline, askBinge] = await Promise.all([
+    const ids = await listInsightIds();
+    const [rollup, eventStats, baseline, history, askBinge] = await Promise.all([
       readRollup(),
       readEventStats(range),
-      readBaseline(range.from),
+      ids ? readBaseline(ids, range.from) : Promise.resolve(null),
+      ids ? readHistory(ids, range) : Promise.resolve(null),
       readAskBingeStats(range),
     ]);
 
@@ -150,9 +189,10 @@ export const apiInsights = onRequest(
       eventsSince: eventStats.eventsSince,
       askBinge,
       window,
+      history,
       // Ett intervall utan eventStats-dokument är "inte mätt", inget fel — bara ett läsfel
       // gör svaret partiellt.
-      partial: rollup === null || rollup.partial || eventStats.failed,
+      partial: rollup === null || rollup.partial || eventStats.failed || history === null,
     };
 
     res.set('Cache-Control', 'private, max-age=300');

@@ -32,7 +32,9 @@ export const EVENT_VOCABULARY = {
   signed_up: {},
   signed_in: { method: ['google', 'email'] },
   onboarding_completed: { step_reached: [] },
-  title_added_watchlist: {},
+  // Dagssummor per status/typ visas bara på den interna admin-sidan, aldrig publikt eller i
+  // en export (#5:s villkor, plan 2026-10-28): med få konton kan en dagssumma peka ut en person.
+  title_added_watchlist: { status: ['vill_se', 'mina', 'sedd', 'avbruten'], mediaType: ['movie', 'tv'] },
   advisor_action_taken: { action: ['pause', 'resume', 'subscribe', 'catchup'] },
   provider_clicked: { offerType: ['subscription', 'rent', 'buy', 'free'] },
   share_clicked: { surface: ['title', 'list', 'profile'], method: ['native', 'copy'] },

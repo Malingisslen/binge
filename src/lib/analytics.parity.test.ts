@@ -43,6 +43,7 @@ describe('COUNTED_EVENTS ↔ recordEvents ordförråd', () => {
     expectTypeOf<'offerType'>().toExtend<keyof PropsOf<'provider_clicked'>>();
     expectTypeOf<'surface' | 'method'>().toExtend<keyof PropsOf<'share_clicked'>>();
     expectTypeOf<'surface'>().toExtend<keyof PropsOf<'price_check_total_shown'>>();
+    expectTypeOf<'status' | 'mediaType'>().toExtend<keyof PropsOf<'title_added_watchlist'>>();
     // Körtidskontroll att listan ovan täcker ordförrådet: varje (händelse, egenskap)-par.
     const pairs = Object.entries(EVENT_VOCABULARY).flatMap(([e, props]) => Object.keys(props).map((p) => `${e}.${p}`));
     expect(pairs.sort()).toEqual([
@@ -53,6 +54,8 @@ describe('COUNTED_EVENTS ↔ recordEvents ordförråd', () => {
       'share_clicked.method',
       'share_clicked.surface',
       'signed_in.method',
+      'title_added_watchlist.mediaType',
+      'title_added_watchlist.status',
     ]);
   });
 
@@ -65,6 +68,8 @@ describe('COUNTED_EVENTS ↔ recordEvents ordförråd', () => {
     expectTypeOf<NonNullable<PropsOf<'share_clicked'>['surface']>>().toEqualTypeOf<V['share_clicked']['surface'][number]>();
     expectTypeOf<NonNullable<PropsOf<'share_clicked'>['method']>>().toEqualTypeOf<V['share_clicked']['method'][number]>();
     expectTypeOf<NonNullable<PropsOf<'price_check_total_shown'>['surface']>>().toEqualTypeOf<V['price_check_total_shown']['surface'][number]>();
+    expectTypeOf<NonNullable<PropsOf<'title_added_watchlist'>['status']>>().toEqualTypeOf<V['title_added_watchlist']['status'][number]>();
+    expectTypeOf<NonNullable<PropsOf<'title_added_watchlist'>['mediaType']>>().toEqualTypeOf<V['title_added_watchlist']['mediaType'][number]>();
   });
 
   it('klientens batch ryms i serverns tak, och utskicken är minst 30 s isär (villkor D)', () => {

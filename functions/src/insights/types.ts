@@ -75,6 +75,16 @@ export interface WindowDeltas {
   };
 }
 
+/** One day's aggregate totals from a dated insights/{YYYY-MM-DD} doc (history.ts). */
+export interface HistoryPoint {
+  date: string;
+  users: number;
+  titlesTracked: number;
+  reviews: number;
+  activeUsers7d?: number;  // absent on docs written before activeUsers existed
+  activeUsers30d?: number;
+}
+
 export interface InsightsData {
   generatedAt: string; // ISO timestamp of this API response
   range: RangeInfo;
@@ -83,5 +93,6 @@ export interface InsightsData {
   eventsSince: string | null; // första dagen som har ett eventStats-dokument över huvud taget
   askBinge: AskBingeData | null; // null if the read failed; zeroed if simply no data yet
   window: WindowDeltas | null; // null until at least one prior snapshot exists
+  history: HistoryPoint[] | null; // dated snapshots in the range, oldest first; null = read failed
   partial: boolean; // true if any source failed (frontend shows a ribbon)
 }

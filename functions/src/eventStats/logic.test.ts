@@ -42,8 +42,21 @@ describe('planIncrements — godkända händelser blir summerade ökningar', () 
   });
 
   it('en händelse utan egenskaper i ordförrådet räknas bara som antal', () => {
-    const m = asMap(planIncrements({ events: [{ name: 'title_added_watchlist', props: { mediaType: 'tv', status: 'mina' } }] }));
-    expect([...m.entries()]).toEqual([['counts/title_added_watchlist', 1]]);
+    const m = asMap(planIncrements({ events: [{ name: 'price_check_save_clicked', props: { paidCount: 2 } }] }));
+    expect([...m.entries()]).toEqual([['counts/price_check_save_clicked', 1]]);
+  });
+
+  it('title_added_watchlist räknas per status och typ, men ett okänt värde släpps', () => {
+    const m = asMap(planIncrements({ events: [
+      { name: 'title_added_watchlist', props: { mediaType: 'tv', status: 'mina' } },
+      { name: 'title_added_watchlist', props: { mediaType: 'movie', status: 'favorit' } },
+    ] }));
+    expect([...m.entries()].sort()).toEqual([
+      ['counts/title_added_watchlist', 2],
+      ['props/title_added_watchlist/mediaType/movie', 1],
+      ['props/title_added_watchlist/mediaType/tv', 1],
+      ['props/title_added_watchlist/status/mina', 1],
+    ]);
   });
 
   it('läser högst MAX_EVENTS_PER_CALL händelser ur ett anrop', () => {
