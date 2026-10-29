@@ -30,9 +30,7 @@ import { describe, it, expect } from 'vitest';
  * degradation must not itself be the skippable one.
  */
 
-// From the repo root, the way the sibling source scans resolve their targets
-// (src/lib/watchlistDocKey.test.ts) — vitest runs with cwd at the root.
-const SOURCE_PATH = join(process.cwd(), 'functions', 'src', 'availableNotify', 'runNotify.ts');
+const SOURCE_PATH = join(__dirname, 'runNotify.ts');
 
 /**
  * The last significant character of a completed VALUE — after one of these a `/` divides,
