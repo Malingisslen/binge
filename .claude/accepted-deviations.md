@@ -2724,3 +2724,28 @@ larm, och att markörerna får bära namn, användarnamn eller annan identitet.
 
 **Re-open when:** någon begär radering av markörerna före svepet, eller markörerna får ett fält
 som bär mer än uid och tidpunkter.
+
+## BIN-1459: commits utan biljett-id kopplas via sin sha, granskade i efterhand — 2026-10-29
+
+Malins beslut 2026-10-29, alternativ A. Commits nådde main 2026-10-07..12 utan biljett-id i
+ämnesraden och utan `review`-rad, via PR-sammanslagningar och en klon utan commit-krok (hålet är
+BIN-1460). Historiken skrivs inte om, så de knyts i `TICKET_BY_SHA`: elva till BIN-1459 och
+`76876c74`, som bara ändrar regeltestsviten för återflytten, till BIN-1422, vars `review`-rader
+skrevs före den. BIN-1422:s rader täcker inget annat här.
+
+**En ytterligare, medveten vidgning av villkor (c) i BIN-1367-posten.** Granskningarna är
+riktiga men gjordes efter pushen, och BIN-1459:s `review`-rader bokfördes efter commitarna:
+`binge-security-reviewer` över de två regeländringarna (följnotisen, tipsa en vän) och
+kontoraderingen i inställningscommiten, två `binge-code-reviewer`-körningar över resten, och
+release-rollen #25:s kritik av den här kopplingen. Säkerhetsgranskningens blockerande fynd,
+att följnotisen namngav en privat följare för någon som inte är vän, är lagat under BIN-1459.
+Övriga fynd är lagade eller filade (BIN-1462).
+
+Öppet hos Malin, inte avgjort här: om redan skrivna följnotiser med namnet ska skrivas om, och
+incidentbedömningen för den perioden.
+
+```
+git grep -n "BIN-1459" -- docs/org/metrics/check_review_coverage.mjs docs/org/metrics/events.jsonl
+```
+
+**INTE accepterat:** samma villkor som i BIN-1367-posten, och rader i efterhand som standardväg.

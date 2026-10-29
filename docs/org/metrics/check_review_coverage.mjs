@@ -434,6 +434,20 @@ export const TICKET_BY_SHA = new Map([
   ['1f3d0025f41408007d69baaf4f2b7b8607cbcf92', 'BIN-1450'],
   ['f56e539b1c04923aa0c39cba26d5e84eed1c856c', 'BIN-1450'],
   ['0db25284cc6e075330ec6bea5eaff80f7594ba4d', 'BIN-1450'],
+  // 2026-10-29, Malin's decision (option A). Pushed 2026-10-07..12 without an id or a review;
+  // reviewed after the fact under BIN-1459. The test-only restore-suite commit is BIN-1422's.
+  ['91532d0307e246e5d0f4461305c0e77da71ffac5', 'BIN-1459'],
+  ['f5db5718b7eec91bc4e97e1890a73da8f24d53b2', 'BIN-1459'],
+  ['2b98d2fdd8186dabddd30a39de15e0347342d4e8', 'BIN-1459'],
+  ['542cf85668a05e0f4e27bbb56dbc545ad2b99a88', 'BIN-1459'],
+  ['520f43b8054054fce318ec5db84001b05a14e722', 'BIN-1459'],
+  ['76876c74946ab9af999a473bcee542b257549d3a', 'BIN-1422'],
+  ['cc3d17a3dd465c7ddef4f5a885c78ceb1a40adcf', 'BIN-1459'],
+  ['d7e7d2b2a545456476ebb50624953938b04ba8a4', 'BIN-1459'],
+  ['6ddbd8208edd29fc2f8cc9fe4e3d993ce0732175', 'BIN-1459'],
+  ['683aed574614557e52acb3dcf59fe89af5483fda', 'BIN-1459'],
+  ['49a7387e7e6c22dc7a71387ed825ee990e79d753', 'BIN-1459'],
+  ['1b797c3d2c03e25310a412d4e20070f1f8f2beaf', 'BIN-1459'],
 ]);
 
 /** The BIN-ids a commit subject names, deduplicated and in order. */
