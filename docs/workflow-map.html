@@ -792,6 +792,12 @@
       "path": "src/lib/sentry.ts"
     },
     {
+      "id": "cloudflare-analytics",
+      "label": "Cloudflare Web Analytics",
+      "context": "external-api",
+      "path": "functions/src/insights/traffic.ts"
+    },
+    {
       "id": "recap-hook",
       "label": "useRecap + coverageGap wrapper",
       "context": "client-state",
@@ -2852,13 +2858,20 @@
     {
       "id": "flow-insights",
       "label": "Insights dashboard",
-      "description": "rollupInsights runs on a 24h Cloud Scheduler trigger, paginated-scans the watchlist collectionGroup plus aggregate counts (users/reviews/groups/active sessions), pages through Firebase Auth for weekly/monthly active-user counts (non-anonymous accounts by the later of lastSignInTime/lastRefreshTime; only the two counts are stored), and writes one current-state snapshot to insights/daily (read by the API) and a dated insights/{YYYY-MM-DD} history doc, then prunes history past a 90-day retention window. The apiInsights HTTP function sits behind the /api/insights Hosting rewrite; it authenticates either a Firebase ID token (must resolve to users/{uid}.isAdmin===true) or a static INSIGHTS_TOKEN secret, reads insights/daily (1 read), lists the insights collection's ids once and uses that listing twice: for the baseline dated snapshot behind the window deltas, and for the dated snapshots inside the range that become the tiles' curves (history; a field mask keeps the read to totals and activeUsers, and the newest HISTORY_READ_LIMIT ids are kept when the range holds more), reads the eventStats day docs written by recordEvent and the askBinge usage stats, merges them into one InsightsData JSON payload (partial when the rollup, the event read or the history read failed), and returns it with a 5-minute private cache header. The /insikter dashboard (InsikterClient + useInsightsData hook) calls fetchInsights with a bearer token and range, then fetches the previous equally long window with a second call for the period comparison (skipped for a custom range; a failed second call leaves the comparison blank), and renders the merged data.",
+      "description": "rollupInsights runs on a 24h Cloud Scheduler trigger, paginated-scans the watchlist collectionGroup plus aggregate counts (users/reviews/groups/active sessions), pages through Firebase Auth for weekly/monthly active-user counts (non-anonymous accounts by the later of lastSignInTime/lastRefreshTime; only the two counts are stored), and writes one current-state snapshot to insights/daily (read by the API) and a dated insights/{YYYY-MM-DD} history doc, then prunes history past a 90-day retention window. The apiInsights HTTP function sits behind the /api/insights Hosting rewrite; it authenticates either a Firebase ID token (must resolve to users/{uid}.isAdmin===true) or a static INSIGHTS_TOKEN secret, reads insights/daily (1 read), lists the insights collection's ids once and uses that listing twice: for the baseline dated snapshot behind the window deltas, and for the dated snapshots inside the range that become the tiles' curves (history; a field mask keeps the read to totals and activeUsers, and the newest HISTORY_READ_LIMIT ids are kept when the range holds more), reads the eventStats day docs written by recordEvent and the askBinge usage stats, asks Cloudflare Web Analytics' GraphQL API for the range's daily visits and page views, top pages and top referring hosts (functions/src/insights/traffic.ts; account id, site tag and API token are Firebase secrets passed as GraphQL variables, never in the query text, and never reach the client; 8 s timeout; a non-OK answer, GraphQL errors or a missing secret → traffic: null, logged by status only), merges them into one InsightsData JSON payload (partial when the rollup, the event read, the history read or the traffic read failed), and returns it with a 5-minute private cache header. Every page of the site loads Cloudflare's beacon script (src/app/layout.tsx, public site token; the hosting CSP header names static.cloudflareinsights.com in script-src and cloudflareinsights.com in connect-src exactly), which posts one report per page load to cloudflareinsights.com/cdn-cgi/rum with no cookie and nothing stored on the device; those reports are what the GraphQL read sums (ADR 0025, privacy policy 1.17). The /insikter dashboard (InsikterClient + useInsightsData hook) calls fetchInsights with a bearer token and range, then fetches the previous equally long window with a second call for the period comparison (skipped for a custom range; a failed second call leaves the comparison blank), and renders the merged data.",
       "covers": [
         "rollupInsights",
         "apiInsights",
         "/insikter"
       ],
       "steps": [
+        {
+          "from": "web-app",
+          "to": "cloudflare-analytics",
+          "payload": "beacon.min.js from static.cloudflareinsights.com (defer, data-cf-beacon token) → POST cloudflareinsights.com/cdn-cgi/rum per page load; no cookie, no storage",
+          "transport": "https-fetch",
+          "verified": true
+        },
         {
           "from": "cf-rollupInsights",
           "to": "firestore",
@@ -2910,8 +2923,15 @@
         },
         {
           "from": "cf-apiInsights",
+          "to": "cloudflare-analytics",
+          "payload": "POST https://api.cloudflare.com/client/v4/graphql, bearer CF_ANALYTICS_TOKEN, variables {accountTag, siteTag, geq, lt, top}: rumPageloadEventsAdaptiveGroups per date (count=page views, sum.visits), per requestPath and per refererHost (top 10) → summarizeTraffic → TrafficData; any failure → traffic: null and partial",
+          "transport": "https-fetch",
+          "verified": true
+        },
+        {
+          "from": "cf-apiInsights",
           "to": "insikter-page",
-          "payload": "JSON {success, data: InsightsData{rollup, events, eventsSince, askBinge, window, history, partial}}",
+          "payload": "JSON {success, data: InsightsData{rollup, events, eventsSince, askBinge, window, history, traffic, partial}}",
           "transport": "https-response",
           "verified": true
         }
