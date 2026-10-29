@@ -5,7 +5,7 @@ import type { MetricKey, Explanation } from './types';
  * code. Every catalog key has an entry — explanations.test.ts enforces it both ways.
  */
 const SNAPSHOT = 'Ögonblicksbild från den senaste beräkningen, en gång per dygn. Följer inte datumväljaren.';
-const TREND = 'Den lilla kurvan under talet visar samma siffra dag för dag i vald period, ur de dagliga beräkningarna. Den ritas först när perioden har minst sju beräknade dagar.';
+const TREND = 'Den lilla kurvan under talet visar samma siffra dag för dag i vald period, ur de dagliga beräkningarna. Den ritas först när perioden har minst sju beräknade dagar. Har perioden fler än 90 beräknade dagar ritas högst 90 jämnt utspridda dagar, första och sista alltid med, så kurvan täcker hela perioden med glesare punkter.';
 const TRAFFIC = 'Räknas av ett skript från Cloudflare i besökarens webbläsare, utan cookies och utan att någon enskild besökare följs; Binge hämtar bara summorna. Siffrorna är ungefärliga: Cloudflare uppskattar ur ett urval av sidvisningarna, annonsblockerare och avstängd JavaScript räknas inte, och robotar kan slinka med. Dagarna går efter UTC, så en sen kväll i Sverige hamnar på rätt dag men en tidig natt på dagen före. Läs nivån över tid, och lägg inte ihop den med Binges egna händelseräkningar längre upp.';
 const EVENTS = 'Samma person tre gånger räknas som 3. Händelser räknas sedan mätningen startade (datumet står i verktygsraden); dagar före det syns inte.';
 

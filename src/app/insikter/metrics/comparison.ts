@@ -1,5 +1,5 @@
 import type { MetricDef, MetricValue } from './types';
-import type { InsightsData, RangeInfo } from '../insights.types';
+import type { InsightsData, InsightsSource, RangeInfo } from '../insights.types';
 
 /**
  * "Mot förra perioden" for a comparable period metric (#22's conditions, plan
@@ -40,12 +40,21 @@ export function previousRange(current: RangeInfo): RangeInfo | null {
  */
 export function previousWindowProblem(def: MetricDef, current: InsightsData, previous: InsightsData | null): string | null {
   if (!previous) return 'ingen jämförelse: förra perioden kunde inte hämtas';
-  // Traffic needs only its own block, so a traffic metric is judged on that before
-  // the blanket partial flag: a failed history read must not hide the visits comparison.
+  // Each tile is judged on its own source (BIN-1458): a Cloudflare outage or a failed
+  // history read must not hide the comparison on tiles that never use them.
   if (def.source === 'traffic') {
-    return previous.traffic ? null : 'ingen jämförelse: förra periodens besök kunde inte hämtas';
+    if (!previous.traffic) return 'ingen jämförelse: förra periodens besök kunde inte hämtas';
+    // Both windows must lie wholly after the beacon's first day: the function clips
+    // the query there, so an earlier window is a shorter one, not a smaller one.
+    const since = current.trafficSince ?? previous.trafficSince;
+    if (since && (previous.range.from < since || current.range.from < since)) {
+      return `ingen jämförelse: mätningen började ${since}`;
+    }
+    return null;
   }
-  if (previous.partial) return 'ingen jämförelse: förra perioden kunde inte hämtas helt';
+  if (sourceFailed(previous, def.source === 'events' ? 'events' : 'rollup')) {
+    return 'ingen jämförelse: förra perioden kunde inte hämtas helt';
+  }
   if (def.source === 'events') {
     if (!previous.events) return 'ingen jämförelse: förra perioden är inte räknad';
     if (previous.eventsSince && previous.range.from < previous.eventsSince) {
@@ -58,6 +67,11 @@ export function previousWindowProblem(def: MetricDef, current: InsightsData, pre
   if (current.window.truncated) return `ingen jämförelse: historiken börjar ${current.window.basisDate}`;
   if (previous.window.basisDate >= current.window.basisDate) return 'ingen jämförelse: ingen beräkning mellan perioderna';
   return null;
+}
+
+/** A response from before the function listed its sources has only the blanket flag. */
+function sourceFailed(data: InsightsData, source: InsightsSource): boolean {
+  return data.failed ? data.failed.includes(source) : data.partial;
 }
 
 /**

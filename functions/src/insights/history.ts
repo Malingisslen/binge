@@ -13,10 +13,17 @@ export const HISTORY_READ_LIMIT = 90;
 
 const DATED = /^\d{4}-\d{2}-\d{2}$/;
 
-/** The dated doc ids inside [from, to], oldest first, capped at the newest HISTORY_READ_LIMIT. */
+/**
+ * The dated doc ids inside [from, to], oldest first. Over HISTORY_READ_LIMIT days the
+ * curve keeps its whole span at lower resolution: evenly spaced days, the first and
+ * the last always included, rather than only the newest days. Deterministic: the
+ * same ids give the same picks on every request.
+ */
 export function historyIds(ids: readonly string[], from: string, to: string): string[] {
   const dated = ids.filter((id) => DATED.test(id) && id >= from && id <= to).sort();
-  return dated.slice(Math.max(0, dated.length - HISTORY_READ_LIMIT));
+  if (dated.length <= HISTORY_READ_LIMIT) return dated;
+  const step = (dated.length - 1) / (HISTORY_READ_LIMIT - 1);
+  return Array.from({ length: HISTORY_READ_LIMIT }, (_, i) => dated[Math.round(i * step)]);
 }
 
 /** One curve point from a rollup doc. Unknown or malformed fields are dropped, never passed on. */

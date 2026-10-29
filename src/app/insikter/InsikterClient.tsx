@@ -200,7 +200,7 @@ export default function InsikterClient() {
           </div>
         </Section>
 
-        <Section title="Besök i perioden" intro="Cookiefri räkning i webbläsaren via Cloudflare Web Analytics. Inga besökare följs; bara summor per dag, sida och varifrån folk kom. Ungefärliga tal (urval, annonsblockerare räknas inte, dagar efter UTC): följ nivån över tid, och lägg dem inte ihop med räkningarna ovan.">
+        <Section title="Besök i perioden" intro={<>Cookiefri räkning i webbläsaren via Cloudflare Web Analytics. Inga besökare följs; bara summor per dag, sida och varifrån folk kom. Ungefärliga tal (urval, annonsblockerare räknas inte, dagar efter UTC): följ nivån över tid, och lägg dem inte ihop med räkningarna ovan.{data.trafficSince ? ` Besök räknas sedan ${data.trafficSince}.` : ''}</>}>
           <MetricGrid>
             <MetricTile metricKey="visits" />
             <MetricTile metricKey="pageViews" />

@@ -100,5 +100,10 @@ export interface InsightsData {
   window: WindowDeltas | null; // null until at least one prior snapshot exists
   history?: HistoryPoint[] | null; // dated snapshots in the range, oldest first; null = read failed. Optional until the function is deployed.
   traffic?: TrafficData | null; // Cloudflare Web Analytics; null = not fetched. Optional until the function is deployed.
+  trafficSince?: string; // första dagen besök räknades; optional until the function is deployed
+  failed?: InsightsSource[]; // källor som inte kunde läsas; optional until the function is deployed
   partial: boolean;
 }
+
+/** Varje källa svaret kan sakna. En ruta vägrar sin jämförelse bara på sin egen källa (BIN-1458). */
+export type InsightsSource = 'rollup' | 'events' | 'history' | 'traffic';

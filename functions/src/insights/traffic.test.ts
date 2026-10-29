@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const logger = vi.hoisted(() => ({ error: vi.fn(), warn: vi.fn(), info: vi.fn() }));
 vi.mock('firebase-functions/v2', () => ({ logger }));
-import { buildTrafficQuery, readTraffic, summarizeTraffic, trafficWindow, TRAFFIC_TOP_N, type RumRow } from './traffic';
+import { buildTrafficQuery, readTraffic, summarizeTraffic, trafficWindow, EMPTY_TRAFFIC, TRAFFIC_SINCE, TRAFFIC_TOP_N, type RumRow } from './traffic';
 
 const row = (dims: RumRow['dimensions'], count: number, visits: number): RumRow => ({
   count, sum: { visits }, dimensions: dims,
@@ -10,20 +10,26 @@ const row = (dims: RumRow['dimensions'], count: number, visits: number): RumRow 
 
 describe('trafficWindow', () => {
   it('starts at midnight of the first day and ends before midnight after the last day', () => {
-    expect(trafficWindow({ preset: '7d', from: '2026-10-22', to: '2026-10-28' })).toEqual({
-      geq: '2026-10-22T00:00:00Z', lt: '2026-10-29T00:00:00Z',
+    expect(trafficWindow({ preset: '7d', from: '2026-11-02', to: '2026-11-08' })).toEqual({
+      geq: '2026-11-02T00:00:00Z', lt: '2026-11-09T00:00:00Z',
     });
   });
 
   it('crosses a month end', () => {
     expect(trafficWindow({ preset: 'custom', from: '2026-10-30', to: '2026-10-31' }).lt).toBe('2026-11-01T00:00:00Z');
   });
+
+  it('never starts before the beacon went live: a straddling range is clipped, a later one untouched', () => {
+    expect(trafficWindow({ preset: 'custom', from: '2026-10-01', to: '2026-11-05' }).geq).toBe(`${TRAFFIC_SINCE}T00:00:00Z`);
+    expect(trafficWindow({ preset: 'custom', from: TRAFFIC_SINCE, to: '2026-11-05' }).geq).toBe(`${TRAFFIC_SINCE}T00:00:00Z`);
+    expect(trafficWindow({ preset: 'custom', from: '2026-11-02', to: '2026-11-05' }).geq).toBe('2026-11-02T00:00:00Z');
+  });
 });
 
 describe('buildTrafficQuery', () => {
   it('passes the tags and the window as variables, never inlined in the query text', () => {
-    const q = buildTrafficQuery('acct', 'site', { preset: '7d', from: '2026-10-22', to: '2026-10-28' });
-    expect(q.variables).toEqual({ accountTag: 'acct', siteTag: 'site', geq: '2026-10-22T00:00:00Z', lt: '2026-10-29T00:00:00Z', top: TRAFFIC_TOP_N });
+    const q = buildTrafficQuery('acct', 'site', { preset: '7d', from: '2026-11-02', to: '2026-11-08' });
+    expect(q.variables).toEqual({ accountTag: 'acct', siteTag: 'site', geq: '2026-11-02T00:00:00Z', lt: '2026-11-09T00:00:00Z', top: TRAFFIC_TOP_N });
     expect(q.query).toContain('$siteTag');
     expect(q.query).toContain('$accountTag');
     // No literal value in the query text: every value travels as a variable.
@@ -89,7 +95,7 @@ describe('summarizeTraffic', () => {
 });
 
 describe('readTraffic', () => {
-  const range = { preset: '7d' as const, from: '2026-10-22', to: '2026-10-28' };
+  const range = { preset: '7d' as const, from: '2026-11-02', to: '2026-11-08' };
   const fetchMock = vi.fn();
   const env = { CF_ANALYTICS_TOKEN: 'secret-token-value', CF_ACCOUNT_ID: 'acct', CF_SITE_TAG: 'site' };
   beforeEach(() => {
@@ -113,6 +119,25 @@ describe('readTraffic', () => {
       expect(fetchMock, k).not.toHaveBeenCalled();
       expect(loggedText(), k).toContain('secrets not configured');
     }
+  });
+
+  it('a range wholly before the beacon is a measured zero and never asks Cloudflare', async () => {
+    expect(await readTraffic({ preset: 'custom', from: '2026-10-01', to: '2026-10-28' })).toEqual(EMPTY_TRAFFIC);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('a range ending on the beacon day itself is measured: Cloudflare is asked', async () => {
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ data: { viewer: { accounts: [{ daily: [], pages: [], referrers: [] }] } } }) });
+    expect(await readTraffic({ preset: 'custom', from: '2026-10-28', to: TRAFFIC_SINCE })).toEqual(EMPTY_TRAFFIC);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('a straddling range asks Cloudflare from the beacon day on', async () => {
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ data: { viewer: { accounts: [{ daily: [], pages: [], referrers: [] }] } } }) });
+    await readTraffic({ preset: '30d', from: '2026-10-01', to: '2026-10-30' });
+    const [, init] = fetchMock.mock.calls[0] as [string, { body: string }];
+    expect((JSON.parse(init.body) as { variables: { geq: string } }).variables.geq).toBe(`${TRAFFIC_SINCE}T00:00:00Z`);
   });
 
   it('is null when Cloudflare answers with data AND errors, and when the account list is empty', async () => {

@@ -10,6 +10,15 @@ import type { RangeInfo, TrafficData } from './types';
 
 export const CLOUDFLARE_GRAPHQL = 'https://api.cloudflare.com/client/v4/graphql';
 export const TRAFFIC_TOP_N = 10;
+/**
+ * Dagen beaconen gick live på binge.nu (BIN-1457). Före den räknade Cloudflare
+ * automatiskt besökare utanför EU, mest robotar, så de dagarna frågas aldrig:
+ * ett intervall klipps vid den här dagen och en jämförelse bakåt över den vägras.
+ */
+export const TRAFFIC_SINCE = '2026-10-29';
+
+/** En lyckad läsning utan rader, och ett intervall helt före TRAFFIC_SINCE. */
+export const EMPTY_TRAFFIC: TrafficData = { visits: 0, pageViews: 0, daily: [], topPages: [], topReferrers: [] };
 
 /** One row of rumPageloadEventsAdaptiveGroups, as the three sub-queries return it. */
 export interface RumRow {
@@ -29,11 +38,15 @@ export interface RumResponse {
 
 const DAY_MS = 86_400_000;
 
-/** Cloudflare filters on an instant: the whole last day needs `lt` the day after it. */
+/**
+ * Cloudflare filters on an instant: the whole last day needs `lt` the day after it.
+ * The start never precedes TRAFFIC_SINCE; a range ending before it gives lt <= geq.
+ */
 export function trafficWindow(range: RangeInfo): { geq: string; lt: string } {
   const toMs = Date.parse(`${range.to}T00:00:00Z`);
+  const from = range.from < TRAFFIC_SINCE ? TRAFFIC_SINCE : range.from;
   return {
-    geq: `${range.from}T00:00:00Z`,
+    geq: `${from}T00:00:00Z`,
     lt: `${new Date(toMs + DAY_MS).toISOString().slice(0, 10)}T00:00:00Z`,
   };
 }
@@ -107,6 +120,8 @@ export async function readTraffic(range: RangeInfo): Promise<TrafficData | null>
     logger.error('readTraffic: Cloudflare secrets not configured');
     return null;
   }
+  // Helt före beaconen: inget mättes, så svaret är en mätt nolla, inte ett fel.
+  if (range.to < TRAFFIC_SINCE) return EMPTY_TRAFFIC;
   try {
     const res = await fetch(CLOUDFLARE_GRAPHQL, {
       method: 'POST',

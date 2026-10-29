@@ -450,6 +450,19 @@ describe('traffic resolvers (Cloudflare Web Analytics) — inte hämtat är aldr
     }
   });
 
+  it('a range wholly before the beacon went live says when counting began, never a bare 0', () => {
+    const d = emptyData({
+      traffic: { visits: 0, pageViews: 0, daily: [], topPages: [], topReferrers: [] },
+      trafficSince: '2026-10-29',
+      range: { preset: 'custom', from: '2026-10-01', to: '2026-10-28' },
+    });
+    for (const key of ['visits', 'pageViews', 'visitsTrend', 'topPages', 'topReferrers'] as const) {
+      expect(DATA_RESOLVERS[key](d).missing, key).toBe('mätningen började 2026-10-29');
+    }
+    // The boundary day counts: a range ending on the first counted day is measured.
+    expect(DATA_RESOLVERS.visits(emptyData({ ...d, range: { preset: 'custom', from: '2026-10-01', to: '2026-10-29' } }))).toEqual({ kind: 'scalar', value: 0 });
+  });
+
   it('a fetched zero is a measured zero: 0 with no missing reason, unlike a failed read', () => {
     const d = emptyData({ traffic: { visits: 0, pageViews: 0, daily: [], topPages: [], topReferrers: [] } });
     expect(DATA_RESOLVERS.visits(d)).toEqual({ kind: 'scalar', value: 0 });

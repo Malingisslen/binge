@@ -107,5 +107,10 @@ export interface InsightsData {
   window: WindowDeltas | null; // null until at least one prior snapshot exists
   history: HistoryPoint[] | null; // dated snapshots in the range, oldest first; null = read failed
   traffic: TrafficData | null; // Cloudflare Web Analytics; null = not fetched (secrets, network or query error)
+  trafficSince: string; // första dagen beaconen räknade binge.nu; tidigare dagar frågas aldrig
+  failed: InsightsSource[]; // källor som inte kunde läsas; klienten vägrar bara jämförelser som behöver dem
   partial: boolean; // true if any source failed (frontend shows a ribbon)
 }
+
+/** Varje källa svaret kan sakna. En ruta vägrar sin jämförelse bara på sin egen källa (BIN-1458). */
+export type InsightsSource = 'rollup' | 'events' | 'history' | 'traffic';

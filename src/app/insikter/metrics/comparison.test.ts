@@ -60,6 +60,28 @@ describe('previousWindowProblem', () => {
     expect(previousWindowProblem(eventsDef, current, data({ partial: true }))).toContain('kunde inte hämtas helt');
   });
 
+  // BIN-1458: a tile is judged on its own source. The matrix lists every source
+  // against an event tile and a rollup-window tile.
+  it('an event tile refuses only when the events source failed, whatever else did', () => {
+    for (const other of ['rollup', 'history', 'traffic'] as const) {
+      expect(previousWindowProblem(eventsDef, current, data({ partial: true, failed: [other] })), other).toBeNull();
+    }
+    expect(previousWindowProblem(eventsDef, current, data({ partial: true, failed: ['events'] }))).toContain('kunde inte hämtas helt');
+  });
+
+  it('a rollup-window tile refuses only when the rollup source failed', () => {
+    const ok = { basisDate: '2026-09-23', truncated: false, deltas: { users: 4, titlesTracked: 0 } };
+    for (const other of ['events', 'history', 'traffic'] as const) {
+      expect(previousWindowProblem(METRICS.newUsers, currentWin, data({ window: ok, partial: true, failed: [other] })), other).toBeNull();
+    }
+    expect(previousWindowProblem(METRICS.newUsers, currentWin, data({ window: ok, partial: true, failed: ['rollup'] }))).toContain('kunde inte hämtas helt');
+  });
+
+  it('an older function response without the source list falls back to the blanket flag', () => {
+    expect(previousWindowProblem(eventsDef, current, data({ partial: true, failed: undefined }))).toContain('kunde inte hämtas helt');
+    expect(previousWindowProblem(eventsDef, current, data({ partial: false, failed: undefined }))).toBeNull();
+  });
+
   it('refuses an event metric when the previous window has no event counts', () => {
     expect(previousWindowProblem(eventsDef, current, data({ events: null }))).toBe('ingen jämförelse: förra perioden är inte räknad');
   });
@@ -146,6 +168,21 @@ describe('previousWindowProblem for traffic metrics (Cloudflare Web Analytics)',
 
   it('is fine with traffic present even when the previous period is partial for another reason', () => {
     expect(previousWindowProblem(METRICS.visits, current, data({ traffic, partial: true }))).toBeNull();
+    expect(previousWindowProblem(METRICS.visits, current, data({ traffic, partial: true, failed: ['rollup', 'events', 'history'] }))).toBeNull();
     expect(previousWindowProblem(METRICS.providerClicks, current, data({ traffic, partial: true }))).toContain('kunde inte hämtas helt');
+  });
+
+  it('refuses, naming the first counted day, when either window starts before the beacon went live', () => {
+    const previous = data({ traffic, range: { preset: 'custom', from: '2026-09-23', to: '2026-09-30' } });
+    const since = (from: string) => data({ traffic, trafficSince: '2026-09-24', range: { preset: '7d', from, to: '2026-10-08' } });
+    expect(previousWindowProblem(METRICS.visits, since('2026-10-01'), previous)).toBe('ingen jämförelse: mätningen började 2026-09-24');
+    expect(previousWindowProblem(METRICS.visits, since('2026-09-20'), data({ ...previous, range: { preset: 'custom', from: '2026-09-24', to: '2026-09-30' } })))
+      .toBe('ingen jämförelse: mätningen började 2026-09-24');
+    // Boundary day allowed on both sides: previous starting on it, and current starting on it.
+    expect(previousWindowProblem(METRICS.visits, since('2026-10-01'), data({ ...previous, range: { preset: 'custom', from: '2026-09-24', to: '2026-09-30' } }))).toBeNull();
+    expect(previousWindowProblem(METRICS.visits, since('2026-09-24'), data({ ...previous, range: { preset: 'custom', from: '2026-09-24', to: '2026-09-30' } }))).toBeNull();
+    // The date may come from the previous response alone (current from an older deploy).
+    const older = data({ traffic, range: { preset: '7d', from: '2026-09-20', to: '2026-10-08' } });
+    expect(previousWindowProblem(METRICS.visits, older, data({ ...previous, trafficSince: '2026-09-24' }))).toBe('ingen jämförelse: mätningen började 2026-09-24');
   });
 });

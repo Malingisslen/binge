@@ -21,7 +21,8 @@ import { readAskBingeStats } from './askbinge';
 import { readEventStats } from './eventStats';
 import { computeWindowDeltas, pickBaselineId } from './window';
 import { historyIds, toHistoryPoint } from './history';
-import { readTraffic } from './traffic';
+import { readTraffic, TRAFFIC_SINCE } from './traffic';
+import { failedSources } from './failed';
 import { stockholmDayId } from '../askbinge/logic';
 import type { HistoryPoint, InsightsData, RangeInfo, RollupData } from './types';
 
@@ -189,6 +190,10 @@ export const apiInsights = onRequest(
       ? computeWindowDeltas(rollup, baseline?.data ?? null, baseline?.date ?? null, range.from)
       : null;
 
+    // Ett intervall utan eventStats-dokument är "inte mätt", inget fel — bara ett läsfel
+    // räknas (failed.ts).
+    const failed = failedSources({ rollup, eventsFailed: eventStats.failed, history, traffic });
+
     const data: InsightsData = {
       generatedAt: new Date().toISOString(),
       range,
@@ -199,9 +204,9 @@ export const apiInsights = onRequest(
       window,
       history,
       traffic,
-      // Ett intervall utan eventStats-dokument är "inte mätt", inget fel — bara ett läsfel
-      // gör svaret partiellt.
-      partial: rollup === null || rollup.partial || eventStats.failed || history === null || traffic === null,
+      trafficSince: TRAFFIC_SINCE,
+      failed,
+      partial: failed.length > 0,
     };
 
     res.set('Cache-Control', 'private, max-age=300');

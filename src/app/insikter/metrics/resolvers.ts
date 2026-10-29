@@ -1,5 +1,5 @@
 import type { MetricKey, MetricValue } from './types';
-import type { HistoryPoint, InsightsData } from '../insights.types';
+import type { HistoryPoint, InsightsData, TrafficData } from '../insights.types';
 import { getProvider, canonicalProviderId } from '@/lib/tmdb/providers';
 import { genreLabel } from '@/lib/tmdb/genreLabels';
 import { MIN_COHORT } from '@/lib/secondWeek';
@@ -54,6 +54,14 @@ export const MISSING = {
 const notFetchedScalar: MetricValue = { kind: 'scalar', value: NaN, missing: MISSING.notFetched };
 const notFetchedBreakdown: MetricValue = { kind: 'breakdown', entries: [], missing: MISSING.notFetched };
 const notFetchedSeries: MetricValue = { kind: 'series', points: [], missing: MISSING.notFetched };
+/** Ett intervall helt före beaconens första dag är inte mätt: en nolla där vore "inga besökare". */
+const beforeTraffic = (d: InsightsData): string | null =>
+  d.trafficSince && d.range.to < d.trafficSince ? `mätningen började ${d.trafficSince}` : null;
+const trafficValue = (d: InsightsData, value: (t: TrafficData) => MetricValue, notFetched: MetricValue): MetricValue => {
+  if (!d.traffic) return notFetched;
+  const before = beforeTraffic(d);
+  return before ? { ...notFetched, missing: before } : value(d.traffic);
+};
 /** Cloudflare lämnar hänvisaren tom vid direktbesök och när webbläsaren inte skickar någon. */
 export const DIRECT_REFERRER_LABEL = 'Direkt eller okänd';
 
@@ -130,8 +138,8 @@ export const TREND_NOT_FETCHED = 'kurvan kunde inte hämtas';
 
 // Ögonblicksbilden kommer ur dagens rollup; kurvan ur de daterade kopiorna i intervallet.
 // Dagar som saknar fältet (äldre dokument) hoppas över i stället för att ritas som noll.
-// Börjar kurvan senare än intervallet (historiken är kortare, eller taket på läsningar
-// slog till) står det under talet, så att en kort kurva inte läses som hela perioden.
+// Börjar kurvan senare än intervallet (historiken är kortare) står det under talet,
+// så att en kort kurva inte läses som hela perioden.
 const snapshotWithTrend = (
   d: InsightsData,
   value: number | undefined,
@@ -320,18 +328,12 @@ export const DATA_RESOLVERS: Record<MetricKey, (data: InsightsData) => MetricVal
   }),
 
   // ── Besök ─────────────────────────────────────────────────────────────────
-  visits: (d) => (d.traffic ? scalar(d.traffic.visits) : notFetchedScalar),
-  pageViews: (d) => (d.traffic ? scalar(d.traffic.pageViews) : notFetchedScalar),
+  visits: (d) => trafficValue(d, (t) => scalar(t.visits), notFetchedScalar),
+  pageViews: (d) => trafficValue(d, (t) => scalar(t.pageViews), notFetchedScalar),
   visitsTrend: (d) =>
-    d.traffic
-      ? { kind: 'series', points: d.traffic.daily.map((p) => ({ x: p.date, y: p.visits })) }
-      : notFetchedSeries,
+    trafficValue(d, (t) => ({ kind: 'series', points: t.daily.map((p) => ({ x: p.date, y: p.visits })) }), notFetchedSeries),
   topPages: (d) =>
-    d.traffic
-      ? { kind: 'breakdown', entries: d.traffic.topPages.map((p) => ({ label: p.path, value: p.pageViews })) }
-      : notFetchedBreakdown,
+    trafficValue(d, (t) => ({ kind: 'breakdown', entries: t.topPages.map((p) => ({ label: p.path, value: p.pageViews })) }), notFetchedBreakdown),
   topReferrers: (d) =>
-    d.traffic
-      ? { kind: 'breakdown', entries: d.traffic.topReferrers.map((r) => ({ label: r.host || DIRECT_REFERRER_LABEL, value: r.visits })) }
-      : notFetchedBreakdown,
+    trafficValue(d, (t) => ({ kind: 'breakdown', entries: t.topReferrers.map((r) => ({ label: r.host || DIRECT_REFERRER_LABEL, value: r.visits })) }), notFetchedBreakdown),
 };

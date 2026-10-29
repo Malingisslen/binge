@@ -19,7 +19,21 @@ describe('historyIds', () => {
     expect(historyIds(['2026-10-01', '2026-10-08'], '2026-10-01', '2026-10-08')).toEqual(['2026-10-01', '2026-10-08']);
   });
 
-  it('caps at the newest HISTORY_READ_LIMIT ids', () => {
+  it('spreads HISTORY_READ_LIMIT picks evenly over a longer range: first and last day kept, same picks every time', () => {
+    const day = (i: number) => new Date(Date.UTC(2026, 0, 1) + i * 86_400_000).toISOString().slice(0, 10);
+    const ids = Array.from({ length: 2 * HISTORY_READ_LIMIT + 1 }, (_, i) => day(i));
+    const out = historyIds(ids, '2026-01-01', '2026-12-31');
+    expect(out).toHaveLength(HISTORY_READ_LIMIT);
+    expect(out[0]).toBe(day(0));
+    expect(out[out.length - 1]).toBe(day(2 * HISTORY_READ_LIMIT));
+    expect(new Set(out).size).toBe(HISTORY_READ_LIMIT);
+    expect(out).toEqual([...out].sort());
+    expect(historyIds([...ids].reverse(), '2026-01-01', '2026-12-31')).toEqual(out);
+    // Every other day, not the newest 90.
+    expect(out[1]).toBe(day(2));
+  });
+
+  it('caps at HISTORY_READ_LIMIT ids', () => {
     const ids = Array.from({ length: HISTORY_READ_LIMIT + 5 }, (_, i) => `2026-01-${String(i + 1).padStart(2, '0')}`);
     // not real calendar days past 31, but lexicographic order is what the helper sorts on
     const out = historyIds(ids, '2026-01-01', '2026-01-99');

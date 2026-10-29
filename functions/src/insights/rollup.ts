@@ -42,8 +42,9 @@ const PAGE_SIZE = 2000;
 
 // BIN-326: keep dated history bounded. insights/{YYYY-MM-DD} is written every
 // run; without a sweep it grows one doc/day forever against the 25 SEK cap.
-// 90 days is plenty for the Fas-2 trend charts.
-const RETENTION_DAYS = 90;
+// A year plus a margin, so the curves can show a whole year against the year
+// before; the API samples a long range down to HISTORY_READ_LIMIT reads (history.ts).
+const RETENTION_DAYS = 400;
 
 /** Upper bound on the second-week cohort read (BIN-1442). Hitting it marks the
  *  rollup partial rather than reporting a figure computed on a cut-off cohort. */
