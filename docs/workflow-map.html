@@ -1604,7 +1604,7 @@
     {
       "id": "flow-follow-notify",
       "label": "Follow → \"följer dig nu\" notice",
-      "description": "FollowButton writes the follower's following doc and the mirrored followers doc in the recipient's tree in one batch. A Firestore trigger on the mirror tells the recipient who started following them: a card in the bell and, when the recipient has push on, an FCM push, both linking to the follower's profile. The trigger trusts only the document id for who followed and reads the name from the follower's own profile with the Admin SDK. Two markers in followPushes hold the notice back: a pair marker per (recipient, follower) for the follow/unfollow/follow loop, and a per-recipient marker that caps notices per hour. The windows, the cap and the freshness check live in functions/src/followPush/logic.ts. The follow itself always lands.",
+      "description": "FollowButton writes the follower's following doc and the mirrored followers doc in the recipient's tree in one batch. A Firestore trigger on the mirror tells the recipient who started following them: a card in the bell and, when the recipient has push on, an FCM push, both linking to the follower's profile. The trigger trusts only the document id for who followed and reads the name from the follower's own profile with the Admin SDK, but names the follower only when the recipient may read their publicProfiles doc (public profile, or the follower has the recipient as a friend); otherwise the notice says 'Någon följer dig nu' and links to Vänner. Two markers in followPushes hold the notice back: a pair marker per (recipient, follower) for the follow/unfollow/follow loop, and a per-recipient marker that caps notices per hour. The windows, the cap and the freshness check live in functions/src/followPush/logic.ts. The follow itself always lands.",
       "covers": [
         "onFollowCreate"
       ],
@@ -1626,14 +1626,14 @@
         {
           "from": "cf-follow-push",
           "to": "firestore",
-          "payload": "getAll(users/{recipientUid}, users/{recipientUid}/blocked/{followerUid}, users/{followerUid}). Nothing is sent when: the follower is the recipient; followedAt is missing or older than the freshness window (an admin copy such as the account-restore script, not a tap); the recipient profile is missing; notificationSettings.followNotify is an explicit false; the recipient has blocked the follower; the follower has no profile. Then one transaction reads followPushes/{recipientUid}_{followerUid} {lastPushedAt} and followPushes/{recipientUid} {windowStartedAt, count, lastPushedAt} and stamps both only when the notice may go: not within the pair window, and under the hourly cap. Both are sealed by a deny-all rule and reaped by retentionCleanup.",
+          "payload": "getAll(users/{recipientUid}, users/{recipientUid}/blocked/{followerUid}, users/{followerUid}, users/{followerUid}/friends/{recipientUid}). Nothing is sent when: the follower is the recipient; followedAt is missing or older than the freshness window (an admin copy such as the account-restore script, not a tap); the recipient profile is missing; notificationSettings.followNotify is an explicit false; the recipient has blocked the follower; the follower has no profile. Then one transaction reads followPushes/{recipientUid}_{followerUid} {lastPushedAt} and followPushes/{recipientUid} {windowStartedAt, count, lastPushedAt} and stamps both only when the notice may go: not within the pair window, and under the hourly cap. Both are sealed by a deny-all rule and reaped by retentionCleanup.",
           "transport": "Admin SDK reads + transaction",
           "verified": true
         },
         {
           "from": "cf-follow-push",
           "to": "firestore",
-          "payload": "create users/{recipientUid}/notifications/follow-{eventId} {kind:'system', title:'Ny följare', body:'{namn} följer dig nu', actionUrl:'/user/{username}/' or '/my/friends/' without a valid handle, read:false, createdAt}. The name is the follower's displayName with control characters removed and cut to a maximum length, else @username, else 'Någon'.",
+          "payload": "create users/{recipientUid}/notifications/follow-{eventId} {kind:'system', title:'Ny följare', body:'{namn} följer dig nu', actionUrl:'/user/{username}/' or '/my/friends/' without a valid handle, read:false, createdAt}. followerVisibleTo mirrors the publicProfiles read rule (defaultVisibility 'public', isPublic true, or the friends doc read above); when it is false the body is 'Någon följer dig nu' and actionUrl '/my/friends/'. Otherwise the name is the follower's displayName with control characters removed and cut to a maximum length, else @username, else 'Någon'.",
           "transport": "Admin SDK write",
           "verified": true
         },
@@ -1647,7 +1647,7 @@
         {
           "from": "cf-sendPush",
           "to": "fcm-sw",
-          "payload": "push notification (tab closed); click opens the follower's profile",
+          "payload": "push notification (tab closed); click opens the notice's actionUrl: the follower's profile, or Vänner",
           "transport": "FCM / Web Push",
           "verified": true
         }
