@@ -6,8 +6,9 @@
  *   2. Authorization: Bearer <INSIGHTS_TOKEN>    → matches the secret (URL-token fallback).
  *
  * On success: reads insights/daily (1 read), the askBingeStats and eventStats day docs in
- * the range, and merges them into an InsightsData JSON response. Never does heavy
- * Firestore work per request.
+ * the range, the dated history, and the Cloudflare Web Analytics aggregates (traffic.ts),
+ * and merges them into an InsightsData JSON response. Never does heavy Firestore work
+ * per request.
  */
 
 import * as crypto from 'crypto';
@@ -20,10 +21,16 @@ import { readAskBingeStats } from './askbinge';
 import { readEventStats } from './eventStats';
 import { computeWindowDeltas, pickBaselineId } from './window';
 import { historyIds, toHistoryPoint } from './history';
+import { readTraffic } from './traffic';
 import { stockholmDayId } from '../askbinge/logic';
 import type { HistoryPoint, InsightsData, RangeInfo, RollupData } from './types';
 
 const INSIGHTS_TOKEN = defineSecret('INSIGHTS_TOKEN');
+// Cloudflare Web Analytics (traffic.ts). Read-only analytics token; the values are
+// bound to the function and never echoed in a response or a log line.
+const CF_ANALYTICS_TOKEN = defineSecret('CF_ANALYTICS_TOKEN');
+const CF_ACCOUNT_ID = defineSecret('CF_ACCOUNT_ID');
+const CF_SITE_TAG = defineSecret('CF_SITE_TAG');
 
 function safeEqual(a: string, b: string): boolean {
   const bufA = Buffer.from(a);
@@ -154,7 +161,7 @@ async function readHistory(ids: readonly string[], range: RangeInfo): Promise<Hi
 export const apiInsights = onRequest(
   {
     region: 'europe-west1',
-    secrets: [INSIGHTS_TOKEN],
+    secrets: [INSIGHTS_TOKEN, CF_ANALYTICS_TOKEN, CF_ACCOUNT_ID, CF_SITE_TAG],
     cors: false,
   },
   async (req, res) => {
@@ -169,12 +176,13 @@ export const apiInsights = onRequest(
     const range = parseRange(req.query as Record<string, unknown>);
 
     const ids = await listInsightIds();
-    const [rollup, eventStats, baseline, history, askBinge] = await Promise.all([
+    const [rollup, eventStats, baseline, history, askBinge, traffic] = await Promise.all([
       readRollup(),
       readEventStats(range),
       ids ? readBaseline(ids, range.from) : Promise.resolve(null),
       ids ? readHistory(ids, range) : Promise.resolve(null),
       readAskBingeStats(range),
+      readTraffic(range),
     ]);
 
     const window = rollup
@@ -190,9 +198,10 @@ export const apiInsights = onRequest(
       askBinge,
       window,
       history,
+      traffic,
       // Ett intervall utan eventStats-dokument är "inte mätt", inget fel — bara ett läsfel
       // gör svaret partiellt.
-      partial: rollup === null || rollup.partial || eventStats.failed || history === null,
+      partial: rollup === null || rollup.partial || eventStats.failed || history === null || traffic === null,
     };
 
     res.set('Cache-Control', 'private, max-age=300');

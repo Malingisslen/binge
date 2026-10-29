@@ -6,6 +6,7 @@ import type { MetricKey, Explanation } from './types';
  */
 const SNAPSHOT = 'Ögonblicksbild från den senaste beräkningen, en gång per dygn. Följer inte datumväljaren.';
 const TREND = 'Den lilla kurvan under talet visar samma siffra dag för dag i vald period, ur de dagliga beräkningarna. Den ritas först när perioden har minst sju beräknade dagar.';
+const TRAFFIC = 'Räknas av ett skript från Cloudflare i besökarens webbläsare, utan cookies och utan att någon enskild besökare följs; Binge hämtar bara summorna. Siffrorna är ungefärliga: Cloudflare uppskattar ur ett urval av sidvisningarna, annonsblockerare och avstängd JavaScript räknas inte, och robotar kan slinka med. Dagarna går efter UTC, så en sen kväll i Sverige hamnar på rätt dag men en tidig natt på dagen före. Läs nivån över tid, och lägg inte ihop den med Binges egna händelseräkningar längre upp.';
 const EVENTS = 'Samma person tre gånger räknas som 3. Händelser räknas sedan mätningen startade (datumet står i verktygsraden); dagar före det syns inte.';
 
 export const EXPLANATIONS: Record<MetricKey, Explanation> = {
@@ -233,5 +234,37 @@ export const EXPLANATIONS: Record<MetricKey, Explanation> = {
     howCalculated: 'Varje gång ett tolkat filter tas bort räknas dess typ, sorterat fallande.',
     whyImportant: 'En borttagning är ett kvitto på att Binge gissade fel. Dominerar en typ så övertriggar den regeln.',
     source: 'Firestore (Fråga Binge-räknare)',
+  },
+
+  // ── Besök (Cloudflare Web Analytics) ──────────────────────────────────────
+  visits: {
+    whatIsIt: 'Antal besök på binge.nu i perioden. Ett besök är en sidvisning som inte kom från en annan sida på binge.nu. Samma person som kommer tillbaka en annan dag ger ett nytt besök, så det här är inte antal unika besökare.',
+    howCalculated: `${TRAFFIC} Ett besök räknas när hänvisaren är tom eller en annan sajt; klick inne i Binge räknas som sidvisningar i samma besök.`,
+    whyImportant: 'Hur många som hittar hit, oavsett om de skapar konto.',
+    source: 'Cloudflare Web Analytics',
+  },
+  pageViews: {
+    whatIsIt: 'Antal sidvisningar på binge.nu i perioden.',
+    howCalculated: `${TRAFFIC} Varje laddad sida räknas en gång; en person som klickar runt ger många sidvisningar.`,
+    whyImportant: 'Kvoten mot Besök visar hur mycket folk tittar runt när de väl är här.',
+    source: 'Cloudflare Web Analytics',
+  },
+  visitsTrend: {
+    whatIsIt: 'Besök dag för dag i perioden.',
+    howCalculated: `${TRAFFIC} Samma räkning som Besök, uppdelad per dag.`,
+    whyImportant: 'Toppar visar när något delades eller nämndes någonstans.',
+    source: 'Cloudflare Web Analytics',
+  },
+  topPages: {
+    whatIsIt: 'Vilka sidor som visades flest gånger i perioden.',
+    howCalculated: `${TRAFFIC} Sidvisningar per sökväg, de tio största. Listan är en egen fråga till Cloudflare och summerar inte till Sidvisningar.`,
+    whyImportant: 'Visar vad folk faktiskt tittar på, också sådant som inte kräver konto.',
+    source: 'Cloudflare Web Analytics',
+  },
+  topReferrers: {
+    whatIsIt: 'Vilka sajter besöken kom från.',
+    howCalculated: `${TRAFFIC} Besök per hänvisande sajt, de tio största; listan summerar inte till Besök. "Direkt eller okänd" är adressfältet, ett bokmärke, en app eller en webbläsare som inte skickar hänvisare.`,
+    whyImportant: 'Visar var det lönar sig att synas.',
+    source: 'Cloudflare Web Analytics',
   },
 };

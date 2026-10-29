@@ -40,6 +40,11 @@ export function previousRange(current: RangeInfo): RangeInfo | null {
  */
 export function previousWindowProblem(def: MetricDef, current: InsightsData, previous: InsightsData | null): string | null {
   if (!previous) return 'ingen jämförelse: förra perioden kunde inte hämtas';
+  // Traffic needs only its own block, so a traffic metric is judged on that before
+  // the blanket partial flag: a failed history read must not hide the visits comparison.
+  if (def.source === 'traffic') {
+    return previous.traffic ? null : 'ingen jämförelse: förra periodens besök kunde inte hämtas';
+  }
   if (previous.partial) return 'ingen jämförelse: förra perioden kunde inte hämtas helt';
   if (def.source === 'events') {
     if (!previous.events) return 'ingen jämförelse: förra perioden är inte räknad';

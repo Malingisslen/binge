@@ -130,6 +130,14 @@ export default function RootLayout({
             __html: `try{var m=localStorage.getItem('binge:theme')||'system';var d=m==='dark'||(m==='system'&&window.matchMedia('(prefers-color-scheme:dark)').matches);if(d)document.documentElement.dataset.theme='dark'}catch(_){}`,
           }}
         />
+        {/* Cloudflare Web Analytics: cookiefri besöksräkning (integritetspolicyn §4, §8).
+            Token är publik — den pekar bara ut sajten. Manuell snippet, inte Cloudflares
+            automatiska injektion, så CSP:n i firebase.json kan lista exakt två värdar. */}
+        <script
+          defer
+          src="https://static.cloudflareinsights.com/beacon.min.js"
+          data-cf-beacon='{"token": "65955cff16924f96be1b2608d5ab44b2"}'
+        />
       </head>
       <body suppressHydrationWarning>
         <script

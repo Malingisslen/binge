@@ -45,7 +45,17 @@ export const MISSING = {
   notMeasured: 'inte mätt',
   tooFewAccounts: 'för få konton än',
   tooFewSearches: 'för få sökningar än',
+  notFetched: 'kunde inte hämtas',
 } as const;
+
+// ── Besök (Cloudflare Web Analytics) ─────────────────────────────────────────
+// `traffic` är null när Cloudflare inte kunde läsas (svaret är då delvis): rutan säger
+// det i stället för att visa noll. Saknas fältet helt är funktionen inte driftsatt än.
+const notFetchedScalar: MetricValue = { kind: 'scalar', value: NaN, missing: MISSING.notFetched };
+const notFetchedBreakdown: MetricValue = { kind: 'breakdown', entries: [], missing: MISSING.notFetched };
+const notFetchedSeries: MetricValue = { kind: 'series', points: [], missing: MISSING.notFetched };
+/** Cloudflare lämnar hänvisaren tom vid direktbesök och när webbläsaren inte skickar någon. */
+export const DIRECT_REFERRER_LABEL = 'Direkt eller okänd';
 
 /** Under så här många sökningar visas ingen andel: en procent på ett par sökningar är inget mönster. */
 export const MIN_SEARCHES_FOR_RATE = 10;
@@ -308,4 +318,20 @@ export const DATA_RESOLVERS: Record<MetricKey, (data: InsightsData) => MetricVal
       value: c.count,
     })),
   }),
+
+  // ── Besök ─────────────────────────────────────────────────────────────────
+  visits: (d) => (d.traffic ? scalar(d.traffic.visits) : notFetchedScalar),
+  pageViews: (d) => (d.traffic ? scalar(d.traffic.pageViews) : notFetchedScalar),
+  visitsTrend: (d) =>
+    d.traffic
+      ? { kind: 'series', points: d.traffic.daily.map((p) => ({ x: p.date, y: p.visits })) }
+      : notFetchedSeries,
+  topPages: (d) =>
+    d.traffic
+      ? { kind: 'breakdown', entries: d.traffic.topPages.map((p) => ({ label: p.path, value: p.pageViews })) }
+      : notFetchedBreakdown,
+  topReferrers: (d) =>
+    d.traffic
+      ? { kind: 'breakdown', entries: d.traffic.topReferrers.map((r) => ({ label: r.host || DIRECT_REFERRER_LABEL, value: r.visits })) }
+      : notFetchedBreakdown,
 };

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { DATA_RESOLVERS, MISSING, MIN_TREND_POINTS } from './resolvers';
+import { DATA_RESOLVERS, DIRECT_REFERRER_LABEL, MISSING, MIN_TREND_POINTS } from './resolvers';
 import type { InsightsData } from '../insights.types';
 
 function emptyData(over: Partial<InsightsData> = {}): InsightsData {
@@ -427,5 +427,46 @@ describe('kurvor för ögonblicksbilder (history, steg 3)', () => {
       const v = DATA_RESOLVERS[key](d);
       expect(v.kind === 'scalar' && v.trend).toBeUndefined();
     }
+  });
+});
+
+describe('traffic resolvers (Cloudflare Web Analytics) — inte hämtat är aldrig noll', () => {
+  const traffic = {
+    visits: 12, pageViews: 30,
+    daily: [{ date: '2026-10-01', visits: 5, pageViews: 10 }, { date: '2026-10-02', visits: 7, pageViews: 20 }],
+    topPages: [{ path: '/', pageViews: 20 }, { path: '/kalender', pageViews: 10 }],
+    topReferrers: [{ host: '', visits: 9 }, { host: 'google.com', visits: 3 }],
+  };
+
+  it('every traffic metric says "kunde inte hämtas" when traffic is null or absent', () => {
+    for (const d of [emptyData({ traffic: null }), emptyData()]) {
+      const visits = DATA_RESOLVERS.visits(d);
+      expect(visits.kind === 'scalar' && Number.isNaN(visits.value)).toBe(true);
+      expect(visits.missing).toBe(MISSING.notFetched);
+      expect(DATA_RESOLVERS.pageViews(d).missing).toBe(MISSING.notFetched);
+      expect(DATA_RESOLVERS.visitsTrend(d).missing).toBe(MISSING.notFetched);
+      expect(DATA_RESOLVERS.topPages(d).missing).toBe(MISSING.notFetched);
+      expect(DATA_RESOLVERS.topReferrers(d).missing).toBe(MISSING.notFetched);
+    }
+  });
+
+  it('a fetched zero is a measured zero: 0 with no missing reason, unlike a failed read', () => {
+    const d = emptyData({ traffic: { visits: 0, pageViews: 0, daily: [], topPages: [], topReferrers: [] } });
+    expect(DATA_RESOLVERS.visits(d)).toEqual({ kind: 'scalar', value: 0 });
+    expect(DATA_RESOLVERS.visitsTrend(d)).toEqual({ kind: 'series', points: [] });
+    expect(DATA_RESOLVERS.topPages(d)).toEqual({ kind: 'breakdown', entries: [] });
+  });
+
+  it('reads the sums, the per-day curve by visits, and the pages by path, with no missing reason', () => {
+    const d = emptyData({ traffic });
+    expect(DATA_RESOLVERS.visits(d)).toEqual({ kind: 'scalar', value: 12 });
+    expect(DATA_RESOLVERS.pageViews(d)).toEqual({ kind: 'scalar', value: 30 });
+    expect(DATA_RESOLVERS.visitsTrend(d)).toEqual({ kind: 'series', points: [{ x: '2026-10-01', y: 5 }, { x: '2026-10-02', y: 7 }] });
+    expect(DATA_RESOLVERS.topPages(d)).toEqual({ kind: 'breakdown', entries: [{ label: '/', value: 20 }, { label: '/kalender', value: 10 }] });
+  });
+
+  it('an empty referring host is labelled as direct or unknown, a named host keeps its name', () => {
+    const v = DATA_RESOLVERS.topReferrers(emptyData({ traffic }));
+    expect(v.kind === 'breakdown' && v.entries).toEqual([{ label: DIRECT_REFERRER_LABEL, value: 9 }, { label: 'google.com', value: 3 }]);
   });
 });

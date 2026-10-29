@@ -21,9 +21,11 @@ export type MetricKey =
   | 'ratingsHistogram'
   // Fråga Binge (NL-sök, BIN-176)
   | 'askSearches' | 'askZeroRate' | 'askLowConfidenceRate'
-  | 'askResultBuckets' | 'askStrandingFilters' | 'askRemovedChips';
+  | 'askResultBuckets' | 'askStrandingFilters' | 'askRemovedChips'
+  // Besök (Cloudflare Web Analytics)
+  | 'visits' | 'pageViews' | 'visitsTrend' | 'topPages' | 'topReferrers';
 
-export type MetricCategory = 'now' | 'period' | 'engagement' | 'library' | 'ask';
+export type MetricCategory = 'now' | 'period' | 'engagement' | 'library' | 'ask' | 'traffic';
 
 export type MetricFormat =
   | { kind: 'number'; decimals?: number }
@@ -34,8 +36,11 @@ export interface MetricDef {
   label: string;
   category: MetricCategory;
   format: MetricFormat;
-  /** 'events' = räknas ur eventStats; rutan visar enheten "händelser", inte personer. */
-  source?: 'events';
+  /**
+   * 'events' = räknas ur eventStats; rutan visar enheten "händelser", inte personer.
+   * 'traffic' = Cloudflare Web Analytics; jämförelsen kräver bara förra periodens `traffic`.
+   */
+  source?: 'events' | 'traffic';
   /** Ögonblicksbild ur senaste rollupen: följer inte datumväljaren och jämförs aldrig med en förra period. */
   snapshot?: true;
   /** Periodsumma som får en jämförelse mot föregående lika långa fönster (se comparison.ts). */

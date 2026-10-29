@@ -128,3 +128,24 @@ describe('compare', () => {
     expect(compare(METRICS.totalUsers, { kind: 'scalar', value: 5 }, { kind: 'scalar', value: 4 }, withClicks(1), data())).toBeNull();
   });
 });
+
+describe('previousWindowProblem for traffic metrics (Cloudflare Web Analytics)', () => {
+  const current = data({ range: { preset: '7d', from: '2026-10-01', to: '2026-10-08' } });
+  const traffic = { visits: 1, pageViews: 1, daily: [], topPages: [], topReferrers: [] };
+
+  it('refuses when the previous period has no traffic, and ignores the event counter entirely', () => {
+    expect(previousWindowProblem(METRICS.visits, current, data({ traffic: null, events: null })))
+      .toBe('ingen jämförelse: förra periodens besök kunde inte hämtas');
+    expect(previousWindowProblem(METRICS.pageViews, current, data({ events: null })))
+      .toBe('ingen jämförelse: förra periodens besök kunde inte hämtas');
+  });
+
+  it('is fine with traffic present, even when the previous period has no event counts', () => {
+    expect(previousWindowProblem(METRICS.visits, current, data({ traffic, events: null, eventsSince: null }))).toBeNull();
+  });
+
+  it('is fine with traffic present even when the previous period is partial for another reason', () => {
+    expect(previousWindowProblem(METRICS.visits, current, data({ traffic, partial: true }))).toBeNull();
+    expect(previousWindowProblem(METRICS.providerClicks, current, data({ traffic, partial: true }))).toContain('kunde inte hämtas helt');
+  });
+});

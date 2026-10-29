@@ -85,6 +85,18 @@ export interface HistoryPoint {
   activeUsers30d?: number;
 }
 
+/**
+ * Besök ur Cloudflare Web Analytics över intervallet (traffic.ts). Bara aggregat:
+ * inga besökare, inga IP-adresser, bara summor per dag, sida och hänvisande värd.
+ */
+export interface TrafficData {
+  visits: number;
+  pageViews: number;
+  daily: { date: string; visits: number; pageViews: number }[];
+  topPages: { path: string; pageViews: number }[];
+  topReferrers: { host: string; visits: number }[]; // host '' = direkt / okänd hänvisare
+}
+
 export interface InsightsData {
   generatedAt: string; // ISO timestamp of this API response
   range: RangeInfo;
@@ -94,5 +106,6 @@ export interface InsightsData {
   askBinge: AskBingeData | null; // null if the read failed; zeroed if simply no data yet
   window: WindowDeltas | null; // null until at least one prior snapshot exists
   history: HistoryPoint[] | null; // dated snapshots in the range, oldest first; null = read failed
+  traffic: TrafficData | null; // Cloudflare Web Analytics; null = not fetched (secrets, network or query error)
   partial: boolean; // true if any source failed (frontend shows a ribbon)
 }

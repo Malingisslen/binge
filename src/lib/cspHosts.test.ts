@@ -56,6 +56,18 @@ describe('CSP i firebase.json släpper igenom de externa värdar koden använder
     for (const host of hosts) expect(allows(csp.get('connect-src'), host), host).toBe(true);
     expect(policy).toContain('Wikimedia Foundation');
   });
+
+  it('Cloudflare Web Analytics: the beacon host in script-src, its report host in connect-src, both named exactly', () => {
+    const hosts = hostsIn('src/app/layout.tsx');
+    expect(hosts).toContain('static.cloudflareinsights.com');
+    expect(allows(csp.get('script-src'), 'static.cloudflareinsights.com')).toBe(true);
+    // The beacon posts to cloudflareinsights.com/cdn-cgi/rum; the layout never names it.
+    expect(allows(csp.get('connect-src'), 'cloudflareinsights.com')).toBe(true);
+    for (const dir of ['script-src', 'connect-src']) {
+      expect((csp.get(dir) ?? []).filter((s) => s.includes('cloudflareinsights')).every((s) => !s.includes('*'))).toBe(true);
+    }
+    expect(policy).toContain('Cloudflare Web Analytics');
+  });
 });
 
 describe('Plausible är borttaget (BIN-1438)', () => {

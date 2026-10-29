@@ -31,7 +31,7 @@ describe('snapshot and comparable flags', () => {
 
   it('the comparable roster is the period sums', () => {
     expect([...comparableKeys].sort()).toEqual([
-      'newUsers', 'priceCheckSaves', 'priceCheckTotals', 'providerClicks', 'shareClicks', 'signins', 'titlesAdded',
+      'newUsers', 'pageViews', 'priceCheckSaves', 'priceCheckTotals', 'providerClicks', 'shareClicks', 'signins', 'titlesAdded', 'visits',
     ]);
   });
 

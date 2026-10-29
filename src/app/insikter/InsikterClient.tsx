@@ -11,7 +11,6 @@ import { useInsightsData } from './state/useInsightsData';
 import { InsightsProvider } from './state/InsightsContext';
 import { Button } from '@/components/ui/Button';
 import { eyebrowClass } from '@/components/ui/Eyebrow';
-import { cardClass } from '@/components/ui/Card';
 import {
   Toolbar, MetricGrid, MetricTile, TimeSeriesChart, Donut,
   Histogram, TopList, ExplainDrawer,
@@ -201,10 +200,16 @@ export default function InsikterClient() {
           </div>
         </Section>
 
-        <Section title="Besök">
-          <p className={cardClass('p-3 text-sm text-ink-2')}>
-            Besök, sidvisningar och varifrån folk kommer mäts inte — Binge sätter inga cookies.
-          </p>
+        <Section title="Besök i perioden" intro="Cookiefri räkning i webbläsaren via Cloudflare Web Analytics. Inga besökare följs; bara summor per dag, sida och varifrån folk kom. Ungefärliga tal (urval, annonsblockerare räknas inte, dagar efter UTC): följ nivån över tid, och lägg dem inte ihop med räkningarna ovan.">
+          <MetricGrid>
+            <MetricTile metricKey="visits" />
+            <MetricTile metricKey="pageViews" />
+          </MetricGrid>
+          <div className="grid lg:grid-cols-2 gap-3 mt-3">
+            <TimeSeriesChart metricKey="visitsTrend" />
+            <TopList metricKey="topPages" />
+            <TopList metricKey="topReferrers" />
+          </div>
         </Section>
 
         {/* ExplainDrawer self-renders from the ?metric URL param */}

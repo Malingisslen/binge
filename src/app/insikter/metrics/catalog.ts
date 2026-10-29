@@ -56,6 +56,13 @@ export const METRICS: Record<MetricKey, MetricDef> = {
   askResultBuckets: { key: 'askResultBuckets', label: 'Antal träffar per sökning', category: 'ask', format: { kind: 'number' } },
   askStrandingFilters: { key: 'askStrandingFilters', label: 'Filterkombinationer som ger noll träffar', category: 'ask', format: { kind: 'number' } },
   askRemovedChips: { key: 'askRemovedChips', label: 'Filter folk oftast tar bort', category: 'ask', format: { kind: 'number' } },
+
+  // ── Besök (Cloudflare Web Analytics) ──────────────────────────────────────
+  visits: { key: 'visits', label: 'Besök', category: 'traffic', format: { kind: 'number' }, source: 'traffic', comparable: true },
+  pageViews: { key: 'pageViews', label: 'Sidvisningar', category: 'traffic', format: { kind: 'number' }, source: 'traffic', comparable: true },
+  visitsTrend: { key: 'visitsTrend', label: 'Besök per dag', category: 'traffic', format: { kind: 'number' }, source: 'traffic' },
+  topPages: { key: 'topPages', label: 'Topp 10 sidor', category: 'traffic', format: { kind: 'number' }, source: 'traffic' },
+  topReferrers: { key: 'topReferrers', label: 'Topp 10 varifrån folk kommer', category: 'traffic', format: { kind: 'number' }, source: 'traffic' },
 };
 
 export const METRIC_KEYS = Object.keys(METRICS) as MetricKey[];

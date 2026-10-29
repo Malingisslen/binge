@@ -10,8 +10,8 @@ export default function IntegritetPage() {
   return (
     <LegalPageShell
       title="Integritetspolicy"
-      lastUpdated="2026-10-11"
-      version="1.16"
+      lastUpdated="2026-10-29"
+      version="1.17"
       toc={[
         { id: 'ansvarig', label: '1. Vem är ansvarig?' },
         { id: 'uppgifter', label: '2. Vilka uppgifter vi samlar in' },
@@ -95,7 +95,7 @@ export default function IntegritetPage() {
         <h2>3. Varför vi behandlar uppgifterna (rättslig grund)</h2>
         <ul>
           <li><strong>Avtal (GDPR art. 6.1.b)</strong> — för att leverera tjänsten: spara din bevakningslista, visa rätt streaming-info, köra rådgivaren, och visa de grupper du är medlem i vilka streamingtjänster du har, eftersom det är så gruppen räknar ut vad ni kan se tillsammans, och visa gruppens medlemmar de betyg du sätter på gruppens titlar (se §10).</li>
-          <li><strong>Berättigat intresse (art. 6.1.f)</strong> — för driftlogg, felsökning, felövervakning, bot- och missbruksskydd, samt cookiefri räkning av hur funktioner används, som bara sparas som en summa per dag (se §4). Också för att visa en svensk biografi från Wikipedia på personsidor: intresset är att sidan ska vara begriplig på svenska, och Wikimedia får ingenting om ditt konto (se §4).</li>
+          <li><strong>Berättigat intresse (art. 6.1.f)</strong> — för driftlogg, felsökning, felövervakning, bot- och missbruksskydd, samt cookiefri räkning av hur funktioner används och av besök via Cloudflare Web Analytics (se §4). Du kan invända mot båda räkningarna (se §7). Också för att visa en svensk biografi från Wikipedia på personsidor: intresset är att sidan ska vara begriplig på svenska, och Wikimedia får ingenting om ditt konto (se §4).</li>
           <li><strong>Samtycke (art. 6.1.a)</strong> — för Hushåll, den frivilliga delningen av prenumerationskostnader i grupper (se §10), för att spela en trailer från YouTube, där ditt tryck på spela är samtycket (se §4 och §8), samt eventuella framtida inslag som kräver samtycke, t.ex. marknadsföring eller cookie-baserad spårning. Inga marknadsföringsinslag används idag.</li>
         </ul>
         <p>
@@ -116,6 +116,7 @@ export default function IntegritetPage() {
           <li><strong>Google reCAPTCHA / Firebase App Check</strong> (bot- och missbruksskydd) — laddar ett skript från Google som analyserar webbläsarsignaler för att skilja människor från bottar. Sätter en teknisk token och skickar signaler till Google.</li>
           <li><strong>Egen räkning av hur funktioner används</strong> — Binge räknar själv till exempel att någon klickade vidare till en tjänst eller delade en titel. Det sparas bara som en summa per dag, utan koppling till dig eller ditt konto, och inga cookies sätts. Som vid alla anrop till våra servrar kan din IP-adress finnas i Googles tekniska serverloggar i högst 30 dagar.</li>
           <li><strong>Cloudflare</strong> (CDN, DNS, brandvägg) — behandlar trafikdata under Cloudflares DPA.</li>
+          <li><strong>Cloudflare Web Analytics</strong> (besöksräkning) — ett skript från Cloudflare räknar sidvisningar, vilken sida som visades och vilken sajt besöket kom från. Enligt Cloudflare sätts inga cookies och ingen spårning sker via IP-adress eller webbläsare; IP-adressen behandlas tekniskt i anropet, som vid alla anrop. Vi ser bara summor per dag, sida och hänvisande sajt. Uppgifterna lagras i USA (se §5) under Cloudflares DPA.</li>
           <li><strong>The Movie Database (TMDB)</strong> — vi hämtar film- och serieinformation och affischer från TMDB. Det sker direkt från din webbläsare, så TMDB får din IP-adress, viss webbläsarinformation och det du skriver när du söker. TMDB får inte din profil, ditt konto eller vad du tittar på.</li>
           <li><strong>Sentry</strong> (felövervakning) — tar emot teknisk information när något går fel i appen, så vi kan hitta och rätta buggar. Personuppgifter som e-post, användarnamn och användar-id rensas bort innan felrapporten skickas. Sentry är amerikanskt och anlitar i sin tur egna underleverantörer (bl.a. Intercom och OpenAI); aktuell lista finns hos <a href="https://sentry.io/legal/subprocessors/" target="_blank" rel="noopener noreferrer">Sentry</a>.</li>
           <li><strong>Google Gemini</strong> (används av &quot;Fråga Binge&quot;) — om vår vanliga sökning inte lyckas tolka din fritextfråga skickas själva frågetexten till Googles Gemini-modell, som tolkar den till en sökning. Ingen profil- eller tittardata skickas med, bara din formulering. Frågetexten skickas i stunden för tolkningen. Som EES-kund omfattas behandlingen av Googles databehandlaravtal (DPA), och frågetexten används inte för att träna eller förbättra Googles modeller. Google Gemini är amerikanskt.</li>
@@ -143,8 +144,8 @@ export default function IntegritetPage() {
         <p>
           Vissa leverantörer är amerikanska eller kan vid enskilda operationer
           överföra data till USA: Google (inklusive reCAPTCHA och Gemini),
-          Sentry och Cloudflare.
-          För dessa överföringar gäller EU-kommissionens
+          Sentry och Cloudflare. Besöksräkningen i Cloudflare Web Analytics
+          lagras i USA. För dessa överföringar gäller EU-kommissionens
           standardavtalsklausuler (SCC) och, där det är tillämpligt, EU–US Data
           Privacy Framework, med kompletterande skyddsåtgärder. TMDB är
           amerikanskt och tar emot din IP-adress, webbläsarinformation och
@@ -166,6 +167,7 @@ export default function IntegritetPage() {
           <li>Tips från vänner raderas automatiskt när de är 90 dagar gamla. Det gäller också tips du skickat till någon annan, som ligger kvar hos mottagaren tills dess även om du tar bort ditt konto.</li>
           <li>Tillsammans-sessioner raderas automatiskt senast ett dygn efter att de blivit 7 dagar gamla.</li>
           <li>Teknisk logg-data i Firebase/Cloudflare sparas enligt respektive leverantörs standardtid (typiskt 30 dagar).</li>
+          <li>Besöksräkningen i Cloudflare Web Analytics (summor per dag, sida och hänvisande sajt, se §4) sparas hos Cloudflare enligt Cloudflares standardtid.</li>
           <li>
             <strong>Om du tar bort ditt konto</strong> raderar vi all din data
             permanent och omedelbart: profil, bevakningslista, avsnittsframsteg,
@@ -338,11 +340,6 @@ export default function IntegritetPage() {
             </ul>
           </li>
         </ul>
-        <p>
-          Om vi i framtiden lägger till statistik- eller marknadsförings-
-          verktyg kommer vi först be om ditt samtycke enligt LEK
-          (lagen om elektronisk kommunikation).
-        </p>
       </section>
 
       <section id="alder">
