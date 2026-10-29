@@ -8,6 +8,10 @@ const MIN_VOTES = 50;
 // by the Swedish reader this screen is for.
 const LATIN = /\p{Script=Latin}/u;
 
+// The reader is in Sweden, so "released by today" is judged on the Stockholm date,
+// not the UTC one that lags it by an hour or two after midnight.
+const STOCKHOLM_DAY = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Stockholm' });
+
 function isReleased(item: TMDBSearchResult, today: string): boolean {
   const date = item.release_date || item.first_air_date;
   return !!date && date <= today;
@@ -19,7 +23,7 @@ export function pickCalibrationCandidates(
   size: number,
   now: Date = new Date(),
 ): TMDBSearchResult[] {
-  const today = now.toISOString().slice(0, 10);
+  const today = STOCKHOLM_DAY.format(now);
   const seen = new Set<string>();
   return results
     .filter(r =>

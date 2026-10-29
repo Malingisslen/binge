@@ -74,4 +74,12 @@ describe('pickCalibrationCandidates', () => {
   it('drops a person result', () => {
     expect(pickCalibrationCandidates([make({ id: 16, media_type: 'person' as TMDBSearchResult['media_type'] })], 10, NOW)).toEqual([]);
   });
+
+  it('counts today as the Stockholm date, so a title out today here is in just after midnight', () => {
+    // 2026-10-09 23:30 UTC is 2026-10-10 01:30 in Stockholm.
+    const lateUtc = new Date('2026-10-09T23:30:00Z');
+    const outToday = make({ id: 999, release_date: '2026-10-10' });
+    expect(pickCalibrationCandidates([outToday], 5, lateUtc).map(r => r.id)).toEqual([999]);
+    expect(pickCalibrationCandidates([outToday], 5, new Date('2026-10-09T21:30:00Z'))).toEqual([]);
+  });
 });
