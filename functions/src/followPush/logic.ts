@@ -165,6 +165,23 @@ function validUsername(raw: unknown): string | null {
   return typeof raw === 'string' && USERNAME_RE.test(raw) ? raw : null;
 }
 
+/**
+ * Whether the recipient may see who the follower is. Mirrors the read rule on
+ * `publicProfiles/{uid}` in firestore.rules (public by `defaultVisibility` or
+ * `isPublic`, or the reader is in the follower's `friends`): this function reads
+ * the private `users/{uid}` with admin rights, so it must repeat that check, or a
+ * private profile's name reaches someone the app shows as "Privat användare".
+ */
+export function followerVisibleTo(
+  followerProfile: Record<string, unknown> | null,
+  followerHasRecipientAsFriend: boolean,
+): boolean {
+  if (followerProfile === null) return false;
+  return followerProfile.defaultVisibility === 'public'
+    || followerProfile.isPublic === true
+    || followerHasRecipientAsFriend;
+}
+
 /** The follower's name as the notice shows it, read from their own profile. */
 export function followerDisplayName(followerProfile: Record<string, unknown>): string {
   const displayName = clean(followerProfile.displayName);
@@ -185,7 +202,15 @@ export interface FollowNotice {
   actionUrl: string;
 }
 
-export function buildFollowNotice(followerProfile: Record<string, unknown>): FollowNotice {
+/**
+ * One notice for both the inbox card and the push, so the two never disagree on
+ * whether the follower is named. A follower the recipient may not see reads the
+ * same as one with no name at all, so the wording does not reveal the setting.
+ */
+export function buildFollowNotice(followerProfile: Record<string, unknown>, visible: boolean): FollowNotice {
+  if (!visible) {
+    return { title: 'Ny följare', body: `${FALLBACK_FOLLOWER_NAME} följer dig nu`, actionUrl: '/my/friends/' };
+  }
   return {
     title: 'Ny följare',
     body: `${followerDisplayName(followerProfile)} följer dig nu`,

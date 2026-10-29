@@ -11553,3 +11553,14 @@ verbatim:
     functions:availableNotify`), never a blanket `--only functions`. Rules/indexes go FIRST when new client code
     depends on them (a CG export query deployed before its rules makes export AND deletion throw for everyone);
     AFTER hosting when a new constraint would deny writes from the OLD still-running client (BIN-540).
+
+### 2026-10-29 — server-side notice bypassed the publicProfiles read gate (BIN-1459)
+`onFollowCreate` (functions/src/followPush) read `users/{followerUid}` with admin rights and wrote
+the follower's displayName and username into the followed person's inbox card and push. The app
+shows that name only through `publicProfiles/{uid}`, readable when the profile is public
+(`defaultVisibility == 'public'` or `isPublic == true`) or the reader is in the owner's `friends`.
+So a private follower was named to a non-friend from 542cf856 until the fix. Found in an
+after-the-fact review of a commit that reached main with no recorded review. Fix: pure
+`followerVisibleTo` mirroring the rule, a fourth read of `users/{follower}/friends/{recipient}`,
+"Någon följer dig nu" otherwise; a rules-text test pins the clauses and a source scan pins the
+call site in index.ts.

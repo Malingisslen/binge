@@ -115,3 +115,7 @@ Read only when the staged diff touches this chapter's paths (see .claude/shared-
   uid comes from the doc PATH (`d.ref.parent.parent?.id`), never client content.
 - Bare-tmdbId keying collides movie and TV — grouping keys, state doc ids, FCM `tag`s, inbox ids and action
   URLs all need `mediaTypeDocId`; fixing one means grepping every other collection on that bare id (BIN-523).
+- **An Admin-SDK function that shows another user anything read from a private doc must repeat that
+  data's client read gate** — admin reads skip the rules. `onFollowCreate` put a private follower's
+  name in the recipient's notice that `publicProfiles` would have hidden (BIN-1459). Pin the mirror
+  with a test against the rules text AND a source scan of the call site, where it regresses.

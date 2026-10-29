@@ -19,6 +19,7 @@ import {
   followNoticeSkipReason,
   followPushPairId,
   followPushRateId,
+  followerVisibleTo,
   gateFollowNotice,
   recipientPushEnabled,
   type FollowGate,
@@ -39,11 +40,12 @@ export const onFollowCreate = onDocumentCreated(
     const { recipientUid, followerUid } = event.params;
     const db = getFirestore();
 
-    // One round trip for the three reads every decision below needs.
-    const [recipientSnap, blockedSnap, followerSnap] = await db.getAll(
+    // One round trip for the four reads every decision below needs.
+    const [recipientSnap, blockedSnap, followerSnap, friendSnap] = await db.getAll(
       db.collection('users').doc(recipientUid),
       db.collection('users').doc(recipientUid).collection('blocked').doc(followerUid),
       db.collection('users').doc(followerUid),
+      db.collection('users').doc(followerUid).collection('friends').doc(recipientUid),
     );
     const recipientProfile = recipientSnap.exists ? (recipientSnap.data() ?? {}) : null;
     const followerProfile = followerSnap.exists ? (followerSnap.data() ?? {}) : null;
@@ -91,7 +93,7 @@ export const onFollowCreate = onDocumentCreated(
       return;
     }
 
-    const notice = buildFollowNotice(followerProfile);
+    const notice = buildFollowNotice(followerProfile, followerVisibleTo(followerProfile, friendSnap.exists));
 
     // The markers are the load-bearing write; the card and the push after them are
     // best-effort and fail on their own, so one going wrong never stops the other.

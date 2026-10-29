@@ -759,6 +759,12 @@ mottagarmarkören räknar notiser inom en timme och håller tillbaka dem över t
 - **Själva notisen** är ett kort i `users/{uid}/notifications` och följer de korten: med i
   exporten, raderas med kontot och efter 90 dagar. Mottagaren stänger av den under
   Inställningar, Notiser (`notificationSettings.followNotify`).
+- **Följarens namn** står i kortet och pushen bara om mottagaren får läsa följarens
+  `publicProfiles`-dokument (`followerVisibleTo` i `functions/src/followPush/logic.ts`).
+  För det läser funktionen följarens `users/{följarUid}` och
+  `users/{följarUid}/friends/{mottagarUid}`. Annars står det "Någon följer dig nu" och
+  kortet länkar till Vänner. Kort skrivna före den spärren, sedan `542cf856`, kan bära namnet
+  på en privat följare; se BIN-1459.
 
 ### Push-tokens för konton Auth inte längre erkänner (BIN-848, 2026-08-10)
 

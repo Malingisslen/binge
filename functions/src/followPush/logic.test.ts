@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import {
   FALLBACK_FOLLOWER_NAME,
@@ -14,6 +16,7 @@ import {
   followPushRateId,
   followerDisplayName,
   followerProfileUrl,
+  followerVisibleTo,
   gateFollowNotice,
   isStaleFollowPushMarker,
   recipientPushEnabled,
@@ -241,10 +244,64 @@ describe('followerProfileUrl and buildFollowNotice', () => {
   });
 
   it('says who follows you, in Swedish', () => {
-    expect(buildFollowNotice({ displayName: 'Anna', username: 'anna' })).toEqual({
+    expect(buildFollowNotice({ displayName: 'Anna', username: 'anna' }, true)).toEqual({
       title: 'Ny följare',
       body: 'Anna följer dig nu',
       actionUrl: '/user/anna/',
     });
+  });
+
+  it('names nobody and links to Vänner when the recipient may not see the follower', () => {
+    expect(buildFollowNotice({ displayName: 'Anna', username: 'anna' }, false)).toEqual({
+      title: 'Ny följare',
+      body: 'Någon följer dig nu',
+      actionUrl: '/my/friends/',
+    });
+  });
+
+  it('a hidden follower reads exactly like a follower with no name, so the setting does not show', () => {
+    expect(buildFollowNotice({ displayName: 'Anna', username: 'anna' }, false).body)
+      .toBe(buildFollowNotice({}, true).body);
+  });
+});
+
+// Mirrors the publicProfiles read rule in firestore.rules.
+describe('followerVisibleTo', () => {
+  const PRIVATE = { displayName: 'Anna', defaultVisibility: 'friends', isPublic: false };
+
+  it('a public profile is visible, by defaultVisibility or by the older isPublic flag', () => {
+    expect(followerVisibleTo({ ...PRIVATE, defaultVisibility: 'public' }, false)).toBe(true);
+    expect(followerVisibleTo({ ...PRIVATE, isPublic: true }, false)).toBe(true);
+  });
+
+  it('a private profile is visible only to someone it has as a friend', () => {
+    expect(followerVisibleTo(PRIVATE, true)).toBe(true);
+    expect(followerVisibleTo(PRIVATE, false)).toBe(false);
+  });
+
+  it('missing fields, a truthy non-true isPublic and a missing profile fail closed', () => {
+    expect(followerVisibleTo({ displayName: 'Anna' }, false)).toBe(false);
+    expect(followerVisibleTo({ ...PRIVATE, isPublic: 'true' }, false)).toBe(false);
+    expect(followerVisibleTo({ ...PRIVATE, defaultVisibility: 'Public' }, false)).toBe(false);
+    expect(followerVisibleTo(null, true)).toBe(false);
+  });
+
+  it('the publicProfiles read rule still has exactly the clauses this helper mirrors', () => {
+    const rules = readFileSync(join(__dirname, '..', '..', '..', 'firestore.rules'), 'utf8');
+    const block = rules.slice(rules.indexOf('match /publicProfiles/{uid}'));
+    const read = block.slice(block.indexOf('allow read:'), block.indexOf('allow create'));
+    expect(read).toContain(".data.get('defaultVisibility', '') == 'public'");
+    expect(read).toContain(".data.get('isPublic', false) == true");
+    expect(read).toContain('/users/$(uid)/friends/$(request.auth.uid)');
+    expect(read.match(/\|\|/g)).toHaveLength(3);
+  });
+
+  // index.ts has no test of its own, so pin the call site: the check only protects
+  // if the trigger reads the follower's friends doc and passes its answer through.
+  it('onFollowCreate reads the follower-side friends doc and builds the notice from the check', () => {
+    const src = readFileSync(join(__dirname, 'index.ts'), 'utf8').replace(/\s+/g, ' ');
+    expect(src).toContain("db.collection('users').doc(followerUid).collection('friends').doc(recipientUid)");
+    expect(src).toContain('buildFollowNotice(followerProfile, followerVisibleTo(followerProfile, friendSnap.exists))');
+    expect(src.match(/buildFollowNotice\(/g)).toHaveLength(1);
   });
 });
