@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   clearPersistedViewState, isPersistedViewKey, libraryFiltersKey, librarySortKey, groupSortKey,
-  RECOMMENDATION_FILTERS_KEY, PERSISTED_VIEW_CLEARED_EVENT, FILTERS_PREFIX, SORT_PREFIX,
+  RECOMMENDATION_FILTERS_KEY, toWatchFiltersKey, toWatchSortKey, PERSISTED_VIEW_CLEARED_EVENT, FILTERS_PREFIX, SORT_PREFIX,
 } from './persistedViewState';
 
 // Keys that belong to the device or to a decision recorded elsewhere, and must survive a
@@ -23,7 +23,7 @@ describe('clearPersistedViewState', () => {
   it('removes every saved filter and sort, interleaved with keys it must keep', () => {
     const doomed = [
       libraryFiltersKey('all'), librarySortKey('sedd'), groupSortKey('g1'),
-      RECOMMENDATION_FILTERS_KEY, libraryFiltersKey('vill-se'),
+      RECOMMENDATION_FILTERS_KEY, libraryFiltersKey('vill-se'), toWatchFiltersKey, toWatchSortKey,
     ];
     // Interleaved, so an index-based removal loop would skip some.
     KEPT.forEach((k, i) => {

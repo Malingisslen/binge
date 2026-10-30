@@ -17,6 +17,8 @@ const viewKey = (key: string) => key as PersistedViewKey;
 export const libraryFiltersKey = (status: string | null | undefined) => viewKey(`${FILTERS_PREFIX}library:${status ?? 'all'}`);
 export const librarySortKey = (status: string | null | undefined) => viewKey(`${SORT_PREFIX}library:${status ?? 'all'}`);
 export const groupSortKey = (groupId: string) => viewKey(`${SORT_PREFIX}group:${groupId}`);
+export const toWatchFiltersKey = viewKey(`${FILTERS_PREFIX}to-watch`);
+export const toWatchSortKey = viewKey(`${SORT_PREFIX}to-watch`);
 export const RECOMMENDATION_FILTERS_KEY = viewKey(`${FILTERS_PREFIX}recommendations`);
 
 export function isPersistedViewKey(key: string): boolean {

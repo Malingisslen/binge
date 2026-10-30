@@ -25,7 +25,7 @@ type NavItem = {
   matches?: readonly string[];
 };
 
-const BIBLIOTEK: NavItem = { label: 'Bibliotek', href: '/my/all/', matches: ['/my/all', '/my/series', '/my/films', '/my/vill-se', '/my/avbrutna', '/my/lists'] };
+const BIBLIOTEK: NavItem = { label: 'Bibliotek', href: '/my/all/', matches: ['/my/all', '/my/series', '/my/films', '/my/vill-se', '/my/nytt-for-dig', '/my/avbrutna', '/my/lists'] };
 const KALENDER: NavItem = { label: 'Kalender', href: '/calendar/' };
 const HEM: NavItem = { label: 'Hem', href: '/' };
 
