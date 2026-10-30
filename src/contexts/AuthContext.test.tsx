@@ -1664,6 +1664,98 @@ describe('AuthContext — a session ending forgets the return path (BIN-732)', (
   });
 });
 
+// A shared browser kept the departing visitor's saved filters, the library one holding
+// their own tag names. Swept on the same transition and in the same click as the return
+// path above, and on deletion.
+describe('AuthContext — a session ending sweeps saved filters and sorts', () => {
+  const FILTER_KEY = 'binge:filters:library:all';
+  const SORT_KEY = 'binge:sort:group:g-hemlig-123';
+  const seed = () => {
+    window.localStorage.setItem(FILTER_KEY, '{"tags":["min hemliga tagg"]}');
+    window.localStorage.setItem(SORT_KEY, '{"key":"title","dir":"asc"}');
+    window.localStorage.setItem('binge:theme', 'dark');
+  };
+  const swept = () =>
+    window.localStorage.getItem(FILTER_KEY) === null && window.localStorage.getItem(SORT_KEY) === null;
+
+  beforeEach(() => window.localStorage.clear());
+
+  it('clears them when uid goes set→null, with no signOut() call in this tab', async () => {
+    renderAuth();
+    await login({ username: 'malin' });
+    seed();
+
+    await act(async () => {
+      authObj.currentUser = null;
+      authCallback!(null);
+    });
+
+    expect(swept()).toBe(true);
+    expect(window.localStorage.getItem('binge:theme')).toBe('dark');
+  });
+
+  it("leaves a guest's own filters alone on a signed-out boot", async () => {
+    renderAuth();
+    await act(async () => {});
+    seed();
+
+    await act(async () => { authCallback!(null); });
+
+    expect(window.localStorage.getItem(FILTER_KEY)).not.toBeNull();
+  });
+
+  it('signOut() clears them itself, without waiting for the listener', async () => {
+    renderAuth();
+    await login({ username: 'malin' });
+    seed();
+
+    await act(async () => { await ctx!.signOut(); });
+
+    expect(swept()).toBe(true);
+    expect(signOutMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('a storage that refuses removal does not stop the sign-out', async () => {
+    renderAuth();
+    await login({ username: 'malin' });
+    seed();
+    const refuse = vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => { throw new Error('blocked'); });
+
+    try {
+      await act(async () => { await expect(ctx!.signOut()).resolves.toBeUndefined(); });
+    } finally {
+      refuse.mockRestore();
+    }
+
+    expect(signOutMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('a storage the page cannot reach does not stop the sign-out', async () => {
+    renderAuth();
+    await login({ username: 'malin' });
+    const unreachable = vi.spyOn(window, 'localStorage', 'get').mockImplementation(() => { throw new Error('SecurityError'); });
+
+    try {
+      await act(async () => { await expect(ctx!.signOut()).resolves.toBeUndefined(); });
+    } finally {
+      unreachable.mockRestore();
+    }
+
+    expect(signOutMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('they are gone even when the sign-out itself then fails', async () => {
+    renderAuth();
+    await login({ username: 'malin' });
+    seed();
+    signOutMock.mockRejectedValueOnce(new Error('network'));
+
+    await act(async () => { await expect(ctx!.signOut()).rejects.toThrow('network'); });
+
+    expect(swept()).toBe(true);
+  });
+});
+
 // BIN-748 — BIN-732's rule reads the tab's MEMORY of whether a session existed,
 // and a tab starting mid-sign-out has none. Another tab (or a revoked/expired
 // token) ends the session while this one re-boots — a reload, a frozen tab
@@ -2036,11 +2128,13 @@ describe('AuthContext — deleteAccount checks session freshness before erasing'
   it('sweeps the invite cache and the push-token pointer once the account is gone', async () => {
     await signedInProvider();
     authTime.current = minutesAgo(1);
+    window.localStorage.setItem('binge:filters:library:all', '{"tags":["x"]}');
 
     await act(async () => { await ctx!.deleteAccount(); });
 
     expect(inviteCache.clearAllInviteTokens).toHaveBeenCalledTimes(1);
     expect(pushCleanup.clearLocalPushTokenId).toHaveBeenCalledWith('u1');
+    expect(window.localStorage.getItem('binge:filters:library:all')).toBeNull();
     // `.at(-1)` throughout: these counters are global and monotonic, and not every
     // mock in this file is cleared between tests, so `[0]` can pick up a call from an
     // earlier one and compare two different deletions.
@@ -2066,6 +2160,19 @@ describe('AuthContext — deleteAccount checks session freshness before erasing'
 
     expect(inviteCache.clearAllInviteTokens).not.toHaveBeenCalled();
     expect(pushCleanup.clearLocalPushTokenId).not.toHaveBeenCalled();
+  });
+
+  it('keeps the saved filters of an account that is still there', async () => {
+    await signedInProvider();
+    authTime.current = minutesAgo(1);
+    window.localStorage.setItem('binge:filters:library:all', '{"tags":["x"]}');
+    deleteUserMock.mockRejectedValueOnce(new Error('network'));
+
+    await act(async () => {
+      await expect(ctx!.deleteAccount()).rejects.toThrow();
+    });
+
+    expect(window.localStorage.getItem('binge:filters:library:all')).not.toBeNull();
   });
 
   it('does NOT call disablePushForUser from the deletion path', async () => {

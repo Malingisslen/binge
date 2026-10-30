@@ -531,6 +531,14 @@ uttryckligen anropas, och de två sorterna städas olika:
     Logga ut — kan inte göra skrivningen alls, eftersom den kräver en levande token.
     Alla tre lämnar samma tillstånd som före ändringen; ingen av dem gör det värre.
 
+- **localStorage, sparade vyer (BIN-1462, 2026-10-29)** — `binge:filters:*` och
+  `binge:sort:*` (bibliotekets filter med egna taggnamn, rekommendationsfiltret,
+  sorteringen per biblioteksvy och per grupp-id) svepas med prefix av
+  `clearPersistedViewState()` vid **utloggning** i varje flik där sessionen tar slut,
+  och vid **radering**. En besökare som aldrig loggat in behåller sina. Kvar: en flik som
+  stängts med levande session, eller en session som gått ut eller återkallats medan
+  webbläsaren var stängd, svepas först vid nästa utloggning i den webbläsaren.
+
 **Medvetet kvarlämnade, genomgångna och beslutade** (inte "ännu inte tittade på"):
 `binge-session-pid-{sessionId}` / `binge-my-sessions`, `binge:wasLoggedIn` och
 `binge:rec-rotation:{rowKey}`. Motivering: bekvämlighet — att rensa sessionslistan hade

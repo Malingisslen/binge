@@ -16,6 +16,7 @@ import { Eyebrow } from '@/components/ui/Eyebrow';
 import { SortableTh } from '@/components/ui/SortableTh';
 import { thClass } from '@/components/ui/tableHead';
 import { usePersistedState } from '@/hooks/usePersistedState';
+import { groupSortKey } from '@/lib/persistedViewState';
 import {
   averageRating, compareGroupItems, DEFAULT_GROUP_SORT, defaultGroupSortDir, sanitizeGroupSort, type GroupSort, type GroupSortKey,
 } from '@/lib/groups/groupWatchlistSort';
@@ -44,7 +45,7 @@ export function GroupWatchlistTable({
 }) {
   // The chosen sort survives a reload, per group.
   const [storedSort, setSort] = usePersistedState<GroupSort>(
-    `binge:sort:group:${groupId}`, DEFAULT_GROUP_SORT, sanitizeGroupSort,
+    groupSortKey(groupId), DEFAULT_GROUP_SORT, sanitizeGroupSort,
   );
   const clickColumn = (key: GroupSortKey) => setSort(prev => (
     key === prev.key ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: defaultGroupSortDir(key) }

@@ -10,8 +10,8 @@ export default function IntegritetPage() {
   return (
     <LegalPageShell
       title="Integritetspolicy"
-      lastUpdated="2026-10-29"
-      version="1.18"
+      lastUpdated="2026-10-30"
+      version="1.19"
       toc={[
         { id: 'ansvarig', label: '1. Vem är ansvarig?' },
         { id: 'uppgifter', label: '2. Vilka uppgifter vi samlar in' },
@@ -327,6 +327,12 @@ export default function IntegritetPage() {
                 <code>binge:deletionStarted:&lt;id&gt;</code> — sätts om en
                 kontoradering påbörjats men inte slutförts, så att appen kan slutföra
                 den.
+              </li>
+              <li>
+                <code>binge:filters:…</code> och <code>binge:sort:…</code> — dina sparade
+                filter och sorteringar i biblioteket, rekommendationerna och grupperna,
+                inklusive namn på egna taggar och grupp-id. De lämnar aldrig din enhet och
+                tas bort när du loggar ut eller raderar kontot i den webbläsaren.
               </li>
               <li>
                 <code>binge:rec-rotation:…</code> — vilka rekommendationer du nyss

@@ -6,6 +6,7 @@ import { GENRE_OPTIONS } from '@/lib/tmdb/genreLabels';
 import { getProvider, SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { usePersistedState } from '@/hooks/usePersistedState';
+import { RECOMMENDATION_FILTERS_KEY } from '@/lib/persistedViewState';
 import {
   DEFAULT_SHARED_FILTERS,
   countSharedFilters,
@@ -57,7 +58,6 @@ function countryName(code: string): string {
 }
 
 type StoredFilters = Pick<FilterState, keyof SharedFilters | 'mediaType' | 'country' | 'sort'>;
-const STORAGE_KEY = 'binge:filters:recommendations';
 
 export function sanitizeStored(raw: unknown): StoredFilters {
   const r = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
@@ -85,7 +85,7 @@ export function useRecommendationFilters(profile: {
   hiddenCountries: readonly string[];
   myProviders: readonly number[];
 }) {
-  const [stored, setStored] = usePersistedState<StoredFilters>(STORAGE_KEY, STORED_DEFAULT, sanitizeStored);
+  const [stored, setStored] = usePersistedState<StoredFilters>(RECOMMENDATION_FILTERS_KEY, STORED_DEFAULT, sanitizeStored);
   const [searchText, setSearchText] = useState('');
   const filters: FilterState = useMemo(
     () => withoutEmptyMine(

@@ -37,6 +37,7 @@ import type { ProviderCampaign } from '@/lib/advisor/campaignPricing';
 import { daysBetween, todayIso } from '@/lib/utils';
 import { clearNextPath } from '@/lib/nextPath';
 import { clearPendingAdd } from '@/lib/pendingAdd';
+import { clearPersistedViewState } from '@/lib/persistedViewState';
 import { markTabSession } from '@/lib/tabSession';
 import { markDeletionStarted, clearDeletionStarted, isDeletionStarted, deletionMarkerKey } from '@/lib/deletionMarker';
 import { mergeUserDoc, assertProfileWritable } from '@/lib/firebase/userDocWrite';
@@ -785,6 +786,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             hadSessionRef.current = false;
             clearNextPath();
             clearPendingAdd();
+            // Saved filters hold the departing visitor's own tag names. Under the
+            // transition, so a guest who never signed in keeps theirs.
+            clearPersistedViewState();
           }
           setUser(null);
           setUid(null);
@@ -1064,6 +1068,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // never lands at all if `firebaseSignOut` throws.
     clearNextPath();
     clearPendingAdd();
+    clearPersistedViewState();
     // BIN-844: unregister push BEFORE the sign-out, and capture the uid first.
     //
     // Two orderings are load-bearing and neither is obvious:
@@ -1822,6 +1827,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // clearAllInviteTokens' own comment for the owner-cost that decided it.
     clearAllInviteTokens();
     clearLocalPushTokenId(id);
+    // Already swept if the listener saw the session end; repeated here because the
+    // deletion must not depend on that.
+    clearPersistedViewState();
   }, [runDeletionCascade]);
 
 

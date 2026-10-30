@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type SetStateAction } from 'react';
+import { PERSISTED_VIEW_CLEARED_EVENT, type PersistedViewKey } from '@/lib/persistedViewState';
 
 /**
  * useState that survives a reload through localStorage. The stored value is read
@@ -8,7 +9,7 @@ import { useCallback, useEffect, useRef, useState, type SetStateAction } from 'r
  * unreadable (private mode, blocked storage, an old shape) falls back via sanitize.
  */
 export function usePersistedState<T>(
-  key: string,
+  key: PersistedViewKey,
   initial: T,
   sanitize: (raw: unknown) => T,
 ): [T, (next: SetStateAction<T>) => void] {
@@ -26,6 +27,23 @@ export function usePersistedState<T>(
     loadedKey.current = key;
     setValue(stored);
     // initial and sanitize are fixed per call site; re-reading on their identity would loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+
+  // A session ending clears the stored value (clearPersistedViewState). The view in memory
+  // is reset with it, so the departing visitor's choice is neither shown to the next one nor
+  // written back by their first click.
+  useEffect(() => {
+    const reset = () => setValue(initial);
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === null || (e.key === key && e.newValue === null)) reset();
+    };
+    window.addEventListener(PERSISTED_VIEW_CLEARED_EVENT, reset);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener(PERSISTED_VIEW_CLEARED_EVENT, reset);
+      window.removeEventListener('storage', onStorage);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 

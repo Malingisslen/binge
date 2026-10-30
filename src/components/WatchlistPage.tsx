@@ -53,6 +53,7 @@ import {
   sharedChipsFor,
 } from '@/components/filters/TitleFilters';
 import { usePersistedState } from '@/hooks/usePersistedState';
+import { librarySortKey, libraryFiltersKey } from '@/lib/persistedViewState';
 import { useLibraryRuntimes } from '@/hooks/useLibraryRuntimes';
 import { formatLibraryDate, pluralSv } from '@/lib/utils';
 import { toneForId } from '@/lib/duotone';
@@ -148,7 +149,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
   const [mediaFilter, setMediaFilter] = useState<MediaFilter>('all');
   // The chosen sort survives a reload, per library view, like the filters below.
   const [storedSort, setStoredSort] = usePersistedState<LibrarySort>(
-    `binge:sort:library:${status ?? 'all'}`, DEFAULT_LIBRARY_SORT, sanitizeLibrarySort,
+    librarySortKey(status), DEFAULT_LIBRARY_SORT, sanitizeLibrarySort,
   );
   const chooseSort = (key: SortKey) => setStoredSort({ key, dir: defaultSortDir(key) });
   const clickColumn = (key: SortKey) => setStoredSort(prev => (
@@ -156,7 +157,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
   ));
   // Filters survive a reload, per library view.
   const [storedLibFilters, setLibFiltersRaw] = usePersistedState<LibraryFilters>(
-    `binge:filters:library:${status ?? 'all'}`, DEFAULT_LIBRARY_FILTERS, sanitizeLibraryFilters,
+    libraryFiltersKey(status), DEFAULT_LIBRARY_FILTERS, sanitizeLibraryFilters,
   );
   const showAddedCol = status !== 'sedd';
   const showWatchedCol = status === 'sedd' || !status;
