@@ -379,11 +379,11 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
     return (
       <>
         <header>
-          <div className="crumb">Bibliotek · {labelForStatus(status)}</div>
+          <div className="crumb">Mitt Binge · {labelForStatus(status)}</div>
           <h1 className="page-h1">{title}</h1>
         </header>
         <LibrarySubnav status={status} />
-        <LoadingView variant="grid" label="Laddar biblioteket…" />
+        <LoadingView variant="grid" label="Laddar Mitt Binge…" />
       </>
     );
   }
@@ -403,7 +403,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
     return (
       <>
         <header>
-          <div className="crumb">Bibliotek · {labelForStatus(status)}</div>
+          <div className="crumb">Mitt Binge · {labelForStatus(status)}</div>
           <h1 className="page-h1">{title}</h1>
         </header>
         <LibrarySubnav status={status} />
@@ -427,7 +427,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
     <>
       <header>
         <div className="crumb">
-          Bibliotek · {labelForStatus(status)}{providerFilter ? ` · ${providerFilter.shortName}` : ''}{behindFilterActive ? ' · efter' : ''}
+          Mitt Binge · {labelForStatus(status)}{providerFilter ? ` · ${providerFilter.shortName}` : ''}{behindFilterActive ? ' · efter' : ''}
         </div>
         <h1 className="page-h1">{title}</h1>
         <p className="stand">{standfirst}</p>
@@ -482,7 +482,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
         <select
           value={sort}
           onChange={e => chooseSort(e.target.value as SortKey)}
-          aria-label="Sortera biblioteket"
+          aria-label="Sortera Mitt Binge"
           className="select"
         >
           <option value="updatedAt">Senast ändrad</option>
@@ -513,7 +513,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
             <input
               type="text"
               placeholder="sök titel…"
-              aria-label="Sök i biblioteket"
+              aria-label="Sök i Mitt Binge"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               spellCheck={false}
@@ -950,7 +950,7 @@ export function LibrarySubnav({ status, activeKey }: { status?: WatchStatus; act
     view.key ? view.key === activeKey : !activeKey && (status ?? null) === view.status;
 
   return (
-    <nav aria-label="Biblioteksvyer" className="flex flex-wrap gap-1.5 mt-3.5">
+    <nav aria-label="Vyer i Mitt Binge" className="flex flex-wrap gap-1.5 mt-3.5">
       {LIBRARY_VIEWS.map(view => {
         const active = isActive(view);
         return (

@@ -21,7 +21,7 @@ export function BibliotekSection() {
   if (!user) return null;
 
   return (
-    <SettingsSection title="Bibliotek">
+    <SettingsSection title="Mitt Binge">
       <p className="text-xs text-ink-3 mb-2">
         Har du ett lånekort? Välj din hemkommun, så visar vi vad som kan vara{' '}
         gratis via biblioteket (t.ex. Cineasterna). Vi kan inte se ditt lånesaldo

@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useToWatchCount } from '@/hooks/useToWatchCount';
 
 // The horizontal section nav that lives directly below the topbar on every
-// authenticated page. Order: Hem · Bibliotek · Kalender · Vänner · Rekommendationer ·
+// authenticated page. Order: Hem · Mitt Binge · Kalender · Vänner · Rekommendationer ·
 // Fråga Binge · Streamingrådgivaren.
 // Grupper is out of the menus while the feature is paused (plan round 2, decision 4).
 
@@ -20,7 +20,7 @@ type NavItem = {
 
 const ITEMS: readonly NavItem[] = [
   { label: 'Hem', href: '/' },
-  { label: 'Bibliotek', href: '/my/all/', matches: ['/my/all', '/my/series', '/my/films', '/my/vill-se', '/my/nytt-for-dig', '/my/avbrutna', '/my/lists'] },
+  { label: 'Mitt Binge', href: '/my/all/', matches: ['/my/all', '/my/series', '/my/films', '/my/vill-se', '/my/nytt-for-dig', '/my/avbrutna', '/my/lists'] },
   { label: 'Kalender', href: '/calendar/' },
   { label: 'Vänner', href: '/my/friends/', matches: ['/feed', '/user/'] },
   { label: 'Rekommendationer', href: '/recommendations/', matches: ['/kalibrera'] },
@@ -44,7 +44,7 @@ export default function Subnav() {
             aria-current={active ? 'page' : undefined}
           >
             {item.label}
-            {item.label === 'Bibliotek' && toWatch > 0 && (
+            {item.label === 'Mitt Binge' && toWatch > 0 && (
               <>
                 <span className="nav-count" aria-hidden="true">{toWatch > 99 ? '99+' : toWatch}</span>
                 <span className="sr-only">, {toWatch} att se</span>

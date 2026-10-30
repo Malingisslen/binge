@@ -59,7 +59,7 @@ describe('MobileTabBar (variant B)', () => {
     const bar = screen.getByRole('navigation', { name: 'Huvudmeny' });
     const names = Array.from(bar.children).map(el => el.textContent);
     expect(names[0]).toBe('Hem');
-    expect(names[1]).toBe('Bibliotek');
+    expect(names[1]).toBe('Mitt Binge');
     expect(names[2]).toBe('Sök');
     expect(names[3]).toBe('Kalender');
     expect(names[4]?.startsWith('Mer')).toBe(true);
@@ -130,8 +130,8 @@ describe('MobileTabBar (variant B)', () => {
     ['/feed/', 'Mer'],
     ['/user/anna/', 'Mer'],
     ['/settings/', 'Mer'],
-    ['/my/all/', 'Bibliotek'],
-    ['/my/series/', 'Bibliotek'],
+    ['/my/all/', 'Mitt Binge'],
+    ['/my/series/', 'Mitt Binge'],
     ['/calendar/', 'Kalender'],
     ['/savings/', 'Mer'],
   ])('on %s only %s is marked active', (path, expected) => {
@@ -175,11 +175,11 @@ describe('MobileTabBar (variant B)', () => {
   });
 });
 
-describe('the to-watch counter next to Bibliotek', () => {
+describe('the to-watch counter next to Mitt Binge', () => {
   it('shows how many titles wait on both the subnav and the tab bar', () => {
     toWatch.count = 12;
     render(<><Subnav /><MobileTabBar /></>);
-    expect(screen.getAllByRole('link', { name: /Bibliotek.*12 att se/ })).toHaveLength(2);
+    expect(screen.getAllByRole('link', { name: /Mitt Binge.*12 att se/ })).toHaveLength(2);
     expect(within(screen.getByRole('navigation', { name: 'Sektioner' })).getByText('12')).toBeTruthy();
   });
 

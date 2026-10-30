@@ -6,5 +6,5 @@ import { usePageMeta } from '@/hooks/usePageMeta';
 
 export default function AllPage() {
   usePageMeta({ title: 'Allt' });
-  return <AuthGuard><WatchlistPage title="Hela biblioteket" /></AuthGuard>;
+  return <AuthGuard><WatchlistPage title="Mitt Binge" /></AuthGuard>;
 }

@@ -17,10 +17,10 @@ describe('PageNotFound', () => {
     expect(screen.getByRole('searchbox', { name: 'Sök film eller serie' })).toHaveAttribute('name', 'q');
   });
 
-  it('links to Hem, Bibliotek and Streamingpriser', () => {
+  it('links to Hem, Mitt Binge and Streamingpriser', () => {
     render(<PageNotFound />);
     expect(screen.getByRole('link', { name: 'Hem' })).toHaveAttribute('href', '/');
-    expect(screen.getByRole('link', { name: 'Bibliotek' })).toHaveAttribute('href', expect.stringMatching(/^\/my\/all\/?$/));
+    expect(screen.getByRole('link', { name: 'Mitt Binge' })).toHaveAttribute('href', expect.stringMatching(/^\/my\/all\/?$/));
     expect(screen.getByRole('link', { name: 'Streamingpriser' })).toHaveAttribute('href', expect.stringMatching(/^\/streamingpriser\/?$/));
   });
 });

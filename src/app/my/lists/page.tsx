@@ -40,7 +40,7 @@ function ListsContent() {
   return (
     <div>
       <PageHeader
-        crumb="Bibliotek · Listor"
+        crumb="Mitt Binge · Listor"
         title="Mina listor"
         actions={lists.length === 0 ? undefined : (
           <Button

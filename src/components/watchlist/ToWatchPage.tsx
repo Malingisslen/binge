@@ -111,7 +111,7 @@ export default function ToWatchPage() {
 
   const header = (
     <PageHeader
-      crumb="Bibliotek · nytt för dig"
+      crumb="Mitt Binge · nytt för dig"
       title={TO_WATCH_TITLE}
       standfirst="Serier du följer men inte är ikapp på, och filmer du vill se."
     />
@@ -122,7 +122,7 @@ export default function ToWatchPage() {
       <>
         {header}
         <LibrarySubnav activeKey="nytt-for-dig" />
-        <LoadingView variant="grid" label="Laddar biblioteket…" />
+        <LoadingView variant="grid" label="Laddar Mitt Binge…" />
       </>
     );
   }

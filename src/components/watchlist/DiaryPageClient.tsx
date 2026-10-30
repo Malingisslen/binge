@@ -62,7 +62,7 @@ export default function DiaryPageClient() {
   return (
     <div>
       <PageHeader
-        crumb="Bibliotek"
+        crumb="Mitt Binge"
         title="Dagbok"
         standfirst={total > 0
           ? `${formatKr(total)} inlägg, senast först.`
