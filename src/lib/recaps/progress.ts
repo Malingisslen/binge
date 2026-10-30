@@ -92,12 +92,23 @@ export function nextToWatch(inventory: SeasonEpisodes, boundary: EpisodeRef): Ne
 /**
  * The inventory limited to episodes that have aired, so "next to watch" and the season meter never
  * count an episode that does not exist yet. TMDB's episode_count includes announced episodes.
- * A last-aired episode in season 0 (a special) says nothing about the numbered order, so then the
- * inventory is returned as is.
+ * The cut-off is never earlier than what the user has already watched: TMDB's last_episode_to_air
+ * can lag behind, and an episode the user has seen has by definition aired. A last-aired episode
+ * in season 0 (a special) says nothing about the numbered order, so then the inventory is returned
+ * as is.
  */
-export function capInventoryToAired(inventory: SeasonEpisodes, lastAired: EpisodeRef | null | undefined): SeasonEpisodes {
+export function capInventoryToAired(
+  inventory: SeasonEpisodes,
+  lastAired: EpisodeRef | null | undefined,
+  watchedThrough?: EpisodeRef | null,
+): SeasonEpisodes {
   if (!lastAired || lastAired.season < 1) return inventory;
+  const cut =
+    watchedThrough && (watchedThrough.season > lastAired.season
+      || (watchedThrough.season === lastAired.season && watchedThrough.episode > lastAired.episode))
+      ? watchedThrough
+      : lastAired;
   return inventory
-    .filter((s) => s.season <= lastAired.season)
-    .map((s) => (s.season === lastAired.season ? { ...s, episodes: s.episodes.filter((e) => e <= lastAired.episode) } : s));
+    .filter((s) => s.season <= cut.season)
+    .map((s) => (s.season === cut.season ? { ...s, episodes: s.episodes.filter((e) => e <= cut.episode) } : s));
 }

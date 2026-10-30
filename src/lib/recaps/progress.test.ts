@@ -112,6 +112,12 @@ describe('capInventoryToAired — only episodes that have aired', () => {
     expect(capInventoryToAired(inv, null)).toBe(inv);
     expect(capInventoryToAired(inv, { season: 0, episode: 4 })).toBe(inv);
   });
+  it('never cuts below what the user has already watched when TMDB lags behind', () => {
+    expect(capInventoryToAired(inv, { season: 1, episode: 3 }, { season: 2, episode: 2 })).toEqual([
+      { season: 1, episodes: [1, 2, 3] },
+      { season: 2, episodes: [1, 2] },
+    ]);
+  });
   it('leaves a caught-up user with no next episode', () => {
     const capped = capInventoryToAired(inv, { season: 2, episode: 2 });
     expect(nextToWatch(capped, { season: 2, episode: 2 })).toBeNull();

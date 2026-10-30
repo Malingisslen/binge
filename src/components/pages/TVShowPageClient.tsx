@@ -174,16 +174,18 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   const lastAired = show?.last_episode_to_air;
   const lastAiredSeason = lastAired?.season_number;
   const lastAiredEpisode = lastAired?.episode_number;
+  const fullInventory = useMemo(() => inventoryFromSeasons(show?.seasons), [show?.seasons]);
+  const recapBoundary = useMemo(
+    () => contiguousWatchedBoundary(fullInventory, isWatched),
+    [fullInventory, isWatched]
+  );
   const recapInventory = useMemo(
     () => capInventoryToAired(
-      inventoryFromSeasons(show?.seasons),
+      fullInventory,
       lastAiredSeason != null && lastAiredEpisode != null ? { season: lastAiredSeason, episode: lastAiredEpisode } : null,
+      recapBoundary,
     ),
-    [show?.seasons, lastAiredSeason, lastAiredEpisode],
-  );
-  const recapBoundary = useMemo(
-    () => contiguousWatchedBoundary(recapInventory, isWatched),
-    [recapInventory, isWatched]
+    [fullInventory, lastAiredSeason, lastAiredEpisode, recapBoundary],
   );
 
   const displayTitle = show ? preferOriginalTitle(show.name, show.original_name) : '';
