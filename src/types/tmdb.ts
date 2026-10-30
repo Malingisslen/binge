@@ -119,6 +119,7 @@ export interface TMDBTVShow {
   // Used for BIN-93's runtime lens (episode_run_time[0]).
   episode_run_time?: number[];
   status: string;
+  networks?: { id: number; name: string; origin_country?: string }[];
   seasons: TMDBSeason[];
   next_episode_to_air: TMDBEpisode | null;
   last_episode_to_air: TMDBEpisode | null;

@@ -1,11 +1,17 @@
 import { canonicalProviderId } from '@/lib/tmdb/providers';
 
+const SVT_PLAY_ID = 520;
+const SVT_NETWORK = /^SVT(\d+|\s|$)/i;
+
 /**
  * The SE `watch/providers` block as the watchlist denormalization needs to read it.
  * Structural, not `TMDBMovie | TMDBTVShow`: both detail types satisfy it, and the
  * helpers have no business knowing which one they were handed.
  */
 export interface SEWatchProvidersDetail {
+  // TV details only. Movies never carry it, so the SVT inference below never fires for them.
+  networks?: { name: string }[];
+  status?: string;
   'watch/providers'?: {
     results?: {
       SE?: {
@@ -58,15 +64,28 @@ export interface SEWatchProvidersDetail {
  *     title-page repair out for 60 days, so the advisor would keep reading the
  *     fallback on exactly the titles this split exists for.
  */
+/**
+ * TMDB's watch data (JustWatch) usually has no SVT Play entry for SVT's own programmes, so a
+ * running SVT show reads as "nowhere in Sweden" although it is free on svtplay.se. An SVT
+ * network on a show that is still running is the evidence we trust instead. Ended shows are
+ * excluded because SVT Play drops old programmes and we cannot see which ones are gone.
+ */
+function isRunningSvtShow(detail: SEWatchProvidersDetail): boolean {
+  return detail.status === 'Returning Series'
+    && (detail.networks ?? []).some(n => SVT_NETWORK.test(n.name));
+}
+
 function seCategoryIds(
   detail: SEWatchProvidersDetail,
   categories: ('flatrate' | 'free' | 'ads' | 'rent' | 'buy')[],
 ): number[] | undefined {
   const se = detail['watch/providers']?.results?.SE;
-  if (!se) return undefined;
-  return Array.from(new Set(
-    categories.flatMap(c => se[c] ?? []).map(p => canonicalProviderId(p.provider_id)),
-  ));
+  const ids = se
+    ? Array.from(new Set(categories.flatMap(c => se[c] ?? []).map(p => canonicalProviderId(p.provider_id))))
+    : undefined;
+  if (!categories.includes('free') || !isRunningSvtShow(detail)) return ids;
+  const withSvt = ids ?? [];
+  return withSvt.includes(SVT_PLAY_ID) ? withSvt : [...withSvt, SVT_PLAY_ID];
 }
 
 /** "Where can this be watched at all" — includes rent and buy. Feeds `providers`. */
