@@ -40,6 +40,7 @@ import { cardClass } from '@/components/ui/Card';
 const LOOK_AHEAD_DAYS = 60;
 
 const AdvisorTimeline = dynamic(() => import('@/components/savings/AdvisorTimeline'), { ssr: false });
+const LeftPerService = dynamic(() => import('@/components/savings/LeftPerService'), { ssr: false });
 const WillSeePerProvider = dynamic(() => import('@/components/savings/WillSeePerProvider'), { ssr: false });
 
 export default function SavingsPage() {
@@ -426,6 +427,8 @@ function SavingsContent() {
             <RotationPlanner advisor={advisor} />
 
             <RotationCalendar />
+
+            <LeftPerService />
 
             <UpcomingEpisodes />
 
