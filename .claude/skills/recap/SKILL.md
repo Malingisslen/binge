@@ -50,7 +50,7 @@ new. Cross-check absentees against `docs/recaps/unsourced-shows.json` too (logge
 unusable, skip without re-fetching Wikipedia) before treating them as real candidates.
 
 **Step B — build the candidate batch** using the existing priority order (below):
-regeneration backlog next-season pick, then uncovered `topTitles`, then TMDB-popularity
+gaps in already-covered shows (new seasons first, then v1 seasons to regenerate), then uncovered `topTitles`, then TMDB-popularity
 fallback — filtering every candidate against the freshly-refreshed manifest + the
 unsourced log, applying the same judgment calls (skip procedurals/soaps/sitcoms/kids
 content) documented under "TMDB popularity fallback" below. Stop once the batch hits a
@@ -223,11 +223,16 @@ regeneration of every existing show, spread across multiple autonomous loop runs
   filter every tier against it — this replaces one-by-one `recaps/{tmdbId}_index`
   checks, which is what made early 2026-07-24 runs slow (dozens of Firestore round
   trips to re-confirm shows already known covered).
-  1. **Regeneration backlog** — any show with `schemaVersion < 2` seasons still
-     pending (see "Regeneration" above). One candidate slot in the batch continues
-     it, one season per pass (a single agent can do several of that show's seasons
-     in one turn if it's small — see "chunk big shows" above — just never split one
-     show's seasons across separate PARALLEL agents).
+  1. **Gaps in already-covered shows** — the manifest's shows come first, before any
+     brand-new show: (a) a season TMDB lists as aired that has no boundary docs yet
+     (e.g. a new season of a covered show, like The Diplomat S4), and (b) seasons still
+     on `schemaVersion < 2` (see "Regeneration" above — a show with such seasons, e.g.
+     Grey's Anatomy, is an ordinary entry here, not a separate tier). Compare each
+     covered show's TMDB season list against the manifest and the per-season docs. A
+     show is ONE candidate slot per batch, doing its missing seasons one after another
+     (a single agent can do several of its seasons in one turn if the show is small —
+     see "chunk big shows" above — just never split one show's seasons across separate
+     PARALLEL agents).
   2. **binge's most-tracked** (insights `topTitles`, TV only, ranked by count desc),
      filtered against the manifest.
   3. **TMDB popularity fallback** (once tier 2 has no uncovered TV title left —
