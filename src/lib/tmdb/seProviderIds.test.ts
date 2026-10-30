@@ -133,3 +133,38 @@ describe('the two helpers disagree exactly where the advisor needs them to (BIN-
     expect(seSubscriptionProviderIdsForRefresh(amazon)).toEqual([119]);
   });
 });
+
+describe('SVT Play inferred from the SVT network (TMDB has no SVT Play offer for SVT programmes)', () => {
+  const SVT_PLAY = 520;
+  const running = { status: 'Returning Series', networks: [{ name: 'SVT1' }] };
+
+  it('adds SVT Play to both answers when a running SVT show has an empty SE block', () => {
+    const detail = { ...running, 'watch/providers': { results: { SE: {} } } };
+    expect(seProviderIdsForRefresh(detail)).toEqual([SVT_PLAY]);
+    expect(seSubscriptionProviderIdsForRefresh(detail)).toEqual([SVT_PLAY]);
+  });
+
+  it('adds SVT Play even when the SE block is absent', () => {
+    expect(seProviderIdsForRefresh(running)).toEqual([SVT_PLAY]);
+  });
+
+  it('does not duplicate SVT Play when TMDB already lists it', () => {
+    const detail = { ...running, 'watch/providers': { results: { SE: { flatrate: [{ provider_id: 493 }] } } } };
+    expect(seProviderIdsForRefresh(detail)).toEqual([SVT_PLAY]);
+  });
+
+  it('keeps other services next to the inferred one', () => {
+    const detail = { ...running, 'watch/providers': { results: { SE: { flatrate: [{ provider_id: NETFLIX }] } } } };
+    expect(seProviderIdsForRefresh(detail)).toEqual([NETFLIX, SVT_PLAY]);
+  });
+
+  it('does nothing for an ended SVT show', () => {
+    const detail = { status: 'Ended', networks: [{ name: 'SVT1' }], 'watch/providers': { results: { SE: {} } } };
+    expect(seProviderIdsForRefresh(detail)).toEqual([]);
+  });
+
+  it('does nothing for a non-SVT network', () => {
+    const detail = { status: 'Returning Series', networks: [{ name: 'SVTV Plus' }, { name: 'BBC One' }], 'watch/providers': { results: { SE: {} } } };
+    expect(seProviderIdsForRefresh(detail)).toEqual([]);
+  });
+});
