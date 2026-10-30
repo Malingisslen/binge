@@ -84,7 +84,7 @@ export function useMarkSeen() {
         showRating(`Betygsätt ${title}?`, (rating) => {
           void updateRating(mediaType, tmdbId, rating);
           trackEvent('rate_on_sedd', { mediaType });
-        });
+        }, { posterPath });
       } else if (counted) {
         show(`${title} — omtitt räknad`);
       } else {

@@ -105,7 +105,7 @@ describe('ToastProvider showRating (betyg-vid-sedd)', () => {
     expect(screen.queryByText('Betygsätt Dune?')).toBeNull();
   });
 
-  it('stäng-knappen avfärdar toasten utan att sätta betyg', () => {
+  it('klick utanför rutan avfärdar den utan att sätta betyg', () => {
     const onRate = vi.fn();
     render(
       <ToastProvider>
@@ -115,12 +115,12 @@ describe('ToastProvider showRating (betyg-vid-sedd)', () => {
     act(() => { fireEvent.click(screen.getByText('betygsätt')); });
     expect(screen.getByText('Betygsätt Dune?')).toBeTruthy();
 
-    act(() => { fireEvent.click(screen.getByRole('button', { name: 'Stäng' })); });
+    act(() => { fireEvent.click(screen.getByRole('dialog').parentElement!); });
     expect(screen.queryByText('Betygsätt Dune?')).toBeNull();
     expect(onRate).not.toHaveBeenCalled();
   });
 
-  it('självdör efter 10 s utan att anropa onRate', () => {
+  it('självdör efter 30 s utan att anropa onRate', () => {
     const onRate = vi.fn();
     render(
       <ToastProvider>
@@ -130,7 +130,7 @@ describe('ToastProvider showRating (betyg-vid-sedd)', () => {
     act(() => { fireEvent.click(screen.getByText('betygsätt')); });
     expect(screen.getByText('Betygsätt Dune?')).toBeTruthy();
 
-    act(() => { vi.advanceTimersByTime(10000); });
+    act(() => { vi.advanceTimersByTime(30000); });
     expect(screen.queryByText('Betygsätt Dune?')).toBeNull();
     expect(onRate).not.toHaveBeenCalled();
   });
