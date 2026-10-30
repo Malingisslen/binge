@@ -4,6 +4,10 @@ import {
   compareToWatchRows,
   lastSeenByShow,
   newestAiredDateByShow,
+  availabilityOf,
+  sanitizeToWatchFilters,
+  sanitizeToWatchSort,
+  DEFAULT_TO_WATCH_FILTERS,
   toWatchGroup,
 } from './toWatch';
 import type { WatchlistItem } from '@/types';
@@ -136,5 +140,29 @@ describe('compareToWatchRows other keys', () => {
       { ...rows[1], newestAirDate: null },
     ];
     expect([...withDates].sort(compareToWatchRows('newest')).map(r => r.item.title)).toEqual(['B', 'A']);
+  });
+});
+
+describe('availabilityOf', () => {
+  it('tells streaming, rent or buy only, not in Sweden, and not yet checked apart', () => {
+    expect(availabilityOf(mk({ providers: [8], subscriptionProviders: [8] }))).toBe('stream');
+    expect(availabilityOf(mk({ providers: [10], subscriptionProviders: [] }))).toBe('rent');
+    expect(availabilityOf(mk({ providers: [], providersCheckedAt: new Date(2026, 9, 1) }))).toBe('none');
+    expect(availabilityOf(mk({ providers: [], providersCheckedAt: null }))).toBe('unknown');
+  });
+});
+
+describe('stored view state', () => {
+  it('falls back to defaults for anything unrecognised', () => {
+    expect(sanitizeToWatchFilters(null)).toEqual(DEFAULT_TO_WATCH_FILTERS);
+    expect(sanitizeToWatchFilters({ media: 'x', layout: 'y', service: 'abc', availability: 'z', onlyMine: 'yes' }))
+      .toEqual(DEFAULT_TO_WATCH_FILTERS);
+    expect(sanitizeToWatchSort('nope')).toBe('seen');
+  });
+
+  it('keeps valid stored choices', () => {
+    const stored = { media: 'tv', layout: 'grouped', onlyMine: true, onlyNew: true, genre: '18', service: '8', availability: 'rent' };
+    expect(sanitizeToWatchFilters(stored)).toEqual(stored);
+    expect(sanitizeToWatchSort('runtime')).toBe('runtime');
   });
 });

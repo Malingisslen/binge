@@ -2,7 +2,7 @@
 // Allt härleds ur redan inläst data (watchlist, avsnittsmarkeringar, Streamingrådgivarens
 // behind-set, kalenderposter). Kalendern och rådgivaren delar TMDB-cache med startsidan.
 
-import { librarySubState } from '@/lib/libraryView';
+import { librarySubState, streamingProvidersOf } from '@/lib/libraryView';
 import { compareTitles } from '@/lib/titleSort';
 import type { WatchlistItem } from '@/types';
 
@@ -134,4 +134,62 @@ export function compareToWatchRows(key: ToWatchSortKey): (a: ToWatchRow, b: ToWa
     }
   };
   return (a, b) => cmp(a, b) || compareTitles(a.item.title, b.item.title);
+}
+
+/**
+ * Where a title can be watched in Sweden. 'rent' means only hyr/köp offers, 'none' means TMDB
+ * was asked and found no offer of any kind, 'unknown' means it has not been asked yet.
+ */
+export type ToWatchAvailability = 'stream' | 'rent' | 'none' | 'unknown';
+
+export const TO_WATCH_AVAILABILITY_LABELS: Record<ToWatchAvailability, string> = {
+  stream: 'Streamas',
+  rent: 'Hyr eller köp',
+  none: 'Finns inte i Sverige',
+  unknown: 'Okänt',
+};
+
+export function availabilityOf(item: WatchlistItem): ToWatchAvailability {
+  if (streamingProvidersOf(item).length > 0) return 'stream';
+  if (item.providers.length > 0) return 'rent';
+  return item.providersCheckedAt != null ? 'none' : 'unknown';
+}
+
+export type ToWatchMedia = 'all' | 'tv' | 'movie';
+export type ToWatchLayout = 'list' | 'grouped';
+
+export interface ToWatchFilters {
+  media: ToWatchMedia;
+  layout: ToWatchLayout;
+  onlyMine: boolean;
+  onlyNew: boolean;
+  genre: string;
+  service: string;
+  availability: ToWatchAvailability | '';
+}
+
+export const DEFAULT_TO_WATCH_FILTERS: ToWatchFilters = {
+  media: 'all', layout: 'list', onlyMine: false, onlyNew: false, genre: '', service: '', availability: '',
+};
+
+// Stored values come from localStorage, so anything unrecognised falls back to the default.
+export function sanitizeToWatchFilters(raw: unknown): ToWatchFilters {
+  const r = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
+  const d = DEFAULT_TO_WATCH_FILTERS;
+  return {
+    media: r.media === 'tv' || r.media === 'movie' ? r.media : d.media,
+    layout: r.layout === 'grouped' ? 'grouped' : d.layout,
+    onlyMine: r.onlyMine === true,
+    onlyNew: r.onlyNew === true,
+    genre: typeof r.genre === 'string' ? r.genre : d.genre,
+    service: typeof r.service === 'string' && /^\d*$/.test(r.service) ? r.service : d.service,
+    availability: r.availability === 'stream' || r.availability === 'rent' || r.availability === 'none' || r.availability === 'unknown'
+      ? r.availability : d.availability,
+  };
+}
+
+const SORT_KEYS = Object.keys(TO_WATCH_SORT_LABELS) as ToWatchSortKey[];
+
+export function sanitizeToWatchSort(raw: unknown): ToWatchSortKey {
+  return SORT_KEYS.includes(raw as ToWatchSortKey) ? raw as ToWatchSortKey : 'seen';
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import Link from 'next/link';
 import { Film, Tv } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -15,7 +15,9 @@ import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
 import { useAllEpisodeProgress } from '@/hooks/useAllEpisodeProgress';
 import { useCalendarEntries } from '@/hooks/useCalendar';
-import { useSubscriptionAdvisor } from '@/hooks/useSubscriptionAdvisor';
+import { useBehindShows } from '@/hooks/useBehindShows';
+import { usePersistedState } from '@/hooks/usePersistedState';
+import { toWatchFiltersKey, toWatchSortKey } from '@/lib/persistedViewState';
 import { posterUrl, titleHref } from '@/lib/tmdb/client';
 import { genreLabel, parseGenreFilter } from '@/lib/tmdb/genreLabels';
 import { canonicalProviderId, canonicalUniqueProviders, getProvider } from '@/lib/tmdb/providers';
@@ -25,16 +27,21 @@ import {
   TO_WATCH_GROUP_LABELS,
   TO_WATCH_GROUP_ORDER,
   TO_WATCH_SORT_LABELS,
+  DEFAULT_TO_WATCH_FILTERS,
+  TO_WATCH_AVAILABILITY_LABELS,
+  availabilityOf,
   buildToWatchRows,
   compareToWatchRows,
   lastSeenByShow,
   newestAiredDateByShow,
+  sanitizeToWatchFilters,
+  sanitizeToWatchSort,
+  type ToWatchAvailability,
+  type ToWatchLayout,
+  type ToWatchMedia,
   type ToWatchRow,
   type ToWatchSortKey,
 } from '@/lib/toWatch';
-
-type MediaFilter = 'all' | 'tv' | 'movie';
-type Layout = 'list' | 'grouped';
 
 export const TO_WATCH_TITLE = 'Nytt för dig';
 
@@ -61,27 +68,28 @@ export default function ToWatchPage() {
   const { user } = useAuth();
   const { episodes, episodesLoading } = useAllEpisodeProgress();
   const { entries, isLoading: calendarLoading } = useCalendarEntries();
-  const advisor = useSubscriptionAdvisor();
+  const followedTv = useMemo(
+    () => items.filter(i => i.mediaType === 'tv' && i.status === 'mina' && !i.dropped),
+    [items],
+  );
+  const behind = useBehindShows(followedTv);
 
-  const [media, setMedia] = useState<MediaFilter>('all');
-  const [layout, setLayout] = useState<Layout>('list');
-  const [onlyMine, setOnlyMine] = useState(false);
-  const [onlyNew, setOnlyNew] = useState(false);
-  const [genre, setGenre] = useState('');
-  const [service, setService] = useState('');
-  const [sort, setSort] = useState<ToWatchSortKey>('seen');
+  const [filters, setFilters] = usePersistedState(toWatchFiltersKey, DEFAULT_TO_WATCH_FILTERS, sanitizeToWatchFilters);
+  const [sort, setSort] = usePersistedState(toWatchSortKey, 'seen' as ToWatchSortKey, sanitizeToWatchSort);
+  const { media, layout, onlyMine, onlyNew, genre, service, availability } = filters;
+  const patch = (p: Partial<typeof filters>) => setFilters(f => ({ ...f, ...p }));
 
   const now = useMemo(() => new Date(), []);
   const myProviders = useMemo(() => canonicalUniqueProviders(user?.myProviders ?? []), [user?.myProviders]);
 
   const allRows = useMemo(
     () => buildToWatchRows(items, {
-      behindIds: advisor.unfinishedTmdbIds,
+      behindIds: behind.behindIds,
       lastSeen: lastSeenByShow(episodes),
       newestAired: newestAiredDateByShow(entries, now),
       now,
     }),
-    [items, advisor.unfinishedTmdbIds, episodes, entries, now],
+    [items, behind.behindIds, episodes, entries, now],
   );
 
   const rowItems = useMemo(() => allRows.map(r => r.item), [allRows]);
@@ -102,11 +110,12 @@ export default function ToWatchPage() {
         if (onlyMine && !providers.some(p => myProviders.includes(p))) return false;
         if (onlyNew && r.group !== 'nya') return false;
         if (genreIds.length && !(i.genreIds ?? []).some(g => genreIds.includes(g))) return false;
+        if (availability && availabilityOf(i) !== availability) return false;
         if (serviceId != null && !providers.includes(canonicalProviderId(serviceId))) return false;
         return true;
       })
       .sort(compareToWatchRows(sort));
-  }, [allRows, media, onlyMine, onlyNew, genre, service, sort, myProviders]);
+  }, [allRows, media, onlyMine, onlyNew, genre, service, availability, sort, myProviders]);
 
   const header = (
     <PageHeader
@@ -126,10 +135,9 @@ export default function ToWatchPage() {
     );
   }
 
-  const detailsLoading = episodesLoading || calendarLoading || advisor.isLoading;
-  const noServices = myProviders.length === 0;
-  const filtered = media !== 'all' || onlyMine || onlyNew || genre !== '' || service !== '';
-  const clearFilters = () => { setMedia('all'); setOnlyMine(false); setOnlyNew(false); setGenre(''); setService(''); };
+  const detailsLoading = episodesLoading || calendarLoading || behind.isLoading;
+  const filtered = media !== 'all' || onlyMine || onlyNew || genre !== '' || service !== '' || availability !== '';
+  const clearFilters = () => patch({ ...DEFAULT_TO_WATCH_FILTERS, layout });
 
   return (
     <>
@@ -137,25 +145,31 @@ export default function ToWatchPage() {
       <LibrarySubnav activeKey="nytt-for-dig" />
 
       <div className="flex flex-wrap items-center gap-2 mt-5">
-        <Segmented<MediaFilter>
+        <Segmented<ToWatchMedia>
           ariaLabel="Typ"
           value={media}
-          onChange={setMedia}
+          onChange={v => patch({ media: v })}
           options={[{ value: 'all', label: 'Alla' }, { value: 'tv', label: 'Serier' }, { value: 'movie', label: 'Film' }]}
         />
-        <button type="button" className={`chip${onlyMine ? ' is-on' : ''}`} aria-pressed={onlyMine} onClick={() => setOnlyMine(v => !v)}>
+        <button type="button" className={`chip${onlyMine ? ' is-on' : ''}`} aria-pressed={onlyMine} onClick={() => patch({ onlyMine: !onlyMine })}>
           Mina tjänster
         </button>
-        <button type="button" className={`chip${onlyNew ? ' is-on' : ''}`} aria-pressed={onlyNew} onClick={() => setOnlyNew(v => !v)}>
+        <button type="button" className={`chip${onlyNew ? ' is-on' : ''}`} aria-pressed={onlyNew} onClick={() => patch({ onlyNew: !onlyNew })}>
           Nya avsnitt
         </button>
-        <select className="select" aria-label="Genre" value={genre} onChange={e => setGenre(e.target.value)}>
+        <select className="select" aria-label="Genre" value={genre} onChange={e => patch({ genre: e.target.value })}>
           <option value="">Alla genrer</option>
           {genreOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
-        <select className="select" aria-label="Tjänst" value={service} onChange={e => setService(e.target.value)}>
+        <select className="select" aria-label="Tjänst" value={service} onChange={e => patch({ service: e.target.value })}>
           <option value="">Alla tjänster</option>
           {services.map(s => <option key={s.id} value={s.id}>{s.name} ({s.count})</option>)}
+        </select>
+        <select className="select" aria-label="Tillgänglighet" value={availability} onChange={e => patch({ availability: e.target.value as ToWatchAvailability | '' })}>
+          <option value="">Överallt</option>
+          {(Object.keys(TO_WATCH_AVAILABILITY_LABELS) as ToWatchAvailability[]).map(k => (
+            <option key={k} value={k}>{TO_WATCH_AVAILABILITY_LABELS[k]}</option>
+          ))}
         </select>
         <span className="flex-1" />
         <select className="select" aria-label="Sortera" value={sort} onChange={e => setSort(e.target.value as ToWatchSortKey)}>
@@ -163,10 +177,10 @@ export default function ToWatchPage() {
             <option key={k} value={k}>Sortera: {TO_WATCH_SORT_LABELS[k]}</option>
           ))}
         </select>
-        <Segmented<Layout>
+        <Segmented<ToWatchLayout>
           ariaLabel="Visning"
           value={layout}
-          onChange={setLayout}
+          onChange={v => patch({ layout: v })}
           options={[{ value: 'list', label: 'Lista' }, { value: 'grouped', label: 'Gruppera' }]}
         />
       </div>
@@ -177,12 +191,6 @@ export default function ToWatchPage() {
           : `${rows.length} av ${allRows.length} titlar`}
         {detailsLoading && ' · hämtar fler uppgifter…'}
       </p>
-
-      {noServices && (
-        <p className="text-sm text-ink-2 mt-2">
-          Välj dina streamingtjänster i <Link href="/settings/" className="underline">Inställningar</Link> så visar vi också serier du ligger efter på.
-        </p>
-      )}
 
       <div className="mt-3">
         {rows.length === 0 && detailsLoading ? (
@@ -272,7 +280,7 @@ function ToWatchRowView({ row, myProviders, now }: { row: ToWatchRow; myProvider
       </td>
       <td className="px-3 py-2">
         {providers.length === 0
-          ? <span className="text-ink-3">–</span>
+          ? <AvailabilityTag item={item} />
           : (
             <span className="flex flex-wrap gap-1">
               {providers.map(id => (
@@ -291,4 +299,23 @@ function ToWatchRowView({ row, myProviders, now }: { row: ToWatchRow; myProvider
       <td className="px-3 py-2 text-ink-2 whitespace-nowrap">{runtimeText(item.runtime, isFilm)}</td>
     </tr>
   );
+}
+
+// Without a subscription offer the row still says where the title can be had: hyr/köp, or not at all in Sweden.
+function AvailabilityTag({ item }: { item: ToWatchRow['item'] }) {
+  switch (availabilityOf(item)) {
+    case 'rent': {
+      const names = canonicalUniqueProviders(item.providers).map(id => getProvider(id)?.shortName).filter(Boolean).slice(0, 2);
+      return (
+        <span className="flex flex-wrap gap-1" title="Går att hyra eller köpa, men finns inte i någon streamingtjänst">
+          <span className={tagClass('ink')}>Hyr eller köp</span>
+          {names.map(n => <span key={n} className={tagClass('muted')}>{n}</span>)}
+        </span>
+      );
+    }
+    case 'none':
+      return <span className={tagClass('faint')} title="Går inte att streama, hyra eller köpa i Sverige just nu">Finns inte i Sverige</span>;
+    default:
+      return <span className="text-ink-3">–</span>;
+  }
 }
