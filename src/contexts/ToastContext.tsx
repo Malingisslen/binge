@@ -114,7 +114,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           // nobody gives. Tapping outside or pressing Hoppa över leaves the title seen, unrated.
           <div
             key={t.id}
-            className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4"
+            className="fixed inset-0 z-[110] flex items-center justify-center bg-scrim p-4"
             onClick={() => dismiss(t.id)}
             onKeyDown={e => { if (e.key === 'Escape') dismiss(t.id); }}
           >
