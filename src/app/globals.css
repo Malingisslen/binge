@@ -650,6 +650,21 @@ button { font: inherit; cursor: pointer; }
   color: var(--ink);
   border-bottom-color: var(--ink);
 }
+/* Titles waiting on you: saffron because it is something to do now. */
+.nav-count {
+  display: inline-block;
+  margin-left: 6px;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--acc);
+  color: var(--on-acc);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  line-height: 1.5;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
 
 /* ─── Canvas (main content area) ─── */
 .canvas {
@@ -962,6 +977,21 @@ button { font: inherit; cursor: pointer; }
   background: var(--acc);
 }
 .m-tabs .icn:has(> .m-dot) { position: relative; }
+.m-count {
+  position: absolute;
+  top: -4px; right: -10px;
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--acc);
+  color: var(--on-acc);
+  font-size: var(--fs-nano);
+  font-weight: 700;
+  line-height: 1.5;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.m-tabs .icn:has(> .m-count) { position: relative; }
 .m-dot-inline { position: static; margin-left: 8px; flex: none; }
 /* Mer: the button fills its grid cell; the panel hangs from the whole bar. */
 .m-more { display: grid; min-width: 0; }

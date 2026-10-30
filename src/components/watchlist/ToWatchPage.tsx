@@ -25,6 +25,7 @@ import { toneForId } from '@/lib/duotone';
 import { genreOptionsInLibrary, serviceCountsInLibrary, streamingProvidersOf } from '@/lib/libraryView';
 import {
   TO_WATCH_GROUP_LABELS,
+  agoText as ago,
   TO_WATCH_GROUP_ORDER,
   TO_WATCH_SORT_LABELS,
   DEFAULT_TO_WATCH_FILTERS,
@@ -44,15 +45,6 @@ import {
 } from '@/lib/toWatch';
 
 export const TO_WATCH_TITLE = 'Nytt för dig';
-
-const rtf = new Intl.RelativeTimeFormat('sv', { numeric: 'auto' });
-
-function ago(date: Date, now: Date): string {
-  const days = Math.round((date.getTime() - now.getTime()) / 86_400_000);
-  if (Math.abs(days) < 14) return rtf.format(days, 'day');
-  if (Math.abs(days) < 60) return rtf.format(Math.round(days / 7), 'week');
-  return rtf.format(Math.round(days / 30), 'month');
-}
 
 function runtimeText(minutes: number | null | undefined, isFilm: boolean): string {
   if (!minutes) return '–';

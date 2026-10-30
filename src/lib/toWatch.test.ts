@@ -9,6 +9,8 @@ import {
   sanitizeToWatchSort,
   DEFAULT_TO_WATCH_FILTERS,
   toWatchGroup,
+  pickToWatchHighlights,
+  agoText,
 } from './toWatch';
 import type { WatchlistItem } from '@/types';
 
@@ -164,5 +166,68 @@ describe('stored view state', () => {
     const stored = { media: 'tv', layout: 'grouped', onlyMine: true, onlyNew: true, genre: '18', service: '8', availability: 'rent' };
     expect(sanitizeToWatchFilters(stored)).toEqual(stored);
     expect(sanitizeToWatchSort('runtime')).toBe('runtime');
+  });
+});
+
+describe('pickToWatchHighlights', () => {
+  const rows = buildToWatchRows(
+    [
+      mk({ tmdbId: 1, title: 'Ej påbörjad' }),
+      mk({ tmdbId: 2, title: 'Film', mediaType: 'movie', status: 'vill_se' }),
+      mk({ tmdbId: 3, title: 'Efter', lastWatchedSeason: 1, lastWatchedEpisode: 1 }),
+      mk({ tmdbId: 4, title: 'Nytt', lastWatchedSeason: 1, lastWatchedEpisode: 1 }),
+    ],
+    {
+      behindIds: new Set([3, 4]),
+      lastSeen: new Map(),
+      newestAired: new Map([[3, '2026-08-01'], [4, '2026-10-28']]),
+      now: NOW,
+    },
+  );
+
+  it('puts new episodes first, then behind, not started and films', () => {
+    expect(pickToWatchHighlights(rows, 4).map(r => r.item.title)).toEqual(['Nytt', 'Efter', 'Ej påbörjad', 'Film']);
+  });
+
+  it('skips titles another tile already shows', () => {
+    expect(pickToWatchHighlights(rows, 4, new Set([4])).map(r => r.item.title)).toEqual(['Efter', 'Ej påbörjad', 'Film']);
+  });
+
+  it('orders the same group by newest episode first', () => {
+    const two = buildToWatchRows(
+      [mk({ tmdbId: 7, title: 'Äldre', lastWatchedSeason: 1, lastWatchedEpisode: 1 }),
+       mk({ tmdbId: 8, title: 'Nyare', lastWatchedSeason: 1, lastWatchedEpisode: 1 })],
+      { behindIds: new Set([7, 8]), lastSeen: new Map(), newestAired: new Map([[7, '2026-10-20'], [8, '2026-10-28']]), now: NOW },
+    );
+    expect(pickToWatchHighlights(two).map(r => r.item.title)).toEqual(['Nyare', 'Äldre']);
+  });
+
+  it('keeps only the requested number', () => {
+    expect(pickToWatchHighlights(rows, 2)).toHaveLength(2);
+  });
+});
+
+describe('agoText', () => {
+  it('says days under two weeks, then weeks, then months', () => {
+    expect(agoText(new Date(2026, 9, 29), NOW)).toBe('i går');
+    expect(agoText(new Date(2026, 9, 27), NOW)).toBe('för 3 dagar sedan');
+    expect(agoText(new Date(2026, 9, 9), NOW)).toBe('för 3 veckor sedan');
+    expect(agoText(new Date(2026, 6, 30), NOW)).toBe('för 3 månader sedan');
+  });
+});
+
+describe('the count does not depend on what only orders or splits rows', () => {
+  it('is the same whether or not newest-episode and last-seen data is known', () => {
+    const items = [
+      mk({ tmdbId: 1, lastWatchedSeason: 1, lastWatchedEpisode: 1 }),
+      mk({ tmdbId: 2 }),
+      mk({ tmdbId: 3, mediaType: 'movie', status: 'vill_se' }),
+    ];
+    const behindIds = new Set([1]);
+    const bare = buildToWatchRows(items, { behindIds, lastSeen: new Map(), newestAired: new Map(), now: NOW });
+    const full = buildToWatchRows(items, {
+      behindIds, lastSeen: new Map([[1, NOW]]), newestAired: new Map([[1, '2026-10-29']]), now: NOW,
+    });
+    expect(bare).toHaveLength(full.length);
   });
 });

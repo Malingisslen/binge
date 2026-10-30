@@ -16,6 +16,8 @@ vi.mock('@/hooks/useFriends', () => ({
     data: Array.from({ length: notifications.friendRequestsCount }, (_, i) => ({ fromUid: `u${i}` })),
   }),
 }));
+const toWatch = vi.hoisted(() => ({ count: 0 }));
+vi.mock('@/hooks/useToWatchCount', () => ({ useToWatchCount: () => toWatch.count }));
 vi.mock('@/hooks/useBlockedUsers', () => ({ useBlockedUsers: () => ({ isBlocked: () => false }) }));
 
 function moreButton() {
@@ -28,6 +30,7 @@ function panel() {
 beforeEach(() => {
   nav.pathname = '/my/all/';
   notifications.friendRequestsCount = 0;
+  toWatch.count = 0;
   push.mockReset();
   document.body.innerHTML = '';
 });
@@ -169,6 +172,20 @@ describe('MobileTabBar (variant B)', () => {
     render(<><Subnav /><MobileTabBar /></>);
     expect(document.querySelectorAll('[aria-current="page"]')).toHaveLength(0);
     expect(document.querySelectorAll('a[href^="/grupper"], a[href^="/tillsammans"]')).toHaveLength(0);
+  });
+});
+
+describe('the to-watch counter next to Bibliotek', () => {
+  it('shows how many titles wait on both the subnav and the tab bar', () => {
+    toWatch.count = 12;
+    render(<><Subnav /><MobileTabBar /></>);
+    expect(screen.getAllByRole('link', { name: /Bibliotek.*12 att se/ })).toHaveLength(2);
+    expect(within(screen.getByRole('navigation', { name: 'Sektioner' })).getByText('12')).toBeTruthy();
+  });
+
+  it('shows nothing when no title waits', () => {
+    render(<><Subnav /><MobileTabBar /></>);
+    expect(document.querySelector('.nav-count, .m-count')).toBeNull();
   });
 });
 
