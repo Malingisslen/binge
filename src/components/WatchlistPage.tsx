@@ -932,6 +932,7 @@ const STATUS_CHOICES: ReadonlyArray<{ value: WatchStatus; label: string }> = [
 // with the status tabs (notably 'Alla', whose status is also null).
 const LIBRARY_VIEWS: { label: string; href: string; status: WatchStatus | null; key?: string }[] = [
   { label: 'Följer',   href: '/my/series/',   status: 'mina' },
+  { label: 'Nytt för dig', href: '/my/nytt-for-dig/', status: null, key: 'nytt-for-dig' },
   { label: 'Vill se',  href: '/my/vill-se/',  status: 'vill_se' },
   { label: 'Filmer',   href: '/my/films/',    status: 'sedd' },
   { label: 'Avbrutna', href: '/my/avbrutna/', status: 'avbruten' },
