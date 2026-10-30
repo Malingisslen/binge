@@ -295,9 +295,13 @@ describe('RecapPanel — "Nästa att se" block', () => {
     expect(screen.getByText('Ny säsong, 3 avsnitt')).toBeInTheDocument();
   });
 
-  it('renders nothing once the whole show is watched', () => {
+  it('stays when the user is caught up, naming the last seen episode and still opening the recap', () => {
     state.coveredBoundary = { season: 5, episode: 3 };
-    const { container } = render(<RecapPanel tmdbId={1} boundary={{ season: 5, episode: 3 }} inventory={inventory} />);
-    expect(container.firstChild).toBeNull();
+    render(<RecapPanel tmdbId={1} boundary={{ season: 5, episode: 3 }} inventory={inventory} />);
+    expect(screen.getByText('Du är ikapp')).toBeInTheDocument();
+    expect(screen.getByText('Senast sedd: säsong 5, avsnitt 3')).toBeInTheDocument();
+    expect(screen.queryByText('Nästa att se')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Läs storyn hittills/ }));
+    expect(screen.getByText('Berättelsen så här långt vid gränsen.')).toBeInTheDocument();
   });
 });

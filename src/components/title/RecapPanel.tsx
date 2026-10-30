@@ -165,11 +165,11 @@ export default function RecapPanel({
   );
   if (!hasBoundaryRecap && priorSeasons.length === 0) return null;
 
-  // The block is framed around what the user is about to watch, so it only exists while there
-  // is a next episode: a finished show has nothing left to catch up for. Only the episode CODE is
-  // shown, never its title or plot, so the block cannot spoil anything itself.
+  // The block is framed around what the user is about to watch. Only the episode CODE is shown,
+  // never its title or plot, so the block cannot spoil anything itself. A user who is caught up
+  // has no next episode but still wants the story so far (a new episode may land any week), so
+  // the block stays and names the last episode they saw instead.
   const upNext = boundary ? nextToWatch(inventory, boundary) : null;
-  if (!upNext) return null;
 
   // Fallback gap: the recap covers an EARLIER boundary (never later — spoiler-safe by
   // construction). Tell the user honestly how many of their watched episodes it misses.
@@ -234,24 +234,36 @@ export default function RecapPanel({
     <div className={cardClass('mt-3 overflow-hidden')}>
       <div className="flex flex-wrap items-center gap-3 px-3 py-3">
         <div className="min-w-0 flex-1">
-          <div className={eyebrowClass()}>Nästa att se</div>
-          <div className="mt-0.5 text-lg font-bold text-ink">
-            Säsong {upNext.next.season}, avsnitt {upNext.next.episode}
-          </div>
-          {upNext.watchedInSeason > 0 ? (
+          {upNext ? (
             <>
-              <div className="mt-2 h-1 max-w-64 overflow-hidden rounded-sm bg-rule-2" aria-hidden="true">
-                <div
-                  className="h-full bg-acc-deep"
-                  style={{ width: `${Math.round((upNext.watchedInSeason / upNext.seasonTotal) * 100)}%` }}
-                />
+              <div className={eyebrowClass()}>Nästa att se</div>
+              <div className="mt-0.5 text-lg font-bold text-ink">
+                Säsong {upNext.next.season}, avsnitt {upNext.next.episode}
               </div>
-              <div className="mt-1 text-sm text-ink-3">
-                {upNext.watchedInSeason} av {upNext.seasonTotal} avsnitt sedda i säsong {upNext.next.season}
-              </div>
+              {upNext.watchedInSeason > 0 ? (
+                <>
+                  <div className="mt-2 h-1 max-w-64 overflow-hidden rounded-sm bg-rule-2" aria-hidden="true">
+                    <div
+                      className="h-full bg-acc-deep"
+                      style={{ width: `${Math.round((upNext.watchedInSeason / upNext.seasonTotal) * 100)}%` }}
+                    />
+                  </div>
+                  <div className="mt-1 text-sm text-ink-3">
+                    {upNext.watchedInSeason} av {upNext.seasonTotal} avsnitt sedda i säsong {upNext.next.season}
+                  </div>
+                </>
+              ) : (
+                <div className="mt-1 text-sm text-ink-3">Ny säsong, {upNext.seasonTotal} avsnitt</div>
+              )}
             </>
           ) : (
-            <div className="mt-1 text-sm text-ink-3">Ny säsong, {upNext.seasonTotal} avsnitt</div>
+            <>
+              <div className={eyebrowClass()}>Du är ikapp</div>
+              <div className="mt-0.5 text-lg font-bold text-ink">
+                Senast sedd: säsong {boundary!.season}, avsnitt {boundary!.episode}
+              </div>
+              <div className="mt-1 text-sm text-ink-3">Fräscha upp storyn inför nästa avsnitt.</div>
+            </>
           )}
         </div>
         <Button
@@ -260,7 +272,7 @@ export default function RecapPanel({
           onClick={() => setOpen((o) => !o)}
           aria-expanded={open}
         >
-          <span>{open ? 'Dölj sammanfattningen' : 'Läs det du missat först'}</span>
+          <span>{open ? 'Dölj sammanfattningen' : upNext ? 'Läs det du missat först' : 'Läs storyn hittills'}</span>
           {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
         </Button>
       </div>
