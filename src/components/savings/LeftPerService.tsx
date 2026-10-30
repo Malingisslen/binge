@@ -13,7 +13,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useAllEpisodeProgress } from '@/hooks/useAllEpisodeProgress';
 import { useCalendarEntries } from '@/hooks/useCalendar';
 import { useBehindShows } from '@/hooks/useBehindShows';
-import { getTVShowLite, posterUrl, titleHref } from '@/lib/tmdb/client';
+import { getMovieLite, getTVShowLite, posterUrl, titleHref } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import { canonicalUniqueProviders, getProvider } from '@/lib/tmdb/providers';
 import { resolveEffectiveMonthlyCost } from '@/lib/advisor/effectiveCost';
@@ -21,6 +21,7 @@ import { resolveProviderMonthlyCost } from '@/lib/tmdb/providers';
 import { formatKr } from '@/lib/formatKr';
 import { pluralSv } from '@/lib/utils';
 import { toneForId } from '@/lib/duotone';
+import type { TMDBMovie, TMDBTVShow } from '@/types';
 import { buildToWatchRows, lastSeenByShow, newestAiredDateByShow, type ToWatchRow } from '@/lib/toWatch';
 import {
   NO_SERVICE_ID,
@@ -29,6 +30,7 @@ import {
   groupRowsByService,
   isNearlyDone,
   minutesLeft,
+  tmdbRuntime,
   sortServiceColumns,
   unseenAiredEpisodes,
   type ServiceColumn,
@@ -79,29 +81,46 @@ export default function LeftPerService() {
     [items, behind.behindIds, episodes, entries, now],
   );
 
-  const tvRows = useMemo(() => allRows.filter(r => r.item.mediaType === 'tv'), [allRows]);
+  // Every row is looked up so a title never saved with a length still gets one; the keys are the
+  // shared tv-lite and movie-lite caches that the calendar and the advisor already fill.
   const showQueries = useQueries({
-    queries: tvRows.map(r => ({
-      queryKey: ['tv-lite', r.item.tmdbId],
-      queryFn: ({ signal }: { signal: AbortSignal }) => getTVShowLite(r.item.tmdbId, { signal }),
+    queries: allRows.map(r => ({
+      queryKey: [r.item.mediaType === 'movie' ? 'movie-lite' : 'tv-lite', r.item.tmdbId],
+      queryFn: ({ signal }: { signal: AbortSignal }) => (
+        r.item.mediaType === 'movie'
+          ? getMovieLite(r.item.tmdbId, { signal })
+          : getTVShowLite(r.item.tmdbId, { signal })
+      ),
       staleTime: TMDB_STALE.LITE_DETAIL,
     })),
   });
   const stamp = showQueries.map(q => q.dataUpdatedAt).join(',');
-  const unseenById = useMemo(() => {
-    const out = new Map<number, number | null>();
-    tvRows.forEach((r, i) => {
-      const show = showQueries[i]?.data;
-      if (show) out.set(r.item.tmdbId, unseenAiredEpisodes(r.item, show));
+  const lookups = useMemo(() => {
+    const unseen = new Map<number, number | null>();
+    const runtime = new Map<string, number | null>();
+    allRows.forEach((r, i) => {
+      const data = showQueries[i]?.data;
+      if (!data) return;
+      const key = `${r.item.mediaType}-${r.item.tmdbId}`;
+      if (r.item.mediaType === 'tv') {
+        unseen.set(r.item.tmdbId, unseenAiredEpisodes(r.item, data as TMDBTVShow));
+        runtime.set(key, tmdbRuntime(data as TMDBTVShow));
+      } else {
+        runtime.set(key, tmdbRuntime(data as TMDBMovie));
+      }
     });
-    return out;
+    return { unseen, runtime };
     // showQueries is a new array each render; dataUpdatedAt marks when any answer changed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tvRows, stamp]);
+  }, [allRows, stamp]);
 
   const minutesOf = useMemo(
-    () => (row: ToWatchRow) => minutesLeft(row, unseenById.get(row.item.tmdbId)),
-    [unseenById],
+    () => (row: ToWatchRow) => minutesLeft(
+      row,
+      lookups.unseen.get(row.item.tmdbId),
+      lookups.runtime.get(`${row.item.mediaType}-${row.item.tmdbId}`),
+    ),
+    [lookups],
   );
 
   const infoOf = useMemo(() => (providerId: number) => {

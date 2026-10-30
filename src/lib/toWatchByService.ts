@@ -32,12 +32,28 @@ export function unseenAiredEpisodes(item: WatchlistItem, show: TMDBTVShow): numb
   return unseen;
 }
 
-/** Minutes left on one row, or null when the episode count or the length is unknown. */
-export function minutesLeft(row: ToWatchRow, unseenEpisodes: number | null | undefined): number | null {
+/**
+ * Length in minutes of a title as TMDB reports it: a film's runtime, or for a series the usual
+ * episode length, falling back to the latest aired episode. Null when TMDB gives none.
+ */
+export function tmdbRuntime(title: { runtime?: number | null; episode_run_time?: number[]; last_episode_to_air?: { runtime?: number | null } | null }): number | null {
+  return title.runtime || title.episode_run_time?.find(m => m > 0) || title.last_episode_to_air?.runtime || null;
+}
+
+/**
+ * Minutes left on one row, or null when the episode count or the length is unknown. The length
+ * saved on the title wins; `fetchedRuntime` covers titles that were never backfilled.
+ */
+export function minutesLeft(
+  row: ToWatchRow,
+  unseenEpisodes: number | null | undefined,
+  fetchedRuntime?: number | null,
+): number | null {
   const { item } = row;
-  if (!item.runtime) return null;
-  if (item.mediaType === 'movie') return item.runtime;
-  return unseenEpisodes == null ? null : unseenEpisodes * item.runtime;
+  const runtime = item.runtime || fetchedRuntime;
+  if (!runtime) return null;
+  if (item.mediaType === 'movie') return runtime;
+  return unseenEpisodes == null ? null : unseenEpisodes * runtime;
 }
 
 export interface ServiceColumn {

@@ -5,6 +5,7 @@ import {
   groupRowsByService,
   isNearlyDone,
   minutesLeft,
+  tmdbRuntime,
   sortServiceColumns,
   unseenAiredEpisodes,
   type ServiceColumn,
@@ -56,9 +57,24 @@ describe('minutesLeft', () => {
     expect(minutesLeft(mkRow({ runtime: 50 }), 4)).toBe(200);
   });
 
+  it('falls back to the length TMDB reports when the title has none saved', () => {
+    expect(minutesLeft(mkRow({ mediaType: 'movie' }), undefined, 118)).toBe(118);
+    expect(minutesLeft(mkRow({}), 3, 45)).toBe(135);
+    expect(minutesLeft(mkRow({ runtime: 50 }), 3, 45)).toBe(150);
+  });
+
   it('is null when the length or the episode count is unknown', () => {
     expect(minutesLeft(mkRow({ mediaType: 'movie' }), undefined)).toBeNull();
     expect(minutesLeft(mkRow({ runtime: 50 }), null)).toBeNull();
+  });
+});
+
+describe('tmdbRuntime', () => {
+  it('prefers a film runtime, then the usual episode length, then the latest aired episode', () => {
+    expect(tmdbRuntime({ runtime: 118 })).toBe(118);
+    expect(tmdbRuntime({ episode_run_time: [0, 42, 50] })).toBe(42);
+    expect(tmdbRuntime({ episode_run_time: [], last_episode_to_air: { runtime: 38 } })).toBe(38);
+    expect(tmdbRuntime({ episode_run_time: [] })).toBeNull();
   });
 });
 
