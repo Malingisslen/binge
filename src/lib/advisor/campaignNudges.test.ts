@@ -51,7 +51,7 @@ describe('computeCampaignNudges (BIN-417 Phase B)', () => {
     const rows = computeCampaignNudges(
       {
         8: { monthlyCost: 29, endDate: '2026-10-02' },   // 4 days
-        337: { monthlyCost: 19, endDate: '2026-09-30' }, // 2 days (Disney+ ordinary 109)
+        337: { monthlyCost: 19, endDate: '2026-09-30' }, // 2 days (Disney+ ordinary 129)
       },
       {},
       NOW,

@@ -11,7 +11,7 @@ import {
 } from './bundleArbitrage';
 
 // Real catalog ids used below (defaults via resolveProviderMonthlyCost, no tier):
-//   Netflix 8 = 169 · Disney+ 337 = 109 · Max 384 = 149 · Viaplay 76 = 169
+//   Netflix 8 = 169 · Disney+ 337 = 129 · Max 384 = 149 · Viaplay 76 = 169
 //   TV4 Play 489 = 169 (alias 1944) · SVT Play 520 = 0 (free) · Pluto TV 300 = 0 (ads)
 const NOW = new Date(2026, 6, 4); // 2026-07-04 local (Stockholm under test TZ)
 
@@ -39,13 +39,13 @@ const STD3 = { 8: 'standard', 337: 'standard', 384: 'standard' };
 
 describe('detectBundleArbitrage (BIN-183)', () => {
   it('suggests a bundle that beats the à-la-carte cost of ≥2 owned paid services', () => {
-    // Owns Netflix(169) + Disney+(109) + Max(149) = 427 à-la-carte; bundle at 349.
+    // Owns Netflix(169) + Disney+(129) + Max(149) = 447 à-la-carte; bundle at 349.
     const out = detectBundleArbitrage([8, 337, 384], {}, [fixture(349, [8, 337, 384], { includedTiers: STD3 })], NOW);
     expect(out).toHaveLength(1);
     expect(out[0].replacedProviderIds.sort((a, b) => a - b)).toEqual([8, 337, 384]);
-    expect(out[0].currentKr).toBe(427);
+    expect(out[0].currentKr).toBe(447);
     expect(out[0].bundleKr).toBe(349);
-    expect(out[0].savingKr).toBe(78);
+    expect(out[0].savingKr).toBe(98);
   });
 
   it('does NOT suggest when the bundle overlaps only ONE owned service (a downgrade, not arbitrage)', () => {
@@ -55,7 +55,7 @@ describe('detectBundleArbitrage (BIN-183)', () => {
   });
 
   it('does NOT suggest at break-even or worse (saving must be strictly positive)', () => {
-    expect(detectBundleArbitrage([8, 337, 384], {}, [fixture(427, [8, 337, 384], { includedTiers: STD3 })], NOW)).toEqual([]); // == 0
+    expect(detectBundleArbitrage([8, 337, 384], {}, [fixture(447, [8, 337, 384], { includedTiers: STD3 })], NOW)).toEqual([]); // == 0
     expect(detectBundleArbitrage([8, 337, 384], {}, [fixture(500, [8, 337, 384], { includedTiers: STD3 })], NOW)).toEqual([]); // < 0
   });
 
@@ -63,7 +63,7 @@ describe('detectBundleArbitrage (BIN-183)', () => {
     // Bundle adds Viaplay(76), which the user does NOT own — pure bonus.
     const out = detectBundleArbitrage([8, 337, 384], {}, [fixture(349, [8, 337, 384, 76], { includedTiers: { ...STD3, 76: 'standard' } })], NOW);
     expect(out).toHaveLength(1);
-    expect(out[0].savingKr).toBe(78); // 427 − 349, NOT 427+169 − 349
+    expect(out[0].savingKr).toBe(98); // 447 − 349, NOT 447+169 − 349
     expect(out[0].bonusProviderIds).toEqual([76]);
     expect(out[0].bonusNames).toEqual(['Viaplay']);
     expect(out[0].replacedProviderIds).not.toContain(76);
@@ -91,26 +91,26 @@ describe('detectBundleArbitrage (BIN-183)', () => {
     expect(out).toHaveLength(1);
     expect(out[0].replacedProviderIds).not.toContain(999999);
     expect(out[0].bonusProviderIds).not.toContain(999999);
-    expect(out[0].currentKr).toBe(278); // 169 + 109 only
+    expect(out[0].currentKr).toBe(298); // 169 + 129 only
   });
 
   it('is campaign-aware via the required `now`: a live promo can suppress a suggestion that a lapsed one restores', () => {
     const user = { providerCampaigns: { 8: { monthlyCost: 29, endDate: '2026-10-01' } } };
     const bundle = fixture(349, [8, 337, 384], { includedTiers: STD3 });
-    // Promo active: Netflix 29 → à-la-carte 29+109+149 = 287 < 349 → no honest saving.
+    // Promo active: Netflix 29 → à-la-carte 29+129+149 = 307 < 349 → no honest saving.
     expect(detectBundleArbitrage([8, 337, 384], user, [bundle], NOW)).toEqual([]);
-    // After the promo lapses: Netflix reverts to 169 → 427 > 349 → the saving appears.
+    // After the promo lapses: Netflix reverts to 169 → 447 > 349 → the saving appears.
     const dayAfter = new Date(2026, 9, 2); // 2026-10-02
     const out = detectBundleArbitrage([8, 337, 384], user, [bundle], dayAfter);
     expect(out).toHaveLength(1);
-    expect(out[0].savingKr).toBe(78);
+    expect(out[0].savingKr).toBe(98);
   });
 
   it('excludes free / ads / user-zeroed services from the replaced set', () => {
     // SVT Play (520, free) inside the bundle is never a "replaced" paid service.
     const free = detectBundleArbitrage([520, 8, 337], {}, [fixture(200, [520, 8, 337], { includedTiers: STD3 })], NOW);
     expect(free[0].replacedProviderIds.sort((a, b) => a - b)).toEqual([8, 337]);
-    expect(free[0].currentKr).toBe(278);
+    expect(free[0].currentKr).toBe(298);
 
     // Pluto TV (300, isAds, cost 0) likewise excluded.
     const ads = detectBundleArbitrage([300, 8, 337], {}, [fixture(200, [300, 8, 337], { includedTiers: STD3 })], NOW);
@@ -122,11 +122,11 @@ describe('detectBundleArbitrage (BIN-183)', () => {
   });
 
   it('returns mutually-exclusive alternatives sorted by saving desc; overlapping bundles both surface', () => {
-    const cheap = fixture(300, [8, 337, 384], { id: 'big', name: 'Stor', includedTiers: STD3 }); // saving 127
-    const dear = fixture(349, [8, 337, 384], { id: 'small', name: 'Liten', includedTiers: STD3 }); // saving 78
+    const cheap = fixture(300, [8, 337, 384], { id: 'big', name: 'Stor', includedTiers: STD3 }); // saving 147
+    const dear = fixture(349, [8, 337, 384], { id: 'small', name: 'Liten', includedTiers: STD3 }); // saving 98
     const out = detectBundleArbitrage([8, 337, 384], {}, [dear, cheap], NOW);
     expect(out.map((s) => s.bundle.id)).toEqual(['big', 'small']); // best-first, both returned
-    expect(out.map((s) => s.savingKr)).toEqual([127, 78]);
+    expect(out.map((s) => s.savingKr)).toEqual([147, 98]);
   });
 
   it('flags a suggestion whose bundle price is past the staleness horizon', () => {
@@ -174,7 +174,7 @@ describe('tier-aware comparison (BIN-433)', () => {
     expect(out).toHaveLength(1); // gate passes on the TWO priced services alone
     expect(out[0].replacedProviderIds).not.toContain(578);
     expect(out[0].downgradeProviderIds).not.toContain(578);
-    expect(out[0].currentKr).toBe(278); // 169 + 109 — never 0-inflated by TriArt
+    expect(out[0].currentKr).toBe(298); // 169 + 129 — never 0-inflated by TriArt
   });
 
   it('an active promo can never mask a hidden tier downgrade — classification is tier-vs-tier', () => {
@@ -190,7 +190,7 @@ describe('tier-aware comparison (BIN-433)', () => {
     expect(out).toHaveLength(1);
     expect(out[0].downgradeProviderIds).toEqual([384]); // the promo never hides the tier drop
     expect(out[0].replacedProviderIds.sort((a, b) => a - b)).toEqual([8, 337]);
-    expect(out[0].currentKr).toBe(238); // 169 + 69 — promo-Max never counted
+    expect(out[0].currentKr).toBe(258); // 169 + 89 — promo-Max never counted
   });
 
   it('a grandfathered custom price above the bundle tier is NOT COMPARABLE — no downgrade label, no fabricated saving', () => {
@@ -202,7 +202,7 @@ describe('tier-aware comparison (BIN-433)', () => {
     expect(out).toHaveLength(1);
     expect(out[0].replacedProviderIds.sort((a, b) => a - b)).toEqual([337, 384]);
     expect(out[0].downgradeProviderIds).toEqual([]); // never the unsupported label
-    expect(out[0].currentKr).toBe(158); // 69 + 89 — the 199 custom never inflates a saving
+    expect(out[0].currentKr).toBe(178); // 89 + 89 — the 199 custom never inflates a saving
   });
 
   it('an omitted tier key on a TIERED provider is a curation error → not comparable, never sold as ad-free', () => {
@@ -215,17 +215,17 @@ describe('tier-aware comparison (BIN-433)', () => {
     expect(out[0].replacedProviderIds.sort((a, b) => a - b)).toEqual([8, 337]);
     expect(out[0].replacedProviderIds).not.toContain(384);
     expect(out[0].downgradeProviderIds).toEqual([]); // skipped from BOTH buckets
-    expect(out[0].currentKr).toBe(238);
+    expect(out[0].currentKr).toBe(258);
   });
 
   it('user cost EXACTLY at the bundle tier price is replaced, not downgrade (AC2, pins <=)', () => {
     const bundle = fixture(120, [384, 337], { includedTiers: { 384: 'ads', 337: 'ads' } });
-    const user = { providerTiers: { 384: 'ads', 337: 'ads' } }; // Max ads 89, Disney ads 69
+    const user = { providerTiers: { 384: 'ads', 337: 'ads' } }; // Max ads 89, Disney ads 89
     const out = detectBundleArbitrage([384, 337], user, [bundle], NOW);
     expect(out).toHaveLength(1);
     expect(out[0].replacedProviderIds.sort((a, b) => a - b)).toEqual([337, 384]);
     expect(out[0].downgradeProviderIds).toEqual([]);
-    expect(out[0].currentKr).toBe(158); // 89 + 69
+    expect(out[0].currentKr).toBe(178); // 89 + 89
   });
 
   it('an orphan tier id fail-safes to NOT COMPARABLE — never a fabricated saving (AC3)', () => {
@@ -235,7 +235,7 @@ describe('tier-aware comparison (BIN-433)', () => {
     expect(out).toHaveLength(1); // 337+384 still clear the gate
     expect(out[0].replacedProviderIds).not.toContain(8);
     expect(out[0].downgradeProviderIds).not.toContain(8); // skipped from BOTH buckets
-    expect(out[0].currentKr).toBe(158);
+    expect(out[0].currentKr).toBe(178);
   });
 
   it('an OMITTED tier key means the untiered base offering — a distinct path from orphan (AC4)', () => {
@@ -264,8 +264,8 @@ describe('tier-aware comparison (BIN-433)', () => {
     expect(out[0].replacedProviderIds.sort((a, b) => a - b)).toEqual([8, 337]);
     expect(out[0].downgradeProviderIds).toEqual([384]);
     expect(out[0].downgradeNames).toEqual(['HBO Max']);
-    expect(out[0].currentKr).toBe(238); // 169 + 69 — HBO Max's 149 NOT included
-    expect(out[0].savingKr).toBe(38); // 238 − 200, downgrade never folded in
+    expect(out[0].currentKr).toBe(258); // 169 + 89 — HBO Max's 149 NOT included
+    expect(out[0].savingKr).toBe(58); // 258 − 200, downgrade never folded in
   });
 
   it('an alias-KEYED includedTiers entry resolves to the canonical provider', () => {
@@ -371,20 +371,20 @@ describe('SWEDISH_BUNDLES seed integrity (BIN-429 verification → BIN-433 seeds
     }; // Prime 119 untiered → catalog default 69
     const out = detectBundleArbitrage([8, 384, 337, 119, 489, 76], user, SWEDISH_BUNDLES, NOW);
     expect(out.map(s => s.bundle.id)).toEqual([
-      'telia-streaming-mest',   // 734 − 499 = 235
-      'telia-streaming-maxad',  // 396 − 319 = 77
-      'telia-streaming-mer',    // 327 − 269 = 58  ← matches Telia's own "spara 58 kr" claim
+      'telia-streaming-mest',   // 754 − 499 = 255
+      'telia-streaming-maxad',  // 416 − 319 = 97
+      'telia-streaming-mer',    // 347 − 269 = 78
     ]);
-    expect(out[0].currentKr).toBe(734);
-    expect(out[0].savingKr).toBe(235);
+    expect(out[0].currentKr).toBe(754);
+    expect(out[0].savingKr).toBe(255);
     expect(out[0].downgradeProviderIds).toEqual([]);
     expect(out[0].bonusProviderIds).toEqual([]);
     // ALL THREE savings pinned exactly (high-review: ordering alone left Maxad's
     // number free to drift anywhere between its neighbours).
-    expect(out[1].currentKr).toBe(396);
-    expect(out[1].savingKr).toBe(77);
-    expect(out[2].currentKr).toBe(327);
-    expect(out[2].savingKr).toBe(58);
+    expect(out[1].currentKr).toBe(416);
+    expect(out[1].savingKr).toBe(97);
+    expect(out[2].currentKr).toBe(347);
+    expect(out[2].savingKr).toBe(78);
   });
 
   it('Tele2 Streaming Max yields a suggestion for a household on exactly its four ad tiers (BIN-1335)', () => {
@@ -395,8 +395,8 @@ describe('SWEDISH_BUNDLES seed integrity (BIN-429 verification → BIN-433 seeds
     const tele2 = out.find(s => s.bundle.id === 'tele2-streaming-max');
     expect(tele2, 'Tele2 Streaming Max produced no suggestion').toBeDefined();
     expect(tele2?.replacedProviderIds.slice().sort((a, b) => a - b)).toEqual([337, 384, 431, 489]);
-    expect(tele2?.currentKr).toBe(296); // 69 + 89 + 69 + 69 at catalog ad-tier prices
-    expect(tele2?.savingKr).toBe(47);
+    expect(tele2?.currentKr).toBe(316); // 89 + 89 + 69 + 69 at catalog ad-tier prices
+    expect(tele2?.savingKr).toBe(67);
     expect(tele2?.downgradeProviderIds).toEqual([]);
   });
 
@@ -439,7 +439,7 @@ describe('SWEDISH_BUNDLES seed integrity (BIN-429 verification → BIN-433 seeds
       expect(s.commitmentTotalKr, s.bundle.id).toBeNull();
       expect(s.savingKr, s.bundle.id).toBe(s.currentKr - s.bundleKr);
     }
-    expect(out.filter(x => x.bundle.vendor === 'Telia').map(s => s.savingKr)).toEqual([235, 77, 58]);
+    expect(out.filter(x => x.bundle.vendor === 'Telia').map(s => s.savingKr)).toEqual([255, 97, 78]);
   });
 });
 
@@ -453,7 +453,7 @@ describe('start fee (BIN-1335, Malin 2026-09-28 variant A)', () => {
     includedTiers: { 384: 'ads', 337: 'ads' },
     verifiedDate: '2026-07-01',
   };
-  const user = { providerTiers: { 384: 'ads', 337: 'ads' } }; // 89 + 69 = 158 à la carte
+  const user = { providerTiers: { 384: 'ads', 337: 'ads' } }; // 89 + 89 = 178 à la carte
 
   it('spreads the fee over the binding period, never over less than a year, rounding up', () => {
     expect(START_FEE_MIN_SPREAD_MONTHS).toBe(12);
@@ -466,9 +466,10 @@ describe('start fee (BIN-1335, Malin 2026-09-28 variant A)', () => {
   });
 
   it('drops a bundle that only saves money before its start fee', () => {
-    // 158 − 100 = 58 before the fee; 695 / 12 → 58 per month → saving 0 → not a suggestion.
-    const bundle = { ...base, bindingMonths: 12, startFeeKr: 695 };
-    expect(detectBundleArbitrage([384, 337], user, [{ ...base }], NOW)).toHaveLength(1);
+    // Bundle at 120: 178 − 120 = 58 before the fee; 695 / 12 → 58 per month → saving 0 → not a suggestion.
+    const priced = { ...base, monthlyKr: 120 };
+    const bundle = { ...priced, bindingMonths: 12, startFeeKr: 695 };
+    expect(detectBundleArbitrage([384, 337], user, [priced], NOW)).toHaveLength(1);
     expect(detectBundleArbitrage([384, 337], user, [bundle], NOW)).toEqual([]);
   });
 
@@ -476,14 +477,14 @@ describe('start fee (BIN-1335, Malin 2026-09-28 variant A)', () => {
     const bundle = { ...base, bindingMonths: 12, startFeeKr: 240 }; // 20 kr/mån
     const [s] = detectBundleArbitrage([384, 337], user, [bundle], NOW);
     expect(s.startFeeMonthlyKr).toBe(20);
-    expect(s.savingKr).toBe(158 - 100 - 20);
+    expect(s.savingKr).toBe(178 - 100 - 20);
     expect(s.savingKr).toBe(s.currentKr - s.bundleKr - s.startFeeMonthlyKr);
     expect(s.commitmentTotalKr).toBe(12 * 100 + 240);
   });
 
   it('ranks by the fee-inclusive saving, so a cheaper-looking bundle with a fee can fall behind', () => {
-    const withFee = { ...base, id: 'with-fee', monthlyKr: 90, bindingMonths: 12, startFeeKr: 600 }; // 158−90−50 = 18
-    const noFee = { ...base, id: 'no-fee', monthlyKr: 110 }; // 158−110 = 48
+    const withFee = { ...base, id: 'with-fee', monthlyKr: 90, bindingMonths: 12, startFeeKr: 600 }; // 178−90−50 = 38
+    const noFee = { ...base, id: 'no-fee', monthlyKr: 110 }; // 178−110 = 68
     const out = detectBundleArbitrage([384, 337], user, [withFee, noFee], NOW);
     expect(out.map(s => s.bundle.id)).toEqual(['no-fee', 'with-fee']);
   });

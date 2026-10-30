@@ -119,11 +119,11 @@ describe('cheapestPath cascade', () => {
   });
 
   it('5c — BIN-322: surfaces the ad-tier price + label for a sub-list-price tier', () => {
-    // Disney+ (337) list 109, ads tier 69 → "från 69 kr (Standard med reklam)".
+    // Disney+ (337) list 129, ads tier 89 → "från 89 kr (Standard med reklam)".
     const v = cheapestPath({ ...base, subscriptionProviderIds: [337] });
     expect(v.kind).toBe('subscribe'); // self-documenting: no owned/free/rent path
     expect(v.providerId).toBe(337);
-    expect(v.priceAmount).toBe(69);
+    expect(v.priceAmount).toBe(89);
     expect(v.tierLabel).toBe('Standard med reklam');
   });
 

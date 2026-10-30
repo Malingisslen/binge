@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { franchisePlan, type FranchiseFilm } from './franchiseCheapest';
 
 // Real provider ids/costs from SWEDISH_PROVIDERS: Netflix 8 (149), Prime 119
-// (69), Disney+ 337 (109), Max 384 (149), SVT 520 (0, free). Max alias 1899.
+// (69), Disney+ 337 (129), Max 384 (149), SVT 520 (0, free). Max alias 1899.
 const film = (
   tmdbId: number,
   subs: number[],
@@ -18,7 +18,7 @@ describe('franchisePlan', () => {
     ]);
     expect(plan.bestProviderId).toBe(337);
     expect(plan.bestProviderName).toBe('Disney+');
-    expect(plan.bestProviderMonthlyCost).toBe(109);
+    expect(plan.bestProviderMonthlyCost).toBe(129);
     expect(plan.coveredCount).toBe(3);
     expect(plan.totalFilms).toBe(4);
   });

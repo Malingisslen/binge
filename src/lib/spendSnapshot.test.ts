@@ -79,7 +79,7 @@ describe('computeSpendSnapshot (BIN-99)', () => {
     // Three DISTINCT catalog prices so the sort is deterministic (Netflix and
     // Viaplay both 169 post-2026-07, so this uses Netflix/Max/Disney+ instead).
     const snap = computeSpendSnapshot([337, 8, 384], [], {}); // none active
-    // Netflix 169 > Max 149 > Disney+ 109
+    // Netflix 169 > Max 149 > Disney+ 129
     expect(snap.idleProviders.map(p => p.id)).toEqual([8, 384, 337]);
     expect(snap.activeKr).toBe(0);
     expect(snap.idleKr).toBe(snap.totalKr);

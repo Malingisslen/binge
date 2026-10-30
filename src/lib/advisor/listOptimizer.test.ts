@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { cheapestListPlan, type ListTitle } from './listOptimizer';
 
 // Real provider ids/costs from SWEDISH_PROVIDERS: Netflix 8 (169), Prime 119
-// (69), Disney+ 337 (109), Max 384 (149, alias 1899), Viaplay 76 (169),
+// (69), Disney+ 337 (129), Max 384 (149, alias 1899), Viaplay 76 (169),
 // SVT 520 (0, isFree), TV4 489 (169, alias 1944), Apple TV+ 350 (119),
 // Pluto TV 300 (0, isAds — NOT isFree).
 const title = (
@@ -179,7 +179,7 @@ describe('cheapestListPlan — edge cases', () => {
 
   it('is deterministic on a three-way single-title tie (lowest id wins the single pick)', () => {
     const plan = cheapestListPlan([title(1, [337]), title(2, [384]), title(3, [8])]);
-    // Each covers exactly 1; costs Disney+ 109, Max 149, Netflix 169. Cheapest = Disney+ (337).
+    // Each covers exactly 1; costs Disney+ 129, Max 149, Netflix 169. Cheapest = Disney+ (337).
     expect(plan.bestSingle.providerId).toBe(337);
   });
 });
