@@ -27,6 +27,12 @@ function formatUnairedRunt(iso: string): string {
   return `${wd} ${d.getDate()}/${d.getMonth() + 1}`;
 }
 
+function formatAiredDate(iso: string): string {
+  return new Date(iso + 'T00:00:00').toLocaleDateString('sv-SE', {
+    day: 'numeric', month: 'short', year: 'numeric',
+  }).replace('.', '');
+}
+
 // T7: memo — säsongspaneler renderar upp till ~30+ rader och varje
 // episodeProgress-onSnapshot re-renderar hela detaljsidan. Med memo hoppar
 // orörda rader över re-rendern (kräver stabila callbacks från föräldern —
@@ -44,11 +50,7 @@ function EpisodeRow({
   const isUnaired = !!airDate && airDate > today;
 
   const code = formatEpisodeCode(seasonNumber, episode.episode_number);
-  const runt = isUnaired && airDate
-    ? formatUnairedRunt(airDate)
-    : episode.runtime
-      ? `${episode.runtime} min`
-      : '';
+  const runtimeText = episode.runtime ? `${episode.runtime} min` : '';
 
   if (masked) {
     // A real button (A11Y-2): the reveal used to be a click-only <div>, so keyboard
@@ -111,7 +113,19 @@ function EpisodeRow({
           />
         )}
       </div>
-      <div className="runt">{runt}</div>
+      <div className="runt">
+        {isUnaired && airDate ? (
+          <>
+            <div>{formatUnairedRunt(airDate)}</div>
+            <div className="chip">Ej släppt</div>
+          </>
+        ) : (
+          <>
+            {airDate && <div>{formatAiredDate(airDate)}</div>}
+            {runtimeText && <div>{runtimeText}</div>}
+          </>
+        )}
+      </div>
       {isToday ? (
         <div className="end">
           <span className="chip acc">nu</span>

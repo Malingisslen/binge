@@ -174,10 +174,18 @@ describe('EpisodeRow — episode code, runtime and air state (BIN-821)', () => {
     expect(screen.getByText('S02E12')).toBeInTheDocument();
   });
 
-  it('shows the runtime for an aired episode', () => {
+  it('shows the runtime and the release date for an aired episode', () => {
     renderRow({ air_date: '2026-03-10' });
 
     expect(screen.getByText('47 min')).toBeInTheDocument();
+    expect(screen.getByText('10 mars 2026')).toBeInTheDocument();
+    expect(screen.queryByText('Ej släppt')).toBeNull();
+  });
+
+  it('labels an episode still to come as not released', () => {
+    renderRow({ air_date: '2026-03-20' });
+
+    expect(screen.getByText('Ej släppt')).toBeInTheDocument();
   });
 
   it('replaces the runtime with the weekday and date for an episode still to come', () => {
