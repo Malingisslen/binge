@@ -36,6 +36,7 @@ vi.mock('@/hooks/useTMDB', () => ({ useTrending: () => ({ data: undefined }) }))
 vi.mock('@/hooks/useWatchlist', () => ({
   useWatchlist: () => ({ items: [], loading: false }),
 }));
+vi.mock('@/hooks/useBehindShows', () => ({ useBehindShows: () => ({ behindIds: new Set<number>(), isLoading: false }) }));
 vi.mock('@/hooks/useCalendar', () => ({
   useCalendarEntries: () => ({ entries: [], isLoading: false }),
 }));

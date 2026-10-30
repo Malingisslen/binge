@@ -18,6 +18,9 @@ import LaterThisWeek from '@/components/home/LaterThisWeek';
 import BacklogResurfaceTile from '@/components/home/BacklogResurfaceTile';
 import { pickBacklogResurface } from '@/lib/backlogResurface';
 import ContinueWatchingTile from '@/components/home/ContinueWatchingTile';
+import ToWatchTile from '@/components/home/ToWatchTile';
+import { useBehindShows } from '@/hooks/useBehindShows';
+import { buildToWatchRows, newestAiredDateByShow, pickToWatchHighlights } from '@/lib/toWatch';
 import { pickContinueWatching, latestAiredEpisodeByShow } from '@/lib/continueWatching';
 import SparandeTile from '@/components/home/SparandeTile';
 import SpendSnapshotTile from '@/components/home/SpendSnapshotTile';
@@ -223,6 +226,26 @@ function Dashboard() {
     const aired = latestAiredEpisodeByShow(calendarEntries, new Date());
     return pickContinueWatching(items, { aired });
   }, [items, calendarEntries]);
+  // "Nytt för dig": the same rows as the library view, from the calendar and tv-lite answers
+  // this page already fetched.
+  const followedTv = useMemo(
+    () => items.filter(i => i.mediaType === 'tv' && i.status === 'mina' && !i.dropped),
+    [items],
+  );
+  const { behindIds } = useBehindShows(followedTv);
+  const toWatchRows = useMemo(() => {
+    const now = new Date();
+    return buildToWatchRows(items, {
+      behindIds,
+      lastSeen: new Map(),
+      newestAired: newestAiredDateByShow(calendarEntries, now),
+      now,
+    });
+  }, [items, behindIds, calendarEntries]);
+  const toWatchHighlights = useMemo(
+    () => pickToWatchHighlights(toWatchRows, 3, new Set(continueWatching.map(e => e.item.tmdbId))),
+    [toWatchRows, continueWatching],
+  );
   // BIN-88: resurfaced vill_se backlog (streamable on a service the user has).
   const resurfaced = useMemo(
     () => pickBacklogResurface(items, user?.myProviders ?? []),
@@ -296,6 +319,7 @@ function Dashboard() {
       ) : (
         <div className="hem-settle">
           <ContinueWatchingTile entries={continueWatching} />
+          <ToWatchTile highlights={toWatchHighlights} total={toWatchRows.length} />
         </div>
       )}
       <BacklogResurfaceTile items={resurfaced} myProviders={user?.myProviders ?? []} />

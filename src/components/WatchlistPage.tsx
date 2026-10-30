@@ -1,10 +1,10 @@
 'use client';
 
-import { Suspense, useState, useEffect, useMemo, useRef } from 'react';
+import { Suspense, useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import {
-  Search, Film, Tv, X, Check, ChevronDown, Library,
+  Search, Film, Tv, X, Check,
   Rows3, LayoutGrid, Grid3x3, CloudOff,
 } from 'lucide-react';
 import { posterUrl, posterSrcSet, titleHref } from '@/lib/tmdb/client';
@@ -15,6 +15,7 @@ import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { useToWatchCount } from '@/hooks/useToWatchCount';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
 import { useCalendarEntries } from '@/hooks/useCalendar';
@@ -59,7 +60,6 @@ import { formatLibraryDate, pluralSv } from '@/lib/utils';
 import { toneForId } from '@/lib/duotone';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import { useIncrementalList } from '@/hooks/useIncrementalList';
-import { useClickOutside } from '@/hooks/useClickOutside';
 import {
   LIBRARY_UNREACHABLE_TITLE,
   LIBRARY_UNREACHABLE_BODY,
@@ -931,8 +931,8 @@ const STATUS_CHOICES: ReadonlyArray<{ value: WatchStatus; label: string }> = [
 // via the `activeKey` prop instead of status-matching, so they never collide
 // with the status tabs (notably 'Alla', whose status is also null).
 const LIBRARY_VIEWS: { label: string; href: string; status: WatchStatus | null; key?: string }[] = [
-  { label: 'Följer',   href: '/my/series/',   status: 'mina' },
   { label: 'Nytt för dig', href: '/my/nytt-for-dig/', status: null, key: 'nytt-for-dig' },
+  { label: 'Följer',   href: '/my/series/',   status: 'mina' },
   { label: 'Vill se',  href: '/my/vill-se/',  status: 'vill_se' },
   { label: 'Filmer',   href: '/my/films/',    status: 'sedd' },
   { label: 'Avbrutna', href: '/my/avbrutna/', status: 'avbruten' },
@@ -941,64 +941,36 @@ const LIBRARY_VIEWS: { label: string; href: string; status: WatchStatus | null; 
   { label: 'Listor',   href: '/my/lists/',    status: null, key: 'lists' },
 ];
 
-// Kompakt dropdown-vy-väljare (variant 2): ersätter den 6-chips-breda flikraden
-// med en liten meny. Behåller riktiga <Link>:ar (delbara URL:er) + aktivmarkering.
-// Stäng på click-outside + Escape (samma mönster som UgcActionsMenu).
+// Synlig flikrad i stället för en rullgardin: användare hittade inte undervyerna bakom
+// en liten knapp. Riktiga <Link>:ar (delbara URL:er); raden bryter på smala skärmar.
+// Nytt för dig står först och bär antalet titlar som väntar.
 export function LibrarySubnav({ status, activeKey }: { status?: WatchStatus; activeKey?: string }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useClickOutside(ref, () => setOpen(false));
-  // useClickOutside täcker mousedown-utanför; Escape har ingen delad hook — behåll
-  // den lilla lyssnaren, gated på open så den inte ligger på globalt.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [open]);
-
+  const toWatch = useToWatchCount();
   const isActive = (view: (typeof LIBRARY_VIEWS)[number]) =>
     view.key ? view.key === activeKey : !activeKey && (status ?? null) === view.status;
-  // find(isActive) matchar alltid en vy (varje status/activeKey har en rad); render
-  // faller ändå tillbaka på 'Alla' om något oväntat inte matchar.
-  const activeView = LIBRARY_VIEWS.find(isActive);
 
   return (
-    <div ref={ref} className="relative inline-block mt-3.5">
-      <button
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        className="chip inline-flex items-center gap-1.5"
-        aria-expanded={open}
-        aria-label="Byt biblioteksvy"
-      >
-        <Library size={13} className="text-ink-3" />
-        <span className="font-semibold">{activeView?.label ?? 'Alla'}</span>
-        <ChevronDown size={13} className={`text-ink-3 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
-      {open && (
-        <nav
-          aria-label="Biblioteksvyer"
-          className={cardClass('absolute left-0 top-full mt-1 shadow-pop min-w-[180px] z-30 py-1')}
-        >
-          {LIBRARY_VIEWS.map(view => {
-            const active = isActive(view);
-            return (
-              <Link
-                key={view.href}
-                href={view.href}
-                aria-current={active ? 'page' : undefined}
-                onClick={() => setOpen(false)}
-                className={`flex items-center justify-between gap-3 px-3 py-1.5 text-sm no-underline hover:bg-bg-2 ${active ? 'text-ink font-semibold' : 'text-ink-2'}`}
-              >
-                {view.label}
-                {active && <Check size={13} className="text-acc-deep" />}
-              </Link>
-            );
-          })}
-        </nav>
-      )}
-    </div>
+    <nav aria-label="Biblioteksvyer" className="flex flex-wrap gap-1.5 mt-3.5">
+      {LIBRARY_VIEWS.map(view => {
+        const active = isActive(view);
+        return (
+          <Link
+            key={view.href}
+            href={view.href}
+            aria-current={active ? 'page' : undefined}
+            className={`chip no-underline${active ? ' is-on' : ''}`}
+          >
+            {view.label}
+            {view.key === 'nytt-for-dig' && toWatch > 0 && (
+              <>
+                <span className="nav-count" aria-hidden="true">{toWatch > 99 ? '99+' : toWatch}</span>
+                <span className="sr-only">, {toWatch} att se</span>
+              </>
+            )}
+          </Link>
+        );
+      })}
+    </nav>
   );
 }
 

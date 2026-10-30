@@ -8,6 +8,7 @@ import { useClickOutside } from '@/hooks/useClickOutside';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useFriendRequests } from '@/hooks/useFriends';
 import { useBlockedUsers } from '@/hooks/useBlockedUsers';
+import { useToWatchCount } from '@/hooks/useToWatchCount';
 import ChromePart from './ChromePart';
 import type { ChromeMode } from './chromeMode';
 
@@ -126,11 +127,12 @@ function AppTabBar() {
   const friendRequestsCount = friendRequests.filter(r => !isBlocked(r.fromUid)).length;
   const moreLabel = friendRequestsCount > 0 ? `Mer, ${friendRequestsCount} ${friendRequestsCount === 1 ? 'vänförfrågan' : 'vänförfrågningar'}` : undefined;
   const moreActive = MORE_ITEMS.some(item => isActive(pathname, item));
+  const toWatch = useToWatchCount();
 
   return (
     <nav className="m-tabs" aria-label="Huvudmeny">
       <TabLink item={HEM} icon={Home} active={isActive(pathname, HEM)} />
-      <TabLink item={BIBLIOTEK} icon={LayoutGrid} active={isActive(pathname, BIBLIOTEK)} />
+      <TabLink item={BIBLIOTEK} icon={LayoutGrid} active={isActive(pathname, BIBLIOTEK)} count={toWatch} />
       <SearchTab pathname={pathname} onOpen={openSearch} />
       <TabLink item={KALENDER} icon={Calendar} active={isActive(pathname, KALENDER)} />
       <div ref={moreRef} className="m-more">
@@ -172,10 +174,18 @@ function AppTabBar() {
   );
 }
 
-function TabLink({ item, icon: Icon, active }: { item: NavItem; icon: typeof LayoutGrid; active: boolean }) {
+function TabLink({ item, icon: Icon, active, count = 0 }: { item: NavItem; icon: typeof LayoutGrid; active: boolean; count?: number }) {
   return (
-    <Link href={item.href} className={active ? 'is-on' : undefined} aria-current={active ? 'page' : undefined}>
-      <span className="icn"><Icon size={22} strokeWidth={1.5} aria-hidden="true" /></span>
+    <Link
+      href={item.href}
+      className={active ? 'is-on' : undefined}
+      aria-current={active ? 'page' : undefined}
+      aria-label={count > 0 ? `${item.label}, ${count} att se` : undefined}
+    >
+      <span className="icn">
+        <Icon size={22} strokeWidth={1.5} aria-hidden="true" />
+        {count > 0 && <span className="m-count" aria-hidden="true">{count > 99 ? '99+' : count}</span>}
+      </span>
       {item.label}
     </Link>
   );

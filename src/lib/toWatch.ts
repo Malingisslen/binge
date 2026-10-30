@@ -17,6 +17,14 @@ export const TO_WATCH_GROUP_LABELS: Record<ToWatchGroup, string> = {
   film: 'Filmer att se',
 };
 
+/** Label for a single title (the Hem tile), where the plural group heading would read wrong. */
+export const TO_WATCH_ROW_LABELS: Record<ToWatchGroup, string> = {
+  nya: 'Nytt avsnitt',
+  efter: 'Ligger efter',
+  ej_paborjad: 'Ej påbörjad',
+  film: 'Film att se',
+};
+
 /** An episode counts as new for this long after it aired. */
 export const NEW_EPISODE_DAYS = 14;
 
@@ -192,4 +200,30 @@ const SORT_KEYS = Object.keys(TO_WATCH_SORT_LABELS) as ToWatchSortKey[];
 
 export function sanitizeToWatchSort(raw: unknown): ToWatchSortKey {
   return SORT_KEYS.includes(raw as ToWatchSortKey) ? raw as ToWatchSortKey : 'seen';
+}
+
+const rtf = new Intl.RelativeTimeFormat('sv', { numeric: 'auto' });
+
+/** "igår", "för 3 dagar sedan", "för 2 veckor sedan" relative to now. */
+export function agoText(date: Date, now: Date): string {
+  const days = Math.round((date.getTime() - now.getTime()) / 86_400_000);
+  if (Math.abs(days) < 14) return rtf.format(days, 'day');
+  if (Math.abs(days) < 60) return rtf.format(Math.round(days / 7), 'week');
+  return rtf.format(Math.round(days / 30), 'month');
+}
+
+/** The few rows Hem shows: new episodes first, then behind, not started, films. */
+export function pickToWatchHighlights(
+  rows: readonly ToWatchRow[],
+  limit = 3,
+  /** Titles another Hem tile already shows, so the same series is not listed twice. */
+  excludeIds: ReadonlySet<number> = new Set(),
+): ToWatchRow[] {
+  const byGroup = (r: ToWatchRow) => TO_WATCH_GROUP_ORDER.indexOf(r.group);
+  return rows.filter(r => !excludeIds.has(r.item.tmdbId))
+    .sort((a, b) =>
+      byGroup(a) - byGroup(b)
+      || (b.newestAirDate ?? '').localeCompare(a.newestAirDate ?? '')
+      || compareToWatchRows('added')(a, b))
+    .slice(0, limit);
 }

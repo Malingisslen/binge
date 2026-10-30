@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useToWatchCount } from '@/hooks/useToWatchCount';
 
 // The horizontal section nav that lives directly below the topbar on every
 // authenticated page. Order: Hem · Bibliotek · Kalender · Vänner · Rekommendationer ·
@@ -29,6 +30,7 @@ const ITEMS: readonly NavItem[] = [
 
 export default function Subnav() {
   const pathname = usePathname();
+  const toWatch = useToWatchCount();
 
   return (
     <nav className="subnav" aria-label="Sektioner">
@@ -42,6 +44,12 @@ export default function Subnav() {
             aria-current={active ? 'page' : undefined}
           >
             {item.label}
+            {item.label === 'Bibliotek' && toWatch > 0 && (
+              <>
+                <span className="nav-count" aria-hidden="true">{toWatch > 99 ? '99+' : toWatch}</span>
+                <span className="sr-only">, {toWatch} att se</span>
+              </>
+            )}
           </Link>
         );
       })}
