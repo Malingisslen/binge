@@ -58,6 +58,9 @@ import {
   stagedAddedFiles,
   stagedReviewGates,
   GATES_CONFIG_REL,
+  isTypedSubject,
+  CONVENTIONAL_TYPES,
+  UNTYPED_EFFECTIVE_FROM,
 } from './check_review_coverage.mjs';
 import { EVENTS_PATH, parseEvents, historyIsAvailable } from './check_events.mjs';
 import { HIGH_STAKES, parseReviewGates, readReviewGates } from '../route.mjs';
@@ -113,11 +116,8 @@ describe('owesReviewRow — the denominator, driven branch by branch', () => {
     }
   });
 
-  it('an unprefixed commit and a revert are OUT OF SCOPE, not silently passed', () => {
-    // A stated limit rather than a hidden one: neither matches, so neither is judged. How
-    // many such commits exist depends on which grammar you count with — the module header
-    // carries the deriving command rather than a figure. Pinned here so that if someone
-    // later decides these SHOULD be judged, this test is where the decision lands.
+  it('an unprefixed subject and a revert are not code types', () => {
+    // `reviewOwedFor` grades an unprefixed subject as code from UNTYPED_EFFECTIVE_FROM on (BIN-1463).
     expect(owesReviewRow('Revert "feat(x): thing (BIN-1)"')).toBe(false);
     expect(owesReviewRow('update the thing')).toBe(false);
   });
@@ -1166,6 +1166,113 @@ describe('decision 1 (BIN-1426): who owes a review row', () => {
   it('exemptionInputs hands both callers the per-commit gate reader', () => {
     expect(exemptionInputs(true).gatesAt).toBe(reviewGatesAtCommits);
     expect(exemptionInputs(false).gatesAt(['x']).size).toBe(0);
+  });
+});
+
+describe('an untyped subject is graded as code (BIN-1463)', () => {
+  const reviewed = new Set(['BIN-100']);
+  const GATES = [{ name: 'fixture', patterns: ['^src/lib/firebase/'] }];
+  const ORDINARY = ['src/components/ui/DuotonePoster.tsx'];
+  const GATED = ['src/lib/firebase/friends.ts'];
+  const FROM_MS = Date.parse(UNTYPED_EFFECTIVE_FROM);
+  const AT_INSTANT = UNTYPED_EFFECTIVE_FROM;
+  const JUST_BEFORE = new Date(FROM_MS - 1).toISOString();
+  const owed = (subject, files, date) => reviewOwedFor({ subject, files, gates: GATES, date });
+  const grade = (subject, files, gates = GATES) => gradeSubject(subject, reviewed, files, { gates });
+  const UNTYPED = 'Socialt: vänner går att hitta och bli vän med (#141)';
+
+  it('owes a row on a gated file from the instant on, and not a millisecond before it', () => {
+    expect(owed(UNTYPED, GATED, AT_INSTANT)).toContain('no type');
+    expect(owed(UNTYPED, GATED, AT_INSTANT)).toContain(GATED[0]);
+    expect(owed(UNTYPED, GATED, JUST_BEFORE)).toBeNull();
+  });
+
+  it('owes nothing on ordinary files, like a fix there', () => {
+    expect(owed(UNTYPED, ORDINARY, AT_INSTANT)).toBeNull();
+    expect(owed('fix(ui): x', ORDINARY, AT_INSTANT)).toBeNull();
+  });
+
+  it('the commit hook refuses an untyped subject on a gated file until it names a reviewed ticket', () => {
+    const v = grade(UNTYPED, GATED);
+    expect(v.ok).toBe(false);
+    expect(v.reason).toContain('no BIN-id');
+    expect(grade('Socialt: vänner (BIN-100)', GATED).ok).toBe(true);
+    expect(grade('Socialt: vänner (BIN-999)', GATED).ok).toBe(false);
+    expect(grade('Initial commit', GATED).ok, 'a hand-typed subject git did not write').toBe(false);
+  });
+
+  it('unreadable gates make an untyped subject owe a row, as they do a code type', () => {
+    const v = grade(UNTYPED, ORDINARY, null);
+    expect(v.ok).toBe(false);
+    expect(v.owed).toContain('could not be read');
+  });
+
+  it('the subjects git writes itself, and a revert, pass on a gated file', () => {
+    for (const subject of [
+      "Merge branch 'main' of github.com:x/binge",
+      "Merge remote-tracking branch 'origin/main' into claude/x",
+      'Merge pull request #12 from x/y',
+      'fixup! fix(data): vänlistan (BIN-100)',
+      'squash! fix(data): vänlistan',
+      'amend! fix(data): vänlistan',
+      'Revert "fix(data): vänlistan (BIN-100)"',
+      'revert: fix(data): vänlistan',
+    ]) {
+      expect(isTypedSubject(subject), subject).toBe(true);
+      expect(grade(subject, GATED).ok, subject).toBe(true);
+    }
+  });
+
+  it('one list of types: every code type owes a row and is typed, every other type is typed only', () => {
+    const code = ['feat', 'fix', 'refactor', 'perf', 'test', 'build', 'ci'];
+    expect(CONVENTIONAL_TYPES.slice().sort()).toEqual([...code, 'docs', 'chore', 'style', 'revert', 'deps'].sort());
+    for (const type of CONVENTIONAL_TYPES) {
+      for (const subject of [`${type}: x`, `${type}(scope): x`, `${type}(scope)!: x`]) {
+        expect(isTypedSubject(subject), subject).toBe(true);
+        expect(owesReviewRow(subject), subject).toBe(code.includes(type));
+      }
+    }
+    // A hand-typed subject that starts with the word Merge is not one git wrote.
+    expect(isTypedSubject('Merge friends and groups into one list')).toBe(false);
+    // A broken grammar is not a type: these were the repo's older spelling.
+    expect(isTypedSubject('feat(watchlist)+rules: x')).toBe(false);
+    expect(isTypedSubject('docs: describe the feat(x): syntax')).toBe(true);
+  });
+
+  it('a typed code subject owes the same row it did before, with the reason it had', () => {
+    expect(owed('fix(data): vänlistan', GATED, AT_INSTANT)).toBe(`its type changes code and a review gate covers ${GATED[0]}`);
+    expect(owed('docs(data): en rad', GATED, AT_INSTANT)).toBeNull();
+  });
+
+  it('dependabot double-scope bumps stay exempt in the walk, and the same subject from a human does not', () => {
+    // `deps(functions)(deps):` is not one conventional type, so the subject is untyped; only
+    // the robot exemption, which reads the subject as written, lets it through.
+    const subject = 'deps(functions)(deps): bump typescript in /functions (#40)';
+    expect(isTypedSubject(subject)).toBe(false);
+    const run = (sha) => findCoverageGaps(
+      [{ sha, date: AT_INSTANT, subject, files: GATED, added: [] }],
+      reviewed,
+      { botShas: new Set(['bot1']), dependabotPrefixes: readDependabotPrefixes(), gatesAt: () => new Map([[sha, GATES]]) },
+    );
+    expect(run('bot1').violations).toEqual([]);
+    expect(run('human1').violations).toHaveLength(1);
+    expect(run('human1').violations[0].reason).toContain('no type');
+  });
+
+  it('the walk lists an untyped commit after the instant on a gated file, and not one before it', () => {
+    const run = (date) => findCoverageGaps(
+      [{ sha: 'abc1234def', date, subject: UNTYPED, files: GATED, added: [] }],
+      reviewed,
+      { gatesAt: () => new Map([['abc1234def', GATES]]) },
+    );
+    expect(run(AT_INSTANT).violations).toHaveLength(1);
+    expect(run(JUST_BEFORE).violations).toEqual([]);
+  });
+
+  it('the instant is a full ISO time after #141, the commit that would otherwise turn the walk red', () => {
+    expect(UNTYPED_EFFECTIVE_FROM).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    expect(FROM_MS).toBeGreaterThan(Date.parse('2026-10-11T23:59:59Z'));
+    expect(FROM_MS, 'an instant in the future grades nothing yet').toBeLessThanOrEqual(Date.now());
   });
 });
 

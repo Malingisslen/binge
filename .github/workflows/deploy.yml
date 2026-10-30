@@ -174,7 +174,7 @@ jobs:
         run: echo "::warning::npm run test:process failed. It does not stop the deploy (BIN-1426); the step above says which test."
 
       # The same review-coverage walk the process tests run, as its own step, so a commit
-      # that reached main with no ticket id is named in the run summary rather than lost
+      # that owes a review row and has none is named in the run summary rather than lost
       # among the other process tests. It warns and never stops the deploy (BIN-1426).
       #
       # The report holds commit subjects, and a squash merge makes a PR title one. So it goes

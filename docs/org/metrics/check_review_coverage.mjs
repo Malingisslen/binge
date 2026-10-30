@@ -74,7 +74,9 @@
 //   * it is a new feature: a `feat` subject, or a page it adds under `src/app/`;
 //   * or its type changes code and it touches a file a review gate in
 //     `.claude/shared-plugin.json` covers. Each commit is judged by the gates in its own tree,
-//     so widening a gate never re-grades an older commit.
+//     so widening a gate never re-grades an older commit. Since `UNTYPED_EFFECTIVE_FROM` a
+//     subject with no conventional type is graded as a code type here (BIN-1463): a hand-typed
+//     subject says nothing about what it changes, and a squash merge keeps a PR title as one.
 // Anything else is an ordinary change and owes no row. The paragraphs below describe the rule
 // before that epoch, which history mode still applies to the commits made under it.
 //
@@ -99,18 +101,11 @@
 //     folds. Automation that never owed a critique;
 //     demanding rows would make the check permanently red, and a permanently red check gets
 //     switched off.
-//   * `revert` (4 subjects in history), and any commit with NO conventional prefix. Neither
-//     matches, so neither is judged, and a revert of reviewed code is a real change this rule
-//     will not ask about.
-//
-//     HOW MANY subjects go unprefixed depends entirely on which grammar you count with, so
-//     derive it rather than reading a figure here:
-//
-//         TZ=UTC git log --no-merges --date=iso-strict-local --format='%cd|%s'
-//
-//     They are mostly this repo's older `feat(watchlist)+rules:` / `fix(providers)+test:`
-//     style, where the suffix after the scope parenthesis breaks the conventional grammar.
-//     They are not untraceable commits; they are a spelling this regex does not parse.
+//   * `revert`, and git's own `Revert "…"` subject. A revert of reviewed code is a real
+//     change this rule will not ask about.
+//   * Before `UNTYPED_EFFECTIVE_FROM`, any commit with NO conventional prefix. Many of them are
+//     this repo's older `feat(watchlist)+rules:` style, where the suffix after the scope
+//     parenthesis breaks the conventional grammar.
 //   * SUBJECT ONLY, never the body. `6d157c5` is a pure documentation correction that names
 //     BIN-565 in its body alone; a body-scanning rule would demand a review row for every
 //     follow-up comment fix on already-reviewed work.
@@ -198,7 +193,21 @@ export const COVERAGE_EFFECTIVE_FROM = '2026-08-18T00:00:00.000Z';
  * `test` is in the list because leaving it out missed `049f21b`, half of the incident this
  * file was filed about. See the header.
  */
-const OWES_REVIEW = /^(feat|fix|refactor|perf|test|build|ci)(\([^)]*\))?!?:/;
+const CODE_TYPES = ['feat', 'fix', 'refactor', 'perf', 'test', 'build', 'ci'];
+export const CONVENTIONAL_TYPES = Object.freeze([...CODE_TYPES, 'docs', 'chore', 'style', 'revert', 'deps']);
+const typePrefix = (types) => new RegExp(`^(${types.join('|')})(\\([^)]*\\))?!?:`);
+const OWES_REVIEW = typePrefix(CODE_TYPES);
+const TYPED = typePrefix(CONVENTIONAL_TYPES);
+// The subjects git writes itself. A fixup/squash/amend is folded into a typed commit before it
+// lands, and a merge or a revert brings in work that was graded where it was written.
+const GIT_WRITTEN = /^(Merge (branch|branches|remote-tracking branch|tag|commit|pull request) |Revert "|fixup! |squash! |amend! )/;
+
+/**
+ * Since this instant, a subject that is neither typed nor written by git is graded as a code
+ * type (BIN-1463). Earlier commits keep the rule they were made under; measured on 2026-10-30,
+ * grading all of history this way would have turned 9d0677c (#141) red.
+ */
+export const UNTYPED_EFFECTIVE_FROM = '2026-10-30T07:15:00.000Z';
 
 /**
  * Dependabot's own version bumps, and ONLY those, are exempt from owing a review row.
@@ -306,6 +315,12 @@ export function owesReviewRow(subject) {
   return OWES_REVIEW.test(subject.trim());
 }
 
+/** True when the subject declares a conventional type, or git wrote it. */
+export function isTypedSubject(subject) {
+  const trimmed = subject.trim();
+  return TYPED.test(trimmed) || GIT_WRITTEN.test(trimmed);
+}
+
 /**
  * BIN-959 del 3 (Malin's call, 2026-09-19): a commit that changes what a gate reviewer is
  * TOLD to look for owes a review row whatever its conventional type. Before this, a
@@ -390,16 +405,18 @@ export function reviewOwedFor({ subject, files = [], added = [], gates = null, d
     const hit = files.find((f) => pattern.test(f));
     if (hit) return `it changes ${hit}, which owes a review row whatever the commit type`;
   }
-  const codeType = owesReviewRow(subject);
+  const untyped = at >= Date.parse(UNTYPED_EFFECTIVE_FROM) && !isTypedSubject(subject);
+  const codeType = owesReviewRow(subject) || untyped;
   if (at < Date.parse(REVIEW_SCOPE_EFFECTIVE_FROM)) return codeType ? 'its type changes code' : null;
   const feature = featureSignal(subject, added);
   if (feature) return feature;
   if (!codeType) return null;
+  const kind = untyped ? 'its subject has no type, so it is graded as code,' : 'its type changes code';
   if (!Array.isArray(gates) || gates.length === 0) {
-    return 'its type changes code and the review gates could not be read';
+    return `${kind} and the review gates could not be read`;
   }
   const gated = files.find((f) => gates.some((gate) => gateCovers(gate, f)));
-  return gated ? `its type changes code and a review gate covers ${gated}` : null;
+  return gated ? `${kind} and a review gate covers ${gated}` : null;
 }
 
 /** True when `reviewOwedFor` names a reason. */
@@ -1003,11 +1020,9 @@ export function mainPullRequest({
     // Unreadable gates make every code type owe a row, the strict reading.
   }
   const reviewed = ticketsWithAReviewRow(parseEvents(readFileSync(join(repoDir, DEFAULT_EVENTS_REL), 'utf8')));
-  // A title with no conventional type says nothing about what it changes, and the squash merge
-  // keeps it as the subject, so it is graded as code. The pull requests that reached main
-  // with no id had titles like that.
-  const typed = /^(feat|fix|refactor|perf|test|build|ci|docs|chore|style|revert|deps)(\([^)]*\))?!?:/.test(subject);
-  const verdict = gradeSubject(typed ? subject : `fix: ${subject}`, reviewed, files, { added, gates });
+  // An untyped title is graded as code by `reviewOwedFor`, as the subject the squash merge
+  // keeps would be.
+  const verdict = gradeSubject(subject, reviewed, files, { added, gates });
 
   if (verdict.ok) {
     const named = verdict.tickets.length > 0 ? ` (${verdict.tickets.join(', ')})` : '';
