@@ -1,7 +1,7 @@
 // check_review_coverage.mjs — fails when a commit that owed a stakeholder-review row
 // silently has none. Filed as BIN-917.
 //
-// TWO MODES, AND THE SECOND ONE EXISTS BECAUSE THE FIRST DRAFT OF THIS HEADER WAS WRONG.
+// THE HISTORY MODE EXISTS BECAUSE THE FIRST DRAFT OF THIS HEADER WAS WRONG.
 //
 // `--message <file>`  — COMMIT TIME. Grades the subject line of the commit being written and
 //                       refuses it. Called by lefthook's `commit-msg` hook. This is BIN-917's
@@ -9,6 +9,8 @@
 // (no flag)           — HISTORY. Walks every commit and grades the ones already made. This
 //                       catches anything that got in before the hook existed, or with the
 //                       hook bypassed.
+// `--pr`              — PULL REQUEST. Grades the title a squash merge would make the subject
+//                       on main. Called by pr-checks.yml (BIN-1460).
 //
 // WHICH RUNNER CALLS WHICH is derived, not asserted — a sentence here was the belief that
 // produced BIN-1040's first, inert fix (the exemption wired into `main()`, which nothing
@@ -31,12 +33,8 @@
 // WHAT THE COMMIT-TIME GATE STILL DOES NOT COVER, stated rather than implied:
 //   * `LEFTHOOK=0` skips every hook. That is a deliberate escape hatch in the tool, not a
 //     hole this file can close.
-//   * The hook only fires where lefthook has installed `.git/hooks/commit-msg`. This repo has
-//     no `prepare` script, so adding a hook TYPE requires one `npx lefthook install`. Until
-//     that runs on a given machine the config is present and the gate is not armed — the
-//     BIN-849 failure shape (a value wired in config and never in the build), which is why it
-//     is said here and flagged to the founder rather than assumed.
-//   * The history mode remains the backstop for all three.
+//   * The hook only fires where lefthook has installed `.git/hooks/commit-msg`.
+//   * The history mode remains the backstop.
 //
 // WHAT IT DOES CHECK
 // The sibling asks "does a claim carry its evidence?". This asks the opposite question:
@@ -69,7 +67,7 @@
 // THE RULE SINCE `REVIEW_SCOPE_EFFECTIVE_FROM` (BIN-1426; Malin's decision 1, 2026-10-05:
 // role critiques and reviewer agents only for database rules, sign-in, personal data, server
 // functions and new features, while ordinary fixes ship on typecheck and tests). `owesReview`
-// is the one predicate this file's two modes and `check_staged_routing.mjs` all ask. A commit
+// is the one predicate this file's modes and `check_staged_routing.mjs` all ask. A commit
 // owes a row when
 //   * it touches a `TYPE_FREE` path, whatever its type: the router's high-stakes paths and the
 //     machinery that decides who reviews, so a `docs:` subject is never a way around either;
@@ -288,10 +286,15 @@ export function readBotBumpShas() {
  */
 export function isBotDependencyBump(commit, botShas, prefixes) {
   if (!botShas.has(commit.sha)) return false;
-  const subject = commit.subject.trim();
+  return isDependencyBumpSubject(commit.subject, prefixes);
+}
+
+/** The subject half of the exemption. Never enough on its own: a human can type it. */
+export function isDependencyBumpSubject(subject, prefixes) {
+  const trimmed = subject.trim();
   return prefixes.some((prefix) => {
     const escaped = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return new RegExp(`^${escaped}\\(deps[^)]*\\)!?:`).test(subject);
+    return new RegExp(`^${escaped}\\(deps[^)]*\\)!?:`).test(trimmed);
   });
 }
 
@@ -953,9 +956,75 @@ export function mainMessage(
   return 1;
 }
 
+/**
+ * The `--pr` entry point, for pr-checks.yml. A pull request merged with GitHub's squash
+ * button becomes one commit on main whose subject is the PR title, and it never passes a local
+ * `commit-msg` hook. So the title is graded here, against the PR's own files, before the merge.
+ *
+ * The title and the author arrive through the environment, never through a command line a
+ * shell builds: both are typed by whoever opened the PR. The robot exemption needs the author
+ * AND the subject, as in the history walk.
+ */
+export function mainPullRequest({
+  title = process.env.PR_TITLE ?? '',
+  author = process.env.PR_AUTHOR ?? '',
+  base = process.env.PR_BASE_SHA ?? '',
+  repoDir = REPO_ROOT,
+  changed = null,
+} = {}) {
+  const subject = (String(title).split(/\r?\n/)[0] ?? '').trim();
+  if (author === 'dependabot[bot]' && isDependencyBumpSubject(subject, readDependabotPrefixes(repoDir))) {
+    console.log('review coverage: a dependabot version bump, exempt as in the history walk.');
+    return 0;
+  }
+  if (!/^[0-9a-f]{7,40}$/.test(base)) {
+    console.error('review coverage: no base commit to compare the pull request against (PR_BASE_SHA).');
+    return 1;
+  }
+  const diff = (filter) => execFileSync(
+    'git', ['diff', '--name-only', '--no-renames', ...filter, base, 'HEAD'],
+    { cwd: repoDir, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 },
+  ).split(/\r?\n/).map((f) => f.trim()).filter(Boolean);
+  // `changed` lets a test hand in the file lists instead of a git range.
+  let files;
+  let added;
+  try {
+    files = changed?.files ?? diff([]);
+    added = changed?.added ?? diff(['--diff-filter=A']);
+  } catch {
+    // A range git cannot read is not a pull request that changes nothing.
+    console.error(`review coverage: git could not compare the pull request against ${base}.`);
+    return 1;
+  }
+  let gates = null;
+  try {
+    gates = parseReviewGates(readFileSync(join(repoDir, GATES_CONFIG_REL), 'utf8'));
+  } catch {
+    // Unreadable gates make every code type owe a row, the strict reading.
+  }
+  const reviewed = ticketsWithAReviewRow(parseEvents(readFileSync(join(repoDir, DEFAULT_EVENTS_REL), 'utf8')));
+  // A title with no conventional type says nothing about what it changes, and the squash merge
+  // keeps it as the subject, so it is graded as code. The pull requests that reached main
+  // with no id had titles like that.
+  const typed = /^(feat|fix|refactor|perf|test|build|ci|docs|chore|style|revert|deps)(\([^)]*\))?!?:/.test(subject);
+  const verdict = gradeSubject(typed ? subject : `fix: ${subject}`, reviewed, files, { added, gates });
+
+  if (verdict.ok) {
+    const named = verdict.tickets.length > 0 ? ` (${verdict.tickets.join(', ')})` : '';
+    console.log(`review coverage: the pull request title passes${named}.`);
+    return 0;
+  }
+  console.error(`review coverage: ${verdict.reason.replace('this commit', 'this pull request')}.\n`);
+  console.error(`  title: ${subject}\n`);
+  console.error('The title becomes the commit subject on main when the pull request is squash-merged.');
+  console.error('Name the BIN-id in the title, and give that ticket a `review` row in events.jsonl.');
+  return 1;
+}
+
 // Entry-point guard: without it the CLI runs at import, eats the test runner's argv and
 // exits the process, and the symptom is vitest hanging with no output at all (BIN-802).
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const flag = process.argv.indexOf('--message');
+  if (process.argv.includes('--pr')) process.exit(mainPullRequest());
   process.exit(flag === -1 ? main() : mainMessage(process.argv[flag + 1]));
 }

@@ -173,6 +173,25 @@ jobs:
         if: steps.process-tests.outcome == 'failure'
         run: echo "::warning::npm run test:process failed. It does not stop the deploy (BIN-1426); the step above says which test."
 
+      # The same review-coverage walk the process tests run, as its own step, so a commit
+      # that reached main with no ticket id is named in the run summary rather than lost
+      # among the other process tests. It warns and never stops the deploy (BIN-1426).
+      #
+      # The report holds commit subjects, and a squash merge makes a PR title one. So it goes
+      # to a file, not to the log, where a line starting `::` is read as a workflow command,
+      # and into the summary HTML-escaped inside <pre>, which a backtick fence would not hold.
+      - name: Commits without a ticket id (warning only)
+        id: review-coverage
+        continue-on-error: true
+        timeout-minutes: 2
+        run: node docs/org/metrics/check_review_coverage.mjs > review-coverage.txt 2>&1
+
+      - name: Warn when a commit has no ticket id
+        if: steps.review-coverage.outcome == 'failure'
+        run: |
+          echo "::warning::A commit on main owes a review row and has none. The run summary lists it."
+          { echo '### Commits without a review row'; echo '<pre>'; sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' review-coverage.txt; echo '</pre>'; } >> "$GITHUB_STEP_SUMMARY"
+
       # Audit (high+) — körs på deploy-vägen (push→main), som är enda vägen till
       # produktion; utan detta steg saknade den vägen audit helt (BIN-344).
       # ADVISORY, inte blockerande: Binge är solo push-direct-to-main, så en

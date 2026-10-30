@@ -1,7 +1,6 @@
 name: PR checks
 
-# The pre-merge check for pull requests, which in this repo means dependabot
-# bumps — nobody else opens one (solo, push-direct-to-main per CLAUDE.md).
+# The pre-merge check for pull requests.
 #
 # WHY THIS EXISTS (BIN-1028, Malin's decision 2026-08-27). `ci.yml` and
 # `preview.yml` were deleted because neither ever ran on main. That was right for
@@ -44,6 +43,9 @@ name: PR checks
 on:
   pull_request:
     branches: [main]
+    # `edited` because the title step grades the title, and a title fixed after a red run
+    # must be graded again without a new push.
+    types: [opened, synchronize, reopened, edited]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -88,6 +90,21 @@ jobs:
 
       - name: Check dependency diff
         run: node scripts/check-dependency-diff.mjs "origin/$GITHUB_BASE_REF" HEAD
+
+      # A squash merge turns the PR title into the commit subject on main, and that commit
+      # never meets the local commit-msg hook. Pull requests from cloud sessions reached main
+      # that way with no ticket id. This grades the title like the hook grades a subject.
+      #
+      # The title and the author are typed by whoever opened the PR, so they reach the script
+      # through `env:` only and are never written into a `run:` line, where the shell would
+      # read them as code. Before `npm ci`, like the step above: the script needs nothing
+      # installed.
+      - name: Pull request title names its ticket
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          PR_BASE_SHA="$(git rev-parse "origin/$GITHUB_BASE_REF")" node docs/org/metrics/check_review_coverage.mjs --pr
 
       - name: Install deps
         run: npm ci

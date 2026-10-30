@@ -35,6 +35,7 @@ import {
   findCoverageGaps,
   gradeSubject,
   mainMessage,
+  mainPullRequest,
   stagedEventsLog,
   REPO_ROOT,
   DEFAULT_EVENTS_REL,
@@ -473,6 +474,74 @@ describe('mainMessage — the exit code the commit-msg hook acts on', () => {
       expect(mainMessage(p, ['src/components/ui/DuotonePoster.tsx'], inputs)).toBe(0);
       expect(mainMessage(p, GATED, inputs), 'the same subject on a gated file must still be refused').toBe(1);
     } finally { rmSync(p, { force: true }); }
+  });
+});
+
+describe('mainPullRequest — the title a squash merge turns into a subject on main', () => {
+  // Pull requests from cloud sessions were squash-merged on GitHub and never met the local
+  // commit-msg hook, so their titles reached main without an id. Files are handed in, so the
+  // verdict cannot depend on where HEAD happens to be.
+  const GATED = { files: ['src/lib/firebase/friends.ts'], added: [] };
+  const run = (title, author = 'Malingisslen', changed = GATED) =>
+    mainPullRequest({ title, author, base: '0000000', changed });
+
+  it('refuses a code title on a gated file that names no ticket', () => {
+    expect(run('feat(social): tipsa en vän om en titel')).toBe(1);
+  });
+
+  it('passes the same title once it names a ticket that has a review row', () => {
+    expect(run('feat(social): tipsa en vän om en titel (BIN-917)')).toBe(0);
+  });
+
+  it('passes an ordinary fix outside the gated paths, as the commit hook does', () => {
+    expect(run('fix(ui): knappen stod snett', 'Malingisslen', { files: ['src/components/ui/DuotonePoster.tsx'], added: [] })).toBe(0);
+  });
+
+  it('exempts a dependabot bump only when dependabot opened it', () => {
+    const title = 'deps(deps): bump firebase from 12.1.0 to 12.2.0';
+    // firestore.rules owes a row whatever the commit type, so only the exemption can pass it.
+    const RULES = { files: ['firestore.rules'], added: [] };
+    expect(run(title, 'dependabot[bot]', RULES)).toBe(0);
+    expect(run(title, 'Malingisslen', RULES), 'a human can type the robot\'s subject').toBe(1);
+  });
+
+  it('treats shell characters in the title as text', () => {
+    expect(run('feat(x): "; $(id) `whoami`')).toBe(1);
+    expect(run('feat(x): "; $(id) `whoami` (BIN-917)')).toBe(0);
+  });
+
+  it('refuses when there is no base to compare against', () => {
+    expect(mainPullRequest({ title: 'feat(x): y (BIN-917)', author: 'a', base: '', changed: GATED })).toBe(1);
+  });
+
+  it('refuses a base git cannot read, rather than grading an empty range', () => {
+    expect(mainPullRequest({ title: 'feat(x): y (BIN-917)', author: 'a', base: 'deadbeefdeadbeef', changed: null })).toBe(1);
+  });
+
+  it('grades a title with no conventional type as code, like the ones that reached main', () => {
+    expect(run('Socialt: vänner går att hitta och bli vän med (#141)')).toBe(1);
+    expect(run('Socialt: vänner går att hitta och bli vän med (BIN-917)')).toBe(0);
+    expect(run('docs(x): y')).toBe(0);
+  });
+
+  it('refuses an empty title on a gated file', () => {
+    expect(run('')).toBe(1);
+  });
+
+  it('runs in pr-checks.yml after the base fetch, before npm ci, with nothing to soften it', () => {
+    const lines = readFileSync(join(REPO_ROOT, '.github', 'workflows', 'pr-checks.yml'), 'utf8').split(/\r?\n/);
+    const at = (pattern) => lines.findIndex((l) => pattern.test(l));
+    const step = at(/^ {6}- name: Pull request title names its ticket$/);
+    const end = lines.findIndex((l, i) => i > step && /^ {6}- /.test(l));
+    const body = lines.slice(step, end).join('\n');
+    expect(step).toBeGreaterThan(at(/^ {6}- name: Fetch base branch$/));
+    expect(step).toBeLessThan(at(/^\s+run: npm ci\s*$/));
+    expect(body).not.toMatch(/continue-on-error|\|\| *(true|exit 0)|^\s+if:/m);
+    // The title reaches the script through env only; on a run line the shell would execute it.
+    expect(lines.slice(step, end).filter((l) => /^\s+(run:|PR_BASE_SHA=)/.test(l)).join('\n')).not.toContain('${{');
+    expect(body).toContain('--pr');
+    // A title fixed after a red run is graded again without a new push.
+    expect(lines.find((l) => /^ {4}types:/.test(l))).toMatch(/\bedited\b/);
   });
 });
 

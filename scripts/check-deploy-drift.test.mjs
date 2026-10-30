@@ -2264,6 +2264,7 @@ describe('deploy.yml wires the backend deploy safely (BIN-1426)', () => {
     expect(marked).toEqual([
       'checks: Reviewer knowledge-file caps (warning only)',
       'checks: Process tests (warning only)',
+      'checks: Commits without a ticket id (warning only)',
       'deploy: First Load JS-rapport (rapporterar, fäller aldrig)',
       'deploy: Save TMDB build cache',
     ]);
