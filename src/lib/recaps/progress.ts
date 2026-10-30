@@ -88,3 +88,16 @@ export function nextToWatch(inventory: SeasonEpisodes, boundary: EpisodeRef): Ne
     seasonTotal: following.episodes.length,
   };
 }
+
+/**
+ * The inventory limited to episodes that have aired, so "next to watch" and the season meter never
+ * count an episode that does not exist yet. TMDB's episode_count includes announced episodes.
+ * A last-aired episode in season 0 (a special) says nothing about the numbered order, so then the
+ * inventory is returned as is.
+ */
+export function capInventoryToAired(inventory: SeasonEpisodes, lastAired: EpisodeRef | null | undefined): SeasonEpisodes {
+  if (!lastAired || lastAired.season < 1) return inventory;
+  return inventory
+    .filter((s) => s.season <= lastAired.season)
+    .map((s) => (s.season === lastAired.season ? { ...s, episodes: s.episodes.filter((e) => e <= lastAired.episode) } : s));
+}

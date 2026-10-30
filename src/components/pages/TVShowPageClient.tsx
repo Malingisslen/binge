@@ -22,7 +22,7 @@ import FreeWatchBadge from '@/components/title/FreeWatchBadge';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import SynopsisText from '@/components/title/SynopsisText';
 import RecapPanel from '@/components/title/RecapPanel';
-import { contiguousWatchedBoundary, inventoryFromSeasons } from '@/lib/recaps/progress';
+import { contiguousWatchedBoundary, inventoryFromSeasons, capInventoryToAired } from '@/lib/recaps/progress';
 import TrailerSection from '@/components/ui/TrailerSection';
 import { pickTrailer } from '@/lib/trailer';
 import { LoadingView } from '@/components/ui/LoadingView';
@@ -171,7 +171,16 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   // episode inventory, from the page's existing isWatched (so RecapPanel opens no second
   // episodeProgress listener). Null-safe on show so these hooks run before the loading guard.
   // The inventory is also passed to RecapPanel for the fallback gap-count.
-  const recapInventory = useMemo(() => inventoryFromSeasons(show?.seasons), [show?.seasons]);
+  const lastAired = show?.last_episode_to_air;
+  const lastAiredSeason = lastAired?.season_number;
+  const lastAiredEpisode = lastAired?.episode_number;
+  const recapInventory = useMemo(
+    () => capInventoryToAired(
+      inventoryFromSeasons(show?.seasons),
+      lastAiredSeason != null && lastAiredEpisode != null ? { season: lastAiredSeason, episode: lastAiredEpisode } : null,
+    ),
+    [show?.seasons, lastAiredSeason, lastAiredEpisode],
+  );
   const recapBoundary = useMemo(
     () => contiguousWatchedBoundary(recapInventory, isWatched),
     [recapInventory, isWatched]

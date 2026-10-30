@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { contiguousWatchedBoundary, inventoryFromSeasons, nextToWatch } from './progress';
+import { contiguousWatchedBoundary, inventoryFromSeasons, nextToWatch, capInventoryToAired } from './progress';
 import type { SeasonEpisodes } from './boundary';
 
 // A 3-season show: S1 has 3 eps, S2 has 3, S3 has 2. Specials (S0) present but irrelevant.
@@ -98,5 +98,22 @@ describe('nextToWatch — the first episode the user has NOT seen', () => {
     expect(nextToWatch(gappy, { season: 1, episode: 1 })).toEqual({
       next: { season: 1, episode: 3 }, watchedInSeason: 1, seasonTotal: 2,
     });
+  });
+});
+
+describe('capInventoryToAired — only episodes that have aired', () => {
+  it('drops later seasons and later episodes of the last aired season', () => {
+    expect(capInventoryToAired(inv, { season: 2, episode: 2 })).toEqual([
+      { season: 1, episodes: [1, 2, 3] },
+      { season: 2, episodes: [1, 2] },
+    ]);
+  });
+  it('leaves the inventory alone when nothing is known or the last aired is a special', () => {
+    expect(capInventoryToAired(inv, null)).toBe(inv);
+    expect(capInventoryToAired(inv, { season: 0, episode: 4 })).toBe(inv);
+  });
+  it('leaves a caught-up user with no next episode', () => {
+    const capped = capInventoryToAired(inv, { season: 2, episode: 2 });
+    expect(nextToWatch(capped, { season: 2, episode: 2 })).toBeNull();
   });
 });
