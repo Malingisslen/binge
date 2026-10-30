@@ -4,7 +4,7 @@ import { fieldClass } from './Field';
 
 const LINKS = [
   { href: '/', label: 'Hem' },
-  { href: '/my/all/', label: 'Bibliotek' },
+  { href: '/my/all/', label: 'Mitt Binge' },
   { href: '/streamingpriser/', label: 'Streamingpriser' },
 ] as const;
 

@@ -166,7 +166,7 @@ function LandingPageTrending({ seed }: { seed: TMDBSearchResult[] }) {
 function EmptyLibrary() {
   return (
     <div className="hem-empty">
-      <h2>Bygg ditt bibliotek.</h2>
+      <h2>Bygg ditt Binge.</h2>
       <p>
         Lägg till några serier eller filmer du tittar på så börjar veckan ovan
         fyllas med dina avsnitt — och tjänster du inte använder dyker upp

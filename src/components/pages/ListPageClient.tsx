@@ -60,7 +60,7 @@ export default function ListPageClient({ listId }: { listId: string }) {
         crumb="Lista"
         title="Listan hittades inte"
         body="Listan kan vara borttagen eller satt till privat."
-        action={<Link href="/bibliotek" className={buttonClass({ variant: 'ghost' })}>Till biblioteket</Link>}
+        action={<Link href="/bibliotek" className={buttonClass({ variant: 'ghost' })}>Till Mitt Binge</Link>}
       />
     );
   }

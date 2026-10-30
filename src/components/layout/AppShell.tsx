@@ -20,7 +20,7 @@ import ChromePart from '@/components/layout/ChromePart';
 
 // Direction H "Schemat" chrome:
 //   Topbar (brand · week strip · search · avatar) sits above every page.
-//   Subnav below it (Hem · Bibliotek · Kalender · …).
+//   Subnav below it (Hem · Mitt Binge · Kalender · …).
 //   MobileTabBar at the bottom on small screens — Sök is the center tab.
 //   DuotoneFilters mounted once at the root so any <img> with
 //   `filter: url(#duo-…)` picks up the SVG defs — it and the skip link are the

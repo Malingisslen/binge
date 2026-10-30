@@ -78,7 +78,7 @@ export default function VillSePickerPage() {
 
   const header = (
     <PageHeader
-      crumb="Bibliotek · vill se"
+      crumb="Mitt Binge · vill se"
       title="Vill se"
       standfirst="Vad ska du se ikväll? Filmer du vill se och serier du följer men inte börjat."
     />
@@ -89,7 +89,7 @@ export default function VillSePickerPage() {
       <>
         {header}
         <LibrarySubnav status="vill_se" />
-        <LoadingView variant="grid" label="Laddar biblioteket…" />
+        <LoadingView variant="grid" label="Laddar Mitt Binge…" />
       </>
     );
   }

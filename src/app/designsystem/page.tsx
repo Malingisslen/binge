@@ -154,7 +154,7 @@ function Specimen({ theme }: { theme: 'light' | 'dark' }) {
 
       <Section title="Sidhuvud">
         <PageHeader
-          crumb="Bibliotek"
+          crumb="Mitt Binge"
           title="Mina serier"
           standfirst="Allt du följer, sorterat efter nästa avsnitt."
           actions={<Button type="button" variant="acc" size="sm">Lägg till</Button>}

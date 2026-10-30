@@ -121,6 +121,6 @@ describe('BIN-700 — a dead listener says so instead of showing an empty librar
     render(<WatchlistPage title="Allt" />);
 
     expect(screen.queryByText(/Vi når inte ditt bibliotek/)).not.toBeInTheDocument();
-    expect(screen.getByText(/Laddar biblioteket/)).toBeInTheDocument();
+    expect(screen.getByText(/Laddar Mitt Binge/)).toBeInTheDocument();
   });
 });
