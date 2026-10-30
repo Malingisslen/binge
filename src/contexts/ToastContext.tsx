@@ -53,8 +53,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     timers.current.set(id, timer);
   }, []);
 
-  // Betygs-toasten: dyker upp när en titel markeras sedd. Lever lika länge som
-  // åtgärds-toasts (6 s) så användaren hinner trycka en stjärna; ignoreras den
+  // Betygs-toasten: dyker upp när en titel markeras sedd. Lever 10 s så
+  // användaren hinner trycka en stjärna; ignoreras den
   // självdör den utan att sätta något betyg (titeln förblir sedd).
   const showRating = useCallback((message: string, onRate: (rating: number) => void) => {
     const id = nextId.current++;
@@ -62,7 +62,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     const timer = setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
       timers.current.delete(id);
-    }, 6000);
+    }, 10000);
     timers.current.set(id, timer);
   }, []);
 
@@ -87,21 +87,46 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         // added toast, not a re-read of the whole stack on every add/remove.
         aria-atomic="false"
       >
-        {toasts.map(t => (
+        {toasts.map(t => t.onRate ? (
+          // The rating ask is a card of its own, not a one-line toast: stars on a row
+          // beside a long title were squeezed or missed on a phone, and a rating you
+          // cannot find is a rating nobody gives.
+          <div
+            key={t.id}
+            className="bg-ink text-bg text-sm px-4 py-3 rounded-sm shadow-pop animate-[fadeIn_0.2s_ease-out] flex flex-col gap-2 max-w-[calc(100vw-2rem)]"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <span className="font-semibold">{t.message}</span>
+              <button
+                type="button"
+                onClick={() => dismiss(t.id)}
+                aria-label="Stäng"
+                className="text-bg opacity-60 bg-transparent border-none cursor-pointer p-0 shrink-0"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <RatingInput
+              value={0}
+              size={28}
+              onSelect={(n) => { t.onRate!(n); dismiss(t.id); }}
+              labelFor={n => `Betyg ${String(n).replace('.', ',')} av 5`}
+              groupLabel="Betyg"
+            />
+            <button
+              type="button"
+              onClick={() => dismiss(t.id)}
+              className="self-start text-xs underline text-bg opacity-80 bg-transparent border-none cursor-pointer p-0 min-h-[24px]"
+            >
+              Hoppa över
+            </button>
+          </div>
+        ) : (
           <div
             key={t.id}
             className="bg-ink text-bg text-xs px-3 py-2 rounded-sm animate-[fadeIn_0.2s_ease-out] flex items-center gap-3"
           >
             <span>{t.message}</span>
-            {t.onRate && (
-              <RatingInput
-                value={0}
-                size={20}
-                onSelect={(n) => { t.onRate!(n); dismiss(t.id); }}
-                labelFor={n => `Betyg ${String(n).replace('.', ',')} av 5`}
-                groupLabel="Betyg"
-              />
-            )}
             {t.actions.map(a => (
               <button
                 key={a.label}
@@ -112,16 +137,6 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 {a.label}
               </button>
             ))}
-            {t.onRate && (
-              <button
-                type="button"
-                onClick={() => dismiss(t.id)}
-                aria-label="Stäng"
-                className="text-bg opacity-60 bg-transparent border-none cursor-pointer p-0 shrink-0"
-              >
-                <X size={14} />
-              </button>
-            )}
           </div>
         ))}
       </div>
