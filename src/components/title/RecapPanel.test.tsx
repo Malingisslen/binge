@@ -61,11 +61,12 @@ const inventory: SeasonEpisodes = [
   { season: 2, episodes: [1, 2] },
   { season: 3, episodes: [1, 2, 3, 4, 5, 6, 7, 8] },
   { season: 4, episodes: [1, 2, 3, 4, 5] },
+  { season: 5, episodes: [1, 2, 3] },
 ];
 
 function open(boundary: EpisodeRef = { season: 4, episode: 2 }) {
   render(<RecapPanel tmdbId={1} boundary={boundary} inventory={inventory} />);
-  fireEvent.click(screen.getByText('Påminn mig var jag slutade'));
+  fireEvent.click(screen.getByText('Läs det du missat först'));
 }
 
 beforeEach(() => {
@@ -194,7 +195,7 @@ describe('RecapPanel — season-only-sourced shows (BIN-185 follow-up)', () => {
     state.noBoundaryRecap = true;
     state.seasonOnlySeasons = [1, 2, 3];
     render(<RecapPanel tmdbId={1} boundary={{ season: 4, episode: 2 }} inventory={inventory} />);
-    expect(screen.getByText('Påminn mig var jag slutade')).toBeInTheDocument();
+    expect(screen.getByText('Läs det du missat först')).toBeInTheDocument();
   });
 
   it('shows prior-season nodes with NO "Du är här" node when no per-episode boundary recap exists', () => {
@@ -265,6 +266,38 @@ describe('RecapPanel — season-only-sourced shows (BIN-185 follow-up)', () => {
     state.noBoundaryRecap = true;
     state.seasonOnlySeasons = [1, 2, 3];
     const { container } = render(<RecapPanel tmdbId={1} boundary={null} inventory={inventory} />);
+    expect(container.firstChild).toBeNull();
+  });
+});
+
+describe('RecapPanel — "Nästa att se" block', () => {
+  it('names the next unseen episode and the progress in its season, never its title', () => {
+    render(<RecapPanel tmdbId={1} boundary={{ season: 4, episode: 2 }} inventory={inventory} />);
+    expect(screen.getByText('Nästa att se')).toBeInTheDocument();
+    expect(screen.getByText('Säsong 4, avsnitt 3')).toBeInTheDocument();
+    expect(screen.getByText('2 av 5 avsnitt sedda i säsong 4')).toBeInTheDocument();
+  });
+
+  it('shows no recap text until the button is pressed, and the button toggles it', () => {
+    render(<RecapPanel tmdbId={1} boundary={{ season: 4, episode: 2 }} inventory={inventory} />);
+    expect(screen.queryByText('Berättelsen så här långt vid gränsen.')).not.toBeInTheDocument();
+    const btn = screen.getByRole('button', { name: /Läs det du missat först/ });
+    expect(btn).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(btn);
+    expect(screen.getByText('Berättelsen så här långt vid gränsen.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Dölj sammanfattningen/ })).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('points at the first episode of the next season when the boundary ends a season', () => {
+    state.coveredBoundary = { season: 4, episode: 5 };
+    render(<RecapPanel tmdbId={1} boundary={{ season: 4, episode: 5 }} inventory={inventory} />);
+    expect(screen.getByText('Säsong 5, avsnitt 1')).toBeInTheDocument();
+    expect(screen.getByText('Ny säsong, 3 avsnitt')).toBeInTheDocument();
+  });
+
+  it('renders nothing once the whole show is watched', () => {
+    state.coveredBoundary = { season: 5, episode: 3 };
+    const { container } = render(<RecapPanel tmdbId={1} boundary={{ season: 5, episode: 3 }} inventory={inventory} />);
     expect(container.firstChild).toBeNull();
   });
 });

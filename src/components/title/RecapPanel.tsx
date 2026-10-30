@@ -1,17 +1,20 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
-import { History, ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { useRecap, useSeasonRecaps } from '@/hooks/useRecap';
 import { validateRecapText } from '@/lib/recaps/sanitize';
 import { missingEpisodeCount } from '@/lib/recaps/coverage';
+import { nextToWatch } from '@/lib/recaps/progress';
 import { priorSeasonNumbers, type EpisodeRef, type SeasonEpisodes } from '@/lib/recaps/boundary';
 import type { RecapSource } from '@/lib/recaps/types';
 import { cardClass } from '@/components/ui/Card';
 import { badgeClass } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import { eyebrowClass } from '@/components/ui/Eyebrow';
 import { formatEpisodeCode } from '@/lib/utils';
 
-// BIN-185 — "Påminn mig var jag slutade". Shows ONLY when a cached recap exists for the user's
+// BIN-185 — the "Nästa att se" block that opens the spoiler-safe recap. Shows ONLY when a cached recap exists for the user's
 // spoiler-safe boundary (the contiguous frontier, computed by the parent from episodeProgress +
 // the show inventory — passed in, so this doesn't open a second progress listener). The recap
 // text is rendered as a plain-text child (React auto-escapes; never dangerouslySetInnerHTML) —
@@ -162,6 +165,12 @@ export default function RecapPanel({
   );
   if (!hasBoundaryRecap && priorSeasons.length === 0) return null;
 
+  // The block is framed around what the user is about to watch, so it only exists while there
+  // is a next episode: a finished show has nothing left to catch up for. Only the episode CODE is
+  // shown, never its title or plot, so the block cannot spoil anything itself.
+  const upNext = boundary ? nextToWatch(inventory, boundary) : null;
+  if (!upNext) return null;
+
   // Fallback gap: the recap covers an EARLIER boundary (never later — spoiler-safe by
   // construction). Tell the user honestly how many of their watched episodes it misses.
   // Only meaningful when there IS a "här" node — a season-only show has no boundary recap to
@@ -223,18 +232,38 @@ export default function RecapPanel({
 
   return (
     <div className={cardClass('mt-3 overflow-hidden')}>
-      <button
-        type="button"
-        className="flex w-full items-center gap-2 px-3 py-2.5 text-base font-medium text-ink hover:bg-bg-2"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-      >
-        <History size={15} className="text-ink-3 shrink-0" />
-        <span>Påminn mig var jag slutade</span>
-        <span className="ml-auto text-ink-3">
+      <div className="flex flex-wrap items-center gap-3 px-3 py-3">
+        <div className="min-w-0 flex-1">
+          <div className={eyebrowClass()}>Nästa att se</div>
+          <div className="mt-0.5 text-lg font-bold text-ink">
+            Säsong {upNext.next.season}, avsnitt {upNext.next.episode}
+          </div>
+          {upNext.watchedInSeason > 0 ? (
+            <>
+              <div className="mt-2 h-1 max-w-64 overflow-hidden rounded-sm bg-rule-2" aria-hidden="true">
+                <div
+                  className="h-full bg-acc-deep"
+                  style={{ width: `${Math.round((upNext.watchedInSeason / upNext.seasonTotal) * 100)}%` }}
+                />
+              </div>
+              <div className="mt-1 text-sm text-ink-3">
+                {upNext.watchedInSeason} av {upNext.seasonTotal} avsnitt sedda i säsong {upNext.next.season}
+              </div>
+            </>
+          ) : (
+            <div className="mt-1 text-sm text-ink-3">Ny säsong, {upNext.seasonTotal} avsnitt</div>
+          )}
+        </div>
+        <Button
+          type="button"
+          className="min-h-11 w-full justify-center sm:w-auto"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+        >
+          <span>{open ? 'Dölj sammanfattningen' : 'Läs det du missat först'}</span>
           {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-        </span>
-      </button>
+        </Button>
+      </div>
       {open && (
         <div className="px-3 pb-3 pt-2 border-t border-rule">
           {/* Always a timeline — the boundary "du är här" node renders FIRST with its saffron dot

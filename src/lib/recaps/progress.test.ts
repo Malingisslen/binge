@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { contiguousWatchedBoundary, inventoryFromSeasons } from './progress';
+import { contiguousWatchedBoundary, inventoryFromSeasons, nextToWatch } from './progress';
 import type { SeasonEpisodes } from './boundary';
 
 // A 3-season show: S1 has 3 eps, S2 has 3, S3 has 2. Specials (S0) present but irrelevant.
@@ -73,5 +73,30 @@ describe('contiguousWatchedBoundary — the SPOILER-SAFE frontier (last unbroken
       { season: 1, episodes: [1, 2] },
     ];
     expect(contiguousWatchedBoundary(seasonFirst, watchedSet(['1_1', '1_2']))).toEqual({ season: 1, episode: 2 });
+  });
+});
+
+describe('nextToWatch — the first episode the user has NOT seen', () => {
+  it('is the next episode in the boundary season, with progress in that season', () => {
+    expect(nextToWatch(inv, { season: 2, episode: 1 })).toEqual({
+      next: { season: 2, episode: 2 }, watchedInSeason: 1, seasonTotal: 3,
+    });
+  });
+  it('rolls over to the first episode of the next season, with nothing watched in it yet', () => {
+    expect(nextToWatch(inv, { season: 1, episode: 3 })).toEqual({
+      next: { season: 2, episode: 1 }, watchedInSeason: 0, seasonTotal: 3,
+    });
+  });
+  it('is null when the boundary is the last episode of the show', () => {
+    expect(nextToWatch(inv, { season: 3, episode: 2 })).toBeNull();
+  });
+  it('ignores specials and handles gaps in episode numbers', () => {
+    const gappy: SeasonEpisodes = [
+      { season: 0, episodes: [1] },
+      { season: 1, episodes: [1, 3] },
+    ];
+    expect(nextToWatch(gappy, { season: 1, episode: 1 })).toEqual({
+      next: { season: 1, episode: 3 }, watchedInSeason: 1, seasonTotal: 2,
+    });
   });
 });

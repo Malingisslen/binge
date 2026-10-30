@@ -54,3 +54,37 @@ export function contiguousWatchedBoundary(
   }
   return frontier;
 }
+
+export interface NextToWatch {
+  next: EpisodeRef;
+  /** Episodes of `next`'s season the user has already seen (0 when `next` opens a new season). */
+  watchedInSeason: number;
+  seasonTotal: number;
+}
+
+/**
+ * The episode right after the contiguous boundary, so it is the first one the user has NOT seen
+ * — never one past a skipped gap. Null when the boundary is the last episode of the show: there
+ * is nothing left to catch up for, and the caller shows no block.
+ */
+export function nextToWatch(inventory: SeasonEpisodes, boundary: EpisodeRef): NextToWatch | null {
+  const ordered = [...inventory]
+    .filter((s) => s.season >= 1)
+    .sort((a, b) => a.season - b.season);
+  const here = ordered.find((s) => s.season === boundary.season);
+  const nextInSeason = here ? [...here.episodes].sort((a, b) => a - b).find((e) => e > boundary.episode) : undefined;
+  if (here && nextInSeason !== undefined) {
+    return {
+      next: { season: here.season, episode: nextInSeason },
+      watchedInSeason: here.episodes.filter((e) => e <= boundary.episode).length,
+      seasonTotal: here.episodes.length,
+    };
+  }
+  const following = ordered.find((s) => s.season > boundary.season && s.episodes.length > 0);
+  if (!following) return null;
+  return {
+    next: { season: following.season, episode: Math.min(...following.episodes) },
+    watchedInSeason: 0,
+    seasonTotal: following.episodes.length,
+  };
+}
