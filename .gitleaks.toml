@@ -11,3 +11,9 @@ paths = [
   # FCM service worker must embed the Firebase web client key — public by design.
   '''public/firebase-messaging-sw\.js''',
 ]
+# Matched against the whole line, so only the Cloudflare Web Analytics beacon is let
+# through: its token is sent to every visitor and only names the site (BIN-1457).
+regexTarget = "line"
+regexes = [
+  '''data-cf-beacon='\{"token": "[0-9a-f]{32}"\}'''',
+]
