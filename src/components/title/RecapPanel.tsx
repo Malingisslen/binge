@@ -257,7 +257,7 @@ export default function RecapPanel({
                   </div>
                 </>
               ) : (
-                <div className="mt-1 text-sm text-ink-3">Ny säsong, {upNext.seasonTotal} avsnitt</div>
+                <div className="mt-1 text-sm text-ink-3">Ny säsong</div>
               )}
             </>
           ) : (

@@ -75,7 +75,10 @@ const show = {
   'watch/providers': { results: { SE: { flatrate: [{ provider_id: 8, provider_name: 'Netflix' }] } } },
 };
 
-vi.mock('@/hooks/useTMDB', () => ({ useTVShow: () => ({ data: tmdb.show, isLoading: tmdb.isLoading }) }));
+vi.mock('@/hooks/useTMDB', () => ({
+  useTVShow: () => ({ data: tmdb.show, isLoading: tmdb.isLoading }),
+  useTVSeason: () => ({ data: undefined }),
+}));
 vi.mock('@/hooks/useWatchlist', () => ({ useWatchlist: () => watchlist }));
 vi.mock('@/hooks/useLatinPersonNames', () => ({ useLatinPersonNames: () => undefined }));
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: null, uid: null, loading: false }) }));

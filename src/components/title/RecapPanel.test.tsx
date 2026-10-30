@@ -294,7 +294,7 @@ describe('RecapPanel — "Nästa att se" block', () => {
     state.coveredBoundary = { season: 4, episode: 5 };
     render(<RecapPanel tmdbId={1} boundary={{ season: 4, episode: 5 }} inventory={inventory} />);
     expect(screen.getByText('Säsong 5, avsnitt 1')).toBeInTheDocument();
-    expect(screen.getByText('Ny säsong, 3 avsnitt')).toBeInTheDocument();
+    expect(screen.getByText('Ny säsong')).toBeInTheDocument();
   });
 
   it('stays when the user is caught up, naming the last seen episode and still opening the recap', () => {

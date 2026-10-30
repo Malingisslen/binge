@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { ChevronDown, Tv } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useTVShow } from '@/hooks/useTMDB';
+import { useTVShow, useTVSeason } from '@/hooks/useTMDB';
 import { currentSeasonToPrefetch, seasonPrefetchSpec } from '@/lib/tmdb/prefetch';
 import { usePageMeta } from '@/hooks/usePageMeta';
 import { JsonLd, tvSchema, breadcrumbSchema } from '@/components/title/JsonLd';
@@ -22,7 +22,7 @@ import FreeWatchBadge from '@/components/title/FreeWatchBadge';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import SynopsisText from '@/components/title/SynopsisText';
 import RecapPanel from '@/components/title/RecapPanel';
-import { contiguousWatchedBoundary, inventoryFromSeasons, capInventoryToAired } from '@/lib/recaps/progress';
+import { contiguousWatchedBoundary, inventoryFromSeasons, capInventoryToAired, capInventoryByAirDates } from '@/lib/recaps/progress';
 import TrailerSection from '@/components/ui/TrailerSection';
 import { pickTrailer } from '@/lib/trailer';
 import { LoadingView } from '@/components/ui/LoadingView';
@@ -179,14 +179,24 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
     () => contiguousWatchedBoundary(fullInventory, isWatched),
     [fullInventory, isWatched]
   );
-  const recapInventory = useMemo(
-    () => capInventoryToAired(
+  // The boundary season's per-episode air dates (the same cached read the season list uses)
+  // decide which episodes exist yet; until they load, TMDB's last-aired field is the fallback.
+  const { data: boundarySeason } = useTVSeason(
+    mounted && show && recapBoundary ? show.id : null,
+    recapBoundary?.season ?? null,
+  );
+  const recapInventory = useMemo(() => {
+    if (!recapBoundary) return fullInventory;
+    if (boundarySeason?.episodes?.length) {
+      const premieres = new Map((show?.seasons ?? []).map((s) => [s.season_number, s.air_date || null] as const));
+      return capInventoryByAirDates(fullInventory, recapBoundary, boundarySeason.episodes, premieres, todayIso());
+    }
+    return capInventoryToAired(
       fullInventory,
       lastAiredSeason != null && lastAiredEpisode != null ? { season: lastAiredSeason, episode: lastAiredEpisode } : null,
       recapBoundary,
-    ),
-    [fullInventory, lastAiredSeason, lastAiredEpisode, recapBoundary],
-  );
+    );
+  }, [fullInventory, recapBoundary, boundarySeason, show?.seasons, lastAiredSeason, lastAiredEpisode]);
 
   const displayTitle = show ? preferOriginalTitle(show.name, show.original_name) : '';
   const firstYear = show?.first_air_date ? show.first_air_date.slice(0, 4) : '';

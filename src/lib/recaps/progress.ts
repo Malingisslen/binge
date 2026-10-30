@@ -112,3 +112,36 @@ export function capInventoryToAired(
     .filter((s) => s.season <= cut.season)
     .map((s) => (s.season === cut.season ? { ...s, episodes: s.episodes.filter((e) => e <= cut.episode) } : s));
 }
+
+/**
+ * The inventory limited to what has aired, judged by air dates: the boundary season by its
+ * per-episode dates, later seasons by their premiere date. TMDB's season and episode lists are
+ * kept up to date by its editors while `last_episode_to_air` lags, so the dates are the better
+ * source. An episode the user has watched always counts as aired. Without episode dates for the
+ * boundary season (not loaded, or TMDB has none) the inventory is returned as is.
+ */
+export function capInventoryByAirDates(
+  inventory: SeasonEpisodes,
+  boundary: EpisodeRef,
+  boundarySeasonDates: readonly { episode_number: number; air_date: string | null }[] | undefined,
+  seasonPremieres: ReadonlyMap<number, string | null>,
+  todayIso: string,
+): SeasonEpisodes {
+  if (!boundarySeasonDates || boundarySeasonDates.length === 0) return inventory;
+  const airedEpisodes = new Set(
+    boundarySeasonDates.filter((e) => !!e.air_date && e.air_date <= todayIso).map((e) => e.episode_number),
+  );
+  const out: SeasonEpisodes = [];
+  for (const s of [...inventory].sort((a, b) => a.season - b.season)) {
+    if (s.season < boundary.season) {
+      out.push(s);
+    } else if (s.season === boundary.season) {
+      out.push({ ...s, episodes: s.episodes.filter((e) => e <= boundary.episode || airedEpisodes.has(e)) });
+    } else {
+      const premiere = seasonPremieres.get(s.season);
+      if (!premiere || premiere > todayIso) break; // this season and every later one has not started
+      out.push(s);
+    }
+  }
+  return out;
+}

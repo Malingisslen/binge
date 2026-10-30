@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { contiguousWatchedBoundary, inventoryFromSeasons, nextToWatch, capInventoryToAired } from './progress';
+import { contiguousWatchedBoundary, inventoryFromSeasons, nextToWatch, capInventoryToAired, capInventoryByAirDates } from './progress';
 import type { SeasonEpisodes } from './boundary';
 
 // A 3-season show: S1 has 3 eps, S2 has 3, S3 has 2. Specials (S0) present but irrelevant.
@@ -121,5 +121,31 @@ describe('capInventoryToAired — only episodes that have aired', () => {
   it('leaves a caught-up user with no next episode', () => {
     const capped = capInventoryToAired(inv, { season: 2, episode: 2 });
     expect(nextToWatch(capped, { season: 2, episode: 2 })).toBeNull();
+  });
+});
+
+describe('capInventoryByAirDates: judged by dates, not by the lagging last-aired field', () => {
+  const today = '2026-10-30';
+  const s2dates = [
+    { episode_number: 1, air_date: '2026-10-01' },
+    { episode_number: 2, air_date: '2026-10-08' },
+    { episode_number: 3, air_date: '2026-11-06' },
+  ];
+  it('drops episodes of the boundary season that have not aired, keeping the watched ones', () => {
+    const capped = capInventoryByAirDates(inv, { season: 2, episode: 1 }, s2dates, new Map(), today);
+    expect(capped).toEqual([{ season: 1, episodes: [1, 2, 3] }, { season: 2, episodes: [1, 2] }]);
+    expect(nextToWatch(capped, { season: 2, episode: 2 })).toBeNull();
+  });
+  it('keeps an episode the user watched even if TMDB has no air date for it', () => {
+    const capped = capInventoryByAirDates(inv, { season: 2, episode: 3 }, [], new Map(), today);
+    expect(capped).toBe(inv);
+    const dated = capInventoryByAirDates(inv, { season: 2, episode: 3 }, [{ episode_number: 1, air_date: null }], new Map(), today);
+    expect(dated.find((s) => s.season === 2)?.episodes).toEqual([1, 2, 3]);
+  });
+  it('offers the next season only once its premiere date has passed', () => {
+    const full = [{ episode_number: 1, air_date: '2026-01-01' }, { episode_number: 2, air_date: '2026-01-08' }, { episode_number: 3, air_date: '2026-01-15' }];
+    expect(capInventoryByAirDates(inv, { season: 2, episode: 3 }, full, new Map([[3, '2026-12-01']]), today).map((s) => s.season)).toEqual([1, 2]);
+    expect(capInventoryByAirDates(inv, { season: 2, episode: 3 }, full, new Map([[3, '2026-10-20']]), today).map((s) => s.season)).toEqual([1, 2, 3]);
+    expect(capInventoryByAirDates(inv, { season: 2, episode: 3 }, full, new Map([[3, null]]), today).map((s) => s.season)).toEqual([1, 2]);
   });
 });
