@@ -162,14 +162,16 @@ describe('RecapPanel timeline', () => {
     state.coveredBoundary = { season: 3, episode: 8 };
     open({ season: 4, episode: 5 });
 
-    // The "here" header still reflects where the USER stopped…
-    expect(screen.getByText('Säsong 4, avsnitt 5')).toBeInTheDocument();
+    // The header names what the story actually covers, not where the user stopped, so it never
+    // claims "du är här" above a text that ends earlier.
+    expect(screen.getByText('Storyn till och med säsong 3, avsnitt 8')).toBeInTheDocument();
+    expect(screen.queryByText('Du är här')).not.toBeInTheDocument();
     // …but the season nodes come from the COVERED boundary (S3) → only S1 and S2, never S3.
     expect(screen.getByRole('button', { name: /Säsong 1/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Säsong 2/ })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Säsong 3/ })).not.toBeInTheDocument();
     // The honest gap notice reports the 5 watched episodes (S4E1–E5) the recap misses.
-    expect(screen.getByText(/de 5 senaste avsnitten/)).toBeInTheDocument();
+    expect(screen.getByText(/Du har sett 5 avsnitt till som inte är sammanfattade än/)).toBeInTheDocument();
   });
 
   it('renders only the boundary node when the user is in season 1 (no prior seasons)', () => {
@@ -241,7 +243,7 @@ describe('RecapPanel — season-only-sourced shows (BIN-185 follow-up)', () => {
     state.coveredBoundary = { season: 1, episode: 10 };
     state.seasonOnlySeasons = [2];
     open({ season: 3, episode: 2 });
-    expect(screen.getByText('Du är här')).toBeInTheDocument();
+    expect(screen.getByText('Storyn till och med säsong 1, avsnitt 10')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Säsong 2/ })).toBeInTheDocument();
     // Season 1 is the "här" story's own covered season, never offered as a separate prior node.
     expect(screen.queryByRole('button', { name: /Säsong 1/ })).not.toBeInTheDocument();

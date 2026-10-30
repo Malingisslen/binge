@@ -12,7 +12,6 @@ import { cardClass } from '@/components/ui/Card';
 import { badgeClass } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { eyebrowClass } from '@/components/ui/Eyebrow';
-import { formatEpisodeCode } from '@/lib/utils';
 
 // BIN-185 — the "Nästa att se" block that opens the spoiler-safe recap. Shows ONLY when a cached recap exists for the user's
 // spoiler-safe boundary (the contiguous frontier, computed by the parent from episodeProgress +
@@ -189,18 +188,23 @@ export default function RecapPanel({
   // show with no per-episode boundary recap — the timeline then opens directly on prior seasons.
   const hereContent = hasBoundaryRecap ? (
     <div>
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-base font-semibold text-ink">
-          Säsong {boundary!.season}, avsnitt {boundary!.episode}
-        </span>
-        <span className={badgeClass('acc')}>
-          Du är här
-        </span>
-      </div>
-      {missing > 0 && (
-        <div className="text-sm text-ink-2 mt-1">
-          Sammanfattningen täcker till och med {formatEpisodeCode(coveredBoundary!.season, coveredBoundary!.episode)} —
-          {' '}informationen från {missing === 1 ? 'det senaste avsnittet' : `de ${missing} senaste avsnitten`} du sett saknas.
+      {missing > 0 ? (
+        <>
+          <span className="text-base font-semibold text-ink">
+            Storyn till och med säsong {coveredBoundary!.season}, avsnitt {coveredBoundary!.episode}
+          </span>
+          <div className="text-sm text-ink-2 mt-1">
+            Du har sett {missing === 1 ? 'ett avsnitt' : `${missing} avsnitt`} till som inte är sammanfattade än.
+          </div>
+        </>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-base font-semibold text-ink">
+            Säsong {boundary!.season}, avsnitt {boundary!.episode}
+          </span>
+          <span className={badgeClass('acc')}>
+            Du är här
+          </span>
         </div>
       )}
       <div className="mt-1.5">
