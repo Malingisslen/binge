@@ -46,7 +46,7 @@ class MainActivity : ComponentActivity() {
                         PairingState.Loading -> CenteredText("Hämtar kod …")
                         is PairingState.ShowCode -> CodeScreen(s)
                         PairingState.Paused -> PausedScreen(onNewCode = vm::begin)
-                        PairingState.Paired -> CenteredText("TV:n är kopplad. Ikväll kommer här.")
+                        PairingState.Paired -> HomeScreen(onRevoked = vm::signOut)
                         is PairingState.Failed -> FailedScreen(s)
                     }
                 }

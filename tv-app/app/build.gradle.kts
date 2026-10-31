@@ -35,6 +35,7 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-functions")
+    implementation("com.google.firebase:firebase-firestore")
     implementation("com.google.firebase:firebase-appcheck-playintegrity")
     // Testläge för App Check i testvarianten. Release använder Play Integrity.
     debugImplementation("com.google.firebase:firebase-appcheck-debug")
@@ -48,4 +49,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
     implementation("com.google.zxing:core:3.5.3")
+    implementation("io.coil-kt:coil-compose:2.7.0")
+
+    testImplementation("junit:junit:4.13.2")
 }
