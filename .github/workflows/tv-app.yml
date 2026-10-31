@@ -44,13 +44,13 @@ jobs:
 
       - name: Add Firebase app configuration
         env:
-          GOOGLE_SERVICES_B64: ${{ secrets.TV_GOOGLE_SERVICES_B64 }}
+          GOOGLE_SERVICES: ${{ secrets.TV_GOOGLE_SERVICES }}
         run: |
-          if [ -z "$GOOGLE_SERVICES_B64" ]; then
-            echo "::error::Secret TV_GOOGLE_SERVICES_B64 is missing. Register the Android app in Firebase and add its google-services.json (base64) as a repository secret."
+          if [ -z "$GOOGLE_SERVICES" ]; then
+            echo "::error::Secret TV_GOOGLE_SERVICES is missing. Register the Android app in Firebase and paste the contents of its google-services.json as a repository secret."
             exit 1
           fi
-          printf '%s' "$GOOGLE_SERVICES_B64" | base64 -d > tv-app/app/google-services.json
+          printf '%s' "$GOOGLE_SERVICES" > tv-app/app/google-services.json
 
       - name: Build debug APK
         working-directory: tv-app
