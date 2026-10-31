@@ -1,0 +1,971 @@
+diff --git a/docs/workflow-map-content-baseline.json b/docs/workflow-map-content-baseline.json
+index 687b6a1..938f74c 100644
+--- a/docs/workflow-map-content-baseline.json
++++ b/docs/workflow-map-content-baseline.json
+@@ -1,7 +1,7 @@
+ {
+   "comment": "Per-flow content baseline (description + step-payload char count) for scripts/check-workflow-map.mjs check 5 (BIN-470). The linter fails if any flow shrinks below its baseline or a baselined flow disappears — catching net prose-loss the absolute floor (check 4) misses. Regenerate + commit when you intentionally shorten or remove a flow: node scripts/check-workflow-map.mjs --update-baseline",
+   "flows": {
+-    "flow1": 13664,
++    "flow1": 13922,
+     "flow2": 800,
+     "flow3": 1477,
+     "flow4": 6127,
+@@ -14,7 +14,7 @@
+     "flow-follow-notify": 3151,
+     "flow-groups": 9635,
+     "flow-tillsammans": 4591,
+-    "flow-episodes": 1994,
++    "flow-episodes": 2901,
+     "flow-available": 6610,
+     "flow-digest": 1766,
+     "flow-price-change-push": 1355,
+@@ -32,7 +32,7 @@
+     "flow-insights": 4903,
+     "flow-hygiene": 11206,
+     "flow-gdpr": 16686,
+-    "flow-static": 2603,
++    "flow-static": 2620,
+     "flow-crash-telemetry": 4567,
+     "flow-recap-gaps": 1788,
+     "flow-record-event": 1968,
+diff --git a/docs/workflow-map-universe.json b/docs/workflow-map-universe.json
+index df41744..5b6d2a5 100644
+--- a/docs/workflow-map-universe.json
++++ b/docs/workflow-map-universe.json
+@@ -7,6 +7,7 @@
+     "cineasternaCatalogSync",
+     "communityRatingMaintain",
+     "episodeReleaseNotify",
++    "episodeMorningDigest",
+     "eraseMyGroupTraces",
+     "getProfileForModeration",
+     "handOverGroup",
+@@ -51,6 +52,7 @@
+     "/recommendations",
+     "/my/vill-se",
+     "/my/nytt-for-dig",
++    "/my/igar",
+     "/onboarding",
+     "/insikter",
+     "/my/diary",
+diff --git a/docs/workflow-map.html b/docs/workflow-map.html
+index 16f1992..1f9c3fe 100644
+--- a/docs/workflow-map.html
++++ b/docs/workflow-map.html
+@@ -473,6 +473,12 @@
+       "context": "backend-api",
+       "path": "functions/src/episodeNotify/index.ts"
+     },
++    {
++      "id": "cf-episode-digest",
++      "label": "episodeMorningDigest",
++      "context": "backend-api",
++      "path": "functions/src/episodeDigest/index.ts"
++    },
+     {
+       "id": "cf-return-notify",
+       "label": "showReturnNotify",
+@@ -1927,11 +1933,13 @@
+     {
+       "id": "flow-episodes",
+       "label": "Episode & show-return notify",
+-      "description": "Two schedules share the same followed-series read: episodeReleaseNotify (every 6h) nudges 'ikapp' followers when TMDB's last_episode_to_air advances; showReturnNotify (every 24h) nudges caught-up followers when TMDB announces a later-season premiere (next_episode_to_air episode 1, season>1) on a show they were 'ikapp'/'avslutad' on. Both dedupe via a per-show Firestore marker that always advances (at-most-once, idempotent even on an empty recipient set).",
++      "description": "Two schedules share the same followed-series read: episodeReleaseNotify (every 6h) queues 'ikapp' followers on the show's episodeNotifyState doc when TMDB's last_episode_to_air advances, and episodeMorningDigest (08:00 Stockholm) turns that queue into one inbox card and one push per user that opens /my/igar (BIN-1475); showReturnNotify (every 24h) nudges caught-up followers when TMDB announces a later-season premiere (next_episode_to_air episode 1, season>1) on a show they were 'ikapp'/'avslutad' on. Both dedupe via a per-show Firestore marker that always advances (at-most-once, idempotent even on an empty recipient set).",
+       "covers": [
+         "episodeReleaseNotify",
++        "episodeMorningDigest",
+         "showReturnNotify",
+-        "/my/series"
++        "/my/series",
++        "/my/igar"
+       ],
+       "steps": [
+         {
+@@ -1958,17 +1966,31 @@
+         {
+           "from": "cf-episode-notify",
+           "to": "firestore",
+-          "payload": "read episodeNotifyState/{tmdbId}.lastNotifiedEpisode; shouldNotify = last.id !== marker; recipients = items where deriveSubState()=='ikapp'; write users/{uid}/notifications/{episode-tmdbId-episodeId} kind episode_release; ALWAYS advance the marker to last.id (even if 0 recipients)",
++          "payload": "read episodeNotifyState/{tmdbId}.lastNotifiedEpisode; shouldNotify = last.id !== marker; recipients = items where deriveSubState()=='ikapp'; arrayUnion {episodeId, season, episode, airDate, uids} into episodeNotifyState/{tmdbId}.pending and set hasPending; ALWAYS advance the marker to last.id (even if 0 recipients)",
+           "transport": "Firestore read/write",
+           "verified": true
+         },
+         {
+-          "from": "cf-episode-notify",
++          "from": "cf-episode-digest",
++          "to": "firestore",
++          "payload": "query episodeNotifyState where hasPending==true; group pending by uid; per user re-check users/{uid}.notificationSettings.episodeReleases!==false, the watchlist doc is status 'mina' and the episode is not already watched; create users/{uid}/notifications/episode-digest-{YYYY-MM-DD} kind episode_digest (create(): ALREADY_EXISTS = today's card and push done); then in a transaction per show remove exactly the uids it finished with from the entries it read (entries queued meanwhile stay; entries older than 3 days go)",
++          "transport": "Firestore read/write",
++          "verified": true
++        },
++        {
++          "from": "cf-episode-digest",
+           "to": "cf-sendPush",
+-          "payload": "sendPushToUser(uid, {title:'Nytt avsnitt', body:'{title} — S00E00 har släppts', actionUrl:'/tv/{tmdbId}/', tag:'episode-{tmdbId}'}, {pushEnabled}) — only for recipients with notificationSettings.episodeReleases!==false",
++          "payload": "sendPushToUser(uid, {title:'Igår kom N avsnitt du följer', body:'{series} S00E00, … (no episode titles)', actionUrl:'/my/igar/', tag:'episode-digest'}, {pushEnabled}) — at most one per user per day",
+           "transport": "in-process call",
+           "verified": true
+         },
++        {
++          "from": "web-app",
++          "to": "watchlist-context",
++          "payload": "/my/igar lists the episode_digest card's episodes with 'Sedd?' → useEpisodeProgressWithSync.markEpisodeWatched (episodeProgress + updateProgress); Klar returns to /my; opening the list marks the card read",
++          "transport": "React route",
++          "verified": true
++        },
+         {
+           "from": "cf-return-notify",
+           "to": "tmdb-api",
+diff --git a/functions/src/episodeDigest/index.ts b/functions/src/episodeDigest/index.ts
+new file mode 100644
+index 0000000..2d535b1
+--- /dev/null
++++ b/functions/src/episodeDigest/index.ts
+@@ -0,0 +1,140 @@
++/**
++ * BIN-1475 — the morning question: ONE inbox card and ONE push per user at 08:00
++ * Stockholm, "Igår kom 3 avsnitt du följer", opening a list where each episode
++ * can be ticked off.
++ *
++ * Input is the queue episodeReleaseNotify leaves on episodeNotifyState/{tmdbId}
++ * (`hasPending`, `pending[]`). Nothing is sent per episode any more.
++ *
++ * At send time, not at queue time, each user is checked again: the "Nya avsnitt"
++ * setting is still on, the series is still followed ('mina'), and the episode is
++ * not already watched. A user who changed their mind overnight gets nothing.
++ *
++ * Idempotency: the card id carries the run's Stockholm date and is written with
++ * create(); a retry finds it and sends no second push, so a user gets at most one
++ * push per day. The card is the load-bearing write; the push after it is best
++ * effort, so a push failure never makes the user count as failed (a failed user
++ * would be told again tomorrow under a new card id). Afterwards each show's queue
++ * loses exactly the uids this run finished with, inside a transaction, so an
++ * episode queued meanwhile is kept. Admin SDK bypasses firestore.rules; the card
++ * is the user's own inbox doc.
++ */
++
++import { getFirestore, FieldValue } from 'firebase-admin/firestore';
++import { onSchedule } from 'firebase-functions/v2/scheduler';
++import { logger } from 'firebase-functions/v2';
++import { sendPushToUser } from '../push';
++import { stockholmDayId } from '../util/dayId';
++import { mediaTypeDocId } from '../shared/mediaTypeDocId';
++import {
++  MAX_DIGEST_ITEMS, alreadyWatched, settlePending, allAiredYesterday, digestBody, digestTitle, groupQueueByUser, onePerShow,
++  type DigestItem, type PendingEpisode,
++} from './logic';
++
++const DAY_MS = 24 * 60 * 60 * 1000;
++
++async function readQueue(): Promise<Array<{ tmdbId: number; pending: PendingEpisode[] }>> {
++  const snap = await getFirestore().collection('episodeNotifyState').where('hasPending', '==', true).get();
++  const out: Array<{ tmdbId: number; pending: PendingEpisode[] }> = [];
++  for (const d of snap.docs) {
++    const tmdbId = Number(d.id);
++    const pending = d.get('pending');
++    if (Number.isFinite(tmdbId) && Array.isArray(pending)) out.push({ tmdbId, pending: pending as PendingEpisode[] });
++  }
++  return out;
++}
++
++/** The followed, still-unwatched episodes for one user; [] when they should hear nothing. */
++async function itemsForUser(
++  uid: string,
++  queued: Array<{ tmdbId: number; season: number; episode: number; airDate: string | null }>,
++): Promise<{ items: DigestItem[]; pushEnabled: boolean } | null> {
++  const db = getFirestore();
++  const profile = await db.collection('users').doc(uid).get();
++  if (!profile.exists) return null;
++  const settings = profile.data()?.notificationSettings as { episodeReleases?: boolean; pushEnabled?: boolean } | undefined;
++  if (settings?.episodeReleases === false) return null;
++
++  const refs = queued.flatMap((q) => [
++    db.collection('users').doc(uid).collection('watchlist').doc(mediaTypeDocId('tv', q.tmdbId)),
++    db.collection('users').doc(uid).collection('watchlist').doc(String(q.tmdbId)), // legacy bare id
++  ]);
++  const snaps = await db.getAll(...refs);
++  const items: DigestItem[] = [];
++  queued.forEach((q, i) => {
++    const doc = [snaps[i * 2], snaps[i * 2 + 1]].find((s) => s.exists && s.get('mediaType') === 'tv');
++    if (!doc || doc.get('status') !== 'mina') return;
++    const season = doc.get('lastWatchedSeason');
++    const episode = doc.get('lastWatchedEpisode');
++    if (alreadyWatched({
++      lastWatchedSeason: typeof season === 'number' ? season : null,
++      lastWatchedEpisode: typeof episode === 'number' ? episode : null,
++    }, q.season, q.episode)) return;
++    items.push({ tmdbId: q.tmdbId, title: String(doc.get('title') ?? ''), season: q.season, episode: q.episode, airDate: q.airDate });
++  });
++  return { items, pushEnabled: settings?.pushEnabled === true };
++}
++
++async function sendDigest(uid: string, queued: Parameters<typeof itemsForUser>[1], runDate: string, yesterdayId: string): Promise<boolean> {
++  const found = await itemsForUser(uid, queued);
++  if (!found) return false;
++  const items = onePerShow(found.items).filter((i) => i.title !== '').slice(0, MAX_DIGEST_ITEMS);
++  if (items.length === 0) return false;
++
++  const title = digestTitle(items.length, allAiredYesterday(items, yesterdayId));
++  const body = digestBody(items);
++  try {
++    await getFirestore().collection('users').doc(uid).collection('notifications').doc(`episode-digest-${runDate}`).create({
++      kind: 'episode_digest',
++      title,
++      summary: body,
++      episodes: items.map((i) => ({ tmdbId: i.tmdbId, title: i.title, season: i.season, episode: i.episode })),
++      actionUrl: '/my/igar/',
++      read: false,
++      createdAt: FieldValue.serverTimestamp(),
++    });
++  } catch (err) {
++    if ((err as { code?: unknown }).code === 6) return false; // ALREADY_EXISTS: today's card and push are done
++    throw err;
++  }
++  try {
++    await sendPushToUser(uid, { title, body, actionUrl: '/my/igar/', tag: 'episode-digest' }, { pushEnabled: found.pushEnabled });
++  } catch (err) { logger.warn(`episodeMorningDigest: push to ${uid} failed after the card was written`, err); }
++  return true;
++}
++
++export const episodeMorningDigest = onSchedule(
++  { schedule: '0 8 * * *', timeZone: 'Europe/Stockholm', region: 'europe-west1', timeoutSeconds: 300, memory: '256MiB' },
++  async () => {
++    const now = Date.now();
++    const runDate = stockholmDayId(new Date(now));
++    const yesterdayId = stockholmDayId(new Date(now - DAY_MS));
++    let queue: Awaited<ReturnType<typeof readQueue>>;
++    try { queue = await readQueue(); }
++    catch (err) { logger.error('episodeMorningDigest: queue read failed', err); return; }
++
++    const byUser = groupQueueByUser(queue);
++    const failed = new Set<string>();
++    let sent = 0;
++    for (const [uid, queued] of byUser) {
++      try { if (await sendDigest(uid, queued, runDate, yesterdayId)) sent += 1; }
++      catch (err) { failed.add(uid); logger.error(`episodeMorningDigest: user ${uid} failed`, err); }
++    }
++
++    const db = getFirestore();
++    const done = new Set([...byUser.keys()].filter((u) => !failed.has(u)));
++    for (const show of queue) {
++      const readIds = new Set(show.pending.map((p) => p.episodeId));
++      const ref = db.collection('episodeNotifyState').doc(String(show.tmdbId));
++      try {
++        await db.runTransaction(async (tx) => {
++          const current = (await tx.get(ref)).get('pending');
++          const rest = settlePending(Array.isArray(current) ? (current as PendingEpisode[]) : [], readIds, done, now);
++          if (rest.length === 0) tx.update(ref, { pending: FieldValue.delete(), hasPending: FieldValue.delete() });
++          else tx.update(ref, { pending: rest });
++        });
++      } catch (err) { logger.error(`episodeMorningDigest: settling queue for ${show.tmdbId} failed`, err); }
++    }
++    logger.info('episodeMorningDigest done', { shows: queue.length, users: byUser.size, sent, failed: failed.size });
++  },
++);
+diff --git a/functions/src/episodeDigest/logic.test.ts b/functions/src/episodeDigest/logic.test.ts
+new file mode 100644
+index 0000000..1b329c8
+--- /dev/null
++++ b/functions/src/episodeDigest/logic.test.ts
+@@ -0,0 +1,82 @@
++import { describe, it, expect } from 'vitest';
++import {
++  groupQueueByUser, settlePending, alreadyWatched, onePerShow, allAiredYesterday, digestTitle, digestBody, episodeCode,
++  type DigestItem,
++} from './logic';
++
++const item = (tmdbId: number, title: string, season: number, episode: number, airDate: string | null = '2026-10-30'): DigestItem =>
++  ({ tmdbId, title, season, episode, airDate });
++
++describe('groupQueueByUser', () => {
++  it('collects every show a user is queued for', () => {
++    const m = groupQueueByUser([
++      { tmdbId: 1, pending: [{ episodeId: 11, season: 1, episode: 2, airDate: null, uids: ['a', 'b'] }] },
++      { tmdbId: 2, pending: [{ episodeId: 22, season: 3, episode: 4, airDate: null, uids: ['a'] }] },
++    ]);
++    expect(m.get('a')).toHaveLength(2);
++    expect(m.get('b')).toHaveLength(1);
++  });
++  it('does not list the same episode twice for one user', () => {
++    const e = { episodeId: 11, season: 1, episode: 2, airDate: null, uids: ['a'] };
++    const m = groupQueueByUser([{ tmdbId: 1, pending: [e, e] }]);
++    expect(m.get('a')).toHaveLength(1);
++  });
++});
++
++describe('alreadyWatched', () => {
++  it('is false when nothing is logged', () => {
++    expect(alreadyWatched({ lastWatchedSeason: null, lastWatchedEpisode: null }, 1, 1)).toBe(false);
++  });
++  it('is true at the same or a later episode, false before', () => {
++    expect(alreadyWatched({ lastWatchedSeason: 2, lastWatchedEpisode: 5 }, 2, 5)).toBe(true);
++    expect(alreadyWatched({ lastWatchedSeason: 3, lastWatchedEpisode: 1 }, 2, 9)).toBe(true);
++    expect(alreadyWatched({ lastWatchedSeason: 2, lastWatchedEpisode: 4 }, 2, 5)).toBe(false);
++  });
++});
++
++describe('onePerShow', () => {
++  it('keeps the latest episode per show and sorts by title', () => {
++    const out = onePerShow([item(2, 'Zebra', 1, 1), item(1, 'Andor', 1, 2), item(1, 'Andor', 1, 3)]);
++    expect(out.map((i) => `${i.title}${i.episode}`)).toEqual(['Andor3', 'Zebra1']);
++  });
++});
++
++describe('wording', () => {
++  it('says Igår only when everything aired yesterday', () => {
++    expect(allAiredYesterday([item(1, 'A', 1, 1, '2026-10-30')], '2026-10-30')).toBe(true);
++    expect(allAiredYesterday([item(1, 'A', 1, 1, '2026-10-30'), item(2, 'B', 1, 1, '2026-10-29')], '2026-10-30')).toBe(false);
++    expect(allAiredYesterday([item(1, 'A', 1, 1, null)], '2026-10-30')).toBe(false);
++    expect(allAiredYesterday([], '2026-10-30')).toBe(false);
++  });
++  it('title counts only what is listed', () => {
++    expect(digestTitle(3, true)).toBe('Igår kom 3 avsnitt du följer');
++    expect(digestTitle(1, true)).toBe('Igår kom ett avsnitt du följer');
++    expect(digestTitle(2, false)).toBe('2 nya avsnitt av serier du följer');
++  });
++  it('body names series and code only and folds the rest', () => {
++    const items = [item(1, 'Andor', 2, 1), item(2, 'Bear', 3, 4), item(3, 'Cobra', 1, 1), item(4, 'Dune', 1, 2)];
++    expect(digestBody(items)).toBe('Andor S02E01, Bear S03E04, Cobra S01E01 och 1 till');
++    expect(digestBody(items.slice(0, 1))).toBe('Andor S02E01');
++    expect(episodeCode(1, 2)).toBe('S01E02');
++  });
++});
++
++describe('settlePending', () => {
++  const ep = (episodeId: number, uids: string[], queuedAt?: number) => ({ episodeId, season: 1, episode: episodeId, airDate: null, uids, queuedAt });
++  it('removes only finished uids from entries it read', () => {
++    const out = settlePending([ep(1, ['a', 'b'])], new Set([1]), new Set(['a']), 0);
++    expect(out).toEqual([ep(1, ['b'])]);
++  });
++  it('drops an entry once everyone is finished', () => {
++    expect(settlePending([ep(1, ['a'])], new Set([1]), new Set(['a']), 0)).toEqual([]);
++  });
++  it('keeps an entry queued while the run was going', () => {
++    const out = settlePending([ep(1, ['a']), ep(2, ['a'])], new Set([1]), new Set(['a']), 0);
++    expect(out).toEqual([ep(2, ['a'])]);
++  });
++  it('drops entries older than three days', () => {
++    const day = 24 * 60 * 60 * 1000;
++    expect(settlePending([ep(1, ['a'], 0)], new Set(), new Set(), 4 * day)).toEqual([]);
++    expect(settlePending([ep(1, ['a'], 0)], new Set(), new Set(), 2 * day)).toHaveLength(1);
++  });
++});
+diff --git a/functions/src/episodeDigest/logic.ts b/functions/src/episodeDigest/logic.ts
+new file mode 100644
+index 0000000..33fe2f8
+--- /dev/null
++++ b/functions/src/episodeDigest/logic.ts
+@@ -0,0 +1,115 @@
++/**
++ * Pure helpers for the morning episode question (BIN-1475): grouping the queue
++ * episodeReleaseNotify leaves per show into one list per user, and the wording.
++ * No firebase-admin import, so it runs under the root Vitest suite.
++ */
++
++export interface PendingEpisode {
++  episodeId: number;
++  season: number;
++  episode: number;
++  /** TMDB air_date (YYYY-MM-DD) or null when TMDB had none. */
++  airDate: string | null;
++  uids: string[];
++  /** ms epoch when the episode was queued; older than MAX_QUEUE_AGE_MS is dropped. */
++  queuedAt?: number;
++}
++
++/** A queued episode nobody has been told about by now is stale, not owed. */
++export const MAX_QUEUE_AGE_MS = 3 * 24 * 60 * 60 * 1000;
++
++export interface DigestItem {
++  tmdbId: number;
++  title: string;
++  season: number;
++  episode: number;
++  airDate: string | null;
++}
++
++/** Cap on rows in the card; the count in the text is of the rows actually listed. */
++export const MAX_DIGEST_ITEMS = 12;
++
++export function episodeCode(season: number, episode: number): string {
++  return `S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}`;
++}
++
++/** One entry per (user, show, episode) from the per-show queue docs. */
++export function groupQueueByUser(
++  queue: ReadonlyArray<{ tmdbId: number; pending: readonly PendingEpisode[] }>,
++): Map<string, Array<{ tmdbId: number; season: number; episode: number; airDate: string | null }>> {
++  const out = new Map<string, Array<{ tmdbId: number; season: number; episode: number; airDate: string | null }>>();
++  const seen = new Set<string>();
++  for (const show of queue) {
++    for (const p of show.pending) {
++      for (const uid of p.uids) {
++        const key = `${uid}|${show.tmdbId}|${p.episodeId}`;
++        if (seen.has(key)) continue;
++        seen.add(key);
++        const list = out.get(uid) ?? [];
++        list.push({ tmdbId: show.tmdbId, season: p.season, episode: p.episode, airDate: p.airDate });
++        out.set(uid, list);
++      }
++    }
++  }
++  return out;
++}
++
++/** True when the user already watched this episode or a later one of the show. */
++export function alreadyWatched(
++  progress: { lastWatchedSeason: number | null; lastWatchedEpisode: number | null },
++  season: number,
++  episode: number,
++): boolean {
++  if (progress.lastWatchedSeason == null) return false;
++  const s = progress.lastWatchedSeason;
++  const e = progress.lastWatchedEpisode ?? 0;
++  return s > season || (s === season && e >= episode);
++}
++
++/** One row per show: if a show queued two episodes, the later one stands for it. */
++export function onePerShow(items: DigestItem[]): DigestItem[] {
++  const latest = new Map<number, DigestItem>();
++  for (const it of items) {
++    const cur = latest.get(it.tmdbId);
++    if (!cur || it.season > cur.season || (it.season === cur.season && it.episode > cur.episode)) latest.set(it.tmdbId, it);
++  }
++  return [...latest.values()].sort((a, b) => a.title.localeCompare(b.title, 'sv'));
++}
++
++/** "Igår" is only said when every listed episode aired yesterday (Stockholm). */
++export function allAiredYesterday(items: readonly DigestItem[], yesterdayId: string): boolean {
++  return items.length > 0 && items.every((i) => i.airDate === yesterdayId);
++}
++
++export function digestTitle(count: number, airedYesterday: boolean): string {
++  if (airedYesterday) return count === 1 ? 'Igår kom ett avsnitt du följer' : `Igår kom ${count} avsnitt du följer`;
++  return count === 1 ? 'Nytt avsnitt av en serie du följer' : `${count} nya avsnitt av serier du följer`;
++}
++
++/** Series name and code only, never the episode title or plot (no spoilers). */
++export function digestBody(items: readonly DigestItem[]): string {
++  const shown = items.slice(0, 3).map((i) => `${i.title} ${episodeCode(i.season, i.episode)}`);
++  const rest = items.length - shown.length;
++  return rest > 0 ? `${shown.join(', ')} och ${rest} till` : shown.join(', ');
++}
++
++/**
++ * What stays on a show's queue after a run. Only the uids this run finished with
++ * (told, or deliberately skipped) are removed, and only from the entries it read;
++ * an entry queued while the run was going is untouched, so nothing is lost and
++ * nobody is told twice. Entries older than MAX_QUEUE_AGE_MS go as well.
++ */
++export function settlePending(
++  current: readonly PendingEpisode[],
++  readEpisodeIds: ReadonlySet<number>,
++  doneUids: ReadonlySet<string>,
++  nowMs: number,
++): PendingEpisode[] {
++  const out: PendingEpisode[] = [];
++  for (const p of current) {
++    if (p.queuedAt != null && nowMs - p.queuedAt > MAX_QUEUE_AGE_MS) continue;
++    const uids = readEpisodeIds.has(p.episodeId) ? p.uids.filter((u) => !doneUids.has(u)) : p.uids;
++    if (uids.length > 0) out.push({ ...p, uids });
++  }
++  return out;
++}
+diff --git a/functions/src/episodeNotify/index.ts b/functions/src/episodeNotify/index.ts
+index 1a74cb8..ac8a42b 100644
+--- a/functions/src/episodeNotify/index.ts
++++ b/functions/src/episodeNotify/index.ts
+@@ -1,11 +1,15 @@
+ /**
+- * Scheduled episode-release push (B4).
++ * Scheduled episode-release detection (B4, BIN-1475).
+  *
+  * onSchedule('every 6 hours', europe-west1). Scans collectionGroup('watchlist')
+  * for TV in 'mina' (narrowed via .select()), groups by show, fetches TMDB airing
+  * info per unique show, derives 'ikapp' per follower, dedupes against a per-show
+- * episodeNotifyState/{tmdbId}.lastNotifiedEpisode marker (idempotent), and pushes
+- * to followers who are caught up and have episodeReleases enabled.
++ * episodeNotifyState/{tmdbId}.lastNotifiedEpisode marker (idempotent), and QUEUES
++ * the caught-up followers on the same state doc (`pending`, `hasPending`).
++ *
++ * It sends nothing itself: episodeMorningDigest turns the queue into one inbox
++ * card and one push per user at 08:00, so a user never gets a per-episode push
++ * and a morning question about the same episode.
+  *
+  * The Admin SDK bypasses firestore.rules, so the episodeNotifyState collection
+  * needs no rule change.
+@@ -15,10 +19,9 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+ import { onSchedule } from 'firebase-functions/v2/scheduler';
+ import { logger } from 'firebase-functions/v2';
+ import { defineSecret } from 'firebase-functions/params';
+-import { sendPushToUser } from '../push';
+ import { readFollowedSeries } from '../shared/followedSeries';
+ import { fetchTvAiringInfo } from './tmdb';
+-import { deriveSubState, shouldNotify, type WatchlistLite, type LastEpisode } from './logic';
++import { deriveSubState, shouldNotify, type WatchlistLite } from './logic';
+ 
+ const TMDB_API_KEY = defineSecret('TMDB_API_KEY');
+ async function readLastNotified(tmdbId: number): Promise<number | null> {
+@@ -26,43 +29,19 @@ async function readLastNotified(tmdbId: number): Promise<number | null> {
+   const v = snap.data()?.lastNotifiedEpisode;
+   return typeof v === 'number' ? v : null;
+ }
+-// Läser users/{uid} EN gång och returnerar båda notis-flaggorna, så vi slipper
+-// den dubbla läsningen (episodeReleases här + pushEnabled i sendPushToUser).
+-// null = user-doc saknas → notifiera inte alls. (BIN-33)
+-async function readNotificationSettings(
+-  uid: string,
+-): Promise<{ episodeReleases: boolean; pushEnabled: boolean } | null> {
+-  const snap = await getFirestore().collection('users').doc(uid).get();
+-  if (!snap.exists) return null;
+-  const settings = snap.data()?.notificationSettings as
+-    | { episodeReleases?: boolean; pushEnabled?: boolean }
+-    | undefined;
+-  return {
+-    episodeReleases: settings?.episodeReleases !== false, // default on
+-    pushEnabled: settings?.pushEnabled === true, // default off (måste opt:a in)
+-  };
+-}
+-function episodeCode(last: LastEpisode): string {
+-  return `S${String(last.season_number).padStart(2, '0')}E${String(last.episode_number).padStart(2, '0')}`;
+-}
+ 
+ /**
+  * Leveranskontrakt (medvetna designval):
+- * - AT-MOST-ONCE: markören (lastNotifiedEpisode) avanceras till last.id efter
+- *   körningen oavsett om varje enskild push lyckades. En total FCM-utage ger
+- *   alltså ingen retry för det avsnittet. Episod-nudgen är "nice to have", inte
+- *   garanterad leverans — vi prioriterar idempotens (inga dubbletter vid re-run)
+- *   framför at-least-once.
++ * - AT-MOST-ONCE: markören (lastNotifiedEpisode) avanceras till last.id i samma
++ *   skrivning som kön fylls, så en omkörning köar aldrig samma avsnitt två gånger.
+  * - TOM MOTTAGARLISTA avancerar också markören. Det är KORREKT: om ingen följare
+  *   är 'ikapp' när avsnittet släpps är alla antingen 'aktiv' (har redan backlog,
+  *   ska inte nudgas om ett nyare avsnitt) eller blir 'ikapp' först efter att de
+- *   sett avsnittet (då behöver de ingen "nytt avsnitt"-notis). Att inte notifiera
+- *   är rätt i båda fallen.
+- * - KOSTNAD: per-mottagare-läsningen (readNotificationSettings — en doc-läsning
+- *   vars pushEnabled vidarebefordras till sendPushToUser, BIN-33)
+- *   körs BARA när shouldNotify är sann, dvs när en följd serie faktiskt fått ett
+- *   nytt avsnitt — sällsynt per körning. Dominant kostnad är collectionGroup-
+- *   svepet (ett per körning), inte per-mottagare-fan-out:en.
++ *   sett avsnittet (då behöver de ingen fråga). Att inte köa är rätt i båda fallen.
++ * - Inställningen "Nya avsnitt" och att serien fortfarande följs kontrolleras först
++ *   vid utskicket (episodeMorningDigest), så ett val som ändras under natten gäller.
++ * - Kön bär bara uid:n, inga titlar. episodeMorningDigest tar bort de uid:n den
++ *   är klar med, och poster äldre än tre dygn.
+  */
+ async function processShow(tmdbId: number, items: WatchlistLite[]): Promise<number> {
+   const info = await fetchTvAiringInfo(tmdbId);
+@@ -71,32 +50,22 @@ async function processShow(tmdbId: number, items: WatchlistLite[]): Promise<numb
+   if (!shouldNotify(info.lastEpisode, lastNotified)) return 0;
+   const last = info.lastEpisode!;
+   const db = getFirestore();
+-  const recipients = items.filter((it) => deriveSubState(it, info.status, last) === 'ikapp');
+-  if (recipients.length === 0) {
+-    await db.collection('episodeNotifyState').doc(String(tmdbId))
+-      .set({ lastNotifiedEpisode: last.id, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
++  const uids = [...new Set(items.filter((it) => deriveSubState(it, info.status, last) === 'ikapp').map((it) => it.uid))];
++  const stateRef = db.collection('episodeNotifyState').doc(String(tmdbId));
++  if (uids.length === 0) {
++    await stateRef.set({ lastNotifiedEpisode: last.id, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+     return 0;
+   }
+-  const title = recipients[0]?.title || 'En serie du följer';
+-  const code = episodeCode(last);
+-  const actionUrl = `/tv/${tmdbId}/`;
+-  let notified = 0;
+-  await Promise.allSettled(recipients.map(async (it) => {
+-    // En läsning av users/{uid} för båda flaggorna; pushEnabled vidarebefordras
+-    // till sendPushToUser så den slipper läsa samma doc igen (BIN-33).
+-    const settings = await readNotificationSettings(it.uid);
+-    if (!settings || !settings.episodeReleases) return;
+-    const notifId = `episode-${tmdbId}-${last.id}`;
+-    await db.collection('users').doc(it.uid).collection('notifications').doc(notifId).set({
+-      tmdbId, mediaType: 'tv', title: it.title || title, kind: 'episode_release',
+-      episodeCode: code, read: false, createdAt: FieldValue.serverTimestamp(),
+-    }, { merge: true });
+-    await sendPushToUser(it.uid, { title: 'Nytt avsnitt', body: `${it.title || title} — ${code} har släppts`, actionUrl, tag: `episode-${tmdbId}` }, { pushEnabled: settings.pushEnabled });
+-    notified += 1;
+-  }));
+-  await db.collection('episodeNotifyState').doc(String(tmdbId))
+-    .set({ lastNotifiedEpisode: last.id, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+-  return notified;
++  await stateRef.set({
++    lastNotifiedEpisode: last.id,
++    hasPending: true,
++    pending: FieldValue.arrayUnion({
++      episodeId: last.id, season: last.season_number, episode: last.episode_number,
++      airDate: last.air_date ?? null, uids, queuedAt: Date.now(),
++    }),
++    updatedAt: FieldValue.serverTimestamp(),
++  }, { merge: true });
++  return uids.length;
+ }
+ 
+ export const episodeReleaseNotify = onSchedule(
+@@ -107,11 +76,11 @@ export const episodeReleaseNotify = onSchedule(
+     catch (err) { logger.error('episodeNotify: watchlist scan failed', err); return; }
+     const byShow = new Map<number, WatchlistLite[]>();
+     for (const it of series) { const arr = byShow.get(it.tmdbId); if (arr) arr.push(it); else byShow.set(it.tmdbId, [it]); }
+-    let totalNotified = 0;
++    let totalNotified = 0; // queued recipients, not pushes
+     for (const [tmdbId, items] of byShow) {
+       try { totalNotified += await processShow(tmdbId, items); }
+       catch (err) { logger.error(`episodeNotify: show ${tmdbId} failed`, err); }
+     }
+-    logger.info('episodeNotify done', { followedTvDocs: series.length, uniqueShows: byShow.size, notified: totalNotified });
++    logger.info('episodeNotify done', { followedTvDocs: series.length, uniqueShows: byShow.size, queued: totalNotified });
+   },
+ );
+diff --git a/functions/src/episodeNotify/logic.ts b/functions/src/episodeNotify/logic.ts
+index c8c13ba..c19f78c 100644
+--- a/functions/src/episodeNotify/logic.ts
++++ b/functions/src/episodeNotify/logic.ts
+@@ -14,7 +14,7 @@
+ 
+ export type AiringState = 'ongoing' | 'ended' | 'unknown';
+ export type TvSubState = 'aktiv' | 'ikapp' | 'avslutad' | 'none';
+-export interface LastEpisode { id: number; season_number: number; episode_number: number; }
++export interface LastEpisode { id: number; season_number: number; episode_number: number; air_date?: string | null; }
+ export interface WatchlistLite {
+   uid: string; tmdbId: number; mediaType: string; status: string; title: string;
+   lastWatchedSeason: number | null; lastWatchedEpisode: number | null; tmdbStatus: string | null;
+diff --git a/functions/src/episodeNotify/tmdb.ts b/functions/src/episodeNotify/tmdb.ts
+index 1ac310b..328b4d6 100644
+--- a/functions/src/episodeNotify/tmdb.ts
++++ b/functions/src/episodeNotify/tmdb.ts
+@@ -18,8 +18,8 @@ export async function fetchTvAiringInfo(tmdbId: number): Promise<TvAiringInfo |
+     // fan-out loop to the function's hard timeout; the catch degrades to null.
+     const res = await fetch(`${BASE_URL}/tv/${tmdbId}?api_key=${key}&language=sv-SE`, { signal: AbortSignal.timeout(10_000) });
+     if (!res.ok) { logger.warn(`episodeNotify: TMDB /tv/${tmdbId} → ${res.status}`); return null; }
+-    const json = (await res.json()) as { status?: string; last_episode_to_air?: { id: number; season_number: number; episode_number: number } | null };
++    const json = (await res.json()) as { status?: string; last_episode_to_air?: { id: number; season_number: number; episode_number: number; air_date?: string | null } | null };
+     const last = json.last_episode_to_air ?? null;
+-    return { status: json.status ?? null, lastEpisode: last ? { id: last.id, season_number: last.season_number, episode_number: last.episode_number } : null };
++    return { status: json.status ?? null, lastEpisode: last ? { id: last.id, season_number: last.season_number, episode_number: last.episode_number, air_date: last.air_date ?? null } : null };
+   } catch (err) { logger.warn(`episodeNotify: TMDB fetch failed for ${tmdbId}`, err); return null; }
+ }
+diff --git a/functions/src/index.ts b/functions/src/index.ts
+index 3eaf6b2..68dfe8f 100644
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -190,10 +190,12 @@ export { onFollowCreate } from './followPush';
+ export { rollupInsights } from './insights/rollup';
+ export { apiInsights } from './insights/api';
+ 
+-// ── Episod-release-push (B4) ──────────────────────────────────────────────────
+-// episodeReleaseNotify: schemalagd collectionGroup-scan → push:ar followers som
+-// är ikapp på en serie när TMDB rapporterar ett nytt aireat avsnitt.
++// ── Episod-release (B4, BIN-1475) ────────────────────────────────────────────
++// episodeReleaseNotify: schemalagd collectionGroup-scan → köar followers som är
++// ikapp på en serie när TMDB rapporterar ett nytt aireat avsnitt.
++// episodeMorningDigest: 08:00 → ETT kort + EN push per användare ur kön.
+ export { episodeReleaseNotify } from './episodeNotify';
++export { episodeMorningDigest } from './episodeDigest';
+ 
+ // ── "Serien är tillbaka"-push (BIN-188) ──────────────────────────────────────
+ // showReturnNotify: daglig collectionGroup-scan (TV i 'mina') → fetchar TMDB
+diff --git a/src/app/my/igar/layout.tsx b/src/app/my/igar/layout.tsx
+new file mode 100644
+index 0000000..9c01576
+--- /dev/null
++++ b/src/app/my/igar/layout.tsx
+@@ -0,0 +1,10 @@
++import type { Metadata } from 'next';
++
++// Egen dokumenttitel; robots ärvs från my/layout (noindex).
++export const metadata: Metadata = {
++  title: 'Nya avsnitt',
++};
++
++export default function IgarLayout({ children }: { children: React.ReactNode }) {
++  return children;
++}
+diff --git a/src/app/my/igar/page.tsx b/src/app/my/igar/page.tsx
+new file mode 100644
+index 0000000..b100373
+--- /dev/null
++++ b/src/app/my/igar/page.tsx
+@@ -0,0 +1,10 @@
++'use client';
++
++import AuthGuard from '@/components/AuthGuard';
++import EpisodeDigestPage, { EPISODE_DIGEST_TITLE } from '@/components/watchlist/EpisodeDigestPage';
++import { usePageMeta } from '@/hooks/usePageMeta';
++
++export default function IgarPage() {
++  usePageMeta({ title: EPISODE_DIGEST_TITLE });
++  return <AuthGuard><EpisodeDigestPage /></AuthGuard>;
++}
+diff --git a/src/components/layout/TopbarActions.tsx b/src/components/layout/TopbarActions.tsx
+index eaecdfe..8ae2285 100644
+--- a/src/components/layout/TopbarActions.tsx
++++ b/src/components/layout/TopbarActions.tsx
+@@ -185,6 +185,20 @@ export default function TopbarActions() {
+                         </Link>
+                       );
+                     }
++                    // BIN-1475 morgonfrågan: öppnar avbockningslistan, inte en titel.
++                    if (n.kind === 'episode_digest') {
++                      return (
++                        <Link
++                          key={n.id}
++                          href="/my/igar/"
++                          onClick={() => { markRead(n.id); setBellOpen(false); }}
++                          className={`popover-row${n.read ? '' : ' is-unread'}`}
++                        >
++                          <div className="popover-row-title">{n.title}</div>
++                          <div className="popover-row-meta">{n.summary}</div>
++                        </Link>
++                      );
++                    }
+                     if (n.kind === 'system') {
+                       // BIN-1259: ett kort UTAN actionUrl renderas som en knapp,
+                       // inte som en länk. Reservvägen `|| '/insikter'` skickade
+diff --git a/src/components/settings/NotificationsSection.tsx b/src/components/settings/NotificationsSection.tsx
+index cdc62ea..f439555 100644
+--- a/src/components/settings/NotificationsSection.tsx
++++ b/src/components/settings/NotificationsSection.tsx
+@@ -265,6 +265,9 @@ export function NotificationsSection() {
+           className="accent-acc-deep w-[14px] h-[14px]" />
+         Notiser när en serie jag följer släpper ett nytt avsnitt
+       </label>
++      <p className="text-xs text-ink-3 mt-1 pl-6">
++        Du får en notis om dagen, på morgonen, med dagens nya avsnitt i en lista där du kan bocka av vad du sett. Inga nya avsnitt ger ingen notis.
++      </p>
+ 
+       <label className="flex items-center gap-2 cursor-pointer text-base mt-3">
+         <input type="checkbox" checked={user.notificationSettings.availableOnMyServices} disabled={busyKeys.has('available')}
+diff --git a/src/components/watchlist/EpisodeDigestPage.tsx b/src/components/watchlist/EpisodeDigestPage.tsx
+new file mode 100644
+index 0000000..cc7f6ee
+--- /dev/null
++++ b/src/components/watchlist/EpisodeDigestPage.tsx
+@@ -0,0 +1,122 @@
++'use client';
++
++import { useEffect, useState } from 'react';
++import Link from 'next/link';
++import { useRouter } from 'next/navigation';
++import { Check } from 'lucide-react';
++import { PageHeader } from '@/components/layout/PageHeader';
++import { LoadingView } from '@/components/ui/LoadingView';
++import { EmptyState } from '@/components/ui/EmptyState';
++import { cardClass } from '@/components/ui/Card';
++import { Button } from '@/components/ui/Button';
++import { useNotifications } from '@/hooks/useNotifications';
++import { useWatchlist } from '@/hooks/useWatchlist';
++import { useEpisodeProgressWithSync } from '@/hooks/useEpisodeProgressWithSync';
++import { useToast } from '@/contexts/ToastContext';
++import type { DigestEpisode } from '@/hooks/useNotifications';
++import { isEpisodeSeen, episodeCodeLabel } from '@/lib/episodeDigest';
++import { posterUrl, titleHref } from '@/lib/tmdb/client';
++
++export const EPISODE_DIGEST_TITLE = 'Nya avsnitt';
++
++// BIN-1475: listan som morgonnotisen öppnar. Att inte bocka av något är ett giltigt
++// svar: ingenting skrivs och ingenting räknas.
++
++// One row per episode, so each can use the same per-show write as the episode list
++// on the series page (episodeProgress and the watchlist marker together).
++function DigestRow({ ep, posterPath, seen }: { ep: DigestEpisode; posterPath: string | null; seen: boolean }) {
++  const { markEpisodeWatched } = useEpisodeProgressWithSync(ep.tmdbId);
++  const { show } = useToast();
++  const [busy, setBusy] = useState(false);
++  const code = episodeCodeLabel(ep.season, ep.episode);
++  const poster = posterUrl(posterPath, 'w92');
++  const onTick = async () => {
++    setBusy(true);
++    try { await markEpisodeWatched(ep.season, ep.episode, true); }
++    catch { show('Det gick inte att markera avsnittet. Försök igen.'); }
++    finally { setBusy(false); }
++  };
++  return (
++    <li className={cardClass('flex items-center gap-3 p-3')}>
++      {poster
++        // eslint-disable-next-line @next/next/no-img-element
++        ? <img src={poster} alt="" width={40} height={60} className="rounded-sm shrink-0" />
++        : <div className="w-[40px] h-[60px] rounded-sm bg-bg-2 shrink-0" aria-hidden />}
++      <Link href={titleHref('tv', ep.tmdbId)} className="flex-1 min-w-0">
++        <div className="text-md font-semibold text-ink truncate">{ep.title}</div>
++        <div className="text-sm text-ink-3">{code}</div>
++      </Link>
++      {seen ? (
++        <span className="chip is-on" aria-label={`${ep.title} markerad som sedd`}><Check size={14} aria-hidden /> Sedd</span>
++      ) : (
++        <button type="button" className="chip" disabled={busy} aria-label={`Markera ${ep.title} ${code} som sedd`} onClick={() => { void onTick(); }}>
++          Sedd?
++        </button>
++      )}
++    </li>
++  );
++}
++
++// BIN-1475: listan som morgonnotisen öppnar. Att inte bocka av något är ett giltigt
++// svar: ingenting skrivs och ingenting räknas.
++export default function EpisodeDigestPage() {
++  const router = useRouter();
++  const { notifications, markRead } = useNotifications();
++  const { items, loading } = useWatchlist();
++  const digest = notifications.find(n => n.kind === 'episode_digest');
++
++  // useNotifications has no loading state; an empty inbox gets a moment before the
++  // page says there is nothing, so a push tap does not flash the empty view.
++  const [waited, setWaited] = useState(false);
++  useEffect(() => {
++    const t = setTimeout(() => setWaited(true), 2500);
++    return () => clearTimeout(t);
++  }, []);
++
++  // Opening the list is enough to clear the badge; there is no "unanswered" state.
++  const digestId = digest?.id;
++  const digestRead = digest?.read ?? true;
++  useEffect(() => {
++    if (digestId && !digestRead) void markRead(digestId);
++  }, [digestId, digestRead, markRead]);
++
++  const header = (
++    <PageHeader
++      crumb="Mitt Binge · nya avsnitt"
++      title={digest?.title ?? EPISODE_DIGEST_TITLE}
++      standfirst="Bocka av det du hunnit se. Resten ligger kvar som vanligt."
++    />
++  );
++
++  if (loading || (!digest && !waited)) return <>{header}<LoadingView variant="grid" label="Laddar nya avsnitt…" /></>;
++  if (!digest || !digest.episodes || digest.episodes.length === 0) {
++    return (
++      <>
++        {header}
++        <EmptyState title="Inga nya avsnitt just nu." body="Du får en notis på morgonen när något nytt har kommit." />
++      </>
++    );
++  }
++
++  return (
++    <>
++      {header}
++      <ul className="mt-5 flex flex-col gap-2">
++        {digest.episodes.map(ep => {
++          const item = items.find(i => i.mediaType === 'tv' && i.tmdbId === ep.tmdbId);
++          return (
++            <DigestRow
++              key={`${ep.tmdbId}-${ep.season}-${ep.episode}`}
++              ep={ep}
++              posterPath={item?.posterPath ?? null}
++              seen={isEpisodeSeen(item, ep.season, ep.episode)}
++            />
++          );
++        })}
++      </ul>
++      <div className="mt-5">
++        <Button variant="acc" onClick={() => router.push('/my/')}>Klar</Button>
++      </div>
++    </>
++  );
++}
+diff --git a/src/hooks/useNotifications.ts b/src/hooks/useNotifications.ts
+index b86b81c..e4de876 100644
+--- a/src/hooks/useNotifications.ts
++++ b/src/hooks/useNotifications.ts
+@@ -25,13 +25,16 @@ export interface AppNotification {
+   // tmdbId-formad (tmdbId=0) — en rollup över flera titlar. 'system' är en notis
+   // som inte handlar om en titel — INTE tmdbId-formad; bär `body`, och
+   // `actionUrl` när det finns något att öppna.
+-  kind: 'provider_available' | 'episode_release' | 'digital_release' | 'weekly_digest' | 'system';
++  kind: 'provider_available' | 'episode_release' | 'digital_release' | 'weekly_digest' | 'system' | 'episode_digest';
+   providerId: number | null;
+   providerName: string | null;
+   episodeCode: string | null;
+   // 'system'-fält (undefined för övriga kinds).
+   body?: string;
+   actionUrl?: string;
++  // BIN-1475 episode_digest: morgonfrågan. Inte tmdbId-formad; `episodes` är
++  // listan som öppnas på /my/igar/. `summary` och `actionUrl` delas med övriga.
++  episodes?: DigestEpisode[];
+   // BIN-163 weekly_digest-fält (undefined för övriga kinds).
+   summary?: string;
+   leavingCount?: number;
+@@ -41,6 +44,13 @@ export interface AppNotification {
+   createdAt: Date;
+ }
+ 
++export interface DigestEpisode {
++  tmdbId: number;
++  title: string;
++  season: number;
++  episode: number;
++}
++
+ export interface DigestCardItem {
+   tmdbId: number;
+   title: string;
+@@ -100,6 +110,23 @@ export function useNotifications() {
+             createdAt: toDate(data.createdAt),
+           } as AppNotification;
+         }
++        if (data.kind === 'episode_digest') {
++          return {
++            id: d.id,
++            tmdbId: 0,
++            mediaType: 'tv',
++            title: data.title ?? 'Nya avsnitt du följer',
++            kind: 'episode_digest',
++            providerId: null,
++            providerName: null,
++            episodeCode: null,
++            summary: data.summary ?? '',
++            episodes: Array.isArray(data.episodes) ? (data.episodes as DigestEpisode[]) : [],
++            actionUrl: typeof data.actionUrl === 'string' ? data.actionUrl : '/my/igar/',
++            read: data.read ?? false,
++            createdAt: toDate(data.createdAt),
++          } as AppNotification;
++        }
+         if (data.kind === 'system') {
+           // En notis som inte handlar om en titel. Inte tmdbId-formad. Utan denna gren coerce:ades den till 'provider_available'
+           // och byggde en trasig /tv/undefined-länk (Sentry BINGE-9). `actionUrl`
+diff --git a/src/lib/episodeDigest.test.ts b/src/lib/episodeDigest.test.ts
+new file mode 100644
+index 0000000..899e9ee
+--- /dev/null
++++ b/src/lib/episodeDigest.test.ts
+@@ -0,0 +1,17 @@
++import { describe, it, expect } from 'vitest';
++import { isEpisodeSeen, episodeCodeLabel } from './episodeDigest';
++
++describe('isEpisodeSeen', () => {
++  it('is false without any logged progress', () => {
++    expect(isEpisodeSeen(undefined, 1, 1)).toBe(false);
++    expect(isEpisodeSeen({ lastWatchedSeason: null, lastWatchedEpisode: null }, 1, 1)).toBe(false);
++  });
++  it('is true at the episode or later, false before', () => {
++    expect(isEpisodeSeen({ lastWatchedSeason: 2, lastWatchedEpisode: 5 }, 2, 5)).toBe(true);
++    expect(isEpisodeSeen({ lastWatchedSeason: 3, lastWatchedEpisode: 1 }, 2, 9)).toBe(true);
++    expect(isEpisodeSeen({ lastWatchedSeason: 2, lastWatchedEpisode: 4 }, 2, 5)).toBe(false);
++  });
++  it('formats the code with two digits', () => {
++    expect(episodeCodeLabel(2, 5)).toBe('S02E05');
++  });
++});
+diff --git a/src/lib/episodeDigest.ts b/src/lib/episodeDigest.ts
+new file mode 100644
+index 0000000..4d7a987
+--- /dev/null
++++ b/src/lib/episodeDigest.ts
+@@ -0,0 +1,14 @@
++/** True when the logged progress is at or past the given episode of a series. */
++export function isEpisodeSeen(
++  progress: { lastWatchedSeason: number | null; lastWatchedEpisode: number | null } | null | undefined,
++  season: number,
++  episode: number,
++): boolean {
++  if (!progress || progress.lastWatchedSeason == null) return false;
++  const e = progress.lastWatchedEpisode ?? 0;
++  return progress.lastWatchedSeason > season || (progress.lastWatchedSeason === season && e >= episode);
++}
++
++export function episodeCodeLabel(season: number, episode: number): string {
++  return `S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}`;
++}
