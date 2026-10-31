@@ -216,7 +216,10 @@ async function seedGroup(opts: {
       });
     }
     if (m.household) {
-      await setDoc(doc(d, 'groups', opts.id, 'household', m.uid), { providerIds: ['x'] });
+      // ADR 0026: soon-flaggan och rösterna ligger i samma dokument och följer det.
+      await setDoc(doc(d, 'groups', opts.id, 'household', m.uid), {
+        providerIds: ['x'], soonProviderIds: [8], votes: { 8: 'ok' }, votesMonth: '2026-10',
+      });
     }
   }
   for (const [itemId, addedBy] of Object.entries(opts.items ?? {})) {

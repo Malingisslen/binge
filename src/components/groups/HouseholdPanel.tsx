@@ -8,9 +8,9 @@ import { formatKr } from '@/lib/formatKr';
 import { Eyebrow } from '@/components/ui/Eyebrow';
 import { Button } from '@/components/ui/Button';
 import { cardClass } from '@/components/ui/Card';
+import HouseholdConsent from '@/components/groups/HouseholdConsent';
 
-// BIN-184 — "Hushåll"-panelen i gruppens vänsterspalt. Aggregat-ENDAST i UI:t
-// ("Disney+ betalas av 2 av er"), aldrig per person. Opt-in via en explicit
+// BIN-184 — "Hushåll"-panelen i gruppens vänsterspalt. Opt-in via en explicit
 // samtyckesvy (Legal-krav: vad som delas, vem som ser — nuvarande OCH framtida
 // medlemmar — syfte, återkallelse OCH den tekniska läs-luckan, ADR 0010).
 // Share-to-see: bara medlemmar som själva delar ser vyn (rules-gaten driver
@@ -19,9 +19,10 @@ import { cardClass } from '@/components/ui/Card';
 const dateFmt = new Intl.DateTimeFormat('sv-SE', { day: 'numeric', month: 'short' });
 
 export default function HouseholdPanel({ groupId }: { groupId: string }) {
-  const { status, contributions, optIn, optOut, busy, ready } = useGroupHousehold(groupId);
+  const { status, contributions, optIn, optOut, busy, ready, needsReshare } = useGroupHousehold(groupId);
   const nowMs = useMountTime();
   const [consentOpen, setConsentOpen] = useState(false);
+  const showConsent = consentOpen && (status === 'gated' || (status === 'active' && needsReshare));
 
   const overview = useMemo(
     () => (nowMs != null && status === 'active' ? aggregateHousehold(contributions, new Date(nowMs)) : null),
@@ -63,46 +64,31 @@ export default function HouseholdPanel({ groupId }: { groupId: string }) {
         </div>
       )}
 
-      {status === 'gated' && consentOpen && (
-        <div className="px-3 py-2 space-y-2">
-          {/* Samtyckesvyn — bindande copy (Legal #1/#3 + ADR 0010). */}
-          <p className="text-xs font-bold text-ink">Dela dina streamingkostnader med gruppen?</p>
-          <ul className="text-xxs text-ink-2 leading-relaxed list-disc pl-4 space-y-1">
-            <li>
-              <span className="font-semibold">Det här delas:</span> vad du betalar per
-              tjänst (inklusive kampanjpris och dess slutdatum) och vilka tjänster som
-              har titlar i din backlog. Aldrig vad du tittar på. Alla i gruppen ser redan
-              vilka tjänster du har.
-            </li>
-            <li>
-              <span className="font-semibold">Vilka ser det:</span> nuvarande och framtida
-              medlemmar i den här gruppen som själva delar sina kostnader.
-            </li>
-            <li>
-              <span className="font-semibold">Syfte:</span> en sammanlagd hushållsbild —
-              totalkostnad, dubbelbetalda tjänster och tjänster utan användning.
-            </li>
-            <li>
-              I appen visas bara totalsiffror — men tekniskt kan delande
-              gruppmedlemmar nå din enskilda lista.
-            </li>
-            <li>
-              Du kan sluta dela när som helst; din data raderas då direkt.
-            </li>
-          </ul>
-          <div className="flex items-center gap-2 pt-1">
-            {/* disabled tills payloaden är byggd — klick får aldrig tyst no-op:a */}
-            <Button type="button" variant="acc" size="sm" className="flex-1" disabled={busy || !ready} onClick={() => { void optIn(); }}>
-              Dela
-            </Button>
-            <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => setConsentOpen(false)}>
-              Avbryt
-            </Button>
-          </div>
+      {showConsent && (
+        <HouseholdConsent
+          reshare={status === 'active'}
+          busy={busy}
+          ready={ready}
+          onShare={() => { void optIn().then(() => setConsentOpen(false)).catch(() => {}); }}
+          onCancel={() => setConsentOpen(false)}
+        />
+      )}
+
+      {status === 'active' && needsReshare && !consentOpen && (
+        // ADR 0026: en delare från före "nytt inom 30 dagar" räknas som okänd tills
+        // hen aktivt delar om under den nya texten.
+        <div className="px-3 py-2 space-y-2 border-b border-rule-2">
+          <p className="text-xxs text-ink-2 leading-relaxed">
+            Hushållet kan nu se vem som har något nytt inom 30 dagar. Du har inte
+            delat det ännu.
+          </p>
+          <Button type="button" variant="ghost" size="sm" className="w-full" onClick={() => setConsentOpen(true)}>
+            Läs och dela igen…
+          </Button>
         </div>
       )}
 
-      {status === 'active' && overview && (
+      {status === 'active' && overview && !showConsent && (
         <div className="px-3 py-2 space-y-2">
           <div>
             <span className="text-xl font-bold text-ink">{formatKr(overview.totalKr)} kr</span>

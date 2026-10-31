@@ -1128,7 +1128,9 @@ describe('retentionCleanup orchestrator — the FIELD-owned half (BIN-1063 steg 
     await setDoc(doc(db, 'groups', 'joined'), { ownerUid: 'keeper', memberUids: ['keeper', 'consoled'] });
     await setDoc(doc(db, 'groups', 'joined', 'members', 'keeper'), { uid: 'keeper', joinedAt: ts(NOW - 2000) });
     await setDoc(doc(db, 'groups', 'joined', 'members', 'consoled'), { uid: 'consoled', joinedAt: ts(NOW - 1000) });
-    await setDoc(doc(db, 'groups', 'joined', 'household', 'consoled'), { uid: 'consoled' });
+    await setDoc(doc(db, 'groups', 'joined', 'household', 'consoled'), {
+      uid: 'consoled', soonProviderIds: [8], votes: { 8: 'wait' }, votesMonth: '2026-10',
+    });
     await setDoc(doc(db, 'groups', 'joined', 'household', 'keeper'), { uid: 'keeper' });
     await setDoc(doc(db, 'groups', 'joined', 'watchlist', 'movie_1'), { addedBy: 'consoled', title: 'x' });
     await setDoc(doc(db, 'groups', 'joined', 'watchlist', 'movie_2'), { addedBy: 'keeper', title: 'y' });

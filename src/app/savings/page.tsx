@@ -1,7 +1,7 @@
 'use client';
 
 import { formatKr } from '@/lib/formatKr';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import AuthGuard from '@/components/AuthGuard';
 import ProviderDot from '@/components/ui/ProviderDot';
@@ -22,6 +22,8 @@ import UpcomingEpisodes from '@/components/savings/UpcomingEpisodes';
 import HeroVerdict from '@/components/savings/HeroVerdict';
 import ServiceVerdictCards from '@/components/savings/ServiceVerdictCards';
 import SavedSoFar from '@/components/savings/SavedSoFar';
+import HouseholdMode from '@/components/savings/HouseholdMode';
+import HouseholdSwitch, { useHouseholdMode } from '@/components/savings/HouseholdSwitch';
 import { SavingsTabList, SavingsTabPanel, useSavingsTab } from '@/components/savings/SavingsTabs';
 import CancelHint from '@/components/savings/CancelHint';
 import PauseReminderPrompt from '@/components/savings/PauseReminderPrompt';
@@ -31,6 +33,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { useSubscriptionAdvisor } from '@/hooks/useSubscriptionAdvisor';
 import { useMonthlyBill } from '@/hooks/useMonthlyBill';
 import { useAuth } from '@/hooks/useAuth';
+import { useMyGroups } from '@/hooks/useGroups';
 import { usePauseHistory } from '@/hooks/usePauseHistory';
 import { trackEvent } from '@/lib/analytics';
 import { useToast } from '@/contexts/ToastContext';
@@ -179,22 +182,24 @@ function ActivePausesSection({ pauses, onResume }: { pauses: ActivePause[]; onRe
   );
 }
 
-function PageHead({ crumb }: { crumb: string }) {
+function PageHead({ crumb, switcher }: { crumb: string; switcher: ReactNode }) {
   return (
     <header className="flex flex-wrap items-end justify-between gap-3">
       <div>
         <div className="crumb">{crumb}</div>
         <h1 className="page-h1">Streamingrådgivaren</h1>
       </div>
-      {/* Plats för Jag/Hushållet-växeln: höger i sidhuvudet, så att den ligger kvar
-          på samma ställe i alla lägen (laddar, tomt, fel, pausgolv, full vy). */}
+      {/* Höger i sidhuvudet, så att växeln ligger kvar på samma ställe i alla lägen
+          (laddar, tomt, fel, pausgolv, full vy). */}
+      {switcher}
     </header>
   );
 }
 
 function SavingsContent() {
   const advisor = useSubscriptionAdvisor(LOOK_AHEAD_DAYS);
-  const { pauseProvider, resumeProvider, profileLoading } = useAuth();
+  const { pauseProvider, resumeProvider, profileLoading, uid } = useAuth();
+  const { groups } = useMyGroups(uid);
   // BIN-1442: the pause just made, so its "Påminn mig" can be offered right away.
   const [justPaused, setJustPaused] = useState<{ providerId: number; resumeAt: string } | null>(null);
   const { show: toast } = useToast();
@@ -219,6 +224,16 @@ function SavingsContent() {
   // One listener for both the saved-so-far figure and the sidebar's latest decisions.
   const pauseHistory = usePauseHistory();
   const [tab, selectTab] = useSavingsTab();
+  const household = useHouseholdMode(groups, tab);
+  const switcher = (
+    <HouseholdSwitch
+      groups={groups}
+      mode={household.mode}
+      onMode={household.setMode}
+      groupId={household.groupId}
+      onGroup={household.setGroupId}
+    />
+  );
   // The subscribe step lives in "Mer detaljer" on the Detaljer tab, which is hidden
   // until selected, so scrolling has to wait for the tab to show.
   const [wantsSubscribeRows, setWantsSubscribeRows] = useState(false);
@@ -252,6 +267,20 @@ function SavingsContent() {
   };
   const serviceCards = useMemo(() => serviceVerdicts(advisor, new Date()), [advisor]);
 
+  // The household reads its own data (group docs, not the advisor's TMDB fan-out), so it
+  // does not wait for the advisor to finish loading.
+  if (household.mode === 'hushallet' && household.groupId) {
+    const group = groups.find(g => g.id === household.groupId);
+    return (
+      <>
+        <PageHead switcher={switcher} crumb="Streamingrådgivaren · Hushållet" />
+        <div style={{ marginTop: 22 }}>
+          <HouseholdMode key={household.groupId} groupId={household.groupId} groupName={group?.name ?? 'gruppen'} />
+        </div>
+      </>
+    );
+  }
+
   // A1/A2: gatea på isLoading ENSAMT. Tidigare villkor `&& providers.length
   // === 0` höll aldrig — providers byggs från user.myProviders och är icke-
   // tom redan vid första compute, så diagnos + steg-rader renderades från
@@ -267,7 +296,7 @@ function SavingsContent() {
   if (advisor.isLoading || profileLoading) {
     return (
       <>
-        <PageHead crumb="Streamingrådgivaren" />
+        <PageHead switcher={switcher} crumb="Streamingrådgivaren" />
         <LoadingView label="Räknar på dina tjänster…" />
       </>
     );
@@ -283,7 +312,7 @@ function SavingsContent() {
     if (advisor.bundleSuggestions.length > 0) {
       return (
         <>
-          <PageHead crumb="Streamingrådgivaren" />
+          <PageHead switcher={switcher} crumb="Streamingrådgivaren" />
           <div style={{ marginTop: 22 }}>
             <BundleArbitrageCard suggestions={advisor.bundleSuggestions} />
           </div>
@@ -306,7 +335,7 @@ function SavingsContent() {
     if (advisor.hasError && advisor.hasConfiguredProviders) {
       return (
         <>
-          <PageHead crumb="Streamingrådgivaren" />
+          <PageHead switcher={switcher} crumb="Streamingrådgivaren" />
           <EmptyState
             title="Kunde inte räkna på dina tjänster just nu"
             body="Streamingdatan går inte att nå just nu. Det är oftast tillfälligt, försök igen om en stund."
@@ -325,7 +354,7 @@ function SavingsContent() {
     }
     return (
       <>
-        <PageHead crumb="Streamingrådgivaren" />
+        <PageHead switcher={switcher} crumb="Streamingrådgivaren" />
         <EmptyState
           title="Inga tjänster tillagda än"
           body="Lägg till dina streamingtjänster så räknar vi ut vad du kan pausa och spara på."
@@ -346,7 +375,7 @@ function SavingsContent() {
   if (!advisor.pauseAdviceReady) {
     return (
       <>
-        <PageHead crumb={`Streamingrådgivaren · ${activeProviderCount} tjänster`} />
+        <PageHead switcher={switcher} crumb={`Streamingrådgivaren · ${activeProviderCount} tjänster`} />
         <div style={{ marginTop: 22 }}>
           <SavedSoFar activePauses={advisor.activePauses} historySaved={pauseHistory.totalSaved} isLoading={pauseHistory.isLoading} />
           <DiagnosisCard advisor={advisor} activeProviderCount={activeProviderCount} />
@@ -386,7 +415,7 @@ function SavingsContent() {
 
   return (
     <>
-      <PageHead crumb={`Streamingrådgivaren · ${activeProviderCount} tjänster`} />
+      <PageHead switcher={switcher} crumb={`Streamingrådgivaren · ${activeProviderCount} tjänster`} />
       <div style={{ marginTop: 22 }}>
         <SavedSoFar activePauses={advisor.activePauses} historySaved={pauseHistory.totalSaved} isLoading={pauseHistory.isLoading} />
 

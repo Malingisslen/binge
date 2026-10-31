@@ -5,7 +5,13 @@ import { captureError } from '@/lib/sentry';
 import { mediaTypeDocId, resolveTmdbId } from '@/lib/mediaTypeDocId';
 import {
   buildHouseholdContribution,
-  contributionContentEquals,
+  composeHouseholdContribution,
+  householdContributionNeedsWrite,
+  householdSoonNeedsRefresh,
+  householdVoteMonthKey,
+  sanitizeSoonProviderIds,
+  sanitizeVotes,
+  sanitizeVotesMonth,
   type HouseholdContribution,
   type HouseholdContributionContent,
 } from '@/lib/advisor/householdAggregate';
@@ -1335,12 +1341,16 @@ function householdDocToObject(uid: string, data: Record<string, unknown>): House
     providerCosts: (data.providerCosts as HouseholdContribution['providerCosts']) ?? {},
     providerCampaigns: (data.providerCampaigns as HouseholdContribution['providerCampaigns']) ?? {},
     activeProviderIds: Array.isArray(data.activeProviderIds) ? (data.activeProviderIds as number[]) : [],
+    // Rules check only the type and size of these, so unknown values are dropped here.
+    soonProviderIds: sanitizeSoonProviderIds(data.soonProviderIds),
+    votes: sanitizeVotes(data.votes),
+    votesMonth: sanitizeVotesMonth(data.votesMonth),
     updatedAt: toDate(data.updatedAt)?.getTime() ?? null,
   };
 }
 
 /** Opt-in / refresh: skriv (över) medlemmens eget bidrag. Callern ansvarar för
- *  dirty-checken (contributionContentEquals) så oförändrat innehåll aldrig ger
+ *  dirty-checken (householdContributionNeedsWrite) så oförändrat innehåll aldrig ger
  *  en Firestore-write (25 SEK-cappen). */
 export async function setHouseholdContribution(
   groupId: string,
@@ -1348,10 +1358,21 @@ export async function setHouseholdContribution(
   content: HouseholdContributionContent,
 ): Promise<void> {
   const { db, doc, setDoc, serverTimestamp } = await fsdb();
-  await setDoc(doc(db, 'groups', groupId, 'household', uid), {
-    ...content,
-    updatedAt: serverTimestamp(),
-  });
+  // Built field by field: the optional fields are left out when absent (Firestore refuses
+  // an undefined value), and nothing outside the rules' hasOnly list can slip through.
+  const payload: Record<string, unknown> = {
+    providerIds: content.providerIds,
+    providerCosts: content.providerCosts,
+    providerCampaigns: content.providerCampaigns,
+    activeProviderIds: content.activeProviderIds,
+  };
+  if (content.soonProviderIds !== undefined) payload.soonProviderIds = content.soonProviderIds;
+  if (content.votes !== undefined && content.votesMonth !== undefined) {
+    payload.votes = content.votes;
+    payload.votesMonth = content.votesMonth;
+  }
+  payload.updatedAt = serverTimestamp();
+  await setDoc(doc(db, 'groups', groupId, 'household', uid), payload);
 }
 
 /** Opt-out (ångra delning) utan att lämna gruppen — DBA-krav: opt-in får inte
@@ -1416,14 +1437,22 @@ export async function refreshMyHouseholdContributions(
       const snap = await getDoc(doc(db, 'groups', g.id, 'household', uid));
       if (!snap.exists()) return; // inte opt-in i den här gruppen
       const existing = householdDocToObject(uid, snap.data() as Record<string, unknown>);
+      // En skrivning här stämplar om updatedAt och gör en gammal delad soon-flagga "färsk"
+      // utan att medlemmen har kollat om något nytt kommit. Besöksuppdateringen skriver om
+      // bidraget med en ny soon-bedömning.
+      if (householdSoonNeedsRefresh(existing, Date.now())) return;
       const built = buildHouseholdContribution(
         fields.myProviders, fields.providerCosts, fields.providerTiers, fields.providerCampaigns, [],
       );
-      const next: HouseholdContributionContent = {
-        ...built,
-        activeProviderIds: existing.activeProviderIds,
-      };
-      if (contributionContentEquals(next, existing)) return; // dirty-check → ingen write
+      // soonProviderIds och månadens röster följer med oförändrade (soon: null = behåll
+      // befintligt värde) — en setDoc utan dem skulle radera dem.
+      const monthKey = householdVoteMonthKey(new Date());
+      const next: HouseholdContributionContent = composeHouseholdContribution(
+        { ...built, activeProviderIds: existing.activeProviderIds },
+        existing,
+        { monthKey, soon: null },
+      );
+      if (!householdContributionNeedsWrite(next, existing, monthKey)) return; // dirty-check → ingen write
       await setHouseholdContribution(g.id, uid, next);
     } catch {
       // Best-effort per grupp (samma som updateMemberProviders-fan-outen) —

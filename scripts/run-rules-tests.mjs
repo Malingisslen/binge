@@ -127,7 +127,10 @@ const REPO = resolve(HERE, '..');
 // "Någon följer dig nu", 2026-10-11: raised to what `numTotalTests` reported with
 // src/test/rules/follow-push.test.ts and the follow-notice marker sweep cases in place.
 // Measured with `npm run test:rules -- --port 8123`.
-export const MIN_TESTS = 954;
+// Hushållsröster, 2026-10-31: raised to what `numTotalTests` reported with the describe
+// block named `ADR 0026 — soonProviderIds, votes, votesMonth` in place. Measured with
+// `npm run test:rules -- --port 8123`.
+export const MIN_TESTS = 967;
 
 const VITEST_ARGS = ['run', '--config', 'vitest.rules.config.ts'];
 

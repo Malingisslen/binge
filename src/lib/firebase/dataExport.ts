@@ -40,7 +40,11 @@ import type { QuerySnapshot } from 'firebase/firestore';
 //     that group's data. Before this the group was dropped without a trace.
 // 2.5 (Tipsa en vän, 2026-10-11): additive — new `tips` array: title tips friends sent
 //     you (id = "<fromUid>_<mediaType>_<tmdbId>").
-export const SCHEMA_VERSION = '2.5' as const;
+// 2.6 (ADR 0026, 2026-10-31): additive — a `householdContributions` doc may now carry
+//     `soonProviderIds` (provider ids with something new within 30 days), `votes`
+//     (provider id → 'ok' | 'keep' | 'wait') and `votesMonth` ("YYYY-MM"). They live in the
+//     same doc, so the export carries them as stored. No field changed meaning.
+export const SCHEMA_VERSION = '2.6' as const;
 
 export interface ExportDoc {
   id: string;
