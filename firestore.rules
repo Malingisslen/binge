@@ -3,7 +3,19 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ---- helpers ----
-    function isSignedIn() { return request.auth != null; }
+    // BIN-1471: en TV-session (custom token med claim tv) är inte en vanlig inloggad
+    // användare. Utan det här undantaget skulle varje regel som bara kräver
+    // isSignedIn() släppa in TV:n. TV släpps i stället in uttryckligen via isTvOf().
+    function isSignedIn() { return request.auth != null && request.auth.token.get('tv', false) != true; }
+    // TV:ns uid är `tv_<enhet>`, aldrig ägarens. Enhetens rad i tvDevices måste finnas:
+    // "Koppla bort" tar bort raden och TV:n nekas direkt, utan att vänta på att
+    // ID-token (upp till en timme) går ut. Kostar en get-läsning per TV-förfrågan.
+    function isTvOf(uid) {
+      return request.auth != null
+        && request.auth.token.get('tv', false) == true
+        && request.auth.token.get('ownerUid', '') == uid
+        && exists(/databases/$(database)/documents/users/$(uid)/tvDevices/$(request.auth.token.get('tvDeviceId', '-')));
+    }
 
     // BIN-1184: ett gruppnamn måste innehålla minst ett tecken som inte är blanksteg.
     // Samma uttryck på gruppen, dess publika projektion och inbjudans kopia av namnet;
@@ -386,6 +398,14 @@ service cloud.firestore {
     }
     match /users/{uid}/watchlist/{itemId} {
       allow read, delete: if isOwner(uid);
+      // BIN-1471: TV:n läser ägarens lista och får bara ändra statusfälten (bocka av).
+      // Den kan varken skapa eller radera titlar.
+      allow read: if isTvOf(uid);
+      allow update: if isTvOf(uid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+          ['status', 'watchedAt', 'updatedAt', 'lastWatchedSeason', 'lastWatchedEpisode', 'rewatchCount', 'dropped'])
+        && request.resource.data.status in ['vill_se', 'mina', 'sedd', 'avbruten']
+        && isValidWatchlistItem(request.resource.data);
       // BIN-505: `notes` moved to the owner-only watchlistNotes subcollection.
       // The key STAYS whitelisted in isValidWatchlistItem (one-way-ratchet: a
       // legacy doc still carrying `notes` must keep passing unrelated merge-writes,
@@ -516,6 +536,19 @@ service cloud.firestore {
     // design (see isValidTagDoc). Shape { tags: string[] }. The doc id is
     // mediaTypeDocId(mediaType, tmdbId) since BIN-560 (WatchlistContext.tsx:1045),
     // not a bare tmdbId — the wildcard's NAME is the pre-cutover leftover.
+    // BIN-1471: TV-kopplingar. Bara funktionen tvPairPoll skapar raden (Admin SDK).
+    // Ägaren läser och tar bort. TV:n läser sin egen rad (nekas den är den bortkopplad)
+    // och får bara röra lastSeenAt, högst en gång per ca dygn.
+    match /users/{uid}/tvDevices/{deviceId} {
+      allow read, delete: if isOwner(uid);
+      allow get: if isTvOf(uid) && deviceId == request.auth.token.get('tvDeviceId', '-');
+      allow create: if false;
+      allow update: if isTvOf(uid) && deviceId == request.auth.token.get('tvDeviceId', '-')
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastSeenAt'])
+        && request.resource.data.lastSeenAt is timestamp
+        && request.resource.data.lastSeenAt <= request.time
+        && request.time - resource.data.lastSeenAt > duration.value(20, 'h');
+    }
     match /users/{uid}/watchlistTags/{tmdbId} {
       allow read, delete: if isOwner(uid);
       allow create, update: if isOwner(uid) && isValidTagDoc(request.resource.data);
@@ -530,7 +563,8 @@ service cloud.firestore {
     }
     match /users/{uid}/episodeProgress/{itemId} {
       allow read, delete: if isOwner(uid);
-      allow create, update: if isOwner(uid)
+      allow read: if isTvOf(uid);
+      allow create, update: if (isOwner(uid) || isTvOf(uid))
         // media-type doc-id migration — shared optional-but-validated guard.
         && request.resource.data.keys().hasOnly(['tmdbId', 'seasons', 'mediaType'])
         && validOptionalMediaType(request.resource.data);

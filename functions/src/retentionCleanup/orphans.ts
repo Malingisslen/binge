@@ -27,6 +27,7 @@
  * what gets deleted is testable under the root vitest toolchain, like
  * `logic.ts` and `reclaimOrphanFollows/logic.ts`.
  */
+import { isTvPrincipalUid } from '../tvPair/logic';
 
 /**
  * How old an auth account with no `users/{uid}` document must be before it is
@@ -151,10 +152,14 @@ export function exceedsOrphanAuthCeiling(candidates: number, checkedAccounts: nu
  * firebase-admin — the same move the ceiling made for the same reason.
  */
 export function isOrphanCandidate(
-  user: { disabled?: boolean; metadata?: { creationTime?: unknown } },
+  user: { uid?: string; disabled?: boolean; metadata?: { creationTime?: unknown } },
   nowMs: number,
 ): boolean {
   if (user.disabled === true) return false;
+  // BIN-1471: a TV principal never has a users/{uid} document, so without this
+  // every paired TV would be signed out after a week, and enough of them would
+  // trip the ceiling and stop the sweep for the accounts it exists to erase.
+  if (isTvPrincipalUid(user.uid)) return false;
   return isReapableOrphanAge(creationTimeToMillis(user.metadata?.creationTime), nowMs);
 }
 

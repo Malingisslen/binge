@@ -78,7 +78,8 @@
         "src/lib/firebase/utils.test.ts",
         "src/lib/firebase/utils.ts",
         "src/lib/passwordStrength.test.ts",
-        "src/lib/passwordStrength.ts"
+        "src/lib/passwordStrength.ts",
+        "src/test/rules/tvDevices.rules.test.ts"
       ]
     },
     "5": {

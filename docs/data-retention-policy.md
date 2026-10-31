@@ -58,6 +58,9 @@ vid kontoradering. Export och radering läser samma helper
 (`src/lib/firebase/userData.ts`), så listorna hålls i synk: lägger man till en
 ny user-owned subcollection måste helpern uppdateras så båda flödena får med den.
 
+- `tvPairings/*` och `tvRate/*` (BIN-1471) — kopplingskoder och räknare för kodinloggning på TV. Bara Cloud Functions når dem. Raden bär en hash av koden, aldrig koden, och raderas när TV:n hämtat sin inloggning eller av TTL-policyn på `expireAt`. Räknare per IP använder en hash saltad med dygnet, inte IP-adressen.
+- `users/{uid}/tvDevices/*` (BIN-1471) — kopplade TV. Ingår i exporten och raderas av kaskaden; ägaren kan ta bort en rad när som helst, och då nekas TV:n direkt.
+
 Utanför mitt träd, och därför inte i helpern:
 
 - `rotationReminderState/{uid}_{providerId}_{kind}_{datum}` — dedup-märket för

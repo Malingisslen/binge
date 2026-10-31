@@ -134,8 +134,7 @@ async function readAuthActivity(): Promise<AuthActivityLite[]> {
     const page = await getAuth().listUsers(1000, pageToken);
     for (const u of page.users) {
       out.push({
-        // Holds while the app has no custom-token or other provider-less sign-in; a
-        // future one would make its real users read as anonymous and drop out here.
+        // A provider-less account reads as anonymous.
         anonymous: u.providerData.length === 0,
         lastSignInTime: u.metadata.lastSignInTime,
         lastRefreshTime: u.metadata.lastRefreshTime,

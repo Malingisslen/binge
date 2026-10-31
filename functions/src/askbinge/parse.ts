@@ -17,6 +17,7 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import { normalizeQuery, buildGeminiBody, extractFilterJson, type AskFilter } from './parseLogic';
 import { stockholmDayId } from './logic';
+import { isTvAuth } from '../tvPair/logic';
 
 const GEMINI_API_KEY = defineSecret('GEMINI_API_KEY');
 
@@ -33,6 +34,8 @@ function hashQuery(norm: string): string {
 export const askBingeParse = onCall({ region: 'europe-west1', secrets: [GEMINI_API_KEY] }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError('unauthenticated', 'Logga in för att använda AI-tolkning.');
+  // A TV principal is not an account, and a disconnected TV keeps a valid token.
+  if (isTvAuth(request.auth)) throw new HttpsError('permission-denied', 'Inte tillgängligt på TV.');
 
   const raw = (request.data as { query?: unknown } | undefined)?.query;
   if (typeof raw !== 'string' || raw.trim().length === 0 || raw.length > 200) {

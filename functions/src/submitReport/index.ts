@@ -16,10 +16,13 @@
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { validateReportInput, isWithinCooldown, resolveTargetRef, resolveDocOwner } from './logic';
+import { isTvAuth } from '../tvPair/logic';
 
 export const submitReport = onCall({ region: 'europe-west1' }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError('unauthenticated', 'Du måste vara inloggad för att rapportera.');
+  // A TV principal is not an account, and a disconnected TV keeps a valid token.
+  if (isTvAuth(request.auth)) throw new HttpsError('permission-denied', 'Det går inte att anmäla från TV:n.');
 
   const parsed = validateReportInput(request.data);
   if (!parsed.ok) throw new HttpsError('invalid-argument', parsed.error);

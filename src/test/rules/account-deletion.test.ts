@@ -254,6 +254,7 @@ async function seedFullAccount() {
     await set(['users', ME, 'fcmTokens', 't1'], { token: 'abc' });
     await set(['users', ME, 'reportMeta', 'rm'], { lastReportAt: 1 });
     await set(['users', ME, 'askBingeMeta', 'am'], { count: 1 });
+    await set(['users', ME, 'tvDevices', 'd1'], { name: 'Google TV' });
     await set(['users', ME, 'following', OTHER], { at: 1 });
     await set(['users', OTHER, 'followers', ME], { at: 1 });           // mirror of my outbound follow
     await set(['users', ME, 'followers', OTHER], { at: 1 });           // OTHER follows me — survives (OTHER-owned)

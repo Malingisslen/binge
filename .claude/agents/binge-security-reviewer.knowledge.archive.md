@@ -11564,3 +11564,42 @@ after-the-fact review of a commit that reached main with no recorded review. Fix
 `followerVisibleTo` mirroring the rule, a fourth read of `users/{follower}/friends/{recipient}`,
 "Någon följer dig nu" otherwise; a rules-text test pins the clauses and a source scan pins the
 call site in index.ts.
+
+### 2026-10-31 — BIN-1471: TV-principalen äts av föräldralösa-konton-svepet
+Staged review of the TV pairing (worktree C:/binge-tv). `tvPairPoll` mints a custom token for
+`tv_<24 hex>` with claims `{tv, ownerUid, tvDeviceId}`; `signInWithCustomToken` creates that
+Auth user, and by design it never gets a `users/{uid}` doc. `retentionCleanup`'s
+`collectOrphanedAuthAccounts` (runCleanup.ts) takes every Auth account older than
+`ORPHAN_AUTH_MIN_AGE_MS` (7 days) whose profile doc is confirmed missing. Trace: TV paired →
+7 days → candidate → `deleteAuthUsers` → the TV's refresh fails, the TV is signed out, its
+`tvDevices` row lingers. With more than `ORPHAN_AUTH_MIN_CEILING` such accounts AND more than
+a quarter of the accounts checked, `withinOrphanCeiling` refuses the whole run every day, so the
+aborted-deletion erasures the sweep exists for (Malin 2026-08-11, Art. 12(3), conditional on it
+running) stop. Each re-pairing mints a new principal, so the count only grows. Severity High:
+GDPR erasure mechanism disabled by ordinary use. Fix shipped in review: `isTvPrincipalUid` (strict
+inverse of `tvPrincipalUid(generateDeviceId())`) in tvPair/logic.ts; `isOrphanCandidate` returns
+false for it (pinned by an orphans.test.ts case, mutation-checked: neutering the line turns
+exactly that test red); the paging loop skips it before `checkedAccounts` so TVs do not loosen the
+proportional ceiling (that wiring line is not pinned by a test). Rejected: writing a
+`users/tv_*` doc (pollutes every users/* reader); `setCustomUserClaims` + a reaper keyed on the
+claim (more moving parts, left as follow-up). Residual: TV Auth principals are now never reaped.
+insights/rollup.ts counts them as anonymous (its comment foresaw a custom-token sign-in).
+
+### 2026-10-31 — BIN-1471 r2: TV-principalen godtas av konto-gatade callables
+Second staged review of the TV pairing (worktree C:/binge-tv). The rules exclude the TV from
+`isSignedIn()` via the `tv` claim, but every callable that gates on `request.auth?.uid` alone
+treats `tv_<id>` as an account. Per the panel, "Koppla bort" deletes only the `tvDevices` row and
+never calls `revokeRefreshTokens`, so the TV's session stays valid for callables indefinitely.
+Trace: pair → disconnect (or extract the refresh token from the device) → `askBingeParse` with a
+fresh per-uid daily allowance written to `users/tv_<id>/askBingeMeta/throttle` (Gemini spend,
+bounded only by the global ceiling), and `submitReport` filing reports as `reporterUid: tv_<id>`
+from an identity no one can revoke. One account can mint a new principal per approval
+(`approveUid` rate limit), and a disconnected principal frees its slot under `MAX_TV_DEVICES`
+while staying valid. Severity Medium (spend/abuse, no cross-account data access:
+`getProfileForModeration` needs an admin `users/{uid}` doc, groupHandover acts on the caller's
+own empty group set, the stats callables only read an `isAuthed` flag). Fix applied in review:
+`isTvAuth(auth)` in tvPair/logic.ts, a refusal in `askBingeParse`, `submitReport` and
+`tvPairApprove`; logic.test.ts pins the helper plus a source scan of the three call sites
+(mutation: neutering submitReport's line turned exactly that case red, restored by hash).
+Rejected: `revokeRefreshTokens` on disconnect (panel ruled it out); a central wrapper for every
+onCall (larger change across files outside this ticket). Not fixed: the stats callables, groupHandover.

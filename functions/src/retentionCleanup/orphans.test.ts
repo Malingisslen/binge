@@ -225,6 +225,11 @@ describe('isOrphanCandidate', () => {
     expect(isOrphanCandidate({ metadata: { creationTime: new Date(NOW - 60_000).toUTCString() } }, NOW)).toBe(false);
   });
 
+  it('hoppar över en TV-principal (BIN-1471), som aldrig har ett profildokument', () => {
+    expect(isOrphanCandidate({ ...OLD, uid: `tv_${'0a'.repeat(12)}` }, NOW)).toBe(false);
+    expect(isOrphanCandidate({ ...OLD, uid: 'Xk3vQ9pLmN2bR7tY1wZ0aB4cD5eF' }, NOW)).toBe(true);
+  });
+
   it('hoppar över ett konto utan läsbar skapandetid', () => {
     expect(isOrphanCandidate({}, NOW)).toBe(false);
     expect(isOrphanCandidate({ metadata: { creationTime: 'inte ett datum' } }, NOW)).toBe(false);

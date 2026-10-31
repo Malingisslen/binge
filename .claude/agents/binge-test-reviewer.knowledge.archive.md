@@ -30155,3 +30155,6 @@ Fresh isolated rig (detached worktree + staged patch, all 9 blobs hash-equal to 
 Verdict: pass (0 blocking).
 
 - (2026-10-19, flyttad från kärnkortet för längdtaket) **A "the rest still resolves" oracle over a UNION of sources needs DISJOINT ids per source** — BIN-1420's two list mocks both yielded `1000+p`, so "one failed page voids its whole list" stayed green via the sibling list; mutate the call site, not only the helper.
+
+## 2026-10-31 — BIN-1471 TV-koppling (orphans/tvPair/dataExport/tvDevices rules tests)
+Read whole: orphans.test.ts, tvPair/logic.test.ts, dataExport.coverage.test.ts, tvDevices.rules.test.ts (worktree has 3 UNSTAGED extra describes vs index, additions only). Static findings, no mutation run: (1) runCleanup.ts `if (isTvPrincipalUid(u.uid)) continue;` (checkedAccounts denominator) has no test — isOrphanCandidate already skips TV so deleting the `continue` changes only the ceiling denominator; grep finds no tv_ fixture in any retention test. (2) account-deletion.test.ts seedFullAccount seeds no tvDevices row; the KNOWN_USER_SUBCOLLECTIONS loop asserts count 0 and is vacuous for it. Not filed: isTvAuth source-scan regex (accepted text-scan class); other onCall with request.auth (askbinge/index, recapCoverage, groupHandover, moderationProfile) unguarded, left to security reviewer. Verdict: fail (2 blocking).

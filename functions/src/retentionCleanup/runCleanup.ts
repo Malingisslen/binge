@@ -46,6 +46,7 @@ import {
 } from './logic';
 import { isStaleFriendRequestPushMarker } from '../friendRequestPush/logic';
 import { isStaleFollowPushMarker } from '../followPush/logic';
+import { isTvPrincipalUid } from '../tvPair/logic';
 import {
   FIELD_OWNED_CATEGORIES,
   withinDocumentBudget,
@@ -520,6 +521,9 @@ async function collectOrphanedAuthAccounts(io: CleanupIo, nowMs: number): Promis
   for (;;) {
     const page = await io.listAuthAccounts(pageToken);
     for (const u of page.users) {
+      // BIN-1471: a TV principal is not a person's account. Counting it would
+      // loosen the proportional ceiling below as TVs get paired.
+      if (isTvPrincipalUid(u.uid)) continue;
       checkedAccounts += 1;
       // Candidacy (age + the disabled skip) lives in orphans.ts; this is paging only.
       if (isOrphanCandidate(u, nowMs)) candidates.push(u.uid);

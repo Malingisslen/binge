@@ -100,6 +100,10 @@ Read only when the staged diff touches this chapter's paths (see .claude/shared-
   plant (one `signUp` mints a profile-less Auth account). Rate the REFUSAL itself: a RUNBOOK clear-by-hand
   entry, and any LEGAL claim a runbook-only fix leaves false. It belongs in the admin-free predicate module,
   and extracting the predicate leaves the CALL unpinned — ask for the filtered SET, not a boolean.
+  **A NEW KIND of Auth account is a candidate the sweep was never designed for:** a custom-token principal
+  with no `users/{uid}` doc (BIN-1471's `tv_<id>`) reads as an orphan after 7 days and, in numbers, trips the
+  ceiling for everyone. On any `createCustomToken`, grep every `listUsers` consumer AND every `request.auth?.uid`
+  callable: a rules-only exclusion (`isSignedIn` minus `tv`) leaves each callable treating it as an account (archive 2026-10-31).
 - **A new privileged API call inside an existing function invalidates the post-deploy attestation scoped to
   the OLD permission.** BIN-848 verified only `firebaseauth.users.get`; BIN-816 added `listUsers` +
   `deleteUsers` (a DELETE permission). A missing runtime role makes the sweep inert with a green deploy —

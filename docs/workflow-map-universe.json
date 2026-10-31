@@ -31,7 +31,10 @@
     "submitReport",
     "titleRatings",
     "tmdbFieldsSweep",
-    "weeklyDigestNotify"
+    "weeklyDigestNotify",
+    "tvPairApprove",
+    "tvPairPoll",
+    "tvPairStart"
   ],
   "routes": [
     "/",

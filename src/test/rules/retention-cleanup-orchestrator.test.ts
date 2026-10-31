@@ -802,6 +802,40 @@ describe('retentionCleanup orchestrator — the orphan ceiling at its decisive e
     expect(auth.deleted).toEqual([]);
   });
 
+  it('does not let paired TVs dilute the ceiling: tv_ principals are not counted as checked accounts (BIN-1471)', async () => {
+    const db = adminLikeDb();
+    // TV principals must stay out of the checked-accounts count; counted, they
+    // would loosen the ceiling enough for the sweep to delete.
+    const accounts = await seedOrphanAuth(db, 6, 10);
+    for (let i = 0; i < 10; i += 1) {
+      accounts.push({ uid: `tv_${String(i).padStart(24, '0')}`, ageMs: ORPHAN_AUTH_MIN_AGE_MS + 1000 });
+    }
+    expect(6).toBeGreaterThan(ORPHAN_AUTH_MIN_CEILING);
+    expect(6).toBeGreaterThan(16 * ORPHAN_AUTH_MAX_FRACTION);   // refuses without TVs
+    expect(6).toBeLessThanOrEqual(26 * ORPHAN_AUTH_MAX_FRACTION); // would allow with TVs
+    const auth = makeAuth(accounts);
+
+    const summary = await runRetentionCleanup(makeIo(db, auth));
+
+    expect(summary.checkedAuthAccounts).toBe(16);
+    expect(summary.orphanAuthAccounts).toBe(6);
+    expect(summary.deletedOrphanAuthAccounts).toBe(0);
+    expect(auth.deleted).toEqual([]);
+  });
+
+  it('control: the same 6 orphans among 26 real accounts are within the ceiling and are deleted', async () => {
+    const db = adminLikeDb();
+    const accounts = await seedOrphanAuth(db, 6, 20);
+    const auth = makeAuth(accounts);
+
+    const summary = await runRetentionCleanup(makeIo(db, auth));
+
+    expect(summary.checkedAuthAccounts).toBe(26);
+    expect(summary.orphanAuthAccounts).toBe(6);
+    expect(summary.deletedOrphanAuthAccounts).toBe(6);
+    expect(auth.deleted.sort()).toEqual(['orphan0', 'orphan1', 'orphan2', 'orphan3', 'orphan4', 'orphan5']);
+  });
+
   it('applies the same ceiling to released usernames, counted against RESERVATIONS', async () => {
     const db = adminLikeDb();
     // 11 orphaned reservations out of 12 — the auth side is irrelevant here, and

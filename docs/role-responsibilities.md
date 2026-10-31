@@ -161,6 +161,9 @@ is the real boundary.
   gave the predicate a second caller — the watchlist edit paths that swallow the
   create-floor's refusal. One definition, so the two cannot drift.
   → `src/lib/firebase/errorCodes.ts`
+- TV-inloggning med kod (BIN-1471): TV:n är en egen principal som reglerna släpper in
+  bara på namngivna sökvägar, och som nekas direkt när enhetens rad tas bort.
+  → `src/test/rules/tvDevices.rules.test.ts`
 - Server-authoritative rate limiting (`submitReport` callable).
 - App Check (reCAPTCHA v3, fail-closed default), CSP/HSTS headers, secrets via
   `NEXT_PUBLIC_*` / `defineSecret`, cache-clear on logout for shared devices.
