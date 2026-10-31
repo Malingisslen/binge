@@ -1,23 +1,21 @@
 'use client';
 
 import { formatKr } from '@/lib/formatKr';
-import { usePauseHistory, type PauseHistoryEntry } from '@/hooks/usePauseHistory';
-import { useAuth } from '@/hooks/useAuth';
-import { formatSwedishDate, daysBetween, pluralSv, localIsoDate } from '@/lib/utils';
-import type { AdvisorResult, ActivePause } from '@/types';
+import type { PauseHistoryEntry } from '@/hooks/usePauseHistory';
+import { formatSwedishDate, pluralSv } from '@/lib/utils';
+import type { AdvisorResult } from '@/types';
 import { cardClass } from '@/components/ui/Card';
 import { eyebrowClass } from '@/components/ui/Eyebrow';
 
 // Höger spalt på Streamingrådgivaren. Stackar under main content på mobil.
 // Block (i ordning):
-//   1. Sparat hittills (kumulativ siffra för förtroende)
-//   2. Senaste sparbesluten (3 senaste från pauseHistory)
-//   3. Nästa översyn (datum härlett ur primaryAction)
-//   4. Så fungerar pausen (statisk helper-text för trust)
+//   1. Senaste sparbesluten (3 senaste från pauseHistory)
+//   2. Nästa översyn (datum härlett ur primaryAction)
+//   3. Så fungerar pausen (statisk helper-text för trust)
 
 interface Props {
   advisor: AdvisorResult;
-  activePauses: ActivePause[];
+  history: PauseHistoryEntry[];
 }
 
 function pickNextReviewDate(advisor: AdvisorResult): { date: string | null; rationale: string } {
@@ -56,42 +54,16 @@ function pickNextReviewDate(advisor: AdvisorResult): { date: string | null; rati
   }
 }
 
-function monthsSince(date: Date | null | undefined): number {
-  if (!date) return 0;
-  const iso = localIsoDate(date);
-  const days = daysBetween(iso);
-  return Math.max(1, Math.floor(days / 30));
-}
-
 const BLOCK = cardClass('px-3.5 py-3');
 const HEAD = eyebrowClass({ className: 'mb-2' });
 
-export default function SavingsSidebar({ advisor, activePauses }: Props) {
-  const { user } = useAuth();
-  const { history, totalSaved: historicalSaved } = usePauseHistory();
-
-  const activeSaved = activePauses.reduce((sum, p) => sum + p.savingsSoFar, 0);
-  const totalSaved = historicalSaved + activeSaved;
-  const accountMonths = monthsSince(user?.createdAt ?? null);
+export default function SavingsSidebar({ advisor, history }: Props) {
 
   const recent: PauseHistoryEntry[] = history.slice(0, 3);
   const { date: nextReviewDate, rationale: nextReviewRationale } = pickNextReviewDate(advisor);
 
   return (
     <aside className="flex flex-col gap-3.5">
-      {/* Sparat hittills */}
-      <div className={BLOCK}>
-        <h3 className={HEAD}>Sparat hittills</h3>
-        <div className="text-4xl font-bold text-season-done tabular-nums leading-none mb-1.5">
-          {formatKr(totalSaved)} kr
-        </div>
-        <p className="text-xs text-ink-3 leading-[1.45]">
-          {accountMonths > 0
-            ? `Sedan du började använda Streamingrådgivaren för ${pluralSv(accountMonths, 'månad', 'månader')} sedan.`
-            : 'Sedan du började använda Streamingrådgivaren.'}
-        </p>
-      </div>
-
       {/* Senaste sparbesluten */}
       <div className={BLOCK}>
         <h3 className={HEAD}>Senaste sparbesluten</h3>
