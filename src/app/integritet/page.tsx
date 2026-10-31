@@ -10,8 +10,8 @@ export default function IntegritetPage() {
   return (
     <LegalPageShell
       title="Integritetspolicy"
-      lastUpdated="2026-10-30"
-      version="1.19"
+      lastUpdated="2026-10-31"
+      version="1.21"
       toc={[
         { id: 'ansvarig', label: '1. Vem är ansvarig?' },
         { id: 'uppgifter', label: '2. Vilka uppgifter vi samlar in' },
@@ -385,9 +385,9 @@ export default function IntegritetPage() {
           något sparas.
         </p>
         <ul>
-          <li><strong>Vad vi sparar</strong> — vilka streamingtjänster du har (det ser alla i gruppen redan, se ovan), vad de kostar dig (ordinarie pris, aldrig vilken abonnemangsnivå), eventuellt kampanjpris med slutdatum, samt vilka av tjänsterna som bär minst en osedd titel i din bevakningslista.</li>
-          <li><strong>Syfte</strong> — att ge gruppen en samlad hushållsbild, t.ex. &quot;Disney+ betalas av 2 av er&quot;, så ni kan se om ni betalar dubbelt för samma tjänst.</li>
-          <li><strong>Vem kan se det</strong> — andra medlemmar i gruppen (nuvarande och framtida), men bara de som själva delar sina egna kostnader. Appens gränssnitt visar bara summerade totaler, men tekniskt kan en delande medlem läsa din enskilda lista rad för rad — vi vill att du vet det innan du väljer att dela.</li>
+          <li><strong>Vad vi sparar</strong> — vilka streamingtjänster du har (det ser alla i gruppen redan, se ovan), vad de kostar dig (ordinarie pris, aldrig vilken abonnemangsnivå), eventuellt kampanjpris med slutdatum, vilka av tjänsterna som bär minst en osedd titel i din bevakningslista, och på vilka tjänster du har något nytt inom 30 dagar (bara tjänsten, aldrig titeln eller datumet). En titel du markerat som Privat räknas inte med i det som delas. Om du röstar om en tjänst sparas också din röst för den månaden. Ditt namn sparas inte i bidraget; det hämtas ur ditt medlemskap i gruppen när rösten visas.</li>
+          <li><strong>Syfte</strong> — att ge gruppen en samlad hushållsbild, t.ex. &quot;Disney+ betalas av 2 av er&quot;, så ni kan se om ni betalar dubbelt för samma tjänst och vad ni vill göra med varje tjänst den här månaden.</li>
+          <li><strong>Vem kan se det</strong> — andra medlemmar i gruppen (nuvarande och framtida), men bara de som själva delar sina egna kostnader. Appens gränssnitt visar kostnaderna bara som summerade totaler, men tekniskt kan en delande medlem läsa din enskilda lista rad för rad — vi vill att du vet det innan du väljer att dela. Dina röster visas med ditt namn. Att rösta är frivilligt, och en röst gäller bara den månad du röstade.</li>
           <li><strong>Din kontroll</strong> — sluta dela när som helst med ett tryck; din data raderas då omedelbart. Den raderas också automatiskt om du lämnar gruppen, blir borttagen ur den, eller tar bort ditt konto.</li>
           <li><strong>Export</strong> — dina hushålls-bidrag ingår i din dataexport (se §7).</li>
         </ul>

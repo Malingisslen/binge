@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import type { AdvisorResult, BundleSuggestion } from '@/types';
 
@@ -26,9 +26,13 @@ vi.mock('@/components/AuthGuard', () => ({
 }));
 
 // The page reads pause/resume + profileLoading from useAuth; none matter here.
+const pauseProviderMock = vi.fn(() => Promise.resolve());
 vi.mock('@/hooks/useAuth', () => ({
-  useAuth: () => ({ pauseProvider: vi.fn(), resumeProvider: vi.fn(), profileLoading: false }),
+  useAuth: () => ({ pauseProvider: pauseProviderMock, resumeProvider: vi.fn(), profileLoading: false, uid: 'u1' }),
 }));
+
+const pauseHistoryMock = vi.fn(() => ({ history: [], totalSaved: 0, isLoading: false }));
+vi.mock('@/hooks/usePauseHistory', () => ({ usePauseHistory: () => pauseHistoryMock() }));
 
 const advisorMock = vi.fn<() => AdvisorResult>();
 vi.mock('@/hooks/useSubscriptionAdvisor', () => ({
@@ -36,6 +40,18 @@ vi.mock('@/hooks/useSubscriptionAdvisor', () => ({
 }));
 
 vi.mock('@/lib/analytics', () => ({ trackEvent: vi.fn() }));
+
+// Steg 2b: the Jag/Hushållet switch reads the user's groups; the household view reads its
+// own hooks. Both are stubbed so the page test decides only the page's render decisions.
+const groupsMock = vi.hoisted(() => ({ groups: [] as { id: string; name: string }[] }));
+vi.mock('@/hooks/useGroups', () => ({ useMyGroups: () => ({ groups: groupsMock.groups, loading: false }) }));
+vi.mock('@/hooks/useGroupHousehold', () => ({
+  useGroupHousehold: () => ({
+    status: 'gated', contributions: [], optIn: vi.fn(), optOut: vi.fn(), busy: false, ready: true,
+    needsReshare: false, myVotes: {}, soon: null, setVote: vi.fn(),
+  }),
+}));
+vi.mock('@/hooks/useGroupMemberNames', () => ({ useGroupMemberNames: () => ({}) }));
 
 // BIN-1366: the full (providers-present) render path mounts sibling panels that
 // read their own hooks, so they render nothing here; the existing
@@ -274,5 +290,261 @@ describe('SavingsPage — månadsnotan', () => {
     render(<SavingsPage />);
     expect(screen.queryByTestId('monthly-bill')).toBeNull();
     expect(screen.queryByText('Behåll eller säg upp?')).toBeNull();
+  });
+});
+
+// Steg 1: ett svar överst, en dom per tjänst och flikar som minns valet i URL:en.
+describe('SavingsPage — svar, domar och flikar', () => {
+  const NETFLIX = { providerId: 8, providerName: 'Netflix', shortName: 'Netflix', color: '#e50914', shows: [], monthlyCost: 169, status: 'pause' as const, nextAirDate: '2099-01-15' };
+  const HBO = { providerId: 384, providerName: 'Max', shortName: 'Max', color: '#002be7', shows: [], monthlyCost: 129, status: 'active' as const, nextAirDate: null };
+  const pauseAction = { kind: 'pause' as const, providerId: 8, providerName: 'Netflix', shortName: 'Netflix', color: '#e50914', monthlyCost: 169, nextAirDate: '2099-01-15' };
+
+  beforeEach(() => {
+    advisorMock.mockReset();
+    monthlyBillMock.mockReset();
+    monthlyBillMock.mockReturnValue(null);
+    pauseProviderMock.mockClear();
+    pauseHistoryMock.mockReset();
+    pauseHistoryMock.mockReturnValue({ history: [], totalSaved: 0, isLoading: false });
+    window.history.replaceState(null, '', '/savings/');
+  });
+
+  it('answers once at the top with the amount and a pause button that pauses until the resume date', () => {
+    advisorMock.mockReturnValue(baseAdvisor({
+      providers: [NETFLIX, HBO], hasConfiguredProviders: true, primaryAction: pauseAction,
+    }));
+    render(<SavingsPage />);
+
+    expect(screen.getByRole('heading', { name: 'Den här månaden' })).toBeInTheDocument();
+    expect(screen.getByText(krText('Pausa Netflix och spara 169 kr/mån.'), verbatim)).toBeInTheDocument();
+    const hero = screen.getByRole('region', { name: 'Den här månaden' });
+    fireEvent.click(within(hero).getByRole('button', { name: /^Pausa till/ }));
+    expect(pauseProviderMock).toHaveBeenCalledWith(8, '2099-01-15');
+  });
+
+  it('explains the answer under "Varför?"', () => {
+    advisorMock.mockReturnValue(baseAdvisor({
+      providers: [NETFLIX], hasConfiguredProviders: true, primaryAction: pauseAction,
+    }));
+    render(<SavingsPage />);
+    expect(screen.getByText(/Inget från din Följer eller Vill se ligger på Netflix före/)).toBeInTheDocument();
+    expect(screen.getByText(/Varför\?/)).toBeInTheDocument();
+  });
+
+  it('offers the bundle as the answer when there is nothing to pause', () => {
+    advisorMock.mockReturnValue(baseAdvisor({
+      providers: [HBO], hasConfiguredProviders: true, bundleSuggestions: [SUGGESTION],
+    }));
+    render(<SavingsPage />);
+    expect(screen.getByText(/Samla Netflix och Max i Telia Streaming Mer och spara 58 kr\/mån/)).toBeInTheDocument();
+  });
+
+  it('shows the bundle’s bindning and startavgift next to the hero’s saving claim', () => {
+    advisorMock.mockReturnValue(baseAdvisor({
+      providers: [HBO], hasConfiguredProviders: true,
+      bundleSuggestions: [{ ...SUGGESTION, bindingMonths: 12, startFeeKr: 120, startFeeMonthlyKr: 10 }],
+    }));
+    render(<SavingsPage />);
+    const hero = screen.getByRole('region', { name: 'Den här månaden' });
+    expect(within(hero).getByText(/12 mån bindningstid · startavgift 120 kr/)).toBeInTheDocument();
+  });
+
+  it('gives each service a verdict card', () => {
+    advisorMock.mockReturnValue(baseAdvisor({
+      providers: [NETFLIX, HBO], hasConfiguredProviders: true, primaryAction: pauseAction,
+    }));
+    render(<SavingsPage />);
+    const cards = within(screen.getByRole('tabpanel', { name: 'Tjänster' })).getAllByRole('listitem');
+    expect(within(cards[0]).getByText('Pausa')).toBeInTheDocument();
+    expect(within(cards[1]).getByText('Behåll')).toBeInTheDocument();
+  });
+
+  it('shows the saved-so-far total high up from the pause history', () => {
+    pauseHistoryMock.mockReturnValue({ history: [], totalSaved: 2094, isLoading: false });
+    advisorMock.mockReturnValue(baseAdvisor({ providers: [HBO], hasConfiguredProviders: true }));
+    render(<SavingsPage />);
+    expect(screen.getByRole('heading', { name: 'Sparat hittills' })).toBeInTheDocument();
+    expect(screen.getByText(krText('2 094 kr'), verbatim)).toBeInTheDocument();
+  });
+
+  it('opens on Tjänster and shows only that panel', () => {
+    advisorMock.mockReturnValue(baseAdvisor({
+      providers: [HBO], hasConfiguredProviders: true, bundleSuggestions: [SUGGESTION],
+    }));
+    render(<SavingsPage />);
+    expect(screen.getByRole('tab', { name: 'Tjänster' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tabpanel', { name: 'Tjänster' })).toBeVisible();
+    expect(screen.queryByRole('tabpanel', { name: 'Paket' })).toBeNull();
+  });
+
+  it('opens the tab named in the URL hash', () => {
+    window.history.replaceState(null, '', '/savings/#paket');
+    advisorMock.mockReturnValue(baseAdvisor({
+      providers: [HBO], hasConfiguredProviders: true, bundleSuggestions: [SUGGESTION],
+    }));
+    render(<SavingsPage />);
+    expect(screen.getByRole('tab', { name: 'Paket' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tabpanel', { name: 'Paket' })).toBeVisible();
+  });
+
+  it('writes the chosen tab to the hash', () => {
+    advisorMock.mockReturnValue(baseAdvisor({ providers: [HBO], hasConfiguredProviders: true }));
+    render(<SavingsPage />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Pausa & rotera' }));
+    expect(window.location.hash).toBe('#pausa');
+    expect(screen.getByRole('tabpanel', { name: 'Pausa & rotera' })).toBeVisible();
+  });
+
+  it('the hero’s bundle button switches to the Paket tab', () => {
+    advisorMock.mockReturnValue(baseAdvisor({
+      providers: [HBO], hasConfiguredProviders: true, bundleSuggestions: [SUGGESTION],
+    }));
+    render(<SavingsPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'Visa paketet' }));
+    expect(window.location.hash).toBe('#paket');
+    expect(screen.getByRole('tabpanel', { name: 'Paket' })).toBeVisible();
+  });
+
+  it('the hero’s subscribe button opens and scrolls to the titles on Detaljer, like the numbered step', () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    advisorMock.mockReturnValue(baseAdvisor({
+      providers: [HBO], hasConfiguredProviders: true,
+      primaryAction: { kind: 'subscribe', providerId: 337, providerName: 'Disney+', shortName: 'Disney+', color: '#113ccf', showCount: 1, nearestAirDate: '2099-02-01', monthlyCost: 119 },
+      subscribeAdvice: [{
+        providerId: 337, providerName: 'Disney+', shortName: 'Disney+', color: '#113ccf', nearestAirDate: '2099-02-01',
+        shows: [{ tmdbId: 1, mediaType: 'tv', title: 'Serie X', posterPath: null, nextAirDate: '2099-02-01', nextEpisodeCode: null, isEnded: false, releaseDate: null, providerIds: [337] }],
+      }],
+    }));
+    render(<SavingsPage />);
+    const hero = screen.getByRole('region', { name: 'Den här månaden' });
+    fireEvent.click(within(hero).getByRole('button', { name: 'Visa titlar' }));
+    expect(window.location.hash).toBe('#detaljer');
+    expect(screen.getByRole('tabpanel', { name: 'Detaljer' })).toBeVisible();
+    expect(scroll).toHaveBeenCalled();
+    expect(screen.getByText('Titlar på tjänster du inte har').closest('details')).toHaveAttribute('open');
+  });
+
+  it('holds the saved-so-far figure’s place with a skeleton while the history loads', () => {
+    pauseHistoryMock.mockReturnValue({ history: [], totalSaved: 0, isLoading: true });
+    advisorMock.mockReturnValue(baseAdvisor({ providers: [HBO], hasConfiguredProviders: true }));
+    const { container } = render(<SavingsPage />);
+    expect(screen.getByRole('heading', { name: 'Sparat hittills' })).toBeInTheDocument();
+    expect(container.querySelector('[data-skeleton]')).not.toBeNull();
+    expect(screen.queryByText('Inget än. Din första paus räknas här.')).toBeNull();
+  });
+
+  it('moves between tabs with Home and End and makes the panels focusable', () => {
+    advisorMock.mockReturnValue(baseAdvisor({ providers: [HBO], hasConfiguredProviders: true }));
+    render(<SavingsPage />);
+    const list = screen.getByRole('tablist');
+    fireEvent.keyDown(list, { key: 'End' });
+    expect(screen.getByRole('tab', { name: 'Detaljer' })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(list, { key: 'Home' });
+    expect(screen.getByRole('tab', { name: 'Tjänster' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tabpanel', { name: 'Tjänster' })).toHaveAttribute('tabindex', '0');
+  });
+
+  it('under the pause floor shows no answer, no verdict cards and no tabs', () => {
+    advisorMock.mockReturnValue(baseAdvisor({
+      providers: [NETFLIX], hasConfiguredProviders: true, pauseAdviceReady: false,
+      primaryAction: { kind: 'needs-library', titleCount: 0, minTitles: 3 },
+    }));
+    render(<SavingsPage />);
+    expect(screen.queryByRole('heading', { name: 'Den här månaden' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Den här månaden' })).toBeNull();
+    expect(screen.queryByRole('tablist')).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Pausa till/ })).toBeNull();
+  });
+});
+
+// Steg 2b: Jag/Hushållet-växeln. Den finns bara för den som är med i en grupp, och
+// hushållsläget har en egen hash som inte rör flik-hasharna.
+describe('SavingsPage — Jag/Hushållet-växeln', () => {
+  const HBO = { providerId: 384, providerName: 'Max', shortName: 'Max', color: '#002be7', shows: [], monthlyCost: 129, status: 'active' as const, nextAirDate: null };
+
+  beforeEach(() => {
+    advisorMock.mockReset();
+    advisorMock.mockReturnValue(baseAdvisor({ providers: [HBO], hasConfiguredProviders: true }));
+    monthlyBillMock.mockReset();
+    monthlyBillMock.mockReturnValue(null);
+    pauseHistoryMock.mockReset();
+    pauseHistoryMock.mockReturnValue({ history: [], totalSaved: 0, isLoading: false });
+    groupsMock.groups = [];
+    window.sessionStorage.clear();
+    window.history.replaceState(null, '', '/savings/');
+  });
+
+  it('shows no switch for someone who is in no group', () => {
+    render(<SavingsPage />);
+    expect(screen.queryByRole('group', { name: 'Visa för' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Hushållet' })).toBeNull();
+  });
+
+  it('shows the switch for a group member, in Jag mode with the tabs', () => {
+    groupsMock.groups = [{ id: 'g1', name: 'Hemmet' }];
+    render(<SavingsPage />);
+    expect(screen.getByRole('button', { name: 'Jag' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Hushållet' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('tablist')).toBeInTheDocument();
+  });
+
+  it('switches to the household, writes #hushallet and swaps the tabs for the household view', () => {
+    groupsMock.groups = [{ id: 'g1', name: 'Hemmet' }];
+    render(<SavingsPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'Hushållet' }));
+    expect(window.location.hash).toBe('#hushallet');
+    expect(screen.getByRole('heading', { name: 'Se vad hushållet sparar' })).toBeInTheDocument();
+    expect(screen.queryByRole('tablist')).toBeNull();
+  });
+
+  it('goes back to Jag on the tab that was open, so the tab hash stays intact', () => {
+    groupsMock.groups = [{ id: 'g1', name: 'Hemmet' }];
+    window.history.replaceState(null, '', '/savings/#paket');
+    render(<SavingsPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'Hushållet' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Jag' }));
+    expect(window.location.hash).toBe('#paket');
+    expect(screen.getByRole('tab', { name: 'Paket' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('opens in household mode from the hash, and ignores the hash without a group', () => {
+    window.history.replaceState(null, '', '/savings/#hushallet');
+    groupsMock.groups = [{ id: 'g1', name: 'Hemmet' }];
+    const { unmount } = render(<SavingsPage />);
+    expect(screen.getByRole('heading', { name: 'Se vad hushållet sparar' })).toBeInTheDocument();
+    unmount();
+
+    groupsMock.groups = [];
+    render(<SavingsPage />);
+    expect(screen.queryByRole('heading', { name: 'Se vad hushållet sparar' })).toBeNull();
+    expect(screen.getByRole('tablist')).toBeInTheDocument();
+  });
+
+  it('remembers the mode for the session when the hash is gone', () => {
+    groupsMock.groups = [{ id: 'g1', name: 'Hemmet' }];
+    const { unmount } = render(<SavingsPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'Hushållet' }));
+    unmount();
+    window.history.replaceState(null, '', '/savings/');
+    render(<SavingsPage />);
+    expect(screen.getByRole('heading', { name: 'Se vad hushållet sparar' })).toBeInTheDocument();
+  });
+
+  it('offers a group picker only with several groups', () => {
+    groupsMock.groups = [{ id: 'g1', name: 'Hemmet' }];
+    const { unmount } = render(<SavingsPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'Hushållet' }));
+    expect(screen.queryByRole('combobox', { name: 'Grupp' })).toBeNull();
+    unmount();
+
+    window.sessionStorage.clear();
+    groupsMock.groups = [{ id: 'g1', name: 'Hemmet' }, { id: 'g2', name: 'Kollektivet' }];
+    render(<SavingsPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'Hushållet' }));
+    const picker = screen.getByRole('combobox', { name: 'Grupp' });
+    expect(within(picker).getByRole('option', { name: 'Kollektivet' })).toBeInTheDocument();
+    fireEvent.change(picker, { target: { value: 'g2' } });
+    expect(picker).toHaveValue('g2');
   });
 });

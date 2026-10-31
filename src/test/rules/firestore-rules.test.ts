@@ -5161,6 +5161,120 @@ describe('groups household — opt-in delade kostnadsdata (BIN-184)', () => {
     await seedContribution(MEMBER);
     await assertSucceeds(deleteDoc(doc(memberDb(), 'groups', GROUP, 'household', MEMBER)));
   });
+
+  // ADR 0026: tre valfria fält. Varje nekande utgår från validContent() så att
+  // varje annan klausul är uppfylld och det är just det namngivna fältet som nekar.
+  describe('ADR 0026 — soonProviderIds, votes, votesMonth', () => {
+    function withNewFields(over: Record<string, unknown> = {}) {
+      return {
+        ...validContent(),
+        soonProviderIds: [8],
+        votes: { 8: 'keep', 337: 'wait' },
+        votesMonth: '2026-10',
+        ...over,
+      };
+    }
+    const write = (data: Record<string, unknown>) =>
+      setDoc(doc(memberDb(), 'groups', GROUP, 'household', MEMBER), data);
+
+    it('the full new shape is accepted', async () => {
+      await seedGroup({ memberUids: [OWNER, MEMBER] });
+      await assertSucceeds(write(withNewFields()));
+    });
+
+    it('an old-shape write (no new fields) is still accepted over a doc that had them', async () => {
+      await seedGroup({ memberUids: [OWNER, MEMBER] });
+      await assertSucceeds(write(withNewFields()));
+      await assertSucceeds(write(validContent()));
+    });
+
+    it('each new field on its own is accepted (all three are optional)', async () => {
+      await seedGroup({ memberUids: [OWNER, MEMBER] });
+      await assertSucceeds(write({ ...validContent(), soonProviderIds: [] }));
+      await assertSucceeds(write({ ...validContent(), votes: { 8: 'ok' } }));
+      await assertSucceeds(write({ ...validContent(), votesMonth: '2026-10' }));
+    });
+
+    it('hasAll is unchanged: the new fields do not replace a missing old one', async () => {
+      await seedGroup({ memberUids: [OWNER, MEMBER] });
+      const partial: Record<string, unknown> = withNewFields();
+      delete partial.activeProviderIds;
+      await assertFails(write(partial));
+    });
+
+    it('a name or free text next to the new fields is rejected (hasOnly)', async () => {
+      await seedGroup({ memberUids: [OWNER, MEMBER] });
+      await assertFails(write(withNewFields({ displayName: 'Malin' })));
+      await assertFails(write(withNewFields({ voteNote: 'säg upp' })));
+      await assertFails(write(withNewFields({ soonTitles: ['Hemlig serie'] })));
+    });
+
+    it('soonProviderIds must be a list of at most 100', async () => {
+      await seedGroup({ memberUids: [OWNER, MEMBER] });
+      await assertSucceeds(write(withNewFields({ soonProviderIds: Array.from({ length: 100 }, (_, i) => i + 1) })));
+      await assertFails(write(withNewFields({ soonProviderIds: Array.from({ length: 101 }, (_, i) => i + 1) })));
+      await assertFails(write(withNewFields({ soonProviderIds: { 8: true } })));
+      await assertFails(write(withNewFields({ soonProviderIds: 'Netflix' })));
+    });
+
+    it('votes must be a map of at most 100', async () => {
+      await seedGroup({ memberUids: [OWNER, MEMBER] });
+      const votes = (n: number) => Object.fromEntries(Array.from({ length: n }, (_, i) => [String(i + 1), 'ok']));
+      await assertSucceeds(write(withNewFields({ votes: votes(100) })));
+      await assertFails(write(withNewFields({ votes: votes(101) })));
+      await assertFails(write(withNewFields({ votes: ['ok'] })));
+      await assertFails(write(withNewFields({ votes: 'keep' })));
+    });
+
+    it('votesMonth must be a YYYY-MM string', async () => {
+      await seedGroup({ memberUids: [OWNER, MEMBER] });
+      await assertSucceeds(write(withNewFields({ votesMonth: '2026-11' })));
+      for (const bad of ['2026-1', '26-10', '2026-10-31', 'oktober', ' 2026-10', '2026-10 ']) {
+        await assertFails(write(withNewFields({ votesMonth: bad })));
+      }
+      await assertFails(write(withNewFields({ votesMonth: 202610 })));
+      // A list that holds a valid-looking month: only the `is string` clause denies it.
+      await assertFails(write(withNewFields({ votesMonth: ['2026-10'] })));
+    });
+
+    // The deviation in accepted-deviations.md, stated as a test: the rules do not check
+    // each vote's value, so the client and every reader carry that check.
+    it('an unknown vote VALUE is not rejected by the rules (client-side validation, accepted deviation)', async () => {
+      await seedGroup({ memberUids: [OWNER, MEMBER] });
+      await assertSucceeds(write(withNewFields({ votes: { 8: 'säg upp' } })));
+    });
+
+    it('a forged updatedAt is still rejected on a vote write', async () => {
+      await seedGroup({ memberUids: [OWNER, MEMBER] });
+      await assertFails(write(withNewFields({ updatedAt: new Date('2099-01-01') })));
+    });
+
+    it("a member cannot write votes into ANOTHER member's contribution", async () => {
+      await seedGroup({ memberUids: [OWNER, MEMBER] });
+      await assertFails(setDoc(doc(ownerDb(), 'groups', GROUP, 'household', MEMBER), withNewFields()));
+    });
+
+    it('share-to-see is unchanged: votes are readable only by a member who shares', async () => {
+      await seedGroup({ memberUids: [OWNER, MEMBER] });
+      await testEnv.withSecurityRulesDisabled(async (ctx) => {
+        await setDoc(doc(ctx.firestore(), 'groups', GROUP, 'household', OWNER), {
+          providerIds: [], providerCosts: {}, providerCampaigns: {}, activeProviderIds: [],
+          soonProviderIds: [8], votes: { 8: 'keep' }, votesMonth: '2026-10', updatedAt: serverTimestamp(),
+        });
+      });
+      await assertFails(getDoc(doc(memberDb(), 'groups', GROUP, 'household', OWNER)));
+      await seedContribution(MEMBER);
+      await assertSucceeds(getDoc(doc(memberDb(), 'groups', GROUP, 'household', OWNER)));
+    });
+
+    it('opt-out deletes the doc with its votes; the owner can still remove it', async () => {
+      await seedGroup({ memberUids: [OWNER, MEMBER] });
+      await assertSucceeds(write(withNewFields()));
+      await assertSucceeds(deleteDoc(doc(memberDb(), 'groups', GROUP, 'household', MEMBER)));
+      await assertSucceeds(write(withNewFields()));
+      await assertSucceeds(deleteDoc(doc(ownerDb(), 'groups', GROUP, 'household', MEMBER)));
+    });
+  });
 });
 
 // ── BIN-1152: gruppens medlemslista ar privat, namnet har en egen projektion ──

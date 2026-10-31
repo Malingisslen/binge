@@ -3,7 +3,8 @@
 import { formatKr } from '@/lib/formatKr';
 import { useMemo } from 'react';
 import ProviderDot from '@/components/ui/ProviderDot';
-import { rotationPlan, type RotationProviderInput } from '@/lib/advisor/rotationPlan';
+import { rotationPlan } from '@/lib/advisor/rotationPlan';
+import { rotationInputsFromAdvisor } from '@/lib/advisor/rotationInputs';
 import type { AdvisorResult } from '@/types';
 import { eyebrowClass } from '@/components/ui/Eyebrow';
 import { cardClass } from '@/components/ui/Card';
@@ -21,40 +22,6 @@ import { cardClass } from '@/components/ui/Card';
 
 const HORIZON = 4;
 
-function buildInputs(advisor: AdvisorResult): RotationProviderInput[] {
-  const map = new Map<number, RotationProviderInput>();
-  for (const p of advisor.providers) {
-    const unfinished = p.shows.filter(s => advisor.unfinishedTmdbIds.has(s.tmdbId)).length;
-    map.set(p.providerId, {
-      providerId: p.providerId,
-      providerName: p.providerName,
-      shortName: p.shortName,
-      color: p.color,
-      monthlyCost: p.monthlyCost ?? 0,
-      backlogCount: unfinished,
-      isFree: (p.monthlyCost ?? 0) === 0,
-    });
-  }
-  for (const r of advisor.willSeeByProvider) {
-    const willSee = r.tvCount + r.movieCount;
-    const existing = map.get(r.providerId);
-    if (existing) {
-      existing.backlogCount += willSee;
-    } else {
-      map.set(r.providerId, {
-        providerId: r.providerId,
-        providerName: r.providerName,
-        shortName: r.shortName,
-        color: r.color,
-        monthlyCost: r.monthlyCost ?? 0,
-        backlogCount: willSee,
-        isFree: (r.monthlyCost ?? 0) === 0,
-      });
-    }
-  }
-  return [...map.values()];
-}
-
 // "Denna månad", "Nästa månad", sedan svenska månadsnamn för offset 2+.
 function monthLabel(offset: number, base: Date): string {
   if (offset === 0) return 'Denna månad';
@@ -64,7 +31,7 @@ function monthLabel(offset: number, base: Date): string {
 }
 
 export default function RotationPlanner({ advisor, now }: { advisor: AdvisorResult; now?: Date }) {
-  const inputs = useMemo(() => buildInputs(advisor), [advisor]);
+  const inputs = useMemo(() => rotationInputsFromAdvisor(advisor), [advisor]);
   const plan = useMemo(() => rotationPlan(inputs, { horizonMonths: HORIZON }), [inputs]);
 
   const scheduled = plan.months.filter(m => m.provider);

@@ -38,3 +38,4 @@ rules alone couldn't settle:
 - 2026-09-14 (BIN-1173): the consent copy's "Det här delas" line gained the
   clarification that which services you have is already visible to every group
   member through the membership row. The disclosure sentence is unchanged.
+- 2026-10-31: point 3 ("copy stays silent") is superseded in part by ADR 0026.

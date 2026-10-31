@@ -2285,7 +2285,18 @@ service cloud.firestore {
         allow create, update: if isOwner(householdUid)
           && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids
           && request.resource.data.keys().hasAll(['providerIds', 'providerCosts', 'providerCampaigns', 'activeProviderIds', 'updatedAt'])
-          && request.resource.data.keys().hasOnly(['providerIds', 'providerCosts', 'providerCampaigns', 'activeProviderIds', 'updatedAt'])
+          && request.resource.data.keys().hasOnly(['providerIds', 'providerCosts', 'providerCampaigns', 'activeProviderIds', 'updatedAt', 'soonProviderIds', 'votes', 'votesMonth'])
+          // ADR 0026: tre valfria fält, så ett dokument från före dem kan fortfarande skrivas.
+          // Röstvärdena i votes valideras av klienten (accepted-deviations.md).
+          && (!request.resource.data.keys().hasAny(['soonProviderIds'])
+            || (request.resource.data.soonProviderIds is list
+              && request.resource.data.soonProviderIds.size() <= 100))
+          && (!request.resource.data.keys().hasAny(['votes'])
+            || (request.resource.data.votes is map
+              && request.resource.data.votes.size() <= 100))
+          && (!request.resource.data.keys().hasAny(['votesMonth'])
+            || (request.resource.data.votesMonth is string
+              && request.resource.data.votesMonth.matches('^\\d{4}-\\d{2}$')))
           && request.resource.data.providerIds is list
           && request.resource.data.providerIds.size() <= 100
           && request.resource.data.activeProviderIds is list

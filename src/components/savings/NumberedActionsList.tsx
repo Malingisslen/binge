@@ -170,7 +170,7 @@ export default function NumberedActionsList({ advisor, onPauseProvider, onShowSu
                   {step.cta.label}
                 </Link>
               ) : (
-                <button onClick={() => { onShowSubscribeRows?.(); step.cta?.onClick?.(); }} className={step.active ? CTA_PRIMARY : CTA_GHOST}>
+                <button onClick={step.cta.onClick ?? onShowSubscribeRows} className={step.active ? CTA_PRIMARY : CTA_GHOST}>
                   {step.cta.label}
                 </button>
               )
