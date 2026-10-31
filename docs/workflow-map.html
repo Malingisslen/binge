@@ -474,6 +474,12 @@
       "path": "functions/src/episodeNotify/index.ts"
     },
     {
+      "id": "cf-episode-digest",
+      "label": "episodeMorningDigest",
+      "context": "backend-api",
+      "path": "functions/src/episodeDigest/index.ts"
+    },
+    {
       "id": "cf-return-notify",
       "label": "showReturnNotify",
       "context": "backend-api",
@@ -1927,11 +1933,13 @@
     {
       "id": "flow-episodes",
       "label": "Episode & show-return notify",
-      "description": "Two schedules share the same followed-series read: episodeReleaseNotify (every 6h) nudges 'ikapp' followers when TMDB's last_episode_to_air advances; showReturnNotify (every 24h) nudges caught-up followers when TMDB announces a later-season premiere (next_episode_to_air episode 1, season>1) on a show they were 'ikapp'/'avslutad' on. Both dedupe via a per-show Firestore marker that always advances (at-most-once, idempotent even on an empty recipient set).",
+      "description": "Two schedules share the same followed-series read: episodeReleaseNotify (every 6h) queues 'ikapp' followers on the show's episodeNotifyState doc when TMDB's last_episode_to_air advances, and episodeMorningDigest (08:00 Stockholm) turns that queue into one inbox card and one push per user that opens /my/igar (BIN-1475); showReturnNotify (every 24h) nudges caught-up followers when TMDB announces a later-season premiere (next_episode_to_air episode 1, season>1) on a show they were 'ikapp'/'avslutad' on. Both dedupe via a per-show Firestore marker that always advances (at-most-once, idempotent even on an empty recipient set).",
       "covers": [
         "episodeReleaseNotify",
+        "episodeMorningDigest",
         "showReturnNotify",
-        "/my/series"
+        "/my/series",
+        "/my/igar"
       ],
       "steps": [
         {
@@ -1958,15 +1966,29 @@
         {
           "from": "cf-episode-notify",
           "to": "firestore",
-          "payload": "read episodeNotifyState/{tmdbId}.lastNotifiedEpisode; shouldNotify = last.id !== marker; recipients = items where deriveSubState()=='ikapp'; write users/{uid}/notifications/{episode-tmdbId-episodeId} kind episode_release; ALWAYS advance the marker to last.id (even if 0 recipients)",
+          "payload": "read episodeNotifyState/{tmdbId}.lastNotifiedEpisode; shouldNotify = last.id !== marker; recipients = items where deriveSubState()=='ikapp'; arrayUnion {episodeId, season, episode, airDate, uids} into episodeNotifyState/{tmdbId}.pending and set hasPending; ALWAYS advance the marker to last.id (even if 0 recipients)",
           "transport": "Firestore read/write",
           "verified": true
         },
         {
-          "from": "cf-episode-notify",
+          "from": "cf-episode-digest",
+          "to": "firestore",
+          "payload": "query episodeNotifyState where hasPending==true; group pending by uid; per user re-check users/{uid}.notificationSettings.episodeReleases!==false, the watchlist doc is status 'mina' and the episode is not already watched; create users/{uid}/notifications/episode-digest-{YYYY-MM-DD} kind episode_digest (create(): ALREADY_EXISTS = today's card and push done); then in a transaction per show remove exactly the uids it finished with from the entries it read (entries queued meanwhile stay; entries older than 3 days go)",
+          "transport": "Firestore read/write",
+          "verified": true
+        },
+        {
+          "from": "cf-episode-digest",
           "to": "cf-sendPush",
-          "payload": "sendPushToUser(uid, {title:'Nytt avsnitt', body:'{title} — S00E00 har släppts', actionUrl:'/tv/{tmdbId}/', tag:'episode-{tmdbId}'}, {pushEnabled}) — only for recipients with notificationSettings.episodeReleases!==false",
+          "payload": "sendPushToUser(uid, {title:'Igår kom N avsnitt du följer', body:'{series} S00E00, … (no episode titles)', actionUrl:'/my/igar/', tag:'episode-digest'}, {pushEnabled}) — at most one per user per day",
           "transport": "in-process call",
+          "verified": true
+        },
+        {
+          "from": "web-app",
+          "to": "watchlist-context",
+          "payload": "/my/igar lists the episode_digest card's episodes with 'Sedd?' → useEpisodeProgressWithSync.markEpisodeWatched (episodeProgress + updateProgress); Klar returns to /my; opening the list marks the card read",
+          "transport": "React route",
           "verified": true
         },
         {

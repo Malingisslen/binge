@@ -185,6 +185,20 @@ export default function TopbarActions() {
                         </Link>
                       );
                     }
+                    // BIN-1475 morgonfrågan: öppnar avbockningslistan, inte en titel.
+                    if (n.kind === 'episode_digest') {
+                      return (
+                        <Link
+                          key={n.id}
+                          href="/my/igar/"
+                          onClick={() => { markRead(n.id); setBellOpen(false); }}
+                          className={`popover-row${n.read ? '' : ' is-unread'}`}
+                        >
+                          <div className="popover-row-title">{n.title}</div>
+                          <div className="popover-row-meta">{n.summary}</div>
+                        </Link>
+                      );
+                    }
                     if (n.kind === 'system') {
                       // BIN-1259: ett kort UTAN actionUrl renderas som en knapp,
                       // inte som en länk. Reservvägen `|| '/insikter'` skickade

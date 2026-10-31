@@ -789,6 +789,26 @@ mottagarmarkören räknar notiser inom en timme och håller tillbaka dem över t
   kortet länkar till Vänner. Kort skrivna före den spärren, sedan `542cf856`, kan bära namnet
   på en privat följare; se BIN-1459.
 
+### Kön till morgonfrågan om nya avsnitt (BIN-1475, 2026-10-31)
+
+`episodeNotifyState/{tmdbId}.pending[]` — varje post är `{ episodeId, season, episode,
+airDate, uids, queuedAt }`. `episodeReleaseNotify` lägger dit uid:n för den som är ikapp
+på serien när ett nytt avsnitt sänts; `episodeMorningDigest` gör kort och push av kön.
+
+- **Vad den säger om en person:** att ett konto följer en viss serie och var ikapp när
+  avsnittet kom. Inget innehåll.
+- **Utanför exporten:** operationell kö utan egen användarsynlig funktion, samma bucket
+  som `friendRequestPushes` ovan. Det användaren ser, kortet i
+  `users/{uid}/notifications`, följer korten: med i exporten, raderas med kontot och
+  efter 90 dagar. Samlingen har ingen `firestore.rules`-match, så klienter nekas och
+  klientens kontoradering når den inte.
+- **Radering:** `settlePending` i `functions/src/episodeDigest/logic.ts`, körd av
+  `episodeMorningDigest`, tar bort varje uid som körningen blev klar med och varje post
+  äldre än `MAX_QUEUE_AGE_MS`. Ett raderat konto saknar `users/{uid}`, räknas därför som
+  klart (`itemsForUser` returnerar null) och tas bort vid nästa körning.
+- **Lucka:** båda raderingsvägarna körs bara av `episodeMorningDigest`. Står den jobbet
+  stilla ligger kön kvar; `retentionCleanup` sveper den inte.
+
 ### Push-tokens för konton Auth inte längre erkänner (BIN-848, 2026-08-10)
 
 `users/{uid}/fcmTokens/*` för uid vars Auth-användare **saknas eller är spärrad**.

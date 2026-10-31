@@ -25,13 +25,16 @@ export interface AppNotification {
   // tmdbId-formad (tmdbId=0) — en rollup över flera titlar. 'system' är en notis
   // som inte handlar om en titel — INTE tmdbId-formad; bär `body`, och
   // `actionUrl` när det finns något att öppna.
-  kind: 'provider_available' | 'episode_release' | 'digital_release' | 'weekly_digest' | 'system';
+  kind: 'provider_available' | 'episode_release' | 'digital_release' | 'weekly_digest' | 'system' | 'episode_digest';
   providerId: number | null;
   providerName: string | null;
   episodeCode: string | null;
   // 'system'-fält (undefined för övriga kinds).
   body?: string;
   actionUrl?: string;
+  // BIN-1475 episode_digest: morgonfrågan. Inte tmdbId-formad; `episodes` är
+  // listan som öppnas på /my/igar/. `summary` och `actionUrl` delas med övriga.
+  episodes?: DigestEpisode[];
   // BIN-163 weekly_digest-fält (undefined för övriga kinds).
   summary?: string;
   leavingCount?: number;
@@ -39,6 +42,13 @@ export interface AppNotification {
   digestItems?: DigestCardItem[];
   read: boolean;
   createdAt: Date;
+}
+
+export interface DigestEpisode {
+  tmdbId: number;
+  title: string;
+  season: number;
+  episode: number;
 }
 
 export interface DigestCardItem {
@@ -96,6 +106,23 @@ export function useNotifications() {
             leavingCount: data.leavingCount ?? 0,
             newCount: data.newCount ?? 0,
             digestItems: Array.isArray(data.items) ? (data.items as DigestCardItem[]) : [],
+            read: data.read ?? false,
+            createdAt: toDate(data.createdAt),
+          } as AppNotification;
+        }
+        if (data.kind === 'episode_digest') {
+          return {
+            id: d.id,
+            tmdbId: 0,
+            mediaType: 'tv',
+            title: data.title ?? 'Nya avsnitt du följer',
+            kind: 'episode_digest',
+            providerId: null,
+            providerName: null,
+            episodeCode: null,
+            summary: data.summary ?? '',
+            episodes: Array.isArray(data.episodes) ? (data.episodes as DigestEpisode[]) : [],
+            actionUrl: typeof data.actionUrl === 'string' ? data.actionUrl : '/my/igar/',
             read: data.read ?? false,
             createdAt: toDate(data.createdAt),
           } as AppNotification;

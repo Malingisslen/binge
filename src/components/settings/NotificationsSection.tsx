@@ -265,6 +265,9 @@ export function NotificationsSection() {
           className="accent-acc-deep w-[14px] h-[14px]" />
         Notiser när en serie jag följer släpper ett nytt avsnitt
       </label>
+      <p className="text-xs text-ink-3 mt-1 pl-6">
+        Du får en notis om dagen, på morgonen, med dagens nya avsnitt i en lista där du kan bocka av vad du sett. Inga nya avsnitt ger ingen notis.
+      </p>
 
       <label className="flex items-center gap-2 cursor-pointer text-base mt-3">
         <input type="checkbox" checked={user.notificationSettings.availableOnMyServices} disabled={busyKeys.has('available')}

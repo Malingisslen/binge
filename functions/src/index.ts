@@ -190,10 +190,12 @@ export { onFollowCreate } from './followPush';
 export { rollupInsights } from './insights/rollup';
 export { apiInsights } from './insights/api';
 
-// ── Episod-release-push (B4) ──────────────────────────────────────────────────
-// episodeReleaseNotify: schemalagd collectionGroup-scan → push:ar followers som
-// är ikapp på en serie när TMDB rapporterar ett nytt aireat avsnitt.
+// ── Episod-release (B4, BIN-1475) ────────────────────────────────────────────
+// episodeReleaseNotify: schemalagd collectionGroup-scan → köar followers som är
+// ikapp på en serie när TMDB rapporterar ett nytt aireat avsnitt.
+// episodeMorningDigest: 08:00 → ETT kort + EN push per användare ur kön.
 export { episodeReleaseNotify } from './episodeNotify';
+export { episodeMorningDigest } from './episodeDigest';
 
 // ── "Serien är tillbaka"-push (BIN-188) ──────────────────────────────────────
 // showReturnNotify: daglig collectionGroup-scan (TV i 'mina') → fetchar TMDB
