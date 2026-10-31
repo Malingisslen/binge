@@ -8,6 +8,7 @@ import { ProfileSection } from '@/components/settings/ProfileSection';
 import { UsernameSection } from '@/components/settings/UsernameSection';
 import { ProvidersSection } from '@/components/settings/ProvidersSection';
 import { BibliotekSection } from '@/components/settings/BibliotekSection';
+import { TvDevicesSection } from '@/components/settings/TvDevicesSection';
 import { DisplaySection } from '@/components/settings/DisplaySection';
 import { ContentFilterSection } from '@/components/settings/ContentFilterSection';
 import { NotificationsSection } from '@/components/settings/NotificationsSection';
@@ -70,6 +71,7 @@ function SettingsContent() {
           <Group id="tjanster">
             <ProvidersSection />
             <BibliotekSection />
+            <TvDevicesSection />
           </Group>
           <Group id="visning">
             <DisplaySection />

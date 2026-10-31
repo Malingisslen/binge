@@ -1,0 +1,63 @@
+name: TV app (Google TV test build)
+
+# Builds the Android TV test APK. Never deploys anything and never touches Firebase:
+# it only compiles tv-app/ and hands the APK over as a downloadable file.
+# google-services.json is app configuration rather than a credential, but it is kept
+# out of the repo (see tv-app/.gitignore) and is supplied as a repository secret.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'tv-app/**'
+      - '.github/workflows/tv-app.yml'
+  push:
+    paths:
+      - 'tv-app/**'
+      - '.github/workflows/tv-app.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tv-app-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # The runner image ships the Android SDK; only the licences and the exact platform are ours to add.
+      - name: Accept SDK licences and install platform
+        run: |
+          SDKMANAGER="$(command -v sdkmanager || ls -d "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager | head -n 1)"
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Add Firebase app configuration
+        env:
+          GOOGLE_SERVICES: ${{ secrets.TV_GOOGLE_SERVICES }}
+        run: |
+          if [ -z "$GOOGLE_SERVICES" ]; then
+            echo "::error::Secret TV_GOOGLE_SERVICES is missing. Register the Android app in Firebase and paste the contents of its google-services.json as a repository secret."
+            exit 1
+          fi
+          printf '%s' "$GOOGLE_SERVICES" > tv-app/app/google-services.json
+
+      - name: Test and build debug APK
+        working-directory: tv-app
+        run: ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleDebug :app:compileReleaseKotlin
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: binge-tv-debug-apk
+          path: tv-app/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14

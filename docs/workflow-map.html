@@ -672,6 +672,18 @@
       "path": "functions/src/tvPair/index.ts, functions/src/tvPair/logic.ts, functions/src/tvPair/cleanup.ts"
     },
     {
+      "id": "tv-pair-page",
+      "label": "/tv pairing page",
+      "context": "web-app",
+      "path": "src/app/tv/page.tsx, src/lib/firebase/tvPairing.ts, src/lib/tvPairingCode.ts"
+    },
+    {
+      "id": "tv-devices-section",
+      "label": "TvDevicesSection (Kopplade TV in settings)",
+      "context": "web-app",
+      "path": "src/components/settings/TvDevicesSection.tsx, src/hooks/useTvDevices.ts"
+    },
+    {
       "id": "admin-reports-page",
       "label": "/admin/reports dashboard",
       "context": "web-app",
@@ -2778,9 +2790,24 @@
         "tvPairApprove",
         "tvPairPoll",
         "tvDeviceDeleted",
-        "tvOwnerDeleted"
+        "tvOwnerDeleted",
+        "/tv"
       ],
       "steps": [
+        {
+          "from": "tv-pair-page",
+          "to": "cf-tvPair",
+          "payload": "/tv?kod=CODE (the QR link) or a typed code: the page normalises it locally, shows no device name, and on Godkänn calls tvPairApprove with {code}; the reply carries the deviceName shown afterwards",
+          "transport": "https-callable",
+          "verified": true
+        },
+        {
+          "from": "tv-devices-section",
+          "to": "firestore",
+          "payload": "Kopplade TV lists users/{uid}/tvDevices; Koppla bort deletes one row and Logga ut alla TV batch-deletes every row, which disconnects the TV at once because the rules require the row",
+          "transport": "firestore-batch-write",
+          "verified": true
+        },
         {
           "from": "cf-tvPair",
           "to": "firestore",
