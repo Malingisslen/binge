@@ -3,10 +3,13 @@
 import { useMemo } from 'react';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useBehindShows } from '@/hooks/useBehindShows';
+import { useToWatchSeen } from '@/hooks/useToWatchSeen';
 import { buildToWatchRows } from '@/lib/toWatch';
+import { countUnseen } from '@/lib/toWatchSeen';
 
 /**
- * How many titles "Nytt för dig" lists, for the nav counter. It only reads the TMDB answers
+ * How many titles in "Nytt för dig" Malin has not yet seen there, for the nav counter (an inbox:
+ * opening the page zeroes it, later additions raise it again). It only reads the TMDB answers
  * other views already cached, so a counter on every page never starts its own fan-out: until
  * Hem or Nytt för dig has loaded them, series that are behind but not yet known to be count as
  * zero and the number grows when the answers land.
@@ -18,8 +21,9 @@ export function useToWatchCount(): number {
     [items],
   );
   const { behindIds } = useBehindShows(followedTv, { fetch: false });
+  const { seen } = useToWatchSeen();
   return useMemo(
-    () => buildToWatchRows(items, { behindIds, lastSeen: new Map(), newestAired: new Map(), now: new Date() }).length,
-    [items, behindIds],
+    () => countUnseen(buildToWatchRows(items, { behindIds, lastSeen: new Map(), newestAired: new Map(), now: new Date() }), seen),
+    [items, behindIds, seen],
   );
 }

@@ -16,6 +16,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { useAllEpisodeProgress } from '@/hooks/useAllEpisodeProgress';
 import { useCalendarEntries } from '@/hooks/useCalendar';
 import { useBehindShows } from '@/hooks/useBehindShows';
+import { useMarkToWatchSeen } from '@/hooks/useToWatchSeen';
+import { toWatchSeenKey } from '@/lib/toWatchSeen';
 import { usePersistedState } from '@/hooks/usePersistedState';
 import { toWatchFiltersKey, toWatchSortKey } from '@/lib/persistedViewState';
 import { posterUrl, titleHref } from '@/lib/tmdb/client';
@@ -83,6 +85,10 @@ export default function ToWatchPage() {
     }),
     [items, behind.behindIds, episodes, entries, now],
   );
+
+  // Marking waits for the lists to settle so a half-loaded page does not leave later rows counted.
+  const seenKeys = useMemo(() => allRows.map(toWatchSeenKey), [allRows]);
+  useMarkToWatchSeen(seenKeys, !loading && !episodesLoading && !calendarLoading && !behind.isLoading);
 
   const rowItems = useMemo(() => allRows.map(r => r.item), [allRows]);
   const genreOptions = useMemo(() => genreOptionsInLibrary(rowItems), [rowItems]);
