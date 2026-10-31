@@ -6,7 +6,7 @@ import { ChevronDown, Film } from 'lucide-react';
 import { useMovie } from '@/hooks/useTMDB';
 import { usePageMeta } from '@/hooks/usePageMeta';
 import { JsonLd, movieSchema, breadcrumbSchema } from '@/components/title/JsonLd';
-import { posterUrl, posterSrcSet, profileUrl, logoUrl } from '@/lib/tmdb/client';
+import { posterUrl, posterSrcSet, profileUrl } from '@/lib/tmdb/client';
 import StatusButton from '@/components/title/StatusButton';
 import WatchedDateEditor from '@/components/title/WatchedDateEditor';
 import NotInterestedButton from '@/components/title/NotInterestedButton';
@@ -15,8 +15,8 @@ import AddToGroupButton from '@/components/title/AddToGroupButton';
 import TipFriendButton from '@/components/title/TipFriendButton';
 import { RatingInput } from '@/components/ui/RatingInput';
 import CommunityRating from '@/components/title/CommunityRating';
-import ProviderTag from '@/components/title/ProviderTag';
-import FreeWatchBadge from '@/components/title/FreeWatchBadge';
+import ProviderStrip from '@/components/title/ProviderStrip';
+import { buildProviderRows } from '@/components/title/ProviderStrip.helpers';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import SynopsisText from '@/components/title/SynopsisText';
 import TrailerSection from '@/components/ui/TrailerSection';
@@ -44,12 +44,11 @@ import { useLatinPersonNames } from '@/hooks/useLatinPersonNames';
 import { availabilityLine, buildContentFloor, hasSubstantialText } from '@/lib/seo/contentFloor';
 import { movieContentFloorInput } from '@/lib/seo/contentFloorInput';
 import { franchiseByCollectionId } from '@/lib/seo/franchises';
-import { canonicalProviderId, dedupeProvidersByCanonicalId, affiliateWrap } from '@/lib/tmdb/providers';
+import { canonicalProviderId, dedupeProvidersByCanonicalId } from '@/lib/tmdb/providers';
 import { seProviderIdsForRefresh, seSubscriptionProviderIdsForRefresh } from '@/lib/tmdb/seProviderIds';
 import { toneForGenreIds } from '@/lib/duotone';
 import ClientOnly from '@/components/utils/ClientOnly';
 import { useStreamingOffers } from '@/hooks/useStreamingOffers';
-import { offerForProvider, isLeavingSoon, formatLeaving } from '@/lib/streaming/offers';
 import { useCineasternaCatalog } from '@/hooks/useCineasternaCatalog';
 import { CheapestPathVerdict } from '@/components/title/CheapestPathVerdict';
 import CinemaCountdownStrip from '@/components/title/CinemaCountdownStrip';
@@ -59,7 +58,6 @@ import { AvailabilityTable } from '@/components/seo/AvailabilityTable';
 import { titleAvailability } from '@/lib/seo/titleAvailability';
 import { cinemaToStreaming } from '@/lib/calendar/releaseDate';
 import { useToast } from '@/contexts/ToastContext';
-import { trackEvent } from '@/lib/analytics';
 import ShareButton from '@/components/share/ShareButton';
 import type { TMDBMovie } from '@/types';
 import { DELETION_IN_PROGRESS_MESSAGE, isDeletionInProgressError } from '@/lib/deletionInProgressError';
@@ -245,6 +243,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   // Hoisted here (not inside JSX) so the linter disable is minimal in scope.
   // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
+  const stripRows = buildProviderRows({ flatrate, free, ads, rent, buy }, offers, myProviderIds, now);
 
   // BIN-193: cinema→streaming countdown. todayStr derives from `now` (pure —
   // no argless Date) so no extra purity-disable. Null unless the film is in
@@ -510,39 +509,9 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
             />
           )}
 
-          {onSubscription.length > 0 && (
-            <div className="providers-row">
-              <span className="lab">finns på</span>
-              {onSubscription.map(p => {
-                const logo = logoUrl(p.logo_path);
-                const offer = offerForProvider(offers, canonicalProviderId(p.provider_id));
-                if (logo) {
-                  // Placeholder-bakgrund + eager: raden är above-the-fold och
-                  // utan fill renderas tomma vita rutor tills CDN:t svarar (T5).
-                  const leaving = isLeavingSoon(offer, now);
-                  const leavingLabel = leaving ? formatLeaving(offer!) : null;
-                  const imgEl = (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={logo} alt={p.provider_name} title={p.provider_name} style={{ width: 28, height: 28, borderRadius: 3, border: '1px solid var(--rule)', background: 'var(--placeholder-fill)' }} loading="eager" decoding="async" width={28} height={28} />
-                  );
-                  return (
-                    <span key={p.provider_id} className="inline-flex items-center gap-1">
-                      {offer?.link ? (
-                        <a href={affiliateWrap(p.provider_id, offer.link)} target="_blank" rel="noopener noreferrer" onClick={() => trackEvent('provider_clicked', { providerId: canonicalProviderId(p.provider_id), offerType: offer.type, mediaType: 'movie' })}>{imgEl}</a>
-                      ) : imgEl}
-                      {leavingLabel && (
-                        <span className="rounded-sm bg-acc-soft text-acc-deep px-1 text-xs">{leavingLabel}</span>
-                      )}
-                    </span>
-                  );
-                }
-                return <ProviderTag key={p.provider_id} provider={p} size="md" offer={offer} nowMs={now} mediaType="movie" />;
-              })}
-            </div>
-          )}
+          <ProviderStrip rows={stripRows.main} mediaType="movie" />
           <ProviderHubLinks providerIds={onSubscription.map(p => p.provider_id)} />
 
-          <FreeWatchBadge free={free} ads={ads} />
 
           {onCineasterna && (
             <div style={{ marginTop: 8 }}>
@@ -574,21 +543,10 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
                     : `Finns även med abonnemang på ${onSubscription.map(p => p.provider_name).join(', ')} — billigare än att hyra om du ser mer därifrån.`}
                 </div>
               )}
-              {rent.length > 0 && (
-                <div>
-                  <span className={eyebrowClass({ size: 'xs', className: 'mr-1.5' })}>Hyr:</span>
-                  {rent.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" offer={offerForProvider(offers, canonicalProviderId(p.provider_id))} nowMs={now} mediaType="movie" />)}
-                </div>
-              )}
+              <ProviderStrip rows={stripRows.rentBuy} mediaType="movie" heading={null} />
               {/* BIN-354: rent price-history stat row (option C). Lazy — only
                   fetches priceHistory/{id} when this disclosure is expanded. */}
               {showRentBuy && <PriceHistoryChart tmdbId={movie.id} mediaType="movie" nowMs={now} />}
-              {buy.length > 0 && (
-                <div>
-                  <span className={eyebrowClass({ size: 'xs', className: 'mr-1.5' })}>Köp:</span>
-                  {buy.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" offer={offerForProvider(offers, canonicalProviderId(p.provider_id))} nowMs={now} mediaType="movie" />)}
-                </div>
-              )}
             </div>
             </details>
           )}

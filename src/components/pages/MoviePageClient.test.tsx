@@ -144,8 +144,6 @@ vi.mock('@/components/title/StatusButton', () => ({
 }));
 vi.mock('@/components/ui/RatingInput', () => ({ RatingInput: () => null }));
 vi.mock('@/components/title/CommunityRating', () => ({ default: () => null }));
-vi.mock('@/components/title/ProviderTag', () => ({ default: () => null }));
-vi.mock('@/components/title/FreeWatchBadge', () => ({ default: () => null }));
 vi.mock('@/components/title/AddToListButton', () => ({ default: () => null }));
 vi.mock('@/components/title/AddToGroupButton', () => ({ default: () => null }));
 vi.mock('@/components/title/TipFriendButton', () => ({ default: () => null }));
@@ -493,7 +491,8 @@ describe('MoviePageClient — what a crawler reads without clicking (SEO-2/SEO-4
     expect(details).not.toBeNull();
     expect(details!.open).toBe(false);
     // The list is in the DOM while collapsed — the old button rendered nothing here.
-    expect(details!.textContent).toContain('Hyr:');
+    expect(details!.textContent).toContain('Apple TV');
+    expect(details!.textContent).toContain('Hyr');
     // …and the availability line names the rent option in words.
     expect(screen.getByText(/Den går också att hyra eller köpa via Apple TV\./)).toBeTruthy();
   });

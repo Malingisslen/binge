@@ -9,7 +9,7 @@ import { useTVShow, useTVSeason } from '@/hooks/useTMDB';
 import { currentSeasonToPrefetch, seasonPrefetchSpec } from '@/lib/tmdb/prefetch';
 import { usePageMeta } from '@/hooks/usePageMeta';
 import { JsonLd, tvSchema, breadcrumbSchema } from '@/components/title/JsonLd';
-import { posterUrl, posterSrcSet, profileUrl, logoUrl } from '@/lib/tmdb/client';
+import { posterUrl, posterSrcSet, profileUrl } from '@/lib/tmdb/client';
 import StatusButton from '@/components/title/StatusButton';
 import NotInterestedButton from '@/components/title/NotInterestedButton';
 import AddToListButton from '@/components/title/AddToListButton';
@@ -17,8 +17,8 @@ import AddToGroupButton from '@/components/title/AddToGroupButton';
 import TipFriendButton from '@/components/title/TipFriendButton';
 import { RatingInput } from '@/components/ui/RatingInput';
 import CommunityRating from '@/components/title/CommunityRating';
-import ProviderTag from '@/components/title/ProviderTag';
-import FreeWatchBadge from '@/components/title/FreeWatchBadge';
+import ProviderStrip from '@/components/title/ProviderStrip';
+import { buildProviderRows } from '@/components/title/ProviderStrip.helpers';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import SynopsisText from '@/components/title/SynopsisText';
 import RecapPanel from '@/components/title/RecapPanel';
@@ -53,7 +53,7 @@ import { availabilityLine, buildContentFloor, hasSubstantialText } from '@/lib/s
 import { tvContentFloorInput } from '@/lib/seo/contentFloorInput';
 import { formatNextEpisodeLabel, seriesYearSpan, upcomingEpisode } from '@/lib/episodeLabel';
 import { todayIso } from '@/lib/utils';
-import { canonicalProviderId, dedupeProvidersByCanonicalId, affiliateWrap } from '@/lib/tmdb/providers';
+import { canonicalProviderId, dedupeProvidersByCanonicalId } from '@/lib/tmdb/providers';
 import { seProviderIdsForRefresh, seSubscriptionProviderIdsForRefresh } from '@/lib/tmdb/seProviderIds';
 import ClientOnly from '@/components/utils/ClientOnly';
 import { useStreamingOffers } from '@/hooks/useStreamingOffers';
@@ -62,9 +62,7 @@ import PriceHistoryChart from '@/components/title/PriceHistoryChart';
 import { TitleCrumb, GenreLinks, ProviderHubLinks } from '@/components/title/TitleHubLinks';
 import { AvailabilityTable } from '@/components/seo/AvailabilityTable';
 import { titleAvailability } from '@/lib/seo/titleAvailability';
-import { offerForProvider, isLeavingSoon, formatLeaving } from '@/lib/streaming/offers';
 import type { TMDBTVShow } from '@/types';
-import { trackEvent } from '@/lib/analytics';
 import ShareButton from '@/components/share/ShareButton';
 import { buttonClass } from '@/components/ui/Button';
 import { eyebrowClass } from '@/components/ui/Eyebrow';
@@ -296,6 +294,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   // Hoisted here (not inside JSX) so the linter disable is minimal in scope.
   // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
+  const stripRows = buildProviderRows({ flatrate, free, ads, rent, buy }, offers, user?.myProviders ?? [], now);
 
   return (
     <>
@@ -420,39 +419,9 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
             />
           )}
 
-          {onSubscription.length > 0 && (
-            <div className="providers-row">
-              <span className="lab">finns på</span>
-              {onSubscription.map(p => {
-                const logo = logoUrl(p.logo_path);
-                const offer = offerForProvider(offers, canonicalProviderId(p.provider_id));
-                if (logo) {
-                  // Placeholder-bakgrund + eager: raden är above-the-fold och
-                  // utan fill renderas tomma vita rutor tills CDN:t svarar (T5).
-                  const leaving = isLeavingSoon(offer, now);
-                  const leavingLabel = leaving ? formatLeaving(offer!) : null;
-                  const imgEl = (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={logo} alt={p.provider_name} title={p.provider_name} style={{ width: 28, height: 28, borderRadius: 3, border: '1px solid var(--rule)', background: 'var(--placeholder-fill)' }} loading="eager" decoding="async" width={28} height={28} />
-                  );
-                  return (
-                    <span key={p.provider_id} className="inline-flex items-center gap-1">
-                      {offer?.link ? (
-                        <a href={affiliateWrap(p.provider_id, offer.link)} target="_blank" rel="noopener noreferrer" onClick={() => trackEvent('provider_clicked', { providerId: canonicalProviderId(p.provider_id), offerType: offer.type, mediaType: 'tv' })}>{imgEl}</a>
-                      ) : imgEl}
-                      {leavingLabel && (
-                        <span className="rounded-sm bg-acc-soft text-acc-deep px-1 text-xs">{leavingLabel}</span>
-                      )}
-                    </span>
-                  );
-                }
-                return <ProviderTag key={p.provider_id} provider={p} size="md" offer={offer} nowMs={now} mediaType="tv" />;
-              })}
-            </div>
-          )}
+          <ProviderStrip rows={stripRows.main} mediaType="tv" />
           <ProviderHubLinks providerIds={onSubscription.map(p => p.provider_id)} />
 
-          <FreeWatchBadge free={free} ads={ads} />
 
           {/* SEO-2: <details> keeps rent/buy in the static HTML; see the movie page. */}
           {hasRentBuy && (
@@ -461,18 +430,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
                 Hyr & köp <ChevronDown size={12} className="transition-transform group-open:rotate-180" />
               </summary>
             <div style={{ marginTop: 10, fontSize: 'var(--fs-xs)', color: 'var(--ink-3)' }}>
-              {rent.length > 0 && (
-                <div>
-                  <span className={eyebrowClass({ size: 'xs', className: 'mr-1.5' })}>Hyr:</span>
-                  {rent.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" offer={offerForProvider(offers, canonicalProviderId(p.provider_id))} nowMs={now} mediaType="tv" />)}
-                </div>
-              )}
-              {buy.length > 0 && (
-                <div>
-                  <span className={eyebrowClass({ size: 'xs', className: 'mr-1.5' })}>Köp:</span>
-                  {buy.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" offer={offerForProvider(offers, canonicalProviderId(p.provider_id))} nowMs={now} mediaType="tv" />)}
-                </div>
-              )}
+              <ProviderStrip rows={stripRows.rentBuy} mediaType="tv" heading={null} />
               {/* BIN-354: rent price-history stat row, same as the film page —
                   lazy (only when this disclosure is open). */}
               {showRentBuy && <PriceHistoryChart tmdbId={show.id} mediaType="tv" nowMs={now} />}
