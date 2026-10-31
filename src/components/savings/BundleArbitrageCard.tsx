@@ -32,7 +32,7 @@ function joinNames(names: string[]): string {
 // rubriken när paketet har någon av dem, startavgiften i kronor, och den utslagna
 // delen som "räknad som" — aldrig som en egen månadsrad. Talet är samma heltal som
 // motorn drog av i savingKr.
-function commitmentLine(s: BundleSuggestion): string | null {
+export function commitmentLine(s: BundleSuggestion): string | null {
   const parts: string[] = [];
   if (s.bindingMonths > 0) parts.push(`${s.bindingMonths} mån bindningstid`);
   if (s.startFeeKr > 0) {
