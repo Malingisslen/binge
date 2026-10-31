@@ -18,8 +18,8 @@ export async function fetchTvAiringInfo(tmdbId: number): Promise<TvAiringInfo | 
     // fan-out loop to the function's hard timeout; the catch degrades to null.
     const res = await fetch(`${BASE_URL}/tv/${tmdbId}?api_key=${key}&language=sv-SE`, { signal: AbortSignal.timeout(10_000) });
     if (!res.ok) { logger.warn(`episodeNotify: TMDB /tv/${tmdbId} → ${res.status}`); return null; }
-    const json = (await res.json()) as { status?: string; last_episode_to_air?: { id: number; season_number: number; episode_number: number } | null };
+    const json = (await res.json()) as { status?: string; last_episode_to_air?: { id: number; season_number: number; episode_number: number; air_date?: string | null } | null };
     const last = json.last_episode_to_air ?? null;
-    return { status: json.status ?? null, lastEpisode: last ? { id: last.id, season_number: last.season_number, episode_number: last.episode_number } : null };
+    return { status: json.status ?? null, lastEpisode: last ? { id: last.id, season_number: last.season_number, episode_number: last.episode_number, air_date: last.air_date ?? null } : null };
   } catch (err) { logger.warn(`episodeNotify: TMDB fetch failed for ${tmdbId}`, err); return null; }
 }

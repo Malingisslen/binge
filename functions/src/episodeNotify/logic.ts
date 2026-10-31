@@ -14,7 +14,7 @@
 
 export type AiringState = 'ongoing' | 'ended' | 'unknown';
 export type TvSubState = 'aktiv' | 'ikapp' | 'avslutad' | 'none';
-export interface LastEpisode { id: number; season_number: number; episode_number: number; }
+export interface LastEpisode { id: number; season_number: number; episode_number: number; air_date?: string | null; }
 export interface WatchlistLite {
   uid: string; tmdbId: number; mediaType: string; status: string; title: string;
   lastWatchedSeason: number | null; lastWatchedEpisode: number | null; tmdbStatus: string | null;
