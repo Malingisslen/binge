@@ -233,9 +233,13 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
     if (user?.defaultView) setView(user.defaultView);
   }, [user?.defaultView, status]);
 
+  // Alla-vyn döljer avbrutna titlar tills man uttryckligen väljer statusen Avbruten.
+  const showAbandonedInAll = libFilters.status === 'avbruten';
   const baseItems = useMemo(
-    () => status ? items.filter(i => i.status === status && (status !== 'mina' || !i.dropped)) : items,
-    [items, status],
+    () => status
+      ? items.filter(i => i.status === status && (status !== 'mina' || !i.dropped))
+      : items.filter(i => showAbandonedInAll || i.status !== 'avbruten'),
+    [items, status, showAbandonedInAll],
   );
   const { runtimeOf, pending: runtimesPending } = useLibraryRuntimes(baseItems, hasRuntimeFilter(libFilters));
 
@@ -278,8 +282,8 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
   const totalCount = useMemo(
     () => status
       ? items.filter(i => i.status === status && (status !== 'mina' || !i.dropped)).length
-      : items.length,
-    [items, status]
+      : items.filter(i => showAbandonedInAll || i.status !== 'avbruten').length,
+    [items, status, showAbandonedInAll]
   );
 
   // B7/T2: substate för /my/series härleds från PERSISTERADE fält enbart
