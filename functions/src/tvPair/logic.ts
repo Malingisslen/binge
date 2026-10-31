@@ -86,6 +86,11 @@ export function tvPrincipalUid(deviceId: string): string {
   return `tv_${deviceId}`;
 }
 
+/** Admin SDK-felet när Auth-kontot redan är borta: då är städningen redan klar. */
+export function isAuthUserNotFound(e: unknown): boolean {
+  return (e as { code?: unknown } | null)?.code === 'auth/user-not-found';
+}
+
 export function pollTooSoon(lastPollMs: number | null, nowMs: number): boolean {
   return lastPollMs != null && nowMs - lastPollMs < MIN_POLL_INTERVAL_MS;
 }

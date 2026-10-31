@@ -11622,3 +11622,25 @@ Fix options if it ever matters: `request.time - request.resource.data.lastSeenAt
 "godtycklig äldre tidpunkt") and 3 ("Retentionspolicyn nämner dem inte i den här ändringen"),
 which the staged retention-policy line now contradicts — a decision record, so a dated successor,
 not a strike.
+
+### 2026-10-31 — BIN-1471 cleanup triggers: a throw-to-retry with retry off
+
+Review of the staged `functions/src/tvPair/cleanup.ts` (`tvDeviceDeleted`, `tvOwnerDeleted`).
+`tvDeviceDeleted` catches a non-`auth/user-not-found` error, logs `message` only, and rethrows
+with the comment "låt triggern försöka igen". The `onDocumentDeleted` options carry `region` and
+`maxInstances` but no `retry`, and `EventHandlerOptions.retry` ("Whether failed executions should
+be delivered again") defaults off in v2; `communityRatings/index.ts`'s header records the same
+default as a declined fix. So a transient Auth error ends the event: the `tvDevices` row is
+already gone, `isOrphanCandidate` skips `tv_` on purpose, and nothing ever revisits the
+account. Inert under rules (`isTvOf` needs the row; `isSignedIn()` refuses `tv`), PII-free, but
+the companion ledger entry declares the earlier entry's point 3 resolved on a retry that does not
+exist. Rated Medium, blocking. Fix: `retry: true` on both triggers; the user-not-found early
+return already makes redelivery idempotent, `tvOwnerDeleted`'s query+delete is idempotent, and
+`maxInstances: 5` bounds a permanent-failure retry loop. Rejected: a sweep for `tv_` accounts
+without a row (needs the owner uid, which is not on the Auth record — custom-token claims are
+not stored as customClaims).
+Non-blocking residual: a TV that exchanges its one-hour custom token AFTER its row was deleted
+(owner unpaired between poll and sign-in) recreates `tv_<id>` after the trigger already saw
+user-not-found; inert, uncleaned. Checked clean: cross-user delete (`delete: isOwner(uid)`,
+`create: if false`, so `deviceId` only from `generateDeviceId`), uid collision (no client path
+chooses a uid; the sole `createCustomToken` prefixes `tv_`), logs (message only).

@@ -90,3 +90,4 @@ headings differ.
 ## Följnotisens markörer exporteras inte och raderas av svepet, inte av kontoraderingen — 2026-10-11
 ## BIN-1459: commits utan biljett-id kopplas via sin sha, granskade i efterhand — 2026-10-29
 ## BIN-1471: TV-backendens kvarvarande punkter går som uppföljning, inte som spärr — 2026-10-31
+## BIN-1471: TV-kontona och kopplingskoderna städas av triggers — 2026-10-31

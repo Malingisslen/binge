@@ -667,9 +667,9 @@
     },
     {
       "id": "cf-tvPair",
-      "label": "tvPairStart / tvPairApprove / tvPairPoll callables",
+      "label": "tvPairStart / tvPairApprove / tvPairPoll callables and TV cleanup triggers",
       "context": "backend-api",
-      "path": "functions/src/tvPair/index.ts, functions/src/tvPair/logic.ts"
+      "path": "functions/src/tvPair/index.ts, functions/src/tvPair/logic.ts, functions/src/tvPair/cleanup.ts"
     },
     {
       "id": "admin-reports-page",
@@ -2776,7 +2776,9 @@
       "covers": [
         "tvPairStart",
         "tvPairApprove",
-        "tvPairPoll"
+        "tvPairPoll",
+        "tvDeviceDeleted",
+        "tvOwnerDeleted"
       ],
       "steps": [
         {
@@ -2798,6 +2800,13 @@
           "to": "firestore",
           "payload": "tvPairPoll: transaction creates users/{uid}/tvDevices/{deviceId} and deletes the pairing, then createCustomToken",
           "transport": "firestore-transaction",
+          "verified": true
+        },
+        {
+          "from": "cf-tvPair",
+          "to": "firestore",
+          "payload": "tvDeviceDeleted deletes the tv_<device> Auth account when the device row goes; tvOwnerDeleted deletes tvPairings approved by a deleted user",
+          "transport": "firestore-trigger",
           "verified": true
         }
       ],

@@ -33,6 +33,8 @@
     "titleRatings",
     "tmdbFieldsSweep",
     "weeklyDigestNotify",
+    "tvDeviceDeleted",
+    "tvOwnerDeleted",
     "tvPairApprove",
     "tvPairPoll",
     "tvPairStart"

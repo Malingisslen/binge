@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   CODE_ALPHABET, CODE_LENGTH, generateUserCode, normalizeUserCode, sha256Hex, secretMatches,
   generateDeviceSecret, sanitizeDeviceName, nextRateState, ipRateKey, pollTooSoon, isExpired,
-  tvPrincipalUid, RATE_LIMITS,
+  tvPrincipalUid, isAuthUserNotFound, RATE_LIMITS,
 } from './logic';
 
 describe('user code', () => {
@@ -74,6 +74,15 @@ describe('nextRateState', () => {
     expect(RATE_LIMITS.start.max).toBe(10);
     expect(RATE_LIMITS.approveUid.max).toBe(10);
     expect(RATE_LIMITS.approveIp.max).toBe(20);
+  });
+});
+
+describe('isAuthUserNotFound', () => {
+  it('is true only for the missing-user code', () => {
+    expect(isAuthUserNotFound({ code: 'auth/user-not-found' })).toBe(true);
+    expect(isAuthUserNotFound({ code: 'auth/internal-error' })).toBe(false);
+    expect(isAuthUserNotFound(new Error('x'))).toBe(false);
+    expect(isAuthUserNotFound(null)).toBe(false);
   });
 });
 

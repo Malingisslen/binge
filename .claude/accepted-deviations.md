@@ -2777,3 +2777,15 @@ som orphan-svepet räknar mot sitt tak.
 
 **Re-open when:** en anropbar funktion börjar läsa `ownerUid`-claimet, eller `lastSeenAt` börjar
 användas för att avgöra något (till exempel att koppla bort inaktiva TV).
+
+## BIN-1471: TV-kontona och kopplingskoderna städas av triggers — 2026-10-31
+
+Efterföljare till posten "TV-backendens kvarvarande punkter" av samma datum, punkt 3. Auth-kontot
+`tv_<enhet>` raderas nu av `tvDeviceDeleted` när raden i `tvDevices` försvinner, och kopplingskoder
+som en raderad användare godkänt raderas av `tvOwnerDeleted`. Punkt 3 i den äldre posten är därmed
+löst; punkt 1 och 2 gäller oförändrade. Orphan-svepets hopp över `tv_` ligger kvar som skydd.
+
+Känd rest: kopplar ägaren bort TV:n efter att `tvPairPoll` gett TV:n sin token men innan TV:n
+loggat in, ser triggern inget konto att radera, och `tv_<enhet>` skapas när TV:n växlar in
+token (upp till en timme senare). Kontot saknar rad och nekas av reglerna, men städas inte. Öppet
+arbete.

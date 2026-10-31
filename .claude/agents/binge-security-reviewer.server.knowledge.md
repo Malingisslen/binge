@@ -60,6 +60,10 @@ Read only when the staged diff touches this chapter's paths (see .claude/shared-
   timed-out function with no `finally`, so a kill between claim and release sticks the flag for the cycle —
   bound the window under the platform timeout, or give the claim a LEASE timestamp. Transactions retry the
   callback, so `.add()` duplicates; use idempotent `.doc(id).set()`.
+- **A v2 event trigger that `throw`s "to retry" retries NOTHING without `retry: true`** — the option
+  defaults off (`firebase-functions/lib/v2/options.d.ts`, and `communityRatings/index.ts` records it).
+  When a trigger is the SOLE cleanup path (a sweep deliberately skips the artifact), no retry means a
+  transient error strands it forever. Found in review, BIN-1471 `tvDeviceDeleted` (archive 2026-10-31).
 - **"Every write is idempotent" is not "a retry REACHES this unit" — check whether the claim write mutates the
   field the CANDIDATE QUERY selects on.** FOUND IN REVIEW, BIN-1063 steg 3 bunt 2 (r1, fixed before it
   shipped — full finding in the archive, dated 2026-09-07; the shipped `runHandover.ts` calls
