@@ -2789,3 +2789,28 @@ Känd rest: kopplar ägaren bort TV:n efter att `tvPairPoll` gett TV:n sin token
 loggat in, ser triggern inget konto att radera, och `tv_<enhet>` skapas när TV:n växlar in
 token (upp till en timme senare). Kontot saknar rad och nekas av reglerna, men städas inte. Öppet
 arbete.
+## Hushållsröster: rösternas värden valideras av klienten, inte av reglerna — 2026-10-31
+
+ADR 0026. `groups/{gid}/household/{uid}` fick de valfria fälten `soonProviderIds`, `votes` och
+`votesMonth`. Reglerna kontrollerar formen: `soonProviderIds` är en lista och `votes` en map, båda
+med högst 100 poster, och `votesMonth` matchar `^\d{4}-\d{2}$`. De kontrollerar INTE varje värde i
+`votes` eller att nycklarna är provider-id, eftersom det kräver en loop som reglerna inte har.
+Klienten validerar röstvärdet (`ok`, `keep`, `wait`) och provider-id (positivt heltal) före varje
+skrivning, och varje läsare behandlar ett okänt värde eller en okänd nyckel som ingen röst. En
+medlem som skriver förbi klienten kan alltså lagra skräp i sitt EGET bidrag; ingen annan
+läser det som en röst. Regeltestet som säger detta heter
+`an unknown vote VALUE is not rejected by the rules (client-side validation, accepted deviation)`.
+Härled klientens kontroller och läsarens sanering:
+
+```
+git grep -n -e "export function isHouseholdVote" -e "export function sanitizeVotes" -e "export function applyHouseholdVote" -- src/lib/advisor/householdAggregate.ts
+```
+
+**INTE accepterat, alltså fortfarande fileable:**
+1. Ett fält i `votes` eller `soonProviderIds` som bär namn, titel, datum eller fritext.
+2. En läsare som visar ett okänt röstvärde, eller visar lagrad text ur bidraget.
+3. Att storleksgränsen eller `votesMonth`-mönstret försvinner ur reglerna.
+4. En skrivning av en röst som inte bygger om hela bidraget (`updatedAt == request.time`).
+
+**Re-open when:** rösterna får fler värden än tre, eller något annat än medlemmens eget bidrag
+börjar läsa dem.

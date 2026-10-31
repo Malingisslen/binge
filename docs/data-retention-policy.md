@@ -251,24 +251,39 @@ medlem skriver bara sitt eget bidrag (aldrig andras):
   osedd titel i backloggen — **usage-härlett, aldrig självrapporterat, och
   bara på tjänste-nivå, aldrig titel-nivå**; DPO-krav om att inte exponera VAD
   någon tittar på, bara VILKEN tjänst som bär vikt), `updatedAt`
-  (server-stämplad).
+  (server-stämplad). Sedan 2026-10-31 (ADR 0026) dessutom, valfritt:
+  `soonProviderIds` (tjänster där medlemmen har något nytt inom 30 dagar —
+  bara tjänsten, aldrig titel eller datum; skrivs först när medlemmen delat om
+  under den samtyckestext som nämner det), `votes` (medlemmens röst per tjänst:
+  `ok`, `keep` eller `wait`) och `votesMonth` (månaden rösterna gäller). Inget
+  namn lagras i bidraget; namnet vid en röst läses ur `members/{uid}`.
 - **Rättslig grund:** samtycke (art. 6.1.a) — explicit opt-in per grupp; en
   samtyckesskärm visas före första skrivningen. Att gå med i en grupp är INTE
   samtycke till att dela.
 - **Vem kan läsa:** endast gruppmedlemmar som SJÄLVA delar (share-to-see-
   reciprocitet, `exists()`-check i `firestore.rules`) — se ADR 0010
-  (`docs/org/adr/0010-household-read-gap.md`). Appens UI visar bara aggregat
-  ("Disney+ betalas av 2 av er"), men en delande medlem kan tekniskt läsa en
+  (`docs/org/adr/0010-household-read-gap.md`). Appens UI visar kostnaderna bara
+  som aggregat ("Disney+ betalas av 2 av er"); rösterna visas med namn
+  (ADR 0026). En delande medlem kan tekniskt läsa en
   annan medlems post-för-post-lista; det är en medveten, founder-godkänd
   disclosure-lucka (ingen Cloud Function-proxy) — konsent-texten säger det
   rakt ut.
 - **Radering:** ett tryck ("Sluta dela") raderar dokumentet omedelbart. Att
   lämna gruppen eller bli borttagen ur den raderar det också. Kontoradering
-  kaskadar via BÅDA grenarna i `deleteAccount` (owner-grenen tar hela
-  gruppens `household`-collection när gruppen raderas; medlems-grenen
-  raderar bara mitt eget doc när jag lämnar) — emulator-testat.
+  raderar mitt eget `household/{uid}` i varje grupp jag är medlem i.
+- **Privat titel:** en titel som medlemmen själv markerat Privat på titeln
+  räknas inte in i `activeProviderIds` eller `soonProviderIds` (ADR 0027).
+  Att tjänsten har osedda titlar delas ändå på tjänste-nivå, och samtyckesraden
+  säger det.
 - **Retention:** inget tidsbaserat utgångsdatum — dokumentet lever tills
-  återkallelse/lämnande/borttagning/kontoradering.
+  återkallelse/lämnande/borttagning/kontoradering. De nya fälten ligger i
+  samma dokument och raderas med det.
+- **Gamla röster:** en röst gäller den månad som står i `votesMonth`
+  (svensk tid). Röster från en tidigare månad ignoreras när de läses och skrivs
+  över nästa gång medlemmens bidrag skrivs (en ny röst, en ändrad kostnad eller
+  en ändrad backlog). Ingen server-städning tar bort dem däremellan, så en
+  gammal röst kan ligga kvar i dokumentet tills dess, längst lika länge som
+  dokumentet självt. Den visas inte och räknas inte.
 
 ### Användarnamn → Hård radering + release
 
@@ -791,10 +806,16 @@ på serien när ett nytt avsnitt sänts; `episodeMorningDigest` gör kort och pu
   klientens kontoradering når den inte.
 - **Radering:** `settlePending` i `functions/src/episodeDigest/logic.ts`, körd av
   `episodeMorningDigest`, tar bort varje uid som körningen blev klar med och varje post
-  äldre än `MAX_QUEUE_AGE_MS`. Ett raderat konto saknar `users/{uid}`, räknas därför som
+  äldre än `MAX_QUEUE_AGE_MS`. Ett konto raderat i appen saknar `users/{uid}`, räknas därför som
   klart (`itemsForUser` returnerar null) och tas bort vid nästa körning.
-- **Lucka:** båda raderingsvägarna körs bara av `episodeMorningDigest`. Står den jobbet
-  stilla ligger kön kvar; `retentionCleanup` sveper den inte.
+- **Säkerhetsnät:** `episodeReleaseNotify` (var sjätte timme) tar bort poster äldre än
+  `MAX_QUEUE_AGE_MS` via `trimStaleQueue`, så kön har en övre gräns även när
+  `episodeMorningDigest` står stilla. Statusdokumentet blir kvar, eftersom det också bär
+  `lastNotifiedEpisode`. Om båda jobben står still ligger kön kvar; `retentionCleanup`
+  sveper den inte.
+- **Gräns och fördröjning:** en post går ut efter 3 dygn (`MAX_QUEUE_AGE_MS`) och tas bort av
+  nästa körning av jobben ovan. Ett raderat kontos uid lämnar kön genom att posten går ut
+  eller att nästa 08:00-körning gör uid:t klart, inte på begäran.
 
 ### Push-tokens för konton Auth inte längre erkänner (BIN-848, 2026-08-10)
 

@@ -305,7 +305,10 @@ async function seedFullAccount() {
     // nekades av share-to-see-reglerna och fick HELA raderingen att kasta. Nu
     // härleds refs ur medlems-id:na, så OTHERS doc raderas ändå.
     await set(['groups', 'mygroup', 'members', OTHER], { uid: OTHER });
-    await set(['groups', 'mygroup', 'household', OTHER], { providerIds: [337], providerCosts: { 337: 109 }, providerCampaigns: {}, activeProviderIds: [] });
+    await set(['groups', 'mygroup', 'household', OTHER], {
+      providerIds: [337], providerCosts: { 337: 109 }, providerCampaigns: {}, activeProviderIds: [],
+      soonProviderIds: [337], votes: { 337: 'wait' }, votesMonth: '2026-10',
+    });
 
     // BIN-1152: en ägd grupp med INGEN annan medlem kvar. Den lämnas inte över —
     // en efterträdare går inte att uppfinna — så den når ägar-grenen i
@@ -330,7 +333,12 @@ async function seedFullAccount() {
     await set(['groups', 'othergroup', 'joinAttempts', ME], { token: 'plain2' });
     // BIN-184: mitt bidrag i gruppen jag bara är medlem i (member-grenen) —
     // OTHERS bidrag där ska överleva (deras data, deras grupp).
-    await set(['groups', 'othergroup', 'household', ME], { providerIds: [8], providerCosts: { 8: 169 }, providerCampaigns: {}, activeProviderIds: [] });
+    // ADR 0026: bidraget bär också soon-flaggan och månadens röster — de ligger i samma
+    // dokument och ska därför försvinna med det.
+    await set(['groups', 'othergroup', 'household', ME], {
+      providerIds: [8], providerCosts: { 8: 169 }, providerCampaigns: {}, activeProviderIds: [],
+      soonProviderIds: [8], votes: { 8: 'keep' }, votesMonth: '2026-10',
+    });
     await set(['groups', 'othergroup', 'household', OTHER], { providerIds: [337], providerCosts: { 337: 109 }, providerCampaigns: {}, activeProviderIds: [] });
 
     // A report I filed — retained under Art. 17(3).

@@ -378,6 +378,33 @@ describe('BIN-1172: your own group member row is in the export', () => {
   });
 });
 
+// ADR 0026: soon-flaggan och rösterna ligger i samma hushållsdokument. Exporten bär
+// dokumentet som det är lagrat, så de nya fälten kommer med utan egen läsning; det här
+// pinnar att ingen framtida filtrering av bidraget tappar dem.
+describe('ADR 0026: household votes and the soon flag are exported with the contribution', () => {
+  it('carries soonProviderIds, votes and votesMonth verbatim, and nothing about other members', async () => {
+    const stored = {
+      providerIds: [8], providerCosts: { 8: 169 }, providerCampaigns: {}, activeProviderIds: [8],
+      soonProviderIds: [8], votes: { 8: 'keep' }, votesMonth: '2026-10', updatedAt: 'ts',
+    };
+    vi.mocked(collectUserDataSnapshots).mockResolvedValueOnce(snapsWithGroups(['g1']));
+    dbMock.getDoc.mockClear();
+    dbMock.getDoc.mockImplementation(async (ref: { path: string }) =>
+      ref.path === 'groups/g1/household/test-uid'
+        ? { exists: () => true, data: () => stored }
+        : answerByPath(ref));
+
+    const out = await buildUserExport('test-uid');
+
+    expect(out.householdContributions).toEqual([{ id: 'g1', data: stored }]);
+    const householdPaths = dbMock.getDoc.mock.calls
+      .map(([ref]) => (ref as { path: string }).path)
+      .filter(p => p.includes('/household/'));
+    expect(householdPaths).toContain('groups/g1/household/test-uid');
+    expect(householdPaths.every(p => p.endsWith('/test-uid'))).toBe(true);
+  });
+});
+
 // BIN-1352: the household read sits in the same Promise.all as the member row and the
 // title list. Without its own catch, one group's denied read rejected the whole export.
 describe('BIN-1352: a group whose household read THROWS is skipped', () => {

@@ -1,7 +1,7 @@
 'use client';
 
 import { formatKr } from '@/lib/formatKr';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import AuthGuard from '@/components/AuthGuard';
 import ProviderDot from '@/components/ui/ProviderDot';
@@ -19,6 +19,12 @@ import RotationPlanner from '@/components/savings/RotationPlanner';
 import RotationCalendar from '@/components/savings/RotationCalendar';
 import SavingsSidebar from '@/components/savings/SavingsSidebar';
 import UpcomingEpisodes from '@/components/savings/UpcomingEpisodes';
+import HeroVerdict from '@/components/savings/HeroVerdict';
+import ServiceVerdictCards from '@/components/savings/ServiceVerdictCards';
+import SavedSoFar from '@/components/savings/SavedSoFar';
+import HouseholdMode from '@/components/savings/HouseholdMode';
+import HouseholdSwitch, { useHouseholdMode } from '@/components/savings/HouseholdSwitch';
+import { SavingsTabList, SavingsTabPanel, useSavingsTab } from '@/components/savings/SavingsTabs';
 import CancelHint from '@/components/savings/CancelHint';
 import PauseReminderPrompt from '@/components/savings/PauseReminderPrompt';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
@@ -27,11 +33,14 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { useSubscriptionAdvisor } from '@/hooks/useSubscriptionAdvisor';
 import { useMonthlyBill } from '@/hooks/useMonthlyBill';
 import { useAuth } from '@/hooks/useAuth';
+import { useMyGroups } from '@/hooks/useGroups';
+import { usePauseHistory } from '@/hooks/usePauseHistory';
 import { trackEvent } from '@/lib/analytics';
 import { useToast } from '@/contexts/ToastContext';
 import { captureError } from '@/lib/sentry';
 import { titleHref } from '@/lib/tmdb/client';
 import { formatSwedishDate } from '@/lib/utils';
+import { serviceVerdicts } from '@/lib/advisor/verdicts';
 import type { AdvisedShow, ActivePause, SubscribeAdvisory } from '@/types';
 import { Eyebrow, eyebrowClass } from '@/components/ui/Eyebrow';
 import { Button, buttonClass } from '@/components/ui/Button';
@@ -173,9 +182,24 @@ function ActivePausesSection({ pauses, onResume }: { pauses: ActivePause[]; onRe
   );
 }
 
+function PageHead({ crumb, switcher }: { crumb: string; switcher: ReactNode }) {
+  return (
+    <header className="flex flex-wrap items-end justify-between gap-3">
+      <div>
+        <div className="crumb">{crumb}</div>
+        <h1 className="page-h1">Streamingrådgivaren</h1>
+      </div>
+      {/* Höger i sidhuvudet, så att växeln ligger kvar på samma ställe i alla lägen
+          (laddar, tomt, fel, pausgolv, full vy). */}
+      {switcher}
+    </header>
+  );
+}
+
 function SavingsContent() {
   const advisor = useSubscriptionAdvisor(LOOK_AHEAD_DAYS);
-  const { pauseProvider, resumeProvider, profileLoading } = useAuth();
+  const { pauseProvider, resumeProvider, profileLoading, uid } = useAuth();
+  const { groups } = useMyGroups(uid);
   // BIN-1442: the pause just made, so its "Påminn mig" can be offered right away.
   const [justPaused, setJustPaused] = useState<{ providerId: number; resumeAt: string } | null>(null);
   const { show: toast } = useToast();
@@ -197,13 +221,65 @@ function SavingsContent() {
   // from a fresh Date.now().
   const [valueNowMs] = useState(() => Date.now());
   const monthlyBill = useMonthlyBill(valueNowMs);
-  const handleShowSubscribeRows = () => {
+  // One listener for both the saved-so-far figure and the sidebar's latest decisions.
+  const pauseHistory = usePauseHistory();
+  const [tab, selectTab] = useSavingsTab();
+  const household = useHouseholdMode(groups, tab);
+  const switcher = (
+    <HouseholdSwitch
+      groups={groups}
+      mode={household.mode}
+      onMode={household.setMode}
+      groupId={household.groupId}
+      onGroup={household.setGroupId}
+    />
+  );
+  // The subscribe step lives in "Mer detaljer" on the Detaljer tab, which is hidden
+  // until selected, so scrolling has to wait for the tab to show.
+  const [wantsSubscribeRows, setWantsSubscribeRows] = useState(false);
+  useEffect(() => {
+    if (!wantsSubscribeRows || tab !== 'detaljer') return;
     const el = detailsRef.current;
-    if (!el) return;
-    el.open = true;
-    setDetailsOpen(true);
-    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (el) {
+      el.open = true;
+      setDetailsOpen(true);
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    setWantsSubscribeRows(false);
+  }, [wantsSubscribeRows, tab]);
+  const handleShowSubscribeRows = () => {
+    setWantsSubscribeRows(true);
+    selectTab('detaljer');
   };
+  const handlePauseProvider = (id: number, resumeAt: string | null) => {
+    pauseProvider(id, resumeAt)
+      .then(() => { if (resumeAt) setJustPaused({ providerId: id, resumeAt }); })
+      .catch((err: unknown) => {
+        console.error('Pause failed:', err);
+        captureError(err, { scope: 'advisor', kind: 'pauseProvider' });
+        toast('Kunde inte pausa tjänsten. Försök igen.');
+      });
+    trackEvent('advisor_action_taken', { action: 'pause', providerId: id });
+  };
+  const handleResume = (id: number) => {
+    resumeProvider(id);
+    trackEvent('advisor_action_taken', { action: 'resume', providerId: id });
+  };
+  const serviceCards = useMemo(() => serviceVerdicts(advisor, new Date()), [advisor]);
+
+  // The household reads its own data (group docs, not the advisor's TMDB fan-out), so it
+  // does not wait for the advisor to finish loading.
+  if (household.mode === 'hushallet' && household.groupId) {
+    const group = groups.find(g => g.id === household.groupId);
+    return (
+      <>
+        <PageHead switcher={switcher} crumb="Streamingrådgivaren · Hushållet" />
+        <div style={{ marginTop: 22 }}>
+          <HouseholdMode key={household.groupId} groupId={household.groupId} groupName={group?.name ?? 'gruppen'} />
+        </div>
+      </>
+    );
+  }
 
   // A1/A2: gatea på isLoading ENSAMT. Tidigare villkor `&& providers.length
   // === 0` höll aldrig — providers byggs från user.myProviders och är icke-
@@ -220,10 +296,7 @@ function SavingsContent() {
   if (advisor.isLoading || profileLoading) {
     return (
       <>
-        <header>
-          <div className="crumb">Streamingrådgivaren</div>
-          <h1 className="page-h1">Streamingrådgivaren</h1>
-        </header>
+        <PageHead switcher={switcher} crumb="Streamingrådgivaren" />
         <LoadingView label="Räknar på dina tjänster…" />
       </>
     );
@@ -239,10 +312,7 @@ function SavingsContent() {
     if (advisor.bundleSuggestions.length > 0) {
       return (
         <>
-          <header>
-            <div className="crumb">Streamingrådgivaren</div>
-            <h1 className="page-h1">Streamingrådgivaren</h1>
-          </header>
+          <PageHead switcher={switcher} crumb="Streamingrådgivaren" />
           <div style={{ marginTop: 22 }}>
             <BundleArbitrageCard suggestions={advisor.bundleSuggestions} />
           </div>
@@ -265,10 +335,7 @@ function SavingsContent() {
     if (advisor.hasError && advisor.hasConfiguredProviders) {
       return (
         <>
-          <header>
-            <div className="crumb">Streamingrådgivaren</div>
-            <h1 className="page-h1">Streamingrådgivaren</h1>
-          </header>
+          <PageHead switcher={switcher} crumb="Streamingrådgivaren" />
           <EmptyState
             title="Kunde inte räkna på dina tjänster just nu"
             body="Streamingdatan går inte att nå just nu. Det är oftast tillfälligt, försök igen om en stund."
@@ -287,10 +354,7 @@ function SavingsContent() {
     }
     return (
       <>
-        <header>
-          <div className="crumb">Streamingrådgivaren</div>
-          <h1 className="page-h1">Streamingrådgivaren</h1>
-        </header>
+        <PageHead switcher={switcher} crumb="Streamingrådgivaren" />
         <EmptyState
           title="Inga tjänster tillagda än"
           body="Lägg till dina streamingtjänster så räknar vi ut vad du kan pausa och spara på."
@@ -311,11 +375,9 @@ function SavingsContent() {
   if (!advisor.pauseAdviceReady) {
     return (
       <>
-        <header>
-          <div className="crumb">Streamingrådgivaren · {activeProviderCount} tjänster</div>
-          <h1 className="page-h1">Streamingrådgivaren</h1>
-        </header>
+        <PageHead switcher={switcher} crumb={`Streamingrådgivaren · ${activeProviderCount} tjänster`} />
         <div style={{ marginTop: 22 }}>
+          <SavedSoFar activePauses={advisor.activePauses} historySaved={pauseHistory.totalSaved} isLoading={pauseHistory.isLoading} />
           <DiagnosisCard advisor={advisor} activeProviderCount={activeProviderCount} />
           <div className="flex flex-wrap gap-2 mb-3.5">
             <Link href="/series/" className={buttonClass({ size: 'sm' })}>Utforska serier</Link>
@@ -326,7 +388,7 @@ function SavingsContent() {
           {advisor.activePauses.length > 0 && (
             <ActivePausesSection
               pauses={advisor.activePauses}
-              onResume={(id) => { resumeProvider(id); trackEvent('advisor_action_taken', { action: 'resume', providerId: id }); }}
+              onResume={handleResume}
             />
           )}
           <BundleArbitrageCard suggestions={advisor.bundleSuggestions} />
@@ -353,24 +415,11 @@ function SavingsContent() {
 
   return (
     <>
-      <header>
-        <div className="crumb">Streamingrådgivaren · {activeProviderCount} tjänster</div>
-        <h1 className="page-h1">Streamingrådgivaren</h1>
-      </header>
+      <PageHead switcher={switcher} crumb={`Streamingrådgivaren · ${activeProviderCount} tjänster`} />
       <div style={{ marginTop: 22 }}>
-        {advisor.mostUsedProvider && (
-          // BIN-514: den redan-beräknade "mest använda tjänst"-statistiken —
-          // vilken tjänst som bär flest av dina anchor-titlar (Följer + Vill se).
-          <div className="mb-3.5 flex items-center gap-1.5 text-xs text-ink-2">
-            <span className="text-ink-3">Mest använda tjänst:</span>
-            <ProviderDot color={advisor.mostUsedProvider.color} size={7} />
-            <span className="font-semibold text-ink">{advisor.mostUsedProvider.shortName}</span>
-            <span className="text-ink-3">
-              · {advisor.mostUsedProvider.followCount} följer · {advisor.mostUsedProvider.willSeeCount} vill se
-            </span>
-          </div>
-        )}
-        <DiagnosisCard advisor={advisor} activeProviderCount={activeProviderCount} />
+        <SavedSoFar activePauses={advisor.activePauses} historySaved={pauseHistory.totalSaved} isLoading={pauseHistory.isLoading} />
+
+        <HeroVerdict advisor={advisor} onPause={handlePauseProvider} onOpenTab={selectTab} onShowSubscribeRows={handleShowSubscribeRows} />
 
         <PriceChangeNudges />
 
@@ -389,91 +438,95 @@ function SavingsContent() {
           );
         })()}
 
-        {advisor.activePauses.length > 0 && (
-          <ActivePausesSection
-            pauses={advisor.activePauses}
-            onResume={(id) => { resumeProvider(id); trackEvent('advisor_action_taken', { action: 'resume', providerId: id }); }}
-          />
-        )}
-
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_280px] gap-6 items-start">
           <div className="min-w-0">
-            <NumberedActionsList
-              advisor={advisor}
-              onPauseProvider={(id, resumeAt) => {
-                pauseProvider(id, resumeAt)
-                  .then(() => { if (resumeAt) setJustPaused({ providerId: id, resumeAt }); })
-                  .catch((err: unknown) => {
-                    console.error('Pause failed:', err);
-                    captureError(err, { scope: 'advisor', kind: 'pauseProvider' });
-                    toast('Kunde inte pausa tjänsten. Försök igen.');
-                  });
-                trackEvent('advisor_action_taken', { action: 'pause', providerId: id });
-              }}
-              onShowSubscribeRows={handleShowSubscribeRows}
-            />
+            <SavingsTabList tab={tab} onSelect={selectTab} />
 
-            <BundleArbitrageCard suggestions={advisor.bundleSuggestions} />
+            <SavingsTabPanel id="tjanster" active={tab}>
+              {advisor.mostUsedProvider && (
+                // BIN-514: den redan-beräknade "mest använda tjänst"-statistiken —
+                // vilken tjänst som bär flest av dina anchor-titlar (Följer + Vill se).
+                <div className="mb-3.5 flex items-center gap-1.5 text-xs text-ink-2">
+                  <span className="text-ink-3">Mest använda tjänst:</span>
+                  <ProviderDot color={advisor.mostUsedProvider.color} size={7} />
+                  <span className="font-semibold text-ink">{advisor.mostUsedProvider.shortName}</span>
+                  <span className="text-ink-3">
+                    · {advisor.mostUsedProvider.followCount} följer · {advisor.mostUsedProvider.willSeeCount} vill se
+                  </span>
+                </div>
+              )}
+              <ServiceVerdictCards cards={serviceCards} onPause={handlePauseProvider} />
+              <DiagnosisCard advisor={advisor} activeProviderCount={activeProviderCount} />
+              <ProvidersByValue
+                providers={advisor.providers}
+                activePauses={advisor.activePauses}
+              />
+              {monthlyBill && <MonthlyBillCard bill={monthlyBill} />}
+              <CoverageOptimizer rows={advisor.willSeeByProvider} />
+            </SavingsTabPanel>
 
-            <ProvidersByValue
-              providers={advisor.providers}
-              activePauses={advisor.activePauses}
-            />
+            <SavingsTabPanel id="pausa" active={tab}>
+              <NumberedActionsList
+                advisor={advisor}
+                onPauseProvider={handlePauseProvider}
+                onShowSubscribeRows={handleShowSubscribeRows}
+              />
+              {advisor.activePauses.length > 0 && (
+                <ActivePausesSection pauses={advisor.activePauses} onResume={handleResume} />
+              )}
+              <RotationPlanner advisor={advisor} />
+              <RotationCalendar />
+            </SavingsTabPanel>
 
-            {monthlyBill && <MonthlyBillCard bill={monthlyBill} />}
+            <SavingsTabPanel id="paket" active={tab}>
+              <BundleArbitrageCard suggestions={advisor.bundleSuggestions} />
+            </SavingsTabPanel>
 
-            <CoverageOptimizer rows={advisor.willSeeByProvider} />
+            <SavingsTabPanel id="detaljer" active={tab}>
+              <LeftPerService />
 
-            <RotationPlanner advisor={advisor} />
+              <UpcomingEpisodes />
 
-            <RotationCalendar />
-
-            <LeftPerService />
-
-            <UpcomingEpisodes />
-
-            <details
-              ref={detailsRef}
-              className="mb-3 scroll-mt-3 mt-3"
-              onToggle={e => setDetailsOpen((e.currentTarget as HTMLDetailsElement).open)}
-            >
-              <summary className={eyebrowClass({ size: 'xs', className: 'cursor-pointer select-none list-none' })}>
-                Mer detaljer ›
-              </summary>
-              <div className="mt-3 flex flex-col gap-3">
-                {detailsOpen && <AdvisorTimeline />}
-                {detailsOpen && <WillSeePerProvider rows={advisor.willSeeByProvider} />}
-                {hasSubscribeDetails && (
-                  <div>
-                    <div className="flex items-baseline justify-between mb-1.5">
-                      <Eyebrow as="h3" size="xs">
-                        Titlar på tjänster du inte har
-                      </Eyebrow>
-                      <span className="text-xxs text-ink-3">
-                        {subscribeRows.length + datelessSubscribeRows.length} totalt
-                      </span>
+              <details
+                ref={detailsRef}
+                className="mb-3 scroll-mt-3 mt-3"
+                onToggle={e => setDetailsOpen((e.currentTarget as HTMLDetailsElement).open)}
+              >
+                <summary className={eyebrowClass({ size: 'xs', className: 'cursor-pointer select-none list-none' })}>
+                  Mer detaljer ›
+                </summary>
+                <div className="mt-3 flex flex-col gap-3">
+                  {detailsOpen && <AdvisorTimeline />}
+                  {detailsOpen && <WillSeePerProvider rows={advisor.willSeeByProvider} />}
+                  {hasSubscribeDetails && (
+                    <div>
+                      <div className="flex items-baseline justify-between mb-1.5">
+                        <Eyebrow as="h3" size="xs">
+                          Titlar på tjänster du inte har
+                        </Eyebrow>
+                        <span className="text-xxs text-ink-3">
+                          {subscribeRows.length + datelessSubscribeRows.length} totalt
+                        </span>
+                      </div>
+                      {subscribeRows.length > 0 && <SubscribeRowTable rows={subscribeRows} />}
+                      {datelessSubscribeRows.length > 0 && (
+                        <details className="mt-2">
+                          <summary className="text-xxs text-ink-3 cursor-pointer select-none list-none">
+                            +{datelessSubscribeRows.length} utan spikat datum (avslutade / okänt) ›
+                          </summary>
+                          <div className="mt-1">
+                            <SubscribeRowTable rows={datelessSubscribeRows} />
+                          </div>
+                        </details>
+                      )}
                     </div>
-                    {subscribeRows.length > 0 && <SubscribeRowTable rows={subscribeRows} />}
-                    {datelessSubscribeRows.length > 0 && (
-                      <details className="mt-2">
-                        <summary className="text-xxs text-ink-3 cursor-pointer select-none list-none">
-                          +{datelessSubscribeRows.length} utan spikat datum (avslutade / okänt) ›
-                        </summary>
-                        <div className="mt-1">
-                          <SubscribeRowTable rows={datelessSubscribeRows} />
-                        </div>
-                      </details>
-                    )}
-                  </div>
-                )}
-              </div>
-            </details>
+                  )}
+                </div>
+              </details>
+            </SavingsTabPanel>
           </div>
 
-          <SavingsSidebar
-            advisor={advisor}
-            activePauses={advisor.activePauses}
-          />
+          <SavingsSidebar advisor={advisor} history={pauseHistory.history} />
         </div>
 
         <div style={{ marginTop: 16 }}>

@@ -26,15 +26,18 @@
 //    so such rows get activityUnknown instead of deadWeight. Fresh positive
 //    activity clears a row individually regardless of others' staleness.
 //  - The double-counted household total is DELIBERATE ("Disney+ betalas av 2 av
-//    er" is the insight). There is intentionally NO savings/sharing-suggestion
-//    field in the output shape — account-sharing implications are out of scope
-//    (ADR 0010: copy stays silent).
+//    er" is the insight). The saving figures live in householdVerdicts.ts, not in
+//    this output shape.
 
 import { subscriptionProviderIds } from '@/lib/watchlist/subscriptionProviders';
 import { canonicalProviderId, canonicalUniqueProviders, getProvider, resolveProviderMonthlyCost } from '@/lib/tmdb/providers';
 import { resolveCampaignCost, type ProviderCampaign } from '@/lib/advisor/campaignPricing';
 import { isKeepReasonStatus } from '@/lib/spendSnapshot';
 import type { WatchlistItem } from '@/types';
+
+/** A member's monthly say on one household service (ADR 0026). */
+export const HOUSEHOLD_VOTES = ['ok', 'keep', 'wait'] as const;
+export type HouseholdVote = (typeof HOUSEHOLD_VOTES)[number];
 
 /** Contribution shape as consumed here — plain data, Firestore Timestamp already
  *  converted to epoch ms by the subscriber (null = missing/unreadable). */
@@ -44,6 +47,12 @@ export interface HouseholdContribution {
   providerCosts: Record<number, number>;
   providerCampaigns: Record<number, ProviderCampaign>;
   activeProviderIds: number[];
+  /** Providers with something new within HOUSEHOLD_SOON_DAYS. Absent (undefined) means the
+   *  member shared before this field existed and has not re-shared: unknown, never "nothing". */
+  soonProviderIds?: number[];
+  /** Absent when the member has not voted. Only meaningful when votesMonth is the current month. */
+  votes?: Record<number, HouseholdVote>;
+  votesMonth?: string;
   updatedAt: number | null;
 }
 
@@ -91,9 +100,9 @@ export const HOUSEHOLD_STALE_DAYS = 30;
 
 const DAY_MS = 86_400_000;
 
-function isFresh(updatedAt: number | null, nowMs: number): boolean {
+function isFresh(updatedAt: number | null, nowMs: number, maxAgeDays: number = HOUSEHOLD_STALE_DAYS): boolean {
   if (updatedAt == null) return false;
-  return nowMs - updatedAt <= HOUSEHOLD_STALE_DAYS * DAY_MS;
+  return nowMs - updatedAt <= maxAgeDays * DAY_MS;
 }
 
 /** Canonicalise a member's number-keyed map, preferring an entry already keyed by
@@ -220,6 +229,272 @@ export function aggregateHousehold(
 /** The write-side payload — everything except uid (doc id) and updatedAt (server). */
 export type HouseholdContributionContent = Omit<HouseholdContribution, 'uid' | 'updatedAt'>;
 
+/** The part rebuilt from the member's own profile and watchlist on every write. */
+export type HouseholdBaseContent = Pick<
+  HouseholdContributionContent,
+  'providerIds' | 'providerCosts' | 'providerCampaigns' | 'activeProviderIds'
+>;
+
+// ── Votes and the "nytt inom 30 dagar" flag (ADR 0026) ───────────────────────
+// The rules cannot validate each entry of the votes map without a loop, so the
+// client validates before every write and every reader drops what it does not
+// recognise: an unknown value or key counts as no vote, never as a vote.
+
+export function isHouseholdVote(value: unknown): value is HouseholdVote {
+  return typeof value === 'string' && (HOUSEHOLD_VOTES as readonly string[]).includes(value);
+}
+
+/** Provider ids are TMDB integers; anything else is not a votable key. */
+export function isHouseholdProviderId(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
+}
+
+const MONTH_KEY_RE = /^\d{4}-\d{2}$/;
+
+const stockholmMonth = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Europe/Stockholm',
+  year: 'numeric',
+  month: '2-digit',
+});
+
+/** "YYYY-MM" for `now` in Swedish time. Votes are a monthly decision for a Swedish
+ *  household, so the month turns at Stockholm midnight, not at UTC midnight. */
+export function householdVoteMonthKey(now: Date): string {
+  const parts = stockholmMonth.formatToParts(now);
+  const year = parts.find(p => p.type === 'year')?.value ?? '';
+  const month = parts.find(p => p.type === 'month')?.value ?? '';
+  return `${year}-${month}`;
+}
+
+/** Read-side sanitiser for a stored soonProviderIds value. A missing or non-list value
+ *  stays undefined (unknown); non-integer entries are dropped. */
+export function sanitizeSoonProviderIds(raw: unknown): number[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  return raw.filter(isHouseholdProviderId);
+}
+
+/** Read-side sanitiser for a stored votes map: keeps only integer keys with a known value. */
+export function sanitizeVotes(raw: unknown): Record<number, HouseholdVote> | undefined {
+  if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const out: Record<number, HouseholdVote> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const id = Number(k);
+    if (isHouseholdProviderId(id) && String(id) === k && isHouseholdVote(v)) out[id] = v;
+  }
+  return out;
+}
+
+export function sanitizeVotesMonth(raw: unknown): string | undefined {
+  return typeof raw === 'string' && MONTH_KEY_RE.test(raw) ? raw : undefined;
+}
+
+/** The member's votes that count this month, canonical-keyed. Votes from an earlier
+ *  month are ignored, not deleted: they are overwritten by the next write. */
+export function currentHouseholdVotes(
+  c: Pick<HouseholdContribution, 'votes' | 'votesMonth'>,
+  monthKey: string,
+): Map<number, HouseholdVote> {
+  const out = new Map<number, HouseholdVote>();
+  if (c.votesMonth !== monthKey || !c.votes) return out;
+  for (const [k, v] of Object.entries(c.votes)) {
+    const raw = Number(k);
+    if (!isHouseholdProviderId(raw) || !isHouseholdVote(v)) continue;
+    const canon = canonicalProviderId(raw);
+    if (raw === canon || !out.has(canon)) out.set(canon, v);
+  }
+  return out;
+}
+
+/** Window for "något nytt": the same 30 days the advisor uses for an active service. */
+export const HOUSEHOLD_SOON_DAYS = 30;
+
+function localDayKey(d: Date): string {
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+/**
+ * Providers where the member has something new within HOUSEHOLD_SOON_DAYS, from the
+ * denormalised `nextAirDate` already stored on each watchlist row (no TMDB fetch).
+ * Provider ids only: no title, date or count leaves the device. Same backlog and
+ * subscription-subset rules as activeProviderIds.
+ */
+export function buildSoonProviderIds(
+  items: readonly Pick<WatchlistItem, 'status' | 'providers' | 'subscriptionProviders' | 'nextAirDate' | 'dropped' | 'visibility'>[],
+  today: Date,
+): number[] {
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + HOUSEHOLD_SOON_DAYS);
+  const startKey = localDayKey(start);
+  const endKey = localDayKey(end);
+  const soon = new Set<number>();
+  for (const it of items) {
+    if (it.dropped || !isKeepReasonStatus(it.status) || it.visibility === 'private') continue;
+    const date = it.nextAirDate;
+    if (!date || date < startKey || date > endKey) continue;
+    for (const p of subscriptionProviderIds(it)) soon.add(canonicalProviderId(p));
+  }
+  return [...soon].sort((a, b) => a - b);
+}
+
+/**
+ * Compose the member's next contribution from a freshly built base, carrying what the
+ * base cannot know:
+ *  - soonProviderIds is written ONLY when the member already re-shared under the consent
+ *    copy that names it (the existing doc carries the field) or `optInSoon` is set by the
+ *    Dela press itself. `soon` is the fresh value; when null (no watchlist in this layer)
+ *    the existing value is kept.
+ *  - votes from the current month are kept; older ones are dropped here.
+ */
+export function composeHouseholdContribution(
+  base: HouseholdBaseContent,
+  existing: Pick<HouseholdContribution, 'soonProviderIds' | 'votes' | 'votesMonth'> | undefined,
+  opts: { monthKey: string; soon: number[] | null; optInSoon?: boolean },
+): HouseholdContributionContent {
+  const out: HouseholdContributionContent = { ...base };
+  const soonShared = opts.optInSoon === true || existing?.soonProviderIds !== undefined;
+  if (soonShared) {
+    const value = opts.soon ?? existing?.soonProviderIds;
+    if (value !== undefined) out.soonProviderIds = value;
+  }
+  const votes = existing ? currentHouseholdVotes(existing, opts.monthKey) : new Map<number, HouseholdVote>();
+  if (votes.size > 0) {
+    out.votes = Object.fromEntries(votes) as Record<number, HouseholdVote>;
+    out.votesMonth = opts.monthKey;
+  }
+  return out;
+}
+
+function withoutVotes<T extends HouseholdContributionContent>(c: T): T {
+  const out = { ...c };
+  delete out.votes;
+  delete out.votesMonth;
+  return out;
+}
+
+/**
+ * Set or clear one vote on a composed contribution. Returns null when the provider id or
+ * the vote is not valid, so a caller can never write an unvalidated value.
+ */
+export function applyHouseholdVote(
+  content: HouseholdContributionContent,
+  monthKey: string,
+  providerId: number,
+  vote: HouseholdVote | null,
+): HouseholdContributionContent | null {
+  if (!isHouseholdProviderId(providerId)) return null;
+  if (vote !== null && !isHouseholdVote(vote)) return null;
+  const votes = currentHouseholdVotes(content, monthKey);
+  const id = canonicalProviderId(providerId);
+  if (vote === null) votes.delete(id);
+  else votes.set(id, vote);
+  const rest = withoutVotes(content);
+  if (votes.size === 0) return rest;
+  return { ...rest, votes: Object.fromEntries(votes) as Record<number, HouseholdVote>, votesMonth: monthKey };
+}
+
+/** Dirty-check against the stored own doc, where stale-month votes count as no votes:
+ *  dropping them alone never costs a write. */
+export function householdContributionNeedsWrite(
+  next: HouseholdContributionContent,
+  existing: HouseholdContribution,
+  monthKey: string,
+): boolean {
+  const votes = currentHouseholdVotes(existing, monthKey);
+  const rest: HouseholdContributionContent = withoutVotes(existing);
+  const comparable: HouseholdContributionContent = votes.size > 0
+    ? { ...rest, votes: Object.fromEntries(votes) as Record<number, HouseholdVote>, votesMonth: monthKey }
+    : rest;
+  return !contributionContentEquals(next, comparable);
+}
+
+/** A visit rewrites a shared soon flag older than this even when its content is unchanged,
+ *  so a member who opens the app often never ages out of HOUSEHOLD_SOON_FRESH_DAYS. */
+export const HOUSEHOLD_SOON_REFRESH_DAYS = 3;
+
+export function householdSoonNeedsRefresh(
+  existing: Pick<HouseholdContribution, 'soonProviderIds' | 'updatedAt'>,
+  nowMs: number,
+): boolean {
+  return existing.soonProviderIds !== undefined && !isFresh(existing.updatedAt, nowMs, HOUSEHOLD_SOON_REFRESH_DAYS);
+}
+
+/** Below this many members with the flag, "N av M" is hidden: with two, each sees the other's answer. */
+export const HOUSEHOLD_SOON_MIN_REPORTERS = 3;
+
+/** A soon flag is a snapshot of [write, write + HOUSEHOLD_SOON_DAYS]; it is only rewritten
+ *  when the member opens the app, so after a week most of that window has passed and
+ *  "nothing new" can no longer be claimed from it. Shorter than HOUSEHOLD_STALE_DAYS on purpose. */
+export const HOUSEHOLD_SOON_FRESH_DAYS = 7;
+
+export interface HouseholdSoonOverview {
+  /** Fresh contributions carrying the flag: the M in "N av M". */
+  reportedCount: number;
+  /** Contributions without the flag, or too old to trust: never counted as "nothing new". */
+  unknownCount: number;
+  /** False when reportedCount < HOUSEHOLD_SOON_MIN_REPORTERS; counts are then empty. */
+  visible: boolean;
+  /** Canonical provider id → N. Empty when not visible. */
+  soonCountByProvider: Record<number, number>;
+}
+
+export function aggregateHouseholdSoon(
+  contributions: readonly HouseholdContribution[],
+  now: Date,
+): HouseholdSoonOverview {
+  const nowMs = now.getTime();
+  let reportedCount = 0;
+  let unknownCount = 0;
+  const counts = new Map<number, number>();
+  for (const c of contributions) {
+    if (c.soonProviderIds === undefined || !isFresh(c.updatedAt, nowMs, HOUSEHOLD_SOON_FRESH_DAYS)) {
+      unknownCount += 1;
+      continue;
+    }
+    reportedCount += 1;
+    const ids = new Set(c.soonProviderIds.filter(isHouseholdProviderId).map(canonicalProviderId));
+    for (const id of ids) counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  const visible = reportedCount >= HOUSEHOLD_SOON_MIN_REPORTERS;
+  return {
+    reportedCount,
+    unknownCount,
+    visible,
+    soonCountByProvider: visible ? (Object.fromEntries(counts) as Record<number, number>) : {},
+  };
+}
+
+export interface HouseholdVoteRow {
+  providerId: number;
+  /** One entry per member who voted this month; the UI joins uid to members/{uid}.displayName. */
+  votes: { uid: string; vote: HouseholdVote }[];
+  counts: Record<HouseholdVote, number>;
+}
+
+/** This month's votes per service, sorted by provider id, voters by uid. */
+export function aggregateHouseholdVotes(
+  contributions: readonly HouseholdContribution[],
+  now: Date,
+): HouseholdVoteRow[] {
+  const monthKey = householdVoteMonthKey(now);
+  const rows = new Map<number, HouseholdVoteRow>();
+  for (const c of contributions) {
+    for (const [id, vote] of currentHouseholdVotes(c, monthKey)) {
+      let row = rows.get(id);
+      if (!row) {
+        row = { providerId: id, votes: [], counts: { ok: 0, keep: 0, wait: 0 } };
+        rows.set(id, row);
+      }
+      row.votes.push({ uid: c.uid, vote });
+      row.counts[vote] += 1;
+    }
+  }
+  const out = [...rows.values()].sort((a, b) => a.providerId - b.providerId);
+  for (const row of out) row.votes.sort((a, b) => (a.uid < b.uid ? -1 : a.uid > b.uid ? 1 : 0));
+  return out;
+}
+
 /**
  * Build the member's own contribution from their profile fields + watchlist.
  * This is the ONLY place the shared payload is derived, and it enforces the
@@ -241,8 +516,8 @@ export function buildHouseholdContribution(
   // BIN-814: subscriptionProviders belongs in the Pick, not just providers — a
   // narrower row shape would fall back to the broad array and let a rentable title
   // shield a service from the dead-weight verdict.
-  items: readonly Pick<WatchlistItem, 'status' | 'providers' | 'subscriptionProviders'>[],
-): HouseholdContributionContent {
+  items: readonly Pick<WatchlistItem, 'status' | 'providers' | 'subscriptionProviders' | 'visibility'>[],
+): HouseholdBaseContent {
   const providerIds = canonicalUniqueProviders(myProviders);
 
   const costs: Record<number, number> = {};
@@ -258,6 +533,8 @@ export function buildHouseholdContribution(
   const active = new Set<number>();
   for (const it of items) {
     if (!isKeepReasonStatus(it.status)) continue; // shared BIN-528 guard
+    // A title the member marked Privat is the one way to keep a title out of the household.
+    if (it.visibility === 'private') continue;
     // BIN-814: subscription subset only — a rentable title must not shield a
     // service from the household dead-weight verdict.
     for (const p of subscriptionProviderIds(it)) active.add(canonicalProviderId(p));
@@ -301,10 +578,23 @@ export function contributionContentEquals(
       return cy != null && cx.monthlyCost === cy.monthlyCost && cx.endDate === cy.endDate;
     });
   };
+  // undefined and [] differ: one is "has not re-shared the flag", the other "nothing new".
+  const sameOptionalList = (x: number[] | undefined, y: number[] | undefined): boolean =>
+    x === undefined || y === undefined ? x === y : sameList(x, y);
+  const sameVotes = (x: HouseholdContributionContent, y: HouseholdContributionContent): boolean => {
+    const xv = x.votes ?? {};
+    const yv = y.votes ?? {};
+    const xk = Object.keys(xv);
+    if (xk.length !== Object.keys(yv).length) return false;
+    if (xk.length > 0 && x.votesMonth !== y.votesMonth) return false;
+    return xk.every(k => yv[Number(k)] === xv[Number(k)]);
+  };
   return (
     sameList(a.providerIds, b.providerIds) &&
     sameList(a.activeProviderIds, b.activeProviderIds) &&
     sameNumMap(a.providerCosts, b.providerCosts) &&
-    sameCampaigns(a.providerCampaigns, b.providerCampaigns)
+    sameCampaigns(a.providerCampaigns, b.providerCampaigns) &&
+    sameOptionalList(a.soonProviderIds, b.soonProviderIds) &&
+    sameVotes(a, b)
   );
 }

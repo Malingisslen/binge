@@ -21,6 +21,7 @@ import { logger } from 'firebase-functions/v2';
 import { defineSecret } from 'firebase-functions/params';
 import { readFollowedSeries } from '../shared/followedSeries';
 import { fetchTvAiringInfo } from './tmdb';
+import { trimStaleQueue } from '../episodeDigest/trimQueue';
 import { deriveSubState, shouldNotify, type WatchlistLite } from './logic';
 
 const TMDB_API_KEY = defineSecret('TMDB_API_KEY');
@@ -71,6 +72,9 @@ async function processShow(tmdbId: number, items: WatchlistLite[]): Promise<numb
 export const episodeReleaseNotify = onSchedule(
   { schedule: 'every 6 hours', region: 'europe-west1', timeoutSeconds: 300, memory: '512MiB', secrets: [TMDB_API_KEY] },
   async () => {
+    // First, so it runs even when the scan below fails.
+    try { await trimStaleQueue(Date.now()); }
+    catch (err) { logger.error('episodeNotify: queue trim failed', err); }
     let series: WatchlistLite[] = [];
     try { series = await readFollowedSeries(); }
     catch (err) { logger.error('episodeNotify: watchlist scan failed', err); return; }

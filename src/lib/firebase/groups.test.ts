@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -114,6 +114,7 @@ import {
   subscribeToGroup,
   inviteMemberByUid,
   updateMemberIdentity,
+  setHouseholdContribution,
   GROUP_WRITE_REFUSED,
   MY_GROUPS_LIMIT,
   memberDocToObject,
@@ -1131,6 +1132,60 @@ describe('updateMemberIdentity — smal patch, aldrig ett helt medlemsdokument',
   });
 });
 
+// ADR 0026. Valfria falt (soon, roster) utelamnas nar de saknas — Firestore vagrar ett
+// undefined-varde — och fran-/tillvalet ar bundet till reglernas hasOnly-lista. Mockat
+// test: det bevisar payloadens FORM, inte att reglerna godtar den.
+describe('setHouseholdContribution — payloadens form (ADR 0026)', () => {
+  const base = {
+    providerIds: [8],
+    providerCosts: { 8: 109 },
+    providerCampaigns: {},
+    activeProviderIds: [8],
+  };
+
+  async function payloadOf(content: Parameters<typeof setHouseholdContribution>[2]) {
+    setDocMock.mockClear();
+    await setHouseholdContribution('g1', 'u1', content);
+    expect(setDocMock).toHaveBeenCalledTimes(1);
+    const [ref, payload] = setDocMock.mock.calls[0] as [{ _path: string }, Record<string, unknown>];
+    expect(ref._path).toBe('groups/g1/household/u1');
+    return payload;
+  }
+
+  it('gammal form (inga soon/roster) skriver exakt de fyra grundfalten plus updatedAt', async () => {
+    const payload = await payloadOf(base);
+    expect(Object.keys(payload).sort()).toEqual([
+      'activeProviderIds', 'providerCampaigns', 'providerCosts', 'providerIds', 'updatedAt',
+    ]);
+    expect(Object.values(payload)).not.toContain(undefined);
+  });
+
+  it('med soonProviderIds, votes och votesMonth bars de tre extra nycklarna', async () => {
+    const payload = await payloadOf({
+      ...base,
+      soonProviderIds: [8],
+      votes: { 8: 'keep' },
+      votesMonth: '2026-10',
+    });
+    expect(Object.keys(payload).sort()).toEqual([
+      'activeProviderIds', 'providerCampaigns', 'providerCosts', 'providerIds',
+      'soonProviderIds', 'updatedAt', 'votes', 'votesMonth',
+    ]);
+    expect(payload.soonProviderIds).toEqual([8]);
+    expect(payload.votes).toEqual({ 8: 'keep' });
+    expect(payload.votesMonth).toBe('2026-10');
+    expect(Object.values(payload)).not.toContain(undefined);
+  });
+
+  it('votes utan votesMonth utelamnar bade votes och votesMonth', async () => {
+    const payload = await payloadOf({ ...base, votes: { 8: 'ok' }, votesMonth: undefined });
+    expect(Object.keys(payload).sort()).toEqual([
+      'activeProviderIds', 'providerCampaigns', 'providerCosts', 'providerIds', 'updatedAt',
+    ]);
+    expect(Object.values(payload)).not.toContain(undefined);
+  });
+});
+
 // BIN-1166. Ett nekat medlemskap var TYST pa inbjudningsvagen — anroparen loggade till
 // konsolen och gjorde inget mer — och FELSKYLLT pa lankvagen, som rapporterade varje
 // sent fel som 'transient' och lat anvandaren ladda om sidan for nagot en omladdning
@@ -1731,5 +1786,73 @@ describe('PERF-6: invalidation vs a read already in flight', () => {
     await stale;
     getDocsMock.mockResolvedValueOnce({ empty: false, docs: [{ id: 'g2' }] });
     await expect(getMyGroupIds('perf6-d')).resolves.toEqual(['g2']);
+  });
+});
+
+// ADR 0026: fan-outen skriver om hela bidraget med setDoc. Utan att bära med
+// soon-flaggan och månadens röster skulle varje kostnadsändring radera dem.
+// Mockat test: det bevisar skrivningens FORM, inte reglerna (emulatorsviten gör det).
+describe('refreshMyHouseholdContributions — soon och röster följer med (ADR 0026)', () => {
+  const fields = { myProviders: [8], providerCosts: { 8: 169 }, providerTiers: {}, providerCampaigns: {} };
+  const storedBase = { providerIds: [8], providerCosts: { 8: 169 }, providerCampaigns: {}, activeProviderIds: [8] };
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(Date.UTC(2026, 9, 15, 12)));
+    getDocsMock.mockResolvedValueOnce({ empty: false, docs: [{ id: 'g1', data: () => ({}) }] });
+  });
+  afterEach(() => { vi.useRealTimers(); });
+
+  function householdWrites() {
+    return setDocMock.mock.calls.filter(([ref]) => (ref as { _path: string })._path === 'groups/g1/household/me');
+  }
+
+  it('en kostnadsändring skriver om bidraget med soon och månadens röster kvar', async () => {
+    seedDoc('groups/g1/household/me', {
+      exists: () => true,
+      data: () => ({ ...storedBase, providerCosts: { 8: 149 }, soonProviderIds: [8], votes: { 8: 'keep' }, votesMonth: '2026-10', updatedAt: new Date(Date.UTC(2026, 9, 14, 12)) }),
+    });
+    await refreshMyHouseholdContributions('me', fields);
+    const writes = householdWrites();
+    expect(writes).toHaveLength(1);
+    expect(writes[0][1]).toEqual({
+      ...storedBase, soonProviderIds: [8], votes: { 8: 'keep' }, votesMonth: '2026-10', updatedAt: 'SERVER_TIMESTAMP',
+    });
+  });
+
+  it('en kostnadsändring rör inte ett bidrag vars soon-flagga är äldre än besöksgränsen', async () => {
+    seedDoc('groups/g1/household/me', {
+      exists: () => true,
+      data: () => ({ ...storedBase, providerCosts: { 8: 149 }, soonProviderIds: [8], updatedAt: new Date(Date.UTC(2026, 9, 5, 12)) }),
+    });
+    await refreshMyHouseholdContributions('me', fields);
+    expect(householdWrites()).toHaveLength(0);
+  });
+
+  it('ett gammalt bidrag utan nya fält får inga nya fält av fan-outen', async () => {
+    seedDoc('groups/g1/household/me', { exists: () => true, data: () => ({ ...storedBase, providerCosts: { 8: 149 } }) });
+    await refreshMyHouseholdContributions('me', fields);
+    const payload = householdWrites()[0][1] as Record<string, unknown>;
+    expect(Object.keys(payload).sort()).toEqual(['activeProviderIds', 'providerCampaigns', 'providerCosts', 'providerIds', 'updatedAt']);
+  });
+
+  it('oförändrat innehåll, eller bara förra månadens röster, ger ingen skrivning', async () => {
+    seedDoc('groups/g1/household/me', {
+      exists: () => true,
+      data: () => ({ ...storedBase, soonProviderIds: [8], votes: { 8: 'ok' }, votesMonth: '2026-09' }),
+    });
+    await refreshMyHouseholdContributions('me', fields);
+    expect(householdWrites()).toHaveLength(0);
+  });
+
+  it('släpper okända röstvärden och förra månadens röster när en skrivning ändå sker', async () => {
+    seedDoc('groups/g1/household/me', {
+      exists: () => true,
+      data: () => ({ ...storedBase, providerCosts: { 8: 149 }, votes: { 8: 'säg upp' }, votesMonth: '2026-10' }),
+    });
+    await refreshMyHouseholdContributions('me', fields);
+    const payload = householdWrites()[0][1] as Record<string, unknown>;
+    expect('votes' in payload).toBe(false);
+    expect('votesMonth' in payload).toBe(false);
   });
 });

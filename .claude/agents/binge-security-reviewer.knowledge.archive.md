@@ -11565,6 +11565,29 @@ after-the-fact review of a commit that reached main with no recorded review. Fix
 "Någon följer dig nu" otherwise; a rules-text test pins the clauses and a source scan pins the
 call site in index.ts.
 
+### 2026-10-31 — BIN-1475: the morning-digest queue holds uids no account deletion can reach
+Staged diff: `episodeReleaseNotify` stops pushing per episode and instead `arrayUnion`s
+`{ episodeId, season, episode, airDate, uids, queuedAt }` onto `episodeNotifyState/{tmdbId}.pending`;
+the new `episodeMorningDigest` (08:00 Stockholm) groups the queue per uid, re-reads `users/{uid}`,
+the watchlist row and progress, `create()`s `users/{uid}/notifications/episode-digest-<date>`, pushes,
+then a per-show transaction (`settlePending`) removes the uids it finished with plus entries older than
+`MAX_QUEUE_AGE_MS` (3 days). Traced every deletion door:
+- Client `deleteAccount` (`collectDeletionRefs`): cannot reach the queue (no rules match, uid inside an
+  array of objects, unqueryable). Profile is gone afterwards, so `itemsForUser` returns null, the uid
+  counts as done and leaves at the next 08:00 run. Bound: under a day while the digest runs; 3 days if
+  that uid keeps throwing; unbounded if the digest stops — the policy entry names that gap itself.
+- Console deletion (Auth only): profile survives until BIN-1023's sweep, so cards (and pushes until
+  BIN-848's token sweep) continue — same as every other notifier and the per-episode code it replaces.
+- Race: profile read, then the client cascade commits, then the card `create()` lands under a ghost
+  parent. The cascade's notifications snapshot was taken earlier, so a transaction around read+create
+  does not close it (rejected fix). Reaped by the 90-day `collectionGroup('notifications')` TTL and by
+  BIN-1023's `listDocuments()` ghost sweep. Pre-existing class, not widened.
+Gap found: no test pinned the "deleted account drains from the queue, no card" claim the policy entry
+makes. Mutating `if (!profile.exists) return null;` out left 22/22 green; a test seeding a leftover
+watchlist row under a missing profile (4c in `functions/src/episodeDigest/index.test.ts`) failed on that
+mutant and passed on the real code. Added unstaged for the author. Rated Medium, not blocking. The
+stopped-consumer gap was surfaced to Malin as a decision (ledger entry vs `retentionCleanup` backstop), not filed as a block.
+
 ### 2026-10-31 — BIN-1471: TV principals are profile-less Auth accounts the orphan sweep reaps
 Staged diff (TV code login) mints `createCustomToken('tv_<deviceId>', {tv, ownerUid, tvDeviceId})`
 in `tvPairPoll`. First sign-in creates a Firebase Auth user `tv_<deviceId>`. Nothing creates
@@ -11644,3 +11667,21 @@ Non-blocking residual: a TV that exchanges its one-hour custom token AFTER its r
 user-not-found; inert, uncleaned. Checked clean: cross-user delete (`delete: isOwner(uid)`,
 `create: if false`, so `deviceId` only from `generateDeviceId`), uid collision (no client path
 chooses a uid; the sole `createCustomToken` prefixes `tv_`), logs (message only).
+
+### 2026-10-31 — BIN-1471 merge of main (ADR 0026 household votes): union proof, no TV reach
+
+Review of the staged merge of `main` (5a5a0c6) into the TV-backend branch (bd7f5df), merge-base
+388893b. Technique: for each sensitive file the changed lines (`^[-+][^-+]`) of
+`git diff <base> HEAD -- f` were hashed against `git diff --cached MERGE_HEAD -- f`, and the
+main side the other way round for `firestore.rules`. SAME for `firestore.rules`,
+`firestore.indexes.json`, `userData.ts`, `accountDeletion.ts`, `functions/src/index.ts`,
+`retentionCleanup/orphans.ts` — so the only hand-resolved surface was `dataExport.ts`'s
+`SCHEMA_VERSION` (main's 2.6 = ADR 0026 household fields, TV moved to 2.7) and its doc.
+ADR 0026's rules change is confined to `groups/{gid}/household/{uid}` `create, update`
+(`isOwner(householdUid)`) plus untouched `get`/`list`/`delete` on `isSignedIn()`; both helpers
+refuse a `tv` claim, so no new clause reaches a TV principal and `isTvOf` still has exactly its
+branch-side call sites. Unit: `dataExport.coverage.test.ts` + `userData.subcollections.test.ts`
+47/47, functions `tvPair` 20/20. Non-blocking: `MIN_TESTS` in `scripts/run-rules-tests.mjs` is
+main's 967, measured without the branch's `tvDevices.rules.test.ts`, so the floor does not count
+the TV suite (test-reviewer territory).
+Addendum, same review: merged `npm run test:rules -- --port 8123` 11 files, 990/990 green, above the 967 floor.
