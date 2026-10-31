@@ -119,8 +119,6 @@ vi.mock('@/components/title/StatusButton', () => ({
 }));
 vi.mock('@/components/ui/RatingInput', () => ({ RatingInput: () => null }));
 vi.mock('@/components/title/CommunityRating', () => ({ default: () => null }));
-vi.mock('@/components/title/ProviderTag', () => ({ default: () => null }));
-vi.mock('@/components/title/FreeWatchBadge', () => ({ default: () => null }));
 vi.mock('@/components/title/AddToListButton', () => ({ default: () => null }));
 vi.mock('@/components/title/AddToGroupButton', () => ({ default: () => null }));
 vi.mock('@/components/title/TipFriendButton', () => ({ default: () => null }));
@@ -345,7 +343,8 @@ describe('TVShowPageClient — what a crawler reads without clicking (SEO-2/SEO-
     const details = document.querySelector('details');
     expect(details).not.toBeNull();
     expect(details!.open).toBe(false);
-    expect(details!.textContent).toContain('Köp:');
+    expect(details!.textContent).toContain('Apple TV');
+    expect(details!.textContent).toContain('Köp');
   });
 
   it('links the crumb to /series/ and a TV genre id to its hub', () => {
