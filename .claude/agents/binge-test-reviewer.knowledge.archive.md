@@ -30167,3 +30167,6 @@ Static: ipRateKey('start', ip, day) survives dropping ip from the hash (tests on
 Function transaction decisions (secret check order, single-use delete, owner-deleted, MAX_TV_DEVICES >=) live in tvPair/index.ts with no unit test: ruled follow-up, extract a pure decidePoll.
 Verdict: fail (3 blocking, each a one-fixture fix).
 Lesson to fold when chapter cap allows: a "denied for X" rules fixture on a collection whose create is `if false` proves nothing about X.
+
+## 2026-10-31 — tvPairingCode / tvDeviceDates re-review
+Reviewed staged src/lib/tvPairingCode.test.ts and src/lib/tvDeviceDates.test.ts with their sources. Earlier blocking findings fixed: whole alphabet in every position, alphabet equals server literal (functions/src/tvPair/logic.ts CODE_ALPHABET, grep-verified identical), look-alikes O/0/I/1 at start/middle/end, sameDay other month/year, all 12 months, null createdAt. No mutations run. Info: line 27 uses `new Date(2026, 8, 30 + 1)` (obtuse, correct). Verdict: pass (0 blocking).

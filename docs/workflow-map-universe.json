@@ -70,6 +70,7 @@
     "/genre/[slug]",
     "/villkor",
     "/movie/[id]",
+    "/tv",
     "/tv/[id]",
     "/person/[id]",
     "/admin/reports",
