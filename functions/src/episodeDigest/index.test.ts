@@ -243,6 +243,22 @@ describe('episodeMorningDigest', () => {
     ]);
   });
 
+  it('(4c) a deleted account (no users/{uid}) gets no card and no push, and its uid leaves the queue, even with leftover watchlist rows', async () => {
+    // A half-erased tree: the profile is gone but a watchlist row survived, so the
+    // profile check alone is what keeps the run from writing under a deleted uid.
+    follow('gone', 100);
+    addUser('keeper', { pushEnabled: true });
+    follow('keeper', 100);
+    queue(100, ['gone', 'keeper']);
+
+    await run();
+
+    expect([...h.store.keys()].filter((p) => p.startsWith('users/gone/notifications/'))).toEqual([]);
+    expect(h.push.mock.calls.map((c) => c[0])).toEqual(['keeper']);
+    expect(pendingUids(100)).toEqual([]);
+    expect(h.store.get(queuePath(100))).toEqual({});
+  });
+
   it('(5) a push failure after the card was written does not make the user failed: card stays, queue is cleared, no error logged', async () => {
     addUser('u1', { pushEnabled: true });
     follow('u1', 100);
