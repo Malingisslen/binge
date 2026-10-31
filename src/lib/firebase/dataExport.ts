@@ -44,7 +44,8 @@ import type { QuerySnapshot } from 'firebase/firestore';
 //     `soonProviderIds` (provider ids with something new within 30 days), `votes`
 //     (provider id → 'ok' | 'keep' | 'wait') and `votesMonth` ("YYYY-MM"). They live in the
 //     same doc, so the export carries them as stored. No field changed meaning.
-export const SCHEMA_VERSION = '2.6' as const;
+// 2.7 (TV-appen, BIN-1471, 2026-10-31): additive — new `tvDevices` array: your connected TVs.
+export const SCHEMA_VERSION = '2.7' as const;
 
 export interface ExportDoc {
   id: string;
@@ -92,6 +93,7 @@ export interface BingeExport {
   // Tipsa en vän: tips om titlar som vänner skickat till dig.
   tips: ExportDoc[];
   pauseHistory: ExportDoc[];
+  tvDevices: ExportDoc[];
   listFollows: ExportDoc[];
   reviews: ExportDoc[];
   reviewLikes: ExportDoc[];
@@ -130,6 +132,7 @@ Filen innehåller:
 - Inkomna grupp-inbjudningar (groupInvites)
 - Tips om titlar som vänner skickat till dig (tips)
 - Sparbeslut-historik från Streamingrådgivaren (pauseHistory)
+- Kopplade TV: namn, kopplingsdatum och senast använd (tvDevices)
 - Dina recensioner (reviews)
 - Gillamarkeringar du gjort (reviewLikes)
 - Kommentarer du skrivit (reviewComments)
@@ -310,6 +313,7 @@ export async function buildUserExport(uid: string): Promise<BingeExport> {
     groupInvites: toExportDocs(s.groupInvitesSnap),
     tips: toExportDocs(s.tipsSnap),
     pauseHistory: toExportDocs(s.pauseHistorySnap),
+    tvDevices: toExportDocs(s.tvDevicesSnap),
     listFollows: toExportDocs(s.listFollowsSnap),
     reviews: toExportDocs(s.reviewsSnap),
     reviewLikes: toExportDocs(s.reviewLikesSnap),

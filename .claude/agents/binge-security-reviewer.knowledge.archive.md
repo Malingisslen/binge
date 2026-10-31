@@ -11587,3 +11587,101 @@ makes. Mutating `if (!profile.exists) return null;` out left 22/22 green; a test
 watchlist row under a missing profile (4c in `functions/src/episodeDigest/index.test.ts`) failed on that
 mutant and passed on the real code. Added unstaged for the author. Rated Medium, not blocking. The
 stopped-consumer gap was surfaced to Malin as a decision (ledger entry vs `retentionCleanup` backstop), not filed as a block.
+
+### 2026-10-31 — BIN-1471: TV principals are profile-less Auth accounts the orphan sweep reaps
+Staged diff (TV code login) mints `createCustomToken('tv_<deviceId>', {tv, ownerUid, tvDeviceId})`
+in `tvPairPoll`. First sign-in creates a Firebase Auth user `tv_<deviceId>`. Nothing creates
+`users/tv_<deviceId>` (rules: `isSignedIn()` is false for a tv token, so the TV cannot; the function
+does not). `collectOrphanedAuthAccounts` (functions/src/retentionCleanup/runCleanup.ts) takes every
+Auth account with `isOrphanCandidate` (age > `ORPHAN_AUTH_MIN_AGE_MS`, 7 days, not disabled) whose
+`users/{uid}` is missing, and `deleteAuthAccounts` deletes them. Trace (DERIVED, no node_modules in
+the session to run tests): 7 days after pairing every TV's Auth user is deleted, so its refresh
+token dies and the TV is logged out. Each disconnected or re-paired TV leaves another `tv_` account.
+At Binge's size (<50 accounts) a handful of them exceed `ORPHAN_AUTH_MIN_CEILING` (5) and the 25 %
+fraction, so `withinOrphanCeiling` refuses the WHOLE run: erased users' Auth accounts and, through
+`orphanedReservations`, their usernames survive. Rejected fixes: giving the TV a `users/tv_x` profile
+(then `isOwner`-style paths and the profile sweep treat it as a person). Preferred: exclude the `tv_`
+prefix in `isOrphanCandidate` (pure, testable) plus a TV-specific reaper that deletes a `tv_` Auth
+user whose `users/{ownerUid}/tvDevices/{deviceId}` row is gone. Severity High: it breaks the feature
+on a clock and can wedge an Art. 17 backstop.
+
+### 2026-10-31 — BIN-1471 r2: TV-written lastSeenAt gate bypassed by an old value
+Re-review of the TV backend after r1's blockers were fixed (tv_ prefix skipped in
+`isOrphanCandidate` + test; TV write on episodeProgress removed; push awaited; poll refuses a
+missing owner profile; wrongAttempts dropped). `match /users/{uid}/tvDevices/{deviceId}` update:
+`affectedKeys().hasOnly(['lastSeenAt']) && lastSeenAt is timestamp && lastSeenAt <= request.time
+&& request.time - resource.data.lastSeenAt > duration.value(20,'h')`. PoC (throwaway
+`src/test/rules/_poc-tv.test.ts`, emulator on 8193, deleted): seeded the row 48 h old, then five
+consecutive `updateDoc(ref, {lastSeenAt: Timestamp.fromMillis(i)})` as the TV token all
+`assertSucceeds`. Each write makes the stored stamp ancient, so the 20 h gate never closes and
+the value shown to the owner as "senast använd" is whatever the TV says. Not blocking: the field
+gates nothing, the TV already has owner-equivalent status writes on the watchlist (so no new cost
+class), and pairing is announced by push. Fix options: `lastSeenAt == request.time` (loses the
+day rounding the plan wants) or `lastSeenAt > resource.data.lastSeenAt && request.time -
+lastSeenAt < duration.value(1,'d')`. Recorded with the brief's known follow-ups as a dated entry in
+`.claude/accepted-deviations.md` (BIN-1471, 2026-10-31). Mutations run the same round, one per
+emulator process, rules restored by sha256: `isTvOf`'s `exists()` → `true` fails exactly
+"denies the TV straight away when the owner deletes the row"; `isSignedIn()` without the tv
+clause fails exactly "are closed to a TV (isSignedIn excludes tv)". Brief premise checked and
+false: "Auth-konton för tv_ städas inte (dokumenterat i retention-policyn)" — `grep tv_ docs/*.md`
+finds no such sentence in the staged policy.
+
+### 2026-10-31 — BIN-1471 r3: monotonic lastSeenAt still bypassed by 1 ms steps
+Re-review after r2. The staged `tvDevices` update rule now adds
+`request.resource.data.lastSeenAt > resource.data.lastSeenAt` beside `<= request.time` and
+`request.time - resource.data.lastSeenAt > duration.value(20, 'h')`. PoC (scratchpad
+`poc.mjs` on the real rules copy, sha256 087fa4a4…f7921b equal to the staged file; emulator port
+8297; no repo file touched): row seeded 48 h old, then five `updateDoc` writes as the TV with
+`lastSeenAt = seed + i ms` — all 5 succeed, and a write to `fromMillis(1)` is denied. Mutant with
+only the new clause removed: the same 5 succeed and `fromMillis(1)` is ALLOWED, so the new clause
+closes "backwards" and the staged test `cannot set lastSeenAt in the future or backwards` pins it
+(its `fromMillis(1)` assertFails flips under the mutant, by the same derivation). What it does not
+close: the 20 h "once per day" gate keys on the STORED value, and monotonic steps of 1 ms keep the
+stored value old, so the TV can write repeatedly and can hold "senast använd" arbitrarily stale. Not
+blocking, same reasons as r2 (the field gates nothing; the TV already writes watchlist status).
+Fix options if it ever matters: `request.time - request.resource.data.lastSeenAt < duration.value(1,'d')`
+(keeps day rounding), or `== request.time`. Prose fallout recorded as Info: the rules comment
+"högst en gång per ca dygn", and the ledger entry `## BIN-1471` points 2 ("ingen undre gräns",
+"godtycklig äldre tidpunkt") and 3 ("Retentionspolicyn nämner dem inte i den här ändringen"),
+which the staged retention-policy line now contradicts — a decision record, so a dated successor,
+not a strike.
+
+### 2026-10-31 — BIN-1471 cleanup triggers: a throw-to-retry with retry off
+
+Review of the staged `functions/src/tvPair/cleanup.ts` (`tvDeviceDeleted`, `tvOwnerDeleted`).
+`tvDeviceDeleted` catches a non-`auth/user-not-found` error, logs `message` only, and rethrows
+with the comment "låt triggern försöka igen". The `onDocumentDeleted` options carry `region` and
+`maxInstances` but no `retry`, and `EventHandlerOptions.retry` ("Whether failed executions should
+be delivered again") defaults off in v2; `communityRatings/index.ts`'s header records the same
+default as a declined fix. So a transient Auth error ends the event: the `tvDevices` row is
+already gone, `isOrphanCandidate` skips `tv_` on purpose, and nothing ever revisits the
+account. Inert under rules (`isTvOf` needs the row; `isSignedIn()` refuses `tv`), PII-free, but
+the companion ledger entry declares the earlier entry's point 3 resolved on a retry that does not
+exist. Rated Medium, blocking. Fix: `retry: true` on both triggers; the user-not-found early
+return already makes redelivery idempotent, `tvOwnerDeleted`'s query+delete is idempotent, and
+`maxInstances: 5` bounds a permanent-failure retry loop. Rejected: a sweep for `tv_` accounts
+without a row (needs the owner uid, which is not on the Auth record — custom-token claims are
+not stored as customClaims).
+Non-blocking residual: a TV that exchanges its one-hour custom token AFTER its row was deleted
+(owner unpaired between poll and sign-in) recreates `tv_<id>` after the trigger already saw
+user-not-found; inert, uncleaned. Checked clean: cross-user delete (`delete: isOwner(uid)`,
+`create: if false`, so `deviceId` only from `generateDeviceId`), uid collision (no client path
+chooses a uid; the sole `createCustomToken` prefixes `tv_`), logs (message only).
+
+### 2026-10-31 — BIN-1471 merge of main (ADR 0026 household votes): union proof, no TV reach
+
+Review of the staged merge of `main` (5a5a0c6) into the TV-backend branch (bd7f5df), merge-base
+388893b. Technique: for each sensitive file the changed lines (`^[-+][^-+]`) of
+`git diff <base> HEAD -- f` were hashed against `git diff --cached MERGE_HEAD -- f`, and the
+main side the other way round for `firestore.rules`. SAME for `firestore.rules`,
+`firestore.indexes.json`, `userData.ts`, `accountDeletion.ts`, `functions/src/index.ts`,
+`retentionCleanup/orphans.ts` — so the only hand-resolved surface was `dataExport.ts`'s
+`SCHEMA_VERSION` (main's 2.6 = ADR 0026 household fields, TV moved to 2.7) and its doc.
+ADR 0026's rules change is confined to `groups/{gid}/household/{uid}` `create, update`
+(`isOwner(householdUid)`) plus untouched `get`/`list`/`delete` on `isSignedIn()`; both helpers
+refuse a `tv` claim, so no new clause reaches a TV principal and `isTvOf` still has exactly its
+branch-side call sites. Unit: `dataExport.coverage.test.ts` + `userData.subcollections.test.ts`
+47/47, functions `tvPair` 20/20. Non-blocking: `MIN_TESTS` in `scripts/run-rules-tests.mjs` is
+main's 967, measured without the branch's `tvDevices.rules.test.ts`, so the floor does not count
+the TV suite (test-reviewer territory).
+Addendum, same review: merged `npm run test:rules -- --port 8123` 11 files, 990/990 green, above the 967 floor.

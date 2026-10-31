@@ -75,6 +75,11 @@ Read only when the staged diff touches this chapter's paths (see .claude/shared-
   `is timestamp`** — else `Timestamp.fromMillis(futureMs)` defeats the sweep forever. `serverTimestamp()`
   resolves to exactly `request.time` (`<=`, not `<`); promoting an unvalidated field to this ratchet makes any
   legacy doc holding a FUTURE value fail ALL later merge-writes (`is timestamp` does NOT reject a JS `Date`).
+  **The mirror hole: a "once per N" gate `request.time - resource.data.t > N` with only `<= request.time`
+  on the new value is bypassed by writing an OLD `t`** — the writer ages its own stamp and may write
+  again at once (BIN-1471 `tvDevices.lastSeenAt`, emulator PoC; archive 2026-10-31). Bind both ends —
+  and monotonicity (`new > stored`) is NOT the lower end: 1 ms steps keep the stored stamp old and the
+  gate open (BIN-1471 r3 PoC, 5/5). The lower bind must tie the NEW value to `request.time`.
 - **A reaper's "undateable = kept forever" restraint is safe only if the CREATE rule makes the date
   mandatory.** `hasOnly(['token','createdAt'])` requires neither key — `setDoc({token})` skips the reaper
   forever; fix with `createdAt is timestamp && createdAt == request.time` (BIN-476→480).

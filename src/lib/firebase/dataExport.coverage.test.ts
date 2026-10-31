@@ -98,6 +98,8 @@ const COVERAGE: Record<keyof UserDataSnapshots, CoverageSpec> = {
     deleteCascade: true,
   },
   pauseHistorySnap: { export: 'pauseHistory', deleteCascade: true },
+  // BIN-1471: uppgifter om användaren (Art. 15), därför med i exporten.
+  tvDevicesSnap: { export: 'tvDevices', deleteCascade: true },
   listFollowsSnap: { export: 'listFollows', deleteCascade: true },
   reviewsSnap: { export: 'reviews', deleteCascade: true },
   reviewLikesSnap: { export: 'reviewLikes', deleteCascade: true },

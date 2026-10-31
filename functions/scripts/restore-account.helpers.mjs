@@ -51,6 +51,8 @@ export const NEVER_COPIED_SUBCOLLECTIONS = [
   'notifications',
   'reportMeta',
   'askBingeMeta',
+  // Kopplade TV hör till det raderade kontots inloggningar och ska inte följa med tillbaka.
+  'tvDevices',
   'friendRequests',
   'friendRequestsSent',
   'groupInvites',

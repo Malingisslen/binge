@@ -221,6 +221,11 @@ describe('isOrphanCandidate', () => {
     expect(isOrphanCandidate({ ...OLD, disabled: true }, NOW)).toBe(false);
   });
 
+  it('hoppar över en TV-inloggning (tv_) som aldrig har ett profildokument', () => {
+    expect(isOrphanCandidate({ ...OLD, uid: 'tv_abc' }, NOW)).toBe(false);
+    expect(isOrphanCandidate({ ...OLD, uid: 'abc' }, NOW)).toBe(true);
+  });
+
   it('hoppar över ett färskt konto', () => {
     expect(isOrphanCandidate({ metadata: { creationTime: new Date(NOW - 60_000).toUTCString() } }, NOW)).toBe(false);
   });

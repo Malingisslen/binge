@@ -47,3 +47,7 @@ Dated record → `…archive.md` (append-only).
   it is a claim** (r4: 'exactly 1 of 66' was 2). One shared staged blob means no per-round diff: mtime-sort
   `git diff --cached --name-only` for the real delta (r4's brief named five files, eight moved).
 - **Reviewing a FORWARD-REVERT:** prove exactness (`git diff <base> -- <files>` EMPTY); baseline = DEPLOYED.
+  **Reviewing a MERGE:** prove each sensitive file is the UNION of both sides — the changed lines of
+  `git diff <merge-base> HEAD` equal those of `git diff --cached MERGE_HEAD`, and vice versa — so only
+  the hand-resolved hunks need judging; then ask whether the other side's NEW clauses reach a principal
+  the branch minted (BIN-1471 × ADR 0026, archive 2026-10-31).

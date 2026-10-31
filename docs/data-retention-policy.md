@@ -51,6 +51,8 @@ kontoradering (samlas via samma `collectUserDataSnapshots`-helper):
   slutar försöka skicka push till ett raderat konto
 - `users/{uid}/reportMeta/*` — rapport-throttle-stämpel (anti-abuse, BIN-25/49)
 - `users/{uid}/askBingeMeta/*` — Fråga Binge LLM-throttle-stämpel (kostnadstak)
+- `tvPairings/*` och `tvRate/*` (BIN-1471) — kopplingskoder och räknare för kodinloggning på TV. Bara Cloud Functions når dem. Raden bär en hash av koden, aldrig koden, och raderas när TV:n hämtat sin inloggning eller av TTL-policyn på `expireAt` (10 minuter, men Firestore kan dröja ca ett dygn). Räknare per IP använder en hash saltad med dygnet, inte IP-adressen.
+- `users/{uid}/tvDevices/*` (BIN-1471) — kopplade TV. Ingår i exporten och raderas av kaskaden; ägaren kan ta bort en rad när som helst, och då nekas TV:n direkt. TV:ns eget Auth-konto (`tv_<enhet>`, inga personuppgifter, ingen profil) raderas av triggern `tvDeviceDeleted` när raden försvinner; städsvepet för övergivna konton hoppar medvetet över dem. Kopplingskoder som ägaren godkänt raderas av triggern `tvOwnerDeleted` när profilen raderas, annars av TTL-raderingen; `tvPairPoll` vägrar dessutom att logga in en TV om ägarens profil är borta.
 
 Dessa tre är medvetet UNDANTAGNA ur GDPR-exporten (Art. 20) — de är
 drift-/säkerhetsmetadata, inte användarens egna data — men raderas ändå helt

@@ -67,6 +67,18 @@
   ],
   "fieldOverrides": [
     {
+      "collectionGroup": "tvPairings",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "tvRate",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
       "collectionGroup": "watchlist",
       "fieldPath": "status",
       "indexes": [

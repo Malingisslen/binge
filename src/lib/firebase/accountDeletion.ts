@@ -70,6 +70,8 @@ export async function collectDeletionRefs(
   snaps.blockedSnap.docs.forEach(d => refs.push(d.ref));
   // Sparbeslut-historik (Streamingrådgivaren).
   snaps.pauseHistorySnap.docs.forEach(d => refs.push(d.ref));
+  // BIN-1471: kopplade TV. Raden försvinner → TV:n nekas direkt av reglerna.
+  snaps.tvDevicesSnap.docs.forEach(d => refs.push(d.ref));
   // Följda listor (BIN-96) — ägar-ägda.
   snaps.listFollowsSnap.docs.forEach(d => refs.push(d.ref));
   // FCM-tokens — sluta skicka push till raderad användare.

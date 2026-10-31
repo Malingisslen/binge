@@ -86,6 +86,8 @@ export interface UserDataSnapshots {
   // Sparbeslut-historik (Streamingrådgivaren) — skrivs av resumeProvider.
   // Inkluderas i export + delete-cascade.
   pauseHistorySnap: QuerySnapshot;
+  // BIN-1471: kopplade TV (namn, kopplingsdatum, senast sedd). Uppgifter om användaren → med i export + delete-cascade.
+  tvDevicesSnap: QuerySnapshot;
   // Följda listor (BIN-96). Ägar-ägd subcollection → med i export + delete-
   // cascade (annars orphan:as den efter radering).
   listFollowsSnap: QuerySnapshot;
@@ -136,6 +138,7 @@ export const KNOWN_USER_SUBCOLLECTIONS = [
   'fcmTokens',
   'reportMeta',
   'askBingeMeta',
+  'tvDevices',
   'following',
   'followers',
   'friends',
@@ -171,6 +174,7 @@ export async function collectUserDataSnapshots(
     reportMetaSnap,
     askBingeMetaSnap,
     pauseHistorySnap,
+    tvDevicesSnap,
     listFollowsSnap,
     reviewsSnap,
     reviewLikesSnap,
@@ -201,6 +205,7 @@ export async function collectUserDataSnapshots(
     getDocs(collection(db, 'users', uid, 'reportMeta')),
     getDocs(collection(db, 'users', uid, 'askBingeMeta')),
     getDocs(collection(db, 'users', uid, 'pauseHistory')),
+    getDocs(collection(db, 'users', uid, 'tvDevices')),
     getDocs(collection(db, 'users', uid, 'listFollows')),
     getDocs(query(collection(db, 'reviews'), where('uid', '==', uid))),
     // BIN-347: query by the `uid` FIELD (doc-id == uid, but a collection-group
@@ -238,6 +243,7 @@ export async function collectUserDataSnapshots(
     reportMetaSnap,
     askBingeMetaSnap,
     pauseHistorySnap,
+    tvDevicesSnap,
     listFollowsSnap,
     reviewsSnap,
     reviewLikesSnap,

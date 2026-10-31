@@ -7,7 +7,7 @@ Filen är en JSON med följande top-level-struktur (se
 
 ```jsonc
 {
-  "schemaVersion": "2.6",
+  "schemaVersion": "2.7",
   "exportedAt": "2026-04-24T10:30:00.000Z",
   "userId": "firebase-uid",
   "readme": "…",
@@ -31,6 +31,7 @@ Filen är en JSON med följande top-level-struktur (se
   "groupInvites":       [ … ],
   "tips":               [ … ],
   "pauseHistory":       [ … ],
+  "tvDevices":          [ … ],
   "listFollows":        [ … ],
   "reviews":         [ … ],
   "reviewLikes":     [ … ],
@@ -67,6 +68,7 @@ Filen är en JSON med följande top-level-struktur (se
 | `groupInvites` | `users/{uid}/groupInvites/{groupId}` | Inkomna grupp-inbjudningar |
 | `tips` | `users/{uid}/tips/{fromUid}_{mediaType}_{tmdbId}` | Tips om titlar som vänner skickat till dig: avsändarens uid, titel, valfri hälsning och tidpunkt. Tips du själv skickat ligger hos mottagaren och ingår inte. |
 | `pauseHistory` | `users/{uid}/pauseHistory/{historyId}` | Sparbeslut-historik från Streamingrådgivaren |
+| `tvDevices` | `users/{uid}/tvDevices/{deviceId}` | Kopplade TV: namn (telefonmodell), kopplingsdatum och senast använd (avrundad till dygn) |
 | `reviews` | `reviews/{reviewId}` (where uid==me) | Dina recensioner med text, betyg, spoiler-flagga |
 | `reviewLikes` | `reviews/*/likes/{uid}` | Likes du gjort på andras recensioner (doc-id = ditt uid) |
 | `reviewComments` | `reviews/*/comments/{commentId}` (where uid==me) | Dina kommentarer |
@@ -188,3 +190,5 @@ Dokumentera ändringar i CHANGELOG.md-sektionen nedan.
   bära `soonProviderIds`, `votes` och `votesMonth`. De ligger i samma dokument
   som resten av bidraget och exporteras som de är lagrade. Additiva fält →
   minor-bump 2.5 → 2.6.
+- **2.7 (2026-10-31, TV-appen, BIN-1471)** — Lade till `tvDevices` (dina kopplade
+  TV, `users/{uid}/tvDevices/*`). Additivt fält → minor-bump 2.6 → 2.7.

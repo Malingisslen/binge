@@ -32,7 +32,12 @@
     "submitReport",
     "titleRatings",
     "tmdbFieldsSweep",
-    "weeklyDigestNotify"
+    "weeklyDigestNotify",
+    "tvDeviceDeleted",
+    "tvOwnerDeleted",
+    "tvPairApprove",
+    "tvPairPoll",
+    "tvPairStart"
   ],
   "routes": [
     "/",
