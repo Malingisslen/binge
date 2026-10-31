@@ -9,7 +9,11 @@ Read only when the staged diff touches this chapter's paths (see .claude/shared-
 - **A THIRD shape escapes the subcollection-vs-admin-doc binary: a uid-keyed leaf under a NON-user parent** —
   `releaseNotifyState/{tmdbId}/notified/{uid}`, `reviews/{id}/likes/{uid}`, `usernames/{name}.uid`. Ask "does
   ANY doc identify a specific user, directly or by doc-id?" If yes: `uid` FIELD + CG sweep, or if retained,
-  Art. 17(3) comment + policy entry + reaper.
+  Art. 17(3) comment + policy entry + reaper. **A fourth shape: uids inside an ARRAY of objects on a non-user
+  doc** (a work queue, `episodeNotifyState/{tmdbId}.pending[].uids`, BIN-1475) — unqueryable by uid, so only
+  its CONSUMER job erases it. Demand a test that a missing `users/{uid}` drains the uid with no card written
+  (seed a leftover watchlist row, or deleting the profile guard stays green), and ask what erases it if the
+  consumer stops running: the `followPushes` ledger entry refuses a reaper that can stop without an alarm.
 - **A duplicated, structurally-identical type declaration split across an admin/non-admin module pair hides a
   GDPR-erasure category from the compiler.** Two independently-declared shapes for the same erasure payload
   (e.g. a local mirror of `TraceErasure`) are mutually assignable, so a category the pure decider COLLECTS can
