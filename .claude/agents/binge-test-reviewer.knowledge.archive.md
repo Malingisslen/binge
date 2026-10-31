@@ -30155,3 +30155,15 @@ Fresh isolated rig (detached worktree + staged patch, all 9 blobs hash-equal to 
 Verdict: pass (0 blocking).
 
 - (2026-10-19, flyttad från kärnkortet för längdtaket) **A "the rest still resolves" oracle over a UNION of sources needs DISJOINT ids per source** — BIN-1420's two list mocks both yielded `1000+p`, so "one failed page voids its whole list" stayed green via the sibling list; mutate the call site, not only the helper.
+
+## 2026-10-31 — BIN-1471 TV pairing: rules suite, tvPair/logic, export, orphans (round 2)
+Diff: tvDevices.rules.test.ts (21 tests), tvPair/logic.test.ts, dataExport.coverage.test.ts (tvDevices key), orphans.test.ts (tv_ skip).
+Mutations on scratchpad rules copy (real firestore.rules md5 2517ab84... before/after; a concurrent session briefly changed the file mid-review, restored by itself):
+- isSignedIn without the tv exclusion: 1 red (`public paths ... closed to a TV`). Note `reports/x` create is `allow create: if false`, so that fixture alone is vacuous for isSignedIn; `users/tv_dev1` is the one that bites.
+- tvDevices update without `lastSeenAt <= request.time`: 21/21 green (future timestamp unpinned).
+- tvDevices update without `deviceId == tvDeviceId`: 21/21 green (sibling-device update unpinned).
+- watchlist update without `status in [...]`: 1 red (invalid status). episodeProgress `allow write: if isTvOf`: 1 red.
+Static: ipRateKey('start', ip, day) survives dropping ip from the hash (tests only assert not-contains-ip, day change, repeat equality).
+Function transaction decisions (secret check order, single-use delete, owner-deleted, MAX_TV_DEVICES >=) live in tvPair/index.ts with no unit test: ruled follow-up, extract a pure decidePoll.
+Verdict: fail (3 blocking, each a one-fixture fix).
+Lesson to fold when chapter cap allows: a "denied for X" rules fixture on a collection whose create is `if false` proves nothing about X.

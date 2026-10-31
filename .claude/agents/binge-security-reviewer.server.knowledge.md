@@ -96,7 +96,10 @@ Read only when the staged diff touches this chapter's paths (see .claude/shared-
   inference) makes every candidate
   legitimately absent and one run eats the population.
   Demand `MAX_PER_RUN` that deletes NOTHING when
-  exceeded. **The floor BOUNDS the latch, it does not remove it** — above it the wedge is permanent and cheap to
+  exceeded. **A diff that mints a NEW KIND of Auth principal (a device custom token) must be walked
+  against every sweep that reads "Auth account without `users/{uid}`" as orphaned** — it has no
+  profile by design, so the sweep deletes it after the age floor AND each one counts toward the
+  ceiling, which can latch erasure for everyone (BIN-1471 `tv_<device>`, found in review; archive 2026-10-31). **The floor BOUNDS the latch, it does not remove it** — above it the wedge is permanent and cheap to
   plant (one `signUp` mints a profile-less Auth account). Rate the REFUSAL itself: a RUNBOOK clear-by-hand
   entry, and any LEGAL claim a runbook-only fix leaves false. It belongs in the admin-free predicate module,
   and extracting the predicate leaves the CALL unpinned — ask for the filtered SET, not a boolean.

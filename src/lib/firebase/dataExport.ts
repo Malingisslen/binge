@@ -40,7 +40,7 @@ import type { QuerySnapshot } from 'firebase/firestore';
 //     that group's data. Before this the group was dropped without a trace.
 // 2.5 (Tipsa en vän, 2026-10-11): additive — new `tips` array: title tips friends sent
 //     you (id = "<fromUid>_<mediaType>_<tmdbId>").
-export const SCHEMA_VERSION = '2.5' as const;
+export const SCHEMA_VERSION = '2.6' as const;
 
 export interface ExportDoc {
   id: string;
@@ -88,6 +88,7 @@ export interface BingeExport {
   // Tipsa en vän: tips om titlar som vänner skickat till dig.
   tips: ExportDoc[];
   pauseHistory: ExportDoc[];
+  tvDevices: ExportDoc[];
   listFollows: ExportDoc[];
   reviews: ExportDoc[];
   reviewLikes: ExportDoc[];
@@ -126,6 +127,7 @@ Filen innehåller:
 - Inkomna grupp-inbjudningar (groupInvites)
 - Tips om titlar som vänner skickat till dig (tips)
 - Sparbeslut-historik från Streamingrådgivaren (pauseHistory)
+- Kopplade TV: namn, kopplingsdatum och senast använd (tvDevices)
 - Dina recensioner (reviews)
 - Gillamarkeringar du gjort (reviewLikes)
 - Kommentarer du skrivit (reviewComments)
@@ -306,6 +308,7 @@ export async function buildUserExport(uid: string): Promise<BingeExport> {
     groupInvites: toExportDocs(s.groupInvitesSnap),
     tips: toExportDocs(s.tipsSnap),
     pauseHistory: toExportDocs(s.pauseHistorySnap),
+    tvDevices: toExportDocs(s.tvDevicesSnap),
     listFollows: toExportDocs(s.listFollowsSnap),
     reviews: toExportDocs(s.reviewsSnap),
     reviewLikes: toExportDocs(s.reviewLikesSnap),

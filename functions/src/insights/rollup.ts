@@ -133,6 +133,8 @@ async function readAuthActivity(): Promise<AuthActivityLite[]> {
   do {
     const page = await getAuth().listUsers(1000, pageToken);
     for (const u of page.users) {
+      // TV-appens inloggning (BIN-1471) är en custom-token-principal, inte en besökare.
+      if (u.uid.startsWith('tv_')) continue;
       out.push({
         // Holds while the app has no custom-token or other provider-less sign-in; a
         // future one would make its real users read as anonymous and drop out here.

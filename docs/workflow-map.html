@@ -666,6 +666,12 @@
       "path": "functions/src/submitReport/index.ts, functions/src/submitReport/logic.ts"
     },
     {
+      "id": "cf-tvPair",
+      "label": "tvPairStart / tvPairApprove / tvPairPoll callables",
+      "context": "backend-api",
+      "path": "functions/src/tvPair/index.ts, functions/src/tvPair/logic.ts"
+    },
+    {
       "id": "admin-reports-page",
       "label": "/admin/reports dashboard",
       "context": "web-app",
@@ -2762,6 +2768,40 @@
         }
       ],
       "area": "data pipelines"
+    },
+    {
+      "id": "flow-tv-pairing",
+      "label": "TV pairing by code",
+      "description": "The TV app asks tvPairStart for a short code, the signed-in phone approves it with tvPairApprove, and the TV polls tvPairPoll until it receives a custom token for its own principal tv_<device> (claims tv, ownerUid, tvDeviceId). The device row users/{uid}/tvDevices/{deviceId} is what the rules check on every TV request, so deleting it disconnects the TV at once. tvPairings and tvRate are reachable only from these functions.",
+      "covers": [
+        "tvPairStart",
+        "tvPairApprove",
+        "tvPairPoll"
+      ],
+      "steps": [
+        {
+          "from": "cf-tvPair",
+          "to": "firestore",
+          "payload": "tvPairStart: create tvPairings/{sha256(code)} with deviceSecretHash and 60 s expiry; rate counter in tvRate",
+          "transport": "firestore-write",
+          "verified": true
+        },
+        {
+          "from": "cf-tvPair",
+          "to": "firestore",
+          "payload": "tvPairApprove: transaction pending to approved with approvedBy=uid",
+          "transport": "firestore-transaction",
+          "verified": true
+        },
+        {
+          "from": "cf-tvPair",
+          "to": "firestore",
+          "payload": "tvPairPoll: transaction creates users/{uid}/tvDevices/{deviceId} and deletes the pairing, then createCustomToken",
+          "transport": "firestore-transaction",
+          "verified": true
+        }
+      ],
+      "area": "auth"
     },
     {
       "id": "flow-moderation",

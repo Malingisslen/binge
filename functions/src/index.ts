@@ -390,3 +390,6 @@ export { tmdbFieldsSweep } from './tmdbTosSweep';
 // rättelsen påstod "nämner kollektionen inte en enda gång", vilket grep
 // omedelbart motbevisade. Att nämna och att läsa är inte samma sak.
 export { leavingRollup } from './leavingRollup';
+
+// BIN-1471: kodinloggning för TV-appen. TV-principalen och reglerna: se tvPair/index.ts.
+export { tvPairStart, tvPairApprove, tvPairPoll } from './tvPair';

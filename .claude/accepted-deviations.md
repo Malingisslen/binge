@@ -2749,3 +2749,31 @@ git grep -n "BIN-1459" -- docs/org/metrics/check_review_coverage.mjs docs/org/me
 ```
 
 **INTE accepterat:** samma villkor som i BIN-1367-posten, och rader i efterhand som standardväg.
+
+## BIN-1471: TV-backendens kvarvarande punkter går som uppföljning, inte som spärr — 2026-10-31
+
+Säkerhetsgranskningen av TV-backenden (kodinloggning, `functions/src/tvPair/`) bedömde tre kända
+punkter som icke-blockerande för den här ändringen. De är ÖPPET ARBETE som ska bli ärenden, inte
+ett beslut om att lämna dem för alltid. Det som gör dem icke-blockerande är att ingen av dem ger
+en TV åtkomst till ägarens data: reglerna släpper bara in en TV via `isTvOf`, som kräver att
+enhetens rad i `users/{uid}/tvDevices` finns, och `isSignedIn()` nekar en token med claim `tv`.
+
+1. **Övriga anropbara funktioner nekar inte en TV-token.** Bara `tvPairApprove` prövar claimet.
+   En TV kan anropa de andra som sin egen principal `tv_<enhet>`, utan profil och utan koppling
+   till ägarens data. Härled vilka det gäller:
+   `git grep -n "onCall(" -- functions/src`
+2. **`lastSeenAt` sätts av TV:n.** Regeln binder `is timestamp`, `<= request.time` och att den
+   lagrade stämpeln är äldre än 20 timmar, men ingen undre gräns. En TV kan alltså skriva en
+   godtycklig äldre tidpunkt, och göra om det direkt, eftersom den då själv gjort den lagrade
+   stämpeln gammal (provat mot emulatorn i granskningen). Avrundningen till dygn är TV-appens egen
+   disciplin. "Senast använd" i kopplingslistan är därför en uppgift från TV:n, inte en kontroll.
+3. **Auth-kontona `tv_<enhet>` städas inte.** `isOrphanCandidate` hoppar över prefixet så att
+   orphan-svepet inte raderar dem och inte låser sig på dem. Ingenting raderar dem i stället, inte
+   heller när raden i `tvDevices` eller ägarens konto är borta. Retentionspolicyn nämner dem inte i
+   den här ändringen.
+
+**INTE accepterat:** en TV-väg till ägarens data som inte går genom `isTvOf`, och en TV-principal
+som orphan-svepet räknar mot sitt tak.
+
+**Re-open when:** en anropbar funktion börjar läsa `ownerUid`-claimet, eller `lastSeenAt` börjar
+användas för att avgöra något (till exempel att koppla bort inaktiva TV).

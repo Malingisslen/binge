@@ -784,7 +784,7 @@ findings here too.
 - **Field whitelist enforcement** — the `hasOnly()` field contract in
   isValidWatchlistItem; a new field omitted from the whitelist silently
   `permission-denied`s client writes.
-  → `firestore.rules`, `src/test/rules/firestore-rules.test.ts`
+  → `firestore.rules`, `src/test/rules/firestore-rules.test.ts`, `src/test/rules/tvDevices.rules.test.ts`
 - **The value bounds a producer must stay inside** (BIN-1134). The rules cap profile
   fields by length, and a producer that writes past the cap does not get a truncated
   value — it gets the whole write refused, which on the create path leaves an account

@@ -151,9 +151,11 @@ export function exceedsOrphanAuthCeiling(candidates: number, checkedAccounts: nu
  * firebase-admin — the same move the ceiling made for the same reason.
  */
 export function isOrphanCandidate(
-  user: { disabled?: boolean; metadata?: { creationTime?: unknown } },
+  user: { uid?: string; disabled?: boolean; metadata?: { creationTime?: unknown } },
   nowMs: number,
 ): boolean {
+  // TV-appens inloggning (BIN-1471) är ett Auth-konto utan profildokument med flit.
+  if (user.uid?.startsWith('tv_')) return false;
   if (user.disabled === true) return false;
   return isReapableOrphanAge(creationTimeToMillis(user.metadata?.creationTime), nowMs);
 }
