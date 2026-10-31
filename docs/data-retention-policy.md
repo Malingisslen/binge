@@ -804,10 +804,16 @@ på serien när ett nytt avsnitt sänts; `episodeMorningDigest` gör kort och pu
   klientens kontoradering når den inte.
 - **Radering:** `settlePending` i `functions/src/episodeDigest/logic.ts`, körd av
   `episodeMorningDigest`, tar bort varje uid som körningen blev klar med och varje post
-  äldre än `MAX_QUEUE_AGE_MS`. Ett raderat konto saknar `users/{uid}`, räknas därför som
+  äldre än `MAX_QUEUE_AGE_MS`. Ett konto raderat i appen saknar `users/{uid}`, räknas därför som
   klart (`itemsForUser` returnerar null) och tas bort vid nästa körning.
-- **Lucka:** båda raderingsvägarna körs bara av `episodeMorningDigest`. Står den jobbet
-  stilla ligger kön kvar; `retentionCleanup` sveper den inte.
+- **Säkerhetsnät:** `episodeReleaseNotify` (var sjätte timme) tar bort poster äldre än
+  `MAX_QUEUE_AGE_MS` via `trimStaleQueue`, så kön har en övre gräns även när
+  `episodeMorningDigest` står stilla. Statusdokumentet blir kvar, eftersom det också bär
+  `lastNotifiedEpisode`. Om båda jobben står still ligger kön kvar; `retentionCleanup`
+  sveper den inte.
+- **Gräns och fördröjning:** en post går ut efter 3 dygn (`MAX_QUEUE_AGE_MS`) och tas bort av
+  nästa körning av jobben ovan. Ett raderat kontos uid lämnar kön genom att posten går ut
+  eller att nästa 08:00-körning gör uid:t klart, inte på begäran.
 
 ### Push-tokens för konton Auth inte längre erkänner (BIN-848, 2026-08-10)
 

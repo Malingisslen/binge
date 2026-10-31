@@ -11564,3 +11564,26 @@ after-the-fact review of a commit that reached main with no recorded review. Fix
 `followerVisibleTo` mirroring the rule, a fourth read of `users/{follower}/friends/{recipient}`,
 "Någon följer dig nu" otherwise; a rules-text test pins the clauses and a source scan pins the
 call site in index.ts.
+
+### 2026-10-31 — BIN-1475: the morning-digest queue holds uids no account deletion can reach
+Staged diff: `episodeReleaseNotify` stops pushing per episode and instead `arrayUnion`s
+`{ episodeId, season, episode, airDate, uids, queuedAt }` onto `episodeNotifyState/{tmdbId}.pending`;
+the new `episodeMorningDigest` (08:00 Stockholm) groups the queue per uid, re-reads `users/{uid}`,
+the watchlist row and progress, `create()`s `users/{uid}/notifications/episode-digest-<date>`, pushes,
+then a per-show transaction (`settlePending`) removes the uids it finished with plus entries older than
+`MAX_QUEUE_AGE_MS` (3 days). Traced every deletion door:
+- Client `deleteAccount` (`collectDeletionRefs`): cannot reach the queue (no rules match, uid inside an
+  array of objects, unqueryable). Profile is gone afterwards, so `itemsForUser` returns null, the uid
+  counts as done and leaves at the next 08:00 run. Bound: under a day while the digest runs; 3 days if
+  that uid keeps throwing; unbounded if the digest stops — the policy entry names that gap itself.
+- Console deletion (Auth only): profile survives until BIN-1023's sweep, so cards (and pushes until
+  BIN-848's token sweep) continue — same as every other notifier and the per-episode code it replaces.
+- Race: profile read, then the client cascade commits, then the card `create()` lands under a ghost
+  parent. The cascade's notifications snapshot was taken earlier, so a transaction around read+create
+  does not close it (rejected fix). Reaped by the 90-day `collectionGroup('notifications')` TTL and by
+  BIN-1023's `listDocuments()` ghost sweep. Pre-existing class, not widened.
+Gap found: no test pinned the "deleted account drains from the queue, no card" claim the policy entry
+makes. Mutating `if (!profile.exists) return null;` out left 22/22 green; a test seeding a leftover
+watchlist row under a missing profile (4c in `functions/src/episodeDigest/index.test.ts`) failed on that
+mutant and passed on the real code. Added unstaged for the author. Rated Medium, not blocking. The
+stopped-consumer gap was surfaced to Malin as a decision (ledger entry vs `retentionCleanup` backstop), not filed as a block.
