@@ -1,5 +1,6 @@
 package nu.binge.tv
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,7 +30,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.tv.material3.Border
 import androidx.tv.material3.Button
+import androidx.tv.material3.ButtonDefaults
+import androidx.tv.material3.Card
+import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
@@ -72,17 +78,31 @@ private fun Failed(message: String, onRetry: () -> Unit) {
 @Composable
 private fun Ready(s: HomeState.Ready, vm: HomeViewModel) {
     val current = s.current
-    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(32.dp)) {
-        if (current == null) {
-            Centered("Inget att se ikväll. Lägg till något i Vill se i Binge.")
-            return@Column
+    if (current == null) {
+        Centered("Inget att se ikväll. Lägg till något i Vill se i Binge.")
+        return
+    }
+    val others = s.picks.filterNot { it.docId == current.docId }
+    // En rullbar lista: på en TV är skärmen lägre än hero och rader tillsammans, och raderna måste
+    // gå att nå med pil ner i stället för att klippas av.
+    LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(32.dp)) {
+        item { Hero(current, onNext = vm::nextSuggestion, onWatched = vm::markWatched) }
+        if (others.isNotEmpty()) item { PosterRow("Vill se", others) }
+        if (s.upcoming.isNotEmpty()) item {
+            PosterRow("Nästa avsnitt", s.upcoming, caption = { "${it.nextAirCode.orEmpty()} · ${it.nextAirDate.orEmpty()}".trim(' ', '·') })
         }
-        Hero(current, onNext = vm::nextSuggestion, onWatched = vm::markWatched)
-        val others = s.picks.filterNot { it.docId == current.docId }
-        if (others.isNotEmpty()) PosterRow("Vill se", others)
-        if (s.upcoming.isNotEmpty()) PosterRow("Nästa avsnitt", s.upcoming, caption = { "${it.nextAirCode.orEmpty()} · ${it.nextAirDate.orEmpty()}".trim(' ', '·') })
     }
 }
+
+/** Tydlig fokus: den valda knappen är saffran, de andra är mörka. */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun bingeButtonColors() = ButtonDefaults.colors(
+    containerColor = BingeColors.Surface,
+    contentColor = BingeColors.Text,
+    focusedContainerColor = BingeColors.Accent,
+    focusedContentColor = BingeColors.Background,
+)
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -94,12 +114,13 @@ private fun Hero(t: Title, onNext: () -> Unit, onWatched: () -> Unit) {
         Poster(t, Modifier.width(200.dp).height(300.dp))
         Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.height(300.dp)) {
             Text("IKVÄLL", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = BingeColors.Accent)
-            Text(t.title, fontSize = 48.sp, fontWeight = FontWeight.Bold, color = BingeColors.Text, maxLines = 2)
+            // Fast höjd på titeln, så att knapparna ligger på samma ställe oavsett titel.
+            Text(t.title, fontSize = 48.sp, fontWeight = FontWeight.Bold, color = BingeColors.Text, minLines = 2, maxLines = 2)
             Text(TonightPicker.reason(t, System.currentTimeMillis()), fontSize = 22.sp, color = BingeColors.TextMuted)
-            t.runtime?.let { Text("$it min", fontSize = 22.sp, color = BingeColors.TextMuted) }
+            Text(t.runtime?.let { "$it min" }.orEmpty(), fontSize = 22.sp, color = BingeColors.TextMuted, minLines = 1, maxLines = 1)
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(top = 16.dp)) {
-                Button(onClick = onNext, modifier = Modifier.focusRequester(focus)) { Text("Nästa förslag") }
-                Button(onClick = onWatched) {
+                Button(onClick = onNext, colors = bingeButtonColors(), modifier = Modifier.focusRequester(focus)) { Text("Nästa förslag") }
+                Button(onClick = onWatched, colors = bingeButtonColors()) {
                     Text(if (t.isMovie) "Sedd" else "Såg första avsnittet")
                 }
             }
@@ -115,8 +136,14 @@ private fun PosterRow(heading: String, titles: List<Title>, caption: (Title) -> 
         LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             items(titles, key = { it.docId }) { t ->
                 Column(Modifier.width(140.dp)) {
-                    Poster(t, Modifier.width(140.dp).height(210.dp))
-                    caption(t)?.let { Text(it, fontSize = 16.sp, color = BingeColors.TextMuted, maxLines = 1) }
+                    // Valbar så att fokus kan flyttas hit med pil ner; ingen åtgärd än.
+                    Card(
+                        onClick = {},
+                        border = CardDefaults.border(focusedBorder = Border(BorderStroke(3.dp, BingeColors.Accent))),
+                    ) {
+                        Poster(t, Modifier.width(140.dp).height(210.dp))
+                    }
+                    caption(t)?.let { Text(it, fontSize = 16.sp, color = BingeColors.TextMuted, maxLines = 1, modifier = Modifier.padding(top = 6.dp)) }
                 }
             }
         }
