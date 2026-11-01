@@ -101,7 +101,7 @@ private fun bingeButtonColors() = ButtonDefaults.colors(
     containerColor = BingeColors.Surface,
     contentColor = BingeColors.Text,
     focusedContainerColor = BingeColors.Accent,
-    focusedContentColor = BingeColors.Background,
+    focusedContentColor = BingeColors.OnAccent,
 )
 
 @OptIn(ExperimentalTvMaterial3Api::class)
