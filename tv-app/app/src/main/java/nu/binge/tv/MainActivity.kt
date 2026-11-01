@@ -29,7 +29,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.tv.material3.Button
 import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.LocalTextStyle
 import androidx.tv.material3.MaterialTheme
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.tv.material3.Text
 
 class MainActivity : ComponentActivity() {
@@ -40,6 +42,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             MaterialTheme {
+              CompositionLocalProvider(LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = AlbertSans)) {
                 val state by vm.state.collectAsState()
                 Box(Modifier.fillMaxSize().background(BingeColors.Background).padding(32.dp)) {
                     when (val s = state) {
@@ -50,6 +53,7 @@ class MainActivity : ComponentActivity() {
                         is PairingState.Failed -> FailedScreen(s)
                     }
                 }
+              }
             }
         }
     }

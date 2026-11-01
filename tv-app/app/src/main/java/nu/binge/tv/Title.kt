@@ -20,6 +20,8 @@ data class Title(
     val watchedAtMs: Long?,
     val nextAirDate: String?,
     val nextAirCode: String?,
+    /** Tjänster titeln finns på (TMDB-id:n), som webben sparar på posten. */
+    val providers: List<Long> = emptyList(),
 ) {
     val posterUrl: String? get() = posterPath?.let { "https://image.tmdb.org/t/p/w342$it" }
 }

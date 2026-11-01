@@ -92,3 +92,4 @@ headings differ.
 ## BIN-1471: TV-backendens kvarvarande punkter går som uppföljning, inte som spärr — 2026-10-31
 ## BIN-1471: TV-kontona och kopplingskoderna städas av triggers — 2026-10-31
 ## Hushållsröster: rösternas värden valideras av klienten, inte av reglerna — 2026-10-31
+## BIN-1470: tvOverview läser ägarens och hushållets data utanför isTvOf — 2026-11-01

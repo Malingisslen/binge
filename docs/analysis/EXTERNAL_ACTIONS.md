@@ -269,3 +269,11 @@ here; derive where that is:
 ```
 grep -rn "Blaze" CLAUDE.md docs/RUNBOOK.md
 ```
+
+## TV household view flag (BIN-1470)
+
+The household view on the TV is off until the Firestore document `appConfig/tvHousehold` has the
+field `enabled: true`. Only the Firebase Console (or the Admin SDK) can write it; no rule matches
+the collection. Turn it on only after Legal has approved and the consent text is published, and
+after the deployed `tvOverview` has been called once from a real TV. Set `enabled: false` to turn
+it off again; it takes effect on the next call.
