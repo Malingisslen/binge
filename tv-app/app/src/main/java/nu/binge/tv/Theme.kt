@@ -2,11 +2,12 @@ package nu.binge.tv
 
 import androidx.compose.ui.graphics.Color
 
-/** Mörkt tema, samma saffran som webbens "nu/live"-accent. */
+/** Webbens mörka läge (binge.nu, `globals.css` `[data-theme=dark]`) omräknat från oklch till sRGB. */
 object BingeColors {
-    val Background = Color(0xFF14130F)
-    val Surface = Color(0xFF1F1D18)
-    val Text = Color(0xFFF2EFE8)
-    val TextMuted = Color(0xFFA8A398)
-    val Accent = Color(0xFFE3A63B)
+    val Background = Color(0xFF110F0D)
+    val Surface = Color(0xFF201E1B)
+    val Text = Color(0xFFEFEEEB)
+    val TextMuted = Color(0xFFB9B7B3)
+    val Accent = Color(0xFFDE9C31)
+    val OnAccent = Color(0xFF110F0D)
 }

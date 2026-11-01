@@ -41,7 +41,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 val state by vm.state.collectAsState()
-                Box(Modifier.fillMaxSize().background(BingeColors.Background).padding(64.dp)) {
+                Box(Modifier.fillMaxSize().background(BingeColors.Background).padding(32.dp)) {
                     when (val s = state) {
                         PairingState.Loading -> CenteredText("Hämtar kod …")
                         is PairingState.ShowCode -> CodeScreen(s)
@@ -70,19 +70,19 @@ private fun CodeScreen(s: PairingState.ShowCode) {
     val spaced = s.userCode.chunked(4).joinToString("  ")
     Row(
         Modifier.fillMaxSize(),
-        horizontalArrangement = Arrangement.spacedBy(96.dp),
+        horizontalArrangement = Arrangement.spacedBy(48.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(24.dp)) {
-            Text("Koppla Binge till TV:n", fontSize = 44.sp, fontWeight = FontWeight.Bold, color = BingeColors.Text)
-            Text("Öppna Binge på telefonen och skanna koden, eller skriv in koden på binge.nu/tv.", fontSize = 24.sp, color = BingeColors.TextMuted)
-            Text(spaced, fontSize = 64.sp, fontWeight = FontWeight.Bold, color = BingeColors.Accent)
+            Text("Koppla Binge till TV:n", fontSize = 36.sp, fontWeight = FontWeight.Bold, color = BingeColors.Text, maxLines = 1)
+            Text("Skanna koden med telefonen, eller skriv in koden på binge.nu/tv.", fontSize = 22.sp, color = BingeColors.TextMuted)
+            Text(spaced, fontSize = 48.sp, fontWeight = FontWeight.Bold, color = BingeColors.Accent, maxLines = 1)
             Text("Koden gäller i en minut och byts ut automatiskt.", fontSize = 20.sp, color = BingeColors.TextMuted)
         }
         Image(
             bitmap = qr,
             contentDescription = "QR-kod för att koppla TV:n",
-            modifier = Modifier.size(320.dp).clip(RoundedCornerShape(16.dp)),
+            modifier = Modifier.size(240.dp).clip(RoundedCornerShape(16.dp)),
         )
     }
 }
