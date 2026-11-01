@@ -672,6 +672,12 @@
       "path": "functions/src/tvPair/index.ts, functions/src/tvPair/logic.ts, functions/src/tvPair/cleanup.ts"
     },
     {
+      "id": "cf-tvOverview",
+      "label": "tvOverview callable (TV home screen data)",
+      "context": "backend-api",
+      "path": "functions/src/tvOverview/index.ts, functions/src/tvOverview/logic.ts"
+    },
+    {
       "id": "tv-pair-page",
       "label": "/tv pairing page",
       "context": "web-app",
@@ -2834,6 +2840,31 @@
           "to": "firestore",
           "payload": "tvDeviceDeleted deletes the tv_<device> Auth account when the device row goes; tvOwnerDeleted deletes tvPairings approved by a deleted user",
           "transport": "firestore-trigger",
+          "verified": true
+        }
+      ],
+      "area": "auth"
+    },
+    {
+      "id": "flow-tv-overview",
+      "label": "TV home screen: services, Tillsammans board, household",
+      "description": "The TV app calls tvOverview with its own sign-in. The owner is read only from the token (never from the request), the device row users/{uid}/tvDevices/{deviceId} must exist on every call, and calls are rate limited per device. The reply carries the owner's service ids from users/{uid}.myProviders, the id of the owner's live Tillsammans session, and the household view. The household view is off until appConfig/tvHousehold has enabled: true; it needs the owner to have a household row, only includes members with their own household row, reads watchlists only for the members the TV says are on the couch, drops every title that is not explicitly shareable (Privat, unknown or missing visibility is dropped). The calls are rate limited per device and write one counter row to tvRate through takeRate.",
+      "covers": [
+        "tvOverview"
+      ],
+      "steps": [
+        {
+          "from": "cf-tvOverview",
+          "to": "firestore",
+          "payload": "tvOverview: reads tvDevices row, users/{uid}, the owner's latest sessions (index sessions on hostUid and createdAt), groups with their household rows, and the seated members' watchlists with Admin SDK; filters Privat server side",
+          "transport": "firestore-read",
+          "verified": true
+        },
+        {
+          "from": "cf-tvOverview",
+          "to": "firestore",
+          "payload": "takeRate: transaction on tvRate/overview_{deviceId}, one counter row per device and window, removed by TTL on expireAt",
+          "transport": "firestore-transaction",
           "verified": true
         }
       ],

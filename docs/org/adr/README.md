@@ -69,3 +69,4 @@ put to Malin and her answer.>
 - [0025](0025-cloudflare-web-analytics-legitimate-interest.md) — Cloudflare Web Analytics on legitimate interest, no consent banner
 - [0026](0026-household-votes-and-dup-advice.md) — Household votes shown with names, the "nytt inom 30 dagar" flag after an active re-share, client-side vote validation as an accepted deviation, and the successor to ADR 0010 point 3: "Betalas dubbelt" and advice to keep one may be shown (Malin)
 - [0027](0027-household-private-titles.md) — Joining a household is the consent; a Privat title is kept out (2026-10-31)
+- [0028](0028-tv-overview-function-not-rules.md) — TV gets finished rows from a function instead of opened rules; household view behind a server flag until Legal approves (Malin)

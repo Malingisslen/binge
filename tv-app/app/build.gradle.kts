@@ -17,7 +17,23 @@ android {
         versionName = "0.1.0"
     }
 
+    // En fast signeringsnyckel för testbygget, så en ny APK går att lägga över den gamla på TV:n utan
+    // att appens inloggning försvinner. Nyckeln ligger bara som GitHub-hemlighet och kommer in via
+    // TV_DEBUG_KEYSTORE; utan den signeras bygget med utvecklarmaskinens egen nyckel.
+    val fixedDebugKeystore = System.getenv("TV_DEBUG_KEYSTORE")?.let(::file)?.takeIf { it.exists() }
+    if (fixedDebugKeystore != null) {
+        signingConfigs.create("fixedDebug") {
+            storeFile = fixedDebugKeystore
+            storePassword = "bingetv-debug"
+            keyAlias = "bingetv"
+            keyPassword = "bingetv-debug"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfigs.findByName("fixedDebug")?.let { signingConfig = it }
+        }
         release {
             isMinifyEnabled = false
         }

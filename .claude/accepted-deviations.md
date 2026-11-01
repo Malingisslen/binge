@@ -2814,3 +2814,26 @@ git grep -n -e "export function isHouseholdVote" -e "export function sanitizeVot
 
 **Re-open when:** rösterna får fler värden än tre, eller något annat än medlemmens eget bidrag
 börjar läsa dem.
+
+## BIN-1470: tvOverview läser ägarens och hushållets data utanför isTvOf — 2026-11-01
+
+ADR 0028. TV-kontot når ägarens profil, sessioner och hushållsmedlemmarnas delbara titlar genom
+den anropbara funktionen `tvOverview` (Admin SDK) i stället för genom öppnade regler. Funktionen
+upprepar `isTvOf`:s villkor i koden: token med `tv`, `ownerUid` och `tvDeviceId`, ett
+`tvDevices`-dokument som finns, och en hastighetsgräns. Malin godkände den vägen 2026-11-01
+(beslutskortet "med funktion i stället för regeländringar") och skrev in posten 2026-11-01
+(beslutskortet "Ja, skriv in det"). Hushållsvyn ligger bakom serverflaggan `appConfig/tvHousehold`,
+som bara konsolen eller Admin SDK kan skriva. Härled villkoren och filtret:
+
+```
+git grep -n -e "tvDevices" -e "takeRate" -e "appConfig" -- functions/src/tvOverview/index.ts
+git grep -n -e "export function isPrivateItem" -- functions/src/tvOverview/logic.ts
+```
+
+**INTE accepterat, alltså fortfarande fileable:**
+1. En titel som inte är uttryckligen `public` i svaret till TV:n.
+2. Att flaggan slås på utan att Legal #5 godkänt och samtyckestexten publicerats.
+3. Namn, e-post eller uid för en annan medlem i svaret, utöver förnamn och initial.
+4. Att `tvDevices`-kontrollen eller hastighetsgränsen försvinner ur funktionen.
+
+**Re-open when:** TV:n får en andra läsväg till användardata, eller `friends`-titlar ska delas.

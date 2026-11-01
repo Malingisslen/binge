@@ -52,6 +52,17 @@ jobs:
           fi
           printf '%s' "$GOOGLE_SERVICES" > tv-app/app/google-services.json
 
+      - name: Add fixed debug signing key
+        env:
+          DEBUG_KEYSTORE_B64: ${{ secrets.TV_DEBUG_KEYSTORE }}
+        run: |
+          if [ -z "$DEBUG_KEYSTORE_B64" ]; then
+            echo "::warning::Secret TV_DEBUG_KEYSTORE is missing, so this APK gets a one-off signing key and cannot update an installed copy."
+            exit 0
+          fi
+          printf '%s' "$DEBUG_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/tv-debug.keystore"
+          echo "TV_DEBUG_KEYSTORE=$RUNNER_TEMP/tv-debug.keystore" >> "$GITHUB_ENV"
+
       - name: Test and build debug APK
         working-directory: tv-app
         run: ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleDebug :app:compileReleaseKotlin

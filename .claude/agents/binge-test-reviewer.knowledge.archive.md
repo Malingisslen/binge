@@ -30170,3 +30170,9 @@ Lesson to fold when chapter cap allows: a "denied for X" rules fixture on a coll
 
 ## 2026-10-31 — tvPairingCode / tvDeviceDates re-review
 Reviewed staged src/lib/tvPairingCode.test.ts and src/lib/tvDeviceDates.test.ts with their sources. Earlier blocking findings fixed: whole alphabet in every position, alphabet equals server literal (functions/src/tvPair/logic.ts CODE_ALPHABET, grep-verified identical), look-alikes O/0/I/1 at start/middle/end, sameDay other month/year, all 12 months, null createdAt. No mutations run. Info: line 27 uses `new Date(2026, 8, 30 + 1)` (obtuse, correct). Verdict: pass (0 blocking).
+
+## 2026-11-01 — tvOverview / TV-app re-review (round 2)
+Reviewed staged functions/src/tvOverview/{logic,index}.test.ts, Kotlin ProvidersTest/TogetherBoardTest/IkappTextTest with sources. Mutations hand-traced, not run (no write to repo): veto test, householdUids, resolveSeating, isWanted mixed fixture all redden their intended mutants.
+Surviving (traced): (1) index.ts householdFor keeps INLINE `rows.filter((r) => r.exists)` feeding householdUids and `ownRow.exists` reciprocity check; neither is pinned by logic tests or the source scan (dropping the filter exposes non-sharing members). (2) isWanted TV branch: no avbruten series with season null in the fixture, so dropping the status check survives; same for the ikapp `status !== 'mina'` gate. Non-blocking: resolveSeating `<` vs `<=` (fixture index 4 vs count 2), onlyOne single-member case, "Ingår" label, 3-member "ligger N efter".
+Verdict: fail (2 blocking).
+Lesson to fold when core cap allows (core at 14942/15000): after extracting decisions, grep the CALLER for a residual inline `.filter(... .exists)` feeding the helper's input — the helper's tests assume correct input, so the filter is the privacy-bearing decision and needs a call-site pin.
