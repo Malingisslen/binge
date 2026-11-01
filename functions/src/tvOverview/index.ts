@@ -48,8 +48,9 @@ export const tvOverview = onCall(
           logger.warn('[tvOverview] sessions query failed', { code: (e as { code?: unknown }).code });
           return null;
         }),
-      db.doc('appConfig/tvHousehold').get(),
-      db.collection('groups').where('memberUids', 'array-contains', ownerUid).limit(10).get(),
+      // Flaggan och grupperna hör bara till hushållsvyn: ett fel där ska inte ta ner tjänsterna.
+      db.doc('appConfig/tvHousehold').get().catch(() => null),
+      db.collection('groups').where('memberUids', 'array-contains', ownerUid).limit(10).get().catch(() => null),
     ]);
 
     const now = Date.now();
@@ -58,8 +59,8 @@ export const tvOverview = onCall(
       return d.get('status') === 'active' && typeof exp?.toMillis === 'function' && exp.toMillis() > now;
     });
 
-    const household = flag.get('enabled') === true
-      ? await householdFor(db, ownerUid, groups.docs, requestedSeated, typeof data.roster === 'string' ? data.roster : null)
+    const household = flag?.get('enabled') === true
+      ? await householdFor(db, ownerUid, groups?.docs ?? [], requestedSeated, typeof data.roster === 'string' ? data.roster : null)
       : null;
 
     logger.info('[tvOverview]', { hasSession: !!live, household: !!household });

@@ -34,7 +34,12 @@ describe('tvOverview anropsplats', () => {
   it('watchlist-frågan använder den testade statuslistan', () => {
     expect(src).toContain("where('status', 'in', [...OPEN_RAW_STATUSES])");
   });
-  it('hushållsvyn kräver flaggan på servern', () => expect(src).toContain("flag.get('enabled') === true"));
+  it('hushållsvyn kräver flaggan på servern', () => expect(src).toContain("flag?.get('enabled') === true"));
+  it('en flagg- eller grupp-läsning som felar tar inte ner tjänsterna och ger ingen hushållsvy', () => {
+    expect(src).toContain("db.doc('appConfig/tvHousehold').get().catch(() => null)");
+    expect(src).toContain(".limit(10).get().catch(() => null)");
+    expect(src).toContain('groups?.docs ?? []');
+  });
   it('varje watchlist-rad går genom toWatchItem och bara soffvalda listor läses', () => {
     expect(src).toContain('toWatchItem(d.data())');
     expect(src).toContain('wanted.map');

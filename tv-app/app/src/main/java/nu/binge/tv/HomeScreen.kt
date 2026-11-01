@@ -118,6 +118,14 @@ private fun Tonight(s: HomeState.Ready, vm: HomeViewModel) {
         if (s.upcoming.isNotEmpty()) item {
             PosterRow("Nästa avsnitt", s.upcoming, caption = { listOfNotNull(it.nextAirCode, it.nextAirDate).filter(String::isNotEmpty) })
         }
+        // TMDB:s villkor kräver den här texten där deras affischer och uppgifter visas.
+        item {
+            Text(
+                "This product uses the TMDB API but is not endorsed or certified by TMDB.",
+                fontSize = 14.sp,
+                color = BingeColors.TextMuted,
+            )
+        }
     }
 }
 
