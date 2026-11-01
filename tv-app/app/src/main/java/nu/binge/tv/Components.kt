@@ -119,19 +119,31 @@ fun ServiceStrip(rows: List<StripRow>, modifier: Modifier = Modifier) {
     if (rows.isEmpty()) return
     val context = LocalContext.current
     var notice by remember(rows) { mutableStateOf<String?>(null) }
+    // En tjänst du har, annars en gratis, får den stora knappen; resten ligger som en lugn rad med pris.
+    val primary = rows.firstOrNull { it.mine } ?: rows.firstOrNull { it.info.free }
+    val rest = rows.filterNot { it === primary }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            rows.forEach { row ->
-                Button(
-                    onClick = {
-                        notice = if (ServiceLauncher.open(context, row.info)) null
-                        else "${row.info.name} går inte att öppna härifrån än. Öppna appen själv på TV:n."
-                    },
-                    colors = bingeButtonColors(),
-                ) {
-                    Text("${row.info.name} · ${row.label}", fontSize = 18.sp, maxLines = 1)
+        primary?.let { row ->
+            Button(
+                onClick = {
+                    notice = if (ServiceLauncher.open(context, row.info)) null
+                    else "${row.info.name} går inte att öppna härifrån än. Öppna appen själv på TV:n."
+                },
+                colors = bingeButtonColors(),
+            ) {
+                Column {
+                    Text("Se på ${row.info.name}", fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                    Text(if (row.mine) "Ingår i din prenumeration" else "Gratis", fontSize = 16.sp, maxLines = 1)
                 }
             }
+        }
+        if (rest.isNotEmpty()) {
+            Text(
+                rest.joinToString("  ·  ") { r -> listOfNotNull(r.info.name, r.info.priceText).joinToString(" ") },
+                fontSize = 18.sp,
+                color = BingeColors.TextMuted,
+                maxLines = 2,
+            )
         }
         notice?.let { Text(it, fontSize = 18.sp, color = BingeColors.TextMuted) }
     }

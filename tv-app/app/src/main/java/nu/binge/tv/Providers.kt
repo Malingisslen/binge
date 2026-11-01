@@ -1,6 +1,13 @@
 package nu.binge.tv
 
-data class ProviderInfo(val id: Long, val name: String, val packageName: String?, val free: Boolean = false)
+/** `fromPrice` är billigaste nivån utan sport, kr/mån, samma värde som webbens cheapestEntertainmentTier. */
+data class ProviderInfo(val id: Long, val name: String, val packageName: String?, val free: Boolean = false, val fromPrice: Int? = null) {
+    val priceText: String? get() = when {
+        free -> "gratis"
+        fromPrice != null -> "från $fromPrice kr/mån"
+        else -> null
+    }
+}
 
 /** En rad i remsan "Öppna i tjänsten". */
 data class StripRow(val info: ProviderInfo, val mine: Boolean) {
@@ -17,15 +24,15 @@ data class StripRow(val info: ProviderInfo, val mine: Boolean) {
  */
 object Providers {
     private val known = listOf(
-        ProviderInfo(8, "Netflix", "com.netflix.ninja"),
-        ProviderInfo(119, "Prime Video", "com.amazon.amazonvideo.livingroom"),
-        ProviderInfo(337, "Disney+", "com.disney.disneyplus"),
-        ProviderInfo(384, "HBO Max", "com.wbd.stream"),
-        ProviderInfo(76, "Viaplay", null),
+        ProviderInfo(8, "Netflix", "com.netflix.ninja", fromPrice = 129),
+        ProviderInfo(119, "Prime Video", "com.amazon.amazonvideo.livingroom", fromPrice = 69),
+        ProviderInfo(337, "Disney+", "com.disney.disneyplus", fromPrice = 89),
+        ProviderInfo(384, "HBO Max", "com.wbd.stream", fromPrice = 89),
+        ProviderInfo(76, "Viaplay", null, fromPrice = 99),
         ProviderInfo(520, "SVT Play", null, free = true),
-        ProviderInfo(489, "TV4 Play", null),
-        ProviderInfo(350, "Apple TV+", "com.apple.atve.androidtv.appletv"),
-        ProviderInfo(510, "Discovery+", null),
+        ProviderInfo(489, "TV4 Play", null, fromPrice = 69),
+        ProviderInfo(350, "Apple TV+", "com.apple.atve.androidtv.appletv", fromPrice = 119),
+        ProviderInfo(510, "Discovery+", null, fromPrice = 59),
     )
     private val byId = known.associateBy { it.id }
     // Samma alias som webbens lista (src/lib/tmdb/providers.ts): TMDB har flera id:n för samma tjänst.

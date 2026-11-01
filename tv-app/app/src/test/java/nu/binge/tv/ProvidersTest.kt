@@ -50,4 +50,10 @@ class ProvidersTest {
         assertTrue(TonightPicker.reason(t, 0, setOf(8)).startsWith("Finns på Netflix som du har."))
         assertFalse(TonightPicker.reason(t, 0, emptySet()).contains("Netflix"))
     }
+
+    @Test fun priceTextIsFreeOrFromPriceAndNeverInvented() {
+        assertEquals("från 129 kr/mån", Providers.info(8)?.priceText)
+        assertEquals("gratis", Providers.info(520)?.priceText)
+        assertEquals("från 99 kr/mån", Providers.info(76)?.priceText)
+    }
 }
