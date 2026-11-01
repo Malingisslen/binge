@@ -85,7 +85,7 @@ private fun Ready(s: HomeState.Ready, vm: HomeViewModel) {
     val others = s.picks.filterNot { it.docId == current.docId }
     // En rullbar lista: på en TV är skärmen lägre än hero och rader tillsammans, och raderna måste
     // gå att nå med pil ner i stället för att klippas av.
-    LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(32.dp)) {
+    LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(24.dp)) {
         item { Hero(current, onNext = vm::nextSuggestion, onWatched = vm::markWatched) }
         if (others.isNotEmpty()) item { PosterRow("Vill se", others) }
         if (s.upcoming.isNotEmpty()) item {
@@ -111,11 +111,11 @@ private fun Hero(t: Title, onNext: () -> Unit, onWatched: () -> Unit) {
     // Fokus på "Nästa förslag" och bara en gång: en dubbeltryckning ska aldrig markera titeln som sedd.
     LaunchedEffect(Unit) { focus.requestFocus() }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(40.dp)) {
-        Poster(t, Modifier.width(180.dp).height(270.dp))
+        Poster(t, Modifier.width(150.dp).height(225.dp))
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("IKVÄLL", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = BingeColors.Accent)
             // Fast höjd på titeln, så att knapparna ligger på samma ställe oavsett titel.
-            Text(t.title, fontSize = 36.sp, fontWeight = FontWeight.Bold, color = BingeColors.Text, minLines = 2, maxLines = 2)
+            Text(t.title, fontSize = 32.sp, fontWeight = FontWeight.Bold, color = BingeColors.Text, minLines = 2, maxLines = 2)
             Text(TonightPicker.reason(t, System.currentTimeMillis()), fontSize = 22.sp, color = BingeColors.TextMuted)
             Text(t.runtime?.let { "$it min" }.orEmpty(), fontSize = 22.sp, color = BingeColors.TextMuted, minLines = 1, maxLines = 1)
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(top = 8.dp)) {
@@ -135,13 +135,13 @@ private fun PosterRow(heading: String, titles: List<Title>, caption: (Title) -> 
         Text(heading, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = BingeColors.Text)
         LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             items(titles, key = { it.docId }) { t ->
-                Column(Modifier.width(140.dp)) {
+                Column(Modifier.width(112.dp)) {
                     // Valbar så att fokus kan flyttas hit med pil ner; ingen åtgärd än.
                     Card(
                         onClick = {},
                         border = CardDefaults.border(focusedBorder = Border(BorderStroke(3.dp, BingeColors.Accent))),
                     ) {
-                        Poster(t, Modifier.width(140.dp).height(210.dp))
+                        Poster(t, Modifier.width(112.dp).height(168.dp))
                     }
                     // Kod och datum på var sin rad, annars klipps datumet i en smal kolumn.
                     caption(t).forEachIndexed { i, line ->
