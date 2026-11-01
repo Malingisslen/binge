@@ -10,6 +10,7 @@ const h = vi.hoisted(() => ({
   groupDocs: [] as unknown[],
   watchlist: new Map<string, Record<string, unknown>[]>(),
   household: new Set<string>(),
+  sessions: [] as unknown[],
 }));
 
 vi.mock('firebase-functions/v2', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
@@ -43,7 +44,7 @@ vi.mock('firebase-admin/firestore', () => ({
         get: async () => {
           if (h.failing.has(path)) throw new Error('unavailable');
           if (path === 'groups') return { docs: h.groupDocs };
-          if (path === 'sessions') return { docs: [] };
+          if (path === 'sessions') return { docs: h.sessions };
           const rows = h.watchlist.get(path) ?? [];
           return { docs: rows.map((r) => ({ data: () => r })) };
         },
@@ -62,9 +63,14 @@ const request = (data: unknown = {}) => ({
   data,
 });
 
-function group() {
+const session = (id: string, status: string, expiresInMs: number) => ({
+  id,
+  get: (f: string) => (f === 'status' ? status : f === 'expiresAt' ? { toMillis: () => Date.now() + expiresInMs } : undefined),
+});
+
+function group(members: string[] = ['owner', 'friend']) {
   return {
-    get: (f: string) => (f === 'memberUids' ? ['owner', 'friend'] : undefined),
+    get: (f: string) => (f === 'memberUids' ? members : undefined),
     ref: { collection: () => ({ doc: (uid: string) => ({ get: async () => ({ id: uid, exists: h.household.has(uid) }) }) }) },
   };
 }
@@ -78,6 +84,7 @@ beforeEach(() => {
   h.failing.clear();
   h.watchlist.clear();
   h.household.clear();
+  h.sessions = [];
   takeRate.mockClear();
   h.groupDocs = [group()];
   h.docs.set('users/owner/tvDevices/dev1', {});
@@ -151,5 +158,39 @@ describe('tvOverview vid körning', () => {
     const res = await call(request({ seated: [0, 1] }));
     const view = res.household?.view as { shared: { tmdbId: number }[] };
     expect(view.shared.map((t) => t.tmdbId)).toEqual([1]);
+  });
+  it('en aktiv session ger sessionId, en utgången eller avslutad ger ingen', async () => {
+    h.sessions = [session('gammal', 'active', -1000), session('klar', 'ended', 60_000), session('levande', 'active', 60_000)];
+    expect((await call(request())).sessionId).toBe('levande');
+    h.sessions = [session('gammal', 'active', -1000), session('klar', 'ended', 60_000)];
+    expect((await call(request())).sessionId).toBeNull();
+  });
+
+  it('en sessionsfråga som felar (indexet byggs) behåller tjänsterna', async () => {
+    h.failing.add('sessions');
+    const res = await call(request());
+    expect(res.sessionId).toBeNull();
+    expect(res.providers).toEqual([8, 337]);
+  });
+
+  it('en grupp där ägaren saknas som medlem hoppas över till nästa', async () => {
+    h.docs.set('appConfig/tvHousehold', { enabled: true });
+    h.groupDocs = [group(['friend']), group(['owner', 'friend'])];
+    const res = await call(request());
+    expect(res.household?.members).toHaveLength(2);
+    h.groupDocs = [group(['friend'])];
+    expect((await call(request())).household).toBeNull();
+  });
+
+  it('ägaren måste själv dela för att få hushållsvyn', async () => {
+    h.docs.set('appConfig/tvHousehold', { enabled: true });
+    h.household.delete('owner');
+    expect((await call(request())).household).toBeNull();
+  });
+
+  it('en bortkopplad TV räknas inte mot hastighetsgränsen', async () => {
+    h.docs.delete('users/owner/tvDevices/dev1');
+    await expect(call(request())).rejects.toThrow();
+    expect(takeRate).not.toHaveBeenCalled();
   });
 });
