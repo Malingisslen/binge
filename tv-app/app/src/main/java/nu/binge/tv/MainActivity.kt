@@ -41,7 +41,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 val state by vm.state.collectAsState()
-                Box(Modifier.fillMaxSize().background(BingeColors.Background).padding(64.dp)) {
+                Box(Modifier.fillMaxSize().background(BingeColors.Background).padding(48.dp)) {
                     when (val s = state) {
                         PairingState.Loading -> CenteredText("Hämtar kod …")
                         is PairingState.ShowCode -> CodeScreen(s)

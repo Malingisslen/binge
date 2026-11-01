@@ -89,7 +89,7 @@ private fun Ready(s: HomeState.Ready, vm: HomeViewModel) {
         item { Hero(current, onNext = vm::nextSuggestion, onWatched = vm::markWatched) }
         if (others.isNotEmpty()) item { PosterRow("Vill se", others) }
         if (s.upcoming.isNotEmpty()) item {
-            PosterRow("Nästa avsnitt", s.upcoming, caption = { "${it.nextAirCode.orEmpty()} · ${it.nextAirDate.orEmpty()}".trim(' ', '·') })
+            PosterRow("Nästa avsnitt", s.upcoming, caption = { listOfNotNull(it.nextAirCode, it.nextAirDate).filter(String::isNotEmpty) })
         }
     }
 }
@@ -111,14 +111,14 @@ private fun Hero(t: Title, onNext: () -> Unit, onWatched: () -> Unit) {
     // Fokus på "Nästa förslag" och bara en gång: en dubbeltryckning ska aldrig markera titeln som sedd.
     LaunchedEffect(Unit) { focus.requestFocus() }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(40.dp)) {
-        Poster(t, Modifier.width(200.dp).height(300.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.height(300.dp)) {
+        Poster(t, Modifier.width(180.dp).height(270.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("IKVÄLL", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = BingeColors.Accent)
             // Fast höjd på titeln, så att knapparna ligger på samma ställe oavsett titel.
-            Text(t.title, fontSize = 48.sp, fontWeight = FontWeight.Bold, color = BingeColors.Text, minLines = 2, maxLines = 2)
+            Text(t.title, fontSize = 36.sp, fontWeight = FontWeight.Bold, color = BingeColors.Text, minLines = 2, maxLines = 2)
             Text(TonightPicker.reason(t, System.currentTimeMillis()), fontSize = 22.sp, color = BingeColors.TextMuted)
             Text(t.runtime?.let { "$it min" }.orEmpty(), fontSize = 22.sp, color = BingeColors.TextMuted, minLines = 1, maxLines = 1)
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(top = 16.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(top = 8.dp)) {
                 Button(onClick = onNext, colors = bingeButtonColors(), modifier = Modifier.focusRequester(focus)) { Text("Nästa förslag") }
                 Button(onClick = onWatched, colors = bingeButtonColors()) {
                     Text(if (t.isMovie) "Sedd" else "Såg första avsnittet")
@@ -130,7 +130,7 @@ private fun Hero(t: Title, onNext: () -> Unit, onWatched: () -> Unit) {
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun PosterRow(heading: String, titles: List<Title>, caption: (Title) -> String? = { null }) {
+private fun PosterRow(heading: String, titles: List<Title>, caption: (Title) -> List<String> = { emptyList() }) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(heading, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = BingeColors.Text)
         LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -143,7 +143,10 @@ private fun PosterRow(heading: String, titles: List<Title>, caption: (Title) -> 
                     ) {
                         Poster(t, Modifier.width(140.dp).height(210.dp))
                     }
-                    caption(t)?.let { Text(it, fontSize = 16.sp, color = BingeColors.TextMuted, maxLines = 1, modifier = Modifier.padding(top = 6.dp)) }
+                    // Kod och datum på var sin rad, annars klipps datumet i en smal kolumn.
+                    caption(t).forEachIndexed { i, line ->
+                        Text(line, fontSize = 16.sp, color = BingeColors.TextMuted, maxLines = 1, modifier = Modifier.padding(top = if (i == 0) 6.dp else 0.dp))
+                    }
                 }
             }
         }
