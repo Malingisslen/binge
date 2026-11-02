@@ -127,7 +127,11 @@ single agent runs directly when Malin names exactly one show.
    episode 1) from Firestore; `schemaVersion < 2` means that season still has the
    old single-episode-style recaps and needs a full redo pass (see "Regeneration"
    below), not a skip.
-3. **Sources — CC BY-SA only:** Wikipedia season articles first; fan wikis as
+3. **Sources — CC BY-SA only:** Wikipedia season articles first, fetched ONLY with
+   `node functions/scripts/wiki-fetch.mjs "<article title>"`. It spaces requests across
+   all parallel agents and retries on 429 using Retry-After; direct WebFetch/curl against
+   Wikipedia trips the rate limit on the shared cloud IP. Exit 3 = no such article, exit 1 = other HTTP error, exit 4
+   = still rate-limited after retries (skip the show, don't hammer); fan wikis as
    enrichment ONLY if you can fetch their licence page and it states CC BY-SA.
    **NEVER search wider into copyrighted recap sites** (Fandom usually 402-blocks
    WebFetch = licence unverifiable = skip). An episode with no usable source gets
