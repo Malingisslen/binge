@@ -36,7 +36,7 @@ function clientIp(request: { rawRequest?: { ip?: string } }): string {
 }
 
 /** Tar en plats i ett räknefönster, eller kastar resource-exhausted. Egen transaktion per nyckel. */
-async function takeRate(key: string, limit: { max: number; windowMs: number }): Promise<void> {
+export async function takeRate(key: string, limit: { max: number; windowMs: number }): Promise<void> {
   const db = getFirestore();
   const ref = db.doc(`tvRate/${key}`);
   await db.runTransaction(async (tx: Transaction) => {

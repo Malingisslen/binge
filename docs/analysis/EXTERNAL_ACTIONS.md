@@ -269,3 +269,16 @@ here; derive where that is:
 ```
 grep -rn "Blaze" CLAUDE.md docs/RUNBOOK.md
 ```
+
+## TV household view flag (BIN-1470)
+
+The household view on the TV is off until the Firestore document `appConfig/tvHousehold` has the
+field `enabled: true`. Only the Firebase Console (or the Admin SDK) can write it; no rule matches
+the collection. Turn it on only after Legal has approved and the consent text is published, and
+after the deployed `tvOverview` has been called once from a real TV. Set `enabled: false` to turn
+it off again; it takes effect on the next call, with no deploy.
+
+Roll-out order for `tvOverview`: deploy the function and the `sessions` index in the same push, then
+open Firestore > Indexes and wait until the index is READY before trying a TV. Until then only the
+Tillsammans tab is missing. To check the real call, look for the log line `[tvOverview]` in Cloud
+Logging after a TV has opened the app.
