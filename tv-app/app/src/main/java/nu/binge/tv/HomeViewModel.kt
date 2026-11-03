@@ -1,5 +1,6 @@
 package nu.binge.tv
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.firestore.FirebaseFirestoreException
@@ -48,6 +49,8 @@ class HomeViewModel : ViewModel() {
                     throw e
                 } catch (e: Exception) {
                     if (isDenied(e)) throw e
+                    // Bara felkoden loggas, aldrig uppgifter: utan den syns inte att tjänsterna aldrig hämtades.
+                    Log.w("BingeTv", "tvOverview misslyckades: ${(e as? FirebaseFunctionsException)?.code ?: e.javaClass.simpleName}")
                     Overview.EMPTY
                 }
                 HomeState.Ready(
