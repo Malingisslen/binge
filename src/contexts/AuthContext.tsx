@@ -314,6 +314,8 @@ async function buildExistingProfile(data: Record<string, unknown>, firebaseUser:
       acceptTips: (data.notificationSettings as UserProfile['notificationSettings'])?.acceptTips !== false,
       // Same reading as onFollowCreate: only an explicit false turns the notice off.
       followNotify: (data.notificationSettings as UserProfile['notificationSettings'])?.followNotify !== false,
+      // Same reading as firestore.rules and onSessionInviteCreate: only an explicit false.
+      sessionInviteNotify: (data.notificationSettings as UserProfile['notificationSettings'])?.sessionInviteNotify !== false,
     },
     rotationSchedule: (data.rotationSchedule as UserProfile['rotationSchedule']) ?? undefined,
   };

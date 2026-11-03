@@ -73,6 +73,15 @@ export interface UserDataSnapshots {
   // själv skickat ligger i mottagarens träd och når inte hit — se
   // docs/data-retention-policy.md.
   tipsSnap: QuerySnapshot;
+  // Bjud in till Tillsammans: inbjudningar till mig. I export + delete-cascade. De jag
+  // själv skickat ligger i mottagarens träd och raderas av servern, se
+  // docs/data-retention-policy.md.
+  sessionInvitesSnap: QuerySnapshot;
+  // Inbjudningsnotisens spärrmarkörer (`sessionInvitePushes`) där jag är mottagare
+  // respektive avsändare. Med i exporten. Klienten får inte radera dem; servern gör det
+  // vid kontoradering (`handOverOwnedGroups`) och svepet efter maxåldern.
+  sessionInvitePushesReceivedSnap: QuerySnapshot;
+  sessionInvitePushesSentSnap: QuerySnapshot;
   // FCM web-push tokens (Fas 4). Inkluderas i delete-cascade. För export
   // behöver vi inte exponera tokens (de är device-specifika och meningslösa
   // utanför Firebase) — buildUserExport kan hoppa över detta fält.
@@ -146,6 +155,7 @@ export const KNOWN_USER_SUBCOLLECTIONS = [
   'friendRequestsSent',
   'groupInvites',
   'tips',
+  'sessionInvites',
 ] as const;
 
 export async function collectUserDataSnapshots(
@@ -170,6 +180,9 @@ export async function collectUserDataSnapshots(
     friendRequestsSentSnap,
     groupInvitesSnap,
     tipsSnap,
+    sessionInvitesSnap,
+    sessionInvitePushesReceivedSnap,
+    sessionInvitePushesSentSnap,
     fcmTokensSnap,
     reportMetaSnap,
     askBingeMetaSnap,
@@ -201,6 +214,9 @@ export async function collectUserDataSnapshots(
     getDocs(collection(db, 'users', uid, 'friendRequestsSent')),
     getDocs(collection(db, 'users', uid, 'groupInvites')),
     getDocs(collection(db, 'users', uid, 'tips')),
+    getDocs(collection(db, 'users', uid, 'sessionInvites')),
+    getDocs(query(collection(db, 'sessionInvitePushes'), where('recipientUid', '==', uid))),
+    getDocs(query(collection(db, 'sessionInvitePushes'), where('fromUid', '==', uid))),
     getDocs(collection(db, 'users', uid, 'fcmTokens')),
     getDocs(collection(db, 'users', uid, 'reportMeta')),
     getDocs(collection(db, 'users', uid, 'askBingeMeta')),
@@ -239,6 +255,9 @@ export async function collectUserDataSnapshots(
     friendRequestsSentSnap,
     groupInvitesSnap,
     tipsSnap,
+    sessionInvitesSnap,
+    sessionInvitePushesReceivedSnap,
+    sessionInvitePushesSentSnap,
     fcmTokensSnap,
     reportMetaSnap,
     askBingeMetaSnap,

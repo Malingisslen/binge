@@ -11685,3 +11685,94 @@ branch-side call sites. Unit: `dataExport.coverage.test.ts` + `userData.subcolle
 main's 967, measured without the branch's `tvDevices.rules.test.ts`, so the floor does not count
 the TV suite (test-reviewer territory).
 Addendum, same review: merged `npm run test:rules -- --port 8123` 11 files, 990/990 green, above the 967 floor.
+
+### 2026-11-03 — Tillsammans-inbjudan: `sharesSessionGroup` proves membership from the member ROW, not `memberUids`
+
+Staged diff: `users/{uid}/sessionInvites/{inviteId}` create rule, helper `sharesSessionGroup(sessionId)`:
+`gid is string && exists(groups/$(gid)/members/$(uid)) && exists(groups/$(gid)/members/$(request.auth.uid))`.
+
+Trace. `groups/{groupId}` leave branch (member removes only themself) shrinks `memberUids` and never touches
+`members/{memberUid}`. The member row's `allow delete: if selfOrOwner()` requires `request.auth.uid in
+group.memberUids` for the self half, so once the array no longer holds the leaver she can never delete her own
+row; only the owner can. The app's `removeMember` batch deletes both, but a raw-SDK client may send only
+`updateDoc(group, {memberUids: arrayRemove(self)})`. `sessions` create binds `hostUid` and `groupId is string`
+and nothing about membership. So: ex-member raw-leaves, hosts a session with `groupId: <left group>`, and
+`sharesSessionGroup` passes on both stale/current rows for every member who joined through the app.
+
+PoC (emulator, throwaway `src/test/rules/_poc-session-invite-stale-member.test.ts`, deleted): seeded group G
+{owner, attacker, victim, defaults:{}} + member rows for attacker and victim; as attacker `arrayRemove(self)`
+SUCCEEDS, session create with groupId G SUCCEEDS, invite to victim (no friendship) SUCCEEDS, and attacker's
+`getDoc(groups/G)` FAILS (proves she is not a member by the authoritative record). Inverted: same PoC against
+a scratch copy of the rules with the two `exists()` replaced by `uid in get(groups/$(gid)).data.memberUids &&
+request.auth.uid in get(...).data.memberUids` — the invite create is DENIED (evaluation reaches the group-doc
+get). `firestore.rules` sha256 539b18fb… unchanged before/after.
+
+Severity: Medium, blocking. Crosses the binding panel condition "vän eller delad grupp" (plan
+tasks/tillsammans-inbjudan-plan.md) and puts in-app cards plus, at most hourly per pair, a push on a non-friend
+former group-mate's device; the victim's remedy is a block. Not Critical: the attacker must once have shared a
+group with the victim, and the session id is the attacker's own.
+
+Rejected fix options: (a) also require `exists(members/...)` AND array — redundant, the array alone is the
+authority; (b) client-side filter in the picker — the rule is the boundary, the client is not. Chosen: read the
+group doc once and test both uids against `memberUids` (one read instead of two, so the read budget improves).
+Ask for a rules test that seeds a member ROW for the host with the host absent from `memberUids` and asserts
+the invite fails — the existing "host who has left" test deletes the row, which models the app's leave, not
+the raw one.
+
+### 2026-11-03 — Tillsammans-inbjudan r2: `sharesSessionGroup` fix verified; the push brake is resettable through `handOverOwnedGroups`
+
+Fix verified. Staged `sharesSessionGroup` reads `groups/$(gid).memberUids` for both uids. Isolated rig (staged
+blobs copied to the scratchpad, own emulator on 8765, because a sibling session was mutating the shared
+`firestore.rules` in place during this review and contaminated a first in-tree mutation run): baseline 40/40.
+Mutants, one per `--no-cache` run: revert to the old `exists(members/…)` pair → exactly the two new
+"members row outlived" tests red; drop the host `in` → the two host-left tests red; drop the recipient `in` →
+"recipient outside the group" + "recipient row outlived" red; `sharesSessionGroup` → `false` → the group
+accept red; drop `uid != request.auth.uid` → "nobody can invite themselves" red. End-to-end PoC: raw
+`arrayRemove(self)` + session with `groupId: G` + invite to a former group-mate → DENIED; current member →
+allowed. Slash in `groupId` (`H/watchlist/X`) is one path segment in the emulator → no traversal into a
+group subdoc. Staged `firestore.rules` sha256 2e6e90bb… unchanged.
+
+New finding (Medium, blocking). `eraseSessionInviteTraces` (functions/src/groupHandover/sessionInvites.ts),
+wired into `handOverOwnedGroups`, deletes every `sessionInvitePushes` doc with `fromUid == caller` and every
+invite the caller sent. The callable is reachable by any signed-in caller outside a deletion (header of
+groupHandover/index.ts; BIN-1297 entry). `onSessionInviteCreate` reads the pair marker → missing →
+`mayNotifySessionInvite(null)` true → card + push. Loop for a friend or current group-mate: invite, call
+the callable, invite again (the deleted invite frees the same doc id and the recipient cap never fills).
+Defeats the binding panel condition "markör 1 per timme" (tasks/tillsammans-inbjudan-plan.md). DERIVED from
+code, not emulator-PoC'd (functions emulator not run). Not Critical: attacker must be a friend or current
+group-mate; victim can block or turn invites off. Fix options: erase only markers past
+`SESSION_INVITE_PUSH_WINDOW_MS` (the 2-day sweep takes the rest), or only markers naming the caller as
+RECIPIENT, or gate the marker erasure on a confirmed deletion; any narrowing of "markör in i radering" is a
+panel-condition change for Malin. Rejected: client-side rate limit (not a boundary).
+
+### 2026-11-03 — Tillsammans-inbjudan r3: `mayEraseSessionInviteMarker` verified; a read-then-blind-delete race remains (Low)
+
+Fix verified. `eraseSessionInviteTraces` now filters markers through `mayEraseSessionInviteMarker(marker, uid,
+nowMs) = marker.recipientUid === uid || mayNotifySessionInvite(marker.lastPushedAtMs, nowMs)` — the trigger's
+own predicate, so an erased sender marker is exactly one the trigger would already let through (absent reads
+as `null` → may notify, same verdict). `adminSessionInviteErasureIo.markers` selects `recipientUid` and
+`lastPushedAt` and reads the timestamp duck-typed, as `onSessionInviteCreate` does. Mutation rig: staged
+`sessionInvites.ts` + test + `sessionInvitePush/logic.ts` copied to the scratchpad, minimal vitest config,
+one `--no-cache` run per mutant, restored copy sha256 29f514b0… equal to the tree. Baseline 12/12. `return
+true` (r2 behaviour) → 3 red (keep-fresh, keep-fresh-beside-stale, boundary); drop the recipient branch → 1 red
+(fresh recipient marker); drop the `.filter` wiring → the same 3; drop `lastPushedAt` from one `select` → 1
+red (source shape); `lastPushedAtMs: null` → 1 red (source shape). `recipientUid: null` in the port is not
+pinned, but fails closed (keeps more, swept in 2 days). `firestore.rules` changed since r2 (2e6e90bb… →
+be439d05…) only in the cost comment of the `sessionInvites` block.
+
+Cap: the erased sent invites are `fromUid == caller` only (fromUid pinned on create, `update: if false`), so the
+recipient cap's freed slots are the caller's own; other hosts' invites are untouched.
+
+Residual (Low, not blocking). `eraseSessionInviteTraces` queries markers, decides, then deletes by path with an
+unconditional `batch.delete`. Sequence: pair marker stale (>1 h); caller fires `handOverOwnedGroups`, whose
+`markers` read sees it stale; concurrently an invite's trigger stamps a fresh marker and notifies; the
+callable's batch deletes the fresh marker; the next invite notifies again. Bounded: every read must predate
+the first fresh stamp, so the gain is a few extra notices once per window per pair, not a reset loop. DERIVED,
+not emulator-PoC'd (functions emulator not run). Fix: delete sender markers with a `lastUpdateTime`
+precondition from the snapshot read (and treat FAILED_PRECONDITION as "kept"), or re-check
+`mayNotifySessionInvite` inside a transaction per marker. Rejected: re-reading outside a transaction (same
+race, narrower).
+
+Prose (Info): the rules comment on `allow update: if false` in `users/{uid}/sessionInvites` says a repeat
+invite "väcker ingen ny notis"; after the recipient declines or the sender's invites are erased the doc is
+gone and a re-invite is a fresh create, held back only by the marker.

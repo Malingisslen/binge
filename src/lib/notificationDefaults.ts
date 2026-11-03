@@ -20,4 +20,5 @@ export const NEW_ACCOUNT_NOTIFICATION_SETTINGS: UserProfile['notificationSetting
   monthlyBill: true,
   acceptTips: true,
   followNotify: true,
+  sessionInviteNotify: true,
 };

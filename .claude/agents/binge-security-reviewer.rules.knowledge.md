@@ -121,6 +121,12 @@ Read only when the staged diff touches this chapter's paths (see .claude/shared-
   `exists()` when the proof is deleted in the SAME batch; `existsAfter()` when created together (BIN-20).
   Rules gate KEYS, not field COMPLETENESS. A member-create rule's `get(group)` DOES see a doc written earlier
   in the batch.
+- **A NEW rule that proves group membership must read `groups/{gid}.memberUids`, never `exists(members/{x})`.**
+  The leave branch shrinks the array and touches no member row, and afterwards the row's delete rule no longer
+  admits its owner, so a raw-SDK leaver keeps a permanent row (doc-without-array, the escalation direction the
+  server chapter names). Found in review of Tillsammans-inbjudan (2026-11-03, emulator PoC; archive entry):
+  `sharesSessionGroup` as first written let an ex-member invite non-friend former group-mates. One `get()` of
+  the group doc is also cheaper than two `exists()`.
 
 ## Server-only collections, public rollups, external input
 - A top-level collection with NO rules block is default-denied — safe ONLY because this file has no

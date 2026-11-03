@@ -130,7 +130,9 @@ const REPO = resolve(HERE, '..');
 // Hushållsröster, 2026-10-31: raised to what `numTotalTests` reported with the describe
 // block named `ADR 0026 — soonProviderIds, votes, votesMonth` in place. Measured with
 // `npm run test:rules -- --port 8123`.
-export const MIN_TESTS = 967;
+// Sessionsinbjudningar, 2026-11-03: raised to just under what `numTotalTests` reported with
+// src/test/rules/session-invites.test.ts in place. Measured with `npm run test:rules`.
+export const MIN_TESTS = 1030;
 
 const VITEST_ARGS = ['run', '--config', 'vitest.rules.config.ts'];
 

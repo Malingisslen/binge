@@ -411,6 +411,14 @@ function GroupView({
               <Play size={11} />
               {startingSession ? 'Startar…' : 'Starta session'}
             </Button>
+            {/* The invite variant goes through /tillsammans/ny, where the members are
+                listed ticked and can be unticked before anyone is invited. */}
+            <Link
+              href={`/tillsammans/ny/?grupp=${encodeURIComponent(group.id)}`}
+              className={buttonClass({ variant: 'ghost', size: 'sm', className: 'no-underline' })}
+            >
+              Bjud in till session
+            </Link>
             {isOwner && (
               <Button
                 type="button"

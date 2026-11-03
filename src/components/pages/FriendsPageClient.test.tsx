@@ -66,6 +66,12 @@ vi.mock('@/hooks/useTips', () => ({ useTips: () => ({ data: tipData.tips }) }));
 vi.mock('@/components/social/TipRow', () => ({
   TipRow: ({ tip }: { tip: { fromUid: string; title: string } }) => <li data-testid="tip">{tip.fromUid}:{tip.title}</li>,
 }));
+// Bjud in till Tillsammans: the invite list and its rows. The row has its own test file.
+const inviteData = vi.hoisted(() => ({ invites: [] as { id: string; fromUid: string; fromName: string | null; sessionId: string; createdAt: Date }[] }));
+vi.mock('@/hooks/useSessionInvites', () => ({ useSessionInvites: () => ({ data: inviteData.invites }) }));
+vi.mock('@/components/social/SessionInviteRow', () => ({
+  SessionInviteRow: ({ invite }: { invite: { fromUid: string } }) => <li data-testid="invite">{invite.fromUid}</li>,
+}));
 vi.mock('@/hooks/useFriends', () => ({
   useFriends: () => ({ data: data.friends, isLoading: false }),
   useFriendRequests: () => ({ data: data.requests, isLoading: false }),
@@ -460,5 +466,29 @@ describe('FriendsPageClient — tips in the Väntar på dig box (Tipsa en vän)'
     tipData.tips = [tip('bo', 'Alien'), tip('anna', 'The Matrix')];
     const view = render(<FriendsPageClient />);
     expect(view.getAllByTestId('tip').map(t => t.textContent)).toEqual(['anna:The Matrix']);
+  });
+});
+
+describe('FriendsPageClient — Tillsammans invites in the Väntar på dig box', () => {
+  const invite = (fromUid: string) => ({
+    id: `Sess1_${fromUid}`, fromUid, fromName: null, sessionId: 'Sess1', createdAt: new Date(),
+  });
+
+  beforeEach(() => { inviteData.invites = []; tipData.tips = []; data.blocked = new Set(); });
+
+  it('shows the box for an invite alone, with nothing else waiting', () => {
+    inviteData.invites = [invite('anna')];
+    const view = render(<FriendsPageClient />);
+    const box = view.getByRole('region', { name: 'Väntar på dig' });
+    expect(within(box).getByRole('list', { name: 'Inbjudningar till Tillsammans' })).toBeTruthy();
+    expect(within(box).getByTestId('invite').textContent).toBe('anna');
+  });
+
+  it('leaves out an invite from someone I blocked, and the box with it when nothing else waits', () => {
+    data.blocked = new Set(['bo']);
+    inviteData.invites = [invite('bo')];
+    const view = render(<FriendsPageClient />);
+    expect(view.queryByTestId('invite')).toBeNull();
+    expect(view.queryByRole('region', { name: 'Väntar på dig' })).toBeNull();
   });
 });

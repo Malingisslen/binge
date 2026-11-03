@@ -44,7 +44,8 @@ export const RELATION_SUBCOLLECTIONS = ['friends', 'following', 'followers'];
  * Never copied. Push tokens point at devices that may belong to someone else by now,
  * notifications and the two meta docs are server state that rebuilds itself, and a pending
  * request or invite may have been answered or withdrawn while the account was gone. A tip is
- * pending in the same way, and expires after 90 days on its own.
+ * pending in the same way, and expires after 90 days on its own. A session invite points at a
+ * session that has most likely ended, and expires on its own as well.
  */
 export const NEVER_COPIED_SUBCOLLECTIONS = [
   'fcmTokens',
@@ -57,6 +58,7 @@ export const NEVER_COPIED_SUBCOLLECTIONS = [
   'friendRequestsSent',
   'groupInvites',
   'tips',
+  'sessionInvites',
 ];
 
 /** Where each relation's mirror lives in the other person's tree. */

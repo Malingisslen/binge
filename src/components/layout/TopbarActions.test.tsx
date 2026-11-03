@@ -40,9 +40,11 @@ vi.mock('next/navigation', () => {
 const notif = vi.hoisted(() => ({
   notifications: [] as unknown[],
   friendRequests: [] as { fromUid: string; fromDisplayName: string; fromPhotoURL: string | null }[],
+  sessionInvites: [] as { id: string; fromUid: string; fromName: string | null; sessionId: string; createdAt: Date }[],
   recentPicks: [] as unknown[],
   unreadCount: 0,
   friendRequestsCount: 0,
+  sessionInvitesCount: 0,
   providerUnreadCount: 0,
   recentPicksCount: 0,
   markRead: vi.fn(),
@@ -58,6 +60,10 @@ vi.mock('@/hooks/useNotifications', () => ({ useNotifications: () => notif }));
 vi.mock('@/hooks/useFriends', () => ({ useFriendActions: () => friendActions }));
 vi.mock('@/hooks/useMySessions', () => ({ useMySessions: () => [] }));
 vi.mock('@/hooks/useClickOutside', () => ({ useClickOutside: () => {} }));
+// The invite row has its own test file; here only that the bell lists it.
+vi.mock('@/components/social/SessionInviteRow', () => ({
+  SessionInvitePopoverRow: ({ invite }: { invite: { fromUid: string } }) => <div data-testid="invite-row">{invite.fromUid}</div>,
+}));
 const senders = vi.hoisted(() => new Map<string, { displayName: string | null; username: string | null }>());
 vi.mock('@/hooks/useSenderProfile', () => ({
   useSenderProfile: (uid: string) => ({ data: senders.get(uid) ?? null }),
@@ -337,5 +343,65 @@ describe('TopbarActions — systemnotiser med och utan länk (BIN-1259)', () => 
       fireEvent.click(view.getByText('Din anmälan'));
     });
     expect(notif.markRead).toHaveBeenCalledWith('n1');
+  });
+});
+
+// Bjud in till Tillsammans: the bell's own section for invites, above friend requests.
+describe('TopbarActions — Tillsammans invites in the bell', () => {
+  const invite = (fromUid: string) => ({ id: `S1_${fromUid}`, fromUid, fromName: null, sessionId: 'S1', createdAt: new Date() });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    auth.user = { displayName: 'Malin' };
+    auth.uid = 'me';
+    notif.friendRequests = [];
+    notif.friendRequestsCount = 0;
+  });
+
+  it('lists each waiting invite under its own heading with the count', async () => {
+    notif.sessionInvites = [invite('anna'), invite('bo')];
+    notif.sessionInvitesCount = 2;
+    await act(async () => { render(<TopbarActions />); });
+    fireEvent.click(screen.getByRole('button', { name: /notiser/i }));
+    expect(screen.getByText('Inbjudningar till Tillsammans (2)')).toBeTruthy();
+    expect(screen.getAllByTestId('invite-row').map(r => r.textContent)).toEqual(['anna', 'bo']);
+  });
+
+  it('shows no invite heading when nothing waits', async () => {
+    notif.sessionInvites = [];
+    notif.sessionInvitesCount = 0;
+    await act(async () => { render(<TopbarActions />); });
+    fireEvent.click(screen.getByRole('button', { name: /notiser/i }));
+    expect(screen.queryByText(/Inbjudningar till Tillsammans/)).toBeNull();
+  });
+
+  // The bell is drawn from what it would list. Invites are read live from
+  // sessionInvites, and the session_invite inbox card is never listed.
+  describe('whether the bell is shown at all', () => {
+    const inviteCard = { id: 'card1', kind: 'session_invite', read: false, createdAt: new Date() };
+    beforeEach(() => {
+      notif.recentPicks = [];
+      notif.recentPicksCount = 0;
+      notif.providerUnreadCount = 0;
+    });
+
+    it('an invite whose inbox card has not arrived still shows the bell', async () => {
+      notif.notifications = [];
+      notif.sessionInvites = [invite('anna')];
+      notif.sessionInvitesCount = 1;
+      notif.unreadCount = 1;
+      await act(async () => { render(<TopbarActions />); });
+      fireEvent.click(screen.getByRole('button', { name: /notiser/i }));
+      expect(screen.getByText('Inbjudningar till Tillsammans (1)')).toBeTruthy();
+    });
+
+    it('an inbox card left by an answered invite shows no empty bell', async () => {
+      notif.notifications = [inviteCard];
+      notif.sessionInvites = [];
+      notif.sessionInvitesCount = 0;
+      notif.unreadCount = 0;
+      await act(async () => { render(<TopbarActions />); });
+      expect(screen.queryByRole('button', { name: /notiser/i })).toBeNull();
+    });
   });
 });

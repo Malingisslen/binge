@@ -17,6 +17,7 @@
     "monthlyBillNotify",
     "notifyReportDecided",
     "onFollowCreate",
+    "onSessionInviteCreate",
     "onFriendRequestCreate",
     "onSessionPickCreate",
     "priceChangeNotify",

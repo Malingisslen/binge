@@ -76,6 +76,23 @@ const COVERAGE: Record<keyof UserDataSnapshots, CoverageSpec> = {
   groupInvitesSnap: { export: 'groupInvites', deleteCascade: true },
   // Tipsa en vän: tips friends sent me — exported and erased with the account.
   tipsSnap: { export: 'tips', deleteCascade: true },
+  // Bjud in till Tillsammans: invites sent to me — exported and erased with the account.
+  sessionInvitesSnap: { export: 'sessionInvites', deleteCascade: true },
+  sessionInvitePushesReceivedSnap: {
+    export: 'sessionInvitePushesReceived',
+    deleteCascade: false,
+    deleteSkipReason:
+      'Notice brake marker written by onSessionInviteCreate; firestore.rules deny every client ' +
+      'write. Erased server-side by handOverOwnedGroups, which runs before the cascade, and by ' +
+      'the retentionCleanup sweep after its max age.',
+  },
+  sessionInvitePushesSentSnap: {
+    export: 'sessionInvitePushesSent',
+    deleteCascade: false,
+    deleteSkipReason:
+      'Same marker collection, the rows naming me as sender. Erased server-side by ' +
+      'handOverOwnedGroups and by the retentionCleanup sweep.',
+  },
   fcmTokensSnap: {
     export: null,
     exportSkipReason:
@@ -120,7 +137,11 @@ const EXPECTED_EXPORT_SKIP = new Set<keyof UserDataSnapshots>([
   'reportMetaSnap',
   'askBingeMetaSnap',
 ]);
-const EXPECTED_DELETE_SKIP = new Set<keyof UserDataSnapshots>(['followersSnap']);
+const EXPECTED_DELETE_SKIP = new Set<keyof UserDataSnapshots>([
+  'followersSnap',
+  'sessionInvitePushesReceivedSnap',
+  'sessionInvitePushesSentSnap',
+]);
 
 // Non-collection scalar fields on BingeExport — not backed by a snapshot.
 const EXPORT_METADATA_KEYS = new Set<keyof BingeExport>([
@@ -326,7 +347,7 @@ describe('GDPR export/delete completeness (BIN-328)', () => {
     }
   });
 
-  it('delete-skip set is exactly the intended follower-owned key, with a reason', () => {
+  it('delete-skip set is exactly the intended follower-owned and server-erased keys, with a reason', () => {
     const actualSkip = new Set(coverageKeys.filter(k => !COVERAGE[k].deleteCascade));
     expect([...actualSkip].sort()).toEqual([...EXPECTED_DELETE_SKIP].sort());
     for (const key of actualSkip) {

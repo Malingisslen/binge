@@ -39,6 +39,10 @@ Allt som bara användaren själv ser tas bort helt:
   SKICKAT ligger i mottagarnas träd och nås inte av kaskaden — mottagarens tips går
   inte att lista för någon annan än mottagaren. De raderas av 90-dagarssvepet nedan.
   Se den accepterade avvikelsen "Tipsa en vän: skickade tips raderas av 90-dagarssvepet".
+- `users/{uid}/sessionInvites/*` (inbjudningar till Tillsammans som skickats till mig).
+  De inbjudningar jag SKICKAT ligger i mottagarnas träd. De raderas av servern
+  (`handOverOwnedGroups`, som raderaknappen kör före kaskaden) genom en fråga på
+  `fromUid`, och annars av 7-dygnssvepet nedan. Se avsnittet "Bjud in till Tillsammans".
 - `users/{uid}/listFollows/*` (följda listor, BIN-96)
 - `users/{uid}/pauseHistory/*` (paus-/återupptag-historik från Sparande)
 
@@ -791,6 +795,43 @@ mottagarmarkören räknar notiser inom en timme och håller tillbaka dem över t
   kortet länkar till Vänner. Kort skrivna före den spärren, sedan `542cf856`, kan bära namnet
   på en privat följare; se BIN-1459.
 
+### Bjud in till Tillsammans (2026-11-03) — 7-dygns svep och 2-dygns svep
+
+`users/{mottagarUid}/sessionInvites/{sessionId}_{avsändarUid}` — `{ fromUid, fromName,
+sessionId, createdAt }`, skrivs av värden i appen när en session skapas. Bara
+mottagaren kan läsa och radera den; "Gå med" och "Avböj" raderar den direkt.
+`sessionInvitePushes/{mottagarUid}_{avsändarUid}` — `{ recipientUid, fromUid,
+lastPushedAt }`, skrivs av `onSessionInviteCreate`. Finns markören och är yngre än en
+timme får mottagaren ingen ny notis från samma värd; inbjudan landar ändå. Tar en
+mottagare emot fler väntande inbjudningar än taket i
+`functions/src/sessionInvitePush/logic.ts` raderar funktionen den nya utan notis.
+
+- **Vad den säger om en person:** att en värd har bjudit in någon till en
+  Tillsammans-session, avsändarens namn, och när. Sessions-id:t är sessionens
+  åtkomstnyckel och står bara i mottagarens egen inbjudan, aldrig i push, notiskort
+  eller logg.
+- **Rättslig grund:** avtal (funktionen användaren använder) för inbjudan;
+  berättigat intresse (missbruksskydd mot notisspam) för markören.
+- **Export:** inbjudningarna till mig (`sessionInvites`) och markörerna som nämner mig
+  som mottagare eller avsändare (`sessionInvitePushesReceived`,
+  `sessionInvitePushesSent`). Inbjudningar jag skickat ingår inte, eftersom de ligger
+  i mottagarens träd och bara mottagaren får läsa dem.
+- **Radering:** `retentionCleanup` raderar en inbjudan vars `createdAt` är äldre än
+  `SESSION_INVITE_MAX_AGE_MS` och en markör vars `lastPushedAt` är äldre än
+  `SESSION_INVITE_PUSH_MARKER_MAX_AGE_MS`, båda i
+  `functions/src/sessionInvitePush/logic.ts`. Vid kontoradering raderar kaskaden mina
+  inkomna inbjudningar, och `handOverOwnedGroups` raderar de jag skickat och varje
+  markör som nämner mig som mottagare. En markör som nämner mig som avsändare raderas
+  bara när den inte längre håller tillbaka en notis, alltså när `lastPushedAt` är
+  minst `SESSION_INVITE_PUSH_WINDOW_MS` gammal; en yngre ligger kvar tills svepet tar
+  den. Funktionen kan anropas utan att kontot raderas, och en raderad färsk markör
+  skulle släppa fram en ny notis till samma mottagare direkt. Ett konto raderat från
+  Firebase-konsolen når bara svepet.
+- **Inställning:** mottagaren stänger av inbjudningar under Inställningar, Notiser
+  (`notificationSettings.sessionInviteNotify`). Då nekar reglerna nya inbjudningar.
+- **Själva notisen** är ett kort i `users/{uid}/notifications` och följer de korten:
+  med i exporten, raderas med kontot och efter 90 dagar.
+
 ### Kön till morgonfrågan om nya avsnitt (BIN-1475, 2026-10-31)
 
 `episodeNotifyState/{tmdbId}.pending[]` — varje post är `{ episodeId, season, episode,
@@ -1026,9 +1067,12 @@ lades tillbaka.
   över det gamla och startar om klockan. Mottagaren kan stänga av tips under
   Inställningar, Notiser (`notificationSettings.acceptTips`), och kan ta bort ett
   tips när som helst.
+- **`users/{uid}/sessionInvites/{id}`** (Bjud in till Tillsammans) när `createdAt` är
+  äldre än `SESSION_INVITE_MAX_AGE_MS` (7 dygn), samma livslängd som sessionen.
 
 Ett dokument utan tidsstämpel raderas inte. Regeln står i `isExpiredSession`,
-`isStaleNotification` och `isStaleTip` i `functions/src/retentionCleanup/logic.ts`.
+`isStaleNotification` och `isStaleTip` i `functions/src/retentionCleanup/logic.ts`, och
+i `isStaleSessionInvite` i `functions/src/sessionInvitePush/logic.ts`.
 
 ## Re-visit triggers
 
@@ -1049,6 +1093,17 @@ Policy ska omvärderas om:
 - **Moderation-runbook** (`docs/moderation.md`).
 
 ## Ändringslogg
+
+- **2026-11-03 (Bjud in till Tillsammans)** — inbjudningar till en Tillsammans-session
+  sparas i mottagarens konto i högst 7 dygn och raderas när mottagaren svarar. De
+  ingår i mottagarens export och radering, och avsändarens kontoradering raderar de
+  inbjudningar hen skickat. Integritetssidans rad och versionsbump avgörs av Malin.
+
+- **2026-11-03 (Bjud in till Tillsammans, notisspärren)** — efter en kontoradering kan
+  en markör där det raderade kontot är avsändare ligga kvar högst
+  `SESSION_INVITE_PUSH_WINDOW_MS` (`functions/src/sessionInvitePush/logic.ts`) innan
+  den slutar spärra, och raderas sedan av `retentionCleanup`. Markören bär avsändarens
+  och mottagarens uid och tiden för den senaste notisen, inget namn.
 
 - **2026-10-11 (Tipsa en vän)** — tips från vänner sparas i mottagarens konto i 90
   dagar och raderas sedan av `retentionCleanup`. De ingår i mottagarens export och

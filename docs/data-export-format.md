@@ -7,7 +7,7 @@ Filen är en JSON med följande top-level-struktur (se
 
 ```jsonc
 {
-  "schemaVersion": "2.7",
+  "schemaVersion": "2.8",
   "exportedAt": "2026-04-24T10:30:00.000Z",
   "userId": "firebase-uid",
   "readme": "…",
@@ -30,6 +30,9 @@ Filen är en JSON med följande top-level-struktur (se
   "friendRequestsSent": [ … ],
   "groupInvites":       [ … ],
   "tips":               [ … ],
+  "sessionInvites":     [ … ],
+  "sessionInvitePushesReceived": [ … ],
+  "sessionInvitePushesSent":     [ … ],
   "pauseHistory":       [ … ],
   "tvDevices":          [ … ],
   "listFollows":        [ … ],
@@ -68,6 +71,9 @@ Filen är en JSON med följande top-level-struktur (se
 | `groupInvites` | `users/{uid}/groupInvites/{groupId}` | Inkomna grupp-inbjudningar |
 | `tips` | `users/{uid}/tips/{fromUid}_{mediaType}_{tmdbId}` | Tips om titlar som vänner skickat till dig: avsändarens uid, titel, valfri hälsning och tidpunkt. Tips du själv skickat ligger hos mottagaren och ingår inte. |
 | `pauseHistory` | `users/{uid}/pauseHistory/{historyId}` | Sparbeslut-historik från Streamingrådgivaren |
+| `sessionInvites` | `users/{uid}/sessionInvites/{sessionId}_{fromUid}` | Inbjudningar till Tillsammans som skickats till dig: avsändarens uid, avsändarens namn, sessionens id och tidpunkt. Inbjudningar du själv skickat ligger hos mottagaren och ingår inte. |
+| `sessionInvitePushesReceived` | `sessionInvitePushes/{dittUid}_{avsändarUid}` | Notisspärren för inbjudningar till dig: avsändarens uid och när du senast fick en notis från hen. |
+| `sessionInvitePushesSent` | `sessionInvitePushes/{mottagarUid}_{dittUid}` | Samma spärr för inbjudningar du skickat: mottagarens uid och när hen senast fick en notis från dig. |
 | `tvDevices` | `users/{uid}/tvDevices/{deviceId}` | Kopplade TV: namn (telefonmodell), kopplingsdatum och senast använd (avrundad till dygn) |
 | `reviews` | `reviews/{reviewId}` (where uid==me) | Dina recensioner med text, betyg, spoiler-flagga |
 | `reviewLikes` | `reviews/*/likes/{uid}` | Likes du gjort på andras recensioner (doc-id = ditt uid) |
@@ -192,3 +198,8 @@ Dokumentera ändringar i CHANGELOG.md-sektionen nedan.
   minor-bump 2.5 → 2.6.
 - **2.7 (2026-10-31, TV-appen, BIN-1471)** — Lade till `tvDevices` (dina kopplade
   TV, `users/{uid}/tvDevices/*`). Additivt fält → minor-bump 2.6 → 2.7.
+- **2.8 (2026-11-03, Bjud in till Tillsammans)** — Lade till `sessionInvites`
+  (inbjudningar till dig, `users/{uid}/sessionInvites/*`) och
+  `sessionInvitePushesReceived` / `sessionInvitePushesSent` (notisspärrens
+  markörer i `sessionInvitePushes` som nämner dig). Additiva fält → minor-bump
+  2.7 → 2.8.

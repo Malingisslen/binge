@@ -55,7 +55,14 @@ Read only when the staged diff touches this chapter's paths (see .claude/shared-
 - Sealing a client-writable counter behind a callable closes FORGERY/write-SHAPE, NOT COST or DOC-COUNT.
   Against "X matches the sealed pattern used by Y/Z/W", verify each sibling's SPECIFIC bound; separate ACTUAL
   enforcement from design-intent (vendor spend is bounded by `reserveMotnSlot`'s transaction, not cadence),
-  and never refund a reservation the vendor already counted.
+  and never refund a reservation the vendor already counted. **A brake marker is only as sealed as its
+  ERASERS:** when a "delete this account's traces" step deletes markers naming the caller as SENDER, ask
+  whether that step is reachable outside a deletion — a self-callable (`handOverOwnedGroups`) lets the
+  throttled party reset its own brake and re-fire at will. Found in review of Tillsammans-inbjudan
+  (2026-11-03, fixed before it shipped with `mayEraseSessionInviteMarker`, which reuses the trigger's own
+  `mayNotify…` predicate; archive entries r2/r3). Erase only markers past the window, or only on a confirmed
+  deletion — and then ask whether the delete is CONDITIONAL on the bytes it judged: a query-filter-then-
+  blind-`batch.delete` races the trigger's stamping transaction, and the same caller controls both sides.
 - **"Claim in a transaction, work outside, release on failure" has a hard-timeout hole.** GCP force-kills a
   timed-out function with no `finally`, so a kill between claim and release sticks the flag for the cycle —
   bound the window under the platform timeout, or give the claim a LEASE timestamp. Transactions retry the
