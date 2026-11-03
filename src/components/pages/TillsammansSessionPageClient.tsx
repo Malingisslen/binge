@@ -12,7 +12,8 @@ import { SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
 import { scoreCandidates, pickMatches, nextCandidate, participantSwipeProgress, candidateKey } from '@/lib/together/matching';
 import { useSessionTasteVectors } from '@/hooks/useSessionTasteVectors';
 import { computeSessionProviders } from '@/lib/together/candidates';
-import { isWatchableBy } from '@/lib/together/watchable';
+import { isWatchableBy, whoCanWatch } from '@/lib/together/watchable';
+import { genreLabel } from '@/lib/tmdb/genreLabels';
 import { toneForId } from '@/lib/duotone';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { usePageMeta } from '@/hooks/usePageMeta';
@@ -237,6 +238,10 @@ function SessionMain({
   useEffect(() => () => { if (copyTimer.current) clearTimeout(copyTimer.current); }, []);
   const [vetoConfirm, setVetoConfirm] = useState<SessionCandidate | null>(null);
   const [saving, setSaving] = useState(false);
+  // Senaste röstade titeln (inte veto). Inloggade kan lägga om rösten; reglerna
+  // släpper inte anonyma gäster förbi en redan lagd röst.
+  const [lastVoted, setLastVoted] = useState<SessionCandidate | null>(null);
+  const [reVote, setReVote] = useState<SessionCandidate | null>(null);
   const [voteError, setVoteError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
@@ -299,6 +304,9 @@ function SessionMain({
     [swipes, filteredCandidates, me.id],
   );
 
+  const canUndo = !!lastVoted && !!me.uid && me.id === me.uid;
+  const cardCandidate = reVote ?? next;
+
   const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/tillsammans/${sessionId}/` : '';
 
   const copyShare = async () => {
@@ -324,6 +332,8 @@ function SessionMain({
     setSaving(true);
     try {
       await recordSwipe({ sessionId, tmdbId: cand.tmdbId, mediaType: cand.mediaType, participantId: me.id, vote });
+      setReVote(null);
+      setLastVoted(vote === 'veto' ? null : cand);
     } catch (e) {
       console.error(e);
       setVoteError('Din röst kunde inte sparas. Kolla uppkopplingen och försök igen.');
@@ -433,21 +443,40 @@ function SessionMain({
           )}
         </div>
       ) : view === 'card' ? (
-        next ? (
-          <SwipeCard
-            cand={next}
-            me={me}
-            onVote={onVote}
-            progress={progress}
-            vetoConfirm={!!vetoConfirm && candidateKey(vetoConfirm) === candidateKey(next)}
-            onCancelVeto={() => setVetoConfirm(null)}
-            disabled={saving}
-          />
+        cardCandidate ? (
+          <>
+            <SwipeCard
+              cand={cardCandidate}
+              me={me}
+              participants={participants}
+              onVote={onVote}
+              progress={progress}
+              vetoConfirm={!!vetoConfirm && candidateKey(vetoConfirm) === candidateKey(cardCandidate)}
+              onCancelVeto={() => setVetoConfirm(null)}
+              disabled={saving}
+            />
+            {canUndo && !reVote && lastVoted && (
+              <div className="mt-1.5 text-center">
+                <Button type="button" variant="ghost" size="xs" disabled={saving} onClick={() => setReVote(lastVoted)}>
+                  Ångra senaste röst: {lastVoted.title}
+                </Button>
+              </div>
+            )}
+            {reVote && (
+              <div className="mt-1.5 text-center text-xxs text-ink-3">
+                Du lägger om rösten på {reVote.title}.{' '}
+                <button type="button" className="underline" onClick={() => setReVote(null)}>Avbryt</button>
+              </div>
+            )}
+          </>
         ) : (
-          <div className={cardClass('px-3 py-4 text-center')}>
-            <div className="text-sm font-semibold mb-1">Du har röstat på alla.</div>
-            <div className="text-xxs text-ink-3">Vänta på övriga så sammanställs matcherna automatiskt.</div>
-          </div>
+          <FinalStep
+            matches={matches}
+            session={session}
+            participants={participants}
+            canUndo={canUndo}
+            onUndo={() => lastVoted && setReVote(lastVoted)}
+          />
         )
       ) : (
         <CandidateTable
@@ -463,10 +492,11 @@ function SessionMain({
 }
 
 function SwipeCard({
-  cand, me, onVote, progress, vetoConfirm, onCancelVeto, disabled,
+  cand, me, participants, onVote, progress, vetoConfirm, onCancelVeto, disabled,
 }: {
   cand: SessionCandidate;
   me: SessionParticipant;
+  participants: SessionParticipant[];
   onVote: (c: SessionCandidate, v: VoteKind) => void;
   progress: { done: number; total: number };
   vetoConfirm: boolean;
@@ -490,6 +520,7 @@ function SwipeCard({
             {cand.year ?? '—'} · {cand.mediaType === 'movie' ? 'Film' : 'Serie'}
             {cand.voteAverage > 0 && <> · <span className="text-acc-deep">★ {formatDecimal(cand.voteAverage)}</span></>}
           </div>
+          <TitleFacts cand={cand} participants={participants} />
           <p className="text-xs text-ink-2 mt-2 leading-relaxed line-clamp-6">
             {cand.overview || 'Ingen beskrivning på svenska.'}
           </p>
@@ -620,6 +651,97 @@ function CandidateTable({
   );
 }
 
+function providerNames(ids: number[]): string[] {
+  return ids
+    .map(id => SWEDISH_PROVIDERS.find(p => p.id === id)?.name)
+    .filter((n): n is string => !!n);
+}
+
+function TitleFacts({ cand, participants }: { cand: SessionCandidate; participants: SessionParticipant[] }) {
+  const genres = cand.genreIds.slice(0, 3).map(genreLabel);
+  const where = providerNames(cand.providers.filter(id => participants.some(p => p.providers.includes(id))));
+  const watchers = whoCanWatch(cand, participants);
+  const everyone = watchers.length === participants.length;
+  return (
+    <div className="mt-2 flex flex-col gap-1">
+      {genres.length > 0 && <div className="text-xxs text-ink-3">{genres.join(' · ')}</div>}
+      {where.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {where.map(n => <span key={n} className={tagClass('acc')}>{n}</span>)}
+        </div>
+      )}
+      {where.length > 0 && !everyone && watchers.length > 0 && (
+        <div className="text-xxs text-ink-3">Kan ses av: {watchers.join(', ')}</div>
+      )}
+    </div>
+  );
+}
+
+function FinalStep({
+  matches, session, participants, canUndo, onUndo,
+}: {
+  matches: ReturnType<typeof pickMatches>;
+  session: TogetherSession;
+  participants: SessionParticipant[];
+  canUndo: boolean;
+  onUndo: () => void;
+}) {
+  const [randomKey, setRandomKey] = useState<string | null>(null);
+  if (matches.length === 0) {
+    return (
+      <div className={cardClass('px-3 py-4 text-center')}>
+        <div className="text-sm font-semibold mb-1">Du har röstat på alla.</div>
+        <div className="text-xxs text-ink-3">Än så länge finns ingen titel ni är överens om. Vänta på övriga, så sammanställs det automatiskt.</div>
+      </div>
+    );
+  }
+  const waiting = participants.length > 1 && matches.some(m => !m.allVoted);
+  const chosen = matches.find(m => candidateKey(m.candidate) === randomKey) ?? matches[0];
+  const isRandom = !!randomKey && candidateKey(chosen.candidate) === randomKey;
+  const reserves = matches.filter(m => m !== chosen).slice(0, 2);
+  const href = `/${chosen.candidate.mediaType === 'movie' ? 'movie' : 'tv'}/${chosen.candidate.tmdbId}/`;
+  const names = (m: (typeof matches)[number]) =>
+    providerNames(m.candidate.providers.filter(id => participants.some(p => p.providers.includes(id)))).join(', ');
+  return (
+    <div className={cardClass('overflow-hidden')}>
+      <div className={eyebrowClass({ tone: 'acc', className: 'px-3 py-1.5 border-b border-acc-deep/30 bg-acc-deep/[0.06]' })}>
+        {waiting ? 'Preliminärt val · väntar på fler röster' : isRandom ? 'Slumpat bland matcherna' : 'Ikväll ser ni'}
+      </div>
+      <div className="px-3 py-3 flex flex-col gap-1">
+        <div className="text-lg font-bold leading-tight">{chosen.candidate.title}</div>
+        <div className="text-xxs text-ink-3">
+          {chosen.yesCount} av {participants.length} sa ja{names(chosen) && <> · {names(chosen)}</>}
+        </div>
+        <div className="mt-2 flex gap-2 flex-wrap">
+          <Link href={href} className={buttonClass({ variant: 'acc', size: 'sm' })}>Öppna titeln</Link>
+          {matches.length > 1 && (
+            <Button
+              type="button" variant="ghost" size="sm"
+              onClick={() => setRandomKey(candidateKey(matches[Math.floor(Math.random() * matches.length)].candidate))}
+            >
+              Slumpa bland matcherna
+            </Button>
+          )}
+          {canUndo && <Button type="button" variant="ghost" size="sm" onClick={onUndo}>Ångra senaste röst</Button>}
+        </div>
+        {isRandom && <div className="text-xxs text-ink-3">Slumpen syns bara på din skärm. Säg till de andra.</div>}
+      </div>
+      {reserves.length > 0 && (
+        <div className="border-t border-rule-2 px-3 py-2">
+          <div className="text-xxs text-ink-3 mb-1">Reservplatser</div>
+          {reserves.map(m => (
+            <div key={candidateKey(m.candidate)} className="text-xs flex justify-between gap-2">
+              <span className="font-semibold truncate">{m.candidate.title}</span>
+              <span className="text-ink-3 shrink-0">{m.yesCount} ja</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {session.groupId && <div className="px-3 pb-2 text-xxs text-ink-3">Tryck &quot;Den här tar vi&quot; i matchlistan ovan för att spara valet i gruppens historik.</div>}
+    </div>
+  );
+}
+
 function MatchList({
   matches,
   session,
@@ -695,7 +817,11 @@ function MatchList({
               </Link>
               <div className="text-xxs text-ink-3 text-right shrink-0">
                 {m.yesCount} ja / {m.noCount} nej
-                {!m.allVoted && <div className="text-acc-deep">{m.missing.length} kvar</div>}
+                {!m.allVoted && (
+                  <div className="text-acc-deep">
+                    Preliminär · väntar på {m.missing.map(id => participants.find(p => p.id === id)?.displayName ?? 'någon').join(', ')}
+                  </div>
+                )}
               </div>
               {isGroupSession && (
                 isPicked ? (

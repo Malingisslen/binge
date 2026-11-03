@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isWatchableBy } from './watchable';
+import { isWatchableBy, whoCanWatch } from './watchable';
 
 const cand = (providers: number[]) => ({ providers });
 
@@ -28,5 +28,19 @@ describe('isWatchableBy', () => {
 
   it('keeps untagged titles from older sessions', () => {
     expect(isWatchableBy(cand([]), [{ providers: [8] }], 'intersect')).toBe(true);
+  });
+});
+
+describe('whoCanWatch', () => {
+  it('names the participants who have one of the services', () => {
+    const people = [
+      { displayName: 'Anna', providers: [8] },
+      { displayName: 'Erik', providers: [337] },
+    ];
+    expect(whoCanWatch(cand([8]), people)).toEqual(['Anna']);
+  });
+
+  it('says nothing for a title without service data', () => {
+    expect(whoCanWatch(cand([]), [{ displayName: 'Anna', providers: [8] }])).toEqual([]);
   });
 });

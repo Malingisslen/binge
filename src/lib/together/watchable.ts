@@ -16,3 +16,14 @@ export function isWatchableBy(
   const has = (p: { providers: number[] }) => p.providers.some(id => candidate.providers.includes(id));
   return mode === 'intersect' ? participants.every(has) : participants.some(has);
 }
+
+/** Namnen på de deltagare som har minst en av titelns tjänster. */
+export function whoCanWatch(
+  candidate: Pick<SessionCandidate, 'providers'>,
+  participants: ReadonlyArray<{ providers: number[]; displayName: string }>,
+): string[] {
+  if (candidate.providers.length === 0) return [];
+  return participants
+    .filter(p => p.providers.some(id => candidate.providers.includes(id)))
+    .map(p => p.displayName);
+}
