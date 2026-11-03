@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Users, Share2, ChevronLeft, Check, X, Ban, LayoutGrid, Table2, Copy, Radio } from 'lucide-react';
+import { Users, Share2, ChevronLeft, Check, X, Ban, LayoutGrid, Table2, Copy } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useSession, getStoredParticipantId, storeParticipantId } from '@/hooks/useSession';
 import { joinSession, recordSwipe } from '@/lib/firebase/sessions';
@@ -12,6 +12,7 @@ import { SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
 import { scoreCandidates, pickMatches, nextCandidate, participantSwipeProgress, candidateKey } from '@/lib/together/matching';
 import { useSessionTasteVectors } from '@/hooks/useSessionTasteVectors';
 import { computeSessionProviders } from '@/lib/together/candidates';
+import { isWatchableBy } from '@/lib/together/watchable';
 import { toneForId } from '@/lib/duotone';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { usePageMeta } from '@/hooks/usePageMeta';
@@ -57,8 +58,9 @@ export default function TillsammansSessionPageClient({ id }: { id: string }) {
         <header>
           <div className="crumb">Tillsammans · session hittades inte</div>
           <h1 className="page-h1">Den här länken funkar inte.</h1>
-          <p className="stand">Sessionen kan ha gått ut eller vara felstavad. Tillsammans-sessioner lever i 7 dagar.</p>
+          <p className="stand">Sessionen kan ha gått ut, länken kan vara felstavad eller så är uppkopplingen långsam. Tillsammans-sessioner lever i 7 dagar.</p>
           <div className="actions">
+            <Button type="button" variant="ghost" onClick={() => window.location.reload()}>Försök igen</Button>
             <Link href="/tillsammans/ny" className={buttonClass()}>Skapa en ny session</Link>
           </div>
         </header>
@@ -234,6 +236,8 @@ function SessionMain({
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (copyTimer.current) clearTimeout(copyTimer.current); }, []);
   const [vetoConfirm, setVetoConfirm] = useState<SessionCandidate | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [voteError, setVoteError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
   // Re-evaluera "live"-statusen var 3:e sekund så banner blinkar av/på i takt
@@ -256,16 +260,16 @@ function SessionMain({
   );
 
   const filteredCandidates = useMemo(() => {
-    if (!effectiveProviders.length && session.config.providerMode === 'intersect') {
-      // Om intersect är tom (någon saknar gemensam tjänst) — visa inga resultat
-      return [];
-    }
-    // Filtrera ut titlar så länge kandidaten har minst en provider som finns i setet
-    // (kandidater har inte alltid providers-datan, så acceptera de som saknar info)
+    const noSharedService = session.config.providerMode === 'intersect' && effectiveProviders.length === 0;
+    // Titlarna är taggade med vilka tjänster de ligger på, så varje deltagare
+    // kan prövas för sig. Otaggade titlar (äldre sessioner) följer det gamla
+    // snittet av tjänster.
     return session.candidates.filter(c =>
-      c.providers.length === 0 || c.providers.some(p => effectiveProviders.includes(p))
+      c.providers.length === 0
+        ? !noSharedService
+        : isWatchableBy(c, participants, session.config.providerMode)
     );
-  }, [session.candidates, effectiveProviders, session.config.providerMode]);
+  }, [session.candidates, participants, effectiveProviders, session.config.providerMode]);
 
   const tasteByPid = useSessionTasteVectors(participants);
 
@@ -307,16 +311,24 @@ function SessionMain({
   };
 
   const onVote = async (cand: SessionCandidate, vote: VoteKind) => {
+    if (saving) return;
     if (vote === 'veto' && me.vetoRemaining <= 0) return;
-    if (vote === 'veto' && !vetoConfirm) {
+    // Veto kräver bekräftelse för just den här titeln. En bekräftelse som
+    // gällde en annan titel (t.ex. armerad i tabellen) räknas inte.
+    if (vote === 'veto' && !(vetoConfirm && candidateKey(vetoConfirm) === candidateKey(cand))) {
       setVetoConfirm(cand);
       return;
     }
     setVetoConfirm(null);
+    setVoteError(null);
+    setSaving(true);
     try {
       await recordSwipe({ sessionId, tmdbId: cand.tmdbId, mediaType: cand.mediaType, participantId: me.id, vote });
     } catch (e) {
       console.error(e);
+      setVoteError('Din röst kunde inte sparas. Kolla uppkopplingen och försök igen.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -409,6 +421,10 @@ function SessionMain({
         <MatchList matches={matches} session={session} participants={participants} />
       )}
 
+      {voteError && (
+        <div role="alert" className="mb-2 px-3 py-2 text-xs text-danger-ink bg-danger-soft border border-danger/30 rounded-sm">{voteError}</div>
+      )}
+
       {filteredCandidates.length === 0 ? (
         <div className={cardClass('px-3 py-4 text-xs text-ink-3')}>
           Inga titlar matchar era gemensamma tjänster just nu.
@@ -425,6 +441,7 @@ function SessionMain({
             progress={progress}
             vetoConfirm={!!vetoConfirm && candidateKey(vetoConfirm) === candidateKey(next)}
             onCancelVeto={() => setVetoConfirm(null)}
+            disabled={saving}
           />
         ) : (
           <div className={cardClass('px-3 py-4 text-center')}>
@@ -437,6 +454,8 @@ function SessionMain({
           scored={scored}
           me={me}
           onVote={onVote}
+          armedVetoKey={vetoConfirm ? candidateKey(vetoConfirm) : null}
+          disabled={saving}
         />
       )}
     </>
@@ -444,7 +463,7 @@ function SessionMain({
 }
 
 function SwipeCard({
-  cand, me, onVote, progress, vetoConfirm, onCancelVeto,
+  cand, me, onVote, progress, vetoConfirm, onCancelVeto, disabled,
 }: {
   cand: SessionCandidate;
   me: SessionParticipant;
@@ -452,6 +471,7 @@ function SwipeCard({
   progress: { done: number; total: number };
   vetoConfirm: boolean;
   onCancelVeto: () => void;
+  disabled: boolean;
 }) {
   const poster = posterUrl(cand.posterPath, 'w342');
   return (
@@ -486,6 +506,7 @@ function SwipeCard({
           <div className="flex gap-2">
             <Button
               onClick={() => onVote(cand, 'veto')}
+              disabled={disabled}
               variant="danger" size="sm"
             >
               Ja, veto
@@ -502,12 +523,14 @@ function SwipeCard({
         <div className="px-3 py-2 border-t border-rule-2 flex gap-2">
           <Button
             onClick={() => onVote(cand, 'no')}
+            disabled={disabled}
             variant="ghost" size="sm" className="flex-1 flex items-center justify-center gap-1"
           >
             <X size={14} /> Nej
           </Button>
           <Button
             onClick={() => onVote(cand, 'yes')}
+            disabled={disabled}
             variant="acc" size="sm" className="flex-1 flex items-center justify-center gap-1"
           >
             <Check size={14} /> Ja
@@ -515,6 +538,7 @@ function SwipeCard({
           {me.vetoRemaining > 0 && (
             <Button
               onClick={() => onVote(cand, 'veto')}
+              disabled={disabled}
               variant="danger-ghost" size="sm" className="justify-center"
               title="Dödar denna titel definitivt"
             >
@@ -528,11 +552,13 @@ function SwipeCard({
 }
 
 function CandidateTable({
-  scored, me, onVote,
+  scored, me, onVote, armedVetoKey, disabled,
 }: {
   scored: ReturnType<typeof scoreCandidates>;
   me: SessionParticipant;
   onVote: (c: SessionCandidate, v: VoteKind) => void;
+  armedVetoKey: string | null;
+  disabled: boolean;
 }) {
   return (
     <div className={cardClass('overflow-x-auto')}>
@@ -562,22 +588,25 @@ function CandidateTable({
                   <div className="inline-flex gap-0.5">
                     <button
                       onClick={() => onVote(r.candidate, 'no')}
-                      className={`px-1.5 py-px rounded-sm border text-xxs cursor-pointer ${myVote === 'no' ? 'border-acc-deep bg-acc-deep/[0.1] text-acc-deep' : 'border-rule bg-surface text-ink-2'}`}
+                      disabled={disabled}
+                      className={`px-1.5 py-1.5 min-h-[32px] rounded-sm border text-xxs cursor-pointer disabled:opacity-50 ${myVote === 'no' ? 'border-acc-deep bg-acc-deep/[0.1] text-acc-deep' : 'border-rule bg-surface text-ink-2'}`}
                     >
                       Nej
                     </button>
                     <button
                       onClick={() => onVote(r.candidate, 'yes')}
-                      className={`px-1.5 py-px rounded-sm border text-xxs cursor-pointer ${myVote === 'yes' ? 'border-acc-deep bg-acc-deep text-on-acc' : 'border-rule bg-surface text-ink-2'}`}
+                      disabled={disabled}
+                      className={`px-1.5 py-1.5 min-h-[32px] rounded-sm border text-xxs cursor-pointer disabled:opacity-50 ${myVote === 'yes' ? 'border-acc-deep bg-acc-deep text-on-acc' : 'border-rule bg-surface text-ink-2'}`}
                     >
                       Ja
                     </button>
                     {(me.vetoRemaining > 0 || myVote === 'veto') && (
                       <button
                         onClick={() => onVote(r.candidate, 'veto')}
-                        className={`px-1.5 py-px rounded-sm border text-xxs cursor-pointer ${myVote === 'veto' ? 'border-danger bg-danger-soft text-danger-ink' : 'border-rule bg-surface text-ink-3'}`}
+                        disabled={disabled}
+                        className={`px-1.5 py-1.5 min-h-[32px] rounded-sm border text-xxs cursor-pointer disabled:opacity-50 ${myVote === 'veto' ? 'border-danger bg-danger-soft text-danger-ink' : 'border-rule bg-surface text-ink-3'}`}
                       >
-                        Veto
+                        {armedVetoKey === candidateKey(r.candidate) ? 'Säker? Veto' : 'Veto'}
                       </button>
                     )}
                   </div>

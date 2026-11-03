@@ -35,6 +35,27 @@ export function libraryExclusionIds(
 }
 
 /**
+ * Slår ihop samma titel från flera tjänst-sökningar till en kandidat som
+ * vet vilka av tjänsterna den ligger på. Det är det som låter sessionen
+ * filtrera på deltagarnas tjänster i stället för att släppa igenom allt.
+ */
+export function mergeCandidateProviders(
+  hits: ReadonlyArray<{ candidate: SessionCandidate; providerId: number }>,
+): SessionCandidate[] {
+  const byKey = new Map<string, SessionCandidate>();
+  for (const { candidate, providerId } of hits) {
+    const key = mediaTypeDocId(candidate.mediaType, candidate.tmdbId);
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, { ...candidate, providers: [providerId] });
+    } else if (!existing.providers.includes(providerId)) {
+      existing.providers = [...existing.providers, providerId];
+    }
+  }
+  return Array.from(byKey.values());
+}
+
+/**
  * Pure ranking-pipeline för sviparkortleken: exkludera → dedupa →
  * sortera på betyg → cappa till MAX_CANDIDATES. Extraherad ur
  * generateCandidates för att kunna testas utan TMDB-fetch.
@@ -94,54 +115,58 @@ export async function generateCandidates(params: {
   excludeTmdbIds?: ReadonlySet<string>;
 }): Promise<SessionCandidate[]> {
   const { config, providers, excludeTmdbIds } = params;
-  const candidates: SessionCandidate[] = [];
+  const hits: Array<{ candidate: SessionCandidate; providerId: number }> = [];
 
-  const discoverParams: Record<string, string> = {
+  const baseParams: Record<string, string> = {
     watch_region: 'SE',
     sort_by: 'popularity.desc',
     'vote_count.gte': '50',
   };
-
-  if (providers.length > 0) {
-    discoverParams.with_watch_providers = providers.join('|');
-    discoverParams.with_watch_monetization_types = 'flatrate';
-  }
-
   if (config.maxRuntimeMin) {
-    discoverParams['with_runtime.lte'] = String(config.maxRuntimeMin);
+    baseParams['with_runtime.lte'] = String(config.maxRuntimeMin);
   }
 
   const wantMovies = config.mediaType === 'movie' || config.mediaType === 'both';
   const wantTV = config.mediaType === 'tv' || config.mediaType === 'both';
 
+  // Sökning per tjänst så att sessionen vet var titeln går att se. providerId 0 = ingen tjänst känd.
+  const lanes = providers.length > 0 ? providers : [0];
   const tasks: Promise<void>[] = [];
 
-  if (wantMovies) {
-    tasks.push(
-      discoverMovies(discoverParams).then(res => {
-        for (const r of res.results) {
-          candidates.push(resultToCandidate(r, 'movie'));
-        }
-      }).catch(() => {/* ignore */})
-    );
-  }
+  for (const providerId of lanes) {
+    const laneParams = { ...baseParams };
+    if (providerId !== 0) {
+      laneParams.with_watch_providers = String(providerId);
+      laneParams.with_watch_monetization_types = 'flatrate';
+    }
 
-  if (wantTV) {
-    // Bygg om filter för TV (runtime stöds inte). Ta bort runtime.
-    const tvParams = { ...discoverParams };
-    delete tvParams['with_runtime.lte'];
-    tasks.push(
-      discoverTV(tvParams).then(res => {
-        for (const r of res.results) {
-          candidates.push(resultToCandidate(r, 'tv'));
-        }
-      }).catch(() => {/* ignore */})
-    );
+    if (wantMovies) {
+      tasks.push(
+        discoverMovies(laneParams).then(res => {
+          for (const r of res.results) hits.push({ candidate: resultToCandidate(r, 'movie'), providerId });
+        }).catch(() => {/* ignore */})
+      );
+    }
+    if (wantTV) {
+      // Runtime stöds inte för TV.
+      const tvParams = { ...laneParams };
+      delete tvParams['with_runtime.lte'];
+      tasks.push(
+        discoverTV(tvParams).then(res => {
+          for (const r of res.results) hits.push({ candidate: resultToCandidate(r, 'tv'), providerId });
+        }).catch(() => {/* ignore */})
+      );
+    }
   }
 
   await Promise.all(tasks);
 
-  return rankCandidates(candidates, excludeTmdbIds);
+  const merged = mergeCandidateProviders(hits).map(c => ({
+    ...c,
+    // providerId 0 betyder "ingen tjänst känd": lämna tomt så att den räknas som otaggad.
+    providers: c.providers.filter(p => p !== 0),
+  }));
+  return rankCandidates(merged, excludeTmdbIds);
 }
 
 function resultToCandidate(r: TMDBSearchResult, mediaType: 'movie' | 'tv'): SessionCandidate {

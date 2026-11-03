@@ -30,7 +30,7 @@ export function useSession(sessionId: string | null) {
     unsubs.push(subscribeToSession(sessionId, s => {
       gotSession = true;
       setSession(s);
-      if (!s) setNotFound(true);
+      setNotFound(!s);
       setLoading(false);
     }));
     unsubs.push(subscribeToParticipants(sessionId, setParticipants));

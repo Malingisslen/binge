@@ -38,11 +38,13 @@ function NyContent() {
   const [providerMode, setProviderMode] = useState<ProviderMode>('intersect');
   const [aggregation, setAggregation] = useState<AggregationStrategy>('least_misery');
   const [maxRuntime, setMaxRuntime] = useState<string>('');
-  const [allowAsymmetry, setAllowAsymmetry] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
   const [providersError, setProvidersError] = useState<string | null>(null);
+  // Sessionen som redan skapats om sista steget (titlarna) föll. Ett nytt försök
+  // fortsätter på den i stället för att skapa en dubblett.
+  const createdSessionId = useRef<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const providersRef = useRef<HTMLDivElement>(null);
 
@@ -90,14 +92,15 @@ function NyContent() {
         aggregation,
         mediaType,
         maxRuntimeMin: maxRuntime ? parseInt(maxRuntime, 10) : null,
-        allowAsymmetry,
+        allowAsymmetry: true,
       };
-      const sessionId = await createSession({
+      const sessionId = createdSessionId.current ?? await createSession({
         hostUid: uid,
         hostName: name,
         hostProviders: providers,
         config,
       });
+      createdSessionId.current = sessionId;
       storeParticipantId(sessionId, uid ?? sessionId);
       // G4: föreslå inte titlar skaparen redan följer/sett/avbrutit.
       // Övriga deltagare ansluter via länk EFTER att kandidaterna genererats
@@ -112,7 +115,9 @@ function NyContent() {
       router.push(`/tillsammans/${sessionId}`);
     } catch (err) {
       console.error(err);
-      setError('Kunde inte skapa session. Försök igen.');
+      setError(createdSessionId.current
+        ? 'Sessionen är skapad men titlarna kunde inte hämtas. Tryck på knappen igen.'
+        : 'Kunde inte skapa session. Försök igen.');
       setSubmitting(false);
     }
   };
@@ -204,7 +209,7 @@ function NyContent() {
             options={[
               { value: 'least_misery', label: 'Ingen hatar det', desc: 'Undvik titlar någon sagt nej till' },
               { value: 'average', label: 'Flest positiva', desc: 'Rankad efter antalet ja' },
-              { value: 'fair', label: 'Turordning', desc: 'Var och en får prio i tur' },
+              { value: 'fair', label: 'Någons favorit', desc: 'Titlar som någon verkligen vill se får gå före' },
             ]}
           />
         </FormSection>
@@ -221,20 +226,6 @@ function NyContent() {
           />
           <p className="text-xxs text-ink-3 mt-1">Gäller bara filmer.</p>
         </FormSection>
-
-        {mediaType !== 'movie' && (
-          <FormSection title="Serier i olika takt">
-            <label className="flex items-center gap-2 text-xs cursor-pointer">
-              <input
-                type="checkbox"
-                checked={allowAsymmetry}
-                onChange={e => setAllowAsymmetry(e.target.checked)}
-                className="accent-acc-deep w-[12px] h-[12px]"
-              />
-              Tillåt serier där ni ligger på olika avsnitt (varning visas)
-            </label>
-          </FormSection>
-        )}
 
         {error && (
           <div className="px-3 py-2 text-xs text-danger-ink bg-danger-soft border-t border-danger/30">{error}</div>
