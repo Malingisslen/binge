@@ -256,7 +256,11 @@ medlem skriver bara sitt eget bidrag (aldrig andras):
   bara tjänsten, aldrig titel eller datum; skrivs först när medlemmen delat om
   under den samtyckestext som nämner det), `votes` (medlemmens röst per tjänst:
   `ok`, `keep` eller `wait`) och `votesMonth` (månaden rösterna gäller). Inget
-  namn lagras i bidraget; namnet vid en röst läses ur `members/{uid}`.
+  namn lagras i bidraget; namnet vid en röst läses ur `members/{uid}`. Sedan
+  2026-11-03 (ADR 0029), bara i en grupp av typen hushåll: `watchingNow`
+  (titlarna medlemmen tittar på just nu, med TMDB-id, typ och titel, högst 10;
+  aldrig status, betyg, tid eller anteckningar). Skrivs först när medlemmen
+  delat under hushållets samtyckestext, som nämner titlarna.
 - **Rättslig grund:** samtycke (art. 6.1.a) — explicit opt-in per grupp; en
   samtyckesskärm visas före första skrivningen. Att gå med i en grupp är INTE
   samtycke till att dela.
@@ -272,9 +276,15 @@ medlem skriver bara sitt eget bidrag (aldrig andras):
   lämna gruppen eller bli borttagen ur den raderar det också. Kontoradering
   raderar mitt eget `household/{uid}` i varje grupp jag är medlem i.
 - **Privat titel:** en titel som medlemmen själv markerat Privat på titeln
-  räknas inte in i `activeProviderIds` eller `soonProviderIds` (ADR 0027).
+  räknas inte in i `activeProviderIds`, `soonProviderIds` eller `watchingNow`
+  (ADR 0027, ADR 0029). Att markera en titel Privat tar också bort den ur
+  `watchingNow` i varje hushåll medlemmen delar i, direkt och inte först vid
+  nästa besök i hushållet.
   Att tjänsten har osedda titlar delas ändå på tjänste-nivå, och samtyckesraden
   säger det.
+- **Vänskap som upphör:** att ta bort eller blockera en vän tar inte bort hen
+  ur ett hushåll man redan delar. Man slutar dela eller lämnar hushållet själv,
+  och ägaren kan ta bort en medlem.
 - **Retention:** inget tidsbaserat utgångsdatum — dokumentet lever tills
   återkallelse/lämnande/borttagning/kontoradering. De nya fälten ligger i
   samma dokument och raderas med det.

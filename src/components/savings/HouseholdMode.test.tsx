@@ -226,3 +226,28 @@ describe('HouseholdMode — röster', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Kunde inte spara din röst');
   });
 });
+
+describe('HouseholdMode — hushåll (ADR 0029)', () => {
+  it('visar hushållets samtyckestext när man ska dela', () => {
+    state.status = 'gated';
+    render(<HouseholdMode groupId="g1" groupName="Hemma" isHousehold />);
+    fireEvent.click(screen.getByRole('button', { name: 'Dela mina kostnader…' }));
+    expect(screen.getByText(/titlarna du just nu tittar på, med ditt förnamn/)).toBeInTheDocument();
+  });
+
+  it('Ni tittar på visar titeln med förnamnet, aldrig hela namnet', () => {
+    state.names = { u1: 'Malin Gisslén', u2: 'Erik Gisslén' };
+    state.contributions = [contribution('u2', { watchingNow: [{ id: 1399, type: 'tv', title: 'Severance' }] })];
+    render(<HouseholdMode groupId="g1" groupName="Hemma" isHousehold />);
+    const card = screen.getByRole('region', { name: 'Ni tittar på' });
+    expect(within(card).getByText('Severance')).toBeInTheDocument();
+    expect(card.textContent).toContain('Erik');
+    expect(card.textContent).not.toContain('Gisslén');
+  });
+
+  it('en vanlig grupp visar inga titlar', () => {
+    state.contributions = [contribution('u2', { watchingNow: [{ id: 1399, type: 'tv', title: 'Severance' }] })];
+    render(<HouseholdMode groupId="g1" groupName="Filmklubben" />);
+    expect(screen.queryByText('Severance')).toBeNull();
+  });
+});

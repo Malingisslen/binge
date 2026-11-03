@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeSessionProviders, libraryExclusionIds, rankCandidates } from './candidates';
+import { computeSessionProviders, libraryExclusionIds, mergeCandidateProviders, rankCandidates } from './candidates';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import type { SessionCandidate } from '@/types';
 
@@ -128,5 +128,30 @@ describe('computeSessionProviders', () => {
         computeSessionProviders([{ providers: [8] }, { providers: [] }], 'union').sort((a, b) => a - b),
       ).toEqual([8]);
     });
+  });
+});
+
+describe('mergeCandidateProviders', () => {
+  const base = (tmdbId: number, mediaType: 'movie' | 'tv') => ({
+    tmdbId, mediaType, title: 't', posterPath: null, year: 2020, runtime: null,
+    genreIds: [], voteAverage: 7, overview: '', providers: [],
+  });
+
+  it('collects every service a title was found on into one candidate', () => {
+    const out = mergeCandidateProviders([
+      { candidate: base(1, 'movie'), providerId: 8 },
+      { candidate: base(1, 'movie'), providerId: 337 },
+      { candidate: base(1, 'movie'), providerId: 8 },
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].providers).toEqual([8, 337]);
+  });
+
+  it('keeps a movie and a series with the same number apart', () => {
+    const out = mergeCandidateProviders([
+      { candidate: base(42, 'movie'), providerId: 8 },
+      { candidate: base(42, 'tv'), providerId: 337 },
+    ]);
+    expect(out).toHaveLength(2);
   });
 });

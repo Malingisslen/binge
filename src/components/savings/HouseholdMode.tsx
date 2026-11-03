@@ -22,6 +22,8 @@ import {
   type HouseholdServiceVerdict,
 } from '@/lib/advisor/householdVerdicts';
 import { formatKr } from '@/lib/formatKr';
+import { householdWatchingRows } from '@/lib/household/household';
+import { titleHref } from '@/lib/tmdb/client';
 import HouseholdConsent from '@/components/groups/HouseholdConsent';
 import { Button, buttonClass } from '@/components/ui/Button';
 import { badgeClass } from '@/components/ui/Badge';
@@ -147,10 +149,10 @@ function ServiceRow({ row, verdict, soon, voters, summaryLine, allOk, myVote, my
   );
 }
 
-export default function HouseholdMode({ groupId, groupName }: { groupId: string; groupName: string }) {
+export default function HouseholdMode({ groupId, groupName, isHousehold = false }: { groupId: string; groupName: string; isHousehold?: boolean }) {
   const { uid } = useAuth();
   const { status, contributions, optIn, optOut, busy, ready, needsReshare, myVotes, soon, setVote } =
-    useGroupHousehold(groupId);
+    useGroupHousehold(groupId, isHousehold);
   const names = useGroupMemberNames(groupId);
   const nowMs = useMountTime();
   const [consentOpen, setConsentOpen] = useState(false);
@@ -203,7 +205,7 @@ export default function HouseholdMode({ groupId, groupName }: { groupId: string;
           Se vad hushållet sparar
         </Eyebrow>
         {showConsent ? (
-          <HouseholdConsent reshare={false} busy={busy} ready={ready} onShare={share} onCancel={() => setConsentOpen(false)} />
+          <HouseholdConsent reshare={false} household={isHousehold} busy={busy} ready={ready} onShare={share} onCancel={() => setConsentOpen(false)} />
         ) : (
           <div className="px-3 py-2 space-y-2">
             <p className="text-xs text-ink-2 leading-relaxed">
@@ -230,7 +232,9 @@ export default function HouseholdMode({ groupId, groupName }: { groupId: string;
         // ADR 0026: en delare från före "nytt inom 30 dagar" räknas som okänd tills hen delar om.
         <div className={cardClass('px-3 py-2 mb-3.5 space-y-2')}>
           <p className="text-xs text-ink-2 leading-relaxed">
-            Hushållet kan nu se vem som har något nytt inom 30 dagar. Du har inte delat det ännu.
+            {isHousehold
+              ? 'Hushållet kan nu se vad ni tittar på. Du har inte delat det ännu.'
+              : 'Hushållet kan nu se vem som har något nytt inom 30 dagar. Du har inte delat det ännu.'}
           </p>
           <Button type="button" variant="ghost" size="sm" onClick={() => setConsentOpen(true)}>
             Läs och dela igen…
@@ -239,7 +243,7 @@ export default function HouseholdMode({ groupId, groupName }: { groupId: string;
       )}
       {showConsent && (
         <div className={cardClass('mb-3.5')}>
-          <HouseholdConsent reshare busy={busy} ready={ready} onShare={share} onCancel={() => setConsentOpen(false)} />
+          <HouseholdConsent reshare household={isHousehold} busy={busy} ready={ready} onShare={share} onCancel={() => setConsentOpen(false)} />
         </div>
       )}
 
@@ -296,6 +300,8 @@ export default function HouseholdMode({ groupId, groupName }: { groupId: string;
         )}
       </section>
 
+      {isHousehold && <WatchingCard rows={householdWatchingRows(contributions, names)} />}
+
       <section className={cardClass('px-3 py-2 mb-3.5 space-y-2')} aria-labelledby="household-sharers">
         <Eyebrow as="h2" size="xs" id="household-sharers">Vilka delar</Eyebrow>
         <p className="text-xs text-ink-2">
@@ -322,5 +328,26 @@ export default function HouseholdMode({ groupId, groupName }: { groupId: string;
         </div>
       </section>
     </>
+  );
+}
+
+/** ADR 0029: what each sharing household member is watching, by first name. */
+function WatchingCard({ rows }: { rows: ReturnType<typeof householdWatchingRows> }) {
+  return (
+    <section className={cardClass('px-3 py-2 mb-3.5 space-y-2')} aria-labelledby="household-watching">
+      <Eyebrow as="h2" size="xs" id="household-watching">Ni tittar på</Eyebrow>
+      {rows.length === 0 ? (
+        <p className="text-xs text-ink-3">Ingen i hushållet har en serie på gång just nu.</p>
+      ) : (
+        <ul className="list-none p-0 m-0 space-y-1">
+          {rows.flatMap(r => r.titles.map(t => (
+            <li key={`${r.uid}-${t.type}-${t.id}`} className="text-xs text-ink-2">
+              <Link href={titleHref(t.type, t.id)} className="text-ink">{t.title}</Link>
+              {' · '}{r.name}
+            </li>
+          )))}
+        </ul>
+      )}
+    </section>
   );
 }

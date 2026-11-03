@@ -23,6 +23,7 @@ import { FriendsFeed } from '@/components/social/FriendsFeed';
 import { shownSenderName } from '@/lib/friendName';
 import { useTips } from '@/hooks/useTips';
 import { TipRow } from '@/components/social/TipRow';
+import HouseholdCallout from '@/components/household/HouseholdCallout';
 
 type Tab = 'feed' | 'friends' | 'following' | 'followers';
 
@@ -88,6 +89,8 @@ export default function FriendsPageClient() {
           </>
         )}
       />
+
+      <HouseholdCallout />
 
       {(requests.length > 0 || sent.length > 0 || tips.length > 0) && (
         <section aria-label="Väntar på dig" className="bg-acc-soft border border-acc rounded-md px-3 py-2 mb-4">

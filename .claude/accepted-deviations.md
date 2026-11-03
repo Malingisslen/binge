@@ -2837,3 +2837,34 @@ git grep -n -e "export function isPrivateItem" -- functions/src/tvOverview/logic
 4. Att `tvDevices`-kontrollen eller hastighetsgränsen försvinner ur funktionen.
 
 **Re-open when:** TV:n får en andra läsväg till användardata, eller `friends`-titlar ska delas.
+## Hushållets titlar och ett hushåll per person kontrolleras av klienten — 2026-11-03
+
+ADR 0029. Två saker som reglerna inte kan uttrycka, beslutade av Malin 3 nov (plan och panel i
+tråden "Skapa hushåll med Malins man"):
+
+1. **`watchingNow`-posterna.** Reglerna kontrollerar att fältet är en lista med högst 10 poster och
+   att gruppen är ett hushåll, men inte varje post (`id`, `type`, `title`), av samma skäl som
+   rösterna ovan. Klienten bygger listan i `buildHouseholdWatching` och varje läsare går genom
+   `sanitizeHouseholdWatching`, som släpper en okänd post. En medlem som skriver förbi klienten kan
+   lagra skräp i sitt EGET bidrag, upp till dokumentgränsen.
+2. **Ett hushåll per person.** Reglerna kan inte räkna en användares grupper. Klienten skapar inget
+   nytt hushåll och visar ingen Gå med-knapp när användaren redan är med i ett
+   (`useMyHousehold`, `HouseholdCallout`), och `findMyHousehold` väljer det äldsta om gammal data
+   ändå har två. Taket på 6 medlemmar och att man bara går med via inbjudan till en vän ligger i
+   reglerna.
+3. **Att markera en titel Privat stämplar om bidragets ålder.** `removeTitleFromHouseholdWatching`
+   tar bort titeln direkt, och reglerna kräver `updatedAt == request.time` på varje skrivning, så ett
+   bidrag äldre än `HOUSEHOLD_STALE_DAYS` räknas som färskt igen med sina gamla tjänster och
+   soon-flaggor. Löftet i samtyckestexten, att en titel markerad Privat inte delas, väger tyngre än
+   rådgivarens åldersgräns. Nästa besök i hushållet bygger om hela bidraget.
+
+```
+git grep -n -e "export function buildHouseholdWatching" -e "export function sanitizeHouseholdWatching" -e "export function findMyHousehold" -e "export async function removeTitleFromHouseholdWatching" -- src/lib
+```
+
+**INTE accepterat, alltså fortfarande fileable:**
+1. En läsare som visar en `watchingNow`-post utan att sanera den, eller som visar en titel markerad Privat.
+2. Att taket på 10 titlar, taket på 6 medlemmar eller spärren mot länk-inträde i ett hushåll försvinner ur reglerna.
+3. Att `watchingNow` bär status, betyg, tid eller anteckningar.
+
+**Re-open when:** något annat än medlemmens eget bidrag läser `watchingNow`, eller hushåll ska kunna ha fler än 6 medlemmar.

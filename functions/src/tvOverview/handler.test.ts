@@ -11,6 +11,7 @@ const h = vi.hoisted(() => ({
   watchlist: new Map<string, Record<string, unknown>[]>(),
   household: new Set<string>(),
   sessions: [] as unknown[],
+  reads: [] as string[],
 }));
 
 vi.mock('firebase-functions/v2', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
@@ -42,6 +43,7 @@ vi.mock('firebase-admin/firestore', () => ({
         orderBy: () => query,
         limit: () => query,
         get: async () => {
+          h.reads.push(path);
           if (h.failing.has(path)) throw new Error('unavailable');
           if (path === 'groups') return { docs: h.groupDocs };
           if (path === 'sessions') return { docs: h.sessions };
@@ -85,6 +87,7 @@ beforeEach(() => {
   h.watchlist.clear();
   h.household.clear();
   h.sessions = [];
+  h.reads = [];
   takeRate.mockClear();
   h.groupDocs = [group()];
   h.docs.set('users/owner/tvDevices/dev1', {});
@@ -99,6 +102,12 @@ describe('tvOverview vid körning', () => {
     const res = await call(request());
     expect(res.household).toBeNull();
     expect(res.providers).toEqual([8, 337]);
+  });
+
+  it('med flaggan av läses varken grupper eller någons lista', async () => {
+    await call(request());
+    expect(h.reads).not.toContain('groups');
+    expect(h.reads.filter((p) => p.includes('/watchlist'))).toEqual([]);
   });
 
   it('hushållsvyn kommer med när flaggan är på (så att övriga test inte är tomma)', async () => {

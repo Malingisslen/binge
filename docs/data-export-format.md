@@ -7,7 +7,7 @@ Filen är en JSON med följande top-level-struktur (se
 
 ```jsonc
 {
-  "schemaVersion": "2.7",
+  "schemaVersion": "2.8",
   "exportedAt": "2026-04-24T10:30:00.000Z",
   "userId": "firebase-uid",
   "readme": "…",
@@ -78,7 +78,7 @@ Filen är en JSON med följande top-level-struktur (se
 | `editableLists` | `lists/{listId}` (editors array-contains me) | Listor du är medredigerare i (BIN-100) |
 | `sessions` | `sessions/{sessionId}` (where hostUid==me) | Tillsammans-sessioner du är värd för. Ditt deltagande och dina röster i någon annans session ingår inte; de raderas när sessionen gallras (BIN-1342, se `.claude/rules/accepted-deviations.md`) |
 | `groupMemberships` | `groups/{groupId}` (array-contains me) | Grupper du är medlem i + gruppdata |
-| `householdContributions` | `groups/{groupId}/household/{uid}` (endast grupper du opt:at in i, BIN-184) | Ditt delade hushålls-bidrag per grupp: providerIds, providerCosts (kr/tjänst, ordinarie pris — inga tier-namn), providerCampaigns (kampanjpris + slutdatum), activeProviderIds (tjänster med minst en osedd backlog-titel — usage-härlett, inte självrapporterat), soonProviderIds (tjänster där du har något nytt inom 30 dagar — bara tjänsten, aldrig titel eller datum; saknas om du inte delat om efter 2026-10-31), votes (dina röster per tjänst: `ok`, `keep` eller `wait`; saknas om du inte röstat), votesMonth (månaden rösterna gäller, `ÅÅÅÅ-MM`), updatedAt |
+| `householdContributions` | `groups/{groupId}/household/{uid}` (endast grupper du opt:at in i, BIN-184) | Ditt delade hushålls-bidrag per grupp: providerIds, providerCosts (kr/tjänst, ordinarie pris — inga tier-namn), providerCampaigns (kampanjpris + slutdatum), activeProviderIds (tjänster med minst en osedd backlog-titel — usage-härlett, inte självrapporterat), soonProviderIds (tjänster där du har något nytt inom 30 dagar — bara tjänsten, aldrig titel eller datum; saknas om du inte delat om efter 2026-10-31), votes (dina röster per tjänst: `ok`, `keep` eller `wait`; saknas om du inte röstat), votesMonth (månaden rösterna gäller, `ÅÅÅÅ-MM`), watchingNow (bara i ett hushåll: titlarna du tittar på just nu, med TMDB-id, typ och titel; aldrig en titel du markerat Privat; saknas om du inte delat under hushållets text från 2026-11-03), updatedAt |
 | `groupMemberRows` | `groups/{groupId}/members/{uid}` (bara din egen rad, BIN-1172) | Raden om dig som gruppens medlemmar kan läsa, med alla fält den bär |
 | `groupTitleRatings` | `groups/{groupId}/watchlist/{titleId}` → `memberRatings.<uid>` (bara ditt eget värde, BIN-1337) | Ditt betyg per titel i varje grupps lista, som gruppens medlemmar kan se: groupId, titleId, tmdbId, mediaType, title, rating (heltal 1–10, en annan skala än `watchlist.rating`). id = `<groupId>/<titleId>` |
 | `skippedGroups` | läsningarna bakom de tre fälten ovan (BIN-1357) | En post per grupp där en läsning av hushållsbidraget, medlemsraden eller titellistan misslyckades: groupId, groupName (`null` om gruppen saknar ett namn i text), missing (de av `householdContributions`, `groupMemberRows`, `groupTitleRatings` som saknar gruppens data). Exporten avbryts inte av ett sådant fel (BIN-1352); filen är ofullständig för gruppen som står här. En rad som inte finns är inget fel och märks inte |
@@ -192,3 +192,7 @@ Dokumentera ändringar i CHANGELOG.md-sektionen nedan.
   minor-bump 2.5 → 2.6.
 - **2.7 (2026-10-31, TV-appen, BIN-1471)** — Lade till `tvDevices` (dina kopplade
   TV, `users/{uid}/tvDevices/*`). Additivt fält → minor-bump 2.6 → 2.7.
+- **2.8 (2026-11-03, ADR 0029)** — En post i `householdContributions` för ett
+  hushåll kan nu bära `watchingNow` (titlarna du tittar på just nu: TMDB-id, typ
+  och titel, högst 10). Den ligger i samma dokument och exporteras som den är
+  lagrad. Additivt fält → minor-bump 2.7 → 2.8.

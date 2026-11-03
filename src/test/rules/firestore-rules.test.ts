@@ -6302,3 +6302,207 @@ describe('eventStats is sealed to clients (BIN-1438, emulator)', () => {
     });
   });
 });
+
+// ADR 0029 - a household is a group with kind 'household': at most six members, the kind
+// is fixed at creation, and only a household may carry the titles its members watch.
+describe('groups kind household (ADR 0029)', () => {
+  const MEMBER = 'member_uid';
+  function memberDb() { return testEnv.authenticatedContext(MEMBER).firestore(); }
+  function createPayload(over: Record<string, unknown> = {}) {
+    return {
+      name: 'Hemma', ownerUid: OWNER, memberUids: [OWNER], defaults: { region: 'SE' },
+      inviteTokenHash: null, inviteTokenRotatedAt: serverTimestamp(),
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp(), ...over,
+    };
+  }
+  function contribution(over: Record<string, unknown> = {}) {
+    return {
+      providerIds: [8], providerCosts: { 8: 169 }, providerCampaigns: {},
+      activeProviderIds: [8], updatedAt: serverTimestamp(), ...over,
+    };
+  }
+  const watching = [{ id: 1399, type: 'tv', title: 'Severance' }];
+  const fiveOthers = ['m1', 'm2', 'm3', 'm4', 'm5'];
+
+  it('an owner can create a household', async () => {
+    await assertSucceeds(addDoc(collection(ownerDb(), 'groups'), createPayload({ kind: 'household' })));
+  });
+
+  it('any other kind is rejected', async () => {
+    await assertFails(addDoc(collection(ownerDb(), 'groups'), createPayload({ kind: 'club' })));
+  });
+
+  it('the owner cannot turn an ordinary group into a household', async () => {
+    await seedGroup({ memberUids: [OWNER, MEMBER] });
+    await assertFails(updateDoc(doc(ownerDb(), 'groups', GROUP), { kind: 'household' }));
+  });
+
+  it('the owner cannot turn a household back into an ordinary group', async () => {
+    await seedGroup({ kind: 'household' });
+    await assertFails(updateDoc(doc(ownerDb(), 'groups', GROUP), { kind: deleteField() }));
+  });
+
+  it('a household can still be renamed', async () => {
+    await seedGroup({ kind: 'household' });
+    await assertSucceeds(updateDoc(doc(ownerDb(), 'groups', GROUP), { name: 'Vårt hem' }));
+  });
+
+  async function seedOwnerFriend(uid: string, opts: { blocked?: boolean } = {}) {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', OWNER, 'friends', uid), { status: 'accepted' });
+      if (opts.blocked) await setDoc(doc(ctx.firestore(), 'users', OWNER, 'blocked', uid), { at: serverTimestamp() });
+    });
+  }
+
+  it('an invitee who is no longer a friend cannot accept', async () => {
+    await seedGroup({ kind: 'household', memberUids: [OWNER] });
+    await seedInvite('other_uid');
+    await assertFails(updateDoc(doc(otherDb(), 'groups', GROUP), { memberUids: [OWNER, 'other_uid'] }));
+  });
+
+  it('an invitee the owner has blocked cannot accept', async () => {
+    await seedGroup({ kind: 'household', memberUids: [OWNER] });
+    await seedInvite('other_uid');
+    await seedOwnerFriend('other_uid', { blocked: true });
+    await assertFails(updateDoc(doc(otherDb(), 'groups', GROUP), { memberUids: [OWNER, 'other_uid'] }));
+  });
+
+  it('an invitee can accept as the sixth member', async () => {
+    await seedGroup({ kind: 'household', memberUids: [OWNER, 'm1', 'm2', 'm3', 'm4'] });
+    await seedInvite('other_uid');
+    await seedOwnerFriend('other_uid');
+    await assertSucceeds(updateDoc(doc(otherDb(), 'groups', GROUP), {
+      memberUids: [OWNER, 'm1', 'm2', 'm3', 'm4', 'other_uid'],
+    }));
+  });
+
+  it('an invitee cannot accept as the seventh member', async () => {
+    await seedGroup({ kind: 'household', memberUids: [OWNER, ...fiveOthers] });
+    await seedInvite('other_uid');
+    await seedOwnerFriend('other_uid');
+    await assertFails(updateDoc(doc(otherDb(), 'groups', GROUP), {
+      memberUids: [OWNER, ...fiveOthers, 'other_uid'],
+    }));
+  });
+
+  it('nobody joins a household by link, even with room left', async () => {
+    await seedGroup({ kind: 'household', memberUids: [OWNER] });
+    await sealJoinAttempt('other_uid');
+    await assertFails(updateDoc(doc(otherDb(), 'groups', GROUP), {
+      memberUids: [OWNER, 'other_uid'],
+    }));
+  });
+
+  it('an ordinary group can still be joined by link', async () => {
+    await seedGroup({ memberUids: [OWNER] });
+    await sealJoinAttempt('other_uid');
+    await assertSucceeds(updateDoc(doc(otherDb(), 'groups', GROUP), {
+      memberUids: [OWNER, 'other_uid'],
+    }));
+  });
+
+  it('an ordinary group still takes a seventh member', async () => {
+    await seedGroup({ memberUids: [OWNER, ...fiveOthers] });
+    await seedInvite('other_uid');
+    await assertSucceeds(updateDoc(doc(otherDb(), 'groups', GROUP), {
+      memberUids: [OWNER, ...fiveOthers, 'other_uid'],
+    }));
+  });
+
+  it('a household member can share what they watch', async () => {
+    await seedGroup({ kind: 'household', memberUids: [OWNER, MEMBER] });
+    await assertSucceeds(setDoc(doc(memberDb(), 'groups', GROUP, 'household', MEMBER),
+      contribution({ watchingNow: watching })));
+  });
+
+  it('a member of an ordinary group cannot share what they watch', async () => {
+    await seedGroup({ memberUids: [OWNER, MEMBER] });
+    await assertFails(setDoc(doc(memberDb(), 'groups', GROUP, 'household', MEMBER),
+      contribution({ watchingNow: watching })));
+  });
+
+  it('exactly ten titles is accepted', async () => {
+    await seedGroup({ kind: 'household', memberUids: [OWNER, MEMBER] });
+    const ten = Array.from({ length: 10 }, (_, i) => ({ id: i + 1, type: 'tv', title: `T${i}` }));
+    await assertSucceeds(setDoc(doc(memberDb(), 'groups', GROUP, 'household', MEMBER),
+      contribution({ watchingNow: ten })));
+  });
+
+  it('more than ten titles is rejected', async () => {
+    await seedGroup({ kind: 'household', memberUids: [OWNER, MEMBER] });
+    const eleven = Array.from({ length: 11 }, (_, i) => ({ id: i + 1, type: 'tv', title: `T${i}` }));
+    await assertFails(setDoc(doc(memberDb(), 'groups', GROUP, 'household', MEMBER),
+      contribution({ watchingNow: eleven })));
+  });
+
+  it('watchingNow must be a list', async () => {
+    await seedGroup({ kind: 'household', memberUids: [OWNER, MEMBER] });
+    await assertFails(setDoc(doc(memberDb(), 'groups', GROUP, 'household', MEMBER),
+      contribution({ watchingNow: 'Severance' })));
+  });
+
+  // The write marking a title Privat sends (removeTitleFromHouseholdWatching): only the
+  // list and a fresh stamp, merged into the stored contribution.
+  it('removing a title with a fresh stamp is accepted, without one it is denied', async () => {
+    await seedGroup({ kind: 'household', memberUids: [OWNER, MEMBER] });
+    await assertSucceeds(setDoc(doc(memberDb(), 'groups', GROUP, 'household', MEMBER),
+      contribution({ watchingNow: watching })));
+    await assertFails(updateDoc(doc(memberDb(), 'groups', GROUP, 'household', MEMBER),
+      { watchingNow: [] }));
+    await assertSucceeds(updateDoc(doc(memberDb(), 'groups', GROUP, 'household', MEMBER),
+      { watchingNow: [], updatedAt: serverTimestamp() }));
+  });
+
+  it('nobody removes titles from another member\'s list', async () => {
+    await seedGroup({ kind: 'household', memberUids: [OWNER, MEMBER] });
+    await assertSucceeds(setDoc(doc(memberDb(), 'groups', GROUP, 'household', MEMBER),
+      contribution({ watchingNow: watching })));
+    await assertFails(updateDoc(doc(ownerDb(), 'groups', GROUP, 'household', MEMBER),
+      { watchingNow: [], updatedAt: serverTimestamp() }));
+  });
+});
+
+// ADR 0029 - an invitation into a household carries the group's kind and goes only to a
+// confirmed friend who has not blocked the owner.
+describe('groupInvites into a household (ADR 0029)', () => {
+  async function seedFriendship(opts: { blocked?: boolean } = {}) {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', INVITEE, 'friends', OWNER), { status: 'accepted' });
+      if (opts.blocked) await setDoc(doc(ctx.firestore(), 'users', INVITEE, 'blocked', OWNER), { at: serverTimestamp() });
+    });
+  }
+  beforeEach(async () => {
+    await seedGroup({ kind: 'household' });
+    await seedInviterProfile({ displayName: 'Agaren' });
+  });
+
+  it('the owner can invite a confirmed friend', async () => {
+    await seedFriendship();
+    await assertSucceeds(writeInvite({ kind: 'household' }));
+  });
+
+  it('the owner cannot invite someone who is not a friend', async () => {
+    await assertFails(writeInvite({ kind: 'household' }));
+  });
+
+  it('the owner cannot invite a friend who has blocked them', async () => {
+    await seedFriendship({ blocked: true });
+    await assertFails(writeInvite({ kind: 'household' }));
+  });
+
+  it('a household invitation that leaves out the kind is denied', async () => {
+    await seedFriendship();
+    await assertFails(writeInvite());
+  });
+
+  it('an ordinary group invitation cannot claim to be a household', async () => {
+    await seedGroup();
+    await seedFriendship();
+    await assertFails(writeInvite({ kind: 'household' }));
+  });
+
+  it('an ordinary group can still invite a non-friend', async () => {
+    await seedGroup();
+    await assertSucceeds(writeInvite());
+  });
+});

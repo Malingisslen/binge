@@ -426,6 +426,12 @@
       "path": "src/components/pages/GroupPageClient.tsx,src/lib/firebase/groups.ts"
     },
     {
+      "id": "household-page",
+      "label": "HouseholdPageClient (/hushall) + HouseholdCallout (Vänner)",
+      "context": "web-app",
+      "path": "src/components/pages/HouseholdPageClient.tsx,src/components/household/HouseholdCallout.tsx,src/components/household/InviteToHouseholdButton.tsx,src/hooks/useMyHousehold.ts"
+    },
+    {
       "id": "group-settings-modal",
       "label": "GroupSettingsModal",
       "context": "web-app",
@@ -1691,6 +1697,7 @@
       "covers": [
         "/grupper",
         "/grupper/ny",
+        "/hushall",
         "grupper/[id]",
         "GroupSettingsModal",
         "HouseholdPanel",
@@ -1700,6 +1707,13 @@
         "UgcActionsMenu"
       ],
       "steps": [
+        {
+          "from": "household-page",
+          "to": "firestore",
+          "payload": "ADR 0029: Skapa hushåll on Vänner or /hushall runs createGroup with kind 'household' (name Hemma); the rules fix kind for the group's life and cap a household at 6 members on the join and accept branches. Bjud in (friend's profile or the members card) writes users/{friend}/groupInvites/{gid} with kind 'household', allowed only to a confirmed friend who has not blocked the owner. The invitee answers on Vänner under the household consent text; sharing then writes groups/{gid}/household/{uid} with watchingNow (≤10 titles, never a Privat one), which the rules accept only in a household",
+          "transport": "Firestore write",
+          "verified": true
+        },
         {
           "from": "grupper-new-page",
           "to": "firestore",

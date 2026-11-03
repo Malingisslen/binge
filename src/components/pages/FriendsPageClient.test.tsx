@@ -42,6 +42,8 @@ vi.mock('@/components/social/FriendsFeed', () => ({
   FriendsFeed: () => <div data-testid="feed" />,
 }));
 vi.mock('@/hooks/usePageMeta', () => ({ usePageMeta: () => {} }));
+// The household callout has its own data and tests; this file is about the friend lists.
+vi.mock('@/components/household/HouseholdCallout', () => ({ default: () => null }));
 const senders = vi.hoisted(() => new Map<string, { displayName: string | null; username: string | null }>());
 vi.mock('@/hooks/useSenderProfile', () => ({
   useSenderProfile: (uid: string) => ({ data: senders.get(uid) ?? null }),

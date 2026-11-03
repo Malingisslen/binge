@@ -40,7 +40,7 @@ export const tvOverview = onCall(
     const data = (request.data ?? {}) as { seated?: unknown; roster?: unknown };
     const requestedSeated = parseSeated(data.seated);
 
-    const [profile, sessions, flag, groups] = await Promise.all([
+    const [profile, sessions, flag] = await Promise.all([
       db.doc(`users/${ownerUid}`).get(),
       // Indexet byggs efter deploy och frågan kastar tills det är klart: då saknas bara Tillsammans, inte tjänsterna.
       db.collection('sessions').where('hostUid', '==', ownerUid).orderBy('createdAt', 'desc').limit(3).get()
@@ -48,9 +48,8 @@ export const tvOverview = onCall(
           logger.warn('[tvOverview] sessions query failed', { code: (e as { code?: unknown }).code });
           return null;
         }),
-      // Flaggan och grupperna hör bara till hushållsvyn: ett fel där ska inte ta ner tjänsterna.
+      // Flaggan hör bara till hushållsvyn: ett fel där ska inte ta ner tjänsterna.
       db.doc('appConfig/tvHousehold').get().catch(() => null),
-      db.collection('groups').where('memberUids', 'array-contains', ownerUid).limit(10).get().catch(() => null),
     ]);
 
     const now = Date.now();
@@ -59,7 +58,12 @@ export const tvOverview = onCall(
       return d.get('status') === 'active' && typeof exp?.toMillis === 'function' && exp.toMillis() > now;
     });
 
-    const household = flag?.get('enabled') === true
+    // Med flaggan av läses varken grupper eller medlemmar: hushållskoden är då overksam, inte bara tyst.
+    const householdOn = flag?.get('enabled') === true;
+    const groups = householdOn
+      ? await db.collection('groups').where('memberUids', 'array-contains', ownerUid).limit(10).get().catch(() => null)
+      : null;
+    const household = householdOn
       ? await householdFor(db, ownerUid, groups?.docs ?? [], requestedSeated, typeof data.roster === 'string' ? data.roster : null)
       : null;
 

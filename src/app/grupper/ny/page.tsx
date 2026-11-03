@@ -123,7 +123,7 @@ function NyGruppContent() {
             options={[
               { value: 'least_misery', label: 'Ingen hatar det', desc: 'Undvik titlar någon sagt nej till' },
               { value: 'average', label: 'Flest positiva', desc: 'Rankad efter antalet ja' },
-              { value: 'fair', label: 'Turordning', desc: 'Var och en får prio i tur' },
+              { value: 'fair', label: 'Någons favorit', desc: 'Titlar som någon verkligen vill se får gå före' },
             ]}
           />
         </FormSection>

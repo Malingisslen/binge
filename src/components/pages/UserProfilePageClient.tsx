@@ -7,6 +7,7 @@ import { useFollowerCount, useFollowingCount } from '@/hooks/useFollow';
 import { useTasteMatch } from '@/hooks/useTasteVector';
 import FollowButton from '@/components/social/FollowButton';
 import FriendButton from '@/components/social/FriendButton';
+import InviteToHouseholdButton from '@/components/household/InviteToHouseholdButton';
 import ProfileStatsPanel from '@/components/social/ProfileStatsPanel';
 import { UgcActionsMenu } from '@/components/moderation/UgcActionsMenu';
 import StatCard from '@/components/ui/StatCard';
@@ -126,6 +127,7 @@ export default function UserProfilePageClient({ username }: { username: string }
           <>
             {!isOwnProfile && <FollowButton targetUid={uid} />}
             {!isOwnProfile && <FriendButton targetUid={uid} />}
+            {!isOwnProfile && <InviteToHouseholdButton targetUid={uid} targetName={card.displayName} />}
             {/* BIN-1211: profilen är den första ytan i appen som kan skapa en anmälan mot
                 en person. Servern tog emot `user` långt innan den här knappen fanns.
                 Menyn gömmer sig själv för den egna profilen och för utloggade. */}
