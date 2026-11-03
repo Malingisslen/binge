@@ -1,11 +1,8 @@
 {
-  "lastRun": "2026-10-26",
+  "lastRun": "2026-11-02",
   "dossiersRefreshed": 0,
   "worldWatchRoles": 1,
-  "retroFired": false,
   "retroDue": false,
   "acceptRate": null,
-  "scratchCleared": 0,
-  "healthChecks": null,
-  "notes": "Cloud-sandbox weekly sweep. Security Architect was due (scanned 2026-10-19) — lean pass, no new material item: the 2026-10-14 Next.js RCE pair + Server-Action DoS is the same disclosure already filed as issue #152, not a new one. Issue #133 still flagged for closing once reconciled with Linear (not re-verified this cycle). Legal/GDPR Counsel and Data Protection Officer not due (both scanned 2026-10-12, monthly cadence). No plan files qualified for archiving (bin-505-plan has 22 open checklist items; vart-det-plan is gated on the 2026-11-03 price-agent run and Malin's publish ok; recap-50-shows-progress is an ongoing log). Retro schedule already satisfied, none due. dossier-staleness directory does not exist in this checkout (gitignored local state)."
+  "notes": "Security Architect was due (scanned 2026-10-26) -- lean pass, no new material item; package-lock now resolves next@16.4.3, past the fixes for issues #133/#152 (worth closing once reconciled with Linear). Legal/GDPR Counsel and DPO not due (monthly, scanned 2026-10-12). No plan files qualified for archiving. Retro schedule already satisfied (bootstrap/shakedown/full all logged). dossier-staleness dir absent (gitignored local state), as expected."
 }
