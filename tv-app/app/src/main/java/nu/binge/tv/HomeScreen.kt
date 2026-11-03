@@ -30,6 +30,11 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -145,21 +150,38 @@ private fun Hero(t: Title, mine: Set<Long>, total: Int, index: Int, onNext: () -
     // Fokus på "Nästa förslag" och bara en gång: en dubbeltryckning ska aldrig markera titeln som sedd.
     LaunchedEffect(Unit) { focus.requestFocus() }
     val rows = Providers.rows(t.providers, mine)
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(40.dp)) {
-        PosterImage(t.posterUrl, t.title, Modifier.width(150.dp).height(225.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("IKVÄLL · FÖRSLAG ${index + 1} AV $total", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = BingeColors.Accent)
-            // Fast höjd på titeln, så att knapparna ligger på samma ställe oavsett titel.
-            Text(t.title, fontSize = 32.sp, fontWeight = FontWeight.Bold, color = BingeColors.Text, minLines = 2, maxLines = 2)
-            Text(TonightPicker.reason(t, System.currentTimeMillis(), mine), fontSize = 22.sp, color = BingeColors.TextMuted, minLines = 2, maxLines = 2)
-            Text(t.runtime?.let { "$it min" }.orEmpty(), fontSize = 22.sp, color = BingeColors.TextMuted, minLines = 1, maxLines = 1)
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(top = 8.dp)) {
-                Button(onClick = onNext, colors = bingeButtonColors(), modifier = Modifier.focusRequester(focus).onFocusChanged { if (it.isFocused) onFocus() }) { Text("Nästa förslag") }
-                Button(onClick = onWatched, colors = bingeButtonColors(), modifier = Modifier.onFocusChanged { if (it.isFocused) onFocus() }) {
-                    Text(if (t.isMovie) "Sedd" else "Såg första avsnittet")
+    // Skissens stora förslag: affischen som dämpad bakgrund bakom texten, stor titel och knapparna under.
+    Box(Modifier.fillMaxWidth().height(380.dp).clip(RoundedCornerShape(16.dp)).background(BingeColors.Surface)) {
+        AsyncImage(
+            model = t.posterUrl,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            alpha = 0.28f,
+            modifier = Modifier.fillMaxSize(),
+        )
+        Box(
+            Modifier.fillMaxSize().background(
+                Brush.horizontalGradient(listOf(BingeColors.Background, BingeColors.Background.copy(alpha = 0.15f))),
+            ),
+        )
+        Row(Modifier.fillMaxSize().padding(horizontal = 36.dp, vertical = 24.dp), horizontalArrangement = Arrangement.spacedBy(36.dp)) {
+            PosterImage(t.posterUrl, t.title, Modifier.width(180.dp).height(270.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("IKVÄLL · FÖRSLAG ${index + 1} AV $total", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = BingeColors.Accent)
+                // Fast höjd på titeln, så att knapparna ligger på samma ställe oavsett titel.
+                Text(t.title, fontSize = 44.sp, fontWeight = FontWeight.ExtraBold, color = BingeColors.Text, minLines = 2, maxLines = 2)
+                Text(
+                    listOfNotNull(TonightPicker.reason(t, System.currentTimeMillis(), mine), t.runtime?.let { "$it min" }).joinToString(" · "),
+                    fontSize = 22.sp, color = BingeColors.TextMuted, minLines = 2, maxLines = 2,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(top = 4.dp)) {
+                    Button(onClick = onNext, colors = bingeButtonColors(), modifier = Modifier.focusRequester(focus).onFocusChanged { if (it.isFocused) onFocus() }) { Text("Nästa förslag") }
+                    Button(onClick = onWatched, colors = bingeButtonColors(), modifier = Modifier.onFocusChanged { if (it.isFocused) onFocus() }) {
+                        Text(if (t.isMovie) "Sedd" else "Såg första avsnittet")
+                    }
                 }
+                ServiceStrip(rows, Modifier.padding(top = 4.dp), onFocus = onFocus)
             }
-            ServiceStrip(rows, Modifier.padding(top = 8.dp), onFocus = onFocus)
         }
     }
 }
