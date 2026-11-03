@@ -1313,9 +1313,17 @@ export function subscribeToGroupMembers(
   cb: (members: GroupMember[]) => void,
 ): () => void {
   return lazySubscribe(({ db, collection, onSnapshot }) =>
-    onSnapshot(collection(db, 'groups', groupId, 'members'), snap => {
-      cb(snap.docs.map(d => memberDocToObject(d.id, d.data())));
-    }));
+    onSnapshot(
+      collection(db, 'groups', groupId, 'members'),
+      snap => {
+        cb(snap.docs.map(d => memberDocToObject(d.id, d.data())));
+      },
+      // Utan felhanterare kastar SDK:n ett ohanterat fel som hamnar i Sentry när en
+      // icke-medlem öppnar en grupp. Bara nekandet är väntat; allt annat rapporteras.
+      err => {
+        if (!isPermissionDenied(err)) captureError(err, { scope: 'groups', kind: 'subscribeToGroupMembers' });
+      },
+    ));
 }
 
 export function subscribeToGroupWatchlist(
@@ -1323,9 +1331,16 @@ export function subscribeToGroupWatchlist(
   cb: (items: GroupWatchlistRow[]) => void,
 ): () => void {
   return lazySubscribe(({ db, collection, onSnapshot }) =>
-    onSnapshot(collection(db, 'groups', groupId, 'watchlist'), snap => {
-      cb(snap.docs.map(d => watchlistDocToObject(d.id, d.data())));
-    }));
+    onSnapshot(
+      collection(db, 'groups', groupId, 'watchlist'),
+      snap => {
+        cb(snap.docs.map(d => watchlistDocToObject(d.id, d.data())));
+      },
+      // Samma skäl som medlemslyssnaren ovan.
+      err => {
+        if (!isPermissionDenied(err)) captureError(err, { scope: 'groups', kind: 'subscribeToGroupWatchlist' });
+      },
+    ));
 }
 
 // ── BIN-184: Hushåll — opt-in delade prenumerationsbidrag ────────────────────

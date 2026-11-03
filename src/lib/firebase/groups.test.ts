@@ -112,6 +112,7 @@ import {
   joinGroupViaToken,
   acceptGroupInvite,
   subscribeToGroup,
+  subscribeToGroupMembers,
   inviteMemberByUid,
   updateMemberIdentity,
   setHouseholdContribution,
@@ -1514,6 +1515,34 @@ describe('subscribeToGroup lamnar over nekandet, inte bara dokumentet (BIN-1152)
     // "Finns inte" kommer fortfarande genom dokumentvagen, inte genom nekandet —
     // det ar de tva skarmarnas ena halva.
     expect(seen).toEqual([null]);
+  });
+});
+
+// BINGE-E: en icke-medlem som öppnar en grupp nekas läsningen av medlemmar och titlar.
+// Utan felhanterare blev nekandet ett ohanterat fel i Sentry.
+describe.each([
+  ['subscribeToGroupMembers', subscribeToGroupMembers],
+  ['subscribeToGroupWatchlist', subscribeToGroupWatchlist],
+])('%s: väntat nekande tystas, övriga fel rapporteras', (name, subscribe) => {
+  async function attach() {
+    subscribe('g-sub', () => {});
+    await vi.waitUntil(() => onSnapshotMock.mock.calls.length > 0);
+    return onSnapshotMock.mock.calls[0][2] as (err: unknown) => void;
+  }
+
+  it('ett NEKANDE rapporteras inte', async () => {
+    captureErrorMock.mockClear();
+    const onErr = await attach();
+    onErr(permissionDenied());
+    expect(captureErrorMock).not.toHaveBeenCalled();
+  });
+
+  it('ett annat fel rapporteras med fast scope och kind, utan id', async () => {
+    captureErrorMock.mockClear();
+    const onErr = await attach();
+    const err = new Error('offline');
+    onErr(err);
+    expect(captureErrorMock).toHaveBeenCalledWith(err, { scope: 'groups', kind: name });
   });
 });
 
