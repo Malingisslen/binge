@@ -12,6 +12,8 @@ import kotlinx.coroutines.launch
 sealed interface HomeState {
     data object Loading : HomeState
     data class Ready(
+        /** Hela listan, för Hem, Min lista och Kalender. */
+        val all: List<Title>,
         val picks: List<Title>,
         val upcoming: List<Title>,
         val index: Int,
@@ -49,6 +51,7 @@ class HomeViewModel : ViewModel() {
                     Overview.EMPTY
                 }
                 HomeState.Ready(
+                    all = all,
                     picks = TonightPicker.picks(all, overview.providers),
                     upcoming = TonightPicker.upcoming(all),
                     index = 0,
@@ -70,9 +73,10 @@ class HomeViewModel : ViewModel() {
         _state.value = s.copy(index = (s.index + 1) % s.picks.size)
     }
 
-    fun markWatched() {
+    /** Utan argument gäller dagens förslag; titelsidan anger själv vilken titel det gäller. */
+    fun markWatched(which: Title? = null) {
         val s = _state.value as? HomeState.Ready ?: return
-        val title = s.current ?: return
+        val title = which ?: s.current ?: return
         viewModelScope.launch {
             try {
                 repo.markWatched(title)

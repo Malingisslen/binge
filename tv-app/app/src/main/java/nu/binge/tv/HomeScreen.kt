@@ -43,7 +43,9 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.google.firebase.auth.FirebaseAuth
 
-private enum class Tab(val label: String) { Tonight("Ikväll"), Together("Tillsammans"), Household("Hushållet") }
+private enum class Tab(val label: String) {
+    Home("Hem"), Tonight("Ikväll"), MyList("Min lista"), Calendar("Kalender"), Together("Tillsammans"), Household("Hushållet")
+}
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -82,16 +84,25 @@ private fun Failed(message: String, onRetry: () -> Unit) {
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun Ready(s: HomeState.Ready, vm: HomeViewModel) {
-    var picked by remember { mutableStateOf(Tab.Tonight) }
+    var picked by remember { mutableStateOf(Tab.Home) }
+    // Titelsidan ligger över flikarna. Efter "Sedd" laddas allt om och den stängs av sig själv.
+    var open by remember { mutableStateOf<Title?>(null) }
     val household = s.overview.household?.takeIf { it.members.size >= 2 }
     val tabs = buildList {
+        add(Tab.Home)
         add(Tab.Tonight)
+        add(Tab.MyList)
+        add(Tab.Calendar)
         if (s.overview.sessionId != null) add(Tab.Together)
         if (household != null) add(Tab.Household)
     }
     // Försvinner sessionen medan man står på dess flik går man tillbaka till Ikväll.
-    val active = if (picked in tabs) picked else Tab.Tonight
+    val active = if (picked in tabs) picked else Tab.Home
 
+    open?.let { t ->
+        TitleDetail(t, s.overview.providers, onClose = { open = null }, onWatched = vm::markWatched)
+        return
+    }
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("binge", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, color = BingeColors.Accent, modifier = Modifier.padding(end = 16.dp))
@@ -100,7 +111,10 @@ private fun Ready(s: HomeState.Ready, vm: HomeViewModel) {
             }
         }
         when (active) {
-            Tab.Tonight -> Tonight(s, vm)
+            Tab.Home -> HomeShelves(s, onOpen = { open = it })
+            Tab.Tonight -> Tonight(s, vm, onOpen = { open = it })
+            Tab.MyList -> MyListScreen(s, onOpen = { open = it })
+            Tab.Calendar -> CalendarScreen(s, onOpen = { open = it })
             Tab.Together -> TogetherScreen(s.overview.sessionId.orEmpty(), s.overview.providers)
             Tab.Household -> if (household != null) HouseholdScreen(household, s.seated, vm::toggleSeat)
         }
@@ -109,7 +123,7 @@ private fun Ready(s: HomeState.Ready, vm: HomeViewModel) {
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun Tonight(s: HomeState.Ready, vm: HomeViewModel) {
+private fun Tonight(s: HomeState.Ready, vm: HomeViewModel, onOpen: (Title) -> Unit) {
     val current = s.current
     if (current == null) {
         Centered("Inget att se ikväll. Lägg till något i Vill se i Binge.")
@@ -125,9 +139,9 @@ private fun Tonight(s: HomeState.Ready, vm: HomeViewModel) {
     val showWholeHero: () -> Unit = { scope.launch { listState.animateScrollToItem(0) } }
     LazyColumn(Modifier.fillMaxSize(), state = listState, verticalArrangement = Arrangement.spacedBy(24.dp)) {
         item { Hero(current, s.overview.providers, s.picks.size, s.index, onNext = vm::nextSuggestion, onWatched = vm::markWatched, onFocus = showWholeHero) }
-        if (others.isNotEmpty()) item { PosterRow("Vill se", others) }
+        if (others.isNotEmpty()) item { PosterRow("Vill se", others, onOpen = onOpen) }
         if (s.upcoming.isNotEmpty()) item {
-            PosterRow("Nästa avsnitt", s.upcoming, caption = { listOfNotNull(it.nextAirCode, it.nextAirDate).filter(String::isNotEmpty) })
+            PosterRow("Nästa avsnitt", s.upcoming, caption = { listOfNotNull(it.nextAirCode, it.nextAirDate).filter(String::isNotEmpty) }, onOpen = onOpen)
         }
         // TMDB:s villkor kräver den här texten där deras affischer och uppgifter visas.
         item {
@@ -174,15 +188,14 @@ private fun Hero(t: Title, mine: Set<Long>, total: Int, index: Int, onNext: () -
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun PosterRow(heading: String, titles: List<Title>, caption: (Title) -> List<String> = { emptyList() }) {
+fun PosterRow(heading: String, titles: List<Title>, caption: (Title) -> List<String> = { emptyList() }, onOpen: (Title) -> Unit = {}) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(heading, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = BingeColors.Text)
         LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             items(titles, key = { it.docId }) { t ->
                 Column(Modifier.width(112.dp)) {
-                    // Valbar så att fokus kan flyttas hit med pil ner; ingen åtgärd än.
                     Card(
-                        onClick = {},
+                        onClick = { onOpen(t) },
                         border = CardDefaults.border(focusedBorder = Border(BorderStroke(3.dp, BingeColors.Accent))),
                     ) {
                         PosterImage(t.posterUrl, t.title, Modifier.width(112.dp).height(168.dp))
