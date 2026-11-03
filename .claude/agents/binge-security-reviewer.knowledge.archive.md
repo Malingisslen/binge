@@ -11686,6 +11686,49 @@ main's 967, measured without the branch's `tvDevices.rules.test.ts`, so the floo
 the TV suite (test-reviewer territory).
 Addendum, same review: merged `npm run test:rules -- --port 8123` 11 files, 990/990 green, above the 967 floor.
 
+### 2026-11-03 — ADR 0029 households: friends-only gate on the invite, none on the link join
+Staged diff (households: `groups.kind`, cap 6 on join/accept, `groupInvites.kind` + friend/not-blocked
+check, `household/{uid}.watchingNow`). The friend and block conditions sit only on
+`users/{uid}/groupInvites/{groupId}` create. The `groups/{groupId}` token-join branch checked only
+`withinHouseholdCap()`, and `createGroup` mints an invite token for every group, households included;
+the owner's `/grupper/{id}/` page (linked as "Inställningar" from the household page) renders the
+invite-link panel. Live PoC against the STAGED rules (`git show :firestore.rules`, emulator port 8187,
+throwaway `_poc-household.test.ts`, deleted): a non-friend with a sealed `joinAttempts` doc, and a user
+who had blocked the owner, both `assertSucceeds` joining `[OWNER]` -> `[OWNER, other]`. Breaks ADR 0029
+decision 6 and the plan's "Servern är gate" for friends-only. Fix: `resource.data.get('kind', null) !=
+'household'` on the token-join branch, plus a test that link join fails with room left and an ordinary
+group still joins by link. The caller was making that exact change in the working tree, unstaged, while
+this review ran, so the first PoC run (against the working tree) came back denied. Lesson: run the PoC
+against `git show :<file>`, not the working tree, when the working tree shows `MM`.
+Also filed (non-blocking): `watchingNow` entries are unbound per entry, and the ADR 0026 votes deviation
+lists "a reader that shows stored text from the contribution" as NOT accepted, so the brief's "validated
+by the client like votes" needs its own dated ledger entry; same for one-household-per-user.
+Addendum, re-review same day (all fixes staged, working tree == index): token-join refuses
+`kind == 'household'`; accept re-checks `users/{owner}/friends/{invitee}` exists and
+`users/{owner}/blocked/{invitee}` does not; InvitePanel hidden and no token cached for households;
+ledger entry 2026-11-03 added. Mutation run on the emulator against `git show :firestore.rules`
+(household and invite describes, 207 tests): baseline green; dropping the token-join clause fails only
+`nobody joins a household by link, even with room left`; neutering the friend exists fails only
+`an invitee who is no longer a friend cannot accept`; neutering the blocked check fails only
+`an invitee the owner has blocked cannot accept`. Pass.
+
+### 2026-11-03 — ADR 0029 Privat scrub restamps the household contribution's `updatedAt`
+Round adding `withoutHouseholdWatchingTitle`, `removeTitleFromHouseholdWatching` and its call in
+`WatchlistContext.updateVisibility` (marking a title Privat removes it from `watchingNow` at once,
+Legal #5). Live PoC on the emulator (port 8123, throwaway `src/test/rules/_poc-privat-scrub.test.ts`,
+deleted): the production shape `updateDoc(household/{me}, {watchingNow: kept, updatedAt:
+serverTimestamp()})` on a seeded 60-day-old contribution `assertSucceeds`; scrub to `[]` succeeds;
+the same write WITHOUT `updatedAt` `assertFails` (rule pins `updatedAt == request.time` on update);
+another member's scrub of my doc `assertFails`. 4/4 as predicted. Security: clean, own-doc only.
+Non-blocking Medium (data honesty, not a trust boundary): the forced restamp makes a stale
+contribution's `activeProviderIds` count as fresh evidence in `aggregateHousehold` (dead-weight can
+convict on old data) and a stale `soonProviderIds` count inside `HOUSEHOLD_SOON_FRESH_DAYS` in
+`aggregateHouseholdSoon`. `refreshMyHouseholdContributions` already returns early on
+`householdSoonNeedsRefresh` for exactly this reason; the new writer has no such guard. Fix options
+offered, not decided: rebuild the full contribution when the stored doc is stale, or record the
+trade-off as a dated deviation. Info: no rules-suite test pins the partial-update shape; the mocked
+`groups.test.ts` would stay green with `updatedAt` dropped from the payload.
+
 ### 2026-11-03 — Tillsammans-inbjudan: `sharesSessionGroup` proves membership from the member ROW, not `memberUids`
 
 Staged diff: `users/{uid}/sessionInvites/{inviteId}` create rule, helper `sharesSessionGroup(sessionId)`:

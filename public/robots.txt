@@ -13,6 +13,7 @@ Disallow: /settings/
 Disallow: /stats/
 Disallow: /grupper/
 Disallow: /tillsammans/
+Disallow: /hushall/
 Disallow: /search
 
 # Tracking-params — varje variant skapar en separat URL utan canonical i SPA.

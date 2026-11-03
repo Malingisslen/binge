@@ -76,6 +76,9 @@ nivå vars senaste loggade `toKr` inte är katalogens nuvarande pris.
 - Kör `npm run lint && npm run typecheck && npm test` — **grönt krävs** före commit.
   Identitetsvakten (`src/lib/tmdb/providers.identityGuard.test.ts`) failar bygget om
   något immutabelt id/namn/kind ändrats → agenten kan inte råka rasera det.
+- Fäller `providers.tvPrices.test.ts` bygget har ett pris ändrats som TV-appen också visar: uppdatera
+  `fromPrice` för samma tjänst i `tv-app/app/src/main/java/nu/binge/tv/Providers.kt` och ta med den
+  filen i committen.
 - Committa scope:at (`git add src/lib/tmdb/providers.ts`), pusha till `main`.
 - Skicka en **kort Telegram-notis** — även "inga ändringar" (så tyst död upptäcks).
 - Öppna Linear-ärenden för allt i osäkerhets-listan (project **Binge**, prio Medium).

@@ -45,11 +45,14 @@ import type { QuerySnapshot } from 'firebase/firestore';
 //     (provider id → 'ok' | 'keep' | 'wait') and `votesMonth` ("YYYY-MM"). They live in the
 //     same doc, so the export carries them as stored. No field changed meaning.
 // 2.7 (TV-appen, BIN-1471, 2026-10-31): additive — new `tvDevices` array: your connected TVs.
-// 2.8 (Bjud in till Tillsammans, 2026-11-03): additive — new `sessionInvites` array:
+// 2.8 (ADR 0029, 2026-11-03): additive — a `householdContributions` doc in a household may
+//     carry `watchingNow` (the titles you are watching: TMDB id, type and title). Same doc,
+//     exported as stored.
+// 2.9 (Bjud in till Tillsammans, 2026-11-03): additive — new `sessionInvites` array:
 //     invites to a Tillsammans session sent to you (id = "<sessionId>_<fromUid>"), and
 //     `sessionInvitePushesReceived` / `sessionInvitePushesSent`: the invite notice's
 //     brake markers that name you as recipient or sender.
-export const SCHEMA_VERSION = '2.8' as const;
+export const SCHEMA_VERSION = '2.9' as const;
 
 export interface ExportDoc {
   id: string;

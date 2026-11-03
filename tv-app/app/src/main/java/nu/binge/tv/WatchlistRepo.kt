@@ -63,6 +63,7 @@ class WatchlistRepo(
             watchedAtMs = d.getTimestamp("watchedAt")?.toDate()?.time,
             nextAirDate = d.getString("nextAirDate"),
             nextAirCode = d.getString("nextAirCode"),
+            providers = (d.get("providers") as? List<*>)?.mapNotNull { (it as? Number)?.toLong() } ?: emptyList(),
         )
     }
 }

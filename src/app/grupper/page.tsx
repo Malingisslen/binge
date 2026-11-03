@@ -113,7 +113,9 @@ function GrupperList() {
 }
 
 function PendingInvites() {
-  const { invites, accept, decline } = useMyGroupInvites();
+  const { invites: allInvites, accept, decline } = useMyGroupInvites();
+  // ADR 0029: a household invitation is answered on the Vänner page, under its consent text.
+  const invites = allInvites.filter(i => i.kind !== 'household');
   const { show: toast } = useToast();
   const [busy, setBusy] = useState<string | null>(null);
   // BIN-1166: ett nekande ar DETERMINISTISKT — samma inbjudan ger samma svar varje

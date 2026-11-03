@@ -102,3 +102,21 @@ describe('HouseholdPanel — samtyckesvyn (ADR 0010, ADR 0026)', () => {
     expect(screen.getByRole('button', { name: 'Sluta dela' })).toBeInTheDocument();
   });
 });
+
+describe('HouseholdPanel — hushållets samtyckestext (ADR 0029)', () => {
+  it('ett hushåll visar texten som nämner titlarna, inte gruppens "aldrig titlar"', () => {
+    household.status = 'gated';
+    household.needsReshare = false;
+    render(<HouseholdPanel groupId="g1" isHousehold />);
+    fireEvent.click(screen.getByRole('button', { name: 'Dela mina kostnader…' }));
+    expect(screen.getByText(/titlarna du just nu tittar på, med ditt förnamn/)).toBeInTheDocument();
+    expect(screen.queryByText(/Aldrig vilka titlar du tittar på/)).toBeNull();
+  });
+
+  it('en vanlig grupp behåller sin text', () => {
+    household.status = 'gated';
+    render(<HouseholdPanel groupId="g1" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Dela mina kostnader…' }));
+    expect(screen.getByText(/Aldrig vilka titlar du tittar på/)).toBeInTheDocument();
+  });
+});

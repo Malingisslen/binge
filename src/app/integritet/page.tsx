@@ -10,8 +10,8 @@ export default function IntegritetPage() {
   return (
     <LegalPageShell
       title="Integritetspolicy"
-      lastUpdated="2026-10-31"
-      version="1.21"
+      lastUpdated="2026-11-03"
+      version="1.22"
       toc={[
         { id: 'ansvarig', label: '1. Vem är ansvarig?' },
         { id: 'uppgifter', label: '2. Vilka uppgifter vi samlar in' },
@@ -97,7 +97,7 @@ export default function IntegritetPage() {
         <ul>
           <li><strong>Avtal (GDPR art. 6.1.b)</strong> — för att leverera tjänsten: spara din bevakningslista, visa rätt streaming-info, köra rådgivaren, och visa de grupper du är medlem i vilka streamingtjänster du har, eftersom det är så gruppen räknar ut vad ni kan se tillsammans, och visa gruppens medlemmar de betyg du sätter på gruppens titlar (se §10).</li>
           <li><strong>Berättigat intresse (art. 6.1.f)</strong> — för driftlogg, felsökning, felövervakning, bot- och missbruksskydd, samt cookiefri räkning av hur funktioner används och av besök via Cloudflare Web Analytics (se §4). Du kan invända mot båda räkningarna (se §7). Också för att visa en svensk biografi från Wikipedia på personsidor: intresset är att sidan ska vara begriplig på svenska, och Wikimedia får ingenting om ditt konto (se §4).</li>
-          <li><strong>Samtycke (art. 6.1.a)</strong> — för Hushåll, den frivilliga delningen av prenumerationskostnader i grupper (se §10), för att spela en trailer från YouTube, där ditt tryck på spela är samtycket (se §4 och §8), samt eventuella framtida inslag som kräver samtycke, t.ex. marknadsföring eller cookie-baserad spårning. Inga marknadsföringsinslag används idag.</li>
+          <li><strong>Samtycke (art. 6.1.a)</strong> — för Hushåll, den frivilliga delningen av prenumerationskostnader i grupper och, i ett hushåll, av titlarna du tittar på (se §10), för att spela en trailer från YouTube, där ditt tryck på spela är samtycket (se §4 och §8), samt eventuella framtida inslag som kräver samtycke, t.ex. marknadsföring eller cookie-baserad spårning. Inga marknadsföringsinslag används idag.</li>
         </ul>
         <p>
           Administratörer kan se namn, användarnamn, profilbild och presentation
@@ -392,6 +392,16 @@ export default function IntegritetPage() {
           <li><strong>Din kontroll</strong> — sluta dela när som helst med ett tryck; din data raderas då omedelbart. Den raderas också automatiskt om du lämnar gruppen, blir borttagen ur den, eller tar bort ditt konto.</li>
           <li><strong>Export</strong> — dina hushålls-bidrag ingår i din dataexport (se §7).</li>
         </ul>
+        <p>
+          <strong>Ett hushåll</strong> är en grupp för dem som bor ihop, med högst 6
+          personer. Delar du i ett hushåll delas också <strong>titlarna du just nu
+          tittar på</strong>, med ditt förnamn: bara titeln, aldrig status, betyg, tid
+          eller anteckningar, och aldrig en titel du markerat som Privat. Titlarna ser
+          de andra i hushållet som själva delar. Syftet är en
+          hushållsöversikt, inte att kartlägga vad du tittar på. Samtyckesrutan i
+          hushållet säger det innan något sparas, och du kan sluta dela på samma sätt
+          som ovan. I vanliga grupper delas aldrig titlar.
+        </p>
         <p>
           <strong>Vem som ser att gruppen finns.</strong> Gruppens
           <strong> namn</strong> är läsbart för varje inloggat konto — det är vad

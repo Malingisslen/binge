@@ -6,6 +6,15 @@
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <uses-feature android:name="android.software.leanback" android:required="true" />
 
+    <!-- Appar "Öppna i tjänsten" får starta; Android döljer annars installerade appar. Lista: Providers.kt. -->
+    <queries>
+        <package android:name="com.netflix.ninja" />
+        <package android:name="com.amazon.amazonvideo.livingroom" />
+        <package android:name="com.disney.disneyplus" />
+        <package android:name="com.wbd.stream" />
+        <package android:name="com.apple.atve.androidtv.appletv" />
+    </queries>
+
     <application
         android:name=".BingeTvApp"
         android:allowBackup="false"

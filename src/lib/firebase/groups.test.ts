@@ -123,6 +123,7 @@ import {
   subscribeToGroupWatchlist,
   leaveGroup,
   removeMemberAsOwner,
+  removeTitleFromHouseholdWatching,
 } from './groups';
 import type { GroupWatchlistRow } from './groups';
 
@@ -1066,6 +1067,8 @@ describe('inbjudningens faltuppsattning ar pinnad mot regeln (BIN-1127, harledd 
       fromUid: 'owner-invite',
       fromDisplayName: 'Malin',
       targetUid: 'target-invite',
+      // A household invitation carries every key the rule allows, `kind` included.
+      kind: 'household',
     });
     const call = setDocMock.mock.calls.find(
       ([ref]) => (ref as { _path: string })._path === 'users/target-invite/groupInvites/g-invite',
@@ -1082,6 +1085,7 @@ describe('inbjudningens faltuppsattning ar pinnad mot regeln (BIN-1127, harledd 
       fromUid: 'owner-pin',
       fromDisplayName: null,
       targetUid: 'target-pin',
+      kind: null,
     });
     const call = setDocMock.mock.calls.find(
       ([ref]) => (ref as { _path: string })._path === 'users/target-pin/groupInvites/g-pin',
@@ -1815,6 +1819,44 @@ describe('PERF-6: invalidation vs a read already in flight', () => {
     await stale;
     getDocsMock.mockResolvedValueOnce({ empty: false, docs: [{ id: 'g2' }] });
     await expect(getMyGroupIds('perf6-d')).resolves.toEqual(['g2']);
+  });
+});
+
+// ADR 0029: the consent text promises a title marked Privat is not shared, so marking it
+// removes it from the household lists at once instead of on the next household visit.
+describe('removeTitleFromHouseholdWatching (ADR 0029)', () => {
+  const shared = [
+    { id: 1, type: 'tv', title: 'Severance' },
+    { id: 2, type: 'tv', title: 'Andor' },
+  ];
+
+  it('writes the list without the title to every household that carries it, and nowhere else', async () => {
+    getDocsMock.mockResolvedValueOnce({ empty: false, docs: [{ id: 'plain' }, { id: 'hh' }, { id: 'hh2' }] });
+    seedDoc('groups/plain/household/privat-a', { exists: () => true, data: () => ({ providerIds: [] }) });
+    seedDoc('groups/hh/household/privat-a', { exists: () => true, data: () => ({ watchingNow: shared }) });
+    seedDoc('groups/hh2/household/privat-a', { exists: () => true, data: () => ({ watchingNow: [shared[0]] }) });
+    await removeTitleFromHouseholdWatching('privat-a', 'tv', 1);
+    const writes = new Map(
+      (updateDocMock.mock.calls as [{ _path: string }, Record<string, unknown>][]).map(([ref, data]) => [ref._path, data]),
+    );
+    expect([...writes.keys()].sort()).toEqual(['groups/hh/household/privat-a', 'groups/hh2/household/privat-a']);
+    expect(writes.get('groups/hh/household/privat-a')!.watchingNow).toEqual([{ id: 2, type: 'tv', title: 'Andor' }]);
+    // The member's only shared title: the list is written empty, not left alone.
+    expect(writes.get('groups/hh2/household/privat-a')!.watchingNow).toEqual([]);
+    // The household rule requires updatedAt == request.time on every write; a merge
+    // without it keeps the old stamp and is denied.
+    for (const data of writes.values()) {
+      expect(Object.keys(data).sort()).toEqual(['updatedAt', 'watchingNow']);
+      expect(data.updatedAt).toBe('SERVER_TIMESTAMP');
+    }
+  });
+
+  it('writes nothing when no list carries the title', async () => {
+    getDocsMock.mockResolvedValueOnce({ empty: false, docs: [{ id: 'hh' }, { id: 'gone' }] });
+    seedDoc('groups/hh/household/privat-b', { exists: () => true, data: () => ({ watchingNow: shared }) });
+    seedDoc('groups/gone/household/privat-b', { exists: () => false, data: () => undefined });
+    await removeTitleFromHouseholdWatching('privat-b', 'movie', 1);
+    expect(updateDocMock).not.toHaveBeenCalled();
   });
 });
 
