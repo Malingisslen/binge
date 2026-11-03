@@ -32,9 +32,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.layout.ContentScale
-import coil.compose.AsyncImage
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -152,18 +149,7 @@ private fun Hero(t: Title, mine: Set<Long>, total: Int, index: Int, onNext: () -
     val rows = Providers.rows(t.providers, mine)
     // Skissens stora förslag: affischen som dämpad bakgrund bakom texten, stor titel och knapparna under.
     Box(Modifier.fillMaxWidth().height(380.dp).clip(RoundedCornerShape(16.dp)).background(BingeColors.Surface)) {
-        AsyncImage(
-            model = t.posterUrl,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            alpha = 0.28f,
-            modifier = Modifier.fillMaxSize(),
-        )
-        Box(
-            Modifier.fillMaxSize().background(
-                Brush.horizontalGradient(listOf(BingeColors.Background, BingeColors.Background.copy(alpha = 0.15f))),
-            ),
-        )
+        PosterBackdrop(t.posterUrl, Modifier.fillMaxSize())
         Row(Modifier.fillMaxSize().padding(horizontal = 36.dp, vertical = 24.dp), horizontalArrangement = Arrangement.spacedBy(36.dp)) {
             PosterImage(t.posterUrl, t.title, Modifier.width(180.dp).height(270.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -25,6 +25,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -66,6 +67,19 @@ fun PosterImage(url: String?, description: String, modifier: Modifier) {
         contentScale = ContentScale.Crop,
         modifier = modifier.clip(RoundedCornerShape(10.dp)).background(BingeColors.Surface),
     )
+}
+
+/** Affischen som dämpad bakgrund bakom text, mörkare åt vänster där texten ligger. */
+@Composable
+fun PosterBackdrop(url: String?, modifier: Modifier = Modifier) {
+    Box(modifier) {
+        AsyncImage(model = url, contentDescription = null, contentScale = ContentScale.Crop, alpha = 0.28f, modifier = Modifier.fillMaxSize())
+        Box(
+            Modifier.fillMaxSize().background(
+                Brush.horizontalGradient(listOf(BingeColors.Background, BingeColors.Background.copy(alpha = 0.15f))),
+            ),
+        )
+    }
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)

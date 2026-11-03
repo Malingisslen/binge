@@ -2,6 +2,7 @@ package nu.binge.tv
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -21,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -110,13 +113,16 @@ private fun Votes(e: BoardEntry) {
 @Composable
 private fun Match(e: BoardEntry, mine: Set<Long>) {
     val rows = Providers.rows(e.candidate.providers, mine)
-    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(48.dp), verticalAlignment = Alignment.CenterVertically) {
-        PosterImage(e.candidate.posterUrl, e.candidate.title, Modifier.width(260.dp).height(390.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Chip("Match!", accent = true)
-            Text(e.candidate.title, fontSize = 48.sp, fontWeight = FontWeight.ExtraBold, color = BingeColors.Text, maxLines = 2)
-            Text("Alla ${e.participants} sa ja", fontSize = 26.sp, color = BingeColors.TextMuted)
-            ServiceStrip(rows, Modifier.padding(top = 16.dp))
+    Box(Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp)).background(BingeColors.Surface)) {
+        PosterBackdrop(e.candidate.posterUrl, Modifier.fillMaxSize())
+        Row(Modifier.fillMaxSize().padding(48.dp), horizontalArrangement = Arrangement.spacedBy(48.dp), verticalAlignment = Alignment.CenterVertically) {
+            PosterImage(e.candidate.posterUrl, e.candidate.title, Modifier.width(260.dp).height(390.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Chip("Match!", accent = true)
+                Text(e.candidate.title, fontSize = 52.sp, fontWeight = FontWeight.ExtraBold, color = BingeColors.Text, maxLines = 2)
+                Text("Alla ${e.participants} sa ja", fontSize = 26.sp, color = BingeColors.TextMuted)
+                ServiceStrip(rows, Modifier.padding(top = 16.dp))
+            }
         }
     }
 }
