@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -115,7 +116,7 @@ fun TitleRow(heading: String, titles: List<TitleRef>) {
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun ServiceStrip(rows: List<StripRow>, modifier: Modifier = Modifier) {
+fun ServiceStrip(rows: List<StripRow>, modifier: Modifier = Modifier, onFocus: () -> Unit = {}) {
     if (rows.isEmpty()) return
     val context = LocalContext.current
     var notice by remember(rows) { mutableStateOf<String?>(null) }
@@ -130,6 +131,7 @@ fun ServiceStrip(rows: List<StripRow>, modifier: Modifier = Modifier) {
                     else "${row.info.name} går inte att öppna härifrån än. Öppna appen själv på TV:n."
                 },
                 colors = bingeButtonColors(),
+                modifier = Modifier.onFocusChanged { if (it.isFocused) onFocus() },
             ) {
                 Column {
                     Text("Se på ${row.info.name}", fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1)

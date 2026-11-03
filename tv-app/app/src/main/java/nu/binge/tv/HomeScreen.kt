@@ -13,21 +13,25 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.Border
 import androidx.tv.material3.Button
@@ -112,8 +116,13 @@ private fun Tonight(s: HomeState.Ready, vm: HomeViewModel) {
     val others = s.picks.filterNot { it.docId == current.docId }
     // En rullbar lista: på en TV är skärmen lägre än hero och rader tillsammans, och raderna måste
     // gå att nå med pil ner i stället för att klippas av.
-    LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(24.dp)) {
-        item { Hero(current, s.overview.providers, s.picks.size, s.index, onNext = vm::nextSuggestion, onWatched = vm::markWatched) }
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    // Fokus på en knapp rullar bara så mycket att knappen syns och lämnar affisch och titel klippta;
+    // hela förslaget ska alltid synas när man står på det.
+    val showWholeHero: () -> Unit = { scope.launch { listState.animateScrollToItem(0) } }
+    LazyColumn(Modifier.fillMaxSize(), state = listState, verticalArrangement = Arrangement.spacedBy(24.dp)) {
+        item { Hero(current, s.overview.providers, s.picks.size, s.index, onNext = vm::nextSuggestion, onWatched = vm::markWatched, onFocus = showWholeHero) }
         if (others.isNotEmpty()) item { PosterRow("Vill se", others) }
         if (s.upcoming.isNotEmpty()) item {
             PosterRow("Nästa avsnitt", s.upcoming, caption = { listOfNotNull(it.nextAirCode, it.nextAirDate).filter(String::isNotEmpty) })
@@ -131,7 +140,7 @@ private fun Tonight(s: HomeState.Ready, vm: HomeViewModel) {
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun Hero(t: Title, mine: Set<Long>, total: Int, index: Int, onNext: () -> Unit, onWatched: () -> Unit) {
+private fun Hero(t: Title, mine: Set<Long>, total: Int, index: Int, onNext: () -> Unit, onWatched: () -> Unit, onFocus: () -> Unit) {
     val focus = remember { FocusRequester() }
     // Fokus på "Nästa förslag" och bara en gång: en dubbeltryckning ska aldrig markera titeln som sedd.
     LaunchedEffect(Unit) { focus.requestFocus() }
@@ -145,12 +154,12 @@ private fun Hero(t: Title, mine: Set<Long>, total: Int, index: Int, onNext: () -
             Text(TonightPicker.reason(t, System.currentTimeMillis(), mine), fontSize = 22.sp, color = BingeColors.TextMuted, minLines = 2, maxLines = 2)
             Text(t.runtime?.let { "$it min" }.orEmpty(), fontSize = 22.sp, color = BingeColors.TextMuted, minLines = 1, maxLines = 1)
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(top = 8.dp)) {
-                Button(onClick = onNext, colors = bingeButtonColors(), modifier = Modifier.focusRequester(focus)) { Text("Nästa förslag") }
-                Button(onClick = onWatched, colors = bingeButtonColors()) {
+                Button(onClick = onNext, colors = bingeButtonColors(), modifier = Modifier.focusRequester(focus).onFocusChanged { if (it.isFocused) onFocus() }) { Text("Nästa förslag") }
+                Button(onClick = onWatched, colors = bingeButtonColors(), modifier = Modifier.onFocusChanged { if (it.isFocused) onFocus() }) {
                     Text(if (t.isMovie) "Sedd" else "Såg första avsnittet")
                 }
             }
-            ServiceStrip(rows, Modifier.padding(top = 8.dp))
+            ServiceStrip(rows, Modifier.padding(top = 8.dp), onFocus = onFocus)
         }
     }
 }
