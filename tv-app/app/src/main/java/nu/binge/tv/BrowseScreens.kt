@@ -50,8 +50,9 @@ import java.time.LocalDate
 fun HomeShelves(s: HomeState.Ready, onOpen: (Title) -> Unit) {
     val mine = s.overview.providers
     val wantToSee = Browse.wantToSee(s.all)
-    val featured = s.picks.firstOrNull()
-    if (featured == null && wantToSee.isEmpty() && s.upcoming.isEmpty() && Browse.watching(s.all).isEmpty()) {
+    // Ikväll äger dagens förslag; Hem öppnar i stället med nästa avsnitt som kommer, så de två flikarna inte visar samma sak.
+    val featured = s.upcoming.firstOrNull()
+    if (featured == null && wantToSee.isEmpty() && Browse.watching(s.all).isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("Din lista är tom. Lägg till något i Binge så dyker det upp här.", fontSize = 28.sp, color = BingeColors.Text)
         }
@@ -59,12 +60,12 @@ fun HomeShelves(s: HomeState.Ready, onOpen: (Title) -> Unit) {
     }
     LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(24.dp)) {
         featured?.let { t -> item { Featured(t, mine, onOpen) } }
-        val newOnMine = Browse.onMine(wantToSee, mine).filterNot { it.docId == featured?.docId }
+        val newOnMine = Browse.onMine(wantToSee, mine)
         if (newOnMine.isNotEmpty()) item { PosterRow("På dina tjänster", newOnMine, onOpen = onOpen) }
-        val rest = wantToSee.filterNot { it.docId == featured?.docId }
-        if (rest.isNotEmpty()) item { PosterRow("Vill se", rest, onOpen = onOpen) }
-        if (s.upcoming.isNotEmpty()) item {
-            PosterRow("Nästa avsnitt", s.upcoming, caption = { listOfNotNull(it.nextAirCode, it.nextAirDate).filter(String::isNotEmpty) }, onOpen = onOpen)
+        if (wantToSee.isNotEmpty()) item { PosterRow("Vill se", wantToSee, onOpen = onOpen) }
+        val laterEpisodes = s.upcoming.drop(1)
+        if (laterEpisodes.isNotEmpty()) item {
+            PosterRow("Fler avsnitt på väg", laterEpisodes, caption = { listOfNotNull(it.nextAirCode, it.nextAirDate).filter(String::isNotEmpty) }, onOpen = onOpen)
         }
         val watching = Browse.watching(s.all)
         if (watching.isNotEmpty()) item { PosterRow("Tittar på", watching, onOpen = onOpen) }
@@ -79,10 +80,11 @@ private fun Featured(t: Title, mine: Set<Long>, onOpen: (Title) -> Unit) {
     Box(Modifier.fillMaxWidth().height(300.dp).clip(RoundedCornerShape(16.dp)).background(BingeColors.Surface)) {
         PosterBackdrop(t.posterUrl, Modifier.fillMaxSize())
         Column(Modifier.fillMaxSize().padding(horizontal = 36.dp, vertical = 24.dp), verticalArrangement = Arrangement.Bottom) {
-            Text("FÖRSLAG IKVÄLL", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = BingeColors.Accent)
+            val day = t.nextAirDate?.let { Browse.dayLabel(it, LocalDate.now()) }
+            Text(listOfNotNull("NÄSTA AVSNITT", day).joinToString(" · "), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = BingeColors.Accent)
             Text(t.title, fontSize = 40.sp, fontWeight = FontWeight.ExtraBold, color = BingeColors.Text, maxLines = 1)
             Text(
-                TonightPicker.reason(t, System.currentTimeMillis(), mine),
+                t.nextAirCode.orEmpty(),
                 fontSize = 20.sp, color = BingeColors.TextMuted, maxLines = 1,
                 modifier = Modifier.padding(bottom = 12.dp),
             )
@@ -109,7 +111,8 @@ fun MyListScreen(s: HomeState.Ready, onOpen: (Title) -> Unit) {
                 Button(onClick = { tab = t }, colors = tabButtonColors(t == tab)) { Text("${t.label} ${Browse.inTab(s.all, t).size}", fontSize = 20.sp) }
             }
             Spacer(Modifier.weight(1f))
-            Button(onClick = { onlyMine = !onlyMine }, colors = tabButtonColors(onlyMine)) { Text("På mina tjänster", fontSize = 20.sp) }
+            // Utan hämtade tjänster skulle filtret bara tömma listan.
+            if (mine.isNotEmpty()) Button(onClick = { onlyMine = !onlyMine }, colors = tabButtonColors(onlyMine)) { Text("På mina tjänster", fontSize = 20.sp) }
         }
         if (shown.isEmpty()) {
             Text(
@@ -159,6 +162,13 @@ fun CalendarScreen(s: HomeState.Ready, onOpen: (Title) -> Unit) {
                     Card(
                         onClick = { onOpen(t) },
                         modifier = Modifier.fillMaxWidth(),
+                        // Kortets standardfärg är ljus och gör vit text oläslig mot mörk bakgrund.
+                        colors = CardDefaults.colors(
+                            containerColor = BingeColors.Surface,
+                            contentColor = BingeColors.Text,
+                            focusedContainerColor = BingeColors.AccentSoft,
+                            focusedContentColor = BingeColors.Text,
+                        ),
                         border = CardDefaults.border(focusedBorder = Border(BorderStroke(3.dp, BingeColors.Accent))),
                     ) {
                         Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
