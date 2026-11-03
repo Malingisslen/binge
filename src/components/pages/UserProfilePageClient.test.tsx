@@ -11,6 +11,8 @@ import { render, screen } from '@testing-library/react';
 
 // BIN-1211: profilen monterar UgcActionsMenu, vars modulgraf når firebase-konfigen, vars
 // top-level getAuth() kastar på testnyckeln.
+// The household button reads the viewer's own groups; it has its own tests.
+vi.mock('@/components/household/InviteToHouseholdButton', () => ({ default: () => null }));
 vi.mock('@/lib/firebase/config', () => ({ auth: {}, default: {} }));
 // Menyn anropar useBlockedUsers, som prenumererar på Firestore. Mot den stubbade appen
 // ovan kastar den initieringen.

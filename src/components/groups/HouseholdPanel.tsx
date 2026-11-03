@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useGroupHousehold } from '@/hooks/useGroupHousehold';
 import { useMountTime } from '@/hooks/useMountTime';
 import { aggregateHousehold, HOUSEHOLD_STALE_DAYS } from '@/lib/advisor/householdAggregate';
@@ -18,8 +19,8 @@ import HouseholdConsent from '@/components/groups/HouseholdConsent';
 
 const dateFmt = new Intl.DateTimeFormat('sv-SE', { day: 'numeric', month: 'short' });
 
-export default function HouseholdPanel({ groupId }: { groupId: string }) {
-  const { status, contributions, optIn, optOut, busy, ready, needsReshare } = useGroupHousehold(groupId);
+export default function HouseholdPanel({ groupId, isHousehold = false }: { groupId: string; isHousehold?: boolean }) {
+  const { status, contributions, optIn, optOut, busy, ready, needsReshare } = useGroupHousehold(groupId, isHousehold);
   const nowMs = useMountTime();
   const [consentOpen, setConsentOpen] = useState(false);
   const showConsent = consentOpen && (status === 'gated' || (status === 'active' && needsReshare));
@@ -34,6 +35,11 @@ export default function HouseholdPanel({ groupId }: { groupId: string }) {
       <Eyebrow className="px-3 py-1.5 border-b border-rule-2">
         Hushåll
       </Eyebrow>
+      {isHousehold && (
+        <div className="px-3 py-2 border-b border-rule-2">
+          <Link href="/hushall/" className="text-xs">Öppna hushållssidan</Link>
+        </div>
+      )}
 
       {status === 'loading' && (
         // Skeleton-rad, inte bar "Laddar…"-text (design-guarden i consistency.test.ts).
@@ -67,6 +73,7 @@ export default function HouseholdPanel({ groupId }: { groupId: string }) {
       {showConsent && (
         <HouseholdConsent
           reshare={status === 'active'}
+          household={isHousehold}
           busy={busy}
           ready={ready}
           onShare={() => { void optIn().then(() => setConsentOpen(false)).catch(() => {}); }}
@@ -79,8 +86,9 @@ export default function HouseholdPanel({ groupId }: { groupId: string }) {
         // hen aktivt delar om under den nya texten.
         <div className="px-3 py-2 space-y-2 border-b border-rule-2">
           <p className="text-xxs text-ink-2 leading-relaxed">
-            Hushållet kan nu se vem som har något nytt inom 30 dagar. Du har inte
-            delat det ännu.
+            {isHousehold
+              ? 'Hushållet kan nu se vad ni tittar på. Du har inte delat det ännu.'
+              : 'Hushållet kan nu se vem som har något nytt inom 30 dagar. Du har inte delat det ännu.'}
           </p>
           <Button type="button" variant="ghost" size="sm" className="w-full" onClick={() => setConsentOpen(true)}>
             Läs och dela igen…

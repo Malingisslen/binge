@@ -8,7 +8,7 @@ import { useUserSearch } from '@/hooks/useUserSearch';
 import { useAuth } from '@/hooks/useAuth';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import type { ResolvedUser } from '@/lib/firebase/username';
-import type { GroupMember } from '@/types';
+import type { Group, GroupMember } from '@/types';
 import { Eyebrow } from '@/components/ui/Eyebrow';
 import { fieldClass } from '@/components/ui/Field';
 import { cardClass } from '@/components/ui/Card';
@@ -19,10 +19,11 @@ import { Button } from '@/components/ui/Button';
  * Delete + add är owner-gated av parent (isOwner-prop).
  */
 export function GroupMembersPanel({
-  groupId, groupName, members, ownerUid, myUid, isOwner,
+  groupId, groupName, groupKind = null, members, ownerUid, myUid, isOwner,
 }: {
   groupId: string;
   groupName: string;
+  groupKind?: Group['kind'];
   members: GroupMember[];
   ownerUid: string;
   myUid: string;
@@ -49,6 +50,7 @@ export function GroupMembersPanel({
         <AddMemberSearch
           groupId={groupId}
           groupName={groupName}
+          groupKind={groupKind}
           existingUids={members.map(m => m.uid)}
           onDone={() => setAdding(false)}
         />
@@ -124,9 +126,10 @@ function Avatar({ name, photoURL }: { name: string; photoURL: string | null }) {
 // Listan filtrerar bort befintliga medlemmar och en själv så ägaren inte kan
 // råka klicka på fel rad.
 function AddMemberSearch({
-  groupId, groupName, existingUids,
+  groupId, groupName, groupKind, existingUids,
 }: {
   groupId: string;
+  groupKind: Group['kind'];
   groupName: string;
   existingUids: string[];
   onDone: () => void;
@@ -159,6 +162,7 @@ function AddMemberSearch({
         fromUid: myUid,
         fromDisplayName: user.displayName || null,
         targetUid: target.uid,
+        kind: groupKind,
       });
       setInvited(prev => new Set(prev).add(target.uid));
     } catch (e) {

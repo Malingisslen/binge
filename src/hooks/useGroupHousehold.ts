@@ -12,6 +12,7 @@ import {
   aggregateHouseholdSoon,
   applyHouseholdVote,
   buildHouseholdContribution,
+  buildHouseholdWatching,
   buildSoonProviderIds,
   composeHouseholdContribution,
   currentHouseholdVotes,
@@ -19,6 +20,7 @@ import {
   householdSoonNeedsRefresh,
   householdVoteMonthKey,
   type HouseholdBaseContent,
+  type HouseholdWatchingTitle,
   type HouseholdContribution,
   type HouseholdSoonOverview,
   type HouseholdVote,
@@ -40,7 +42,8 @@ import {
 
 export type HouseholdStatus = 'loading' | 'gated' | 'active' | 'error';
 
-export function useGroupHousehold(groupId: string): {
+/** `isHousehold`: the group's kind is 'household', where titles being watched are shared too (ADR 0029). */
+export function useGroupHousehold(groupId: string, isHousehold = false): {
   status: HouseholdStatus;
   contributions: HouseholdContribution[];
   /** Dela, både första gången och vid omdelning: skriver bidraget med soon-flaggan. */
@@ -82,7 +85,7 @@ export function useGroupHousehold(groupId: string): {
     );
   }, [groupId, uid, epoch]);
 
-  const built = useMemo((): { base: HouseholdBaseContent; soon: number[] } | null => {
+  const built = useMemo((): { base: HouseholdBaseContent; soon: number[]; watching: HouseholdWatchingTitle[] } | null => {
     if (!user || watchlistLoading) return null;
     return {
       base: buildHouseholdContribution(
@@ -93,6 +96,7 @@ export function useGroupHousehold(groupId: string): {
         items,
       ),
       soon: buildSoonProviderIds(items, new Date()),
+      watching: buildHouseholdWatching(items),
     };
   }, [user, items, watchlistLoading]);
 
@@ -114,13 +118,15 @@ export function useGroupHousehold(groupId: string): {
         monthKey: householdVoteMonthKey(new Date()),
         soon: built.soon,
         optInSoon: true,
+        watching: built.watching,
+        optInWatching: isHousehold,
       });
       await setHouseholdContribution(groupId, uid, content);
       setEpoch(e => e + 1);
     } finally {
       setBusy(false);
     }
-  }, [groupId, uid, built]);
+  }, [groupId, uid, built, isHousehold]);
 
   const optOut = useCallback(async () => {
     if (!uid) return;
@@ -144,7 +150,7 @@ export function useGroupHousehold(groupId: string): {
       // får inte rösta förrän hen delat igen.
       if (current.soonProviderIds === undefined) return;
       const monthKey = householdVoteMonthKey(new Date());
-      const composed = composeHouseholdContribution(built.base, current, { monthKey, soon: built.soon });
+      const composed = composeHouseholdContribution(built.base, current, { monthKey, soon: built.soon, watching: built.watching });
       const next = applyHouseholdVote(composed, monthKey, providerId, vote);
       if (!next) return;
       if (!householdContributionNeedsWrite(next, current, monthKey)) return;
@@ -162,7 +168,7 @@ export function useGroupHousehold(groupId: string): {
     if (!uid || !built || !own || refreshedThisVisit.current) return;
     const now = new Date();
     const monthKey = householdVoteMonthKey(now);
-    const next = composeHouseholdContribution(built.base, own, { monthKey, soon: built.soon });
+    const next = composeHouseholdContribution(built.base, own, { monthKey, soon: built.soon, watching: built.watching });
     if (!householdContributionNeedsWrite(next, own, monthKey) && !householdSoonNeedsRefresh(own, now.getTime())) return;
     refreshedThisVisit.current = true;
     setHouseholdContribution(groupId, uid, next).catch(() => {});
@@ -192,7 +198,8 @@ export function useGroupHousehold(groupId: string): {
     optOut,
     busy,
     ready: built != null,
-    needsReshare: status === 'active' && own != null && own.soonProviderIds === undefined,
+    needsReshare: status === 'active' && own != null
+      && (own.soonProviderIds === undefined || (isHousehold && own.watchingNow === undefined)),
     myVotes,
     soon,
     setVote,

@@ -468,6 +468,7 @@ function GroupView({
         <div className="space-y-3">
           <GroupMembersPanel
             groupId={groupId}
+            groupKind={group.kind}
             groupName={group.name}
             members={members}
             ownerUid={group.ownerUid}
@@ -476,8 +477,9 @@ function GroupView({
           />
           <ProviderOverlapPanel intersect={intersectProviders} union={unionProviders} />
           {/* BIN-184: opt-in hushållsvy — aggregatet av delade kostnadsdata. */}
-          <HouseholdPanel groupId={groupId} />
-          {isOwner && <InvitePanel groupId={groupId} group={group} isOwner={isOwner} />}
+          <HouseholdPanel groupId={groupId} isHousehold={group.kind === 'household'} />
+          {/* ADR 0029: a household is joined only by invitation to a friend, never by link. */}
+          {isOwner && group.kind !== 'household' && <InvitePanel groupId={groupId} group={group} isOwner={isOwner} />}
         </div>
 
         <div className="space-y-3">

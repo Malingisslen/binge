@@ -1084,12 +1084,22 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     // "delete field" från klienten utan deleteField; istället skriver vi
     // null och låter docToItem normalisera vid läs).
     const effective = visibility ?? user?.defaultVisibility ?? 'private';
-    return guardedItemWrite('updateVisibility', () => setDoc(ref, {
+    const outcome = await guardedItemWrite('updateVisibility', () => setDoc(ref, {
       visibility,
       effectiveVisibility: effective,
       isPublic: effective === 'public',
       updatedAt: serverTimestamp(),
     }, { merge: true }));
+    // ADR 0029: the household consent text promises a title marked Privat is not shared, so
+    // it leaves the household lists now rather than on the next visit. Best-effort: the
+    // visibility write above is what the user asked for and has already landed.
+    // Only series are ever in the list (buildHouseholdWatching), so a film costs no reads.
+    if (outcome === 'written' && visibility === 'private' && mediaType === 'tv') {
+      void import('@/lib/firebase/groups')
+        .then(m => m.removeTitleFromHouseholdWatching(uid, 'tv', tmdbId))
+        .catch(err => captureError(err, { scope: 'household', kind: 'privat-scrub' }));
+    }
+    return outcome;
   }, [uid, user?.defaultVisibility]);
 
   const updateStatus = useCallback(async (mediaType: MediaType, tmdbId: number, status: WatchStatus, watchedAt?: Date) => {
