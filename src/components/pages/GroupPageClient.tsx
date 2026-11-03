@@ -352,6 +352,16 @@ function GroupView({
         maxRuntimeMin: null,
         allowAsymmetry: true,
       };
+      const seedProviders = config.providerMode === 'intersect' ? intersectProviders : unionProviders;
+      // Utan någon tjänst att utgå från blir kortleken en allmän populär-lista som
+      // ingen kan vara säker på att kunna se. Stoppa hellre innan sessionen skapas.
+      if (seedProviders.length === 0) {
+        setError(config.providerMode === 'intersect'
+          ? 'Ni har ingen streamingtjänst gemensamt. Byt till "Någon har" i gruppens inställningar, eller lägg till tjänster i era profiler.'
+          : 'Ingen i gruppen har lagt till någon streamingtjänst än. Lägg till tjänster i profilen först.');
+        setStartingSession(false);
+        return;
+      }
       const me = members.find(m => m.uid === myUid);
       const sessionId = await createSession({
         hostUid: myUid,
@@ -364,7 +374,6 @@ function GroupView({
         groupId: group.id,
       });
       storeParticipantId(sessionId, myUid);
-      const seedProviders = config.providerMode === 'intersect' ? intersectProviders : unionProviders;
       // G4: föreslå inte titlar gruppen redan har i gemensamma biblioteket
       // eller som jag själv följer/sett/avbrutit. Övriga medlemmars privata
       // watchlists är inte läsbara klient-sidigt (Firestore-rules) — gruppens
