@@ -1,4 +1,4 @@
-import test from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { backoffMs, articleUrl, htmlToText } from './wiki-fetch.helpers.mjs';
 
@@ -35,7 +35,9 @@ test('simultaneous claimers get distinct, gap-spaced slots', async () => {
 // read-to-write window so an absent lock reliably hands several children the same slot.
 test('claimers in separate processes get distinct, gap-spaced slots', async () => {
   const { spawn } = await import('node:child_process');
-  const helpers = new URL('./wiki-fetch.helpers.mjs', import.meta.url).href;
+  // Vitest rewrites import.meta.url to an http: URL that a child's plain Node loader rejects, so the
+  // path is built from the repo root, which is where vitest runs.
+  const helpers = (await import('node:url')).pathToFileURL(path.resolve('functions/scripts/wiki-fetch.helpers.mjs')).href;
   const stamp = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'wf-')), 'stamp');
   const startAt = Date.now() + 1500;
   const childSrc = `
