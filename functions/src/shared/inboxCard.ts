@@ -9,14 +9,16 @@ export async function createInboxCard(
   db: Firestore,
   uid: string,
   id: string,
-  card: { title: string; body: string },
+  // `kind` and `actionUrl` default to a savings card, which is what the callers that
+  // leave them out write.
+  card: { title: string; body: string; kind?: 'system' | 'session_invite'; actionUrl?: string },
 ): Promise<boolean> {
   try {
     await db.collection('users').doc(uid).collection('notifications').doc(id).create({
-      kind: 'system',
+      kind: card.kind ?? 'system',
       title: card.title,
       body: card.body,
-      actionUrl: '/savings/',
+      actionUrl: card.actionUrl ?? '/savings/',
       read: false,
       createdAt: FieldValue.serverTimestamp(),
     });

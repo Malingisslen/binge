@@ -289,3 +289,34 @@ describe('NotificationsSection — the follow-notice toggle', () => {
   });
 });
 
+
+// Bjud in till Tillsammans. Same reading as the rules and the trigger: only an explicit
+// false is off, so an account whose settings predate the key shows it ticked.
+describe('NotificationsSection — the session-invite toggle', () => {
+  const inviteBox = () => screen.getByRole('checkbox', { name: /inbjudningar till tillsammans/i }) as HTMLInputElement;
+
+  it('is ticked for an account that has no sessionInviteNotify key', async () => {
+    auth.user = { notificationSettings: { pushEnabled: true } };
+    await act(async () => { render(<NotificationsSection />); });
+    expect(inviteBox().checked).toBe(true);
+  });
+
+  it('is unticked for an explicit false', async () => {
+    auth.user = { notificationSettings: { pushEnabled: true, sessionInviteNotify: false } };
+    await act(async () => { render(<NotificationsSection />); });
+    expect(inviteBox().checked).toBe(false);
+  });
+
+  it('writes sessionInviteNotify false when a ticked box is clicked, and true the other way', async () => {
+    auth.user = { notificationSettings: { pushEnabled: true } };
+    const first = await act(async () => render(<NotificationsSection />));
+    await act(async () => { fireEvent.click(inviteBox()); });
+    expect(auth.updateNotificationSettings).toHaveBeenLastCalledWith({ sessionInviteNotify: false });
+    first.unmount();
+
+    auth.user = { notificationSettings: { pushEnabled: true, sessionInviteNotify: false } };
+    await act(async () => { render(<NotificationsSection />); });
+    await act(async () => { fireEvent.click(inviteBox()); });
+    expect(auth.updateNotificationSettings).toHaveBeenLastCalledWith({ sessionInviteNotify: true });
+  });
+});

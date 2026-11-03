@@ -234,6 +234,10 @@ export interface UserProfile {
     // starts following me. onFollowCreate reads the key and stays silent only on an
     // explicit false, so an account that lacks it gets the notice.
     followNotify: boolean;
+    // Bjud in till Tillsammans: whether friends and group members may invite me to a
+    // session. firestore.rules refuses an invite only on an explicit false, and
+    // onSessionInviteCreate reads the key the same way.
+    sessionInviteNotify: boolean;
   };
   // BIN-181 — klient-persistad rotationskalender-snapshot (paus/återkom-datum)
   // som rotationReminderNotify läser. Skrivs när användaren slår på påminnelser.

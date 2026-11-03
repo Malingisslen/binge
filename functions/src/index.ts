@@ -184,6 +184,12 @@ export const onSessionPickCreate = onDocumentCreated(
 // och push till mottagaren, bakom spärrarna i followPush/logic.ts.
 export { onFollowCreate } from './followPush';
 
+// ── Bjud in till Tillsammans ─────────────────────────────────────────────────
+// onSessionInviteCreate: users/{recipientUid}/sessionInvites/{inviteId} skapad →
+// inbox-kort och neutral push till mottagaren, bakom spärrarna i
+// sessionInvitePush/logic.ts.
+export { onSessionInviteCreate } from './sessionInvitePush';
+
 // ── Insikter (intern analys-dashboard) ───────────────────────────────────────
 // rollupInsights: schemalagd Firestore-aggregering → insights/daily.
 // apiInsights: HTTP-endpoint bakom /api/insights (admin-token + eventStats-summor).

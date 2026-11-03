@@ -48,6 +48,7 @@ import {
 } from './runHandover';
 import { adminHandoverIo, adminHandoverNotifyIo, adminLeaverIo } from './adminIo';
 import { adminReminderMarkerIo, eraseReminderMarkers } from '../rotationReminder/markers';
+import { adminSessionInviteErasureIo, eraseSessionInviteTraces } from './sessionInvites';
 
 
 
@@ -104,10 +105,13 @@ export const handOverOwnedGroups = onCall(
     // query — the uid left its `memberUids` in the swap. A failure here comes
     // after writes may have landed, so whether it says "partial" is decided on
     // what was attempted, invites and handover included.
+    // The session invites the uid sent, and the invite notice's markers, belong to
+    // the same class: they lie where the client cascade cannot reach.
     const progress = { attempted: invites.found > 0 || summary.attempted > 0 };
     try {
       await runMemberGroupErasure({ ...io, ...adminLeaverIo(getFirestore(), logger) }, uid, progress);
       await eraseReminderMarkers(adminReminderMarkerIo(getFirestore()), uid, progress);
+      await eraseSessionInviteTraces(adminSessionInviteErasureIo(getFirestore()), uid, progress);
     } catch (err) {
       logger.error('handOverOwnedGroups: erasure after the handover failed', { err });
       throw new HttpsError('internal', refusalAfterHandover(progress.attempted));

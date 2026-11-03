@@ -48,7 +48,11 @@ import type { QuerySnapshot } from 'firebase/firestore';
 // 2.8 (ADR 0029, 2026-11-03): additive — a `householdContributions` doc in a household may
 //     carry `watchingNow` (the titles you are watching: TMDB id, type and title). Same doc,
 //     exported as stored.
-export const SCHEMA_VERSION = '2.8' as const;
+// 2.9 (Bjud in till Tillsammans, 2026-11-03): additive — new `sessionInvites` array:
+//     invites to a Tillsammans session sent to you (id = "<sessionId>_<fromUid>"), and
+//     `sessionInvitePushesReceived` / `sessionInvitePushesSent`: the invite notice's
+//     brake markers that name you as recipient or sender.
+export const SCHEMA_VERSION = '2.9' as const;
 
 export interface ExportDoc {
   id: string;
@@ -95,6 +99,10 @@ export interface BingeExport {
   groupInvites: ExportDoc[];
   // Tipsa en vän: tips om titlar som vänner skickat till dig.
   tips: ExportDoc[];
+  // Bjud in till Tillsammans: inbjudningar till dig, och notisspärrens markörer.
+  sessionInvites: ExportDoc[];
+  sessionInvitePushesReceived: ExportDoc[];
+  sessionInvitePushesSent: ExportDoc[];
   pauseHistory: ExportDoc[];
   tvDevices: ExportDoc[];
   listFollows: ExportDoc[];
@@ -134,6 +142,8 @@ Filen innehåller:
 - Skickade vänförfrågningar (friendRequestsSent)
 - Inkomna grupp-inbjudningar (groupInvites)
 - Tips om titlar som vänner skickat till dig (tips)
+- Inbjudningar till Tillsammans som skickats till dig (sessionInvites)
+- När du senast fick eller gav en notis om en Tillsammans-inbjudan (sessionInvitePushesReceived, sessionInvitePushesSent)
 - Sparbeslut-historik från Streamingrådgivaren (pauseHistory)
 - Kopplade TV: namn, kopplingsdatum och senast använd (tvDevices)
 - Dina recensioner (reviews)
@@ -315,6 +325,9 @@ export async function buildUserExport(uid: string): Promise<BingeExport> {
     friendRequestsSent: toExportDocs(s.friendRequestsSentSnap),
     groupInvites: toExportDocs(s.groupInvitesSnap),
     tips: toExportDocs(s.tipsSnap),
+    sessionInvites: toExportDocs(s.sessionInvitesSnap),
+    sessionInvitePushesReceived: toExportDocs(s.sessionInvitePushesReceivedSnap),
+    sessionInvitePushesSent: toExportDocs(s.sessionInvitePushesSentSnap),
     pauseHistory: toExportDocs(s.pauseHistorySnap),
     tvDevices: toExportDocs(s.tvDevicesSnap),
     listFollows: toExportDocs(s.listFollowsSnap),

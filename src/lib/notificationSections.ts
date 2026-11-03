@@ -16,7 +16,9 @@ export function notificationSections<T extends { kind?: string }>(
   notifications: readonly T[],
   limit = 10,
 ): NotificationSection<T>[] {
-  const shown = notifications.slice(0, limit);
+  // Session-invite cards are left out before counting: the bell lists the invites
+  // themselves under their own heading, with Gå med and Avböj.
+  const shown = notifications.filter((n) => n.kind !== 'session_invite').slice(0, limit);
   const sections: NotificationSection<T>[] = [
     { heading: 'Från Binge', items: shown.filter((n) => n.kind === 'system') },
     { heading: 'Streamingnyheter', items: shown.filter((n) => n.kind !== 'system') },

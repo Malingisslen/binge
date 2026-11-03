@@ -252,6 +252,18 @@
       "path": "functions/src/followPush/index.ts, functions/src/followPush/logic.ts"
     },
     {
+      "id": "cf-session-invite-push",
+      "label": "onSessionInviteCreate",
+      "context": "backend-api",
+      "path": "functions/src/sessionInvitePush/index.ts, functions/src/sessionInvitePush/logic.ts"
+    },
+    {
+      "id": "session-invite-lib",
+      "label": "Session invites (send, list, Gå med/Avböj)",
+      "context": "client-state",
+      "path": "src/lib/firebase/sessionInvites.ts, src/lib/sessionInvites.ts, src/hooks/useSessionInvites.ts, src/components/social/SessionInviteRow.tsx, src/components/together/InvitePicker.tsx"
+    },
+    {
       "id": "askbinge-parse",
       "label": "askBingeParse (callable)",
       "context": "backend-api",
@@ -1685,6 +1697,66 @@
           "to": "fcm-sw",
           "payload": "push notification (tab closed); click opens the notice's actionUrl: the follower's profile, or Vänner",
           "transport": "FCM / Web Push",
+          "verified": true
+        }
+      ],
+      "area": "social"
+    },
+    {
+      "id": "flow-session-invite",
+      "label": "Tillsammans → \"Bjud in\" with a notice",
+      "description": "On /tillsammans/ny the host picks friends, or a group whose members are listed ticked and can be unticked; nothing is sent until the session exists, and the picker and sendSessionInvites both cap the list at MAX_SESSION_INVITEES. Choosing a group binds the session to it (groupId), which is what lets firestore.rules accept an invite to a member who is not a friend. One invite per recipient lands in users/{recipientUid}/sessionInvites/{sessionId}_{fromUid}, readable and deletable only by the recipient, because the session id is the session's access key. A Firestore trigger deletes an invite past the per-recipient cap without a notice, holds the notice back within a window per (recipient, sender) pair via sessionInvitePushes, and otherwise writes a session_invite card and a neutral push with no name and no session id. The recipient answers from the bell or from the Väntar på dig box on Vänner: Gå med reads sessions/{id}, removes the invite and opens the session, or says 'Sessionen finns inte längre'; Avböj removes it. retentionCleanup reaps invites after SESSION_INVITE_MAX_AGE_MS and markers after their max age; handOverOwnedGroups erases a deleted account's sent invites and the markers that name it as recipient; a marker that names it as sender is erased only once it no longer holds a notice back, and is otherwise left to retentionCleanup.",
+      "covers": [
+        "onSessionInviteCreate"
+      ],
+      "steps": [
+        {
+          "from": "tillsammans-new-page",
+          "to": "firestore",
+          "payload": "createSession({..., groupId: chosen group or null}), setSessionCandidates, then sendSessionInvites({sessionId, fromUid, fromName: own profile displayName, recipientUids}) — one setDoc per recipient of {fromUid, fromName, sessionId, createdAt: serverTimestamp()} at users/{recipientUid}/sessionInvites/{sessionId}_{fromUid}, settled one by one. The rules require: the writer hosts the live session; the recipient is a friend (users/{recipient}/friends/{host}) or both are members of the session's group; no block either way; notificationSettings.sessionInviteNotify not false; hasOnly the four fields; fromName null or equal to the writer's own profile displayName; update denied. A refused recipient is counted and the host gets a toast with the counts.",
+          "transport": "Firestore write (fan-out)",
+          "verified": true
+        },
+        {
+          "from": "firestore",
+          "to": "cf-session-invite-push",
+          "payload": "onDocumentCreated fires on users/{recipientUid}/sessionInvites/{inviteId}",
+          "transport": "Firestore trigger",
+          "verified": true
+        },
+        {
+          "from": "cf-session-invite-push",
+          "to": "firestore",
+          "payload": "count() of users/{recipientUid}/sessionInvites; past SESSION_INVITE_RECIPIENT_CAP the new invite is deleted and nothing is sent. Then getAll(users/{recipientUid}, users/{fromUid}); no notice when the profile is missing or sessionInviteNotify is false. One transaction reads sessionInvitePushes/{recipientUid}_{fromUid} {lastPushedAt} and stamps {recipientUid, fromUid, lastPushedAt} only when the window has passed. Log lines carry recipientUid and fromUid, never the invite id or the session id.",
+          "transport": "Admin SDK reads + transaction",
+          "verified": true
+        },
+        {
+          "from": "cf-session-invite-push",
+          "to": "firestore",
+          "payload": "createInboxCard(users/{recipientUid}/notifications/session-invite-{eventId}, {kind:'session_invite', title:'Inbjudan till Tillsammans', body:'{namn} bjuder in dig att välja något att se tillsammans', actionUrl:'/my/friends/'}). The bell leaves these cards out of its lists and its unread count and shows the live invites instead.",
+          "transport": "Admin SDK write",
+          "verified": true
+        },
+        {
+          "from": "cf-session-invite-push",
+          "to": "cf-sendPush",
+          "payload": "sendPushToUser(recipientUid, {title:'Binge', body:'Du har fått en inbjudan till Tillsammans', actionUrl:'/my/friends/', tag:'session-invite'}, {pushEnabled}) — no name on the lock screen and no session id in the payload; the card and the push are settled separately.",
+          "transport": "in-process call",
+          "verified": true
+        },
+        {
+          "from": "cf-sendPush",
+          "to": "fcm-sw",
+          "payload": "push notification (tab closed); click opens Vänner",
+          "transport": "FCM / Web Push",
+          "verified": true
+        },
+        {
+          "from": "friends-page",
+          "to": "session-invite-lib",
+          "payload": "useSessionInvites lists users/{my}/sessionInvites (newest first, blocked senders filtered) in the Väntar på dig box and in the bell under 'Inbjudningar till Tillsammans'. Gå med: getDoc(sessions/{sessionId}); a missing or expired session shows 'Sessionen finns inte längre'; either way deleteDoc on the invite, then router.push('/tillsammans/{sessionId}') for a live one. Avböj: deleteDoc on the invite.",
+          "transport": "Firestore read + delete",
           "verified": true
         }
       ],

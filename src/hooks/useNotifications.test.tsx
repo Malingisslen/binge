@@ -19,7 +19,7 @@ const writeBatch = vi.hoisted(() => vi.fn());
 
 // Notislistan hooken ser: prenumerationen matas med de har raderna, sa
 // `markAllRead` har nagot att ga igenom.
-const seeded = vi.hoisted(() => ({ rows: [] as { id: string; read: boolean }[] }));
+const seeded = vi.hoisted(() => ({ rows: [] as { id: string; read: boolean; kind?: string }[] }));
 
 vi.mock('@/lib/firebase/db', () => ({
   fsdb: async () => ({
@@ -41,7 +41,7 @@ vi.mock('@/lib/firebase/db', () => ({
           docs: seeded.rows.map(row => ({
             id: row.id,
             data: () => ({
-              kind: 'provider_available', tmdbId: 1, mediaType: 'movie', title: 'T',
+              kind: row.kind ?? 'provider_available', tmdbId: 1, mediaType: 'movie', title: 'T',
               read: row.read, createdAt: null,
             }),
           })),
@@ -63,6 +63,9 @@ vi.mock('@/hooks/useBlockedUsers', () => ({
   useBlockedUsers: () => ({ isBlocked: (uid: string) => social.blocked.has(uid) }),
 }));
 vi.mock('@/lib/firebase/groups', () => ({ getRecentSessionPicksAcrossGroups: vi.fn(async () => []) }));
+// Bjud in till Tillsammans: the invites the hook sees.
+const invites = vi.hoisted(() => ({ rows: [] as { id: string; fromUid: string }[] }));
+vi.mock('@/hooks/useSessionInvites', () => ({ useSessionInvites: () => ({ data: invites.rows }) }));
 vi.mock('@tanstack/react-query', () => ({ useQuery: () => ({ data: [] }) }));
 
 import { useNotifications } from './useNotifications';
@@ -74,6 +77,7 @@ beforeEach(() => {
   seeded.rows = [];
   social.requests = [];
   social.blocked = new Set();
+  invites.rows = [];
 });
 
 describe('useNotifications write path (BIN-1170)', () => {
@@ -157,5 +161,25 @@ describe('useNotifications and blocked people (BIN-1345)', () => {
 
     expect(result.current.friendRequestsCount).toBe(2);
     expect(result.current.unreadCount).toBe(2);
+  });
+});
+
+describe('useNotifications and Tillsammans invites', () => {
+  it('counts each waiting invite once in the bell, and not its card', () => {
+    invites.rows = [{ id: 'S1_anna', fromUid: 'anna' }];
+    seeded.rows = [{ id: 'session-invite-e1', read: false, kind: 'session_invite' }, { id: 'n1', read: false }];
+    const { result } = renderHook(() => useNotifications());
+    expect(result.current.sessionInvitesCount).toBe(1);
+    expect(result.current.providerUnreadCount).toBe(1);
+    expect(result.current.unreadCount).toBe(2);
+    expect(result.current.notifications.find(n => n.id === 'session-invite-e1')?.kind).toBe('session_invite');
+  });
+
+  it('leaves an invite from someone I blocked out of the list and the count', () => {
+    social.blocked = new Set(['bo']);
+    invites.rows = [{ id: 'S1_bo', fromUid: 'bo' }, { id: 'S2_anna', fromUid: 'anna' }];
+    const { result } = renderHook(() => useNotifications());
+    expect(result.current.sessionInvites.map(i => i.fromUid)).toEqual(['anna']);
+    expect(result.current.sessionInvitesCount).toBe(1);
   });
 });

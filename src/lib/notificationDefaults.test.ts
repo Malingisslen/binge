@@ -29,3 +29,9 @@ describe('NEW_ACCOUNT_NOTIFICATION_SETTINGS — follow notices', () => {
     expect(NEW_ACCOUNT_NOTIFICATION_SETTINGS.followNotify).toBe(true);
   });
 });
+
+describe('NEW_ACCOUNT_NOTIFICATION_SETTINGS — Tillsammans invites', () => {
+  it('lets a new account be invited to a session', () => {
+    expect(NEW_ACCOUNT_NOTIFICATION_SETTINGS.sessionInviteNotify).toBe(true);
+  });
+});

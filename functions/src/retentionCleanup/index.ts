@@ -21,6 +21,11 @@
  *     FRIEND_REQUEST_PUSH_MARKER_MAX_AGE_MS (BIN-1129): the repeat friend-request
  *     push brake's marker. Admin-only (no firestore.rules match), outside users/,
  *     so this sweep is its only erasure path.
+ *   - users/{uid}/sessionInvites/{id} — older than SESSION_INVITE_MAX_AGE_MS
+ *     (Bjud in till Tillsammans): an unanswered invite to a session that has
+ *     lived out its own lifetime.
+ *   - sessionInvitePushes/{recipient}_{sender} — older than
+ *     SESSION_INVITE_PUSH_MARKER_MAX_AGE_MS: the invite notice's brake marker.
  *   - followPushes/{id} — older than FOLLOW_PUSH_MARKER_MAX_AGE_MS: the
  *     follow-notice brake's pair and per-recipient cap markers. Sealed by a
  *     deny-all rule, outside users/, so this sweep is their only erasure path.
@@ -156,6 +161,10 @@ function baseQuery(kind: ScanKind): Query {
     case 'followPushMarkers':
       // Both marker shapes in the collection carry `lastPushedAt`.
       return db.collection('followPushes').select('lastPushedAt');
+    case 'sessionInvites':
+      return db.collectionGroup('sessionInvites').select('createdAt');
+    case 'sessionInvitePushMarkers':
+      return db.collection('sessionInvitePushes').select('lastPushedAt');
     case 'fcmTokens':
       // `.select()` with no fields returns refs only — this scan never reads a
       // token value; the owner uid comes from the ref's own path.

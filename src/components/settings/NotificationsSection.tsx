@@ -190,6 +190,19 @@ export function NotificationsSection() {
     }
   }
 
+  async function handleSessionInviteToggle(next: boolean) {
+    if (busyKeys.has('sessionInviteNotify')) return;
+    setBusyKey('sessionInviteNotify', true);
+    try {
+      await updateNotificationSettings({ sessionInviteNotify: next });
+      toast(next ? 'Inbjudningar till Tillsammans på' : 'Inbjudningar till Tillsammans av');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Kunde inte ändra notisinställningar. Försök igen om en stund.');
+    } finally {
+      setBusyKey('sessionInviteNotify', false);
+    }
+  }
+
   async function handleToggle(next: boolean) {
     if (busyKeys.has('push')) return;
     setBusyKey('push', true);
@@ -335,6 +348,16 @@ export function NotificationsSection() {
       </label>
       <p className="text-xs text-ink-3 mt-1 ml-6">
         Visas i appens klocka med personens namn, och som push om push-notiser är på.
+      </p>
+
+      <label className="flex items-center gap-2 cursor-pointer text-base mt-3">
+        <input type="checkbox" checked={user.notificationSettings.sessionInviteNotify !== false} disabled={busyKeys.has('sessionInviteNotify')}
+          onChange={(e) => { void handleSessionInviteToggle(e.target.checked); }}
+          className="accent-acc-deep w-[14px] h-[14px]" />
+        Inbjudningar till Tillsammans
+      </label>
+      <p className="text-xs text-ink-3 mt-1 ml-6">
+        Vänner och gruppmedlemmar kan bjuda in dig när de startar en session. Inbjudan visas under Vänner och i klockan, och som push om push-notiser är på. Pushen visar inte vem som bjuder in. Av betyder att ingen kan bjuda in dig.
       </p>
     </SettingsSection>
   );

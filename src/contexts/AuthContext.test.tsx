@@ -3462,7 +3462,7 @@ describe('monthly bill setting', () => {
 });
 
 describe('friend-related notification settings', () => {
-  it.each(['followNotify', 'acceptTips'] as const)('%s reads as on when the account has no such key, off only for an explicit false', async (key) => {
+  it.each(['followNotify', 'acceptTips', 'sessionInviteNotify'] as const)('%s reads as on when the account has no such key, off only for an explicit false', async (key) => {
     const { unmount } = renderAuth();
     await login({ username: 'malin', notificationSettings: { weeklyDigest: true } });
     expect(ctx!.user?.notificationSettings[key]).toBe(true);

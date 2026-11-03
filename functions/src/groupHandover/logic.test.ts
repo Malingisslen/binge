@@ -1256,8 +1256,8 @@ describe('eraseReminderMarkers — every marker, in batches (BIN-1279)', () => {
 });
 
 describe('the delete door runs the new steps after the handover (BIN-1278, BIN-1279)', () => {
-  it('in the order invites, handover, member groups, markers', () => {
-    const order = ['eraseSentInvites(io', 'runGroupHandover(io', 'runMemberGroupErasure(', 'eraseReminderMarkers(']
+  it('in the order invites, handover, member groups, markers, session invites', () => {
+    const order = ['eraseSentInvites(io', 'runGroupHandover(io', 'runMemberGroupErasure(', 'eraseReminderMarkers(', 'eraseSessionInviteTraces(']
       .map((s) => ENTRY.indexOf(s));
     expect(order.every((i) => i > -1), 'a step is missing from the entry point').toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
@@ -1266,7 +1266,7 @@ describe('the delete door runs the new steps after the handover (BIN-1278, BIN-1
   // One pattern: the counter's seed, both awaited steps, and the throw that reads it.
   it('reports partial on what was attempted, invites and handover included', () => {
     expect(ENTRY).toMatch(
-      /const progress = \{ attempted: invites\.found > 0 \|\| summary\.attempted > 0 \};\s*try \{\s*await runMemberGroupErasure\([^;]*uid, progress\);\s*await eraseReminderMarkers\([^;]*uid, progress\);\s*\} catch \(err\) \{[\s\S]{0,200}?throw new HttpsError\('internal', refusalAfterHandover\(progress\.attempted\)\);/,
+      /const progress = \{ attempted: invites\.found > 0 \|\| summary\.attempted > 0 \};\s*try \{\s*await runMemberGroupErasure\([^;]*uid, progress\);\s*await eraseReminderMarkers\([^;]*uid, progress\);\s*await eraseSessionInviteTraces\([^;]*uid, progress\);\s*\} catch \(err\) \{[\s\S]{0,200}?throw new HttpsError\('internal', refusalAfterHandover\(progress\.attempted\)\);/,
     );
   });
 
