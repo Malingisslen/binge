@@ -209,7 +209,7 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
     id: 335, name: 'YouTube Premium', shortName: 'YouTube', color: '#FF0000', type: 'flatrate', defaultMonthlyCost: 169,
     // Säg upp: https://support.google.com/youtube/answer/6308278?hl=sv (läst 2026-10-06)
     manageUrl: 'https://www.youtube.com/paid_memberships', manageUrlVerifiedDate: '2026-11-03',
-    priceVerifiedDate: '2026-09-03',
+    priceVerifiedDate: '2026-11-04',
     // 188 = TMDB:s nuvarande SE-id för YouTube Premium (katalog-endpoint 2026-06-20). (BIN-64)
     aliases: [188],
     tiers: [
