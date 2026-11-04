@@ -132,7 +132,10 @@ const REPO = resolve(HERE, '..');
 // `npm run test:rules -- --port 8123`.
 // Sessionsinbjudningar, 2026-11-03: raised to just under what `numTotalTests` reported with
 // src/test/rules/session-invites.test.ts in place. Measured with `npm run test:rules`.
-export const MIN_TESTS = 1030;
+// Ångra veto (BIN-1490), 2026-11-04: raised to what `numTotalTests` reported with the
+// describe block named `ångra veto restores the budget (BIN-1490)` in place. Measured with
+// `npm run test:rules`.
+export const MIN_TESTS = 1066;
 
 const VITEST_ARGS = ['run', '--config', 'vitest.rules.config.ts'];
 
