@@ -61,13 +61,14 @@ describe('hubLinks — genre coverage (BIN-461)', () => {
 });
 
 describe('hubLinks — sections', () => {
-  it('exposes exactly the five hub groups with links', () => {
+  it('exposes exactly the six hub groups with links', () => {
     const sections = hubSections();
     expect(sections.map((s) => s.id)).toEqual([
       'streamingtjanster',
       'billigaste',
       'forsvinner',
       'genre',
+      'vart-det',
       'kostnad',
     ]);
     for (const s of sections) {
@@ -138,8 +139,9 @@ describe('hubLinks — kostnadslänkar', () => {
     expect(all.some((h) => h.startsWith('/streamingpriser'))).toBe(false);
   });
 
-  it('does NOT link the hidden month page /vart-det/ before Malin publishes it', () => {
+  it('links every published month page /vart-det/<month>/', () => {
     const all = hubSections().flatMap((s) => s.links.map((l) => l.href));
-    expect(all.some((h) => h.startsWith('/vart-det'))).toBe(false);
+    expect(all).toContain('/vart-det/2026-11/');
+    expect(all).not.toContain('/vart-det/');
   });
 });

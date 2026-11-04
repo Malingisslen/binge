@@ -3,6 +3,7 @@ import { SEO_PROVIDER_IDS } from '@/lib/tmdb/seoCoverage';
 import { readSelectionManifest, resolvedIds, allowThinSelection, type SelectionType } from '@/lib/tmdb/selectionManifest';
 import { FRANCHISES } from '@/lib/seo/franchises';
 import { SEO_GENRE_SLUGS } from '@/lib/seo/genreHubs';
+import { VART_DET_MONTHS } from '@/lib/seo/vartDet';
 import { buildFetchFailed, readContentChangedAt } from '@/lib/tmdb/buildCache';
 
 /**
@@ -174,6 +175,15 @@ function genreEntries(): MetadataRoute.Sitemap {
   }));
 }
 
+// "Värt det i <månad>" — MÅSTE matcha generateStaticParams i src/app/vart-det/[month]/page.tsx.
+function vartDetEntries(): MetadataRoute.Sitemap {
+  return VART_DET_MONTHS.map(month => ({
+    url: `${SITE_URL}/vart-det/${month}/`,
+    changeFrequency: 'weekly' as const,
+    priority: 0.7,
+  }));
+}
+
 /** Statiska sidor och hubbar — delfilen `sitemap-sidor.xml`. */
 export function pageSitemapEntries(): MetadataRoute.Sitemap {
   return [
@@ -182,6 +192,7 @@ export function pageSitemapEntries(): MetadataRoute.Sitemap {
     ...franchiseEntries(),
     ...forsvinnerEntries(),
     ...genreEntries(),
+    ...vartDetEntries(),
   ];
 }
 

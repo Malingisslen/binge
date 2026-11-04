@@ -85,8 +85,8 @@ describe('leavingInMonth', () => {
   });
 });
 
-describe('hidden until published', () => {
-  it('is noindex but follow, like /streamingpriser/', () => {
-    expect(VART_DET_ROBOTS).toEqual({ index: false, follow: true });
+describe('published', () => {
+  it('is indexable and followable now that Malin has published it', () => {
+    expect(VART_DET_ROBOTS).toEqual({ index: true, follow: true });
   });
 });
