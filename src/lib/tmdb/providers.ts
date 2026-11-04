@@ -51,7 +51,7 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
     // live-verifierat 2026-07-02 — https://help.netflix.com/en/node/24926 (SE-höjning ~2026-05-15, +20 kr rakt över, ordinarie ej kampanj)
     id: 8, name: 'Netflix', shortName: 'Netflix', color: '#E50914', type: 'flatrate', defaultMonthlyCost: 169,
     // Säg upp: https://help.netflix.com/sv/node/407 (läst 2026-10-06)
-    manageUrl: 'https://www.netflix.com/cancelplan', manageUrlVerifiedDate: '2026-10-06',
+    manageUrl: 'https://www.netflix.com/cancelplan', manageUrlVerifiedDate: '2026-11-04',
     priceVerifiedDate: '2026-07-02',
     // 175 = "Netflix Kids", TMDB:s egen variantpost för samma abonnemang — inte en egen
     // tjänst. Utan aliaset renderas en titel TMDB märker med 175 som en okänd leverantör.
@@ -117,7 +117,7 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
     // timeline-lanes + Hem-widget) med "TV4 Play" (providerName i råd-texterna).
     // Ett namn överallt (A3, QA-audit 2026-06-09).
     id: 489, name: 'TV4 Play', shortName: 'TV4 Play', color: '#E2001A', type: 'flatrate', defaultMonthlyCost: 169,
-    priceVerifiedDate: '2026-09-02',
+    priceVerifiedDate: '2026-11-04',
     // 1944 = TMDB:s nuvarande primär-id för TV4 Play. 1759 = retirerade C More
     // (uppgick i TV4 Play); finns inte längre i TMDB:s live-katalog men gammal
     // sparad provider-data kan innehålla det → canonicalisera till TV4 Play.
