@@ -352,6 +352,16 @@ function GroupView({
         maxRuntimeMin: null,
         allowAsymmetry: true,
       };
+      const seedProviders = config.providerMode === 'intersect' ? intersectProviders : unionProviders;
+      // Utan någon tjänst att utgå från blir kortleken en allmän populär-lista som
+      // ingen kan vara säker på att kunna se. Stoppa hellre innan sessionen skapas.
+      if (seedProviders.length === 0) {
+        setError(config.providerMode === 'intersect'
+          ? 'Ni har ingen streamingtjänst gemensamt. Byt till "Någon har" i gruppens inställningar, eller lägg till tjänster i era profiler.'
+          : 'Ingen i gruppen har lagt till någon streamingtjänst än. Lägg till tjänster i profilen först.');
+        setStartingSession(false);
+        return;
+      }
       const me = members.find(m => m.uid === myUid);
       const sessionId = await createSession({
         hostUid: myUid,
@@ -364,7 +374,6 @@ function GroupView({
         groupId: group.id,
       });
       storeParticipantId(sessionId, myUid);
-      const seedProviders = config.providerMode === 'intersect' ? intersectProviders : unionProviders;
       // G4: föreslå inte titlar gruppen redan har i gemensamma biblioteket
       // eller som jag själv följer/sett/avbrutit. Övriga medlemmars privata
       // watchlists är inte läsbara klient-sidigt (Firestore-rules) — gruppens
@@ -402,6 +411,14 @@ function GroupView({
               <Play size={11} />
               {startingSession ? 'Startar…' : 'Starta session'}
             </Button>
+            {/* The invite variant goes through /tillsammans/ny, where the members are
+                listed ticked and can be unticked before anyone is invited. */}
+            <Link
+              href={`/tillsammans/ny/?grupp=${encodeURIComponent(group.id)}`}
+              className={buttonClass({ variant: 'ghost', size: 'sm', className: 'no-underline' })}
+            >
+              Bjud in till session
+            </Link>
             {isOwner && (
               <Button
                 type="button"
@@ -459,6 +476,7 @@ function GroupView({
         <div className="space-y-3">
           <GroupMembersPanel
             groupId={groupId}
+            groupKind={group.kind}
             groupName={group.name}
             members={members}
             ownerUid={group.ownerUid}
@@ -467,8 +485,9 @@ function GroupView({
           />
           <ProviderOverlapPanel intersect={intersectProviders} union={unionProviders} />
           {/* BIN-184: opt-in hushållsvy — aggregatet av delade kostnadsdata. */}
-          <HouseholdPanel groupId={groupId} />
-          {isOwner && <InvitePanel groupId={groupId} group={group} isOwner={isOwner} />}
+          <HouseholdPanel groupId={groupId} isHousehold={group.kind === 'household'} />
+          {/* ADR 0029: a household is joined only by invitation to a friend, never by link. */}
+          {isOwner && group.kind !== 'household' && <InvitePanel groupId={groupId} group={group} isOwner={isOwner} />}
         </div>
 
         <div className="space-y-3">

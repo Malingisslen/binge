@@ -42,6 +42,10 @@ import {
   ORPHAN_AUTH_MAX_FRACTION,
 } from '../../../functions/src/retentionCleanup/orphans';
 import { TIP_MAX_AGE_MS } from '../../../functions/src/retentionCleanup/logic';
+import {
+  SESSION_INVITE_MAX_AGE_MS,
+  SESSION_INVITE_PUSH_MARKER_MAX_AGE_MS,
+} from '../../../functions/src/sessionInvitePush/logic';
 
 /**
  * BIN-727 — the retentionCleanup ORCHESTRATOR against a real Firestore emulator.
@@ -186,6 +190,8 @@ const SCAN_SOURCE: Record<ScanKind, { group: boolean; id: string }> = {
   releaseMarkers: { group: true, id: 'notified' },
   friendRequestPushMarkers: { group: false, id: 'friendRequestPushes' },
   followPushMarkers: { group: false, id: 'followPushes' },
+  sessionInvites: { group: true, id: 'sessionInvites' },
+  sessionInvitePushMarkers: { group: false, id: 'sessionInvitePushes' },
   fcmTokens: { group: true, id: 'fcmTokens' },
   usernames: { group: false, id: 'usernames' },
   orphanWatch: { group: false, id: 'orphanWatch' },
@@ -1968,5 +1974,69 @@ describe('retentionCleanup orchestrator — follow-notice markers', () => {
     expect(summary.deletedFollowPushMarkers).toBe(0);
     expect(await exists(db, 'followPushes/alive_oldfollower')).toBe(true);
     expect(summary.deletedFriendRequestPushMarkers).toBe(1);
+  });
+});
+
+describe('retentionCleanup orchestrator — session invites and their markers', () => {
+  async function seedInvites(db: Firestore): Promise<void> {
+    const at = (ms: number) => ({ fromUid: 'host', sessionId: 'S', createdAt: ts(ms) });
+    await setDoc(doc(db, 'users', 'alive', 'sessionInvites', 'Sold_host'), at(NOW - SESSION_INVITE_MAX_AGE_MS - 1));
+    await setDoc(doc(db, 'users', 'alive', 'sessionInvites', 'Sedge_host'), at(NOW - SESSION_INVITE_MAX_AGE_MS));
+    await setDoc(doc(db, 'users', 'alive', 'sessionInvites', 'Sfresh_host'), at(NOW - 1000));
+    await setDoc(doc(db, 'users', 'alive', 'sessionInvites', 'Sundated_host'), { fromUid: 'host', sessionId: 'S' });
+    await setDoc(doc(db, 'sessionInvitePushes', 'alive_oldhost'), {
+      recipientUid: 'alive', fromUid: 'oldhost', lastPushedAt: ts(NOW - SESSION_INVITE_PUSH_MARKER_MAX_AGE_MS - 1),
+    });
+    await setDoc(doc(db, 'sessionInvitePushes', 'alive_edgehost'), {
+      recipientUid: 'alive', fromUid: 'edgehost', lastPushedAt: ts(NOW - SESSION_INVITE_PUSH_MARKER_MAX_AGE_MS),
+    });
+    await setDoc(doc(db, 'sessionInvitePushes', 'alive_freshhost'), {
+      recipientUid: 'alive', fromUid: 'freshhost', lastPushedAt: ts(NOW - 1000),
+    });
+  }
+
+  it('reaps an invite past seven days and a marker past its max age, keeping the edge, fresh and undateable ones', async () => {
+    const db = adminLikeDb();
+    const auth = makeAuth(FULL_ACCOUNTS);
+    await seedInvites(db);
+
+    const summary = await runRetentionCleanup(makeIo(db, auth));
+
+    expect(summary.staleSessionInvites).toBe(1);
+    expect(summary.deletedSessionInvites).toBe(1);
+    expect(await exists(db, 'users/alive/sessionInvites/Sold_host')).toBe(false);
+    expect(await exists(db, 'users/alive/sessionInvites/Sedge_host')).toBe(true);
+    expect(await exists(db, 'users/alive/sessionInvites/Sfresh_host')).toBe(true);
+    expect(await exists(db, 'users/alive/sessionInvites/Sundated_host')).toBe(true);
+
+    expect(summary.staleSessionInvitePushMarkers).toBe(1);
+    expect(summary.deletedSessionInvitePushMarkers).toBe(1);
+    expect(await exists(db, 'sessionInvitePushes/alive_oldhost')).toBe(false);
+    expect(await exists(db, 'sessionInvitePushes/alive_edgehost')).toBe(true);
+    expect(await exists(db, 'sessionInvitePushes/alive_freshhost')).toBe(true);
+
+    const second = await runRetentionCleanup(makeIo(db, auth));
+    expect(second.deletedSessionInvites).toBe(0);
+    expect(second.deletedSessionInvitePushMarkers).toBe(0);
+  });
+
+  it('a thrown invite scan leaves the marker sweep and the tips sweep completed', async () => {
+    const db = adminLikeDb();
+    const auth = makeAuth(FULL_ACCOUNTS);
+    await seedInvites(db);
+    await setDoc(doc(db, 'users', 'alive', 'tips', 'friend_movie_1'), { fromUid: 'friend', createdAt: ts(NOW - TIP_MAX_AGE_MS - 1) });
+
+    const io = makeIo(db, auth, {
+      scanPage: async (kind, cursor, pageSize) => {
+        if (kind === 'sessionInvites') throw new Error('missing index');
+        return makeIo(db, auth).scanPage(kind, cursor, pageSize);
+      },
+    });
+    const summary = await runRetentionCleanup(io);
+
+    expect(summary.deletedSessionInvites).toBe(0);
+    expect(await exists(db, 'users/alive/sessionInvites/Sold_host')).toBe(true);
+    expect(summary.deletedSessionInvitePushMarkers).toBe(1);
+    expect(summary.deletedTips).toBe(1);
   });
 });

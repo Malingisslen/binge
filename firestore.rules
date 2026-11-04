@@ -977,6 +977,82 @@ service cloud.firestore {
       allow delete: if isOwner(uid);
     }
 
+    // ---- Bjud in till Tillsammans ----
+    // En inbjudan till en Tillsammans-session. Ligger i MOTTAGARENS träd och bara
+    // mottagaren läser och raderar den. Sessions-id:t är sessionens åtkomstnyckel
+    // (ADR 0013/0015), så det får bara stå i ett dokument som enbart mottagaren kan
+    // läsa, aldrig i ett publikt dokument.
+    //
+    // Dokument-id:t är `{sessionId}_{fromUid}` och binds mot fälten, så ingen kan
+    // skriva under någon annans id. Sessions-id:t begränsas till Firestores
+    // auto-id-alfabet, så id:t delas alltid tillbaka i samma två delar.
+    //
+    // Bara sessionens värd bjuder in, och bara till en session som inte gått ut:
+    // den som bara har länken ska inte kunna fylla andras inkorgar.
+    //
+    // Mottagaren måste vara bekräftad vän med värden, eller medlem i samma grupp
+    // som sessionen startades från. Gruppen läses ur sessionens egen `groupId`, så
+    // reglerna behöver ingen fråga över gruppens medlemmar.
+    //
+    // Blockering åt båda hållen nekar, och en mottagare som stängt av
+    // `sessionInviteNotify` får inga inbjudningar. En profil utan nyckeln tar emot dem.
+    //
+    // `fromName` binds mot avsändarens egen profil via `isOwnIdentity`, av samma skäl
+    // som `groupInvites` nedan: när avsändarens publika kort inte går att läsa visar
+    // raden det här fältet, och utan bindningen kunde en främling låna ett namn.
+    //
+    // Kostnad: en skrivning läser sessionen, mottagarens profil, avsändarens profil för
+    // namnet, vänskapen och blockeringarna åt båda hållen. Det är en skrivväg en
+    // människa trycker fram, under taket för läsningar per regelutvärdering.
+    match /users/{uid}/sessionInvites/{inviteId} {
+      function isValidSessionInvite(d) {
+        return d.keys().hasOnly(['fromUid', 'fromName', 'sessionId', 'createdAt'])
+          && d.keys().hasAll(['fromUid', 'sessionId', 'createdAt'])
+          && d.fromUid == request.auth.uid
+          && d.sessionId is string
+          && d.sessionId.matches('^[A-Za-z0-9]{1,40}$')
+          && inviteId == d.sessionId + '_' + request.auth.uid
+          && d.createdAt == request.time
+          && (d.get('fromName', null) == null
+            || (d.fromName is string
+              && d.fromName.size() <= 80
+              && isOwnIdentity(d.fromName, null)));
+      }
+      function hostsLiveSession(sessionId) {
+        let s = get(/databases/$(database)/documents/sessions/$(sessionId)).data;
+        return s.hostUid == request.auth.uid && s.expiresAt > request.time;
+      }
+      function sharesSessionGroup(sessionId) {
+        // Membership is memberUids on the group doc. A member who leaves removes
+        // themselves from that array, and their members row can outlive it, so the row
+        // does not prove the host is still in the group.
+        let gid = get(/databases/$(database)/documents/sessions/$(sessionId)).data.get('groupId', null);
+        return gid is string
+          && uid in get(/databases/$(database)/documents/groups/$(gid)).data.get('memberUids', [])
+          && request.auth.uid in get(/databases/$(database)/documents/groups/$(gid)).data.get('memberUids', []);
+      }
+      function recipientAcceptsInviteFromMe(sessionId) {
+        return (exists(/databases/$(database)/documents/users/$(uid)/friends/$(request.auth.uid))
+            || sharesSessionGroup(sessionId))
+          && !exists(/databases/$(database)/documents/users/$(uid)/blocked/$(request.auth.uid))
+          && !exists(/databases/$(database)/documents/users/$(request.auth.uid)/blocked/$(uid))
+          && get(/databases/$(database)/documents/users/$(uid)).data
+            .get('notificationSettings', {}).get('sessionInviteNotify', true) != false;
+      }
+      allow read: if isOwner(uid);
+      allow create: if isSignedIn()
+        && uid != request.auth.uid
+        && isValidSessionInvite(request.resource.data)
+        && hostsLiveSession(request.resource.data.sessionId)
+        && recipientAcceptsInviteFromMe(request.resource.data.sessionId);
+      // En inbjudan ändras aldrig. Samma värd som bjuder in samma person till samma
+      // session igen träffar samma dokument och nekas här.
+      allow update: if false;
+      // Bara mottagaren raderar: "Gå med" och "Avböj" tar bort den. En avsändare som
+      // fick radera kunde se om mottagaren redan svarat.
+      allow delete: if isOwner(uid);
+    }
+
     // ---- grupp-inbjudningar (samtyckesbaserade) ----
     // Spegel av friendRequests-mönstret. Ägaren av en grupp skapar en inbjudan
     // på mål-användarens väg; mål-användaren ser den, kan acceptera (lägger då
@@ -1021,10 +1097,19 @@ service cloud.firestore {
             && request.resource.data.fromDisplayName.size() <= 80))
         && isOwnIdentity(request.resource.data.get('fromDisplayName', null), null)
         && request.resource.data.keys().hasOnly(
-          ['groupId', 'groupName', 'fromUid', 'fromDisplayName', 'invitedAt'])
+          ['groupId', 'groupName', 'fromUid', 'fromDisplayName', 'invitedAt', 'kind'])
         && request.resource.data.groupName
           == get(/databases/$(database)/documents/groups/$(groupId)).data.name
-        && get(/databases/$(database)/documents/groups/$(groupId)).data.ownerUid == request.auth.uid;
+        && get(/databases/$(database)/documents/groups/$(groupId)).data.ownerUid == request.auth.uid
+        // ADR 0029: the invitation says whether it is a household, so the recipient sees the
+        // household consent text before joining. It must match the group, never be chosen.
+        && request.resource.data.get('kind', null)
+          == get(/databases/$(database)/documents/groups/$(groupId)).data.get('kind', null)
+        // A household shares what you watch, so only a confirmed friend who has not blocked
+        // the owner can be invited into one.
+        && (request.resource.data.get('kind', null) != 'household'
+          || (exists(/databases/$(database)/documents/users/$(uid)/friends/$(request.auth.uid))
+            && !exists(/databases/$(database)/documents/users/$(uid)/blocked/$(request.auth.uid))));
       allow update: if false;
       // Mottagaren raderar (accept/decline). Ägaren kan dra tillbaka en inbjudan.
       allow delete: if isOwner(uid)
@@ -1351,6 +1436,17 @@ service cloud.firestore {
     // client that could write one could silence or unblock someone else's notices.
     match /followPushes/{id} {
       allow read, write: if false;
+    }
+
+    // Bjud in till Tillsammans: spärrmarkören onSessionInviteCreate stämplar (Admin
+    // SDK), `{ recipientUid, fromUid, lastPushedAt }`. Mottagaren och avsändaren får
+    // läsa sina egna markörer, så de kommer med i exporten. Ingen klient skriver:
+    // den som kunde skriva en markör kunde tysta någon annans notiser.
+    match /sessionInvitePushes/{id} {
+      allow read: if isSignedIn()
+        && (resource.data.recipientUid == request.auth.uid
+          || resource.data.fromUid == request.auth.uid);
+      allow write: if false;
     }
 
     // Recap coverage-gap counters (BIN-544) — per-show counts of "user hit a
@@ -1822,10 +1918,19 @@ service cloud.firestore {
       function isValidGroupDoc() {
         return request.resource.data.keys().hasOnly([
             'name', 'ownerUid', 'memberUids', 'defaults',
-            'inviteTokenHash', 'inviteTokenRotatedAt', 'createdAt', 'updatedAt'
+            'inviteTokenHash', 'inviteTokenRotatedAt', 'createdAt', 'updatedAt', 'kind'
           ])
           && request.resource.data.name is string
-          && request.resource.data.name.size() <= 48;
+          && request.resource.data.name.size() <= 48
+          // ADR 0029: a household is a group with kind 'household'.
+          && (!('kind' in request.resource.data) || request.resource.data.kind == 'household');
+      }
+
+      // ADR 0029: a household holds the people who live together, so it stops at six.
+      // Applied on the two growth branches; create starts at one member.
+      function withinHouseholdCap() {
+        return request.resource.data.get('kind', null) != 'household'
+          || request.resource.data.memberUids.size() <= 6;
       }
 
       // BIN-1291: ett grupp-id får aldrig vara ett befintligt kontos id. Schemalagda
@@ -1857,6 +1962,9 @@ service cloud.firestore {
       // rör inte namnet; ett golv på hela dokumentet hade låst en grupp vars lagrade namn
       // är tomt. Ett borttaget namn räknas som ändrat och prövas.
       allow update: if isSignedIn() && isValidGroupDoc()
+        // ADR 0029: a group cannot become or stop being a household after creation, so
+        // a group of 100 cannot be turned into a household that shows titles.
+        && request.resource.data.get('kind', null) == resource.data.get('kind', null)
         && (!('name' in request.resource.data.diff(resource.data).affectedKeys())
           || hasVisibleName(request.resource.data.name))
         && (
@@ -1941,6 +2049,10 @@ service cloud.firestore {
           // (vilket i sin tur kräver att hash-checken på den subcollection-
           // regeln nedan passerade).
           exists(/databases/$(database)/documents/groups/$(groupId)/joinAttempts/$(request.auth.uid))
+          // ADR 0029: nobody joins a household by link. A link can reach anyone, and a
+          // household shares titles by name, so entry is only by accepting an invitation
+          // that went to a confirmed friend.
+          && resource.data.get('kind', null) != 'household'
           && !(request.auth.uid in resource.data.memberUids)
           && request.auth.uid in request.resource.data.memberUids
           // BIN-1125: relate the NEW list to the OLD one. Until this landed, the two
@@ -1967,6 +2079,7 @@ service cloud.firestore {
           // can't be inflated toward the 1 MiB doc limit / read-amplified on every
           // membership get(). size() is an in-payload check — zero extra get() cost.
           && request.resource.data.memberUids.size() <= 100
+          && withinHouseholdCap()
           && request.resource.data.ownerUid == resource.data.ownerUid
           && request.resource.data.name == resource.data.name
           && request.resource.data.defaults == resource.data.defaults
@@ -1986,6 +2099,12 @@ service cloud.firestore {
           && request.resource.data.memberUids.hasAll(resource.data.memberUids)   // BIN-1125 (see join branch)
           && request.resource.data.memberUids.size() == resource.data.memberUids.size() + 1
           && request.resource.data.memberUids.size() <= 100   // BIN-327 (see join branch)
+          && withinHouseholdCap()
+          // ADR 0029: the friendship is checked again on accept, so an invitation sent before
+          // the two stopped being friends, or before a block, no longer opens the household.
+          && (resource.data.get('kind', null) != 'household'
+            || (exists(/databases/$(database)/documents/users/$(resource.data.ownerUid)/friends/$(request.auth.uid))
+              && !exists(/databases/$(database)/documents/users/$(resource.data.ownerUid)/blocked/$(request.auth.uid))))
           && request.resource.data.ownerUid == resource.data.ownerUid
           && request.resource.data.name == resource.data.name
           && request.resource.data.defaults == resource.data.defaults
@@ -2320,7 +2439,13 @@ service cloud.firestore {
         allow create, update: if isOwner(householdUid)
           && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids
           && request.resource.data.keys().hasAll(['providerIds', 'providerCosts', 'providerCampaigns', 'activeProviderIds', 'updatedAt'])
-          && request.resource.data.keys().hasOnly(['providerIds', 'providerCosts', 'providerCampaigns', 'activeProviderIds', 'updatedAt', 'soonProviderIds', 'votes', 'votesMonth'])
+          && request.resource.data.keys().hasOnly(['providerIds', 'providerCosts', 'providerCampaigns', 'activeProviderIds', 'updatedAt', 'soonProviderIds', 'votes', 'votesMonth', 'watchingNow'])
+          // ADR 0029: titles being watched are shared only inside a household, never in an
+          // ordinary group. Entries are validated by the client, like votes.
+          && (!request.resource.data.keys().hasAny(['watchingNow'])
+            || (request.resource.data.watchingNow is list
+              && request.resource.data.watchingNow.size() <= 10
+              && get(/databases/$(database)/documents/groups/$(groupId)).data.get('kind', null) == 'household'))
           // ADR 0026: tre valfria fält, så ett dokument från före dem kan fortfarande skrivas.
           // Röstvärdena i votes valideras av klienten (accepted-deviations.md).
           && (!request.resource.data.keys().hasAny(['soonProviderIds'])

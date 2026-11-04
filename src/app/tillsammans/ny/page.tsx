@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Users, Share2 } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
@@ -16,6 +16,13 @@ import { MAX_SESSION_DISPLAY_NAME } from '@/lib/clampText';
 import { Button } from '@/components/ui/Button';
 import { fieldClass } from '@/components/ui/Field';
 import { cardClass } from '@/components/ui/Card';
+import { useToast } from '@/contexts/ToastContext';
+import { useFriends } from '@/hooks/useFriends';
+import { useMyGroups } from '@/hooks/useGroups';
+import { useBlockedUsers } from '@/hooks/useBlockedUsers';
+import { InvitePicker } from '@/components/together/InvitePicker';
+import { sendSessionInvites } from '@/lib/firebase/sessionInvites';
+import { inviteSummaryText } from '@/lib/sessionInvites';
 import type {
   AggregationStrategy,
   ProviderMode,
@@ -31,6 +38,24 @@ function NyContent() {
   const { user, uid } = useAuth();
   const { items: myLibrary } = useWatchlist();
   const router = useRouter();
+  const { show: toast } = useToast();
+  const { data: allFriends = [] } = useFriends();
+  const { groups } = useMyGroups(uid);
+  const { isBlocked } = useBlockedUsers();
+  const friends = allFriends.filter(f => !isBlocked(f.uid)).map(f => ({ uid: f.uid, name: f.displayName }));
+  const [inviteGroupId, setInviteGroupId] = useState<string | null>(null);
+  const [invitees, setInvitees] = useState<string[]>([]);
+  const onInviteesChange = useCallback((next: string[]) => setInvitees(next), []);
+  // Invites go out once per created session, even when the last step is retried.
+  const invitesSent = useRef(false);
+
+  // A group page can link here with ?grupp=<id>. Read once on mount: the members it
+  // lists are ticked, and the host can untick them before anything is sent.
+  useEffect(() => {
+    const fromUrl = new URLSearchParams(window.location.search).get('grupp');
+    if (fromUrl) setInviteGroupId(fromUrl);
+  }, []);
+  const knownGroupId = inviteGroupId && groups.some(g => g.id === inviteGroupId) ? inviteGroupId : null;
 
   const [hostName, setHostName] = useState(user?.displayName ?? '');
   const [providers, setProviders] = useState<number[]>(user?.myProviders ?? []);
@@ -38,11 +63,13 @@ function NyContent() {
   const [providerMode, setProviderMode] = useState<ProviderMode>('intersect');
   const [aggregation, setAggregation] = useState<AggregationStrategy>('least_misery');
   const [maxRuntime, setMaxRuntime] = useState<string>('');
-  const [allowAsymmetry, setAllowAsymmetry] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
   const [providersError, setProvidersError] = useState<string | null>(null);
+  // Sessionen som redan skapats om sista steget (titlarna) föll. Ett nytt försök
+  // fortsätter på den i stället för att skapa en dubblett.
+  const createdSessionId = useRef<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const providersRef = useRef<HTMLDivElement>(null);
 
@@ -90,14 +117,18 @@ function NyContent() {
         aggregation,
         mediaType,
         maxRuntimeMin: maxRuntime ? parseInt(maxRuntime, 10) : null,
-        allowAsymmetry,
+        allowAsymmetry: true,
       };
-      const sessionId = await createSession({
+      const sessionId = createdSessionId.current ?? await createSession({
         hostUid: uid,
         hostName: name,
         hostProviders: providers,
         config,
+        // Binding the session to the chosen group is what lets the rules accept an
+        // invite to a member who is not a friend.
+        groupId: knownGroupId,
       });
+      createdSessionId.current = sessionId;
       storeParticipantId(sessionId, uid ?? sessionId);
       // G4: föreslå inte titlar skaparen redan följer/sett/avbrutit.
       // Övriga deltagare ansluter via länk EFTER att kandidaterna genererats
@@ -109,10 +140,28 @@ function NyContent() {
         excludeTmdbIds: libraryExclusionIds(myLibrary),
       });
       await setSessionCandidates(sessionId, candidates);
+      if (!invitesSent.current && invitees.length > 0 && uid) {
+        invitesSent.current = true;
+        // The session is ready by now, so a failed invite never stops the host from
+        // opening it; the link still works for everyone.
+        try {
+          const { sent, failed } = await sendSessionInvites({
+            sessionId,
+            fromUid: uid,
+            fromName: user?.displayName ?? null,
+            recipientUids: invitees,
+          });
+          toast(inviteSummaryText(sent.length, failed.length));
+        } catch {
+          toast(inviteSummaryText(0, invitees.length));
+        }
+      }
       router.push(`/tillsammans/${sessionId}`);
     } catch (err) {
       console.error(err);
-      setError('Kunde inte skapa session. Försök igen.');
+      setError(createdSessionId.current
+        ? 'Sessionen är skapad men titlarna kunde inte hämtas. Tryck på knappen igen.'
+        : 'Kunde inte skapa session. Försök igen.');
       setSubmitting(false);
     }
   };
@@ -143,6 +192,20 @@ function NyContent() {
           />
           {nameError && <p id="tillsammans-namn-fel" role="alert" className="text-xs text-danger-ink mt-1">{nameError}</p>}
         </FormSection>
+
+        {uid && (
+          <FormSection title="Bjud in">
+            <InvitePicker
+              myUid={uid}
+              friends={friends}
+              groups={groups}
+              groupId={knownGroupId}
+              onGroupChange={setInviteGroupId}
+              selected={invitees}
+              onSelectedChange={onInviteesChange}
+            />
+          </FormSection>
+        )}
 
         <FormSection title="Dina streamingtjänster">
           <p className="text-xs text-ink-3 mb-2">Bara titlar från de här tjänsterna (plus deltagarnas, beroende på läge nedan) visas.</p>
@@ -204,7 +267,7 @@ function NyContent() {
             options={[
               { value: 'least_misery', label: 'Ingen hatar det', desc: 'Undvik titlar någon sagt nej till' },
               { value: 'average', label: 'Flest positiva', desc: 'Rankad efter antalet ja' },
-              { value: 'fair', label: 'Turordning', desc: 'Var och en får prio i tur' },
+              { value: 'fair', label: 'Någons favorit', desc: 'Titlar som någon verkligen vill se får gå före' },
             ]}
           />
         </FormSection>
@@ -221,20 +284,6 @@ function NyContent() {
           />
           <p className="text-xxs text-ink-3 mt-1">Gäller bara filmer.</p>
         </FormSection>
-
-        {mediaType !== 'movie' && (
-          <FormSection title="Serier i olika takt">
-            <label className="flex items-center gap-2 text-xs cursor-pointer">
-              <input
-                type="checkbox"
-                checked={allowAsymmetry}
-                onChange={e => setAllowAsymmetry(e.target.checked)}
-                className="accent-acc-deep w-[12px] h-[12px]"
-              />
-              Tillåt serier där ni ligger på olika avsnitt (varning visas)
-            </label>
-          </FormSection>
-        )}
 
         {error && (
           <div className="px-3 py-2 text-xs text-danger-ink bg-danger-soft border-t border-danger/30">{error}</div>

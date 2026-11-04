@@ -9,9 +9,11 @@ import {
   householdContributionNeedsWrite,
   householdSoonNeedsRefresh,
   householdVoteMonthKey,
+  sanitizeHouseholdWatching,
   sanitizeSoonProviderIds,
   sanitizeVotes,
   sanitizeVotesMonth,
+  withoutHouseholdWatchingTitle,
   type HouseholdContribution,
   type HouseholdContributionContent,
 } from '@/lib/advisor/householdAggregate';
@@ -227,6 +229,8 @@ export async function createGroup(params: {
   ownerProviders: number[];
   name: string;
   defaults: GroupDefaults;
+  /** ADR 0029: set only when creating a household; the rules fix it for the group's life. */
+  kind?: 'household';
 }): Promise<{ groupId: string; inviteToken: string }> {
   const inviteToken = generateSecureToken();
   const inviteTokenHash = await sha256Hex(inviteToken);
@@ -241,6 +245,7 @@ export async function createGroup(params: {
     inviteTokenRotatedAt: serverTimestamp(),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
+    ...(params.kind ? { kind: params.kind } : {}),
   });
 
   // BIN-555: samma spöke-medlems-form som join/accept, men spegelvänd. Här
@@ -540,6 +545,8 @@ export async function inviteMemberByUid(params: {
   // binder faltet mot avsandarens EGEN profil, sa 'Nagon' hade nekats.
   fromDisplayName: string | null;
   targetUid: string;
+  /** The group's own kind: the rules refuse an invitation whose kind differs (ADR 0029). */
+  kind: Group['kind'];
 }): Promise<void> {
   const { db, doc, setDoc, serverTimestamp } = await fsdb();
   await setDoc(doc(db, 'users', params.targetUid, 'groupInvites', params.groupId), {
@@ -548,6 +555,7 @@ export async function inviteMemberByUid(params: {
     fromUid: params.fromUid,
     fromDisplayName: params.fromDisplayName,
     invitedAt: serverTimestamp(),
+    ...(params.kind ? { kind: params.kind } : {}),
   });
 }
 
@@ -1226,6 +1234,7 @@ export function groupDocToObject(id: string, data: Record<string, unknown>): Gro
     inviteTokenRotatedAt: data.inviteTokenRotatedAt ? toDate(data.inviteTokenRotatedAt) : null,
     createdAt: toDate(data.createdAt),
     updatedAt: toDate(data.updatedAt),
+    kind: data.kind === 'household' ? 'household' : null,
   };
 }
 
@@ -1313,9 +1322,17 @@ export function subscribeToGroupMembers(
   cb: (members: GroupMember[]) => void,
 ): () => void {
   return lazySubscribe(({ db, collection, onSnapshot }) =>
-    onSnapshot(collection(db, 'groups', groupId, 'members'), snap => {
-      cb(snap.docs.map(d => memberDocToObject(d.id, d.data())));
-    }));
+    onSnapshot(
+      collection(db, 'groups', groupId, 'members'),
+      snap => {
+        cb(snap.docs.map(d => memberDocToObject(d.id, d.data())));
+      },
+      // Utan felhanterare kastar SDK:n ett ohanterat fel som hamnar i Sentry när en
+      // icke-medlem öppnar en grupp. Bara nekandet är väntat; allt annat rapporteras.
+      err => {
+        if (!isPermissionDenied(err)) captureError(err, { scope: 'groups', kind: 'subscribeToGroupMembers' });
+      },
+    ));
 }
 
 export function subscribeToGroupWatchlist(
@@ -1323,9 +1340,16 @@ export function subscribeToGroupWatchlist(
   cb: (items: GroupWatchlistRow[]) => void,
 ): () => void {
   return lazySubscribe(({ db, collection, onSnapshot }) =>
-    onSnapshot(collection(db, 'groups', groupId, 'watchlist'), snap => {
-      cb(snap.docs.map(d => watchlistDocToObject(d.id, d.data())));
-    }));
+    onSnapshot(
+      collection(db, 'groups', groupId, 'watchlist'),
+      snap => {
+        cb(snap.docs.map(d => watchlistDocToObject(d.id, d.data())));
+      },
+      // Samma skäl som medlemslyssnaren ovan.
+      err => {
+        if (!isPermissionDenied(err)) captureError(err, { scope: 'groups', kind: 'subscribeToGroupWatchlist' });
+      },
+    ));
 }
 
 // ── BIN-184: Hushåll — opt-in delade prenumerationsbidrag ────────────────────
@@ -1345,6 +1369,7 @@ function householdDocToObject(uid: string, data: Record<string, unknown>): House
     soonProviderIds: sanitizeSoonProviderIds(data.soonProviderIds),
     votes: sanitizeVotes(data.votes),
     votesMonth: sanitizeVotesMonth(data.votesMonth),
+    watchingNow: sanitizeHouseholdWatching(data.watchingNow),
     updatedAt: toDate(data.updatedAt)?.getTime() ?? null,
   };
 }
@@ -1371,8 +1396,34 @@ export async function setHouseholdContribution(
     payload.votes = content.votes;
     payload.votesMonth = content.votesMonth;
   }
+  if (content.watchingNow !== undefined) payload.watchingNow = content.watchingNow;
   payload.updatedAt = serverTimestamp();
   await setDoc(doc(db, 'groups', groupId, 'household', uid), payload);
+}
+
+/**
+ * ADR 0029: a title the member marks Privat leaves every household list they share at
+ * once. Only the member's own contribution docs are read (their own get is always
+ * allowed), and only the ones that carry the title are written. Unlike the provider
+ * fan-out this writes even when the stored doc is stale, which makes it count as fresh:
+ * the consent promise wins over the advisor's age limit (accepted-deviations.md).
+ */
+export async function removeTitleFromHouseholdWatching(
+  uid: string,
+  type: 'movie' | 'tv',
+  id: number,
+): Promise<void> {
+  const groupIds = await getMyGroupIds(uid);
+  if (groupIds.length === 0) return;
+  const { db, doc, getDoc, updateDoc, serverTimestamp } = await fsdb();
+  await Promise.all(groupIds.map(async groupId => {
+    const ref = doc(db, 'groups', groupId, 'household', uid);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return;
+    const kept = withoutHouseholdWatchingTitle(sanitizeHouseholdWatching(snap.data().watchingNow), type, id);
+    if (kept == null) return;
+    await updateDoc(ref, { watchingNow: kept, updatedAt: serverTimestamp() });
+  }));
 }
 
 /** Opt-out (ångra delning) utan att lämna gruppen — DBA-krav: opt-in får inte
@@ -1489,6 +1540,7 @@ export interface GroupInvite {
   fromUid: string;
   fromDisplayName: string;
   invitedAt: Date;
+  kind: Group['kind'];
 }
 
 // Live-prenumeration på inkomna grupp-inbjudningar för en användare. Speglar
@@ -1507,6 +1559,7 @@ export function subscribeToMyGroupInvites(
           fromUid: (data.fromUid as string) ?? '',
           fromDisplayName: (data.fromDisplayName as string) || 'Någon',
           invitedAt: toDate(data.invitedAt),
+          kind: data.kind === 'household' ? 'household' : null,
         };
       }));
     }));

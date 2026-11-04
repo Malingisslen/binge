@@ -252,6 +252,18 @@
       "path": "functions/src/followPush/index.ts, functions/src/followPush/logic.ts"
     },
     {
+      "id": "cf-session-invite-push",
+      "label": "onSessionInviteCreate",
+      "context": "backend-api",
+      "path": "functions/src/sessionInvitePush/index.ts, functions/src/sessionInvitePush/logic.ts"
+    },
+    {
+      "id": "session-invite-lib",
+      "label": "Session invites (send, list, Gå med/Avböj)",
+      "context": "client-state",
+      "path": "src/lib/firebase/sessionInvites.ts, src/lib/sessionInvites.ts, src/hooks/useSessionInvites.ts, src/components/social/SessionInviteRow.tsx, src/components/together/InvitePicker.tsx"
+    },
+    {
       "id": "askbinge-parse",
       "label": "askBingeParse (callable)",
       "context": "backend-api",
@@ -424,6 +436,12 @@
       "label": "GroupPageClient (grupper/[id])",
       "context": "web-app",
       "path": "src/components/pages/GroupPageClient.tsx,src/lib/firebase/groups.ts"
+    },
+    {
+      "id": "household-page",
+      "label": "HouseholdPageClient (/hushall) + HouseholdCallout (Vänner)",
+      "context": "web-app",
+      "path": "src/components/pages/HouseholdPageClient.tsx,src/components/household/HouseholdCallout.tsx,src/components/household/InviteToHouseholdButton.tsx,src/hooks/useMyHousehold.ts"
     },
     {
       "id": "group-settings-modal",
@@ -670,6 +688,12 @@
       "label": "tvPairStart / tvPairApprove / tvPairPoll callables and TV cleanup triggers",
       "context": "backend-api",
       "path": "functions/src/tvPair/index.ts, functions/src/tvPair/logic.ts, functions/src/tvPair/cleanup.ts"
+    },
+    {
+      "id": "cf-tvOverview",
+      "label": "tvOverview callable (TV home screen data)",
+      "context": "backend-api",
+      "path": "functions/src/tvOverview/index.ts, functions/src/tvOverview/logic.ts"
     },
     {
       "id": "tv-pair-page",
@@ -1679,12 +1703,73 @@
       "area": "social"
     },
     {
+      "id": "flow-session-invite",
+      "label": "Tillsammans → \"Bjud in\" with a notice",
+      "description": "On /tillsammans/ny the host picks friends, or a group whose members are listed ticked and can be unticked; nothing is sent until the session exists, and the picker and sendSessionInvites both cap the list at MAX_SESSION_INVITEES. Choosing a group binds the session to it (groupId), which is what lets firestore.rules accept an invite to a member who is not a friend. One invite per recipient lands in users/{recipientUid}/sessionInvites/{sessionId}_{fromUid}, readable and deletable only by the recipient, because the session id is the session's access key. A Firestore trigger deletes an invite past the per-recipient cap without a notice, holds the notice back within a window per (recipient, sender) pair via sessionInvitePushes, and otherwise writes a session_invite card and a neutral push with no name and no session id. The recipient answers from the bell or from the Väntar på dig box on Vänner: Gå med reads sessions/{id}, removes the invite and opens the session, or says 'Sessionen finns inte längre'; Avböj removes it. retentionCleanup reaps invites after SESSION_INVITE_MAX_AGE_MS and markers after their max age; handOverOwnedGroups erases a deleted account's sent invites and the markers that name it as recipient; a marker that names it as sender is erased only once it no longer holds a notice back, and is otherwise left to retentionCleanup.",
+      "covers": [
+        "onSessionInviteCreate"
+      ],
+      "steps": [
+        {
+          "from": "tillsammans-new-page",
+          "to": "firestore",
+          "payload": "createSession({..., groupId: chosen group or null}), setSessionCandidates, then sendSessionInvites({sessionId, fromUid, fromName: own profile displayName, recipientUids}) — one setDoc per recipient of {fromUid, fromName, sessionId, createdAt: serverTimestamp()} at users/{recipientUid}/sessionInvites/{sessionId}_{fromUid}, settled one by one. The rules require: the writer hosts the live session; the recipient is a friend (users/{recipient}/friends/{host}) or both are members of the session's group; no block either way; notificationSettings.sessionInviteNotify not false; hasOnly the four fields; fromName null or equal to the writer's own profile displayName; update denied. A refused recipient is counted and the host gets a toast with the counts.",
+          "transport": "Firestore write (fan-out)",
+          "verified": true
+        },
+        {
+          "from": "firestore",
+          "to": "cf-session-invite-push",
+          "payload": "onDocumentCreated fires on users/{recipientUid}/sessionInvites/{inviteId}",
+          "transport": "Firestore trigger",
+          "verified": true
+        },
+        {
+          "from": "cf-session-invite-push",
+          "to": "firestore",
+          "payload": "count() of users/{recipientUid}/sessionInvites; past SESSION_INVITE_RECIPIENT_CAP the new invite is deleted and nothing is sent. Then getAll(users/{recipientUid}, users/{fromUid}); no notice when the profile is missing or sessionInviteNotify is false. One transaction reads sessionInvitePushes/{recipientUid}_{fromUid} {lastPushedAt} and stamps {recipientUid, fromUid, lastPushedAt} only when the window has passed. Log lines carry recipientUid and fromUid, never the invite id or the session id.",
+          "transport": "Admin SDK reads + transaction",
+          "verified": true
+        },
+        {
+          "from": "cf-session-invite-push",
+          "to": "firestore",
+          "payload": "createInboxCard(users/{recipientUid}/notifications/session-invite-{eventId}, {kind:'session_invite', title:'Inbjudan till Tillsammans', body:'{namn} bjuder in dig att välja något att se tillsammans', actionUrl:'/my/friends/'}). The bell leaves these cards out of its lists and its unread count and shows the live invites instead.",
+          "transport": "Admin SDK write",
+          "verified": true
+        },
+        {
+          "from": "cf-session-invite-push",
+          "to": "cf-sendPush",
+          "payload": "sendPushToUser(recipientUid, {title:'Binge', body:'Du har fått en inbjudan till Tillsammans', actionUrl:'/my/friends/', tag:'session-invite'}, {pushEnabled}) — no name on the lock screen and no session id in the payload; the card and the push are settled separately.",
+          "transport": "in-process call",
+          "verified": true
+        },
+        {
+          "from": "cf-sendPush",
+          "to": "fcm-sw",
+          "payload": "push notification (tab closed); click opens Vänner",
+          "transport": "FCM / Web Push",
+          "verified": true
+        },
+        {
+          "from": "friends-page",
+          "to": "session-invite-lib",
+          "payload": "useSessionInvites lists users/{my}/sessionInvites (newest first, blocked senders filtered) in the Väntar på dig box and in the bell under 'Inbjudningar till Tillsammans'. Gå med: getDoc(sessions/{sessionId}); a missing or expired session shows 'Sessionen finns inte längre'; either way deleteDoc on the invite, then router.push('/tillsammans/{sessionId}') for a live one. Avböj: deleteDoc on the invite.",
+          "transport": "Firestore read + delete",
+          "verified": true
+        }
+      ],
+      "area": "social"
+    },
+    {
       "id": "flow-groups",
       "label": "Groups: create, invite, manage",
       "description": "Owner creates a group (self as first member) and gets a plaintext invite token whose hash alone is persisted; joining is a two-step rule-verified token check, or a consent-based invite-by-handle that mirrors the friend-request pattern. Owner-only settings cover rename/defaults, member removal, and a client-side cascading delete across subcollections. BIN-184 added an opt-in household facet: a member who explicitly shares (writes groups/{gid}/household/{uid}) unlocks a share-to-see aggregate view of the group's cost data (HouseholdPanel/useGroupHousehold) — reads require the reader to already share too, revoke is immediate, and the doc is cascade-deleted on opt-out/leave/removal/group-deletion and on account deletion/export (flow-gdpr). BIN-1118: en ägare som vill sluta sköta gruppen öppnar Gruppinställningar och väljer \"Lämna över\", som är steg 1 av 2; steg 2 är HandOverGroupDialog, där ägaren pekar ut en medlem. Klienten kan inte skriva ownerUid — den är pinnad oförändrad på varje klientskrivbar groups-update-gren — så valet går genom handOverGroup-callablen, som validerar att anroparen äger gruppen och att efterträdaren står i memberUids, raderar den avgående ägarens egna spår med samma maskineri som kontoraderingens dörr, och först därefter byter ägare under adminIo:s optimistiska spärr. Efteråt skriver den ett system-kort i varje kvarvarande medlems users/{uid}/notifications. BIN-1120: gruppsidans ⋯-meny är samma UgcActionsMenu som recensioner använder, med utträdet flyttat in i den och targetType=group.",
       "covers": [
         "/grupper",
         "/grupper/ny",
+        "/hushall",
         "grupper/[id]",
         "GroupSettingsModal",
         "HouseholdPanel",
@@ -1694,6 +1779,13 @@
         "UgcActionsMenu"
       ],
       "steps": [
+        {
+          "from": "household-page",
+          "to": "firestore",
+          "payload": "ADR 0029: Skapa hushåll on Vänner or /hushall runs createGroup with kind 'household' (name Hemma); the rules fix kind for the group's life and cap a household at 6 members on the join and accept branches. Bjud in (friend's profile or the members card) writes users/{friend}/groupInvites/{gid} with kind 'household', allowed only to a confirmed friend who has not blocked the owner. The invitee answers on Vänner under the household consent text; sharing then writes groups/{gid}/household/{uid} with watchingNow (≤10 titles, never a Privat one), which the rules accept only in a household",
+          "transport": "Firestore write",
+          "verified": true
+        },
         {
           "from": "grupper-new-page",
           "to": "firestore",
@@ -2834,6 +2926,31 @@
           "to": "firestore",
           "payload": "tvDeviceDeleted deletes the tv_<device> Auth account when the device row goes; tvOwnerDeleted deletes tvPairings approved by a deleted user",
           "transport": "firestore-trigger",
+          "verified": true
+        }
+      ],
+      "area": "auth"
+    },
+    {
+      "id": "flow-tv-overview",
+      "label": "TV home screen: services, Tillsammans board, household",
+      "description": "The TV app calls tvOverview with its own sign-in. The owner is read only from the token (never from the request), the device row users/{uid}/tvDevices/{deviceId} must exist on every call, and calls are rate limited per device. The reply carries the owner's service ids from users/{uid}.myProviders, the id of the owner's live Tillsammans session, and the household view. The household view is off until appConfig/tvHousehold has enabled: true; it needs the owner to have a household row, only includes members with their own household row, reads watchlists only for the members the TV says are on the couch, drops every title that is not explicitly shareable (Privat, unknown or missing visibility is dropped). The calls are rate limited per device and write one counter row to tvRate through takeRate.",
+      "covers": [
+        "tvOverview"
+      ],
+      "steps": [
+        {
+          "from": "cf-tvOverview",
+          "to": "firestore",
+          "payload": "tvOverview: reads tvDevices row, users/{uid}, the owner's latest sessions (index sessions on hostUid and createdAt), groups with their household rows, and the seated members' watchlists with Admin SDK; filters Privat server side",
+          "transport": "firestore-read",
+          "verified": true
+        },
+        {
+          "from": "cf-tvOverview",
+          "to": "firestore",
+          "payload": "takeRate: transaction on tvRate/overview_{deviceId}, one counter row per device and window, removed by TTL on expireAt",
+          "transport": "firestore-transaction",
           "verified": true
         }
       ],

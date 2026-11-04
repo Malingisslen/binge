@@ -10,8 +10,8 @@ export default function IntegritetPage() {
   return (
     <LegalPageShell
       title="Integritetspolicy"
-      lastUpdated="2026-10-31"
-      version="1.21"
+      lastUpdated="2026-11-03"
+      version="1.22"
       toc={[
         { id: 'ansvarig', label: '1. Vem är ansvarig?' },
         { id: 'uppgifter', label: '2. Vilka uppgifter vi samlar in' },
@@ -69,6 +69,7 @@ export default function IntegritetPage() {
           <li><strong>Andra veckan</strong> — Binge sparar en gång per konto datumet när du öppnar appen under din andra vecka. Det används bara för att räkna hur många nya konton som kommer tillbaka, som en summa, och raderas när du raderar kontot.</li>
           <li><strong>Tips från vänner</strong> — en vän kan tipsa dig om en film eller serie, med en kort hälsning om hen vill. Tipset sparas i ditt konto, syns bara för dig under Vänner och raderas automatiskt efter 90 dagar. Det skickas inte som notis. Du kan ta bort ett tips när som helst och stänga av tips helt under Inställningar, Notiser.</li>
           <li><strong>Notis när någon följer dig</strong> — när någon börjar följa dig får du en notis i appens klocka, och som push om du har push-notiser på. Notisen visar personens visningsnamn bara om du får se hens profil, alltså om den är publik eller ni är vänner. Annars står det &quot;Någon följer dig nu&quot;. För att avgöra det läser vi personens synlighetsinställning och om ni är vänner. För att samma person inte ska kunna skicka notis efter notis genom att följa och sluta följa sparar vi vem som följde vem och när. Den uppgiften raderas automatiskt när den är 7 dagar gammal. Du stänger av notisen under Inställningar, Notiser.</li>
+          <li><strong>Inbjudningar till Tillsammans</strong> — en vän eller någon i din grupp kan bjuda in dig när hen startar en Tillsammans-session. Inbjudan sparas i ditt konto med avsändarens namn, syns bara för dig under Vänner och i appens klocka, och raderas när du svarar på den, annars automatiskt när den är 7 dagar gammal. Pushen visar inte vem som bjuder in. För att samma person inte ska kunna skicka notis efter notis sparar vi när hen senast gav dig en notis. Den uppgiften raderas automatiskt när den är 2 dagar gammal. Du stänger av inbjudningar under Inställningar, Notiser.</li>
           <li><strong>Push-notistoken</strong> — om du aktiverat push-notiser sparar vi en enhetsspecifik token (Firebase Cloud Messaging) för att kunna skicka notiser.</li>
           <li><strong>Hemkommun</strong> — om du själv väljer en kommun för att se vad som finns på ditt bibliotek. Den är frivillig och går att ta bort i inställningarna.</li>
           <li><strong>Avsnittsreaktioner</strong> — reaktioner du lämnar på enskilda avsnitt. De är publika och visar att de kommer från ditt konto.</li>
@@ -96,7 +97,7 @@ export default function IntegritetPage() {
         <ul>
           <li><strong>Avtal (GDPR art. 6.1.b)</strong> — för att leverera tjänsten: spara din bevakningslista, visa rätt streaming-info, köra rådgivaren, och visa de grupper du är medlem i vilka streamingtjänster du har, eftersom det är så gruppen räknar ut vad ni kan se tillsammans, och visa gruppens medlemmar de betyg du sätter på gruppens titlar (se §10).</li>
           <li><strong>Berättigat intresse (art. 6.1.f)</strong> — för driftlogg, felsökning, felövervakning, bot- och missbruksskydd, samt cookiefri räkning av hur funktioner används och av besök via Cloudflare Web Analytics (se §4). Du kan invända mot båda räkningarna (se §7). Också för att visa en svensk biografi från Wikipedia på personsidor: intresset är att sidan ska vara begriplig på svenska, och Wikimedia får ingenting om ditt konto (se §4).</li>
-          <li><strong>Samtycke (art. 6.1.a)</strong> — för Hushåll, den frivilliga delningen av prenumerationskostnader i grupper (se §10), för att spela en trailer från YouTube, där ditt tryck på spela är samtycket (se §4 och §8), samt eventuella framtida inslag som kräver samtycke, t.ex. marknadsföring eller cookie-baserad spårning. Inga marknadsföringsinslag används idag.</li>
+          <li><strong>Samtycke (art. 6.1.a)</strong> — för Hushåll, den frivilliga delningen av prenumerationskostnader i grupper och, i ett hushåll, av titlarna du tittar på (se §10), för att spela en trailer från YouTube, där ditt tryck på spela är samtycket (se §4 och §8), samt eventuella framtida inslag som kräver samtycke, t.ex. marknadsföring eller cookie-baserad spårning. Inga marknadsföringsinslag används idag.</li>
         </ul>
         <p>
           Administratörer kan se namn, användarnamn, profilbild och presentation
@@ -391,6 +392,16 @@ export default function IntegritetPage() {
           <li><strong>Din kontroll</strong> — sluta dela när som helst med ett tryck; din data raderas då omedelbart. Den raderas också automatiskt om du lämnar gruppen, blir borttagen ur den, eller tar bort ditt konto.</li>
           <li><strong>Export</strong> — dina hushålls-bidrag ingår i din dataexport (se §7).</li>
         </ul>
+        <p>
+          <strong>Ett hushåll</strong> är en grupp för dem som bor ihop, med högst 6
+          personer. Delar du i ett hushåll delas också <strong>titlarna du just nu
+          tittar på</strong>, med ditt förnamn: bara titeln, aldrig status, betyg, tid
+          eller anteckningar, och aldrig en titel du markerat som Privat. Titlarna ser
+          de andra i hushållet som själva delar. Syftet är en
+          hushållsöversikt, inte att kartlägga vad du tittar på. Samtyckesrutan i
+          hushållet säger det innan något sparas, och du kan sluta dela på samma sätt
+          som ovan. I vanliga grupper delas aldrig titlar.
+        </p>
         <p>
           <strong>Vem som ser att gruppen finns.</strong> Gruppens
           <strong> namn</strong> är läsbart för varje inloggat konto — det är vad

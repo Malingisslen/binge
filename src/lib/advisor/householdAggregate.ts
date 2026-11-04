@@ -53,8 +53,23 @@ export interface HouseholdContribution {
   /** Absent when the member has not voted. Only meaningful when votesMonth is the current month. */
   votes?: Record<number, HouseholdVote>;
   votesMonth?: string;
+  /** ADR 0029: titles the member is watching right now, only in a household. Absent means
+   *  the member has not shared under the consent text that names titles. */
+  watchingNow?: HouseholdWatchingTitle[];
   updatedAt: number | null;
 }
+
+/** One title a household member is watching (ADR 0029): the TMDB id and the title, nothing
+ *  about status, rating, time or notes. */
+export interface HouseholdWatchingTitle {
+  id: number;
+  type: 'movie' | 'tv';
+  title: string;
+}
+
+/** Same number the rules enforce on `watchingNow`. */
+export const HOUSEHOLD_WATCHING_MAX = 10;
+const HOUSEHOLD_WATCHING_TITLE_MAX = 200;
 
 export interface HouseholdProviderRow {
   /** Canonical provider id. */
@@ -339,6 +354,52 @@ export function buildSoonProviderIds(
 }
 
 /**
+ * The titles the member is watching right now, for a household (ADR 0029): a series they
+ * follow and have started, newest first. A title the member marked Privat is left out of
+ * the data itself, so it never leaves the device.
+ */
+export function buildHouseholdWatching(
+  items: readonly Pick<WatchlistItem, 'tmdbId' | 'mediaType' | 'title' | 'status' | 'dropped' | 'visibility' | 'lastWatchedEpisode' | 'updatedAt'>[],
+): HouseholdWatchingTitle[] {
+  return items
+    .filter(it => it.mediaType === 'tv' && it.status === 'mina' && !it.dropped
+      && it.lastWatchedEpisode != null && it.visibility !== 'private')
+    .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
+    .slice(0, HOUSEHOLD_WATCHING_MAX)
+    .map(it => ({ id: it.tmdbId, type: it.mediaType, title: it.title.slice(0, HOUSEHOLD_WATCHING_TITLE_MAX) }));
+}
+
+/**
+ * The stored list without one title, or null when the title is not in it (nothing to
+ * write). Marking a title Privat calls this at once, so the promise "a title marked Privat
+ * is not shared" holds without waiting for the member's next visit to the household.
+ */
+export function withoutHouseholdWatchingTitle(
+  stored: readonly HouseholdWatchingTitle[] | undefined,
+  type: HouseholdWatchingTitle['type'],
+  id: number,
+): HouseholdWatchingTitle[] | null {
+  if (!stored) return null;
+  const kept = stored.filter(t => !(t.type === type && t.id === id));
+  return kept.length === stored.length ? null : kept;
+}
+
+/** Read-side sanitiser: the rules check only that `watchingNow` is a short list, so each
+ *  entry is checked here and anything unrecognised is dropped. Missing stays undefined. */
+export function sanitizeHouseholdWatching(raw: unknown): HouseholdWatchingTitle[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: HouseholdWatchingTitle[] = [];
+  for (const e of raw.slice(0, HOUSEHOLD_WATCHING_MAX)) {
+    if (e == null || typeof e !== 'object') continue;
+    const { id, type, title } = e as Record<string, unknown>;
+    if (!isHouseholdProviderId(id) || (type !== 'movie' && type !== 'tv')) continue;
+    if (typeof title !== 'string' || title.trim() === '') continue;
+    out.push({ id, type, title: title.slice(0, HOUSEHOLD_WATCHING_TITLE_MAX) });
+  }
+  return out;
+}
+
+/**
  * Compose the member's next contribution from a freshly built base, carrying what the
  * base cannot know:
  *  - soonProviderIds is written ONLY when the member already re-shared under the consent
@@ -349,14 +410,27 @@ export function buildSoonProviderIds(
  */
 export function composeHouseholdContribution(
   base: HouseholdBaseContent,
-  existing: Pick<HouseholdContribution, 'soonProviderIds' | 'votes' | 'votesMonth'> | undefined,
-  opts: { monthKey: string; soon: number[] | null; optInSoon?: boolean },
+  existing: Pick<HouseholdContribution, 'soonProviderIds' | 'votes' | 'votesMonth' | 'watchingNow'> | undefined,
+  opts: {
+    monthKey: string;
+    soon: number[] | null;
+    optInSoon?: boolean;
+    /** Fresh titles, or null to keep the stored value. Written only once shared (ADR 0029). */
+    watching?: HouseholdWatchingTitle[] | null;
+    /** Set by the Dela press under the consent text that names titles, in a household. */
+    optInWatching?: boolean;
+  },
 ): HouseholdContributionContent {
   const out: HouseholdContributionContent = { ...base };
   const soonShared = opts.optInSoon === true || existing?.soonProviderIds !== undefined;
   if (soonShared) {
     const value = opts.soon ?? existing?.soonProviderIds;
     if (value !== undefined) out.soonProviderIds = value;
+  }
+  const watchingShared = opts.optInWatching === true || existing?.watchingNow !== undefined;
+  if (watchingShared) {
+    const value = opts.watching ?? existing?.watchingNow;
+    if (value !== undefined) out.watchingNow = value;
   }
   const votes = existing ? currentHouseholdVotes(existing, opts.monthKey) : new Map<number, HouseholdVote>();
   if (votes.size > 0) {
@@ -589,12 +663,17 @@ export function contributionContentEquals(
     if (xk.length > 0 && x.votesMonth !== y.votesMonth) return false;
     return xk.every(k => yv[Number(k)] === xv[Number(k)]);
   };
+  const sameWatching = (x: HouseholdWatchingTitle[] | undefined, y: HouseholdWatchingTitle[] | undefined): boolean =>
+    x === undefined || y === undefined
+      ? x === y
+      : x.length === y.length && x.every((t, i) => t.id === y[i].id && t.type === y[i].type && t.title === y[i].title);
   return (
     sameList(a.providerIds, b.providerIds) &&
     sameList(a.activeProviderIds, b.activeProviderIds) &&
     sameNumMap(a.providerCosts, b.providerCosts) &&
     sameCampaigns(a.providerCampaigns, b.providerCampaigns) &&
     sameOptionalList(a.soonProviderIds, b.soonProviderIds) &&
-    sameVotes(a, b)
+    sameVotes(a, b) &&
+    sameWatching(a.watchingNow, b.watchingNow)
   );
 }

@@ -80,6 +80,11 @@ Read only when the staged diff touches this chapter's paths (see .claude/shared-
   again at once (BIN-1471 `tvDevices.lastSeenAt`, emulator PoC; archive 2026-10-31). Bind both ends —
   and monotonicity (`new > stored`) is NOT the lower end: 1 ms steps keep the stored stamp old and the
   gate open (BIN-1471 r3 PoC, 5/5). The lower bind must tie the NEW value to `request.time`.
+  **The converse: a rule that FORCES `updatedAt == request.time` on every update makes each partial
+  write a re-dating of the WHOLE doc.** When readers treat that stamp as the age of OTHER fields'
+  evidence (household freshness, soon flag), a targeted scrub makes stale evidence read as fresh. Check
+  whether a sibling writer already skips stale docs for that reason (`householdSoonNeedsRefresh` in
+  `refreshMyHouseholdContributions`) and whether the new writer does too (archive 2026-11-03, Privat scrub).
 - **A reaper's "undateable = kept forever" restraint is safe only if the CREATE rule makes the date
   mandatory.** `hasOnly(['token','createdAt'])` requires neither key — `setDoc({token})` skips the reaper
   forever; fix with `createdAt is timestamp && createdAt == request.time` (BIN-476→480).
@@ -92,7 +97,10 @@ Read only when the staged diff touches this chapter's paths (see .claude/shared-
   write it is. FOUND IN REVIEW, BIN-1125; **CLOSED 2026-09-09** on both branches. BIN-1108 had hardened the
   adjacent owner and leave branches against the OWNER freezing themselves out, and that fix neither touched
   nor worsened this growth-side hole — check every OTHER branch touching the same array field for the
-  mirror-image gap before calling a shrink-only fix complete.
+  mirror-image gap before calling a shrink-only fix complete. **The same applies to WHO may enter:** a
+  gate put on the invite CREATE (ADR 0029's friends-only, not-blocked household invite) says nothing
+  about the token-join branch, which reaches the same `memberUids` with no invite at all. Enumerate
+  every growth branch and ask whether the new entry condition holds there too (live PoC, archive 2026-11-03).
 - **`old.hasAll(new.removeAll([addedUid]))` is NOT a sound containment check, and it was the recommended form
   here until 2026-09-09.** A DUPLICATE defeats it: `new = [self, self]` against `old = [owner]` satisfies it
   — `removeAll` strips both copies and `hasAll([])` is true — while the size clause reads `2 == 1 + 1` and the
@@ -121,6 +129,12 @@ Read only when the staged diff touches this chapter's paths (see .claude/shared-
   `exists()` when the proof is deleted in the SAME batch; `existsAfter()` when created together (BIN-20).
   Rules gate KEYS, not field COMPLETENESS. A member-create rule's `get(group)` DOES see a doc written earlier
   in the batch.
+- **A NEW rule that proves group membership must read `groups/{gid}.memberUids`, never `exists(members/{x})`.**
+  The leave branch shrinks the array and touches no member row, and afterwards the row's delete rule no longer
+  admits its owner, so a raw-SDK leaver keeps a permanent row (doc-without-array, the escalation direction the
+  server chapter names). Found in review of Tillsammans-inbjudan (2026-11-03, emulator PoC; archive entry):
+  `sharesSessionGroup` as first written let an ex-member invite non-friend former group-mates. One `get()` of
+  the group doc is also cheaper than two `exists()`.
 
 ## Server-only collections, public rollups, external input
 - A top-level collection with NO rules block is default-denied — safe ONLY because this file has no

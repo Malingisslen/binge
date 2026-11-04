@@ -17,6 +17,7 @@ import { FRIEND_FAILURE_TEXT } from '@/lib/friendActionText';
 import type { FriendRequest } from '@/lib/firebase/friends';
 import { Button } from '@/components/ui/Button';
 import { shownSenderName } from '@/lib/friendName';
+import { SessionInvitePopoverRow } from '@/components/social/SessionInviteRow';
 
 // Right-hand cluster of the new topbar: sessions popover, notifications bell
 // popover, and the user avatar (or "Logga in" if signed out). Extracted from
@@ -27,8 +28,8 @@ export default function TopbarActions() {
   const { user, uid, loading: authLoading, signOut, markNotificationsSeen } = useAuth();
   const goToLogin = useSignedOutRedirect();
   const {
-    notifications, friendRequests, recentPicks,
-    unreadCount, friendRequestsCount, providerUnreadCount, recentPicksCount,
+    notifications, friendRequests, sessionInvites, recentPicks,
+    unreadCount, friendRequestsCount, sessionInvitesCount, providerUnreadCount, recentPicksCount,
     markRead, markAllRead,
   } = useNotifications();
   const { acceptFriendRequest, declineFriendRequest } = useFriendActions();
@@ -59,8 +60,12 @@ export default function TopbarActions() {
     }
   };
 
+  // An invite is shown from sessionInvites, not from its inbox card. The card can outlive
+  // an answered invite and an invite can arrive before its card, so the card counts for
+  // nothing here, as it does in notificationSections and providerUnreadCount.
   const hasNotifications =
-    friendRequestsCount > 0 || recentPicksCount > 0 || notifications.length > 0;
+    friendRequestsCount > 0 || recentPicksCount > 0 || sessionInvitesCount > 0
+    || notifications.some(n => n.kind !== 'session_invite');
   // G7: badgen visar antal *sessioner* med osvepta kandidater — inte summan
   // av kvarvarande svep (29 osvepta i en session ska inte se ut som 29
   // notiser). Per-session-svepräknarna finns kvar i popover-raderna.
@@ -124,6 +129,21 @@ export default function TopbarActions() {
           </button>
           {bellOpen && (
             <div className="topbar-popover wide" role="dialog" aria-label="Notiser">
+              {sessionInvitesCount > 0 && (
+                <>
+                  <div className="popover-head">
+                    Inbjudningar till Tillsammans ({sessionInvitesCount})
+                  </div>
+                  {sessionInvites.slice(0, 5).map(i => (
+                    <SessionInvitePopoverRow key={i.id} invite={i} onNavigate={() => setBellOpen(false)} />
+                  ))}
+                  {sessionInvitesCount > 5 && (
+                    <Link href="/my/friends/" onClick={() => setBellOpen(false)} className="popover-row">
+                      <div className="popover-row-meta">Visa alla under Vänner</div>
+                    </Link>
+                  )}
+                </>
+              )}
               {friendRequestsCount > 0 && (
                 <>
                   <div className="popover-head">

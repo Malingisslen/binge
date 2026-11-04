@@ -109,6 +109,8 @@ export interface Group {
   inviteTokenRotatedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  /** ADR 0029: 'household' for the people who live together; null for any other group. */
+  kind: 'household' | null;
 }
 
 export interface GroupMember {

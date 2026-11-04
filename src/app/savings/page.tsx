@@ -275,7 +275,7 @@ function SavingsContent() {
       <>
         <PageHead switcher={switcher} crumb="Streamingrådgivaren · Hushållet" />
         <div style={{ marginTop: 22 }}>
-          <HouseholdMode key={household.groupId} groupId={household.groupId} groupName={group?.name ?? 'gruppen'} />
+          <HouseholdMode key={household.groupId} groupId={household.groupId} groupName={group?.name ?? 'gruppen'} isHousehold={group?.kind === 'household'} />
         </div>
       </>
     );

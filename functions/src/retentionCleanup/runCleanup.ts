@@ -46,6 +46,7 @@ import {
 } from './logic';
 import { isStaleFriendRequestPushMarker } from '../friendRequestPush/logic';
 import { isStaleFollowPushMarker } from '../followPush/logic';
+import { isStaleSessionInvite, isStaleSessionInvitePushMarker } from '../sessionInvitePush/logic';
 import {
   FIELD_OWNED_CATEGORIES,
   withinDocumentBudget,
@@ -80,6 +81,10 @@ export type ScanKind =
   | 'friendRequestPushMarkers'
   // "Någon följer dig nu": `followPushes/{id}`, the follow-notice brake, reaped on `lastPushedAt`.
   | 'followPushMarkers'
+  // Bjud in till Tillsammans: `users/{recipient}/sessionInvites/{id}`, reaped on `createdAt`.
+  | 'sessionInvites'
+  // Bjud in till Tillsammans: `sessionInvitePushes/{recipient}_{sender}`, reaped on `lastPushedAt`.
+  | 'sessionInvitePushMarkers'
   | 'fcmTokens'
   | 'usernames'
   // BIN-1023: `orphanWatch/{uid}` holds `firstSeenAt` — the run-to-run memory
@@ -290,6 +295,10 @@ export interface CleanupSummary {
   deletedFriendRequestPushMarkers: number;
   staleFollowPushMarkers: number;
   deletedFollowPushMarkers: number;
+  staleSessionInvites: number;
+  deletedSessionInvites: number;
+  staleSessionInvitePushMarkers: number;
+  deletedSessionInvitePushMarkers: number;
   revokedPushTokens: number;
   deletedRevokedTokens: number;
   skippedAuthBatches: number;
@@ -993,6 +1002,8 @@ export async function runRetentionCleanup(io: CleanupIo): Promise<CleanupSummary
     staleReleaseMarkers,
     staleFriendRequestPushMarkers,
     staleFollowPushMarkers,
+    staleSessionInvites,
+    staleSessionInvitePushMarkers,
     revokedPushTokens,
   ] =
     await Promise.all([
@@ -1026,6 +1037,16 @@ export async function runRetentionCleanup(io: CleanupIo): Promise<CleanupSummary
         io.log.error('retentionCleanup: followPushMarkers scan failed', err);
         return [] as string[];
       }),
+      collectStaleByField(io, 'sessionInvites', 'createdAt', isStaleSessionInvite, nowMs).catch((err) => {
+        io.log.error('retentionCleanup: sessionInvites scan failed', err);
+        return [] as string[];
+      }),
+      collectStaleByField(
+        io, 'sessionInvitePushMarkers', 'lastPushedAt', isStaleSessionInvitePushMarker, nowMs,
+      ).catch((err) => {
+        io.log.error('retentionCleanup: sessionInvitePushMarkers scan failed', err);
+        return [] as string[];
+      }),
       collectRevokedPushTokens(io).catch((err) => {
         io.log.error('retentionCleanup: revoked push token scan failed', err);
         // -1, not 0: the whole scan died, so nothing was checked. A 0 here would
@@ -1042,6 +1063,8 @@ export async function runRetentionCleanup(io: CleanupIo): Promise<CleanupSummary
   const deletedReleaseMarkers = await deleteInBatches(io, staleReleaseMarkers);
   const deletedFriendRequestPushMarkers = await deleteInBatches(io, staleFriendRequestPushMarkers);
   const deletedFollowPushMarkers = await deleteInBatches(io, staleFollowPushMarkers);
+  const deletedSessionInvites = await deleteInBatches(io, staleSessionInvites);
+  const deletedSessionInvitePushMarkers = await deleteInBatches(io, staleSessionInvitePushMarkers);
   const deletedRevokedTokens = await deleteInBatches(io, revokedPushTokens.paths);
 
   // The sweeps above are done; say so BEFORE the ones below start. Those reach
@@ -1063,6 +1086,10 @@ export async function runRetentionCleanup(io: CleanupIo): Promise<CleanupSummary
     deletedFriendRequestPushMarkers,
     staleFollowPushMarkers: staleFollowPushMarkers.length,
     deletedFollowPushMarkers,
+    staleSessionInvites: staleSessionInvites.length,
+    deletedSessionInvites,
+    staleSessionInvitePushMarkers: staleSessionInvitePushMarkers.length,
+    deletedSessionInvitePushMarkers,
     revokedPushTokens: revokedPushTokens.paths.length,
     deletedRevokedTokens,
   });
@@ -1175,6 +1202,10 @@ export async function runRetentionCleanup(io: CleanupIo): Promise<CleanupSummary
     deletedFriendRequestPushMarkers,
     staleFollowPushMarkers: staleFollowPushMarkers.length,
     deletedFollowPushMarkers,
+    staleSessionInvites: staleSessionInvites.length,
+    deletedSessionInvites,
+    staleSessionInvitePushMarkers: staleSessionInvitePushMarkers.length,
+    deletedSessionInvitePushMarkers,
     revokedPushTokens: revokedPushTokens.paths.length,
     deletedRevokedTokens,
     // >0: some uids went unchecked. -1: the scan itself died, nothing was checked

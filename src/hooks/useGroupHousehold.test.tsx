@@ -160,3 +160,51 @@ describe('useGroupHousehold — besoksrefresh', () => {
     expect(hoisted.setHouseholdContribution).not.toHaveBeenCalled();
   });
 });
+
+// ADR 0029: in a household the titles being watched are shared too, and only under the
+// household consent text.
+describe('useGroupHousehold — titlar i ett hushall (ADR 0029)', () => {
+  const series = {
+    tmdbId: 1399, mediaType: 'tv', title: 'Severance', status: 'mina', dropped: false,
+    visibility: null, lastWatchedEpisode: 3, updatedAt: new Date('2026-10-30T10:00:00Z'),
+    providers: [], subscriptionProviders: [], nextAirDate: null,
+  };
+
+  it('en delare utan watchingNow maste dela om i ett hushall', () => {
+    const { result } = renderHook(() => useGroupHousehold('g1', true));
+    act(() => emit([ownContribution({ soonProviderIds: [] })]));
+    expect(result.current.needsReshare).toBe(true);
+  });
+
+  it('samma delare i en vanlig grupp behover inte dela om', () => {
+    const { result } = renderHook(() => useGroupHousehold('g1', false));
+    act(() => emit([ownContribution({ soonProviderIds: [] })]));
+    expect(result.current.needsReshare).toBe(false);
+  });
+
+  it('optIn i ett hushall skriver titlarna', async () => {
+    hoisted.watchlist = { items: [series], loading: false };
+    const { result } = renderHook(() => useGroupHousehold('g1', true));
+    act(() => emit([]));
+    await act(async () => { await result.current.optIn(); });
+    expect(lastPayload().watchingNow).toEqual([{ id: 1399, type: 'tv', title: 'Severance' }]);
+  });
+
+  it('optIn i en vanlig grupp skriver aldrig titlar', async () => {
+    hoisted.watchlist = { items: [series], loading: false };
+    const { result } = renderHook(() => useGroupHousehold('g1', false));
+    act(() => emit([]));
+    await act(async () => { await result.current.optIn(); });
+    expect(lastPayload()).not.toHaveProperty('watchingNow');
+  });
+
+  it('en titel som blivit Privat efter delningen skrivs bort vid nasta besok', () => {
+    hoisted.watchlist = { items: [{ ...series, visibility: 'private' }], loading: false };
+    renderHook(() => useGroupHousehold('g1', true));
+    act(() => emit([ownContribution({
+      soonProviderIds: [], watchingNow: [{ id: 1399, type: 'tv', title: 'Severance' }],
+    })]));
+    expect(hoisted.setHouseholdContribution).toHaveBeenCalledTimes(1);
+    expect(lastPayload().watchingNow).toEqual([]);
+  });
+});

@@ -103,6 +103,10 @@ export async function collectDeletionRefs(
   snaps.groupInvitesSnap.docs.forEach(d => refs.push(d.ref));
   // 2e. Tips vänner skickat till mig.
   snaps.tipsSnap.docs.forEach(d => refs.push(d.ref));
+  // 2f. Inbjudningar till Tillsammans som skickats till mig. Spärrmarkörerna i
+  //     `sessionInvitePushes` och inbjudningarna jag skickat raderas av
+  //     `handOverOwnedGroups`, som kör före kaskaden; klienten får inte skriva dem.
+  snaps.sessionInvitesSnap.docs.forEach(d => refs.push(d.ref));
 
   // 3. My reviews + all their subcollections (likes + comments on my reviews).
   for (const reviewDoc of snaps.reviewsSnap.docs) {

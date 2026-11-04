@@ -26,4 +26,17 @@ describe('notificationSections', () => {
     expect(sections.map((s) => s.heading)).toEqual(['Streamingnyheter']);
     expect(sections[0].items).toHaveLength(10);
   });
+
+  // Bjud in till Tillsammans: the invite is listed live with its buttons, so its card
+  // would show the same invite twice.
+  it('leaves session-invite cards out of both sections, before the ten are counted', () => {
+    const cards = [
+      card('i1', 'session_invite'),
+      ...Array.from({ length: 10 }, (_, i) => card(`n${i}`, 'availability')),
+    ];
+    const sections = notificationSections(cards);
+    expect(sections.flatMap((s) => s.items.map((n) => n.id))).not.toContain('i1');
+    expect(sections[0].items).toHaveLength(10);
+    expect(notificationSections([card('i1', 'session_invite')])).toEqual([]);
+  });
 });

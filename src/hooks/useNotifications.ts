@@ -7,6 +7,7 @@ import { toDate } from '@/lib/firebase/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFriendRequests } from '@/hooks/useFriends';
 import { useBlockedUsers } from '@/hooks/useBlockedUsers';
+import { useSessionInvites } from '@/hooks/useSessionInvites';
 import { getRecentSessionPicksAcrossGroups } from '@/lib/firebase/groups';
 import { captureError } from '@/lib/sentry';
 import { markOneRead, markManyRead } from './useNotifications.helpers';
@@ -25,7 +26,9 @@ export interface AppNotification {
   // tmdbId-formad (tmdbId=0) — en rollup över flera titlar. 'system' är en notis
   // som inte handlar om en titel — INTE tmdbId-formad; bär `body`, och
   // `actionUrl` när det finns något att öppna.
-  kind: 'provider_available' | 'episode_release' | 'digital_release' | 'weekly_digest' | 'system' | 'episode_digest';
+  // 'session_invite' is the card onSessionInviteCreate writes. The bell does not list
+  // it: the invite itself, with its buttons, is read live from sessionInvites.
+  kind: 'provider_available' | 'episode_release' | 'digital_release' | 'weekly_digest' | 'system' | 'episode_digest' | 'session_invite';
   providerId: number | null;
   providerName: string | null;
   episodeCode: string | null;
@@ -77,6 +80,8 @@ export function useNotifications() {
   // bell, the same filter the Vänner page's requests tab uses (BIN-1341).
   const { isBlocked } = useBlockedUsers();
   const friendRequests = allFriendRequests.filter(r => !isBlocked(r.fromUid));
+  const { data: allSessionInvites = [] } = useSessionInvites();
+  const sessionInvites = allSessionInvites.filter(i => !isBlocked(i.fromUid));
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
   // Subscribera på provider-availability-notifs (legacy).
@@ -123,6 +128,22 @@ export function useNotifications() {
             summary: data.summary ?? '',
             episodes: Array.isArray(data.episodes) ? (data.episodes as DigestEpisode[]) : [],
             actionUrl: typeof data.actionUrl === 'string' ? data.actionUrl : '/my/igar/',
+            read: data.read ?? false,
+            createdAt: toDate(data.createdAt),
+          } as AppNotification;
+        }
+        if (data.kind === 'session_invite') {
+          return {
+            id: d.id,
+            tmdbId: 0,
+            mediaType: 'movie',
+            title: data.title ?? 'Inbjudan till Tillsammans',
+            kind: 'session_invite',
+            providerId: null,
+            providerName: null,
+            episodeCode: null,
+            body: data.body ?? '',
+            actionUrl: typeof data.actionUrl === 'string' ? data.actionUrl : undefined,
             read: data.read ?? false,
             createdAt: toDate(data.createdAt),
           } as AppNotification;
@@ -214,17 +235,22 @@ export function useNotifications() {
   // Sammansatt unread-räkning för bell-badge:n. Friend requests är action-
   // required (måste accepteras/avböjas) → räknas alltid. Recent picks +
   // provider-availability räknas tills användaren öppnar dropdown:n.
+  // Session invites count like friend requests, as long as they wait for an answer.
+  // Their cards are left out of the unread count, or one invite would count twice.
   const friendRequestsCount = friendRequests.length;
-  const providerUnreadCount = notifications.filter(n => !n.read).length;
+  const sessionInvitesCount = sessionInvites.length;
+  const providerUnreadCount = notifications.filter(n => !n.read && n.kind !== 'session_invite').length;
   const recentPicksCount = recentPicks.length;
-  const unreadCount = friendRequestsCount + providerUnreadCount + recentPicksCount;
+  const unreadCount = friendRequestsCount + sessionInvitesCount + providerUnreadCount + recentPicksCount;
 
   return {
     notifications,
     friendRequests,
+    sessionInvites,
     recentPicks,
     unreadCount,
     friendRequestsCount,
+    sessionInvitesCount,
     providerUnreadCount,
     recentPicksCount,
     markRead,

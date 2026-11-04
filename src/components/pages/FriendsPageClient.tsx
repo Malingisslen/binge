@@ -23,6 +23,9 @@ import { FriendsFeed } from '@/components/social/FriendsFeed';
 import { shownSenderName } from '@/lib/friendName';
 import { useTips } from '@/hooks/useTips';
 import { TipRow } from '@/components/social/TipRow';
+import HouseholdCallout from '@/components/household/HouseholdCallout';
+import { useSessionInvites } from '@/hooks/useSessionInvites';
+import { SessionInviteRow } from '@/components/social/SessionInviteRow';
 
 type Tab = 'feed' | 'friends' | 'following' | 'followers';
 
@@ -34,6 +37,7 @@ export default function FriendsPageClient() {
   const { data: allRequests = [], isLoading: requestsLoading } = useFriendRequests();
   const { data: allSent = [] } = useSentFriendRequests();
   const { data: allTips = [] } = useTips();
+  const { data: allInvites = [] } = useSessionInvites();
   const { user } = useAuth();
   const { show: toast } = useToast();
   const [tab, setTab] = useState<Tab>('feed');
@@ -46,6 +50,7 @@ export default function FriendsPageClient() {
   const requests = allRequests.filter(r => !isBlocked(r.fromUid));
   const sent = allSent.filter(r => !isBlocked(r.toUid));
   const tips = allTips.filter(t => !isBlocked(t.fromUid));
+  const invites = allInvites.filter(i => !isBlocked(i.fromUid));
   const following = allFollowing.filter(u => !isBlocked(u.uid));
   const followers = allFollowers.filter(u => !isBlocked(u.uid));
 
@@ -89,9 +94,16 @@ export default function FriendsPageClient() {
         )}
       />
 
-      {(requests.length > 0 || sent.length > 0 || tips.length > 0) && (
+      <HouseholdCallout />
+
+      {(requests.length > 0 || sent.length > 0 || tips.length > 0 || invites.length > 0) && (
         <section aria-label="Väntar på dig" className="bg-acc-soft border border-acc rounded-md px-3 py-2 mb-4">
           <h2 className="text-xs font-semibold text-acc-deep mb-1">Väntar på dig</h2>
+          {invites.length > 0 && (
+            <ul className="divide-y divide-rule-2" aria-label="Inbjudningar till Tillsammans">
+              {invites.map(i => <SessionInviteRow key={i.id} invite={i} />)}
+            </ul>
+          )}
           {requests.length > 0 && (
             <ul className="divide-y divide-rule-2">
               {requests.map(r => <RequestRow key={r.fromUid} request={r} />)}

@@ -184,6 +184,12 @@ export const onSessionPickCreate = onDocumentCreated(
 // och push till mottagaren, bakom spärrarna i followPush/logic.ts.
 export { onFollowCreate } from './followPush';
 
+// ── Bjud in till Tillsammans ─────────────────────────────────────────────────
+// onSessionInviteCreate: users/{recipientUid}/sessionInvites/{inviteId} skapad →
+// inbox-kort och neutral push till mottagaren, bakom spärrarna i
+// sessionInvitePush/logic.ts.
+export { onSessionInviteCreate } from './sessionInvitePush';
+
 // ── Insikter (intern analys-dashboard) ───────────────────────────────────────
 // rollupInsights: schemalagd Firestore-aggregering → insights/daily.
 // apiInsights: HTTP-endpoint bakom /api/insights (admin-token + eventStats-summor).
@@ -394,3 +400,4 @@ export { leavingRollup } from './leavingRollup';
 // BIN-1471: kodinloggning för TV-appen. TV-principalen och reglerna: se tvPair/index.ts.
 export { tvPairStart, tvPairApprove, tvPairPoll } from './tvPair';
 export { tvDeviceDeleted, tvOwnerDeleted } from './tvPair/cleanup';
+export { tvOverview } from './tvOverview';

@@ -164,7 +164,7 @@ export function GroupSettingsModal({
             >
               <option value="least_misery">Ingen hatar det</option>
               <option value="average">Flest positiva</option>
-              <option value="fair">Turordning</option>
+              <option value="fair">Någons favorit</option>
             </select>
           </div>
         </div>

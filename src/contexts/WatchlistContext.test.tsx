@@ -46,8 +46,10 @@ vi.mock('@/lib/watchlistWrites', async (importOriginal) => {
 // syncProgressToGroups: fire-and-forget grupp-synk som updateProgress kör via
 // dynamisk import — mockad så vi kan verifiera att rätt status forwardas (BIN-332).
 const syncProgressToGroups = vi.fn();
+const removeTitleFromHouseholdWatching = vi.fn((..._args: unknown[]) => Promise.resolve());
 vi.mock('@/lib/firebase/groups', () => ({
   syncProgressToGroups: (...args: unknown[]) => syncProgressToGroups(...args),
+  removeTitleFromHouseholdWatching: (...args: unknown[]) => removeTitleFromHouseholdWatching(...args),
 }));
 
 // firebase/utils toDate: passthrough.
@@ -3454,6 +3456,44 @@ describe('WatchlistContext — the create-floor refusal is swallowed, nothing el
 
     await act(async () => { await expect(run()).resolves.toBe('written'); });
     expect(captureError).not.toHaveBeenCalled();
+  });
+
+  // ADR 0029: the household consent text promises a title marked Privat is not shared.
+  it('marking a title Privat removes it from the household lists; other changes do not', async () => {
+    await mountSeeded([seedDoc({ tmdbId: 5, mediaType: 'tv', status: 'mina' })]);
+    removeTitleFromHouseholdWatching.mockClear();
+    await act(async () => { await updateVisibilityRef!('tv', 5, 'public'); });
+    await act(async () => { await updateVisibilityRef!('tv', 5, null); });
+    expect(removeTitleFromHouseholdWatching).not.toHaveBeenCalled();
+    await act(async () => { await updateVisibilityRef!('tv', 5, 'private'); });
+    await vi.waitFor(() => expect(removeTitleFromHouseholdWatching).toHaveBeenCalledWith(expect.any(String), 'tv', 5));
+  });
+
+  it('a failed household scrub is reported and does not fail the Privat write', async () => {
+    await mountSeeded([seedDoc({ tmdbId: 5, mediaType: 'tv', status: 'mina' })]);
+    removeTitleFromHouseholdWatching.mockRejectedValueOnce(new Error('unavailable'));
+    await act(async () => { await expect(updateVisibilityRef!('tv', 5, 'private')).resolves.toBe('written'); });
+    await vi.waitFor(() => expect(captureError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'unavailable' }),
+      expect.objectContaining({ scope: 'household', kind: 'privat-scrub' }),
+    ));
+  });
+
+  it('marking a film Privat costs no household reads: only series are ever listed', async () => {
+    await mountSeeded([seedDoc({ tmdbId: 6, mediaType: 'movie', status: 'sedd' })]);
+    removeTitleFromHouseholdWatching.mockClear();
+    await act(async () => { await updateVisibilityRef!('movie', 6, 'private'); });
+    await new Promise(r => setTimeout(r, 0));
+    expect(removeTitleFromHouseholdWatching).not.toHaveBeenCalled();
+  });
+
+  it('a refused Privat write leaves the household lists alone', async () => {
+    await mountSeeded([seedDoc({ tmdbId: 5, mediaType: 'tv', status: 'mina' })]);
+    removeTitleFromHouseholdWatching.mockClear();
+    setDoc.mockRejectedValueOnce(denied());
+    await act(async () => { await expect(updateVisibilityRef!('tv', 5, 'private')).resolves.toBe('refused'); });
+    await new Promise(r => setTimeout(r, 0));
+    expect(removeTitleFromHouseholdWatching).not.toHaveBeenCalled();
   });
 
   it('a refused status write does NOT report status_changed to analytics', async () => {

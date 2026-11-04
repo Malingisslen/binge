@@ -52,7 +52,7 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
     id: 8, name: 'Netflix', shortName: 'Netflix', color: '#E50914', type: 'flatrate', defaultMonthlyCost: 169,
     // Säg upp: https://help.netflix.com/sv/node/407 (läst 2026-10-06)
     manageUrl: 'https://www.netflix.com/cancelplan', manageUrlVerifiedDate: '2026-11-04',
-    priceVerifiedDate: '2026-07-02',
+    priceVerifiedDate: '2026-11-04',
     // 175 = "Netflix Kids", TMDB:s egen variantpost för samma abonnemang — inte en egen
     // tjänst. Utan aliaset renderas en titel TMDB märker med 175 som en okänd leverantör.
     // Id:t kommer ur BIN-1073:s svep av /watch/providers/movie?watch_region=SE 2026-09-02.
