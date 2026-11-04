@@ -10,6 +10,7 @@ import { generateSecureToken } from '@/lib/firebase/utils';
 import { posterUrl } from '@/lib/tmdb/client';
 import { SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
 import { scoreCandidates, pickMatches, nextCandidate, participantSwipeProgress, candidateKey } from '@/lib/together/matching';
+import { nextMatchAnnouncement, INITIAL_MATCH_ANNOUNCEMENT_STATE } from '@/lib/together/matchAnnouncement';
 import { useSessionTasteVectors } from '@/hooks/useSessionTasteVectors';
 import { computeSessionProviders } from '@/lib/together/candidates';
 import { isWatchableBy, whoCanWatch } from '@/lib/together/watchable';
@@ -28,6 +29,8 @@ import { fieldClass } from '@/components/ui/Field';
 import { cardClass } from '@/components/ui/Card';
 import { tagClass } from '@/components/ui/Badge';
 import { formatDecimal } from '@/lib/formatDecimal';
+import { VetoConfirmDialog, VETO_TRIGGER_ATTR } from '@/components/together/VetoConfirmDialog';
+import { ShareSessionButton } from '@/components/together/ShareSessionButton';
 
 export default function TillsammansSessionPageClient({ id }: { id: string }) {
   const { session, participants, swipes, loading, notFound, expired } = useSession(id);
@@ -219,7 +222,7 @@ function JoinSessionForm({
   );
 }
 
-function SessionMain({
+export function SessionMain({
   sessionId,
   session,
   participants,
@@ -244,6 +247,8 @@ function SessionMain({
   const [reVote, setReVote] = useState<SessionCandidate | null>(null);
   const [voteError, setVoteError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const [matchAnnouncement, setMatchAnnouncement] = useState('');
+  const matchState = useRef(INITIAL_MATCH_ANNOUNCEMENT_STATE);
 
   // Re-evaluera "live"-statusen var 3:e sekund så banner blinkar av/på i takt
   // med att deltagare går idle. onSnapshot räcker inte — lastActiveAt ändras
@@ -293,6 +298,14 @@ function SessionMain({
     () => pickMatches(scored, participants.length),
     [scored, participants.length],
   );
+
+  // Swipes load after the session doc, so matches that exist when the page opens appear a moment
+  // later; the baseline only counts as set once swipes have arrived, so those are not announced.
+  useEffect(() => {
+    const result = nextMatchAnnouncement(matchState.current, matches, swipes.length);
+    matchState.current = result.state;
+    if (result.announcement) setMatchAnnouncement(result.announcement);
+  }, [matches, swipes.length]);
 
   const next = useMemo(
     () => nextCandidate({ candidates: filteredCandidates, swipes, participantId: me.id }),
@@ -376,11 +389,12 @@ function SessionMain({
           <Button
             type="button"
             onClick={copyShare}
-            variant="ghost" size="xs" className="flex items-center gap-1"
+            variant="ghost" size="xs" className="flex items-center gap-1 min-h-11"
           >
             <Copy size={10} />
             {shareCopied ? 'Kopierad!' : 'Kopiera'}
           </Button>
+          <ShareSessionButton url={shareUrl} />
         </div>
         <div className="px-3 py-1.5 flex items-center gap-2 flex-wrap text-xs">
           <Eyebrow as="span">Deltagare:</Eyebrow>
@@ -394,12 +408,22 @@ function SessionMain({
                 className={isMe ? tagClass('acc', 'font-semibold') : tagClass('ink')}
                 title={`${prog.done}/${prog.total} svepningar${isLive ? ' · aktiv nu' : ''}`}
               >
-                {isLive && <span className="w-[5px] h-[5px] rounded-full bg-season-done" />}
+                {isLive && (
+                  <>
+                    <span className="w-[5px] h-[5px] rounded-full bg-season-done" aria-hidden="true" />
+                    <span className="sr-only">aktiv nu, </span>
+                  </>
+                )}
                 {p.displayName}{p.isHost ? ' ★' : ''} <span className="text-ink-3">({prog.done}/{prog.total})</span>
               </span>
             );
           })}
         </div>
+        {tasteByPid.size > 0 && (
+          <div className="px-3 py-1.5 border-t border-rule-2 text-xxs text-ink-3">
+            Smakpoängen bygger bara på det vännerna delar offentligt, så den kan vara ofullständig.
+          </div>
+        )}
         <div className="px-3 py-1.5 border-t border-rule-2 flex items-center justify-between text-xxs text-ink-3">
           <span>
             Läge: {session.config.providerMode === 'intersect' ? 'Alla har' : 'Någon har'} ·
@@ -408,12 +432,16 @@ function SessionMain({
           </span>
           <div className="flex gap-0.5">
             <button
+              type="button"
+              aria-pressed={view === 'card'}
               onClick={() => setView('card')}
               className={`px-2 py-0.5 rounded-sm border text-xxs flex items-center gap-1 ${view === 'card' ? 'bg-acc-deep/[0.1] border-acc-deep text-acc-deep' : 'bg-surface border-rule text-ink-2'}`}
             >
               <LayoutGrid size={10} /> Kort
             </button>
             <button
+              type="button"
+              aria-pressed={view === 'table'}
               onClick={() => setView('table')}
               className={`px-2 py-0.5 rounded-sm border text-xxs flex items-center gap-1 ${view === 'table' ? 'bg-acc-deep/[0.1] border-acc-deep text-acc-deep' : 'bg-surface border-rule text-ink-2'}`}
             >
@@ -431,8 +459,11 @@ function SessionMain({
         <MatchList matches={matches} session={session} participants={participants} />
       )}
 
+      <div className="sr-only" aria-live="polite" aria-atomic="true">{matchAnnouncement}</div>
+      <div className="sr-only" aria-live="polite" aria-atomic="true">{voteError ?? ''}</div>
+
       {voteError && (
-        <div role="alert" className="mb-2 px-3 py-2 text-xs text-danger-ink bg-danger-soft border border-danger/30 rounded-sm">{voteError}</div>
+        <div className="mb-2 px-3 py-2 text-xs text-danger-ink bg-danger-soft border border-danger/30 rounded-sm">{voteError}</div>
       )}
 
       {filteredCandidates.length === 0 ? (
@@ -451,6 +482,7 @@ function SessionMain({
               participants={participants}
               onVote={onVote}
               progress={progress}
+              myVote={scored.find(r => candidateKey(r.candidate) === candidateKey(cardCandidate))?.votes[me.id]}
               vetoConfirm={!!vetoConfirm && candidateKey(vetoConfirm) === candidateKey(cardCandidate)}
               onCancelVeto={() => setVetoConfirm(null)}
               disabled={saving}
@@ -491,14 +523,15 @@ function SessionMain({
   );
 }
 
-function SwipeCard({
-  cand, me, participants, onVote, progress, vetoConfirm, onCancelVeto, disabled,
+export function SwipeCard({
+  cand, me, participants, onVote, progress, myVote, vetoConfirm, onCancelVeto, disabled,
 }: {
   cand: SessionCandidate;
   me: SessionParticipant;
   participants: SessionParticipant[];
   onVote: (c: SessionCandidate, v: VoteKind) => void;
   progress: { done: number; total: number };
+  myVote?: VoteKind;
   vetoConfirm: boolean;
   onCancelVeto: () => void;
   disabled: boolean;
@@ -531,49 +564,35 @@ function SwipeCard({
         <span>Veto kvar: <b className={me.vetoRemaining > 0 ? 'text-ink' : 'text-ink-3'}>{me.vetoRemaining}</b></span>
       </div>
       {vetoConfirm ? (
-        <div className="px-3 py-3 border-t border-danger bg-danger-soft text-xs">
-          <div className="font-semibold text-danger-ink mb-1">Lägg ett veto?</div>
-          <div className="text-ink-2 mb-2">Veto dödar den här titeln definitivt. Du kan använda det bara en gång per session.</div>
-          <div className="flex gap-2">
-            <Button
-              onClick={() => onVote(cand, 'veto')}
-              disabled={disabled}
-              variant="danger" size="sm"
-            >
-              Ja, veto
-            </Button>
-            <Button
-              onClick={onCancelVeto}
-              variant="ghost" size="sm"
-            >
-              Avbryt
-            </Button>
-          </div>
-        </div>
+        <VetoConfirmDialog onConfirm={() => onVote(cand, 'veto')} onCancel={onCancelVeto} disabled={disabled} />
       ) : (
         <div className="px-3 py-2 border-t border-rule-2 flex gap-2">
           <Button
             onClick={() => onVote(cand, 'no')}
             disabled={disabled}
-            variant="ghost" size="sm" className="flex-1 flex items-center justify-center gap-1"
+            aria-pressed={myVote === 'no'}
+            variant="ghost" size="sm" className="flex-1 flex items-center justify-center gap-1 min-h-11"
           >
-            <X size={14} /> Nej
+            <X size={14} aria-hidden="true" /> Nej
           </Button>
           <Button
             onClick={() => onVote(cand, 'yes')}
             disabled={disabled}
-            variant="acc" size="sm" className="flex-1 flex items-center justify-center gap-1"
+            aria-pressed={myVote === 'yes'}
+            variant="acc" size="sm" className="flex-1 flex items-center justify-center gap-1 min-h-11"
           >
-            <Check size={14} /> Ja
+            <Check size={14} aria-hidden="true" /> Ja
           </Button>
           {me.vetoRemaining > 0 && (
             <Button
               onClick={() => onVote(cand, 'veto')}
               disabled={disabled}
-              variant="danger-ghost" size="sm" className="justify-center"
+              aria-pressed={myVote === 'veto'}
+              {...{ [VETO_TRIGGER_ATTR]: '' }}
+              variant="danger-ghost" size="sm" className="justify-center min-h-11"
               title="Dödar denna titel definitivt"
             >
-              <Ban size={14} /> Veto
+              <Ban size={14} aria-hidden="true" /> Veto
             </Button>
           )}
         </div>
@@ -582,7 +601,7 @@ function SwipeCard({
   );
 }
 
-function CandidateTable({
+export function CandidateTable({
   scored, me, onVote, armedVetoKey, disabled,
 }: {
   scored: ReturnType<typeof scoreCandidates>;
@@ -619,23 +638,26 @@ function CandidateTable({
                   <div className="inline-flex gap-0.5">
                     <button
                       onClick={() => onVote(r.candidate, 'no')}
+                      aria-pressed={myVote === 'no'}
                       disabled={disabled}
-                      className={`px-1.5 py-1.5 min-h-[32px] rounded-sm border text-xxs cursor-pointer disabled:opacity-50 ${myVote === 'no' ? 'border-acc-deep bg-acc-deep/[0.1] text-acc-deep' : 'border-rule bg-surface text-ink-2'}`}
+                      className={`px-1.5 py-1.5 min-h-11 rounded-sm border text-xxs cursor-pointer disabled:opacity-50 ${myVote === 'no' ? 'border-acc-deep bg-acc-deep/[0.1] text-acc-deep' : 'border-rule bg-surface text-ink-2'}`}
                     >
                       Nej
                     </button>
                     <button
                       onClick={() => onVote(r.candidate, 'yes')}
+                      aria-pressed={myVote === 'yes'}
                       disabled={disabled}
-                      className={`px-1.5 py-1.5 min-h-[32px] rounded-sm border text-xxs cursor-pointer disabled:opacity-50 ${myVote === 'yes' ? 'border-acc-deep bg-acc-deep text-on-acc' : 'border-rule bg-surface text-ink-2'}`}
+                      className={`px-1.5 py-1.5 min-h-11 rounded-sm border text-xxs cursor-pointer disabled:opacity-50 ${myVote === 'yes' ? 'border-acc-deep bg-acc-deep text-on-acc' : 'border-rule bg-surface text-ink-2'}`}
                     >
                       Ja
                     </button>
                     {(me.vetoRemaining > 0 || myVote === 'veto') && (
                       <button
                         onClick={() => onVote(r.candidate, 'veto')}
+                        aria-pressed={myVote === 'veto'}
                         disabled={disabled}
-                        className={`px-1.5 py-1.5 min-h-[32px] rounded-sm border text-xxs cursor-pointer disabled:opacity-50 ${myVote === 'veto' ? 'border-danger bg-danger-soft text-danger-ink' : 'border-rule bg-surface text-ink-3'}`}
+                        className={`px-1.5 py-1.5 min-h-11 rounded-sm border text-xxs cursor-pointer disabled:opacity-50 ${myVote === 'veto' ? 'border-danger bg-danger-soft text-danger-ink' : 'border-rule bg-surface text-ink-3'}`}
                       >
                         {armedVetoKey === candidateKey(r.candidate) ? 'Säker? Veto' : 'Veto'}
                       </button>
