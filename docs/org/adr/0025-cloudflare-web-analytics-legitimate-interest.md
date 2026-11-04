@@ -2,7 +2,7 @@
 
 - **Date:** 2026-10-29
 - **Status:** Accepted
-- **Trigger:** plan `tasks/insikter-plan-2026-10-28.md`, section "Cloudflare Web Analytics"; blind critique #5 Legal/GDPR (approve with conditions, escalated the interpretation to Malin)
+- **Trigger:** blind critique #5 Legal/GDPR (approve with conditions, escalated the interpretation to Malin); the plan section "Cloudflare Web Analytics" it came from was not in the repo when checked 2026-11-03
 - **Stakeholders (panel):** #5 Legal / GDPR Counsel (approve with conditions), #22 Data Analyst / BI (approve with conditions on the dashboard)
 
 ## Context
