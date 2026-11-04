@@ -506,7 +506,7 @@ export function SessionMain({
       )}
 
       {vetoStrip && (
-        <div role="status" className="mb-2 px-3 py-1.5 flex items-center gap-2 text-xs bg-surface border border-rule rounded-sm">
+        <div role="status" className={cardClass('mb-2 px-3 py-1.5 flex items-center gap-2 text-xs')}>
           <span className="flex-1">Veto lagt.</span>
           <Button type="button" variant="ghost" size="xs" className="min-h-11" disabled={saving} onClick={() => onUndoVeto(vetoStrip)}>
             Ångra veto
@@ -516,7 +516,7 @@ export function SessionMain({
       {/* Alltid monterad, så att skärmläsare hör kvittot när texten dyker upp. */}
       <div role="status">
         {vetoUndoNotice === 'done' && (
-          <div className="mb-2 px-3 py-1.5 text-xs text-ink-2 bg-surface border border-rule rounded-sm">
+          <div className={cardClass('mb-2 px-3 py-1.5 text-xs text-ink-2')}>
             Veto ångrat. Du har ditt veto kvar.
           </div>
         )}
@@ -738,15 +738,17 @@ export function CandidateTable({
                       </button>
                     )}
                     {onUndoVeto && canUndoVetoOn(me, myVote) && (
-                      <button
+                      <Button
                         type="button"
+                        variant="ghost"
+                        size="xs"
                         onClick={() => onUndoVeto(r.candidate)}
                         disabled={disabled}
                         aria-label={`Ångra veto på ${r.candidate.title}`}
-                        className="px-1.5 py-1.5 min-h-11 rounded-sm border border-rule bg-surface text-xxs text-ink-2 cursor-pointer disabled:opacity-50"
+                        className="min-h-11"
                       >
                         Ångra veto
-                      </button>
+                      </Button>
                     )}
                   </div>
                 </td>
