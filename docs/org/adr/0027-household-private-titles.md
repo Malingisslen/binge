@@ -2,7 +2,7 @@
 
 - **Date:** 2026-10-31
 - **Status:** Accepted
-- **Trigger:** Malin's decision in the thread "Granska och pusha hushållsläget"; plan `radgivaren/hushall-ny-integritetsmodell-plan.md`
+- **Trigger:** Malin's decision in the thread "Granska och pusha hushållsläget"; the plan is in the project's shared folder as `radgivaren/hushall-ny-integritetsmodell-plan.md`, not in the repo (checked 2026-11-03)
 
 ## Decision (Malin, 2026-10-31)
 1. Joining a household means sharing what you watch at service level: which services you have, what they cost, whether you use them, and whether you have something new coming. Titles, dates and counts are still never shared.
