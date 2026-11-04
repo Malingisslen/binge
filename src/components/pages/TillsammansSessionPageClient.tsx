@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Users, Share2, ChevronLeft, Check, X, Ban, LayoutGrid, Table2, Copy } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useSession, getStoredParticipantId, storeParticipantId } from '@/hooks/useSession';
-import { joinSession, recordSwipe, setSessionCandidates } from '@/lib/firebase/sessions';
+import { joinSession, recordSwipe, setSessionCandidates, undoVeto } from '@/lib/firebase/sessions';
 import { generateSecureToken } from '@/lib/firebase/utils';
 import { posterUrl } from '@/lib/tmdb/client';
 import { SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
@@ -14,6 +14,7 @@ import { nextMatchAnnouncement, INITIAL_MATCH_ANNOUNCEMENT_STATE } from '@/lib/t
 import { useSessionTasteVectors } from '@/hooks/useSessionTasteVectors';
 import { computeSessionProviders, generateCandidates } from '@/lib/together/candidates';
 import { canRerun, rerunExcludeIds } from '@/lib/together/rerun';
+import { VETO_UNDO_STRIP_MS, isSignedInOwnSeat, canUndoVetoOn, myVetoedCandidate } from '@/lib/together/vetoUndo';
 import { isWatchableBy, whoCanWatch } from '@/lib/together/watchable';
 import { genreLabel } from '@/lib/tmdb/genreLabels';
 import { toneForId } from '@/lib/duotone';
@@ -248,6 +249,11 @@ export function SessionMain({
   const [lastVoted, setLastVoted] = useState<SessionCandidate | null>(null);
   const [reVote, setReVote] = useState<SessionCandidate | null>(null);
   const [voteError, setVoteError] = useState<string | null>(null);
+  // Ångra veto (BIN-1490): remsan efter ett nyss lagt veto, och utfallet av ett ångrande.
+  const [vetoStrip, setVetoStrip] = useState<SessionCandidate | null>(null);
+  const vetoStripTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (vetoStripTimer.current) clearTimeout(vetoStripTimer.current); }, []);
+  const [vetoUndoNotice, setVetoUndoNotice] = useState<'done' | 'failed' | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [matchAnnouncement, setMatchAnnouncement] = useState('');
   const matchState = useRef(INITIAL_MATCH_ANNOUNCEMENT_STATE);
@@ -319,7 +325,12 @@ export function SessionMain({
     [swipes, filteredCandidates, me.id],
   );
 
-  const canUndo = !!lastVoted && !!me.uid && me.id === me.uid;
+  const ownSeat = isSignedInOwnSeat(me);
+  const canUndo = !!lastVoted && ownSeat;
+  const vetoedByMe = useMemo(
+    () => (ownSeat ? myVetoedCandidate(scored, me.id) : null),
+    [ownSeat, scored, me.id],
+  );
   const cardCandidate = reVote ?? next;
 
   const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/tillsammans/${sessionId}/` : '';
@@ -344,14 +355,40 @@ export function SessionMain({
     }
     setVetoConfirm(null);
     setVoteError(null);
+    setVetoUndoNotice(null);
     setSaving(true);
     try {
       await recordSwipe({ sessionId, tmdbId: cand.tmdbId, mediaType: cand.mediaType, participantId: me.id, vote });
       setReVote(null);
       setLastVoted(vote === 'veto' ? null : cand);
+      if (vote === 'veto' && ownSeat) showVetoStrip(cand);
     } catch (e) {
       console.error(e);
       setVoteError('Din röst kunde inte sparas. Kolla uppkopplingen och försök igen.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const showVetoStrip = (cand: SessionCandidate | null) => {
+    if (vetoStripTimer.current) clearTimeout(vetoStripTimer.current);
+    vetoStripTimer.current = null;
+    setVetoStrip(cand);
+    if (cand) vetoStripTimer.current = setTimeout(() => setVetoStrip(null), VETO_UNDO_STRIP_MS);
+  };
+
+  const onUndoVeto = async (cand: SessionCandidate) => {
+    if (saving || !ownSeat) return;
+    setVoteError(null);
+    setVetoUndoNotice(null);
+    setSaving(true);
+    try {
+      await undoVeto({ sessionId, participantId: me.id, tmdbId: cand.tmdbId, mediaType: cand.mediaType });
+      showVetoStrip(null);
+      setVetoUndoNotice('done');
+    } catch (e) {
+      console.error(e);
+      setVetoUndoNotice('failed');
     } finally {
       setSaving(false);
     }
@@ -468,6 +505,28 @@ export function SessionMain({
         <div className="mb-2 px-3 py-2 text-xs text-danger-ink bg-danger-soft border border-danger/30 rounded-sm">{voteError}</div>
       )}
 
+      {vetoStrip && (
+        <div role="status" className={cardClass('mb-2 px-3 py-1.5 flex items-center gap-2 text-xs')}>
+          <span className="flex-1">Veto lagt.</span>
+          <Button type="button" variant="ghost" size="xs" className="min-h-11" disabled={saving} onClick={() => onUndoVeto(vetoStrip)}>
+            Ångra veto
+          </Button>
+        </div>
+      )}
+      {/* Alltid monterad, så att skärmläsare hör kvittot när texten dyker upp. */}
+      <div role="status">
+        {vetoUndoNotice === 'done' && (
+          <div className={cardClass('mb-2 px-3 py-1.5 text-xs text-ink-2')}>
+            Veto ångrat. Du har ditt veto kvar.
+          </div>
+        )}
+      </div>
+      {vetoUndoNotice === 'failed' && (
+        <div role="alert" className="mb-2 px-3 py-2 text-xs text-danger-ink bg-danger-soft border border-danger/30 rounded-sm">
+          Vetot kunde inte ångras. Kolla uppkopplingen och försök igen.
+        </div>
+      )}
+
       {filteredCandidates.length === 0 ? (
         <div className={cardClass('px-3 py-4 text-xs text-ink-3')}>
           Inga titlar matchar era gemensamma tjänster just nu.
@@ -515,13 +574,23 @@ export function SessionMain({
             onUndo={() => lastVoted && setReVote(lastVoted)}
           />
         )
-      ) : (
+      ) : null}
+      {view === 'card' && filteredCandidates.length > 0 && vetoedByMe && !vetoStrip && (
+        <div className="mt-1.5 text-center text-xxs text-ink-3">
+          Ditt veto: {vetoedByMe.title}.{' '}
+          <Button type="button" variant="ghost" size="xs" className="min-h-11" disabled={saving} onClick={() => onUndoVeto(vetoedByMe)}>
+            Ångra veto
+          </Button>
+        </div>
+      )}
+      {view === 'table' && filteredCandidates.length > 0 && (
         <CandidateTable
           scored={scored}
           me={me}
           onVote={onVote}
           armedVetoKey={vetoConfirm ? candidateKey(vetoConfirm) : null}
           disabled={saving}
+          onUndoVeto={onUndoVeto}
         />
       )}
     </>
@@ -607,13 +676,14 @@ export function SwipeCard({
 }
 
 export function CandidateTable({
-  scored, me, onVote, armedVetoKey, disabled,
+  scored, me, onVote, armedVetoKey, disabled, onUndoVeto,
 }: {
   scored: ReturnType<typeof scoreCandidates>;
   me: SessionParticipant;
   onVote: (c: SessionCandidate, v: VoteKind) => void;
   armedVetoKey: string | null;
   disabled: boolean;
+  onUndoVeto?: (c: SessionCandidate) => void;
 }) {
   return (
     <div className={cardClass('overflow-x-auto')}>
@@ -666,6 +736,19 @@ export function CandidateTable({
                       >
                         {armedVetoKey === candidateKey(r.candidate) ? 'Säker? Veto' : 'Veto'}
                       </button>
+                    )}
+                    {onUndoVeto && canUndoVetoOn(me, myVote) && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        onClick={() => onUndoVeto(r.candidate)}
+                        disabled={disabled}
+                        aria-label={`Ångra veto på ${r.candidate.title}`}
+                        className="min-h-11"
+                      >
+                        Ångra veto
+                      </Button>
                     )}
                   </div>
                 </td>

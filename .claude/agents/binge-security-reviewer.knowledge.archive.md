@@ -11819,3 +11819,37 @@ race, narrower).
 Prose (Info): the rules comment on `allow update: if false` in `users/{uid}/sessionInvites` says a repeat
 invite "väcker ingen ny notis"; after the recipient declines or the sender's invites are erased the doc is
 gone and a re-invite is a fresh create, held back only by the marker.
+
+### 2026-11-04 — BIN-1490 ångra veto: the BIN-540 0→1 ratchet is lifted for signed-in own seats — PASS, new accepted deviation
+
+Staged diff: `firestore.rules` participants block adds a third disjunct to the vetoRemaining cap's
+"ceiling = 1" condition, `(request.auth != null && pid == request.auth.uid && request.resource.data.uid ==
+request.auth.uid)`, identical to the signed-in leg of the write branch. Client `undoVeto` in
+`src/lib/firebase/sessions.ts` writes the swipe vote `'no'` first, then `vetoRemaining: 1`.
+
+Trace. The disjunct can only be true when the write branch's signed-in leg is true, so it reaches no seat
+the caller could not already write. Anon seat (`uid == null`) fails `uid == auth.uid`; a mid-session-login
+token seat fails `pid == auth.uid`; another account's seat fails both. Swipe rules never read
+`vetoRemaining`, and the signed-in swipe branch already lets the owner change their own key between
+`veto`/`no`/`yes`, so a raw-SDK signed-in caller could veto any number of titles before this diff.
+
+Emulator PoC (throwaway `_poc-bin1490.test.ts`, deleted; IPv4-only alt config on a free port because ::1 is
+unsupported in the cloud sandbox and 8080/8123 were held): (a) signed-in seat vetoes movie_1, spends to 0,
+re-arms to 1 with the vote STILL `veto`, vetoes movie_2 — all succeed; (b) a rejoin merge with
+`vetoRemaining: 1` on a spent signed-in seat now passes; (c) anon re-arm still `assertFails`. Mutation
+against a COPY of the rules with the new disjunct removed: the restore write is denied, so the suite's
+`a signed-in participant may restore their own spent veto (0 → 1)` pins the clause. Tree hash unchanged
+(bec10cb6…). 27/27 green for `-t "BIN-1490|BIN-540"` plus PoC.
+
+Why it is a deviation, not a finding: the rule does not tie the raise to an undone veto (that would need a
+`get()` of a swipe doc the rule cannot name), so the signed-in one-veto budget is a client convention again,
+as ADR 0015's Consequences already said of the pre-BIN-540 state. Malin chose to build it after the panel
+escalated the change to the ADR 0015 risk (events.jsonl `review` row for BIN-1490, 2026-11-04T07:11:02Z).
+Ledger entry appended. Rejected alternative: a `lastVetoKey` field pairing the raise with a specific swipe
+doc (the panel's first plan) — simplified away by the plan; no rule-level gain since the swipe branch never
+reads the budget anyway.
+
+Info only: `request.auth != null` rather than `isSignedIn()` lets a TV token's `tv_<device>` uid use the
+clause on a `tv_<device>` seat — the write branch already admits that seat, so nothing new.
+Observed during the run: untracked `src/test/rules/zzmut-m0..m5.test.ts` appeared from a sibling session's
+mutation harness; not mine, not deleted, flagged to the caller (BIN-624 class: they corrupt later full runs).

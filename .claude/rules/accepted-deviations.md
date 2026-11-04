@@ -94,3 +94,4 @@ headings differ.
 ## Hushållsröster: rösternas värden valideras av klienten, inte av reglerna — 2026-10-31
 ## BIN-1470: tvOverview läser ägarens och hushållets data utanför isTvOf — 2026-11-01
 ## Hushållets titlar och ett hushåll per person kontrolleras av klienten — 2026-11-03
+## BIN-1490: en inloggad deltagare kan få tillbaka sitt veto, och reglerna kopplar det inte till ett ångrat veto — 2026-11-04

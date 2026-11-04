@@ -117,7 +117,10 @@ Read only when the staged diff touches this chapter's paths (see .claude/shared-
   `anonShapedPid(p) = p.size() == 32 && p.matches('^[0-9a-f]+$')` — disjoint from 28-char uids.
 - **Don't conflate a new anon-identity attack with the accepted anon-vs-anon deviation** (ADR 0015 accepts
   anon-forging-anon; forging a SIGNED-IN identity's vote is a different class). **Scope a ratchet's promise
-  honestly:** BIN-540's `vetoRemaining` caps the FIELD, not the ACT — `swipes` rules never read it.
+  honestly:** BIN-540's `vetoRemaining` caps the FIELD, not the ACT — `swipes` rules never read it. Since
+  BIN-1490 the 0→1 ratchet binds ANON seats only; a signed-in own seat may re-arm at will (accepted
+  deviation, archive 2026-11-04). A clause lifting a ratchet for one principal class must name that class
+  exactly as the write branch does (`pid == auth.uid && uid == auth.uid`), or a mid-session-login token seat leaks in.
 
 ## Cross-account and cross-session leak classes
 - **Retiring a field you can't drop from `hasOnly`:** the `update` guard needs the three-way OR — absent/

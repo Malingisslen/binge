@@ -1771,8 +1771,20 @@ service cloud.firestore {
           // kunde då varken heartbeata, veto:a eller gå med igen under
           // sessionens 7 dagar, utan någon väg tillbaka i klienten. Skräpvärde
           // behandlas därför som frånvarande (= 1, oförbrukad).
+          //
+          // BIN-1490 "Ångra veto": en INLOGGAD deltagare på sin EGEN plats får
+          // gå tillbaka från 0 till 1. Det ger ingen ny förmåga: swipe-reglerna
+          // läser aldrig vetoRemaining, så en inloggad kan redan skriva 'veto'
+          // på flera titlar — budgeten är en klientkonvention (ADR 0015).
+          // Anonyma platser är medvetet undantagna: de kan inte ändra en lagd
+          // röst (anonVoteAddOk är add-only), så ett återfått veto där skulle
+          // inte gå att para med ett ångrat veto.
           && request.resource.data.vetoRemaining <= (
-            resource == null || !(resource.data.get('vetoRemaining', 1) is int)
+            resource == null
+              || !(resource.data.get('vetoRemaining', 1) is int)
+              || (request.auth != null
+                && pid == request.auth.uid
+                && request.resource.data.uid == request.auth.uid)
               ? 1
               : resource.data.get('vetoRemaining', 1)
           )
