@@ -161,6 +161,24 @@ export async function recordSwipe(params: {
   }
 }
 
+// Ångra veto (BIN-1490): rösten blir 'no' och vetot räknas upp igen. Rösten
+// skrivs FÖRST: fallerar uppräkningen efteråt har deltagaren ett nej och inget
+// veto kvar, vilket är det försiktiga felläget (ingen får ett extra veto).
+// Reglerna tillåter uppräkningen bara på en inloggad deltagares egen plats.
+export async function undoVeto(params: {
+  sessionId: string;
+  participantId: string;
+  tmdbId: number;
+  mediaType: MediaType;
+}): Promise<void> {
+  await recordSwipe({ ...params, vote: 'no' });
+  const { db, doc, updateDoc, serverTimestamp } = await fsdb();
+  await updateDoc(doc(db, 'sessions', params.sessionId, 'participants', params.participantId), {
+    vetoRemaining: 1,
+    lastActiveAt: serverTimestamp(),
+  });
+}
+
 export function sessionDocToObject(id: string, data: Record<string, unknown>): TogetherSession {
   return {
     id,

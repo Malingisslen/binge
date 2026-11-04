@@ -2868,3 +2868,28 @@ git grep -n -e "export function buildHouseholdWatching" -e "export function sani
 3. Att `watchingNow` bär status, betyg, tid eller anteckningar.
 
 **Re-open when:** något annat än medlemmens eget bidrag läser `watchingNow`, eller hushåll ska kunna ha fler än 6 medlemmar.
+## BIN-1490: en inloggad deltagare kan få tillbaka sitt veto, och reglerna kopplar det inte till ett ångrat veto — 2026-11-04
+
+Efterföljare till BIN-540:s spärr på `vetoRemaining` (budgeten fick bara räknas ned). För "Ångra veto"
+får en INLOGGAD deltagare på sin EGEN plats (`pid == auth.uid` och `uid == auth.uid`) skriva
+`vetoRemaining` från 0 till 1. Reglerna prövar inte att vetot faktiskt ångrades: de kan inte peka ut
+vilket röstdokument vetot låg på. Appen skriver rösten `'no'` FÖRE uppräkningen (`undoVeto`), så i appen
+finns högst ett levande veto per inloggad deltagare. Den som skriver förbi appen kan räkna upp vetot utan
+att ändra rösten. Det ger ingen ny förmåga: swipe-reglerna läser aldrig `vetoRemaining`, så en inloggad
+kunde redan lägga `'veto'` på flera titlar (ADR 0015, Consequences). Anonyma platser och en plats som
+skapades anonymt (inloggning mitt i sessionen) har kvar spärren. Malin valde att bygga funktionen efter
+att panelen eskalerat ändringen av ADR 0015-risken (raden `review` för BIN-1490 i
+`docs/org/metrics/events.jsonl`, 2026-11-04). Härled villkoret och klientens ordning:
+
+```
+git grep -n -e "pid == request.auth.uid" -- firestore.rules
+git grep -n -e "export async function undoVeto" -- src/lib/firebase/sessions.ts
+```
+
+**INTE accepterat, alltså fortfarande fileable:**
+1. Att uppräkningen når en anonym plats, en plats skapad anonymt, eller någon annans plats.
+2. Att `vetoRemaining` kan bli större än 1, eller att uppräkningen följer med andra fält (`isHost`, nya nycklar).
+3. Att `undoVeto` räknar upp vetot innan rösten skrivits om, eller trots att röstskrivningen misslyckades.
+4. Att något på servern (en funktion, matchningen i en regel) börjar läsa `vetoRemaining` som en gräns.
+
+**Re-open when:** veto får en verkan utanför sessionens egen matchning, eller vetot ska vara en gräns som reglerna håller.
