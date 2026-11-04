@@ -5,14 +5,15 @@ import Link from 'next/link';
 import { Users, Share2, ChevronLeft, Check, X, Ban, LayoutGrid, Table2, Copy } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useSession, getStoredParticipantId, storeParticipantId } from '@/hooks/useSession';
-import { joinSession, recordSwipe } from '@/lib/firebase/sessions';
+import { joinSession, recordSwipe, setSessionCandidates } from '@/lib/firebase/sessions';
 import { generateSecureToken } from '@/lib/firebase/utils';
 import { posterUrl } from '@/lib/tmdb/client';
 import { SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
 import { scoreCandidates, pickMatches, nextCandidate, participantSwipeProgress, candidateKey } from '@/lib/together/matching';
 import { nextMatchAnnouncement, INITIAL_MATCH_ANNOUNCEMENT_STATE } from '@/lib/together/matchAnnouncement';
 import { useSessionTasteVectors } from '@/hooks/useSessionTasteVectors';
-import { computeSessionProviders } from '@/lib/together/candidates';
+import { computeSessionProviders, generateCandidates } from '@/lib/together/candidates';
+import { canRerun, rerunExcludeIds } from '@/lib/together/rerun';
 import { isWatchableBy, whoCanWatch } from '@/lib/together/watchable';
 import { genreLabel } from '@/lib/tmdb/genreLabels';
 import { toneForId } from '@/lib/duotone';
@@ -20,7 +21,8 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { usePageMeta } from '@/hooks/usePageMeta';
 import { LoadingView } from '@/components/ui/LoadingView';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
-import type { SessionCandidate, SessionParticipant, TogetherSession, VoteKind } from '@/types';
+import type { SessionCandidate, SessionParticipant, SessionSwipe, TogetherSession, VoteKind } from '@/types';
+import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import { MAX_SESSION_DISPLAY_NAME } from '@/lib/clampText';
 import { Eyebrow, eyebrowClass } from '@/components/ui/Eyebrow';
 import { buttonClass, Button } from '@/components/ui/Button';
@@ -506,6 +508,9 @@ export function SessionMain({
             matches={matches}
             session={session}
             participants={participants}
+            me={me}
+            providers={effectiveProviders}
+            swipes={swipes}
             canUndo={canUndo}
             onUndo={() => lastVoted && setReVote(lastVoted)}
           />
@@ -699,12 +704,84 @@ function TitleFacts({ cand, participants }: { cand: SessionCandidate; participan
   );
 }
 
+// Värdens "Kör om": nya titlar i samma session. Rösterna på de gamla titlarna
+// ligger kvar i swipes men räknas inte, eftersom matchningen bara tittar på
+// sessionens nuvarande kandidater.
+function RerunControl({
+  session, me, providers, swipes,
+}: {
+  session: TogetherSession;
+  me: SessionParticipant;
+  providers: number[];
+  swipes: SessionSwipe[];
+}) {
+  const { uid } = useAuth();
+  const [confirming, setConfirming] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (!canRerun(session, uid)) return null;
+
+  const rerun = async () => {
+    const usedProviders = providers.length > 0 ? providers : me.providers;
+    if (usedProviders.length === 0) {
+      setError('Ingen streamingtjänst att söka på. Lägg till en tjänst i din profil.');
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const fresh = await generateCandidates({
+        config: session.config,
+        providers: usedProviders,
+        excludeTmdbIds: rerunExcludeIds(
+          session.candidates,
+          new Set(swipes.map(sw => mediaTypeDocId(sw.mediaType, sw.tmdbId))),
+        ),
+      });
+      if (fresh.length === 0) {
+        setError('Hittade inga nya titlar just nu. Era nuvarande ligger kvar.');
+        return;
+      }
+      await setSessionCandidates(session.id, fresh);
+      setConfirming(false);
+    } catch (e) {
+      console.error(e);
+      setError('Det gick inte att köra om. Försök igen.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!confirming) {
+    return (
+      <Button type="button" variant="ghost" size="sm" onClick={() => setConfirming(true)}>Kör om</Button>
+    );
+  }
+  return (
+    <div className="basis-full text-xxs text-ink-2" role="group" aria-label="Bekräfta omkörning">
+      <div>Kör om med nya titlar? Era röster på de gamla titlarna ligger kvar men räknas inte.</div>
+      <div className="mt-1 flex gap-2 flex-wrap">
+        <Button type="button" variant="acc" size="xs" disabled={saving} onClick={rerun}>
+          {saving ? 'Hämtar nya titlar…' : 'Ja, kör om'}
+        </Button>
+        <Button type="button" variant="ghost" size="xs" disabled={saving} onClick={() => { setConfirming(false); setError(null); }}>
+          Avbryt
+        </Button>
+      </div>
+      {error && <div role="alert" className="mt-1 text-danger-ink">{error}</div>}
+    </div>
+  );
+}
+
 function FinalStep({
-  matches, session, participants, canUndo, onUndo,
+  matches, session, participants, me, providers, swipes, canUndo, onUndo,
 }: {
   matches: ReturnType<typeof pickMatches>;
   session: TogetherSession;
   participants: SessionParticipant[];
+  me: SessionParticipant;
+  providers: number[];
+  swipes: SessionSwipe[];
   canUndo: boolean;
   onUndo: () => void;
 }) {
@@ -714,6 +791,7 @@ function FinalStep({
       <div className={cardClass('px-3 py-4 text-center')}>
         <div className="text-sm font-semibold mb-1">Du har röstat på alla.</div>
         <div className="text-xxs text-ink-3">Än så länge finns ingen titel ni är överens om. Vänta på övriga, så sammanställs det automatiskt.</div>
+        <div className="mt-2 flex justify-center"><RerunControl session={session} me={me} providers={providers} swipes={swipes} /></div>
       </div>
     );
   }
@@ -745,6 +823,7 @@ function FinalStep({
             </Button>
           )}
           {canUndo && <Button type="button" variant="ghost" size="sm" onClick={onUndo}>Ångra senaste röst</Button>}
+          <RerunControl session={session} me={me} providers={providers} swipes={swipes} />
         </div>
         {isRandom && <div className="text-xxs text-ink-3">Slumpen syns bara på din skärm. Säg till de andra.</div>}
       </div>

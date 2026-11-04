@@ -243,3 +243,14 @@ export async function setSessionStatus(
     updatedAt: serverTimestamp(),
   });
 }
+
+/**
+ * Sessioner där användaren är värd, hämtade via värdens uid. Låter en värd hitta
+ * sina pågående sessioner på en ny enhet utan lokalt spår. Utgångna filtreras
+ * bort av anroparen med isSessionExpired.
+ */
+export async function listHostedSessions(hostUid: string): Promise<TogetherSession[]> {
+  const { db, collection, query, where, getDocs } = await fsdb();
+  const snap = await getDocs(query(collection(db, 'sessions'), where('hostUid', '==', hostUid)));
+  return snap.docs.map(d => sessionDocToObject(d.id, d.data()));
+}
