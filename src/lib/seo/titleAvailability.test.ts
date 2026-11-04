@@ -97,9 +97,14 @@ describe('titleAvailability', () => {
   });
 
   it('daterar priserna med det äldsta kontrolldatumet bland raderna som visar ett pris', () => {
-    const dates = [NETFLIX, TV4].map(id => getProvider(id)!.priceVerifiedDate!).sort();
+    // Prisrutinen kontrollerar tjänsterna samma dag, så två fasta tjänster kan ha samma datum.
+    // Testet behöver två med olika datum och väljer dem ur prislistan.
+    const candidates = [NETFLIX, TV4, DISNEY, 384, 350, 521, 435];
+    const newer = candidates.find(id => getProvider(id)!.priceVerifiedDate !== getProvider(NETFLIX)!.priceVerifiedDate);
+    expect(newer, 'minst en tjänst med annat kontrolldatum än Netflix').toBeDefined();
+    const dates = [NETFLIX, newer!].map(id => getProvider(id)!.priceVerifiedDate!).sort();
     expect(dates[0]).not.toBe(dates[1]);
-    const { pricesVerifiedOn } = titleAvailability(se({ flatrate: [p(TV4), p(NETFLIX), p(UNVERIFIED)] }));
+    const { pricesVerifiedOn } = titleAvailability(se({ flatrate: [p(newer!), p(NETFLIX), p(UNVERIFIED)] }));
     expect(pricesVerifiedOn).toBe(dates[0]);
   });
 
