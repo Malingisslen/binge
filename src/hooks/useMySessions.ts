@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useAuth } from '@/hooks/useAuth';
 import { getTrackedSessions, clearStoredParticipantId, isSessionExpired, type TrackedSession } from '@/hooks/useSession';
 import {
+  listHostedSessions,
   subscribeToSession,
   subscribeToSwipes,
 } from '@/lib/firebase/sessions';
@@ -20,14 +22,37 @@ export interface MySessionSummary {
 }
 
 export function useMySessions(): MySessionSummary[] {
-  const [tracked, setTracked] = useState<TrackedSession[]>([]);
+  const { uid } = useAuth();
+  const [local, setLocal] = useState<TrackedSession[]>([]);
+  const [hosted, setHosted] = useState<TrackedSession[]>([]);
   const [sessions, setSessions] = useState<Record<string, TogetherSession | null>>({});
   const [swipes, setSwipes] = useState<Record<string, SessionSwipe[]>>({});
 
   // Load tracked list on mount (client-only).
   useEffect(() => {
-    setTracked(getTrackedSessions());
+    setLocal(getTrackedSessions());
   }, []);
+
+  // Värdens deltagar-id är uid:t (createSession), så en värd kan hitta sina egna
+  // pågående sessioner även utan lokal spårning, t.ex. på en ny enhet.
+  useEffect(() => {
+    if (!uid) { setHosted([]); return; }
+    let cancelled = false;
+    listHostedSessions(uid)
+      .then(list => {
+        if (cancelled) return;
+        setHosted(list
+          .filter(s => s.status === 'active' && !isSessionExpired(s))
+          .map(s => ({ sessionId: s.id, participantId: uid, joinedAt: s.createdAt.getTime() })));
+      })
+      .catch(() => { if (!cancelled) setHosted([]); });
+    return () => { cancelled = true; };
+  }, [uid]);
+
+  const tracked = useMemo(() => {
+    const seen = new Set(local.map(t => t.sessionId));
+    return [...local, ...hosted.filter(h => !seen.has(h.sessionId))];
+  }, [local, hosted]);
 
   useEffect(() => {
     const unsubs: Array<() => void> = [];
