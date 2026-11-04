@@ -2529,8 +2529,9 @@
     {
       "id": "flow-vart-det",
       "label": "Värt det month page",
-      "description": "/vart-det/[month] (BIN-1449) is pre-rendered once per listed month (VART_DET_MONTHS). At build it reads the static price catalog and PRICE_CHANGES and asks TMDB what premieres on each paid service that month; in the browser it counts what leaves each service from the public leaving rollup. Kept noindex and out of the sitemap until Malin has seen the month.",
+      "description": "/vart-det/[month] (BIN-1449) is pre-rendered once per listed month (VART_DET_MONTHS). At build it reads the static price catalog and PRICE_CHANGES and asks TMDB what premieres on each paid service that month; in the browser it counts what leaves each service from the public leaving rollup. Published 2026-11-04 on Malin's ok: indexable, listed in the sitemap and in the /guider/ hub. The bare /vart-det/ redirects to the latest listed month.",
       "covers": [
+        "/vart-det",
         "/vart-det/[month]"
       ],
       "steps": [

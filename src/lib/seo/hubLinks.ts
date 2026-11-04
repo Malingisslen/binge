@@ -13,6 +13,7 @@ import { FRANCHISES } from '@/lib/seo/franchises';
 import { GENRE_HUBS } from '@/lib/seo/genreHubs';
 import { canonicalProviderId, getProvider } from '@/lib/tmdb/providers';
 import { SEO_PROVIDER_IDS } from '@/lib/tmdb/seoCoverage';
+import { VART_DET_MONTHS, parseVartDetMonth } from '@/lib/seo/vartDet';
 
 export interface HubLink {
   href: string;
@@ -66,6 +67,14 @@ export function costLinks(): HubLink[] {
   return [{ href: '/streamingkostnad/', label: 'Räkna ut din streamingkostnad' }];
 }
 
+/** "Värt det i <månad>" — one link per published month page. */
+export function vartDetLinks(): HubLink[] {
+  return VART_DET_MONTHS.flatMap((id) => {
+    const month = parseVartDetMonth(id);
+    return month ? [{ href: `/vart-det/${id}/`, label: `Värt det i ${month.name} ${month.year}` }] : [];
+  });
+}
+
 export function hubSections(): HubSection[] {
   return [
     {
@@ -91,6 +100,12 @@ export function hubSections(): HubSection[] {
       heading: 'Bästa per genre',
       blurb: 'Populära filmer och serier genre för genre — och var de streamar i Sverige.',
       links: genreLinks(),
+    },
+    {
+      id: 'vart-det',
+      heading: 'Värt det den här månaden',
+      blurb: 'Vad som kommer, vad som blir dyrare och vad som försvinner på varje tjänst under månaden.',
+      links: vartDetLinks(),
     },
     {
       id: 'kostnad',

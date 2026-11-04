@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { VART_DET_MONTHS, VART_DET_ROBOTS } from '@/lib/seo/vartDet';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -108,15 +109,22 @@ describe('sitemap — BIN-337 URL shape + family coverage', () => {
     for (const u of EXPECTED_STATIC) expect(urls.has(u), `missing static: ${u}`).toBe(true);
     // Two-sided: the static (non-dynamic) route set must be EXACTLY EXPECTED_STATIC, so a
     // newly-added top-level page (esp. an auth-walled one) can't silently leak in.
-    const DYNAMIC_PREFIXES = ['/movie/', '/tv/', '/person/', '/provider/', '/billigaste/', '/forsvinner/', '/genre/'];
+    const DYNAMIC_PREFIXES = ['/movie/', '/tv/', '/person/', '/provider/', '/billigaste/', '/forsvinner/', '/genre/', '/vart-det/'];
     const staticUrls = all.filter(u => !DYNAMIC_PREFIXES.some(p => u.includes(p)));
     expect(staticUrls.sort()).toEqual([...EXPECTED_STATIC].sort());
     // Auth-walled / noindex routes must never appear (GSC "submitted URL marked noindex").
     // BIN-305: /savings/ is now auth-walled + robots:noindex, so it must NOT leak in.
     // /streamingpriser/ is noindex via its layout.tsx until the price agent is scheduled.
-    for (const leak of ['/my', '/login', '/settings', '/feed', '/kalibrera', '/stats', '/savings', '/streamingpriser', '/vart-det']) {
+    for (const leak of ['/my', '/login', '/settings', '/feed', '/kalibrera', '/stats', '/savings', '/streamingpriser']) {
       expect([...urls].some(u => u.includes(`binge.nu${leak}`)), `leaked: ${leak}`).toBe(false);
     }
+  });
+
+  it('lists each month page exactly when its robots say index, and never the bare /vart-det/', () => {
+    const all = sitemap().map(e => e.url);
+    expect(VART_DET_ROBOTS.index).toBe(true);
+    for (const m of VART_DET_MONTHS) expect(all).toContain(`https://binge.nu/vart-det/${m}/`);
+    expect(all).not.toContain('https://binge.nu/vart-det/');
   });
 
   it('emits no duplicate URLs (crawl-budget hygiene)', () => {

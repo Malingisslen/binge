@@ -9,10 +9,11 @@ import type { PriceChange } from '@/lib/tmdb/providers';
 /** The months that get a page. A new month is one more entry here. */
 export const VART_DET_MONTHS: readonly string[] = ['2026-11'];
 
-// Hidden until Malin has seen the month after the price agent's run: noindex and
-// out of the sitemap, footer and /guider/, like /streamingpriser/. follow keeps the
-// links to the calculator. Publishing a month flips this for that month.
-export const VART_DET_ROBOTS = { index: false, follow: true } as const;
+/** The month the bare /vart-det/ sends visitors to: the last entry of VART_DET_MONTHS. */
+export const LATEST_VART_DET_MONTH = VART_DET_MONTHS[VART_DET_MONTHS.length - 1];
+
+// Published by Malin's ok on 2026-11-04: indexable, in the sitemap and in /guider/.
+export const VART_DET_ROBOTS = { index: true, follow: true } as const;
 
 export interface VartDetMonth {
   id: string;
