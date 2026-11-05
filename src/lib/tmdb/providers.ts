@@ -97,7 +97,7 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
   },
   {
     id: 76, name: 'Viaplay', shortName: 'Viaplay', color: '#FF6B00', type: 'flatrate', defaultMonthlyCost: 169,
-    priceVerifiedDate: '2026-09-02',
+    priceVerifiedDate: '2026-11-05',
     // live-verifierat 2026-07-02 — https://viaplay.se — reklam = 99 ORDINARIE utan bindning
     // (79 var reklam + 6 mån bindning); total = 749 ordinarie reklamfritt (699 = Total med reklam) (BIN-406)
     // live-verifierat 2026-09-02 — https://viaplay.se — medium = 449 ordinarie, ingen kampanj
@@ -169,7 +169,7 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
     // webbläsare (BIN-1399): Fan SEK 85.00/mo, Mega Fan SEK 99.00/mo, VAT inclusive.
     // Katalogen modellerar inte årspriserna (850 respektive 990).
     id: 323, name: 'Crunchyroll', shortName: 'Crunchyroll', color: '#F47521', type: 'flatrate', defaultMonthlyCost: 85,
-    priceVerifiedDate: '2026-10-02',
+    priceVerifiedDate: '2026-11-05',
     // 1968 = "Crunchyroll Amazon Channel" (live-verifierat SE-id 2026-06-10).
     // 283 = TMDB:s nuvarande bas-id för Crunchyroll på titel-nivå (live-verifierat
     // 2026-06-20 via /tv/37854 → SE flatrate 283). Behåll 323 som primär så
@@ -240,7 +240,7 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
   // agenten läste sidans planlista med geoLocation SE: månadsplanen 129 SEK. Årsplanen och
   // studentplanen modelleras inte. Färgen är den som sidan använder. (BIN-1401)
   // Säg upp: https://help.mubi.com/article/68-how-do-i-cancel-my-subscription-if-i-purchased-it-online-through-the-web (läst 2026-10-06)
-  { id: 11, name: 'MUBI', shortName: 'MUBI', color: '#001489', type: 'flatrate', defaultMonthlyCost: 129, priceVerifiedDate: '2026-10-02', manageUrl: 'https://mubi.com/subscription', manageUrlVerifiedDate: '2026-11-03', planName: 'Månadsplan' },
+  { id: 11, name: 'MUBI', shortName: 'MUBI', color: '#001489', type: 'flatrate', defaultMonthlyCost: 129, priceVerifiedDate: '2026-11-05', manageUrl: 'https://mubi.com/subscription', manageUrlVerifiedDate: '2026-11-03', planName: 'Månadsplan' },
   {
     // live-verifierat 2026-10-02 — https://www.drakenfilm.se — sidans planlista, månadspris i
     // SEK. Färgen är sidans accentfärg. (BIN-1401; nivåerna: Malins val 2026-10-02, BIN-1418)
