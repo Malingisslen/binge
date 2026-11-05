@@ -189,7 +189,7 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
     id: 431, name: 'SkyShowtime', shortName: 'SkyShowtime', color: '#0D1D40', type: 'flatrate', defaultMonthlyCost: 109,
     // Säg upp: https://www.skyshowtime.com/se/help/article/how-do-i-cancel-my-skyshowtime-subscription (läst 2026-11-03) — hjälpsidan anger nu /se/account/plans, var /en/
     manageUrl: 'https://www.skyshowtime.com/se/account/plans', manageUrlVerifiedDate: '2026-11-03',
-    priceVerifiedDate: '2026-09-03',
+    priceVerifiedDate: '2026-11-04',
     // 1773 = TMDB:s nuvarande SE-id för SkyShowtime (katalog-endpoint 2026-06-20). (BIN-64)
     // 531 = nedlagda Paramount+ (SE-nedläggning 2022-10-01, uppgick i SkyShowtime — BIN-404);
     // aliasa hit så gammal sparad Paramount+-data + ev. TMDB-titlar mappar till efterträdaren.
@@ -209,7 +209,7 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
     id: 335, name: 'YouTube Premium', shortName: 'YouTube', color: '#FF0000', type: 'flatrate', defaultMonthlyCost: 169,
     // Säg upp: https://support.google.com/youtube/answer/6308278?hl=sv (läst 2026-10-06)
     manageUrl: 'https://www.youtube.com/paid_memberships', manageUrlVerifiedDate: '2026-11-03',
-    priceVerifiedDate: '2026-09-03',
+    priceVerifiedDate: '2026-11-04',
     // 188 = TMDB:s nuvarande SE-id för YouTube Premium (katalog-endpoint 2026-06-20). (BIN-64)
     aliases: [188],
     tiers: [
