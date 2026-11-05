@@ -23,7 +23,7 @@ export const PROVIDER_PAID: Readonly<Record<number, PaidEntry>> = {
   119: { aliases: [], hasDefault: true, defaultPaid: true, free: false, tiers: {} },
   337: { aliases: [], hasDefault: true, defaultPaid: true, free: false, tiers: { ads: true, standard: true, premium: true } },
   384: { aliases: [1899, 1825], hasDefault: true, defaultPaid: true, free: false, tiers: { ads: true, standard: true, premium: true } },
-  76: { aliases: [], hasDefault: true, defaultPaid: true, free: false, tiers: { reklam: true, standard: true, medium: true, total: true } },
+  76: { aliases: [], hasDefault: true, defaultPaid: true, free: false, tiers: { reklam: true, standard: true, medium: true, total: true, 'medium-reklam': true, 'total-reklam': true, 'standard-appletv': true, 'medium-appletv': true, 'total-appletv': true } },
   520: { aliases: [493], hasDefault: true, defaultPaid: false, free: true, tiers: {} },
   489: { aliases: [1944, 1759], hasDefault: true, defaultPaid: true, free: false, tiers: { 'plus-ads': true, plus: true, 'sport-bas': true, 'sport-fotboll': true, 'sport-hockey': true, sport: true } },
   350: { aliases: [2243], hasDefault: true, defaultPaid: true, free: false, tiers: {} },

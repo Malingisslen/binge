@@ -105,8 +105,16 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
     tiers: [
       { id: 'reklam', name: 'Film & Serier med reklam', cost: 99 },
       { id: 'standard', name: 'Film & Serier', cost: 169 },
+      // Läst 2026-11-05 på https://help.viaplay.com/sv/package-info, ordinarie pris utan bindning.
+      // Apple TV-paketen är ett Viaplay-abonnemang med Apple TV inkluderat; den som har dem
+      // ska inte också ange Apple TV+ som egen tjänst. Nivåerna ligger i prisordning.
+      { id: 'standard-appletv', name: 'Film & Serier med Apple TV', cost: 199 },
+      { id: 'medium-reklam', name: 'Medium med reklam (inkl. sport)', cost: 399, kind: 'sport' },
       { id: 'medium', name: 'Medium (inkl. sport)', cost: 449, kind: 'sport' },
+      { id: 'medium-appletv', name: 'Medium med Apple TV (inkl. sport)', cost: 479, kind: 'sport' },
+      { id: 'total-reklam', name: 'Total med reklam (all sport)', cost: 699, kind: 'sport' },
       { id: 'total', name: 'Total (all sport)', cost: 749, kind: 'sport' },
+      { id: 'total-appletv', name: 'Total med Apple TV (all sport)', cost: 779, kind: 'sport' },
     ],
   },
   // 493 = TMDB:s nuvarande SE-id för SVT (katalog-endpoint 2026-06-20); 520 var
