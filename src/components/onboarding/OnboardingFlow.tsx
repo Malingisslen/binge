@@ -266,6 +266,7 @@ function StepProviders({ onBack, onNext }: { onBack: () => void; onNext: () => v
   const flatrateProviders = SWEDISH_PROVIDERS.filter(p => p.type === 'flatrate');
   const costSettings = {
     providerTiers: tiers,
+    myProviders: selected,
     providerCosts: user?.providerCosts,
     providerCampaigns: user?.providerCampaigns,
   };

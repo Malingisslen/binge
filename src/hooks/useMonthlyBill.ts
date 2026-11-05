@@ -34,6 +34,7 @@ export function useMonthlyBill(nowMs: number): MonthlyBill | null {
         providerTiers: user.providerTiers ?? {},
         providerCosts: user.providerCosts ?? {},
         providerCampaigns: user.providerCampaigns ?? {},
+        myProviders: user.myProviders ?? [],
       }, priceDate) ?? 0,
       pauses,
       month,

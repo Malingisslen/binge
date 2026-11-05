@@ -1,5 +1,6 @@
 'use client';
 
+import { isAppleTvIncludedInViaplay } from '@/lib/advisor/appleTvOverlap';
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useQueries } from '@tanstack/react-query';
@@ -70,8 +71,9 @@ export default function LeftPerService() {
     providerTiers: user?.providerTiers ?? {},
     providerCosts: user?.providerCosts ?? {},
     providerCampaigns: user?.providerCampaigns ?? {},
+    myProviders: user?.myProviders ?? [],
     providerBindings: user?.providerBindings ?? {},
-  }), [user?.providerTiers, user?.providerCosts, user?.providerCampaigns, user?.providerBindings]);
+  }), [user?.providerTiers, user?.providerCosts, user?.providerCampaigns, user?.myProviders, user?.providerBindings]);
 
   const allRows = useMemo(
     () => buildToWatchRows(items, {
@@ -130,7 +132,9 @@ export default function LeftPerService() {
     const provider = getProvider(providerId);
     const monthlyCost = resolveEffectiveMonthlyCost(providerId, costSettings, now);
     const bound = activeBinding(costSettings.providerBindings, providerId, now) != null;
-    const campaign = !bound && monthlyCost !== resolveProviderMonthlyCost(providerId, costSettings);
+    const campaign = !bound
+      && !isAppleTvIncludedInViaplay(providerId, costSettings)
+      && monthlyCost !== resolveProviderMonthlyCost(providerId, costSettings);
     const ownCost = bound
       || costSettings.providerTiers[provider?.id ?? providerId] != null
       || costSettings.providerCosts[provider?.id ?? providerId] != null;

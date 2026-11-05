@@ -20,6 +20,7 @@ import RotationCalendar from '@/components/savings/RotationCalendar';
 import SavingsSidebar from '@/components/savings/SavingsSidebar';
 import UpcomingEpisodes from '@/components/savings/UpcomingEpisodes';
 import HeroVerdict from '@/components/savings/HeroVerdict';
+import AppleTvDoubleCard from '@/components/savings/AppleTvDoubleCard';
 import ServiceVerdictCards from '@/components/savings/ServiceVerdictCards';
 import SavedSoFar from '@/components/savings/SavedSoFar';
 import HouseholdMode from '@/components/savings/HouseholdMode';
@@ -420,6 +421,8 @@ function SavingsContent() {
         <SavedSoFar activePauses={advisor.activePauses} historySaved={pauseHistory.totalSaved} isLoading={pauseHistory.isLoading} />
 
         <HeroVerdict advisor={advisor} onPause={handlePauseProvider} onOpenTab={selectTab} onShowSubscribeRows={handleShowSubscribeRows} />
+
+        <AppleTvDoubleCard />
 
         <PriceChangeNudges />
 

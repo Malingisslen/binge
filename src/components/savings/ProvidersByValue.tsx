@@ -11,6 +11,8 @@ import type { ProviderAdvisory, ActivePause } from '@/types';
 import { Eyebrow } from '@/components/ui/Eyebrow';
 import { cardClass } from '@/components/ui/Card';
 import { formatDecimal } from '@/lib/formatDecimal';
+import { appleTvOverlap, APPLE_TV_PLUS_ID } from '@/lib/advisor/appleTvOverlap';
+import { canonicalProviderId } from '@/lib/tmdb/providers';
 
 // "Dina tjänster" sorterad efter kr/aktiv-serie — ersätter den gamla
 // KPI-3-griden. Bäst valuta överst, sämst nedanför så ögat naturligt
@@ -28,6 +30,8 @@ interface Row {
   monthlyCost: number;
   krPerShow: number | null;   // null när kostnad = 0 eller inga aktiva
   isFree: boolean;
+  /** Apple TV+ som ingår i användarens Viaplay-paket: 0 kr, men går att säga upp. */
+  inViaplay: boolean;
 }
 
 interface Props {
@@ -43,6 +47,7 @@ export default function ProvidersByValue({ providers, activePauses }: Props) {
   if (providers.length === 0) return null;
 
   const renewalDays = user?.providerRenewalDays ?? {};
+  const overlap = user ? appleTvOverlap(user.myProviders ?? [], user) : null;
   const userPausedSet = new Set(activePauses.map(p => p.providerId));
 
   const rows: Row[] = providers
@@ -59,6 +64,7 @@ export default function ProvidersByValue({ providers, activePauses }: Props) {
         monthlyCost: cost,
         krPerShow,
         isFree: cost === 0,
+        inViaplay: overlap != null && canonicalProviderId(p.providerId) === APPLE_TV_PLUS_ID,
       };
     });
 
@@ -102,14 +108,17 @@ export default function ProvidersByValue({ providers, activePauses }: Props) {
                     {pluralSv(row.activeCount, 'aktiv', 'aktiva')}
                   </td>
                   <td className="px-3 py-1.5 text-xs text-ink-2 text-right whitespace-nowrap tabular-nums">
-                    {row.isFree ? '0 kr' : `${formatKr(row.monthlyCost)} kr/mån`}
+                    {row.inViaplay ? '0 kr/mån' : row.isFree ? '0 kr' : `${formatKr(row.monthlyCost)} kr/mån`}
+                    {row.inViaplay && <span className="block text-xxs text-ink-3">Ingår i ditt Viaplay-paket</span>}
                     {renewalDay != null && !row.isFree && (
                       <span className="block text-xxs text-ink-3">förnyas om {daysUntilRenewal(renewalDay, new Date())} d</span>
                     )}
-                    {!row.isFree && <CancelHint providerId={row.providerId} billingDay={renewalDay} now={new Date()} />}
+                    {(!row.isFree || row.inViaplay) && <CancelHint providerId={row.providerId} billingDay={renewalDay} now={new Date()} />}
                   </td>
                   <td className={`px-3 py-1.5 text-xs text-right whitespace-nowrap tabular-nums ${krCellClass}`}>
-                    {row.isFree
+                    {row.inViaplay
+                      ? 'ingår'
+                      : row.isFree
                       ? 'gratis'
                       : row.krPerShow != null
                         ? `${formatDecimal(row.krPerShow)} kr/serie`

@@ -53,7 +53,7 @@ export function totalMonthlyCost(
 ): number {
   // Canonicalise + dedupe so an alias+canonical pair isn't summed twice (BIN-409).
   return canonicalUniqueProviders(selectedIds).reduce(
-    (sum, id) => sum + (resolveEffectiveMonthlyCost(id, { providerTiers, providerCosts, providerCampaigns, providerBindings }, now) ?? 0),
+    (sum, id) => sum + (resolveEffectiveMonthlyCost(id, { providerTiers, providerCosts, providerCampaigns, providerBindings, myProviders: selectedIds }, now) ?? 0),
     0,
   );
 }
