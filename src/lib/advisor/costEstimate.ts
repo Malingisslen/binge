@@ -11,6 +11,7 @@
 import { getProvider } from '@/lib/tmdb/providers';
 import { resolveEffectiveMonthlyCost, type CampaignCostSettings } from '@/lib/advisor/effectiveCost';
 import { resolveCampaignCost } from '@/lib/advisor/campaignPricing';
+import { activeBinding } from '@/lib/advisor/bindings';
 import { computeSpendSnapshot } from '@/lib/spendSnapshot';
 
 export function isEstimatedMonthlyCost(
@@ -24,6 +25,7 @@ export function isEstimatedMonthlyCost(
   if (effective == null || effective <= 0) return false;
 
   const key = provider.id;
+  if (activeBinding(user.providerBindings, key, now)) return false;
   const tierId = user.providerTiers?.[key];
   if (tierId && provider.tiers?.some(t => t.id === tierId)) return false;
   if (user.providerCosts?.[key] != null) return false;
@@ -54,6 +56,7 @@ export function summarizeMonthlySpend(
     user.providerTiers ?? {},
     user.providerCampaigns ?? {},
     now,
+    user.providerBindings ?? {},
   );
   // Utan titlar är varje betald tjänst "idle", så listan är exakt summans urval.
   const counted = snapshot.idleProviders;

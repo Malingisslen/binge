@@ -11,6 +11,7 @@ import {
   splitTvByProgress,
   subscriptionAnchorIds,
   deriveProviderStatus,
+  isCountedInTotal,
   selectBundleSuggestions,
   CATCHUP_THRESHOLD,
   isTotalCostEstimated,
@@ -941,5 +942,36 @@ describe('isTotalCostEstimated — rådgivarens "(uppskattat)" (paket I)', () =>
 
   it('en tjänst utanför urvalet (t.ex. pausad) påverkar inte märket', () => {
     expect(isTotalCostEstimated([makeProvider({ providerId: 520, monthlyCost: 0 })], {}, NOW)).toBe(false);
+  });
+});
+
+describe('bindning tar bort paus-utfallet vid källan', () => {
+  const base = { hasActiveShow: false, hasUpcomingShow: false, hasWillSeeAnchor: false, isFree: false, effectiveMonthlyCost: 149 };
+
+  it('en oanvänd betald tjänst är en paus-kandidat utan bindning', () => {
+    expect(deriveProviderStatus(base)).toBe('pause');
+  });
+  it('samma tjänst med gällande bindning blir bound, inte pause', () => {
+    expect(deriveProviderStatus({ ...base, isBound: true })).toBe('bound');
+  });
+  it('en bunden tjänst som används eller väntas behåller sin vanliga status', () => {
+    expect(deriveProviderStatus({ ...base, isBound: true, hasActiveShow: true })).toBe('active');
+    expect(deriveProviderStatus({ ...base, isBound: true, hasWillSeeAnchor: true })).toBe('upcoming');
+  });
+  it('en gratistjänst förblir free även med bindning', () => {
+    expect(deriveProviderStatus({ ...base, isBound: true, isFree: true })).toBe('free');
+  });
+  it('findTopPausable ger aldrig en bunden tjänst', () => {
+    const bound = makeProvider({ providerId: 76, monthlyCost: 149, status: 'bound', boundUntil: '2027-11' });
+    expect(findTopPausable([bound], new Set())).toBeUndefined();
+  });
+});
+
+describe('isCountedInTotal', () => {
+  it('en pausad tjänst räknas bort, men inte om den är bunden', () => {
+    const paused = new Set([76]);
+    expect(isCountedInTotal({ providerId: 76, boundUntil: null }, paused)).toBe(false);
+    expect(isCountedInTotal({ providerId: 76, boundUntil: '2027-11' }, paused)).toBe(true);
+    expect(isCountedInTotal({ providerId: 8, boundUntil: null }, paused)).toBe(true);
   });
 });

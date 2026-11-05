@@ -10,8 +10,8 @@ export default function IntegritetPage() {
   return (
     <LegalPageShell
       title="Integritetspolicy"
-      lastUpdated="2026-11-04"
-      version="1.23"
+      lastUpdated="2026-11-05"
+      version="1.24"
       toc={[
         { id: 'ansvarig', label: '1. Vem är ansvarig?' },
         { id: 'uppgifter', label: '2. Vilka uppgifter vi samlar in' },
@@ -59,7 +59,7 @@ export default function IntegritetPage() {
           <li><strong>E-postadress</strong> — från inloggning (Firebase Authentication).</li>
           <li><strong>Visningsnamn</strong> — det namn du valt eller som följt med från Google-inloggning.</li>
           <li><strong>Användarnamn</strong> — om du valt ett publikt användarnamn för din profil.</li>
-          <li><strong>Dina streamingtjänster</strong> — vilka tjänster du har, vilket abonnemang (nivå), pris, och eventuella pauser.</li>
+          <li><strong>Dina streamingtjänster</strong> — vilka tjänster du har, vilket abonnemang (nivå), pris, eventuell bindningstid per tjänst, och eventuella pauser.</li>
           <li><strong>Din bevakningslista</strong> — titlar du följer, vill se eller har sett; betyg; anteckningar; egna taggar (fritext du själv anger); avsnitts-framsteg.</li>
           <li><strong>Recensioner, listor och sociala kopplingar</strong> — recensioner, kommentarer och listor du skapat, samt vänner, följare och grupp-medlemskap. Ditt medlemskap i en grupp bär ditt visningsnamn, användarnamn, din profilbild och vilka streamingtjänster du har (se §10).</li>
           <li><strong>Streamingrådgivaren-historik</strong> — dina pausa- och återuppta-beslut (sparbeslut) som rådgivaren sparar.</li>

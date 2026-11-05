@@ -111,6 +111,8 @@ const SUGGESTION: BundleSuggestion = {
   startFeeMonthlyKr: 0,
   commitmentTotalKr: null,
   savingKr: 58,
+  savesFromMonth: null,
+  boundReplacedNames: [],
   bonusProviderIds: [337],
   bonusNames: ['Disney+'],
   downgradeProviderIds: [],

@@ -76,3 +76,31 @@ describe('resolveEffectiveMonthlyCost (BIN-417 campaign-aware cost)', () => {
     expect(resolveEffectiveMonthlyCost(8, user, dayAfter)).toBe(219); // reverted → tier
   });
 });
+
+describe('resolveEffectiveMonthlyCost with a binding', () => {
+  const binding = { 8: { months: 12, startedOn: '2026-07', monthlyCost: 99 } }; // bound through 2027-07
+
+  it('uses the binding price while it applies', () => {
+    expect(resolveEffectiveMonthlyCost(8, { providerBindings: binding }, NOW)).toBe(99);
+  });
+  it('beats both a campaign price and an own cost', () => {
+    expect(resolveEffectiveMonthlyCost(8, {
+      providerBindings: binding,
+      providerCosts: { 8: 120 },
+      providerCampaigns: { 8: { monthlyCost: 29, endDate: '2026-10-01' } },
+    }, NOW)).toBe(99);
+  });
+  it('goes back to the ordinary price once the binding has run out', () => {
+    expect(resolveEffectiveMonthlyCost(8, { providerBindings: binding }, new Date(2027, 7, 1))).toBe(169);
+  });
+  it('gives a price even where the catalog has none, because the user entered one', () => {
+    expect(resolveEffectiveMonthlyCost(999999, { providerBindings: { 999999: { months: 6, startedOn: '2026-07', monthlyCost: 50 } } }, NOW)).toBe(50);
+  });
+  it('a broken entry is ignored rather than thrown on', () => {
+    expect(resolveEffectiveMonthlyCost(8, { providerBindings: { 8: { months: 7 } } }, NOW)).toBe(169);
+  });
+  it('keys on the canonical id (alias 531 reads the 431 entry)', () => {
+    expect(resolveEffectiveMonthlyCost(531, { providerBindings: { 431: { months: 12, startedOn: '2026-07', monthlyCost: 55 } } }, NOW)).toBe(55);
+  });
+});
+

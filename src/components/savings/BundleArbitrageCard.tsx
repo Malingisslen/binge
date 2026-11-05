@@ -3,6 +3,7 @@
 import { formatKr } from '@/lib/formatKr';
 import type { BundleSuggestion } from '@/types';
 import { Eyebrow } from '@/components/ui/Eyebrow';
+import { formatMonthYear } from '@/lib/advisor/bindings';
 
 // BIN-430 — UI-yta för paket-arbitrage (motorn: src/lib/advisor/bundleArbitrage.ts,
 // BIN-183/433). Visar när användarens LÖSA, var-för-sig-betalda tjänster vore
@@ -95,6 +96,13 @@ export default function BundleArbitrageCard({ suggestions }: { suggestions: Bund
                 Du betalar {formatKr(s.currentKr)} kr/mån för {joinNames(s.replacedNames)} var för sig.{' '}
                 Samma tjänster ingår i {s.bundle.name} för {formatKr(s.bundleKr)} kr/mån.
               </p>
+
+              {s.savesFromMonth && (
+                <p data-testid="bundle-saves-from" className="text-xs text-ink mt-1">
+                  Sparar först från {formatMonthYear(s.savesFromMonth)}: {joinNames(s.boundReplacedNames)}{' '}
+                  {s.boundReplacedNames.length > 1 ? 'är bundna' : 'är bunden'} tills dess, enligt dina uppgifter.
+                </p>
+              )}
 
               {s.bonusNames.length > 0 && (
                 <p className="text-xxs text-ink-3 mt-1">

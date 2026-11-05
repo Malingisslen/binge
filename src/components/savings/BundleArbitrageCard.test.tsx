@@ -32,6 +32,8 @@ function suggestion(over: Partial<BundleSuggestion> = {}): BundleSuggestion {
     startFeeMonthlyKr: 0,
     commitmentTotalKr: null,
     savingKr: 58,
+    savesFromMonth: null,
+    boundReplacedNames: [],
     bonusProviderIds: [337],
     bonusNames: ['Disney+'],
     downgradeProviderIds: [],
@@ -175,5 +177,21 @@ describe('BundleArbitrageCard (BIN-430)', () => {
       render(<BundleArbitrageCard suggestions={[suggestion()]} />);
       expect(screen.queryByTestId('bundle-commitment')).toBeNull();
     });
+  });
+
+  it('says when the saving can start if a replaced service is bound, and names it in the singular', () => {
+    render(<BundleArbitrageCard suggestions={[suggestion({ savesFromMonth: '2027-04', boundReplacedNames: ['Netflix'] })]} />);
+    const line = screen.getByTestId('bundle-saves-from');
+    expect(line.textContent).toBe('Sparar först från apr 2027: Netflix är bunden tills dess, enligt dina uppgifter.');
+  });
+
+  it('uses the plural for several bound services', () => {
+    render(<BundleArbitrageCard suggestions={[suggestion({ savesFromMonth: '2028-08', boundReplacedNames: ['Netflix', 'HBO Max'] })]} />);
+    expect(screen.getByTestId('bundle-saves-from').textContent).toContain('Netflix och HBO Max är bundna tills dess');
+  });
+
+  it('shows no start line when nothing is bound', () => {
+    render(<BundleArbitrageCard suggestions={[suggestion()]} />);
+    expect(screen.queryByTestId('bundle-saves-from')).toBeNull();
   });
 });

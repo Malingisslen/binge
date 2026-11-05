@@ -13,6 +13,7 @@ const auth = vi.hoisted(() => ({
   setProviderRenewalDay: vi.fn(async () => {}),
   updateProviderTier: vi.fn(),
   setProviderCampaign: vi.fn(async () => {}),
+  setProviderBinding: vi.fn(async () => {}),
 }));
 
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => auth }));
@@ -82,5 +83,55 @@ describe('ProvidersSection — kronbelopp grupperas i tusental (BIN-1374, BIN-13
     renderExpanded();
 
     expect(screen.getByRole('option', { name: krText('Basic — 129 kr') })).toBeInTheDocument();
+  });
+});
+
+describe('ProvidersSection — bindningstid', () => {
+  it('erbjuder att lägga till en bindning när ingen finns', () => {
+    auth.user = { myProviders: [8], providerCosts: { 8: 169 } };
+    renderExpanded();
+    expect(screen.getByRole('button', { name: '+ Lägg till bindningstid' })).toBeInTheDocument();
+  });
+
+  it('visar slutmånaden försiktigt, utan "sista dag" eller löfte om uppsägning', () => {
+    const start = new Date();
+    const startedOn = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}`;
+    auth.user = { myProviders: [8], providerBindings: { 8: { months: 12, startedOn, monthlyCost: 99 } } };
+    renderExpanded();
+    const row = screen.getByText(/Bindningstid:/);
+    expect(row.textContent).toMatch(/bunden till och med .* \d{4}/);
+    expect(row.textContent).toContain('enligt dina uppgifter. Kolla ditt avtal.');
+    expect(row.textContent).not.toMatch(/sista dag|kan säga upp/i);
+    expect(screen.getByRole('button', { name: 'Ta bort bindning' })).toBeInTheDocument();
+  });
+
+  it('en utgången bindning visas i dåtid och aldrig som "Bunden till"', () => {
+    auth.user = { myProviders: [8], providerBindings: { 8: { months: 3, startedOn: '2024-01', monthlyCost: 99 } } };
+    renderExpanded();
+    expect(screen.getByText(/Bindningen gick ut apr 2024/)).toBeInTheDocument();
+    expect(screen.queryByText(/bunden till/i)).toBeNull();
+  });
+
+  it('sparar längd, startmånad och pris för hand; Spara är låst tills priset är ifyllt', () => {
+    auth.user = { myProviders: [8] };
+    renderExpanded();
+    fireEvent.click(screen.getByRole('button', { name: '+ Lägg till bindningstid' }));
+    const save = screen.getByRole('button', { name: 'Spara' });
+    expect(save).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Bindningens längd'), { target: { value: '6' } });
+    fireEvent.change(screen.getByLabelText('Månaden bindningen började'), { target: { value: '2026-11' } });
+    fireEvent.change(screen.getByLabelText('Pris per månad under bindningen'), { target: { value: '79' } });
+    expect(save).toBeEnabled();
+    fireEvent.click(save);
+    expect(auth.setProviderBinding).toHaveBeenCalledWith(8, { months: 6, startedOn: '2026-11', monthlyCost: 79 });
+  });
+
+  it('Ta bort bindning rensar posten', () => {
+    const now = new Date();
+    const startedOn = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    auth.user = { myProviders: [8], providerBindings: { 8: { months: 12, startedOn, monthlyCost: 99 } } };
+    renderExpanded();
+    fireEvent.click(screen.getByRole('button', { name: 'Ta bort bindning' }));
+    expect(auth.setProviderBinding).toHaveBeenCalledWith(8, null);
   });
 });

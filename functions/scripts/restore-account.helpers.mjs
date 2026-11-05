@@ -86,6 +86,7 @@ export const PROFILE_FIELDS = [
   'providerCosts',
   'providerTiers',
   'providerCampaigns',
+  'providerBindings',
   'providerRenewalDays',
   'providerPauses',
   'pauseReminderNext',

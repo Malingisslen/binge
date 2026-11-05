@@ -35,9 +35,10 @@ function costOf(
   providerTiers: Record<number, string>,
   providerCampaigns: Record<number, ProviderCampaign>,
   now: Date,
+  providerBindings: Record<number, unknown>,
 ): number {
   // BIN-417: campaign-aware — a lapsed campaign auto-reverts to the ordinary price.
-  return resolveEffectiveMonthlyCost(id, { providerTiers, providerCosts, providerCampaigns }, now) ?? 0;
+  return resolveEffectiveMonthlyCost(id, { providerTiers, providerCosts, providerCampaigns, providerBindings }, now) ?? 0;
 }
 
 export function computeSpendSnapshot(
@@ -49,6 +50,7 @@ export function computeSpendSnapshot(
   // is only consulted when a campaign exists, so defaulting it is safe.
   providerCampaigns: Record<number, ProviderCampaign> = {},
   now: Date = new Date(),
+  providerBindings: Record<number, unknown> = {},
 ): SpendSnapshot {
   // Providers that carry backlog you'd actually watch (shared guard above).
   const activeProviderIds = new Set<number>();
@@ -64,7 +66,7 @@ export function computeSpendSnapshot(
   const idleProviders: { id: number; name: string; cost: number }[] = [];
   // Canonicalise + dedupe so a legacy alias+canonical pair isn't double-counted (BIN-409).
   for (const id of canonicalUniqueProviders(myProviders)) {
-    const cost = costOf(id, providerCosts, providerTiers, providerCampaigns, now);
+    const cost = costOf(id, providerCosts, providerTiers, providerCampaigns, now, providerBindings);
     if (cost <= 0) continue; // free services (SVT Play) aren't "spend"
     totalKr += cost;
     if (activeProviderIds.has(id)) {

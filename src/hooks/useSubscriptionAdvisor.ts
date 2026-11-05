@@ -8,6 +8,7 @@ import { getTVShowLite } from '@/lib/tmdb/client';
 import { getProvider, canonicalProviderId, canonicalUniqueProviders } from '@/lib/tmdb/providers';
 import { resolveEffectiveMonthlyCost } from '@/lib/advisor/effectiveCost';
 import { SWEDISH_BUNDLES } from '@/lib/advisor/bundleArbitrage';
+import { activeBinding, pausedSavingsKr } from '@/lib/advisor/bindings';
 import { daysBetween } from '@/lib/utils';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import { isEndedStatus } from '@/lib/airingState';
@@ -29,6 +30,7 @@ import {
   deriveProviderStatus,
   selectBundleSuggestions,
   isTotalCostEstimated,
+  isCountedInTotal,
 } from './useSubscriptionAdvisor.helpers';
 import type {
   TMDBTVShow, AdvisedShow, ProviderAdvisory, SubscribeAdvisory, AdvisorResult,
@@ -85,6 +87,7 @@ export function useSubscriptionAdvisor(
   const providerCosts = useMemo(() => user?.providerCosts ?? {}, [user?.providerCosts]);
   const providerTiers = useMemo(() => user?.providerTiers ?? {}, [user?.providerTiers]);
   const providerCampaigns = useMemo(() => user?.providerCampaigns ?? {}, [user?.providerCampaigns]);
+  const providerBindings = useMemo(() => user?.providerBindings ?? {}, [user?.providerBindings]);
   const providerPauses = useMemo(() => user?.providerPauses ?? {}, [user?.providerPauses]);
   // BIN-417: stable per-mount `now` for campaign resolution. Campaigns flip at a
   // day boundary; a per-mount value refreshes on navigation, which is enough and
@@ -256,12 +259,14 @@ export function useSubscriptionAdvisor(
       // Effektiv månadskostnad = tier/custom/kampanj-kaskaden, inte katalog-
       // defaulten. Delas mellan status-härledningen (BIN-506: en custom-prissatt
       // gratis-katalog-tjänst ska kunna bli paus-kandidat) och monthlyCost nedan.
-      const effectiveMonthlyCost = resolveEffectiveMonthlyCost(pid, { providerTiers, providerCosts, providerCampaigns }, now);
+      const effectiveMonthlyCost = resolveEffectiveMonthlyCost(pid, { providerTiers, providerCosts, providerCampaigns, providerBindings }, now);
 
       // Status-precedensen bor nu i deriveProviderStatus (BIN-411) — extraherad
       // för egna regressionstester. Named options-fält gör en positionsförväxling
       // omöjlig (hasUpcomingShow/hasWillSeeAnchor är båda boolean → 'upcoming').
+      const bound = activeBinding(providerBindings, pid, now);
       const status = deriveProviderStatus({
+        isBound: bound != null,
         hasActiveShow,
         hasUpcomingShow,
         hasWillSeeAnchor,
@@ -281,12 +286,13 @@ export function useSubscriptionAdvisor(
         color: provider.color,
         monthlyCost: effectiveMonthlyCost,
         status,
+        boundUntil: bound?.endMonth ?? null,
         shows: followingAnchors,
         nextAirDate: dates[0] ?? null,
       });
     }
 
-    const statusOrder: Record<ProviderAdvisory['status'], number> = { active: 0, upcoming: 1, free: 2, pause: 3 };
+    const statusOrder: Record<ProviderAdvisory['status'], number> = { active: 0, upcoming: 1, free: 2, pause: 3, bound: 3 };
     providerAdvisories.sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
 
     const subscribeAdvice: SubscribeAdvisory[] = [];
@@ -350,7 +356,14 @@ export function useSubscriptionAdvisor(
           shortName: provider.shortName,
           color: provider.color,
           isSubscribed: myProviderSet.has(pid),
-          monthlyCost: resolveEffectiveMonthlyCost(pid, { providerTiers, providerCosts, providerCampaigns }, now),
+          // Bindningspriset bara för tjänster man har: en gammal bindning prissätter inte en tjänst man kanske inte har kvar.
+          monthlyCost: resolveEffectiveMonthlyCost(
+            pid,
+            myProviderSet.has(pid)
+              ? { providerTiers, providerCosts, providerCampaigns, providerBindings }
+              : { providerTiers, providerCosts, providerCampaigns },
+            now,
+          ),
           tvCount: c.tv,
           movieCount: c.movie,
         });
@@ -369,7 +382,7 @@ export function useSubscriptionAdvisor(
       const provider = getProvider(pid);
       if (!provider) continue;
       const state = providerPauses[pid];
-      const monthlyCost = resolveEffectiveMonthlyCost(pid, { providerTiers, providerCosts, providerCampaigns }, now) ?? 0;
+      const monthlyCost = resolveEffectiveMonthlyCost(pid, { providerTiers, providerCosts, providerCampaigns, providerBindings }, now) ?? 0;
       const days = daysBetween(state.pausedAt);
       activePauses.push({
         providerId: pid,
@@ -379,7 +392,7 @@ export function useSubscriptionAdvisor(
         pausedAt: state.pausedAt,
         resumeAt: state.resumeAt,
         monthlyCost,
-        savingsSoFar: Math.round((monthlyCost * days) / 30),
+        savingsSoFar: pausedSavingsKr(monthlyCost, days, state.pausedAt, providerBindings, pid, now),
       });
     }
 
@@ -395,10 +408,11 @@ export function useSubscriptionAdvisor(
         .reduce((sum, p) => sum + (p.monthlyCost ?? 0), 0)
       : 0;
 
-    const countedInTotal = providerAdvisories.filter(p => !userPausedSet.has(p.providerId));
+    // En pausad men bunden tjänst kostar fortfarande, så den ingår i summan.
+    const countedInTotal = providerAdvisories.filter(p => isCountedInTotal(p, userPausedSet));
     const totalMonthlyCost = countedInTotal.reduce((sum, p) => sum + (p.monthlyCost ?? 0), 0);
     const totalMonthlyCostEstimated = isTotalCostEstimated(
-      countedInTotal, { providerTiers, providerCosts, providerCampaigns }, now);
+      countedInTotal, { providerTiers, providerCosts, providerCampaigns, providerBindings }, now);
 
     // tmdbIds där användaren har osedda aireade avsnitt (= "behind").
     // Använder den råa TMDB-datan via showsByTmdbId — det här är vår enda
@@ -517,7 +531,7 @@ export function useSubscriptionAdvisor(
       unfinishedTmdbIds,
       endedCaughtUpTmdbIds,
     };
-  }, [enabled, shows, followingTV, willSeeItems, myProviders, providerCosts, providerTiers, providerCampaigns, now, providerPauses, lookAheadDays, hasError]);
+  }, [enabled, shows, followingTV, willSeeItems, myProviders, providerCosts, providerTiers, providerCampaigns, providerBindings, now, providerPauses, lookAheadDays, hasError]);
 
   // BIN-430: paket-arbitrage. Ren funktion över ägda tjänster + samma
   // campaign-cost-inställningar (providerTiers/providerCosts/providerCampaigns)
@@ -529,11 +543,11 @@ export function useSubscriptionAdvisor(
       selectBundleSuggestions(
         enabled,
         myProviders,
-        { providerTiers, providerCosts, providerCampaigns },
+        { providerTiers, providerCosts, providerCampaigns, providerBindings },
         SWEDISH_BUNDLES,
         now,
       ),
-    [enabled, myProviders, providerTiers, providerCosts, providerCampaigns, now],
+    [enabled, myProviders, providerTiers, providerCosts, providerCampaigns, providerBindings, now],
   );
 
   // BIN-448: expose whether the user has ANY configured service, independent of

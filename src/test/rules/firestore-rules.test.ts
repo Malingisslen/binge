@@ -792,6 +792,14 @@ describe('users/{uid} create value bounds (BIN-1134/BIN-1142)', () => {
   it('a displayName one over the limit is denied', async () => {
     await assertFails(signup({ displayName: 'x'.repeat(NAME_MAX + 1) }));
   });
+  // Bindningstid: create-grenen har en egen klausul, så den testas utan seed.
+  it('providerBindings on signup: a map up to 20 entries passes, a non-map or 21 entries is denied', async () => {
+    const entry = { months: 12, startedOn: '2026-11', monthlyCost: 99 };
+    const many = (n: number) => Object.fromEntries(Array.from({ length: n }, (_, i) => [String(i + 1), entry]));
+    await assertFails(signup({ providerBindings: 'x' }));
+    await assertFails(signup({ providerBindings: many(21) }));
+    await assertSucceeds(signup({ providerBindings: many(20) }));
+  });
   // BIN-1164: WHICH UNIT `size()` counts, measured rather than assumed.
   // `src/lib/clampText.ts` clamps in UTF-16 code units and its header says the two
   // quantities are the same one — but every cap test above uses `'x'.repeat(N)`, where
@@ -905,6 +913,41 @@ describe('users/{uid} update value bounds + isAdmin escalation (BIN-1145, BIN-11
     expect(stored.providerRenewalDays).toEqual({ 76: 20 });
     expect(stored.bio).toBe('kvar');
   });
+  describe('providerBindings (bindningstid)', () => {
+    const binding = { months: 12, startedOn: '2026-11', monthlyCost: 149 };
+    const tooMany = () => Object.fromEntries(Array.from({ length: 21 }, (_, i) => [String(i + 1), binding]));
+
+    it('the owner can write one binding per key and clear it again with deleteField', async () => {
+      await seedOwnProfile({ bio: 'kvar' });
+      const ref = doc(ownerDb(), 'users', OWNER);
+      await assertSucceeds(setDoc(ref, { providerBindings: { 76: binding, 8: binding } }, { merge: true }));
+      await assertSucceeds(setDoc(ref, { providerBindings: { 76: deleteField() } }, { merge: true }));
+      const stored = (await getDoc(ref)).data()!;
+      expect(stored.providerBindings).toEqual({ 8: binding });
+      expect(stored.bio).toBe('kvar');
+    });
+    it('rejects a providerBindings that is not a map', async () => {
+      await seedOwnProfile();
+      const ref = doc(ownerDb(), 'users', OWNER);
+      await assertFails(setDoc(ref, { providerBindings: 'bunden' }, { merge: true }));
+      await assertFails(setDoc(ref, { providerBindings: [binding] }, { merge: true }));
+      await assertFails(setDoc(ref, { providerBindings: null }, { merge: true }));
+    });
+    it('rejects more than 20 bindings and allows exactly 20', async () => {
+      await seedOwnProfile();
+      const ref = doc(ownerDb(), 'users', OWNER);
+      await assertFails(setDoc(ref, { providerBindings: tooMany() }, { merge: true }));
+      const twenty = Object.fromEntries(Object.entries(tooMany()).slice(0, 20));
+      await assertSucceeds(setDoc(ref, { providerBindings: twenty }, { merge: true }));
+    });
+    it('another user cannot read or write the owner\'s bindings', async () => {
+      await seedOwnProfile({ providerBindings: { 76: binding } });
+      const other = doc(otherDb(), 'users', OWNER);
+      await assertFails(getDoc(other));
+      await assertFails(setDoc(other, { providerBindings: { 8: binding } }, { merge: true }));
+    });
+  });
+
   it('a per-key write creates a cost map that did not exist yet', async () => {
     await seedOwnProfile();
     const ref = doc(ownerDb(), 'users', OWNER);

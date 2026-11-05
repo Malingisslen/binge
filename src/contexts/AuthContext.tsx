@@ -34,6 +34,7 @@ import { CURRENT_TERMS_VERSION } from '@/lib/legal';
 import { getProvider, canonicalProviderId } from '@/lib/tmdb/providers';
 import { resolveEffectiveMonthlyCost } from '@/lib/advisor/effectiveCost';
 import type { ProviderCampaign } from '@/lib/advisor/campaignPricing';
+import { MAX_BINDINGS, pausedSavingsKr, readProviderBindings, sanitizeBindingInput, type ProviderBinding } from '@/lib/advisor/bindings';
 import { daysBetween, todayIso } from '@/lib/utils';
 import { clearNextPath } from '@/lib/nextPath';
 import { clearPendingAdd } from '@/lib/pendingAdd';
@@ -93,6 +94,9 @@ interface AuthState {
   // Lagrar RÅTT { monthlyCost, endDate } (aldrig ett resolvat pris), keyat på
   // kanoniskt id. Samma funktionella-merge-härdning som setProviderCost.
   setProviderCampaign: (providerId: number, campaign: ProviderCampaign | null) => Promise<void>;
+  // Sätt/ta bort EN tjänsts bindningstid (null = ta bort). Värdena klampas här, eftersom
+  // Firestore-reglerna bara kan se att det är en karta. Kastar vid ogiltig inmatning.
+  setProviderBinding: (providerId: number, binding: ProviderBinding | null) => Promise<void>;
   pauseProvider: (providerId: number, resumeAt?: string | null) => Promise<void>;
   setPauseReminder: (providerId: number, remind: boolean) => Promise<void>;
   resumeProvider: (providerId: number) => Promise<void>;
@@ -167,6 +171,7 @@ const AuthContext = createContext<AuthState>({
   updateProviderTier: async () => {},
   updateProviderTiers: async () => {},
   setProviderCampaign: async () => {},
+  setProviderBinding: async () => {},
   pauseProvider: async () => {},
   setPauseReminder: async () => {},
   resumeProvider: async () => {},
@@ -286,6 +291,7 @@ async function buildExistingProfile(data: Record<string, unknown>, firebaseUser:
     providerCosts: (data.providerCosts as Record<number, number>) ?? {},
     providerTiers: (data.providerTiers as Record<number, string>) ?? {},
     providerCampaigns: (data.providerCampaigns as UserProfile['providerCampaigns']) ?? {},
+    providerBindings: readProviderBindings(data.providerBindings),
     providerRenewalDays: (data.providerRenewalDays as Record<number, number>) ?? {},
     providerPauses: (data.providerPauses as UserProfile['providerPauses']) ?? {},
     calibrationGenres: (data.calibrationGenres as Record<number, number> | null) ?? null,
@@ -1236,7 +1242,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Lokalt ändras också bara den nyckeln, på det senaste läget: två skrivningar som blir
   // klara i omvänd ordning får inte ta bort varandras värden på skärmen.
   const writeProviderMapKey = useCallback(async (
-    field: 'providerCosts' | 'providerCampaigns' | 'providerRenewalDays',
+    field: 'providerCosts' | 'providerCampaigns' | 'providerRenewalDays' | 'providerBindings',
     { key, value }: { key: number; value: unknown },
   ) => {
     if (!uid) return;
@@ -1271,6 +1277,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [setCampaignByKey],
   );
 
+  const commitProviderBindings = useCallback(
+    (_next: Record<number, ProviderBinding>, changed: { key: number; value: ProviderBinding | null }) =>
+      writeProviderMapKey('providerBindings', changed),
+    [writeProviderMapKey],
+  );
+  const setBindingByKey = useOptimisticMirrorField(uid, user?.providerBindings, commitProviderBindings);
+  const setProviderBinding = useCallback(
+    async (providerId: number, binding: ProviderBinding | null) => {
+      const key = canonicalProviderId(providerId);
+      if (binding == null) return setBindingByKey(key, null);
+      const clean = sanitizeBindingInput(binding);
+      if (!clean) throw new Error('ogiltig bindningstid');
+      const existing = Object.keys(user?.providerBindings ?? {}).filter(k => Number(k) !== key).length;
+      if (existing >= MAX_BINDINGS) throw new Error('för många bindningar');
+      return setBindingByKey(key, clean);
+    },
+    [setBindingByKey, user?.providerBindings],
+  );
   // BIN-184: hushålls-fan-out — när kostnadsrelaterade profilfält ÄNDRAS
   // uppdateras användarens opt-in-bidrag i alla grupper (dirty-checkat, så en
   // oförändrad payload aldrig ger en write). Effekt-driven istället för fem
@@ -1405,10 +1429,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       providerTiers: user?.providerTiers,
       providerCosts: user?.providerCosts,
       providerCampaigns: user?.providerCampaigns,
+      providerBindings: user?.providerBindings,
     }, new Date()) ?? 0;
     // Minst 1 dag — annars hamnar pause-then-instant-resume-test som 0 kr.
     const durationDays = Math.max(1, daysBetween(pause.pausedAt));
-    const savedAmount = Math.round((monthlyCost * durationDays) / 30);
+    const savedAmount = pausedSavingsKr(monthlyCost, durationDays, pause.pausedAt, user?.providerBindings, providerId, new Date());
 
     const next = { ...current };
     delete next[providerId];
@@ -1847,7 +1872,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       user, uid, loading, profileLoading, profileLoadError, retryProfileLoad, emailVerified,
       signIn, signInEmail, register, resendEmailVerification, signOut,
-      updateProviders, updateDefaultView, updateHomeMunicipality, updateRotationSchedule, setProviderCost, setProviderRenewalDay, updateProviderTier, updateProviderTiers, setProviderCampaign,
+      updateProviders, updateDefaultView, updateHomeMunicipality, updateRotationSchedule, setProviderCost, setProviderRenewalDay, updateProviderTier, updateProviderTiers, setProviderCampaign, setProviderBinding,
       pauseProvider, setPauseReminder, resumeProvider,
       updateUsername, updateDisplayName, updateBio, updateDefaultVisibility, visibilitySyncPending, deletionInProgress, pendingReconsent, reconsentRestored, completeReconsent, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
       setCalibrationGenres, deleteAccount,
@@ -1855,7 +1880,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [
       user, uid, loading, profileLoading, profileLoadError, retryProfileLoad, emailVerified,
       signIn, signInEmail, register, resendEmailVerification, signOut,
-      updateProviders, updateDefaultView, updateHomeMunicipality, updateRotationSchedule, setProviderCost, setProviderRenewalDay, updateProviderTier, updateProviderTiers, setProviderCampaign,
+      updateProviders, updateDefaultView, updateHomeMunicipality, updateRotationSchedule, setProviderCost, setProviderRenewalDay, updateProviderTier, updateProviderTiers, setProviderCampaign, setProviderBinding,
       pauseProvider, setPauseReminder, resumeProvider,
       updateUsername, updateDisplayName, updateBio, updateDefaultVisibility, visibilitySyncPending, deletionInProgress, pendingReconsent, reconsentRestored, completeReconsent, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
       setCalibrationGenres, deleteAccount,

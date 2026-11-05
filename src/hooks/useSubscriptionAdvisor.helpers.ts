@@ -92,11 +92,14 @@ export function deriveProviderStatus(input: {
   hasWillSeeAnchor: boolean;
   isFree?: boolean;
   effectiveMonthlyCost?: number | null;
+  /** Bindning som gäller just nu. Tar bort paus-utfallet vid källan, så ingen konsument kan föreslå paus. */
+  isBound?: boolean;
 }): ProviderAdvisory['status'] {
   if (input.hasActiveShow) return 'active';
   else if (input.hasUpcomingShow) return 'upcoming';
   else if (input.hasWillSeeAnchor) return 'upcoming';
   else if (input.isFree || (input.effectiveMonthlyCost ?? 0) === 0) return 'free';
+  else if (input.isBound) return 'bound';
   else return 'pause';
 }
 
@@ -354,6 +357,15 @@ export function selectBundleSuggestions(
   detect: typeof detectBundleArbitrage = detectBundleArbitrage,
 ): BundleSuggestion[] {
   return enabled ? detect(ownedProviderIds, costSettings, bundles, now) : [];
+}
+
+// En pausad tjänst räknas bort ur månadssumman, utom när en bindning gäller: då
+// betalar man den ändå.
+export function isCountedInTotal(
+  p: Pick<ProviderAdvisory, 'providerId' | 'boundUntil'>,
+  userPausedSet: Set<number>,
+): boolean {
+  return !userPausedSet.has(p.providerId) || p.boundUntil != null;
 }
 
 // Paket I (2026-10-05): "(uppskattat)" på rådgivarens total. Anroparen skickar

@@ -19,6 +19,8 @@ export interface RotationProviderLite {
   shortName: string;
   color: string;
   monthlyCost: number | null;
+  /** Sista bindningsmånaden ('YYYY-MM') om en bindning gäller, annars null/saknas. */
+  boundUntil?: string | null;
 }
 
 export interface RotationUpcomingLite {
@@ -56,6 +58,7 @@ export function buildRotationStates(
       color: p.color,
       monthlyCost: cost,
       billingDay: renewalDays[p.providerId] ?? null,
+      boundUntilMonth: p.boundUntil ?? null,
       nextAiringDate: earliest ? earliest.date : null,
       quietWeeks,
     });

@@ -8,6 +8,16 @@ import { useDebouncedCommit } from '@/hooks/useDebouncedCommit';
 import { isValidBillingDay, daysUntilRenewal } from '@/lib/renewal';
 import { trackEvent } from '@/lib/analytics';
 import { formatKr } from '@/lib/formatKr';
+import {
+  BINDING_MONTH_OPTIONS,
+  MAX_BINDING_COST_KR,
+  bindingState,
+  currentMonth,
+  formatMonthYear,
+  isValidMonthString,
+  sanitizeBindingInput,
+  type ProviderBinding,
+} from '@/lib/advisor/bindings';
 import { SettingsSection } from './SettingsSection';
 import { eyebrowClass } from '@/components/ui/Eyebrow';
 import { fieldClass } from '@/components/ui/Field';
@@ -20,7 +30,7 @@ import {
 const FLATRATE = SWEDISH_PROVIDERS.filter(p => p.type === 'flatrate');
 
 export function ProvidersSection() {
-  const { user, updateProviders, setProviderCost, setProviderRenewalDay, updateProviderTier, setProviderCampaign } = useAuth();
+  const { user, updateProviders, setProviderCost, setProviderRenewalDay, updateProviderTier, setProviderCampaign, setProviderBinding } = useAuth();
   const { show: toast } = useToast();
 
   const savedProviders = useMemo(() => user?.myProviders ?? [], [user?.myProviders]);
@@ -55,7 +65,7 @@ export function ProvidersSection() {
   };
 
   const { selected: selectedProviders, available } = splitProviders(FLATRATE, selected);
-  const total = totalMonthlyCost(selected, user.providerCosts ?? {}, user.providerTiers ?? {}, user.providerCampaigns ?? {});
+  const total = totalMonthlyCost(selected, user.providerCosts ?? {}, user.providerTiers ?? {}, user.providerCampaigns ?? {}, new Date(), user.providerBindings ?? {});
 
   const tile = (p: SwedishProvider, isSelected: boolean) => {
     const fg = readableTextColor(p.color);
@@ -122,7 +132,7 @@ export function ProvidersSection() {
       )}
 
       {selectedProviders.length > 0 && (
-        <div className="border-t border-rule-2 pt-3">
+        <div id="bindningstid" className="border-t border-rule-2 pt-3 scroll-mt-16">
           <div className={eyebrowClass({ className: 'mb-2' })}>Nivå &amp; kostnad</div>
           <p className="text-xs text-ink-3 mb-2 leading-snug">
             Väljer du en nivå följer priset tjänstens aktuella listpris — det uppdateras automatiskt när tjänsten
@@ -214,6 +224,15 @@ export function ProvidersSection() {
                   onClear={() => setProviderCampaign(provider.id, null)
                     .then(() => toast('Kampanjpris borttaget'))
                     .catch(() => toast('Kunde inte ta bort kampanjen.'))}
+                />
+                <ProviderBindingRow
+                  state={bindingState(user.providerBindings, provider.id, new Date())}
+                  onSave={(b) => setProviderBinding(provider.id, b)
+                    .then(() => toast('Bindningstid sparad'))
+                    .catch(() => toast('Kunde inte spara bindningstiden. Försök igen.'))}
+                  onClear={() => setProviderBinding(provider.id, null)
+                    .then(() => toast('Bindningen borttagen'))
+                    .catch(() => toast('Kunde inte ta bort bindningen.'))}
                 />
                 </div>
               );
@@ -322,6 +341,131 @@ function ProviderCampaignRow({
         {saving ? 'Sparar…' : 'Spara'}
       </button>
       <button type="button" onClick={() => setEditing(false)} disabled={saving} className="text-ink-3 bg-transparent border-none p-0 cursor-pointer disabled:opacity-50">Avbryt</button>
+    </div>
+  );
+}
+
+// Bindningstid: "du kan inte säga upp före". Sparar bara det man skrivit in (längd,
+// startmånad, pris); slutmånaden räknas ut vid läsning. Raden är medvetet skild från
+// kampanjpris, som är ett tillfälligt lägre pris men ingen spärr.
+type BindingRowState = ReturnType<typeof bindingState>;
+
+function ProviderBindingRow({
+  state,
+  onSave,
+  onClear,
+}: {
+  state: BindingRowState;
+  onSave: (b: ProviderBinding) => Promise<void> | void;
+  onClear: () => Promise<void> | void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [months, setMonths] = useState('12');
+  const [startedOn, setStartedOn] = useState('');
+  const [cost, setCost] = useState('');
+
+  const existing = state.kind === 'none' ? null : state.binding;
+
+  const startEdit = () => {
+    setMonths(String(existing?.months ?? 12));
+    setStartedOn(existing?.startedOn ?? currentMonth(new Date()));
+    setCost(existing ? String(existing.monthlyCost) : '');
+    setEditing(true);
+  };
+
+  const parsedCost = parseInt(cost, 10);
+  const candidate = !isNaN(parsedCost) && isValidMonthString(startedOn)
+    ? sanitizeBindingInput({ months: Number(months), startedOn, monthlyCost: parsedCost })
+    : null;
+  const thisMonth = currentMonth(new Date());
+  const valid = candidate != null && parsedCost <= MAX_BINDING_COST_KR && startedOn <= thisMonth;
+
+  const save = async () => {
+    if (!candidate || saving) return;
+    setSaving(true);
+    await onSave(candidate);
+    setSaving(false);
+    setEditing(false);
+  };
+
+  const linkBtn = 'bg-transparent border-none p-0 cursor-pointer';
+
+  if (!editing) {
+    return (
+      <div className="flex items-center gap-2 pl-16 pb-1 text-xs flex-wrap">
+        {state.kind === 'active' && (
+          <>
+            <span className="text-ink-3">
+              Bindningstid:{' '}
+              <span className="text-ink font-semibold">bunden till och med {formatMonthYear(state.endMonth)}</span>
+              {', '}<span className="tabular-nums">{formatKr(state.binding.monthlyCost)} kr/mån</span>, enligt dina uppgifter. Kolla ditt avtal.
+            </span>
+            <button type="button" onClick={startEdit} className={`${linkBtn} text-acc-deep`}>Ändra</button>
+            <button type="button" onClick={() => onClear()} className={`${linkBtn} text-ink-3`}>Ta bort bindning</button>
+          </>
+        )}
+        {state.kind === 'expired' && (
+          <>
+            <span className="text-ink-3">Bindningen gick ut {formatMonthYear(state.endMonth)}. Priset är tillbaka till ordinarie.</span>
+            <button type="button" onClick={startEdit} className={`${linkBtn} text-acc-deep`}>Ny bindning</button>
+            <button type="button" onClick={() => onClear()} className={`${linkBtn} text-ink-3`}>Ta bort</button>
+          </>
+        )}
+        {state.kind === 'none' && (
+          <button type="button" onClick={startEdit} className={`${linkBtn} text-ink-3 hover:text-acc-deep`}>
+            + Lägg till bindningstid
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="pl-16 pb-1.5 text-xs">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-ink-3">Bindningstid</span>
+        <select
+          value={months}
+          onChange={e => setMonths(e.target.value)}
+          aria-label="Bindningens längd"
+          className="select"
+        >
+          {BINDING_MONTH_OPTIONS.map(m => <option key={m} value={m}>{m} månader</option>)}
+        </select>
+        <span className="text-ink-3">från</span>
+        <input
+          type="month"
+          max={thisMonth}
+          value={startedOn}
+          onChange={e => setStartedOn(e.target.value)}
+          aria-label="Månaden bindningen började"
+          className={fieldClass({ size: 'sm' })}
+        />
+        <input
+          type="number"
+          min="0"
+          max={MAX_BINDING_COST_KR}
+          step="1"
+          placeholder="kr/mån"
+          value={cost}
+          onChange={e => setCost(e.target.value)}
+          aria-label="Pris per månad under bindningen"
+          className={fieldClass({ size: 'sm', className: 'w-[70px] text-right' })}
+        />
+        <button
+          type="button"
+          onClick={save}
+          disabled={!valid || saving}
+          className={`${linkBtn} text-acc-deep font-semibold disabled:text-ink-3 disabled:cursor-default`}
+        >
+          {saving ? 'Sparar…' : 'Spara'}
+        </button>
+        <button type="button" onClick={() => setEditing(false)} disabled={saving} className={`${linkBtn} text-ink-3 disabled:opacity-50`}>Avbryt</button>
+      </div>
+      <p className="text-ink-3 mt-1 leading-snug">
+        Binge tar inte hänsyn till uppsägningstid eller automatisk förnyelse. Kolla ditt avtal.
+      </p>
     </div>
   );
 }

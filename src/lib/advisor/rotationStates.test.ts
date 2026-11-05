@@ -53,3 +53,19 @@ describe('buildRotationStates', () => {
     expect(states.find(s => s.providerId === 76)!.billingDay).toBeNull();
   });
 });
+
+describe('buildRotationStates med bindning', () => {
+  it('skickar bindningens slutmånad vidare, null när ingen finns', () => {
+    const states = buildRotationStates(
+      [
+        { providerId: 8, providerName: 'Netflix', shortName: 'Netflix', color: '#e50914', monthlyCost: 169, boundUntil: '2027-11' },
+        { providerId: 76, providerName: 'Viaplay', shortName: 'Viaplay', color: '#000', monthlyCost: 129 },
+      ],
+      [],
+      {},
+      { weeks: 8 },
+    );
+    expect(states.find(s => s.providerId === 8)!.boundUntilMonth).toBe('2027-11');
+    expect(states.find(s => s.providerId === 76)!.boundUntilMonth).toBeNull();
+  });
+});

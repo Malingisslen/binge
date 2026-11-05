@@ -95,3 +95,23 @@ describe('summarizeMonthlySpend', () => {
     expect(s).toEqual({ totalKr: 99, paidCount: 1, estimated: false, lines: [{ label: 'Netflix', kr: 99 }] });
   });
 });
+
+describe('bindning och "uppskattat"', () => {
+  it('ett gällande bindningspris är användarens eget och märks inte uppskattat', () => {
+    const s = summarizeMonthlySpend(
+      [NETFLIX],
+      { providerBindings: { [NETFLIX]: { months: 12, startedOn: '2026-07', monthlyCost: 129 } } },
+      NOW,
+    );
+    expect(s).toEqual({ totalKr: 129, paidCount: 1, estimated: false, lines: [{ label: 'Netflix', kr: 129 }] });
+  });
+  it('när bindningen gått ut gäller listpriset igen och märks uppskattat', () => {
+    const s = summarizeMonthlySpend(
+      [NETFLIX],
+      { providerBindings: { [NETFLIX]: { months: 3, startedOn: '2025-01', monthlyCost: 129 } } },
+      NOW,
+    );
+    expect(s.totalKr).toBe(169);
+    expect(s.estimated).toBe(true);
+  });
+});

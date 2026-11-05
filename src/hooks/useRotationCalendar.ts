@@ -33,6 +33,7 @@ export function useRotationCalendar(): UseRotationCalendarResult {
         shortName: p.shortName,
         color: p.color,
         monthlyCost: p.monthlyCost,
+        boundUntil: p.boundUntil ?? null,
       })),
       upcoming.shows.map(s => ({
         providerId: s.providerId,

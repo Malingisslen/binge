@@ -7,7 +7,9 @@ export type { BundleSuggestion, SwedishBundle } from '@/lib/advisor/bundleArbitr
 // Subscription advisor — beräknad rekommendations-state för
 // Streamingrådgivaren (se src/hooks/useSubscriptionAdvisor.ts).
 
-export type AdvisorStatus = 'active' | 'upcoming' | 'pause' | 'free';
+// 'bound': tjänsten skulle annars vara en paus-kandidat men användaren har en
+// registrerad bindningstid som gäller, så ingen paus eller besparing föreslås.
+export type AdvisorStatus = 'active' | 'upcoming' | 'pause' | 'free' | 'bound';
 
 export interface AdvisedShow {
   tmdbId: number;
@@ -58,6 +60,8 @@ export interface ProviderAdvisory extends ProviderBase {
   monthlyCost: number | null;
   status: AdvisorStatus;
   nextAirDate: string | null;
+  /** Sista bindningsmånaden ('YYYY-MM') när en bindning gäller just nu, annars null/saknas. */
+  boundUntil?: string | null;
 }
 
 export interface SubscribeAdvisory extends ProviderBase {

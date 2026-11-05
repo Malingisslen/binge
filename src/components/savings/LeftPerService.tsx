@@ -17,6 +17,7 @@ import { getMovieLite, getTVShowLite, posterUrl, titleHref } from '@/lib/tmdb/cl
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import { canonicalUniqueProviders, getProvider } from '@/lib/tmdb/providers';
 import { resolveEffectiveMonthlyCost } from '@/lib/advisor/effectiveCost';
+import { activeBinding } from '@/lib/advisor/bindings';
 import { resolveProviderMonthlyCost } from '@/lib/tmdb/providers';
 import { formatKr } from '@/lib/formatKr';
 import { pluralSv } from '@/lib/utils';
@@ -69,7 +70,8 @@ export default function LeftPerService() {
     providerTiers: user?.providerTiers ?? {},
     providerCosts: user?.providerCosts ?? {},
     providerCampaigns: user?.providerCampaigns ?? {},
-  }), [user?.providerTiers, user?.providerCosts, user?.providerCampaigns]);
+    providerBindings: user?.providerBindings ?? {},
+  }), [user?.providerTiers, user?.providerCosts, user?.providerCampaigns, user?.providerBindings]);
 
   const allRows = useMemo(
     () => buildToWatchRows(items, {
@@ -127,8 +129,10 @@ export default function LeftPerService() {
     if (providerId === NO_SERVICE_ID) return { name: NO_SERVICE_NAME, color: 'var(--ink-3)', monthlyCost: null, estimated: false, campaign: false };
     const provider = getProvider(providerId);
     const monthlyCost = resolveEffectiveMonthlyCost(providerId, costSettings, now);
-    const campaign = monthlyCost !== resolveProviderMonthlyCost(providerId, costSettings);
-    const ownCost = costSettings.providerTiers[provider?.id ?? providerId] != null
+    const bound = activeBinding(costSettings.providerBindings, providerId, now) != null;
+    const campaign = !bound && monthlyCost !== resolveProviderMonthlyCost(providerId, costSettings);
+    const ownCost = bound
+      || costSettings.providerTiers[provider?.id ?? providerId] != null
       || costSettings.providerCosts[provider?.id ?? providerId] != null;
     return {
       name: provider?.name ?? `Tjänst ${providerId}`,

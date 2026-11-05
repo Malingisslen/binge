@@ -37,6 +37,7 @@
 
 import { canonicalProviderId, canonicalUniqueProviders, getProvider, resolveProviderMonthlyCost } from '@/lib/tmdb/providers';
 import { resolveEffectiveMonthlyCost, type CampaignCostSettings } from '@/lib/advisor/effectiveCost';
+import { activeBinding, monthAfter } from '@/lib/advisor/bindings';
 
 export interface SwedishBundle {
   /** Stable slug, e.g. 'telia-streaming-mest'. */
@@ -95,6 +96,14 @@ export interface BundleSuggestion {
    * you'd also get".
    */
   savingKr: number;
+  /**
+   * Första månaden ('YYYY-MM') man kan börja spara, när någon ersatt tjänst är bunden:
+   * månaden efter den senaste bindningens slut. null när ingen ersatt tjänst är bunden.
+   * Besparingen i `savingKr` är oförändrad; det här säger bara när den tidigast gäller.
+   */
+  savesFromMonth: string | null;
+  /** Namn på de ersatta tjänster som är bundna just nu. */
+  boundReplacedNames: string[];
   /** Bundle services the user does NOT already own — extra value, never priced into savingKr. */
   bonusProviderIds: number[];
   bonusNames: string[];
@@ -401,7 +410,15 @@ export function detectBundleArbitrage(
     const bindingMonths = bundle.bindingMonths ?? 0;
     const startFeeKr = bundle.startFeeKr ?? 0;
     const bonus = included.filter((id) => !owned.has(id));
+    const boundReplaced = replaced.flatMap((id) => {
+      const b = activeBinding(user.providerBindings, id, now);
+      return b ? [{ id, endMonth: b.endMonth }] : [];
+    });
+    const lastBoundEnd = boundReplaced.reduce<string | null>(
+      (latest, b) => (latest == null || b.endMonth > latest ? b.endMonth : latest), null);
     suggestions.push({
+      savesFromMonth: lastBoundEnd ? monthAfter(lastBoundEnd) : null,
+      boundReplacedNames: namesOf(boundReplaced.map((b) => b.id)),
       bundle,
       replacedProviderIds: replaced,
       replacedNames: namesOf(replaced),
