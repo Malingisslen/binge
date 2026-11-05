@@ -122,6 +122,7 @@ describe('profileFor — the restored users/{uid}', () => {
   const source = {
     displayName: 'Anna', email: 'anna@example.se', username: 'anna', bio: 'hej',
     providerCosts: { 8: 99 }, notificationSettings: { pushEnabled: true },
+    providerBindings: { 8: { months: 12, startedOn: '2026-11', monthlyCost: 99 } },
     isAdmin: true,
     termsAcceptedAt: 'T', ageConfirmedAt: 'A', termsVersion: '2026-01',
     visibilitySyncPending: true,
@@ -133,6 +134,7 @@ describe('profileFor — the restored users/{uid}', () => {
   it('keeps the person\'s own settings and adds the restore stamps', () => {
     const p = profileFor(source, stamps);
     expect(p).toMatchObject({ displayName: 'Anna', email: 'anna@example.se', username: 'anna', bio: 'hej', providerCosts: { 8: 99 } });
+    expect(p.providerBindings).toEqual({ 8: { months: 12, startedOn: '2026-11', monthlyCost: 99 } });
     expect(p).toMatchObject(stamps);
   });
 

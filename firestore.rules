@@ -373,8 +373,14 @@ service cloud.firestore {
       //
       // Talen är update-grenens egna (80 / 160), inte nya. Flyttas ett av dem
       // måste båda grenarna flytta i samma redigering.
+      // Bindningstid (providerBindings): reglerna kan bara se att det är en karta med högst
+      // 20 poster. Längd, månad och pris klampas av klienten och tolkas defensivt av varje
+      // läsare, så reglerna lovar inte mer än så.
       allow create: if isOwner(uid)
         && !('isAdmin' in request.resource.data)
+        && (!('providerBindings' in request.resource.data)
+          || (request.resource.data.providerBindings is map
+            && request.resource.data.providerBindings.size() <= 20))
         && (!('bio' in request.resource.data)
           || request.resource.data.bio == null
           || (request.resource.data.bio is string && request.resource.data.bio.size() <= 160))
@@ -387,6 +393,9 @@ service cloud.firestore {
           !('isAdmin' in request.resource.data)
           || request.resource.data.isAdmin == resource.data.get('isAdmin', false)
         )
+        && (!('providerBindings' in request.resource.data)
+          || (request.resource.data.providerBindings is map
+            && request.resource.data.providerBindings.size() <= 20))
         // Bio + displayName längd-/typvalidering (L4) — bara när fältet är satt.
         && (!('bio' in request.resource.data)
           || request.resource.data.bio == null

@@ -96,3 +96,51 @@ describe('buildRotationCalendar', () => {
     expect(cal.totalProjectedSavings).toBe(158);
   });
 });
+
+describe('buildRotationCalendar med bindning', () => {
+  it('flyttar uppsägningen till månaden efter bindningens slut och räknar sparandet därifrån', () => {
+    // Bunden till och med 2026-08: fri från 2026-09-01. Nästa avsnitt 2026-10-01.
+    const cal = buildRotationCalendar(
+      [state({ boundUntilMonth: '2026-08', nextAiringDate: '2026-10-01' })],
+      { today: TODAY },
+    );
+    expect(cal.entries).toHaveLength(1);
+    expect(cal.entries[0].cancel.date).toBe('2026-09-01');
+    expect(cal.entries[0].cancel.reason).toBe('Bunden till och med aug 2026');
+    expect(cal.entries[0].daysPaused).toBe(30);
+    expect(cal.entries[0].projectedSavings).toBe(100);
+  });
+
+  it('räknar noll besparing för dagar inom bindningen: inget förslag när avsnittet kommer före bindningens slut', () => {
+    const cal = buildRotationCalendar(
+      [state({ boundUntilMonth: '2026-12', nextAiringDate: '2026-09-01' })],
+      { today: TODAY },
+    );
+    expect(cal.entries).toHaveLength(0);
+    expect(cal.totalProjectedSavings).toBe(0);
+  });
+
+  it('en bindning som redan gått ut ändrar ingenting', () => {
+    const without = buildRotationCalendar([state({ nextAiringDate: '2026-09-01' })], { today: TODAY });
+    const expired = buildRotationCalendar([state({ nextAiringDate: '2026-09-01', boundUntilMonth: '2026-05' })], { today: TODAY });
+    expect(expired).toEqual(without);
+  });
+
+  it('uppsägningen är den senare av nästa förnyelse och bindningens slut', () => {
+    // Nästa förnyelse 2026-07-15 ligger efter att bindningen släppt (fri från 2026-07-01).
+    const cal = buildRotationCalendar(
+      [state({ boundUntilMonth: '2026-06', billingDay: 15, nextAiringDate: '2027-02-01', quietWeeks: 8 })],
+      { today: new Date(2026, 5, 23) },
+    );
+    expect(cal.entries[0].cancel.date).toBe('2026-07-15');
+  });
+
+  it('släpper förslaget när glappet efter bindningens slut blir för kort för en paus', () => {
+    // Fri från 2026-09-01, nästa avsnitt 2026-09-05: fyra dagar går inte att pausa på.
+    const cal = buildRotationCalendar(
+      [state({ boundUntilMonth: '2026-08', nextAiringDate: '2026-09-05' })],
+      { today: TODAY },
+    );
+    expect(cal.entries).toHaveLength(0);
+  });
+});

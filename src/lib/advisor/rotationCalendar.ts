@@ -14,6 +14,7 @@
  */
 
 import { nextRenewalDate } from '@/lib/renewal';
+import { monthAfter, formatMonthYear } from '@/lib/advisor/bindings';
 
 export interface RotationProviderState {
   providerId: number;
@@ -27,6 +28,8 @@ export interface RotationProviderState {
   nextAiringDate: string | null;
   /** Sammanhängande tysta veckor framåt (advisor: trailingQuietWeeks). */
   quietWeeks: number;
+  /** Sista bindningsmånaden ('YYYY-MM') om en bindning gäller. Man kan inte säga upp före dess. */
+  boundUntilMonth?: string | null;
 }
 
 export type RotationEventKind = 'cancel' | 'resume';
@@ -108,8 +111,16 @@ export function buildRotationCalendar(
     if (s.quietWeeks < deadZoneWeeks) continue;
 
     // Pausa innan nästa dragning (annars betalar du en månad du inte använder).
-    const cancelDate = s.billingDay != null ? nextRenewalDate(s.billingDay, today) : today;
+    let cancelDate = s.billingDay != null ? nextRenewalDate(s.billingDay, today) : today;
     const resumeDate = s.nextAiringDate ? parseISODate(s.nextAiringDate) : null;
+    // Uppsägning är tidigast när bindningen är slut, och aldrig före nästa förnyelse:
+    // dagar inom bindningen betalas ändå och räknas därför aldrig som sparade.
+    const boundFree = s.boundUntilMonth ? parseISODate(`${monthAfter(s.boundUntilMonth)}-01`) : null;
+    const boundReason = boundFree != null && boundFree.getTime() > cancelDate.getTime();
+    if (boundReason) cancelDate = boundFree;
+    // Något väntar innan bindningen går ut: det finns inget att pausa för.
+    // Eller så kort att en paus inte lönar sig (samma dödzon som annars).
+    if (boundReason && resumeDate != null && wholeDaysBetween(cancelDate, resumeDate) < deadZoneWeeks * 7) continue;
     const hasGap = resumeDate != null && wholeDaysBetween(cancelDate, resumeDate) > 0;
 
     const cancel: RotationEvent = {
@@ -120,9 +131,11 @@ export function buildRotationCalendar(
       color: s.color,
       date: toISODate(cancelDate),
       monthlyCost: s.monthlyCost,
-      reason: hasGap
-        ? `Inget du följer sänds på ${s.shortName} på ${s.quietWeeks} veckor`
-        : `Inget planerat på ${s.shortName} just nu`,
+      reason: boundReason
+        ? `Bunden till och med ${formatMonthYear(s.boundUntilMonth!)}`
+        : hasGap
+          ? `Inget du följer sänds på ${s.shortName} på ${s.quietWeeks} veckor`
+          : `Inget planerat på ${s.shortName} just nu`,
     };
 
     let resume: RotationEvent | null = null;

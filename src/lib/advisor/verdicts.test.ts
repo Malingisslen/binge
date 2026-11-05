@@ -24,6 +24,7 @@ function bundle(savingKr: number, name = 'Paket'): BundleSuggestion {
     bundle: { id: name, name, vendor: 'V', monthlyKr: 200, includedProviderIds: [1], verifiedDate: '2026-07-07', url: 'https://example.test' },
     replacedProviderIds: [1], replacedNames: ['A'], currentKr: 200 + savingKr, bundleKr: 200, bindingMonths: 0,
     startFeeKr: 0, startFeeMonthlyKr: 0, commitmentTotalKr: null, savingKr,
+    savesFromMonth: null, boundReplacedNames: [],
     bonusProviderIds: [], bonusNames: [], downgradeProviderIds: [], downgradeNames: [], stale: false,
   };
 }
@@ -158,5 +159,20 @@ describe('heroVerdict', () => {
   it('gives no answer under the pause floor, not even a pause the engine proposed', () => {
     const pauseAction = { kind: 'pause' as const, providerId: 8, providerName: 'Netflix', shortName: 'Netflix', color: 'x', monthlyCost: 169, nextAirDate: null };
     expect(heroVerdict(advisor({ pauseAdviceReady: false, primaryAction: pauseAction, bundleSuggestions: [bundle(58)] }), TODAY)).toBeNull();
+  });
+});
+
+describe('a service bound by a binding', () => {
+  const bound = provider({ providerId: 1, status: 'bound', boundUntil: '2027-11', monthlyCost: 149 });
+
+  it('gets a bound verdict with no price and no pause button, never "Pausa"', () => {
+    const [card] = serviceVerdicts(advisor({ providers: [bound] }), TODAY);
+    expect(card.verdict).toEqual({ kind: 'bound', boundUntil: '2027-11' });
+    expect(JSON.stringify(card.verdict)).not.toMatch(/monthlyCost|resumeAt/);
+  });
+
+  it('gives no pause hero when the engine proposes none for the bound service', () => {
+    const hero = heroVerdict(advisor({ providers: [bound], primaryAction: { kind: 'idle', nextCheckDate: null } }), TODAY);
+    expect(hero?.kind).toBe('idle');
   });
 });

@@ -817,6 +817,47 @@ describe('AuthContext — rensade kostnadsfält tas bort på servern (BIN-1435)'
     expect(ctx!.user?.providerCampaigns).toEqual({});
   });
 
+  it('en bindning sätts på det kanoniska id:t och klampas till heltal', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerBindings: {} });
+    setDoc.mockClear();
+
+    await act(async () => { await ctx!.setProviderBinding(1899, { months: 12, startedOn: '2026-11', monthlyCost: 99.4 }); });
+
+    const written = (userDocWrites()[0][1] as Record<string, unknown>).providerBindings;
+    expect(written).toEqual({ 384: { months: 12, startedOn: '2026-11', monthlyCost: 99 } });
+    expect(ctx!.user?.providerBindings).toEqual({ 384: { months: 12, startedOn: '2026-11', monthlyCost: 99 } });
+  });
+
+  it('en ogiltig bindning nekas utan skrivning', async () => {
+    renderAuth();
+    await login({ username: 'malin' });
+    setDoc.mockClear();
+
+    await act(async () => {
+      await expect(ctx!.setProviderBinding(8, { months: 5 as 3, startedOn: '2026-11', monthlyCost: 99 })).rejects.toThrow('ogiltig bindningstid');
+      await expect(ctx!.setProviderBinding(8, { months: 12, startedOn: '2026-13', monthlyCost: 99 })).rejects.toThrow('ogiltig bindningstid');
+    });
+    expect(userDocWrites()).toHaveLength(0);
+  });
+
+  it('en bindning tas bort per nyckel med deleteField', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerBindings: { 8: { months: 12, startedOn: '2026-11', monthlyCost: 99 } } });
+    setDoc.mockClear();
+
+    await act(async () => { await ctx!.setProviderBinding(8, null); });
+
+    expect((userDocWrites()[0][1] as Record<string, unknown>).providerBindings).toEqual({ 8: '__delete__' });
+    expect(ctx!.user?.providerBindings).toEqual({});
+  });
+
+  it('en trasig lagrad bindning läses som ingen bindning', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerBindings: { 8: { months: 99 }, 76: { months: 6, startedOn: '2026-11', monthlyCost: 79 } } });
+    expect(ctx!.user?.providerBindings).toEqual({ 76: { months: 6, startedOn: '2026-11', monthlyCost: 79 } });
+  });
+
   it('en kampanj satt via ett alias-id skrivs på det kanoniska id:t', async () => {
     renderAuth();
     await login({ username: 'malin', providerCampaigns: {} });
@@ -3437,6 +3478,58 @@ describe('pause reminders (BIN-1442)', () => {
     // A merge write keeps an omitted nested key, so only deleteField() removes it.
     expect(userSet.data.providerPauses).toEqual({ 76: '__delete__' });
     expect(userSet.data.pauseReminderNext).toBeNull();
+  });
+
+  it('resumeProvider books no saving for days inside a binding', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 10, 5)); // pausedAt 2026-10-01 -> 35 days
+    try {
+      const savedOf = () => batchSets.find(b => b.data.savedAmount !== undefined)!.data.savedAmount as number;
+
+      renderAuth();
+      await login({ username: 'malin', providerPauses: pauses });
+      batchSets.length = 0;
+      await act(async () => { await ctx!.resumeProvider(76); });
+      const unbound = savedOf();
+      expect(unbound).toBeGreaterThan(0);
+
+      renderAuth();
+      await login({
+        username: 'malin',
+        providerPauses: pauses,
+        // Bound through 2027-12: every paused day is inside the binding.
+        providerBindings: { 76: { months: 24, startedOn: '2026-01', monthlyCost: 149 } },
+      });
+      batchSets.length = 0;
+      await act(async () => { await ctx!.resumeProvider(76); });
+      expect(savedOf()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('setProviderBinding refuses a 21st binding but still updates an existing one at the cap', async () => {
+    const entry = { months: 12 as const, startedOn: '2026-11', monthlyCost: 99 };
+    const twenty = Object.fromEntries(Array.from({ length: 20 }, (_, i) => [i + 1, entry]));
+    renderAuth();
+    await login({ username: 'malin', providerBindings: twenty });
+    setDoc.mockClear();
+    await act(async () => {
+      await expect(ctx!.setProviderBinding(8, entry)).resolves.toBeUndefined();
+    });
+    expect(userDocWrites()).toHaveLength(1);
+  });
+
+  it('setProviderBinding throws when 20 other bindings already exist', async () => {
+    const entry = { months: 12 as const, startedOn: '2026-11', monthlyCost: 99 };
+    const twenty = Object.fromEntries(Array.from({ length: 20 }, (_, i) => [i + 100, entry]));
+    renderAuth();
+    await login({ username: 'malin', providerBindings: twenty });
+    setDoc.mockClear();
+    await act(async () => {
+      await expect(ctx!.setProviderBinding(8, entry)).rejects.toThrow('för många bindningar');
+    });
+    expect(userDocWrites()).toHaveLength(0);
   });
 });
 

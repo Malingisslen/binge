@@ -14,6 +14,11 @@ paths:
 
 ```
 users/{uid}                               — profil, preferenser, termsAcceptedAt, onboardingCompletedAt
+                                           `providerBindings` (valfri karta, kanoniskt provider-id ->
+                                           { months 3|6|12|24, startedOn 'ÅÅÅÅ-MM', monthlyCost }): bindningstid.
+                                           Slutmånaden lagras aldrig; src/lib/advisor/bindings.ts räknar ut den.
+                                           Reglerna kontrollerar bara karta och högst 20 poster; värdena klampas
+                                           i setProviderBinding och tolkas defensivt av varje läsare.
 users/{uid}/watchlist/{mediaType_tmdbId} — mediaTypeDocId(), t.ex. movie_42 / tv_42 (BIN-560).
                                            Sedan BIN-766 binder firestore.rules FORMEN på create
                                            (`^(movie|tv)_[1-9][0-9]*$` sedan BIN-797) — communityRatings

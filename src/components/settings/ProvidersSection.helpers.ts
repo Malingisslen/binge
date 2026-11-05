@@ -49,10 +49,11 @@ export function totalMonthlyCost(
   // campaign exists, so defaulting it keeps existing callers/tests unchanged.
   providerCampaigns: Record<number, ProviderCampaign> = {},
   now: Date = new Date(),
+  providerBindings: Record<number, unknown> = {},
 ): number {
   // Canonicalise + dedupe so an alias+canonical pair isn't summed twice (BIN-409).
   return canonicalUniqueProviders(selectedIds).reduce(
-    (sum, id) => sum + (resolveEffectiveMonthlyCost(id, { providerTiers, providerCosts, providerCampaigns }, now) ?? 0),
+    (sum, id) => sum + (resolveEffectiveMonthlyCost(id, { providerTiers, providerCosts, providerCampaigns, providerBindings }, now) ?? 0),
     0,
   );
 }

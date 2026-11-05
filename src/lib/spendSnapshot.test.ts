@@ -112,3 +112,15 @@ describe('computeSpendSnapshot — a rentable title is not active spend (BIN-814
     expect(snap.idleProviders).toEqual([]);
   });
 });
+
+describe('computeSpendSnapshot med bindning', () => {
+  const NOW = new Date(2026, 9, 5);
+  it('räknar bindningspriset i stället för listpriset medan bindningen gäller', () => {
+    const bindings = { 8: { months: 12, startedOn: '2026-07', monthlyCost: 99 } };
+    expect(computeSpendSnapshot([8], [], {}, {}, {}, NOW, bindings).totalKr).toBe(99);
+  });
+  it('går tillbaka till listpriset när bindningen gått ut', () => {
+    const bindings = { 8: { months: 3, startedOn: '2025-01', monthlyCost: 99 } };
+    expect(computeSpendSnapshot([8], [], {}, {}, {}, NOW, bindings).totalKr).toBe(169);
+  });
+});

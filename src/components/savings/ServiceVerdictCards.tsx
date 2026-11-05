@@ -1,7 +1,9 @@
 'use client';
 
 import { formatKr } from '@/lib/formatKr';
+import Link from 'next/link';
 import { formatSwedishDate } from '@/lib/utils';
+import { formatMonthYear } from '@/lib/advisor/bindings';
 import type { ServiceCardData, ServiceVerdict } from '@/lib/advisor/verdicts';
 import ProviderDot from '@/components/ui/ProviderDot';
 import { Button } from '@/components/ui/Button';
@@ -28,6 +30,16 @@ function VerdictLine({ verdict }: { verdict: ServiceVerdict }) {
           <p className="text-xs text-ink-3 mt-1.5">
             {KEEP_REASON[verdict.reason]}
             {verdict.nextAirDate && ` Nytt avsnitt ${formatSwedishDate(verdict.nextAirDate)}.`}
+          </p>
+        </>
+      );
+    case 'bound':
+      return (
+        <>
+          <span className={badgeClass('muted')}>Bunden</span>
+          <p className="text-xs text-ink-3 mt-1.5">
+            Bunden till och med {formatMonthYear(verdict.boundUntil)}, enligt dina uppgifter, därför föreslås ingen paus.{' '}
+            <Link href="/settings/#bindningstid" className="text-acc-deep">Ändra eller ta bort</Link>
           </p>
         </>
       );

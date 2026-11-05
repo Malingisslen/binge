@@ -20,6 +20,7 @@
 
 import { resolveProviderMonthlyCost, canonicalProviderId } from '@/lib/tmdb/providers';
 import { resolveCampaignCost, type ProviderCampaign } from '@/lib/advisor/campaignPricing';
+import { activeBinding } from '@/lib/advisor/bindings';
 
 export interface CampaignCostSettings {
   providerTiers?: Record<number, string>;
@@ -28,13 +29,15 @@ export interface CampaignCostSettings {
    *  providerTiers/providerCosts). Optional third case — distinct from
    *  providerCosts, which stays unambiguously "egen ordinarie kostnad". */
   providerCampaigns?: Record<number, ProviderCampaign>;
+  /** Råa bindningar (kanoniskt id). Tolkas defensivt i bindings.ts. */
+  providerBindings?: Record<number, unknown>;
 }
 
 /**
  * The effective monthly cost a user pays for a provider at `now`: the campaign
  * price while its campaign is active, else the ordinary resolved price. Returns
  * null ONLY when the ordinary cost is unknown (unknown provider, or no cost known
- * anywhere) — a campaign can never manufacture a cost out of nothing, since it
+ * anywhere) and no binding price is registered — a campaign can never manufacture a cost out of nothing, since it
  * needs an ordinary price to revert to. `now` is required + injected (never
  * defaulted) so results are deterministic, matching resolveCampaignCost.
  */
@@ -43,6 +46,11 @@ export function resolveEffectiveMonthlyCost(
   user: CampaignCostSettings,
   now: Date,
 ): number | null {
+  // Under en bindning är det inskrivna bindningspriset det man faktiskt betalar, och
+  // det går före både kampanjpris och egen kostnad. Gått bindningen ut gäller
+  // ordinarie pris igen.
+  const bound = activeBinding(user.providerBindings, providerId, now);
+  if (bound) return bound.binding.monthlyCost;
   const ordinary = resolveProviderMonthlyCost(providerId, user);
   if (ordinary == null) return null;
   // Canonicalise the campaign lookup so an alias id (e.g. 531 → 431) resolves the

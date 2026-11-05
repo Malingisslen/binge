@@ -495,3 +495,47 @@ describe('start fee (BIN-1335, Malin 2026-09-28 variant A)', () => {
     expect(s.commitmentTotalKr).toBeNull();
   });
 });
+
+describe('detectBundleArbitrage med bundna tjänster', () => {
+  const bundleOf = () => fixture(349, [8, 337, 384], { includedTiers: STD3 });
+
+  it('utan bindning finns ingen start-månad', () => {
+    const [s] = detectBundleArbitrage([8, 337, 384], {}, [bundleOf()], NOW);
+    expect(s.savesFromMonth).toBeNull();
+    expect(s.boundReplacedNames).toEqual([]);
+  });
+
+  it('en bunden tjänst: besparingen räknas på bindningspriset och startar månaden efter slutet', () => {
+    // Netflix bunden till och med 2027-03 för 189 kr: 189 + 129 + 149 = 467 mot 349.
+    const user = { providerBindings: { 8: { months: 12, startedOn: '2026-03', monthlyCost: 189 } } };
+    const [s] = detectBundleArbitrage([8, 337, 384], user, [bundleOf()], NOW);
+    expect(s.currentKr).toBe(467);
+    expect(s.savingKr).toBe(118);
+    expect(s.savesFromMonth).toBe('2027-04');
+    expect(s.boundReplacedNames).toEqual(['Netflix']);
+  });
+
+  it('flera bundna tjänster: start-månaden följer den som är bunden längst', () => {
+    const user = {
+      providerBindings: {
+        384: { months: 24, startedOn: '2026-07', monthlyCost: 149 },
+        8: { months: 6, startedOn: '2026-07', monthlyCost: 169 },
+      },
+    };
+    const [s] = detectBundleArbitrage([8, 337, 384], user, [bundleOf()], NOW);
+    expect(s.savesFromMonth).toBe('2028-08');
+    expect(s.boundReplacedNames.sort()).toEqual(['HBO Max', 'Netflix']);
+  });
+
+  it('en bindning som gått ut ger ingen start-månad', () => {
+    const user = { providerBindings: { 8: { months: 3, startedOn: '2026-01', monthlyCost: 189 } } };
+    const [s] = detectBundleArbitrage([8, 337, 384], user, [bundleOf()], NOW);
+    expect(s.savesFromMonth).toBeNull();
+  });
+
+  it('nettot förblir strikt positivt: ett bindningspris som äter besparingen ger inget förslag', () => {
+    // 100 + 129 + 149 = 378: paketet för 378 kr ger exakt noll i besparing.
+    const user = { providerBindings: { 8: { months: 12, startedOn: '2026-07', monthlyCost: 100 } } };
+    expect(detectBundleArbitrage([8, 337, 384], user, [fixture(378, [8, 337, 384], { includedTiers: STD3 })], NOW)).toEqual([]);
+  });
+});

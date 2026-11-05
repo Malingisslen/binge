@@ -162,7 +162,7 @@ export function useAdvisorTimeline(): TimelineResult {
         ? 'user-paused'
         : p.status === 'pause' ? 'pause'
         : p.status === 'free' ? 'free'
-        : p.status === 'upcoming' ? 'upcoming'
+        : p.status === 'upcoming' || p.status === 'bound' ? 'upcoming'
         : 'active';
       return makeLane({
         providerId: p.providerId,

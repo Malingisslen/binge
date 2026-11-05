@@ -12,6 +12,8 @@ const DEFAULT_PAUSE_DAYS = 30;
 
 export type ServiceVerdict =
   | { kind: 'keep'; reason: 'free' | 'watching' | 'coming'; nextAirDate: string | null }
+  /** Skulle annars ha varit "Pausa": bindningen gäller, så inget pausförslag visas. */
+  | { kind: 'bound'; boundUntil: string }
   | { kind: 'pause'; monthlyCost: number; resumeAt: string; resumeIsAirDate: boolean }
   /** startDate null: paused with no resume date set. */
   | { kind: 'rotate-in'; startDate: string | null; alreadyPaused: boolean };
@@ -61,6 +63,9 @@ export function serviceVerdicts(advisor: AdvisorResult, today: Date): ServiceCar
       return { ...base, verdict: { kind: 'rotate-in', startDate: paused.resumeAt, alreadyPaused: true } };
     }
     const cost = p.monthlyCost ?? 0;
+    if (p.status === 'bound' && p.boundUntil) {
+      return { ...base, verdict: { kind: 'bound', boundUntil: p.boundUntil } };
+    }
     if (p.status === 'pause' && cost > 0) {
       return {
         ...base,

@@ -160,6 +160,9 @@ export interface UserProfile {
   // Strukturellt identisk med ProviderCampaign (lib/advisor/campaignPricing) —
   // inlinad här så domän-typerna slipper ett lib-beroende.
   providerCampaigns?: Record<number, { monthlyCost: number; endDate: string }>;
+  // Bindningstid per tjänst (lib/advisor/bindings). Valfri; saknad post = obunden.
+  // Nyckel = kanoniskt provider-id. Slutmånaden lagras aldrig, den räknas ut vid läsning.
+  providerBindings?: Record<number, { months: 3 | 6 | 12 | 24; startedOn: string; monthlyCost: number }>;
   // BIN-46: valfri faktureringsdag (1–28) per provider för förnyelse-nedräkning.
   providerRenewalDays: Record<number, number>;
   providerPauses: Record<number, ProviderPauseState>;
