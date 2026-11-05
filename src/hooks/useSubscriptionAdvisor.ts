@@ -259,7 +259,7 @@ export function useSubscriptionAdvisor(
       // Effektiv månadskostnad = tier/custom/kampanj-kaskaden, inte katalog-
       // defaulten. Delas mellan status-härledningen (BIN-506: en custom-prissatt
       // gratis-katalog-tjänst ska kunna bli paus-kandidat) och monthlyCost nedan.
-      const effectiveMonthlyCost = resolveEffectiveMonthlyCost(pid, { providerTiers, providerCosts, providerCampaigns, providerBindings }, now);
+      const effectiveMonthlyCost = resolveEffectiveMonthlyCost(pid, { providerTiers, providerCosts, providerCampaigns, providerBindings, myProviders }, now);
 
       // Status-precedensen bor nu i deriveProviderStatus (BIN-411) — extraherad
       // för egna regressionstester. Named options-fält gör en positionsförväxling
@@ -360,7 +360,7 @@ export function useSubscriptionAdvisor(
           monthlyCost: resolveEffectiveMonthlyCost(
             pid,
             myProviderSet.has(pid)
-              ? { providerTiers, providerCosts, providerCampaigns, providerBindings }
+              ? { providerTiers, providerCosts, providerCampaigns, providerBindings, myProviders }
               : { providerTiers, providerCosts, providerCampaigns },
             now,
           ),
@@ -382,7 +382,7 @@ export function useSubscriptionAdvisor(
       const provider = getProvider(pid);
       if (!provider) continue;
       const state = providerPauses[pid];
-      const monthlyCost = resolveEffectiveMonthlyCost(pid, { providerTiers, providerCosts, providerCampaigns, providerBindings }, now) ?? 0;
+      const monthlyCost = resolveEffectiveMonthlyCost(pid, { providerTiers, providerCosts, providerCampaigns, providerBindings, myProviders }, now) ?? 0;
       const days = daysBetween(state.pausedAt);
       activePauses.push({
         providerId: pid,
@@ -412,7 +412,7 @@ export function useSubscriptionAdvisor(
     const countedInTotal = providerAdvisories.filter(p => isCountedInTotal(p, userPausedSet));
     const totalMonthlyCost = countedInTotal.reduce((sum, p) => sum + (p.monthlyCost ?? 0), 0);
     const totalMonthlyCostEstimated = isTotalCostEstimated(
-      countedInTotal, { providerTiers, providerCosts, providerCampaigns, providerBindings }, now);
+      countedInTotal, { providerTiers, providerCosts, providerCampaigns, providerBindings, myProviders }, now);
 
     // tmdbIds där användaren har osedda aireade avsnitt (= "behind").
     // Använder den råa TMDB-datan via showsByTmdbId — det här är vår enda
@@ -471,7 +471,7 @@ export function useSubscriptionAdvisor(
       // normally has no tier/custom entry, so this equals defaultMonthlyCost today)
       // — keeps the "one source of truth" invariant airtight against a stale
       // providerTiers/providerCosts entry left behind after un-subscribing.
-      monthlyCost: resolveEffectiveMonthlyCost(topSubscribe.providerId, { providerTiers, providerCosts, providerCampaigns }, now) ?? 0,
+      monthlyCost: resolveEffectiveMonthlyCost(topSubscribe.providerId, { providerTiers, providerCosts, providerCampaigns, myProviders }, now) ?? 0,
     } : null;
 
     const primaryAction = selectPrimaryAction({
@@ -543,7 +543,7 @@ export function useSubscriptionAdvisor(
       selectBundleSuggestions(
         enabled,
         myProviders,
-        { providerTiers, providerCosts, providerCampaigns, providerBindings },
+        { providerTiers, providerCosts, providerCampaigns, providerBindings, myProviders },
         SWEDISH_BUNDLES,
         now,
       ),

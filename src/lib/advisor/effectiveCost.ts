@@ -20,9 +20,12 @@
 
 import { resolveProviderMonthlyCost, canonicalProviderId } from '@/lib/tmdb/providers';
 import { resolveCampaignCost, type ProviderCampaign } from '@/lib/advisor/campaignPricing';
+import { isAppleTvIncludedInViaplay } from '@/lib/advisor/appleTvOverlap';
 import { activeBinding } from '@/lib/advisor/bindings';
 
 export interface CampaignCostSettings {
+  /** Behövs bara för att veta om Viaplay-paketet med Apple TV gäller (appleTvOverlap.ts). */
+  myProviders?: number[];
   providerTiers?: Record<number, string>;
   providerCosts?: Record<number, number>;
   /** Raw per-provider campaign input, keyed by CANONICAL provider id (same as
@@ -51,6 +54,8 @@ export function resolveEffectiveMonthlyCost(
   // ordinarie pris igen.
   const bound = activeBinding(user.providerBindings, providerId, now);
   if (bound) return bound.binding.monthlyCost;
+  // Apple TV+ ingår i Viaplay-paket med Apple TV: räknas en gång, hos Viaplay.
+  if (isAppleTvIncludedInViaplay(providerId, user)) return 0;
   const ordinary = resolveProviderMonthlyCost(providerId, user);
   if (ordinary == null) return null;
   // Canonicalise the campaign lookup so an alias id (e.g. 531 → 431) resolves the

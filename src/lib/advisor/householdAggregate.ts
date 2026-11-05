@@ -29,6 +29,7 @@
 //    er" is the insight). The saving figures live in householdVerdicts.ts, not in
 //    this output shape.
 
+import { isAppleTvIncludedInViaplay } from '@/lib/advisor/appleTvOverlap';
 import { subscriptionProviderIds } from '@/lib/watchlist/subscriptionProviders';
 import { canonicalProviderId, canonicalUniqueProviders, getProvider, resolveProviderMonthlyCost } from '@/lib/tmdb/providers';
 import { resolveCampaignCost, type ProviderCampaign } from '@/lib/advisor/campaignPricing';
@@ -597,7 +598,9 @@ export function buildHouseholdContribution(
   const costs: Record<number, number> = {};
   const campaigns: Record<number, ProviderCampaign> = {};
   for (const id of providerIds) {
-    const ordinary = resolveProviderMonthlyCost(id, { providerTiers, providerCosts });
+    const ordinary = isAppleTvIncludedInViaplay(id, { providerTiers, myProviders })
+      ? 0
+      : resolveProviderMonthlyCost(id, { providerTiers, providerCosts });
     if (ordinary != null) costs[id] = ordinary;
     // User maps are canonical-keyed (BIN-417 contract) — plain lookup suffices.
     const campaign = providerCampaigns[id];

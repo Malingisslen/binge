@@ -36,9 +36,10 @@ function costOf(
   providerCampaigns: Record<number, ProviderCampaign>,
   now: Date,
   providerBindings: Record<number, unknown>,
+  myProviders: number[],
 ): number {
   // BIN-417: campaign-aware — a lapsed campaign auto-reverts to the ordinary price.
-  return resolveEffectiveMonthlyCost(id, { providerTiers, providerCosts, providerCampaigns, providerBindings }, now) ?? 0;
+  return resolveEffectiveMonthlyCost(id, { providerTiers, providerCosts, providerCampaigns, providerBindings, myProviders }, now) ?? 0;
 }
 
 export function computeSpendSnapshot(
@@ -66,7 +67,7 @@ export function computeSpendSnapshot(
   const idleProviders: { id: number; name: string; cost: number }[] = [];
   // Canonicalise + dedupe so a legacy alias+canonical pair isn't double-counted (BIN-409).
   for (const id of canonicalUniqueProviders(myProviders)) {
-    const cost = costOf(id, providerCosts, providerTiers, providerCampaigns, now, providerBindings);
+    const cost = costOf(id, providerCosts, providerTiers, providerCampaigns, now, providerBindings, myProviders);
     if (cost <= 0) continue; // free services (SVT Play) aren't "spend"
     totalKr += cost;
     if (activeProviderIds.has(id)) {
