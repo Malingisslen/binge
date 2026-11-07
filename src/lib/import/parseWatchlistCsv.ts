@@ -89,7 +89,7 @@ function col(header: string[], row: string[], name: string): string | undefined 
   return idx >= 0 ? row[idx] : undefined;
 }
 
-function parseLetterboxdRow(header: string[], row: string[]): ImportRow | null {
+function parseLetterboxdRow(header: string[], row: string[], watched: boolean): ImportRow | null {
   const title = col(header, row, 'Name');
   if (!title) return null;
   // Letterboxd-betyg är 0.5–5.0 stjärnor — SAMMA skala som Binge lagrar
@@ -102,6 +102,7 @@ function parseLetterboxdRow(header: string[], row: string[]): ImportRow | null {
     rating: Number.isFinite(stars) && stars >= 0.5 && stars <= 5 ? stars : null,
     imdbId: null,
     mediaTypeHint: null, // Letterboxd är film-only.
+    watched,
   };
 }
 
@@ -184,7 +185,11 @@ export function mergeImportRows(rows: ImportRow[]): ImportRow[] {
   return [...byKey.values()];
 }
 
-export function parseWatchlistCsv(text: string): ParseResult {
+// Letterboxds watched.csv (och Binges egen sedda-export) saknar betyg och sedd-markering i
+// raderna; det är filnamnet som säger att titlarna är sedda. Dagboken har kolumnen Watched Date.
+const WATCHED_FILE_NAME = /watched|sedda/i;
+
+export function parseWatchlistCsv(text: string, fileName = ''): ParseResult {
   const trimmed = text.trimStart();
   if (trimmed.startsWith('[')) {
     return parseTraktJson(trimmed) ?? { format: 'unknown', rows: [], skipped: 0 };
@@ -196,11 +201,13 @@ export function parseWatchlistCsv(text: string): ParseResult {
   const format = detectFormat(header);
   if (format === 'unknown') return { format, rows: [], skipped: 0 };
 
+  const watchedFile = WATCHED_FILE_NAME.test(fileName)
+    || header.some(h => h.toLowerCase() === 'watched date');
   const rows: ImportRow[] = [];
   let skipped = 0;
   for (let i = 1; i < lines.length; i++) {
     const cells = parseCsvLine(lines[i]);
-    const parsed = format === 'imdb' ? parseImdbRow(header, cells) : parseLetterboxdRow(header, cells);
+    const parsed = format === 'imdb' ? parseImdbRow(header, cells) : parseLetterboxdRow(header, cells, watchedFile);
     if (parsed) rows.push(parsed);
     else skipped++;
   }
