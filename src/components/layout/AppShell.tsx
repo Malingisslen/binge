@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useFcmForeground } from '@/hooks/useFcmToken';
 import { useTitleLinkPrefetch } from '@/hooks/useTitleLinkPrefetch';
+import { useClearRecentSearchesOnSignOut } from '@/hooks/useRecentSearches';
 import AppTopbar from '@/components/layout/AppTopbar';
 import Subnav from '@/components/layout/Subnav';
 import MobileTabBar from '@/components/layout/MobileTabBar';
@@ -33,6 +34,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => setMounted(true), []);
   useFcmForeground();
   useTitleLinkPrefetch();
+  useClearRecentSearchesOnSignOut(uid);
 
   // BIN-816 / ADR 0020: an account whose deletion started and never finished
   // gets ONE screen and nothing else — no topbar, no subnav, no page. This is
