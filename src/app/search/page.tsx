@@ -60,13 +60,13 @@ function SearchResults() {
   }, [filteredByType, onlyMyServices, myProviders, rawProviderMap]);
 
   useEffect(() => {
-    if (!query.trim() || isLoading) return;
+    if (!query.trim() || isLoading || isError) return;
     trackEvent('search_submitted', { resultCount: results.length, mediaFilter });
     // Avsiktligt utelämnad: results.length. Vi vill fyra eventet en gång per
     // distinkt sökning (query + media-flik), inte vid varje provider-filter-
     // omräkning. results är en synkron useMemo så resultCount är aktuell här.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, mediaFilter, isLoading]);
+  }, [query, mediaFilter, isLoading, isError]);
 
   const providerMap = useMemo(() => {
     const map: Record<string, TMDBProvider[]> = {};
@@ -127,7 +127,7 @@ function SearchResults() {
 
       {isLoading ? (
         <LoadingView label="Söker…" />
-      ) : isError ? (
+      ) : isError && !data ? (
         // Utan den här grenen ser ett nätverksfel ut som "Inga träffar", och
         // användaren drar slutsatsen att titeln inte finns.
         <EmptyState
