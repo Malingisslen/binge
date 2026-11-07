@@ -52,6 +52,7 @@ vi.mock('@/hooks/useGroupHousehold', () => ({
   }),
 }));
 vi.mock('@/hooks/useGroupMemberNames', () => ({ useGroupMemberNames: () => ({}) }));
+vi.mock('@/hooks/useBlockedUsers', () => ({ useBlockedUsers: () => ({ blockedUids: new Set<string>() }) }));
 
 // BIN-1366: the full (providers-present) render path mounts sibling panels that
 // read their own hooks, so they render nothing here; the existing
