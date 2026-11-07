@@ -104,6 +104,7 @@
     "src/app/my/error.tsx",
     "src/app/search/error.tsx",
     "src/app/series/error.tsx",
+    "src/app/settings/error.tsx",
     "src/app/tv/[id]/error.tsx",
     "src/components/layout/SegmentError.tsx"
   ]

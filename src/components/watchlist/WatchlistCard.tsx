@@ -121,7 +121,15 @@ export function WatchlistCard({
           : 'border-rule hover:border-rule-2'
       }`}
       {...(selectMode
-        ? { onClick: onToggleSelect, role: 'checkbox', 'aria-checked': selected, 'aria-label': `Välj ${item.title}`, tabIndex: 0 }
+        ? {
+            onClick: onToggleSelect,
+            onKeyDown: (e: React.KeyboardEvent) => {
+              if (e.target === e.currentTarget && (e.key === ' ' || e.key === 'Enter')) {
+                e.preventDefault();
+                onToggleSelect?.();
+              }
+            },
+            role: 'checkbox', 'aria-checked': selected, 'aria-label': `Välj ${item.title}`, tabIndex: 0 }
         : {})}
     >
       {selectMode && (
