@@ -781,7 +781,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                       />
                     </td>
                     <td className="px-2 py-1.5 border-b border-border-table">
-                      <Link href={href}>
+                      <Link href={href} aria-label={item.title}>
                         {poster ? (
                           <div className={`poster duo-${toneForId(item.tmdbId)} w-[32px] h-[48px]`}>
                             <img src={poster} alt="" loading="lazy" decoding="async" width={32} height={48} />

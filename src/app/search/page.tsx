@@ -11,6 +11,7 @@ import TitleRow from '@/components/title/TitleRow';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { Button } from '@/components/ui/Button';
 import { canonicalProviderId, dedupeProvidersByCanonicalId } from '@/lib/tmdb/providers';
 import { isAddableMediaType } from '@/lib/tmdb/client';
 import { trackEvent } from '@/lib/analytics';
@@ -23,7 +24,7 @@ type MediaFilter = 'all' | 'movie' | 'tv';
 function SearchResults() {
   const searchParams = useSearchParams();
   const query = searchParams.get('q') ?? '';
-  const { data, isLoading } = useSearch(query);
+  const { data, isLoading, isError, refetch } = useSearch(query);
   const { user } = useAuth();
   const myProviders = useMemo(() => user?.myProviders ?? [], [user?.myProviders]);
 
@@ -126,6 +127,18 @@ function SearchResults() {
 
       {isLoading ? (
         <LoadingView label="Söker…" />
+      ) : isError ? (
+        // Utan den här grenen ser ett nätverksfel ut som "Inga träffar", och
+        // användaren drar slutsatsen att titeln inte finns.
+        <EmptyState
+          title="Sökningen gick inte att göra"
+          body="Kontrollera din anslutning och försök igen."
+          action={
+            <Button type="button" variant="acc" onClick={() => void refetch()}>
+              Försök igen
+            </Button>
+          }
+        />
       ) : results.length === 0 ? (
         <EmptyState title="Inga träffar" body="Försök med ett annat namn eller stavning." />
       ) : (
