@@ -31,7 +31,7 @@ export function useRecentSearches() {
 // A shared device must not show the next person what the previous one looked
 // up. Watches the sign-in → signed-out transition (not "signed out" itself) so a
 // guest who never signed in keeps their own history. Covers every cause of
-// sign-out, including an expired session and a deletion, and every open tab.
+// sign-out seen by an open tab: a deletion, an expired session, another tab.
 export function useClearRecentSearchesOnSignOut(uid: string | null) {
   const hadSession = useRef(false);
   useEffect(() => {
