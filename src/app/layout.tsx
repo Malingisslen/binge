@@ -42,10 +42,8 @@ export const metadata: Metadata = {
   // när Google indexerar /index.html som "/" + diverse query-param-varianter.
   alternates: { canonical: '/' },
   // BIN-68 — PWA: manifest + add-to-home. Den additiva, ofarliga halvan.
-  // Offline-service-workern är medvetet INTE registrerad här: FCM-SW:en äger
-  // redan scope '/', så en andra SW skulle ersätta den och slå sönder push —
-  // den delen kräver att caching slås ihop i firebase-messaging-sw.js och
-  // preview-testas (se BIN-68-kommentar). BIN-151: PNG-ikoner (192/512 + maskable
+  // Offline-cachen bor i firebase-messaging-sw.js (samma worker äger scope '/').
+  // BIN-151: PNG-ikoner (192/512 + maskable
   // + apple-touch) genererade från brand-marken (saffran-ruta, "b") finns nu i
   // /public → appen är installerbar med riktig hemskärms-ikon.
   manifest: '/manifest.json',

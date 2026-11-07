@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import SearchPage from './page';
 
 const fetchNextPage = vi.fn();
+const refetch = vi.fn();
 let hookState: Record<string, unknown> = {};
 let queryString = 'q=dune';
 
@@ -30,6 +31,8 @@ function state(over: Record<string, unknown>) {
     hasNextPage: true,
     isFetchingNextPage: false,
     isFetchNextPageError: false,
+    isError: false,
+    refetch,
     fetchNextPage,
     ...over,
   };
@@ -67,6 +70,14 @@ describe('SearchPage', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Det gick inte att hämta fler träffar.');
     fireEvent.click(screen.getByRole('button', { name: 'Försök igen' }));
     expect(fetchNextPage).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a retry, not "Inga träffar", when the first page fails', () => {
+    hookState = state({ data: undefined, isError: true, hasNextPage: false });
+    render(<SearchPage />);
+    expect(screen.getByText('Sökningen gick inte att göra')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Försök igen' }));
+    expect(refetch).toHaveBeenCalledTimes(1);
   });
 
   it('remembers a search that found something', () => {

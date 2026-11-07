@@ -11,13 +11,13 @@ import TitleRow from '@/components/title/TitleRow';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { Button } from '@/components/ui/Button';
 import { canonicalProviderId, dedupeProvidersByCanonicalId } from '@/lib/tmdb/providers';
 import { isAddableMediaType } from '@/lib/tmdb/client';
 import { trackEvent } from '@/lib/analytics';
 import { departmentLabel, rankPeople } from '@/lib/searchPeople';
 import type { TMDBProvider } from '@/types';
 import { cardClass } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
 import RecentSearches from '@/components/search/RecentSearches';
 import { mergeSearchPages } from '@/lib/searchPages';
 import { addRecentSearch } from '@/lib/recentSearches';
@@ -28,7 +28,7 @@ function SearchResults() {
   const searchParams = useSearchParams();
   const query = searchParams.get('q') ?? '';
   const {
-    data, isLoading, hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage,
+    data, isLoading, isError, refetch, hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage,
   } = useSearchPages(query);
   const { user } = useAuth();
   const myProviders = useMemo(() => user?.myProviders ?? [], [user?.myProviders]);
@@ -63,13 +63,13 @@ function SearchResults() {
   }, [filteredByType, onlyMyServices, myProviders, rawProviderMap]);
 
   useEffect(() => {
-    if (!query.trim() || isLoading) return;
+    if (!query.trim() || isLoading || isError) return;
     trackEvent('search_submitted', { resultCount: results.length, mediaFilter });
     // Avsiktligt utelämnad: results.length. Vi vill fyra eventet en gång per
     // distinkt sökning (query + media-flik), inte vid varje provider-filter-
     // omräkning. results är en synkron useMemo så resultCount är aktuell här.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, mediaFilter, isLoading]);
+  }, [query, mediaFilter, isLoading, isError]);
 
   // Remembered only once the search found something, so a typo does not
   // become a suggestion.
@@ -137,6 +137,18 @@ function SearchResults() {
 
       {isLoading ? (
         <LoadingView label="Söker…" />
+      ) : isError && !data ? (
+        // Utan den här grenen ser ett nätverksfel ut som "Inga träffar", och
+        // användaren drar slutsatsen att titeln inte finns.
+        <EmptyState
+          title="Sökningen gick inte att göra"
+          body="Kontrollera din anslutning och försök igen."
+          action={
+            <Button type="button" variant="acc" onClick={() => void refetch()}>
+              Försök igen
+            </Button>
+          }
+        />
       ) : results.length === 0 ? (
         <EmptyState
           title="Inga träffar"

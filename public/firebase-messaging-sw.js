@@ -94,11 +94,128 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
+// === Offline (BIN-1497) ===
+// Samma worker äger scope '/', så offline-cachen måste bo här (en andra worker
+// skulle ersätta push). Bara statiska, icke-personliga filer cachas: appskalet
+// (HTML), JS/CSS och ikoner. Användardata ligger i Firestore-/React Query-cachen,
+// aldrig här. Cachen byts när CACHE-namnet byts.
+const CACHE = 'binge-shell-v1';
+const MAX_ENTRIES = 400;
+const NAV_TIMEOUT_MS = 4000;
+// Skalen som dynamiska rutter (/movie/123 m.fl.) serveras från, se firebase.json.
+const SHELL_PREFIXES = ['tillsammans', 'grupper', 'list', 'user'];
+const SHELLS = ['/', '/_/index.html'].concat(SHELL_PREFIXES.map((p) => '/' + p + '/_/index.html'));
+// Inloggning, funktioner och egna API-anrop ska aldrig cachas.
+const NEVER_CACHE = /^\/(__\/|api\/)/;
+
+function shellFor(pathname) {
+  if (/^\/(movie|tv|person|provider)\//.test(pathname)) return '/_/index.html';
+  for (const p of SHELL_PREFIXES) {
+    if (pathname.startsWith('/' + p + '/')) return '/' + p + '/_/index.html';
+  }
+  return '/';
+}
+
+let puts = 0;
+
+async function remember(request, response) {
+  if (!response || !response.ok || response.type !== 'basic' || response.redirected) return;
+  const cache = await caches.open(CACHE);
+  await cache.put(request, response.clone());
+  // Rensningen listar hela cachen, så den körs bara var 20:e sparning.
+  if (++puts % 20 !== 0) return;
+  const keys = await cache.keys();
+  // Skalen är äldst men får aldrig rensas bort: utan dem går offlinestart inte.
+  const evictable = keys.filter((k) => !SHELLS.includes(new URL(k.url).pathname));
+  for (let i = 0; i < evictable.length - MAX_ENTRIES; i++) await cache.delete(evictable[i]);
+}
+
+function networkFirst(request, timeoutMs) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const fallback = () =>
+      caches.match(request).then((hit) => hit || null);
+    const timer = timeoutMs
+      ? setTimeout(() => {
+          fallback().then((hit) => {
+            if (hit && !settled) {
+              settled = true;
+              resolve(hit);
+            }
+          });
+        }, timeoutMs)
+      : null;
+    fetch(request)
+      .then((response) => {
+        remember(request, response).catch(() => {});
+        if (!settled) {
+          settled = true;
+          resolve(response);
+        }
+      })
+      .catch(() =>
+        fallback().then(async (hit) => {
+          if (settled) return;
+          settled = true;
+          if (hit) return resolve(hit);
+          if (request.mode === 'navigate') {
+            const shell = await caches.match(shellFor(new URL(request.url).pathname));
+            if (shell) return resolve(shell);
+          }
+          resolve(Response.error());
+        }),
+      )
+      .finally(() => timer && clearTimeout(timer));
+  });
+}
+
+async function cacheFirst(request) {
+  const hit = await caches.match(request);
+  if (hit) return hit;
+  try {
+    const response = await fetch(request);
+    remember(request, response).catch(() => {});
+    return response;
+  } catch (e) {
+    return Response.error();
+  }
+}
+
+self.addEventListener('fetch', (event) => {
+  const request = event.request;
+  if (request.method !== 'GET') return;
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin || NEVER_CACHE.test(url.pathname)) return;
+  if (url.pathname.startsWith('/_next/static/')) {
+    // Innehållshashade filnamn: en cachad fil är alltid rätt version.
+    event.respondWith(cacheFirst(request));
+    return;
+  }
+  event.respondWith(networkFirst(request, request.mode === 'navigate' ? NAV_TIMEOUT_MS : 0));
+});
+
 // Standard SW lifecycle — claim:a klienter direkt så vi inte behöver
 // vänta på reload för första aktivering.
-self.addEventListener('install', () => {
+self.addEventListener('install', (event) => {
   self.skipWaiting();
+  // Skalen läggs undan direkt så första offlinestarten funkar även på sidor
+  // som aldrig besökts. Misslyckas det (t.ex. nätet försvann) är det ofarligt.
+  event.waitUntil(
+    caches
+      .open(CACHE)
+      .then((cache) => cache.addAll(SHELLS))
+      .catch(() => {}),
+  );
 });
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    caches
+      .keys()
+      .then((names) =>
+        Promise.all(
+          names.filter((n) => n.startsWith('binge-shell-') && n !== CACHE).map((n) => caches.delete(n)),
+        ),
+      )
+      .then(() => self.clients.claim()),
+  );
 });
