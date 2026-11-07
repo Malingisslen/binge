@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMyHousehold } from '@/hooks/useMyHousehold';
 import { useMyGroupInvites } from '@/hooks/useGroups';
+import { useBlockedUsers } from '@/hooks/useBlockedUsers';
 import { inviteAcceptToast } from '@/lib/groupDenialCopy';
 import { HOUSEHOLD_MAX_MEMBERS } from '@/lib/household/household';
 import { HouseholdCopy } from '@/components/groups/HouseholdConsent';
@@ -19,6 +20,7 @@ import type { GroupInvite } from '@/lib/firebase/groups';
 export default function HouseholdCallout() {
   const { household, loading, creating, create } = useMyHousehold();
   const { invites, accept, decline } = useMyGroupInvites();
+  const { blockUser } = useBlockedUsers();
   const router = useRouter();
   const [failed, setFailed] = useState(false);
   const householdInvites = invites.filter(i => i.kind === 'household');
@@ -48,6 +50,10 @@ export default function HouseholdCallout() {
             return inviteAcceptToast(res);
           }}
           onDecline={() => decline(inv.groupId)}
+          onBlock={async () => {
+            await blockUser(inv.fromUid);
+            await decline(inv.groupId);
+          }}
         />
       ))}
 
@@ -79,14 +85,16 @@ export default function HouseholdCallout() {
 }
 
 function InviteCard({
-  invite, alreadyInHousehold, onAccept, onDecline,
+  invite, alreadyInHousehold, onAccept, onDecline, onBlock,
 }: {
   invite: GroupInvite;
   alreadyInHousehold: boolean;
   onAccept: () => Promise<string | null>;
   onDecline: () => Promise<void>;
+  onBlock: () => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
+  const [confirmingBlock, setConfirmingBlock] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -125,7 +133,27 @@ function InviteCard({
         <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => { void run(onDecline); }}>
           Nej tack
         </Button>
+        {!confirmingBlock && (
+          <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => setConfirmingBlock(true)}>
+            Blockera
+          </Button>
+        )}
       </div>
+      {confirmingBlock && (
+        <div className="space-y-2" role="group" aria-label="Bekräfta blockering">
+          <p className="text-xs text-ink-2">
+            Blockerar du {invite.fromDisplayName ?? 'avsändaren'} avslutas er vänskap och inbjudan tas bort.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => { void run(onBlock); }}>
+              Ja, blockera
+            </Button>
+            <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => setConfirmingBlock(false)}>
+              Avbryt
+            </Button>
+          </div>
+        </div>
+      )}
       {message && <p className="text-xs text-danger-ink" role="alert">{message}</p>}
     </section>
   );
