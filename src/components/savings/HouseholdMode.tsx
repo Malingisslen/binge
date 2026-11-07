@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import { useGroupHousehold } from '@/hooks/useGroupHousehold';
 import { useGroupMemberNames } from '@/hooks/useGroupMemberNames';
+import { useBlockedUsers } from '@/hooks/useBlockedUsers';
 import { useMountTime } from '@/hooks/useMountTime';
 import {
   aggregateHousehold,
@@ -154,6 +155,7 @@ export default function HouseholdMode({ groupId, groupName, isHousehold = false 
   const { status, contributions, optIn, optOut, busy, ready, needsReshare, myVotes, soon, setVote } =
     useGroupHousehold(groupId, isHousehold);
   const names = useGroupMemberNames(groupId);
+  const { blockedUids } = useBlockedUsers();
   const nowMs = useMountTime();
   const [consentOpen, setConsentOpen] = useState(false);
   const [pendingId, setPendingId] = useState<number | null>(null);
@@ -300,7 +302,7 @@ export default function HouseholdMode({ groupId, groupName, isHousehold = false 
         )}
       </section>
 
-      {isHousehold && <WatchingCard rows={householdWatchingRows(contributions, names)} />}
+      {isHousehold && <WatchingCard rows={householdWatchingRows(contributions, names, blockedUids)} />}
 
       <section className={cardClass('px-3 py-2 mb-3.5 space-y-2')} aria-labelledby="household-sharers">
         <Eyebrow as="h2" size="xs" id="household-sharers">Vilka delar</Eyebrow>

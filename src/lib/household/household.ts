@@ -55,12 +55,15 @@ export interface HouseholdWatchingRow {
 }
 
 /** "Ni tittar på": one row per member who shared titles and has at least one, in the order
- *  the contributions came. A member who has not shared under the household text is absent. */
+ *  the contributions came. A member who has not shared under the household text is absent.
+ *  Someone I have blocked is absent too, because blocking does not remove them from the household. */
 export function householdWatchingRows(
   contributions: readonly Pick<HouseholdContribution, 'uid' | 'watchingNow'>[],
   names: Readonly<Record<string, string>>,
+  blockedUids: ReadonlySet<string> = new Set(),
 ): HouseholdWatchingRow[] {
   return contributions
+    .filter(c => !blockedUids.has(c.uid))
     .filter(c => c.watchingNow !== undefined && c.watchingNow.length > 0)
     .map(c => ({ uid: c.uid, name: firstName(names[c.uid]), titles: c.watchingNow! }));
 }
