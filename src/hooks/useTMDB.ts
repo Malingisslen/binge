@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import {
   searchMulti,
   getMovie,
@@ -16,12 +16,26 @@ import {
   getCollection,
 } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
+import { nextSearchPage } from '@/lib/searchPages';
 import type { TMDBMovie, TMDBTVShow, TMDBPerson } from '@/types';
 
 export function useSearch(query: string, page = 1) {
   return useQuery({
     queryKey: ['search', query, page],
     queryFn: ({ signal }) => searchMulti(query, page, { signal }),
+    enabled: query.length >= 2,
+    staleTime: TMDB_STALE.SEARCH,
+  });
+}
+
+// The search page's "Visa fler": each page is fetched on demand, and the first
+// page shares nothing with useSearch's cache key, so the dropdown stays untouched.
+export function useSearchPages(query: string) {
+  return useInfiniteQuery({
+    queryKey: ['search-pages', query],
+    queryFn: ({ signal, pageParam }) => searchMulti(query, pageParam, { signal }),
+    initialPageParam: 1,
+    getNextPageParam: lastPage => nextSearchPage(lastPage),
     enabled: query.length >= 2,
     staleTime: TMDB_STALE.SEARCH,
   });

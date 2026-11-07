@@ -3,7 +3,7 @@
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
-import { useSearch } from '@/hooks/useTMDB';
+import { useSearchPages } from '@/hooks/useTMDB';
 import { useSearchProviders } from '@/hooks/useSearchProviders';
 import { useAuth } from '@/hooks/useAuth';
 import TitleGrid from '@/components/title/TitleGrid';
@@ -17,13 +17,19 @@ import { trackEvent } from '@/lib/analytics';
 import { departmentLabel, rankPeople } from '@/lib/searchPeople';
 import type { TMDBProvider } from '@/types';
 import { cardClass } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
+import RecentSearches from '@/components/search/RecentSearches';
+import { mergeSearchPages } from '@/lib/searchPages';
+import { addRecentSearch } from '@/lib/recentSearches';
 
 type MediaFilter = 'all' | 'movie' | 'tv';
 
 function SearchResults() {
   const searchParams = useSearchParams();
   const query = searchParams.get('q') ?? '';
-  const { data, isLoading } = useSearch(query);
+  const {
+    data, isLoading, hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage,
+  } = useSearchPages(query);
   const { user } = useAuth();
   const myProviders = useMemo(() => user?.myProviders ?? [], [user?.myProviders]);
 
@@ -34,12 +40,10 @@ function SearchResults() {
   // titlarna i stället för att filtreras bort.
   // TMDB har ofta flera personer med samma namn. De mest kända först, och bara
   // några, så att sex likadana "Tom Holland" inte fyller raden.
-  const people = useMemo(() => rankPeople(data?.results ?? []), [data]);
+  const loadedResults = useMemo(() => mergeSearchPages(data?.pages ?? []), [data]);
+  const people = useMemo(() => rankPeople(loadedResults), [loadedResults]);
 
-  const allResults = useMemo(() =>
-    (data?.results ?? []).filter(isAddableMediaType),
-    [data]
-  );
+  const allResults = useMemo(() => loadedResults.filter(isAddableMediaType), [loadedResults]);
 
   const filteredByType = useMemo(() =>
     mediaFilter === 'all' ? allResults : allResults.filter(r => r.media_type === mediaFilter),
@@ -67,6 +71,13 @@ function SearchResults() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, mediaFilter, isLoading]);
 
+  // Remembered only once the search found something, so a typo does not
+  // become a suggestion.
+  const found = allResults.length > 0;
+  useEffect(() => {
+    if (found) addRecentSearch(query);
+  }, [found, query]);
+
   const providerMap = useMemo(() => {
     const map: Record<string, TMDBProvider[]> = {};
     for (const [key, data] of Object.entries(rawProviderMap)) {
@@ -80,11 +91,11 @@ function SearchResults() {
   return (
     <>
       <header>
-        <div className="crumb">Sök · {results.length} resultat</div>
+        <div className="crumb">Sök · {results.length}{hasNextPage ? '+' : ''} resultat</div>
         <h1 className="page-h1">Sökresultat för &ldquo;{query}&rdquo;</h1>
         {results.length > 0 && (
           <p className="stand">
-            {`${results.length} ${results.length === 1 ? 'titel matchar' : 'titlar matchar'} din sökning.`}
+            {`${results.length} ${results.length === 1 ? 'titel' : 'titlar'} visas${hasNextPage ? ' hittills' : ''}.`}
           </p>
         )}
       </header>
@@ -127,7 +138,15 @@ function SearchResults() {
       {isLoading ? (
         <LoadingView label="Söker…" />
       ) : results.length === 0 ? (
-        <EmptyState title="Inga träffar" body="Försök med ett annat namn eller stavning." />
+        <EmptyState
+          title="Inga träffar"
+          body={hasNextPage ? 'Inga av de hämtade träffarna passar filtren. Hämta fler eller ändra filtren.' : 'Försök med ett annat namn eller stavning.'}
+          action={hasNextPage ? (
+            <Button type="button" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
+              {isFetchingNextPage ? 'Hämtar…' : 'Visa fler'}
+            </Button>
+          ) : undefined}
+        />
       ) : (
         <div className={cardClass()}>
           {/* Switched in CSS, not on window width, so server and client render the same. */}
@@ -143,6 +162,21 @@ function SearchResults() {
           <div className="hidden md:block">
             <TitleGrid items={results} providerMap={providerMap} />
           </div>
+          {(hasNextPage || isFetchNextPageError) && (
+            <div className="px-3 py-3 border-t border-rule-2 flex flex-col items-center gap-2">
+              {isFetchNextPageError && (
+                <p role="alert" className="text-sm text-ink-2 m-0">Det gick inte att hämta fler träffar.</p>
+              )}
+              <Button
+                type="button"
+                onClick={() => fetchNextPage()}
+                disabled={isFetchingNextPage}
+                aria-busy={isFetchingNextPage}
+              >
+                {isFetchingNextPage ? 'Hämtar…' : isFetchNextPageError ? 'Försök igen' : 'Visa fler'}
+              </Button>
+            </div>
+          )}
           <div className="px-3 py-1.5 border-t border-rule-2">
             <JustWatchCredit />
           </div>
@@ -152,10 +186,30 @@ function SearchResults() {
   );
 }
 
+function SearchLanding() {
+  return (
+    <>
+      <header>
+        <div className="crumb">Sök</div>
+        <h1 className="page-h1">Sök titel eller person</h1>
+        <p className="stand">Skriv minst två tecken i sökfältet.</p>
+      </header>
+      <div className={cardClass('mt-5 pb-1')}>
+        <RecentSearches />
+      </div>
+    </>
+  );
+}
+
+function SearchRoute() {
+  const query = useSearchParams().get('q') ?? '';
+  return query.trim().length < 2 ? <SearchLanding /> : <SearchResults />;
+}
+
 export default function SearchPage() {
   return (
     <Suspense fallback={<LoadingView label="Laddar sökningen…" />}>
-      <SearchResults />
+      <SearchRoute />
     </Suspense>
   );
 }

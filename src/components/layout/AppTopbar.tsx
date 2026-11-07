@@ -8,6 +8,7 @@ import TopbarActions from './TopbarActions';
 import { useSearchBox } from '@/hooks/useSearchBox';
 import { detectMacLike, shortcutHint } from '@/lib/platform';
 import SearchDropdown from '@/components/search/SearchDropdown';
+import RecentSearches from '@/components/search/RecentSearches';
 import { usePathname } from 'next/navigation';
 import { TOPBAR_SEARCH_ID, GUEST_LINKS, isActive } from './MobileTabBar';
 import type { ChromeMode } from './chromeMode';
@@ -104,6 +105,11 @@ export default function AppTopbar({ chrome }: { chrome: ChromeMode }) {
             />
             <span className="k" aria-hidden="true">{shortcutHint(isMac)}</span>
           </div>
+          {searchFocused && searchQuery.trim() === '' && (
+            <div className="search-dropdown-wrap">
+              <RecentSearches onPick={clearSearch} popover />
+            </div>
+          )}
           {dropdownOpen && (
             <div className="search-dropdown-wrap">
               <SearchDropdown
