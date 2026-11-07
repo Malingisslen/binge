@@ -103,9 +103,7 @@
 //     switched off.
 //   * `revert`, and git's own `Revert "…"` subject. A revert of reviewed code is a real
 //     change this rule will not ask about.
-//   * Before `UNTYPED_EFFECTIVE_FROM`, any commit with NO conventional prefix. Many of them are
-//     this repo's older `feat(watchlist)+rules:` style, where the suffix after the scope
-//     parenthesis breaks the conventional grammar.
+//   * Before `UNTYPED_EFFECTIVE_FROM`, any commit with NO conventional prefix.
 //   * SUBJECT ONLY, never the body. `6d157c5` is a pure documentation correction that names
 //     BIN-565 in its body alone; a body-scanning rule would demand a review row for every
 //     follow-up comment fix on already-reviewed work.
