@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   clearRecentSearches,
   readRecentSearches,
@@ -26,4 +26,20 @@ export function useRecentSearches() {
   }, [refresh]);
 
   return { searches, remove: removeRecentSearch, clear: clearRecentSearches };
+}
+
+// A shared device must not show the next person what the previous one looked
+// up. Watches the sign-in → signed-out transition (not "signed out" itself) so a
+// guest who never signed in keeps their own history. Covers every cause of
+// sign-out, including an expired session and a deletion, and every open tab.
+export function useClearRecentSearchesOnSignOut(uid: string | null) {
+  const hadSession = useRef(false);
+  useEffect(() => {
+    if (uid) {
+      hadSession.current = true;
+    } else if (hadSession.current) {
+      hadSession.current = false;
+      clearRecentSearches();
+    }
+  }, [uid]);
 }
