@@ -164,7 +164,7 @@ is the real boundary.
 - Server-authoritative rate limiting (`submitReport` callable).
 - App Check (reCAPTCHA v3, fail-closed default), CSP/HSTS headers, secrets via
   `NEXT_PUBLIC_*` / `defineSecret`, cache-clear on logout for shared devices.
-  → `firestore.rules`, `firebase.json`, `src/lib/firebase/appCheck.ts`, `src/lib/firebase/db.ts`, `src/lib/cspHosts.test.ts`
+  → `firestore.rules`, `firebase.json`, `src/lib/firebase/appCheck.ts`, `src/lib/firebase/db.ts`, `src/lib/firebase/tvPairing.ts`, `functions/src/groupHandover/sessionInvites.ts`, `functions/src/groupHandover/sessionInvites.test.ts`, `src/lib/firebase/sessionInvites.ts`, `src/lib/firebase/sessionInvites.test.ts`, `src/lib/firebase/sessions.hosted.test.ts`, `src/lib/firebase/sessions.undoVeto.test.ts`, `src/test/rules/session-invites.test.ts`, `src/test/rules/veto-undo.test.ts`, `src/lib/cspHosts.test.ts`
 - **Which workflow actually runs on the path code takes** (BIN-1028). Read the `on:`
   block of every file in the workflows directory (written without backticks on purpose: the generator harvests every
   backtick-quoted tracked path in a section, so quoting the directory would seat this
@@ -881,7 +881,7 @@ findings here too.
 - **Admin-SDK-skrivarna mot recap-cachen** (BIN-1013-sätet). Skripten som skriver och
   inventerar dokumenten i `recaps/`. Samma skäl som backfillen ovan: de kör med Admin SDK
   mot en samling klienten bara får läsa, så det är datalagrets skrivväg som avgör sätet.
-  → `functions/scripts/recap-upload.mjs`, `functions/scripts/recap-upload.helpers.mjs`, `functions/scripts/recap-upload.helpers.test.mjs`, `functions/scripts/recap-coverage-manifest.mjs`
+  → `functions/scripts/recap-upload.mjs`, `functions/scripts/recap-upload.helpers.mjs`, `functions/scripts/recap-upload.helpers.test.mjs`, `functions/scripts/recap-coverage-manifest.mjs`, `functions/scripts/wiki-fetch.mjs`, `functions/scripts/wiki-fetch.helpers.mjs`, `functions/scripts/wiki-fetch.helpers.test.mjs`
 - **Vilken databas ett Admin-SDK-skript öppnar** (BIN-1107). Kontraktet som tvingar varje
   skript under functions/scripts att NAMNGE sitt projekt innan det öppnar en Firestore.
   Sätet följer storheten: det här avgör vems data ett skript läser och skriver, alltså

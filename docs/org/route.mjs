@@ -197,6 +197,10 @@ export const TOOLING_CODE_FILES = new Set([
   'functions/scripts/restore-account.mjs',
   'functions/scripts/restore-account.helpers.mjs',
   'functions/scripts/restore-account.helpers.test.mjs',
+  // Recap-hamtaren mot Wikipedia. Tillagd i SAMMA commit som sitt `reviewGates`-monster, per BIN-830.
+  'functions/scripts/wiki-fetch.mjs',
+  'functions/scripts/wiki-fetch.helpers.mjs',
+  'functions/scripts/wiki-fetch.helpers.test.mjs',
   'docs/org/gen-ownership-map.mjs',
   'docs/org/gen-ownership-map.test.mjs',
   // BIN-1088. The dependency-diff check on the pull_request path. Dependabot merges
