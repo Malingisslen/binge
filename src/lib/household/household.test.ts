@@ -90,4 +90,12 @@ describe('householdWatchingRows', () => {
   it('leaves out a member who has not shared titles or watches nothing', () => {
     expect(householdWatchingRows([{ uid: 'a' }, { uid: 'b', watchingNow: [] }], {})).toEqual([]);
   });
+  it('leaves out a member I have blocked, and keeps the others', () => {
+    const rows = householdWatchingRows(
+      [{ uid: 'erik', watchingNow: [t] }, { uid: 'anna', watchingNow: [t] }],
+      { erik: 'Erik', anna: 'Anna' },
+      new Set(['erik']),
+    );
+    expect(rows.map(r => r.uid)).toEqual(['anna']);
+  });
 });

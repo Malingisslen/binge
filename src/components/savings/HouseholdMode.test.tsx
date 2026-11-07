@@ -12,6 +12,7 @@ const state = vi.hoisted(() => ({
   myVotes: {} as Record<number, HouseholdVote>,
   soon: null as HouseholdSoonOverview | null,
   names: {} as Record<string, string>,
+  blocked: new Set<string>(),
   setVote: vi.fn<(id: number, vote: HouseholdVote | null) => Promise<void>>(() => Promise.resolve()),
   optIn: vi.fn(() => Promise.resolve()),
   optOut: vi.fn(() => Promise.resolve()),
@@ -20,6 +21,7 @@ const state = vi.hoisted(() => ({
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ uid: 'u1' }) }));
 vi.mock('@/hooks/useMountTime', () => ({ useMountTime: () => NOW }));
 vi.mock('@/hooks/useGroupMemberNames', () => ({ useGroupMemberNames: () => state.names }));
+vi.mock('@/hooks/useBlockedUsers', () => ({ useBlockedUsers: () => ({ blockedUids: state.blocked }) }));
 vi.mock('@/hooks/useGroupHousehold', () => ({
   useGroupHousehold: () => ({
     status: state.status,
@@ -62,6 +64,7 @@ beforeEach(() => {
   state.myVotes = {};
   state.soon = soon();
   state.names = { u1: 'Malin', u2: 'Anna', u3: 'Olle' };
+  state.blocked = new Set();
   state.setVote.mockClear();
   state.optIn.mockClear();
   state.optOut.mockClear();
@@ -243,6 +246,18 @@ describe('HouseholdMode — hushåll (ADR 0029)', () => {
     expect(within(card).getByText('Severance')).toBeInTheDocument();
     expect(card.textContent).toContain('Erik');
     expect(card.textContent).not.toContain('Gisslén');
+  });
+
+  it('Ni tittar på döljer titlarna från någon jag blockerat men visar de andras', () => {
+    state.blocked = new Set(['u2']);
+    state.contributions = [
+      contribution('u2', { watchingNow: [{ id: 1399, type: 'tv', title: 'Severance' }] }),
+      contribution('u3', { watchingNow: [{ id: 1400, type: 'tv', title: 'Slow Horses' }] }),
+    ];
+    render(<HouseholdMode groupId="g1" groupName="Hemma" isHousehold />);
+    const card = screen.getByRole('region', { name: 'Ni tittar på' });
+    expect(within(card).queryByText('Severance')).toBeNull();
+    expect(within(card).getByText('Slow Horses')).toBeInTheDocument();
   });
 
   it('en vanlig grupp visar inga titlar', () => {
