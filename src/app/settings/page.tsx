@@ -14,6 +14,7 @@ import { ContentFilterSection } from '@/components/settings/ContentFilterSection
 import { NotificationsSection } from '@/components/settings/NotificationsSection';
 import { TasteDataSection } from '@/components/settings/TasteDataSection';
 import { DataExportSection } from '@/components/settings/DataExportSection';
+import { ListExportSection } from '@/components/settings/ListExportSection';
 import { DeleteAccountSection } from '@/components/settings/DeleteAccountSection';
 import { SettingsSection } from '@/components/settings/SettingsSection';
 import { SettingsNav, type SettingsNavItem } from '@/components/settings/SettingsNav';
@@ -83,9 +84,10 @@ function SettingsContent() {
           <Group id="data">
             <TasteDataSection />
             <SettingsSection title="Importera">
-              <p className="text-xs text-ink-3 mb-2">Ta med din historik från Letterboxd eller IMDb (CSV).</p>
-              <Link href="/settings/import/" className={buttonClass({ variant: 'ghost', size: 'sm' })}>Importera från CSV</Link>
+              <p className="text-xs text-ink-3 mb-2">Ta med din historik från Letterboxd, IMDb (CSV) eller Trakt (JSON).</p>
+              <Link href="/settings/import/" className={buttonClass({ variant: 'ghost', size: 'sm' })}>Importera från fil</Link>
             </SettingsSection>
+            <ListExportSection />
             <DataExportSection />
           </Group>
           <Group id="radera" visibleHeading={false}>
