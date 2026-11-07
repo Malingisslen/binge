@@ -81,9 +81,9 @@ export function pickBestMatch(
 /**
  * Avbildar en importrad → Binge-status enligt TV-aware-schemat:
  *  - TV → alltid 'mina' (serier har inget 'sedd'-slutläge).
- *  - Film med betyg (watched/ratings-export) → 'sedd'; utan betyg (watchlist) → 'vill_se'.
+ *  - Film med betyg eller markerad sedd (watched/ratings-export) → 'sedd'; annars (watchlist) → 'vill_se'.
  */
 export function importStatus(row: ImportRow, mediaType: MediaType): WatchStatus {
   if (mediaType === 'tv') return 'mina';
-  return row.rating != null ? 'sedd' : 'vill_se';
+  return row.rating != null || row.watched ? 'sedd' : 'vill_se';
 }

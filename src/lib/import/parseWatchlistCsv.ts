@@ -5,13 +5,13 @@
  * detekterar format via header-raden och normaliserar till ImportRow[]. TMDB-
  * matchning + skrivning sker separat, bakom en obligatorisk dry-run.
  *
- * Format som stöds: Letterboxd (watchlist/watched/ratings-exporter) och IMDb
- * (export av betyg/listor). Trakt har ingen inbyggd CSV-export (API/JSON, eller
- * via tredjeparts-verktyg) — lämnas till en framtida JSON-importör. Okänt
- * format → tomt resultat med en orsak, så UI:t kan visa "känner inte igen filen".
+ * Format som stöds: Letterboxd (watchlist/watched/ratings-exporter), IMDb
+ * (export av betyg/listor) och Trakt (JSON-filerna ur Trakts "Export data":
+ * watched-*, ratings-*, watchlist-*). Okänt format → tomt resultat med en orsak,
+ * så UI:t kan visa "känner inte igen filen".
  */
 
-export type ImportFormat = 'letterboxd' | 'imdb' | 'unknown';
+export type ImportFormat = 'letterboxd' | 'imdb' | 'trakt' | 'unknown';
 
 export interface ImportRow {
   /** Råttitel som den stod i filen (för att visa i dry-run + TMDB-sökning). */
@@ -23,6 +23,8 @@ export interface ImportRow {
   imdbId: string | null;
   /** 'movie' | 'tv' om filen anger det, annars null (matcharen får gissa). */
   mediaTypeHint: 'movie' | 'tv' | null;
+  /** True när filen säger att titeln är sedd utan att ge betyg (Trakt watched/history). */
+  watched?: boolean;
 }
 
 export interface ParseResult {
@@ -57,6 +59,9 @@ export function parseCsvLine(line: string): string[] {
   out.push(field);
   return out.map(f => f.trim());
 }
+
+// Id:t hamnar i en TMDB-URL-sökväg: släpp inte igenom något annat än tt + siffror.
+const IMDB_ID = /^tt\d{1,10}$/;
 
 function splitLines(text: string): string[] {
   return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(l => l.length > 0);
@@ -114,12 +119,76 @@ function parseImdbRow(header: string[], row: string[]): ImportRow | null {
     title,
     year: toYear(col(header, row, 'Year')),
     rating,
-    imdbId: constId.startsWith('tt') ? constId : null,
+    imdbId: IMDB_ID.test(constId) ? constId : null,
     mediaTypeHint: isTv ? 'tv' : 'movie',
   };
 }
 
+interface TraktMedia { title?: unknown; year?: unknown; ids?: { imdb?: unknown } }
+interface TraktEntry {
+  movie?: TraktMedia; show?: TraktMedia; episode?: unknown; season?: unknown; type?: unknown;
+  rating?: unknown; watched_at?: unknown; last_watched_at?: unknown; plays?: unknown;
+}
+
+function parseTraktEntry(e: TraktEntry): ImportRow | null {
+  // Avsnitts- och säsongsposter bär också ett `show`; deras betyg gäller inte hela serien.
+  if (e.episode || e.season || e.type === 'episode' || e.type === 'season') return null;
+  const media = e.movie ?? e.show;
+  if (!media || typeof media.title !== 'string' || !media.title.trim()) return null;
+  // Trakt-betyg är 1–10 heltal → Binge lagrar 0.5–5 (÷2), samma regel som IMDb.
+  const r = typeof e.rating === 'number' ? e.rating : NaN;
+  const imdb = media.ids?.imdb;
+  return {
+    title: media.title.trim(),
+    year: toYear(typeof media.year === 'number' ? String(media.year) : undefined),
+    rating: Number.isInteger(r) && r >= 1 && r <= 10 ? r / 2 : null,
+    imdbId: typeof imdb === 'string' && IMDB_ID.test(imdb) ? imdb : null,
+    mediaTypeHint: e.movie ? 'movie' : 'tv',
+    watched: !!(e.watched_at || e.last_watched_at || (typeof e.plays === 'number' && e.plays > 0)),
+  };
+}
+
+function parseTraktJson(text: string): ParseResult | null {
+  let data: unknown;
+  try { data = JSON.parse(text); } catch { return null; }
+  if (!Array.isArray(data)) return null;
+  const entries = data.filter((e): e is TraktEntry => !!e && typeof e === 'object');
+  // Bara filer vars poster pekar på movie/show är Trakt; en annan JSON-array → okänd.
+  if (!entries.some(e => e.movie || e.show)) return null;
+  const rows: ImportRow[] = [];
+  let skipped = 0;
+  for (const e of entries) {
+    const row = parseTraktEntry(e);
+    if (row) rows.push(row); else skipped++;
+  }
+  return { format: 'trakt', rows, skipped };
+}
+
+function rowKey(r: ImportRow): string {
+  return r.imdbId ?? `${r.mediaTypeHint ?? ''}:${r.title.toLowerCase()}:${r.year ?? ''}`;
+}
+
+/**
+ * Slår ihop rader från flera filer (Trakt delar upp sedda/betyg/watchlist i
+ * separata filer): samma titel blir EN rad som behåller betyget och sedd-flaggan.
+ */
+export function mergeImportRows(rows: ImportRow[]): ImportRow[] {
+  const byKey = new Map<string, ImportRow>();
+  for (const r of rows) {
+    const k = rowKey(r);
+    const prev = byKey.get(k);
+    byKey.set(k, prev
+      ? { ...prev, rating: prev.rating ?? r.rating, watched: !!(prev.watched || r.watched) }
+      : r);
+  }
+  return [...byKey.values()];
+}
+
 export function parseWatchlistCsv(text: string): ParseResult {
+  const trimmed = text.trimStart();
+  if (trimmed.startsWith('[')) {
+    return parseTraktJson(trimmed) ?? { format: 'unknown', rows: [], skipped: 0 };
+  }
   const lines = splitLines(text);
   if (lines.length < 2) return { format: 'unknown', rows: [], skipped: 0 };
 
