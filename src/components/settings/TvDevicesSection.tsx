@@ -40,6 +40,10 @@ export function TvDevicesSection() {
         TV:n visar din Vill se, kalender och nästa avsnitt. Den kan inte ändra något annat.
       </p>
 
+      {devices === null && (
+        <p role="status" className="text-sm text-ink-3">Hämtar dina TV…</p>
+      )}
+
       {devices !== null && devices.length === 0 && (
         <div className="flex items-center justify-between gap-3">
           <p className="text-sm text-ink-2">Ingen TV kopplad</p>
