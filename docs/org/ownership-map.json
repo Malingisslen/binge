@@ -60,6 +60,8 @@
         ".github/workflows/secret-scan.yml",
         "firebase.json",
         "firestore.rules",
+        "functions/src/groupHandover/sessionInvites.test.ts",
+        "functions/src/groupHandover/sessionInvites.ts",
         "scripts/check-dependency-diff.mjs",
         "scripts/check-dependency-diff.test.mjs",
         "scripts/check-public-env.mjs",
@@ -75,10 +77,17 @@
         "src/lib/firebase/errorCodes.ts",
         "src/lib/firebase/groups.test.ts",
         "src/lib/firebase/groups.ts",
+        "src/lib/firebase/sessionInvites.test.ts",
+        "src/lib/firebase/sessionInvites.ts",
+        "src/lib/firebase/sessions.hosted.test.ts",
+        "src/lib/firebase/sessions.undoVeto.test.ts",
+        "src/lib/firebase/tvPairing.ts",
         "src/lib/firebase/utils.test.ts",
         "src/lib/firebase/utils.ts",
         "src/lib/passwordStrength.test.ts",
-        "src/lib/passwordStrength.ts"
+        "src/lib/passwordStrength.ts",
+        "src/test/rules/session-invites.test.ts",
+        "src/test/rules/veto-undo.test.ts"
       ]
     },
     "5": {
@@ -794,6 +803,9 @@
         "functions/scripts/restore-account.helpers.mjs",
         "functions/scripts/restore-account.helpers.test.mjs",
         "functions/scripts/restore-account.mjs",
+        "functions/scripts/wiki-fetch.helpers.mjs",
+        "functions/scripts/wiki-fetch.helpers.test.mjs",
+        "functions/scripts/wiki-fetch.mjs",
         "functions/src/communityRatings/index.ts",
         "functions/src/communityRatings/runAggregate.ts",
         "functions/src/groupHandover/adminIo.ts",
