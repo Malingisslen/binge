@@ -8,7 +8,7 @@ import { usePageMeta } from '@/hooks/usePageMeta';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useToast } from '@/contexts/ToastContext';
 import { searchMulti, findByImdbId, posterUrl } from '@/lib/tmdb/client';
-import { parseWatchlistCsv, type ImportRow, type ImportFormat } from '@/lib/import/parseWatchlistCsv';
+import { parseWatchlistCsv, mergeImportRows, type ImportRow, type ImportFormat } from '@/lib/import/parseWatchlistCsv';
 import { pickBestMatch, titleOf, importStatus } from '@/lib/import/matchTitle';
 import { buildWatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
 import {
@@ -66,23 +66,28 @@ function ImportContent() {
   const [format, setFormat] = useState<ImportFormat>('unknown');
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [skipped, setSkipped] = useState(0);
+  const [unrecognized, setUnrecognized] = useState(0);
   const [truncated, setTruncated] = useState(0);
   const [analyzed, setAnalyzed] = useState<Analyzed[]>([]);
   const [imported, setImported] = useState(0);
   const [importFailed, setImportFailed] = useState(0);
 
-  const onFile = useCallback(async (file: File) => {
-    const text = await file.text();
-    const res = parseWatchlistCsv(text);
-    setFormat(res.format);
-    setSkipped(res.skipped);
-    const capped = res.rows.slice(0, MAX_ROWS);
-    setTruncated(res.rows.length - capped.length);
+  // Flera filer på en gång: Trakt delar upp sedda, betyg och watchlist i egna
+  // filer. Filer vi inte känner igen ignoreras; raderna slås ihop per titel.
+  const onFiles = useCallback(async (files: File[]) => {
+    const results = await Promise.all(files.map(async f => parseWatchlistCsv(await f.text())));
+    const known = results.filter(r => r.format !== 'unknown');
+    setUnrecognized(results.length - known.length);
+    const merged = mergeImportRows(known.flatMap(r => r.rows));
+    setFormat(known[0]?.format ?? 'unknown');
+    setSkipped(known.reduce((n, r) => n + r.skipped, 0));
+    const capped = merged.slice(0, MAX_ROWS);
+    setTruncated(merged.length - capped.length);
     setRows(capped);
     setAnalyzed([]);
     setImported(0);
     setImportFailed(0);
-    setStage(res.format === 'unknown' ? 'idle' : 'parsed');
+    setStage(known.length === 0 ? 'idle' : 'parsed');
   }, []);
 
   const analyze = useCallback(async () => {
@@ -125,7 +130,17 @@ function ImportContent() {
         return { row, match: null, duplicate: false, status: null };
       }
     }));
-    setAnalyzed(results);
+    // Rader från olika filer (t.ex. Letterboxd utan id + Trakt med id) kan landa på samma TMDB-titel:
+    // bara den första räknas som ny, annars skriver den senare över status och betyg.
+    const seen = new Set<string>();
+    const deduped = results.map(a => {
+      if (!a.match) return a;
+      const key = `${a.match.mediaType}:${a.match.tmdbId}`;
+      if (seen.has(key)) return { ...a, duplicate: true };
+      seen.add(key);
+      return a;
+    });
+    setAnalyzed(deduped);
     setStage('analyzed');
   }, [rows, getItem, libraryKnown]);
 
@@ -183,33 +198,42 @@ function ImportContent() {
       <PageHeader
         crumb={<Link href="/settings/" style={{ color: 'inherit' }}>Inställningar</Link>}
         title="Importera"
-        standfirst="Ta med din historik från Letterboxd eller IMDb. Vi visar exakt vad som importeras innan något sparas."
+        standfirst="Ta med din historik från Letterboxd, IMDb eller Trakt. Vi visar exakt vad som importeras innan något sparas."
       />
 
       <div className="mt-7 max-w-2xl">
         <div className={cardClass('p-4')}>
           <p className="text-sm text-ink-2 mb-3">
-            Exportera en CSV från <strong>Letterboxd</strong> (Inställningar → Import &amp; Export) eller{' '}
-            <strong>IMDb</strong> (din lista → Export) och välj filen här.
+            <strong>Letterboxd</strong> (Inställningar → Import &amp; Export) och <strong>IMDb</strong> (din lista →
+            Export) ger en CSV-fil. <strong>Trakt</strong> (Inställningar → Data → Export data) ger flera JSON-filer:
+            välj watched-*, ratings-* och watchlist-* tillsammans, annars importeras bara det som finns i de filer du väljer.
+            Välj filerna här.
           </p>
           <input
             type="file"
-            accept=".csv,text/csv"
+            accept=".csv,text/csv,.json,application/json"
+            multiple
             // Picking a file writes nothing, so it stays usable while the
             // library loads — the hold belongs on the two actions that write.
             disabled={stage === 'analyzing' || stage === 'importing'}
-            onChange={e => { const f = e.target.files?.[0]; if (f) void onFile(f); }}
+            onChange={e => { const fs = Array.from(e.target.files ?? []); if (fs.length) void onFiles(fs); }}
             className="text-sm disabled:opacity-50"
           />
           {stage !== 'idle' && format !== 'unknown' && (
             <p className="text-xs text-ink-3 mt-2">
-              Igenkänt format: <strong>{format === 'letterboxd' ? 'Letterboxd' : 'IMDb'}</strong> · {rows.length} rader
-              {skipped > 0 && ` · ${skipped} hoppade över (saknar titel)`}
+              Igenkänt format: <strong>{format === 'letterboxd' ? 'Letterboxd' : format === 'trakt' ? 'Trakt' : 'IMDb'}</strong> · {rows.length} rader
+              {skipped > 0 && ` · ${skipped} hoppade över`}
               {truncated > 0 && ` · ${truncated} utöver max ${MAX_ROWS} ignorerade`}
             </p>
           )}
+          {unrecognized > 0 && (
+            <p role="alert" className="text-xs text-danger-ink mt-2">
+              {unrecognized} fil(er) känns inte igen och ignorerades. Välj en CSV från Letterboxd eller IMDb, eller JSON-filer från Trakt.
+              Fungerar det inte? Skriv till hej@binge.nu.
+            </p>
+          )}
           {stage === 'idle' && format === 'unknown' && rows.length === 0 && (
-            <p className="text-xs text-ink-3 mt-2">Välj en CSV-fil för att börja.</p>
+            <p className="text-xs text-ink-3 mt-2">Välj en fil för att börja.</p>
           )}
         </div>
 

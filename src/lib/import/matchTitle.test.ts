@@ -101,3 +101,11 @@ describe('importStatus', () => {
     expect(importStatus(row({ rating: null }), 'movie')).toBe('vill_se');
   });
 });
+
+describe('importStatus — watched flag (BIN-1498)', () => {
+  const row = { title: 'X', year: 2000, rating: null, imdbId: null, mediaTypeHint: 'movie' as const };
+  it('a watched movie without rating is sedd; an unwatched one stays vill_se', () => {
+    expect(importStatus({ ...row, watched: true }, 'movie')).toBe('sedd');
+    expect(importStatus({ ...row, watched: false }, 'movie')).toBe('vill_se');
+  });
+});

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseCsvLine, parseWatchlistCsv } from './parseWatchlistCsv';
+import { parseCsvLine, parseWatchlistCsv, mergeImportRows } from './parseWatchlistCsv';
 
 describe('parseCsvLine', () => {
   it('splits plain comma-separated fields and trims', () => {
@@ -134,5 +134,65 @@ describe('parseWatchlistCsv — edge cases', () => {
 
   it('does NOT classify a header lacking both name and const as a known format', () => {
     expect(parseWatchlistCsv('email,phone\na@b.c,123').format).toBe('unknown');
+  });
+});
+
+describe('parseWatchlistCsv — Trakt JSON (BIN-1498)', () => {
+  const ratings = JSON.stringify([
+    { rated_at: '2024-01-01', rating: 9, type: 'movie', movie: { title: 'Dune', year: 2021, ids: { imdb: 'tt1160419', tmdb: 438631 } } },
+    { rated_at: '2024-01-02', rating: 7, type: 'show', show: { title: 'Severance', year: 2022, ids: { imdb: 'tt11280740' } } },
+    { rated_at: '2024-01-03', rating: 0, type: 'movie', movie: { title: 'Cleared', year: 2000, ids: {} } },
+    { type: 'movie', movie: { year: 2000 } },
+  ]);
+
+  it('reads Trakt ratings: 1–10 → 0.5–5, imdb id, movie vs show', () => {
+    const res = parseWatchlistCsv(ratings);
+    expect(res.format).toBe('trakt');
+    expect(res.rows[0]).toMatchObject({ title: 'Dune', year: 2021, rating: 4.5, imdbId: 'tt1160419', mediaTypeHint: 'movie' });
+    expect(res.rows[1]).toMatchObject({ rating: 3.5, mediaTypeHint: 'tv' });
+    expect(res.rows[2].rating).toBeNull();
+    expect(res.skipped).toBe(1);
+  });
+
+  it('marks watched-file entries as watched, watchlist entries not', () => {
+    const watched = parseWatchlistCsv(JSON.stringify([{ plays: 2, last_watched_at: '2024-01-01', movie: { title: 'A', year: 2001, ids: {} } }]));
+    const wl = parseWatchlistCsv(JSON.stringify([{ listed_at: '2024-01-01', type: 'movie', movie: { title: 'B', year: 2002, ids: {} } }]));
+    expect(watched.rows[0].watched).toBe(true);
+    expect(wl.rows[0].watched).toBe(false);
+  });
+
+  it('skips episode and season entries so they never rate the whole show', () => {
+    const res = parseWatchlistCsv(JSON.stringify([
+      { rating: 10, type: 'episode', episode: { season: 1, number: 1 }, show: { title: 'S', year: 2020, ids: {} } },
+      { rating: 10, type: 'season', season: { number: 1 }, show: { title: 'S', year: 2020, ids: {} } },
+      { rating: 6, type: 'show', show: { title: 'S', year: 2020, ids: {} } },
+    ]));
+    expect(res.rows).toHaveLength(1);
+    expect(res.rows[0].rating).toBe(3);
+    expect(res.skipped).toBe(2);
+  });
+
+  it('drops an imdb id that is not tt + digits', () => {
+    const res = parseWatchlistCsv(JSON.stringify([{ movie: { title: 'X', year: 2000, ids: { imdb: 'tt/../../3/movie/550?' } } }]));
+    expect(res.rows[0].imdbId).toBeNull();
+  });
+
+  it('treats JSON that is not a Trakt list as unknown', () => {
+    expect(parseWatchlistCsv('[1,2,3]').format).toBe('unknown');
+    expect(parseWatchlistCsv('[{"foo":1}]').format).toBe('unknown');
+    expect(parseWatchlistCsv('[not json').format).toBe('unknown');
+  });
+});
+
+describe('mergeImportRows (BIN-1498)', () => {
+  it('merges the same title across files, keeping rating and watched', () => {
+    const base = { title: 'Dune', year: 2021, imdbId: 'tt1160419', mediaTypeHint: 'movie' as const };
+    const merged = mergeImportRows([
+      { ...base, rating: null, watched: true },
+      { ...base, rating: 4.5, watched: false },
+      { title: 'Other', year: 2000, imdbId: null, mediaTypeHint: 'movie', rating: null },
+    ]);
+    expect(merged).toHaveLength(2);
+    expect(merged[0]).toMatchObject({ rating: 4.5, watched: true });
   });
 });
