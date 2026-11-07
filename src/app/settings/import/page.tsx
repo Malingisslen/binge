@@ -75,7 +75,7 @@ function ImportContent() {
   // Flera filer på en gång: Trakt delar upp sedda, betyg och watchlist i egna
   // filer. Filer vi inte känner igen ignoreras; raderna slås ihop per titel.
   const onFiles = useCallback(async (files: File[]) => {
-    const results = await Promise.all(files.map(async f => parseWatchlistCsv(await f.text())));
+    const results = await Promise.all(files.map(async f => parseWatchlistCsv(await f.text(), f.name)));
     const known = results.filter(r => r.format !== 'unknown');
     setUnrecognized(results.length - known.length);
     const merged = mergeImportRows(known.flatMap(r => r.rows));

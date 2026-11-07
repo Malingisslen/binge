@@ -196,3 +196,19 @@ describe('mergeImportRows (BIN-1498)', () => {
     expect(merged[0]).toMatchObject({ rating: 4.5, watched: true });
   });
 });
+
+describe('Letterboxd watched file (follow-up to BIN-1498)', () => {
+  const csv = 'Date,Name,Year,Letterboxd URI\n2024-01-01,Dune,2021,https://boxd.it/x';
+  it('marks rows as watched when the file name says watched or sedda', () => {
+    expect(parseWatchlistCsv(csv, 'watched.csv').rows[0].watched).toBe(true);
+    expect(parseWatchlistCsv(csv, 'binge-letterboxd-sedda.csv').rows[0].watched).toBe(true);
+  });
+  it('marks diary rows (Watched Date column) as watched', () => {
+    const diary = 'Date,Name,Year,Letterboxd URI,Rating,Rewatch,Tags,Watched Date\n2024-01-02,Dune,2021,u,4,,,2024-01-01';
+    expect(parseWatchlistCsv(diary, 'diary.csv').rows[0].watched).toBe(true);
+  });
+  it('leaves the watchlist file as want-to-watch', () => {
+    expect(parseWatchlistCsv(csv, 'watchlist.csv').rows[0].watched).toBe(false);
+    expect(parseWatchlistCsv(csv).rows[0].watched).toBe(false);
+  });
+});
