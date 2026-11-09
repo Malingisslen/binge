@@ -1,0 +1,209 @@
+diff --git a/docs/analysis/EXTERNAL_ACTIONS.md b/docs/analysis/EXTERNAL_ACTIONS.md
+index 4164e0a..bd48690 100644
+--- a/docs/analysis/EXTERNAL_ACTIONS.md
++++ b/docs/analysis/EXTERNAL_ACTIONS.md
+@@ -160,7 +160,6 @@ Set via `firebase functions:secrets:set NAME` **before** deploying the function
+ 
+ | Secret | Used by | Notes |
+ |---|---|---|
+-| `INSIGHTS_TOKEN` | `/api/insights` | bearer token for admin-bypass |
+ | `TMDB_API_KEY` | `episodeReleaseNotify` etc. | same value as `NEXT_PUBLIC_TMDB_API_KEY`, but functions need it as a secret |
+ | `OMDB_API_KEY` | `titleRatings` | OMDb free tier 1,000/day |
+ | `MOTN_API_KEY` | `streamingOffersRefresh` | RapidAPI (Movie of the Night), free 100/day |
+diff --git a/docs/org/metrics/events.jsonl b/docs/org/metrics/events.jsonl
+index 865d232..c3a1836 100644
+--- a/docs/org/metrics/events.jsonl
++++ b/docs/org/metrics/events.jsonl
+@@ -801,3 +801,4 @@
+ {"ts":"2026-11-07T19:39:12.801Z","type":"review","ticket":"BIN-1500","tier":"medium","panel":[],"ran":false,"reason":"Underhåll av ägarkartan: tre redan befintliga filer namngavs i båda granskningslistorna. Ingen ny kapacitet; binge-integration-reviewer läste hela diffen och godkände.","outcome":"not-run","via":"ad-hoc","timing":"post-build"}
+ {"ts":"2026-11-07T19:39:25.741Z","type":"review","ticket":"BIN-1500","tier":"medium","panel":[25],"ran":false,"reason":"Underhåll av ägarkartan: tre redan befintliga filer namngavs i båda granskningslistorna. Ingen ny kapacitet; binge-integration-reviewer läste hela diffen och godkände.","outcome":"not-run","via":"ad-hoc","timing":"post-build"}
+ {"ts":"2026-11-09T06:55:09.043Z","type":"review","ticket":"BIN-1501","tier":"medium","panel":[22],"ran":true,"reason":"Data Analyst critique: shared overdue constant, same reference time as Toolbar, partial covers all rollup sections; zero visits and undefined history deliberately not flagged (not errors).","outcome":"conditions-applied","via":"ad-hoc","timing":"post-build"}
++{"ts":"2026-11-09T07:12:21.312Z","type":"review","ticket":"BIN-1502","tier":"medium","panel":[3],"ran":false,"reason":"Removes a static token path; no cost or paid-service change, so the Financial Controller has nothing to critique. binge-security-reviewer (opus) read the full diff and approved.","outcome":"not-run","via":"ad-hoc","timing":"post-build"}
+diff --git a/docs/workflow-map-content-baseline.json b/docs/workflow-map-content-baseline.json
+index 938f74c..2307241 100644
+--- a/docs/workflow-map-content-baseline.json
++++ b/docs/workflow-map-content-baseline.json
+@@ -12,7 +12,8 @@
+     "flow-feed": 1857,
+     "flow-friends": 2483,
+     "flow-follow-notify": 3151,
+-    "flow-groups": 9635,
++    "flow-session-invite": 3729,
++    "flow-groups": 10223,
+     "flow-tillsammans": 4591,
+     "flow-episodes": 2901,
+     "flow-available": 6610,
+@@ -22,18 +23,20 @@
+     "flow-rotation": 2832,
+     "flow-savings": 2737,
+     "flow-leaving": 1165,
+-    "flow-vart-det": 1033,
++    "flow-vart-det": 1117,
+     "flow-tmdb-sweep": 3740,
+     "flow-cineasterna": 1217,
+     "flow-ratings-ext": 937,
+     "flow-rating-community": 3204,
+     "flow-titlepage": 4183,
++    "flow-tv-pairing": 1226,
++    "flow-tv-overview": 1148,
+     "flow-moderation": 4512,
+-    "flow-insights": 4903,
++    "flow-insights": 4847,
+     "flow-hygiene": 11206,
+     "flow-gdpr": 16686,
+     "flow-static": 2620,
+-    "flow-crash-telemetry": 4567,
++    "flow-crash-telemetry": 4572,
+     "flow-recap-gaps": 1788,
+     "flow-record-event": 1968,
+     "flow-premiarer": 2242,
+diff --git a/docs/workflow-map.html b/docs/workflow-map.html
+index 74bbb62..3c14158 100644
+--- a/docs/workflow-map.html
++++ b/docs/workflow-map.html
+@@ -3074,7 +3074,7 @@
+     {
+       "id": "flow-insights",
+       "label": "Insights dashboard",
+-      "description": "rollupInsights runs on a 24h Cloud Scheduler trigger, paginated-scans the watchlist collectionGroup plus aggregate counts (users/reviews/groups/active sessions), pages through Firebase Auth for weekly/monthly active-user counts (non-anonymous accounts by the later of lastSignInTime/lastRefreshTime; only the two counts are stored), and writes one current-state snapshot to insights/daily (read by the API) and a dated insights/{YYYY-MM-DD} history doc, then prunes history past a 400-day retention window (a year plus a margin, so a curve can stand against the year before). The apiInsights HTTP function sits behind the /api/insights Hosting rewrite; it authenticates either a Firebase ID token (must resolve to users/{uid}.isAdmin===true) or a static INSIGHTS_TOKEN secret, reads insights/daily (1 read), lists the insights collection's ids once and uses that listing twice: for the baseline dated snapshot behind the window deltas, and for the dated snapshots inside the range that become the tiles' curves (history; a field mask keeps the read to totals and activeUsers, and a range holding more than HISTORY_READ_LIMIT dated docs is read at HISTORY_READ_LIMIT evenly spaced days, first and last always included, so the curve keeps its whole span at lower resolution), reads the eventStats day docs written by recordEvent and the askBinge usage stats, asks Cloudflare Web Analytics' GraphQL API for the range's daily visits and page views, top pages and top referring hosts (functions/src/insights/traffic.ts; account id, site tag and API token are Firebase secrets passed as GraphQL variables, never in the query text, and never reach the client; 8 s timeout; a non-OK answer, GraphQL errors or a missing secret → traffic: null, logged by status only; the window never starts before TRAFFIC_SINCE, the day the beacon went live, and a range wholly before it is a measured zero without a call), merges them into one InsightsData JSON payload (failed lists which of rollup, events, history and traffic could not be read, partial is that list being non-empty, and trafficSince carries the first counted day; the dashboard refuses a tile's period comparison only when that tile's own source failed or its window starts before trafficSince), and returns it with a 5-minute private cache header. Every page of the site loads Cloudflare's beacon script (src/app/layout.tsx, public site token; the hosting CSP header names static.cloudflareinsights.com in script-src and cloudflareinsights.com in connect-src exactly), which posts one report per page load to cloudflareinsights.com/cdn-cgi/rum with no cookie and nothing stored on the device; those reports are what the GraphQL read sums (ADR 0025, privacy policy 1.17). The /insikter dashboard (InsikterClient + useInsightsData hook) calls fetchInsights with a bearer token and range, then fetches the previous equally long window with a second call for the period comparison (skipped for a custom range; a failed second call leaves the comparison blank), and renders the merged data.",
++      "description": "rollupInsights runs on a 24h Cloud Scheduler trigger, paginated-scans the watchlist collectionGroup plus aggregate counts (users/reviews/groups/active sessions), pages through Firebase Auth for weekly/monthly active-user counts (non-anonymous accounts by the later of lastSignInTime/lastRefreshTime; only the two counts are stored), and writes one current-state snapshot to insights/daily (read by the API) and a dated insights/{YYYY-MM-DD} history doc, then prunes history past a 400-day retention window (a year plus a margin, so a curve can stand against the year before). The apiInsights HTTP function sits behind the /api/insights Hosting rewrite; it authenticates a Firebase ID token (must resolve to users/{uid}.isAdmin===true), reads insights/daily (1 read), lists the insights collection's ids once and uses that listing twice: for the baseline dated snapshot behind the window deltas, and for the dated snapshots inside the range that become the tiles' curves (history; a field mask keeps the read to totals and activeUsers, and a range holding more than HISTORY_READ_LIMIT dated docs is read at HISTORY_READ_LIMIT evenly spaced days, first and last always included, so the curve keeps its whole span at lower resolution), reads the eventStats day docs written by recordEvent and the askBinge usage stats, asks Cloudflare Web Analytics' GraphQL API for the range's daily visits and page views, top pages and top referring hosts (functions/src/insights/traffic.ts; account id, site tag and API token are Firebase secrets passed as GraphQL variables, never in the query text, and never reach the client; 8 s timeout; a non-OK answer, GraphQL errors or a missing secret → traffic: null, logged by status only; the window never starts before TRAFFIC_SINCE, the day the beacon went live, and a range wholly before it is a measured zero without a call), merges them into one InsightsData JSON payload (failed lists which of rollup, events, history and traffic could not be read, partial is that list being non-empty, and trafficSince carries the first counted day; the dashboard refuses a tile's period comparison only when that tile's own source failed or its window starts before trafficSince), and returns it with a 5-minute private cache header. Every page of the site loads Cloudflare's beacon script (src/app/layout.tsx, public site token; the hosting CSP header names static.cloudflareinsights.com in script-src and cloudflareinsights.com in connect-src exactly), which posts one report per page load to cloudflareinsights.com/cdn-cgi/rum with no cookie and nothing stored on the device; those reports are what the GraphQL read sums (ADR 0025, privacy policy 1.17). The /insikter dashboard (InsikterClient + useInsightsData hook) calls fetchInsights with a bearer token and range, then fetches the previous equally long window with a second call for the period comparison (skipped for a custom range; a failed second call leaves the comparison blank), and renders the merged data.",
+       "covers": [
+         "rollupInsights",
+         "apiInsights",
+@@ -3112,7 +3112,7 @@
+         {
+           "from": "insikter-page",
+           "to": "cf-apiInsights",
+-          "payload": "GET /api/insights?range=... with Authorization: Bearer <idToken|INSIGHTS_TOKEN> (via Hosting rewrite); then a second GET for the previous window (previousRange) for the comparison, not sent for a custom range",
++          "payload": "GET /api/insights?range=... with Authorization: Bearer <idToken> (via Hosting rewrite); then a second GET for the previous window (previousRange) for the comparison, not sent for a custom range",
+           "transport": "https-fetch",
+           "verified": true
+         },
+diff --git a/functions/src/insights/api.ts b/functions/src/insights/api.ts
+index 90c118a..45fb61b 100644
+--- a/functions/src/insights/api.ts
++++ b/functions/src/insights/api.ts
+@@ -1,9 +1,8 @@
+ /**
+  * HTTP endpoint behind the hosting rewrite /api/insights.
+  *
+- * Auth — either is accepted:
+- *   1. Authorization: Bearer <firebaseIdToken>  → verified, then users/{uid}.isAdmin must be true.
+- *   2. Authorization: Bearer <INSIGHTS_TOKEN>    → matches the secret (URL-token fallback).
++ * Auth: Authorization: Bearer <firebaseIdToken> → verified, then users/{uid}.isAdmin must be true.
++ * No static shared token is accepted: one in a URL ends up in browser history and referrers.
+  *
+  * On success: reads insights/daily (1 read), the askBingeStats and eventStats day docs in
+  * the range, the dated history, and the Cloudflare Web Analytics aggregates (traffic.ts),
+@@ -11,7 +10,6 @@
+  * per request.
+  */
+ 
+-import * as crypto from 'crypto';
+ import { getFirestore } from 'firebase-admin/firestore';
+ import { getAuth } from 'firebase-admin/auth';
+ import { onRequest } from 'firebase-functions/v2/https';
+@@ -26,33 +24,16 @@ import { failedSources } from './failed';
+ import { stockholmDayId } from '../askbinge/logic';
+ import type { HistoryPoint, InsightsData, RangeInfo, RollupData } from './types';
+ 
+-const INSIGHTS_TOKEN = defineSecret('INSIGHTS_TOKEN');
+ // Cloudflare Web Analytics (traffic.ts). Read-only analytics token; the values are
+ // bound to the function and never echoed in a response or a log line.
+ const CF_ANALYTICS_TOKEN = defineSecret('CF_ANALYTICS_TOKEN');
+ const CF_ACCOUNT_ID = defineSecret('CF_ACCOUNT_ID');
+ const CF_SITE_TAG = defineSecret('CF_SITE_TAG');
+ 
+-function safeEqual(a: string, b: string): boolean {
+-  const bufA = Buffer.from(a);
+-  const bufB = Buffer.from(b);
+-  const len = Math.max(bufA.length, bufB.length, 1);
+-  const padA = Buffer.alloc(len);
+-  const padB = Buffer.alloc(len);
+-  bufA.copy(padA);
+-  bufB.copy(padB);
+-  return crypto.timingSafeEqual(padA, padB) && bufA.length === bufB.length;
+-}
+-
+ /** Returns true if the bearer token authenticates an authorized caller. */
+ async function isAuthorized(token: string): Promise<boolean> {
+   if (!token) return false;
+ 
+-  // 1. URL-token fallback.
+-  const expected = process.env.INSIGHTS_TOKEN || '';
+-  if (expected && safeEqual(token, expected)) return true;
+-
+-  // 2. Firebase ID token of an admin user.
+   try {
+     const decoded = await getAuth().verifyIdToken(token);
+     const snap = await getFirestore().collection('users').doc(decoded.uid).get();
+@@ -162,7 +143,7 @@ async function readHistory(ids: readonly string[], range: RangeInfo): Promise<Hi
+ export const apiInsights = onRequest(
+   {
+     region: 'europe-west1',
+-    secrets: [INSIGHTS_TOKEN, CF_ANALYTICS_TOKEN, CF_ACCOUNT_ID, CF_SITE_TAG],
++    secrets: [CF_ANALYTICS_TOKEN, CF_ACCOUNT_ID, CF_SITE_TAG],
+     cors: false,
+   },
+   async (req, res) => {
+diff --git a/src/app/insikter/InsikterClient.tsx b/src/app/insikter/InsikterClient.tsx
+index 50bed10..d84ca75 100644
+--- a/src/app/insikter/InsikterClient.tsx
++++ b/src/app/insikter/InsikterClient.tsx
+@@ -1,6 +1,7 @@
+ 'use client';
+ 
+ import { useCallback, type ReactNode } from 'react';
++import AuthGuard from '@/components/AuthGuard';
+ import { useAuth } from '@/contexts/AuthContext';
+ import { auth } from '@/lib/firebase/config';
+ import { PageHeader } from '@/components/layout/PageHeader';
+@@ -26,26 +27,26 @@ function Section({ title, intro, children, badge }: { title: string; intro?: Rea
+   );
+ }
+ 
+-/** Read ?token from the URL once (client-only). */
+-function urlToken(): string {
+-  if (typeof window === 'undefined') return '';
+-  return new URLSearchParams(window.location.search).get('token') ?? '';
++// A visitor who is not signed in is sent to the sign-in page and returned here (AuthGuard);
++// only an admin account sees data, which the server enforces too.
++export default function InsikterClient() {
++  return (
++    <AuthGuard>
++      <InsikterDashboard />
++    </AuthGuard>
++  );
+ }
+ 
+-export default function InsikterClient() {
++function InsikterDashboard() {
+   const { user, loading: authLoading, profileLoading } = useAuth();
+   const [range] = useDateRange();
+ 
+-  const token = urlToken();
+-  const isAdmin = !!user?.isAdmin;
+-  const hasAccess = isAdmin || !!token;
++  const hasAccess = !!user?.isAdmin;
+ 
+-  // Resolve the bearer credential per fetch: a fresh ID token for an admin,
+-  // else the static URL token.
++  // A fresh ID token per fetch, so a long-open tab never sends an expired one.
+   const getToken = useCallback(async (): Promise<string | null> => {
+-    if (isAdmin && auth.currentUser) return auth.currentUser.getIdToken();
+-    return token || null;
+-  }, [isAdmin, token]);
++    return auth.currentUser ? auth.currentUser.getIdToken() : null;
++  }, []);
+ 
+   // Hold the fetch until auth + profile have resolved; only then can getToken
+   // mint a real ID token. Re-runs the moment this flips true.
+@@ -72,7 +73,7 @@ export default function InsikterClient() {
+         <div className="mt-6">
+           <EmptyState
+             title="Ingen behörighet"
+-            body="Den här sidan kräver ett admin-konto eller en giltig token i URL:en (?token=…)."
++            body="Den här sidan är bara för administratörer. Logga in med ett admin-konto."
+           />
+         </div>
+       </div>
