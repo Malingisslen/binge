@@ -1,8 +1,8 @@
 {
-  "lastRun": "2026-11-02",
+  "lastRun": "2026-11-09",
   "dossiersRefreshed": 0,
   "worldWatchRoles": 1,
   "retroDue": false,
   "acceptRate": null,
-  "notes": "Security Architect was due (scanned 2026-10-26) -- lean pass, no new material item; package-lock now resolves next@16.4.3, past the fixes for issues #133/#152 (worth closing once reconciled with Linear). Legal/GDPR Counsel and DPO not due (monthly, scanned 2026-10-12). No plan files qualified for archiving. Retro schedule already satisfied (bootstrap/shakedown/full all logged). dossier-staleness dir absent (gitignored local state), as expected."
+  "notes": "Security Architect due (weekly) -- the previewed 2026-11-03 Next.js release shipped (1 High + 6 Medium); none apply, binge is a static export with no server/Image Optimization. Legal/GDPR Counsel and DPO not due (monthly, scanned 2026-10-12). Archived 2 shipped plan files (radgivaren-hushall, vart-det). Retro schedule already satisfied."
 }
