@@ -1,0 +1,53 @@
+diff --git a/src/app/admin/reports/page.tsx b/src/app/admin/reports/page.tsx
+index c6f9465..9073a76 100644
+--- a/src/app/admin/reports/page.tsx
++++ b/src/app/admin/reports/page.tsx
+@@ -98,6 +98,8 @@ function ReportsDashboard() {
+     <div>
+       <PageHeader crumb="Admin · Rapporter" title="Rapporter" />
+ 
++      <OpenSummary onShowOpen={() => setActiveTab('open')} refreshKey={reports} />
++
+       <div className="flex gap-px mb-3">
+         {STATUS_TABS.map(s => (
+           <button
+@@ -135,12 +137,38 @@ function ReportsDashboard() {
+       </ul>
+ 
+       <div className="mt-4 text-xxs text-ink-3">
+-        Se <Link href="https://github.com/Malingisslen/binge/blob/main/docs/moderation.md" className="text-acc-deep underline" target="_blank">docs/moderation.md</Link> för beslutsträd per rapport-typ.
++        <span className="font-semibold">Granskad</span> = du har tittat men inte gjort något än.{' '}
++        <span className="font-semibold">Åtgärda</span> = du har tagit bort eller stängt av det anmälda.{' '}
++        <span className="font-semibold">Avfärda</span> = anmälan var obefogad. Anteckningen du skriver syns aldrig för den som anmälde.
+       </div>
+     </div>
+   );
+ }
+ 
++/** Top box: how many reports wait. Re-reads when the list on screen changes, so it follows a decision. */
++function OpenSummary({ onShowOpen, refreshKey }: { onShowOpen: () => void; refreshKey: unknown }) {
++  const open = useQuery({
++    queryKey: ['admin-open-reports', refreshKey],
++    queryFn: () => listReports({ status: 'open' }),
++    staleTime: 0,
++    retry: false,
++  });
++  if (open.isError) return null;
++  if (!open.data) return null;
++  const n = open.data.length;
++  const count = n >= 100 ? '100 eller fler' : String(n);
++  return n === 0 ? (
++    <div className="mb-3 rounded-sm border border-success bg-surface px-3 py-2 text-sm text-ink" role="status">
++      ✓ Inga anmälningar väntar.
++    </div>
++  ) : (
++    <div className="mb-3 rounded-sm border border-warn-deep bg-warn-soft px-3 py-2 text-sm text-warn-ink" role="status">
++      <span className="font-semibold">{count} {n === 1 ? 'anmälan väntar' : 'anmälningar väntar'}</span> på beslut.{' '}
++      <button type="button" onClick={onShowOpen} className="underline cursor-pointer">Visa dem</button>
++    </div>
++  );
++}
++
+ function ReportRow({
+   report, onAction,
+ }: {
