@@ -192,7 +192,7 @@ export { onSessionInviteCreate } from './sessionInvitePush';
 
 // ── Insikter (intern analys-dashboard) ───────────────────────────────────────
 // rollupInsights: schemalagd Firestore-aggregering → insights/daily.
-// apiInsights: HTTP-endpoint bakom /api/insights (admin-token + eventStats-summor).
+// apiInsights: HTTP-endpoint bakom /api/insights (eventStats-summor).
 export { rollupInsights } from './insights/rollup';
 export { apiInsights } from './insights/api';
 

@@ -9,7 +9,7 @@ import { previousRange } from '../metrics/comparison';
  * Fetches /api/insights, re-fetching when the range changes.
  *
  * `getToken` resolves the bearer credential per fetch — a fresh Firebase ID
- * token for an admin, or the static URL token. Returning null means "no access"
+ * token for an admin. Returning null means "no access"
  * and the hook stays idle (the client renders an access message instead).
  *
  * `enabled` gates the first fetch until the caller's auth/profile state has

@@ -160,7 +160,6 @@ Set via `firebase functions:secrets:set NAME` **before** deploying the function 
 
 | Secret | Used by | Notes |
 |---|---|---|
-| `INSIGHTS_TOKEN` | `/api/insights` | bearer token for admin-bypass |
 | `TMDB_API_KEY` | `episodeReleaseNotify` etc. | same value as `NEXT_PUBLIC_TMDB_API_KEY`, but functions need it as a secret |
 | `OMDB_API_KEY` | `titleRatings` | OMDb free tier 1,000/day |
 | `MOTN_API_KEY` | `streamingOffersRefresh` | RapidAPI (Movie of the Night), free 100/day |

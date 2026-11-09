@@ -1,9 +1,8 @@
 /**
  * HTTP endpoint behind the hosting rewrite /api/insights.
  *
- * Auth — either is accepted:
- *   1. Authorization: Bearer <firebaseIdToken>  → verified, then users/{uid}.isAdmin must be true.
- *   2. Authorization: Bearer <INSIGHTS_TOKEN>    → matches the secret (URL-token fallback).
+ * Auth: Authorization: Bearer <firebaseIdToken> → verified, then users/{uid}.isAdmin must be true.
+ * No static shared token is accepted: one in a URL ends up in browser history and referrers.
  *
  * On success: reads insights/daily (1 read), the askBingeStats and eventStats day docs in
  * the range, the dated history, and the Cloudflare Web Analytics aggregates (traffic.ts),
@@ -11,7 +10,6 @@
  * per request.
  */
 
-import * as crypto from 'crypto';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import { onRequest } from 'firebase-functions/v2/https';
@@ -26,33 +24,16 @@ import { failedSources } from './failed';
 import { stockholmDayId } from '../askbinge/logic';
 import type { HistoryPoint, InsightsData, RangeInfo, RollupData } from './types';
 
-const INSIGHTS_TOKEN = defineSecret('INSIGHTS_TOKEN');
 // Cloudflare Web Analytics (traffic.ts). Read-only analytics token; the values are
 // bound to the function and never echoed in a response or a log line.
 const CF_ANALYTICS_TOKEN = defineSecret('CF_ANALYTICS_TOKEN');
 const CF_ACCOUNT_ID = defineSecret('CF_ACCOUNT_ID');
 const CF_SITE_TAG = defineSecret('CF_SITE_TAG');
 
-function safeEqual(a: string, b: string): boolean {
-  const bufA = Buffer.from(a);
-  const bufB = Buffer.from(b);
-  const len = Math.max(bufA.length, bufB.length, 1);
-  const padA = Buffer.alloc(len);
-  const padB = Buffer.alloc(len);
-  bufA.copy(padA);
-  bufB.copy(padB);
-  return crypto.timingSafeEqual(padA, padB) && bufA.length === bufB.length;
-}
-
 /** Returns true if the bearer token authenticates an authorized caller. */
 async function isAuthorized(token: string): Promise<boolean> {
   if (!token) return false;
 
-  // 1. URL-token fallback.
-  const expected = process.env.INSIGHTS_TOKEN || '';
-  if (expected && safeEqual(token, expected)) return true;
-
-  // 2. Firebase ID token of an admin user.
   try {
     const decoded = await getAuth().verifyIdToken(token);
     const snap = await getFirestore().collection('users').doc(decoded.uid).get();
@@ -162,7 +143,7 @@ async function readHistory(ids: readonly string[], range: RangeInfo): Promise<Hi
 export const apiInsights = onRequest(
   {
     region: 'europe-west1',
-    secrets: [INSIGHTS_TOKEN, CF_ANALYTICS_TOKEN, CF_ACCOUNT_ID, CF_SITE_TAG],
+    secrets: [CF_ANALYTICS_TOKEN, CF_ACCOUNT_ID, CF_SITE_TAG],
     cors: false,
   },
   async (req, res) => {

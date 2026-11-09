@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, type ReactNode } from 'react';
+import AuthGuard from '@/components/AuthGuard';
 import { useAuth } from '@/contexts/AuthContext';
 import { auth } from '@/lib/firebase/config';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -26,26 +27,26 @@ function Section({ title, intro, children, badge }: { title: string; intro?: Rea
   );
 }
 
-/** Read ?token from the URL once (client-only). */
-function urlToken(): string {
-  if (typeof window === 'undefined') return '';
-  return new URLSearchParams(window.location.search).get('token') ?? '';
+// A visitor who is not signed in is sent to the sign-in page and returned here (AuthGuard);
+// only an admin account sees data, which the server enforces too.
+export default function InsikterClient() {
+  return (
+    <AuthGuard>
+      <InsikterDashboard />
+    </AuthGuard>
+  );
 }
 
-export default function InsikterClient() {
+function InsikterDashboard() {
   const { user, loading: authLoading, profileLoading } = useAuth();
   const [range] = useDateRange();
 
-  const token = urlToken();
-  const isAdmin = !!user?.isAdmin;
-  const hasAccess = isAdmin || !!token;
+  const hasAccess = !!user?.isAdmin;
 
-  // Resolve the bearer credential per fetch: a fresh ID token for an admin,
-  // else the static URL token.
+  // A fresh ID token per fetch, so a long-open tab never sends an expired one.
   const getToken = useCallback(async (): Promise<string | null> => {
-    if (isAdmin && auth.currentUser) return auth.currentUser.getIdToken();
-    return token || null;
-  }, [isAdmin, token]);
+    return auth.currentUser ? auth.currentUser.getIdToken() : null;
+  }, []);
 
   // Hold the fetch until auth + profile have resolved; only then can getToken
   // mint a real ID token. Re-runs the moment this flips true.
@@ -72,7 +73,7 @@ export default function InsikterClient() {
         <div className="mt-6">
           <EmptyState
             title="Ingen behörighet"
-            body="Den här sidan kräver ett admin-konto eller en giltig token i URL:en (?token=…)."
+            body="Den här sidan är bara för administratörer. Logga in med ett admin-konto."
           />
         </div>
       </div>
