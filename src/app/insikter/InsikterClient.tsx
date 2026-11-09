@@ -13,13 +13,13 @@ import { Button } from '@/components/ui/Button';
 import { eyebrowClass } from '@/components/ui/Eyebrow';
 import {
   Toolbar, MetricGrid, MetricTile, TimeSeriesChart, Donut,
-  Histogram, TopList, ExplainDrawer,
+  Histogram, TopList, ExplainDrawer, StatusBanner, SectionBadge,
 } from './components';
 
-function Section({ title, intro, children }: { title: string; intro?: ReactNode; children: ReactNode }) {
+function Section({ title, intro, children, badge }: { title: string; intro?: ReactNode; children: ReactNode; badge?: ReactNode }) {
   return (
     <section className="mt-7">
-      <h2 className={eyebrowClass({ size: 'xs', className: 'mb-2' })}>{title}</h2>
+      <h2 className={eyebrowClass({ size: 'xs', className: 'mb-2' })}>{title}{badge}</h2>
       {intro && <p className="text-base text-ink-3 mb-2">{intro}</p>}
       {children}
     </section>
@@ -129,11 +129,13 @@ export default function InsikterClient() {
           </div>
         )}
 
+        <StatusBanner data={data} now={lastFetchedAt} />
+
         <div className="mt-4">
           <Toolbar lastFetchedAt={lastFetchedAt} />
         </div>
 
-        <Section title="Just nu" intro="Ögonblicksbilder från den senaste beräkningen. Följer inte datumväljaren.">
+        <Section badge={<SectionBadge data={data} now={lastFetchedAt} section="now" />} title="Just nu" intro="Ögonblicksbilder från den senaste beräkningen. Följer inte datumväljaren.">
           <MetricGrid>
             <MetricTile metricKey="totalUsers" />
             <MetricTile metricKey="activeUsers7d" />
@@ -145,7 +147,7 @@ export default function InsikterClient() {
           </MetricGrid>
         </Section>
 
-        <Section title="Nya konton i perioden" intro={eventsIntro}>
+        <Section badge={<SectionBadge data={data} now={lastFetchedAt} section="period" />} title="Nya konton i perioden" intro={eventsIntro}>
           <MetricGrid>
             <MetricTile metricKey="newUsers" />
             <MetricTile metricKey="titlesAdded" />
@@ -159,7 +161,7 @@ export default function InsikterClient() {
           </div>
         </Section>
 
-        <Section title="Engagemang i perioden" intro={eventsIntro}>
+        <Section badge={<SectionBadge data={data} now={lastFetchedAt} section="engagement" />} title="Engagemang i perioden" intro={eventsIntro}>
           <MetricGrid>
             <MetricTile metricKey="providerClicks" />
             <MetricTile metricKey="shareClicks" />
@@ -176,7 +178,7 @@ export default function InsikterClient() {
           </div>
         </Section>
 
-        <Section title="Biblioteket" intro="Allt som ligger i användarnas bibliotek just nu. Följer inte datumväljaren.">
+        <Section badge={<SectionBadge data={data} now={lastFetchedAt} section="library" />} title="Biblioteket" intro="Allt som ligger i användarnas bibliotek just nu. Följer inte datumväljaren.">
           <div className="grid lg:grid-cols-2 gap-3">
             <Donut metricKey="statusDistribution" />
             <Donut metricKey="mediaTypeSplit" />
@@ -187,7 +189,7 @@ export default function InsikterClient() {
           </div>
         </Section>
 
-        <Section title="Fråga Binge i perioden">
+        <Section badge={<SectionBadge data={data} now={lastFetchedAt} section="ask" />} title="Fråga Binge i perioden">
           <MetricGrid>
             <MetricTile metricKey="askSearches" />
             <MetricTile metricKey="askZeroRate" />
@@ -200,7 +202,7 @@ export default function InsikterClient() {
           </div>
         </Section>
 
-        <Section title="Besök i perioden" intro={<>Cookiefri räkning i webbläsaren via Cloudflare Web Analytics. Inga besökare följs; bara summor per dag, sida och varifrån folk kom. Ungefärliga tal (urval, annonsblockerare räknas inte, dagar efter UTC): följ nivån över tid, och lägg dem inte ihop med räkningarna ovan.{data.trafficSince ? ` Besök räknas sedan ${data.trafficSince}.` : ''}</>}>
+        <Section badge={<SectionBadge data={data} now={lastFetchedAt} section="traffic" />} title="Besök i perioden" intro={<>Cookiefri räkning i webbläsaren via Cloudflare Web Analytics. Inga besökare följs; bara summor per dag, sida och varifrån folk kom. Ungefärliga tal (urval, annonsblockerare räknas inte, dagar efter UTC): följ nivån över tid, och lägg dem inte ihop med räkningarna ovan.{data.trafficSince ? ` Besök räknas sedan ${data.trafficSince}.` : ''}</>}>
           <MetricGrid>
             <MetricTile metricKey="visits" />
             <MetricTile metricKey="pageViews" />

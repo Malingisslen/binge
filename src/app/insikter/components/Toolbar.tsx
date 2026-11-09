@@ -2,12 +2,11 @@
 
 import { RangePicker } from './RangePicker';
 import { useInsightsContext } from '../state/InsightsContext';
+import { OVERDUE_AFTER_MS } from '../metrics/health';
 
 // The scheduled rollup recomputes the snapshot on this cadence — keep in sync
 // with `every 24 hours` in functions/src/insights/rollup.ts.
 const ROLLUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
-// A run later than this is overdue, not merely "soon": the rollup has missed its slot.
-const OVERDUE_AFTER_MS = 30 * 60 * 60 * 1000;
 
 function formatTime(d: Date): string {
   return d.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
