@@ -928,5 +928,143 @@
     "title": "Season 2, episodes 11 (\"Det hemliga vapnet\") and 12 (\"Lång dags färd mot natt\") have no sourceable plot text anywhere: confirmed no non-Swedish/non-English Wikipedia edition of this show exists at all (checked langlinks on both the main article and the dedicated episode-list article - only sv/en exist, both already exhausted). Not a based-on-true-events show, so no real-event companion article applies. Season 2 already has boundary docs for episodes 1-10, so a season-only fallback remains invalid. — Checked langlinks on both the main sv.wikipedia article and the dedicated \"Lista over avsnitt av Svensson, Svensson\" episode-list article: neither has ANY interlanguage link besides sv<->en (already-exhausted pair). No no/da/fi/de wiki editions exist for this domestic Swedish sitcom. Quick en.wikipedia re-check also unchanged.",
     "reason": "no-wiki",
     "checkedAt": "2026-07-24T20:05:41.231Z"
+  },
+  {
+    "tmdbId": 688,
+    "title": "The West Wing - no usable Wikipedia plot text for S2:14 (13 Nov 2026 revision)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-11-13T09:27:47.934Z"
+  },
+  {
+    "tmdbId": 1215,
+    "title": "Californication - no usable Wikipedia plot text for S7:12 (13 Nov 2026 revision)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-11-13T09:27:48.301Z"
+  },
+  {
+    "tmdbId": 1413,
+    "title": "American Horror Story - no usable Wikipedia plot text for S2:4 S4:3 S11:9 (13 Nov 2026 revision)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-11-13T09:27:48.679Z"
+  },
+  {
+    "tmdbId": 3750,
+    "title": "Nip/Tuck - no usable Wikipedia plot text for S5:2-22 (13 Nov 2026 revision)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-11-13T09:27:49.018Z"
+  },
+  {
+    "tmdbId": 4330,
+    "title": "Millennium - no usable Wikipedia plot text for S2:11-12 S3:1-22 (13 Nov 2026 revision)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-11-13T09:27:49.323Z"
+  },
+  {
+    "tmdbId": 7225,
+    "title": "Merlin - no usable Wikipedia plot text for S4:3-12 (13 Nov 2026 revision)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-11-13T09:27:49.631Z"
+  },
+  {
+    "tmdbId": 14069,
+    "title": "In Treatment - no usable Wikipedia plot text for S3:1-28 S4:1-24 (13 Nov 2026 revision)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-11-13T09:27:49.983Z"
+  },
+  {
+    "tmdbId": 14929,
+    "title": "Heartland - no usable Wikipedia plot text for S20:1-6 (13 Nov 2026 revision)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-11-13T09:27:50.271Z"
+  },
+  {
+    "tmdbId": 31934,
+    "title": "Solsidan - no usable Wikipedia plot text for S6:6-10 S7:1-10 S8:1-10 S9:1-10 (13 Nov 2026 revision)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-11-13T09:27:50.601Z"
+  },
+  {
+    "tmdbId": 37680,
+    "title": "Suits - no usable Wikipedia plot text for S4:2-11 S7:11-12 (13 Nov 2026 revision)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-11-13T09:27:50.895Z"
+  },
+  {
+    "tmdbId": 44006,
+    "title": "Chicago Fire - no usable Wikipedia plot text for S15:2-6 (13 Nov 2026 revision)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-11-13T09:27:51.274Z"
+  },
+  {
+    "tmdbId": 60708,
+    "title": "Gotham - no usable Wikipedia plot text for S5:1 (13 Nov 2026 revision)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-11-13T09:27:51.655Z"
+  },
+  {
+    "tmdbId": 61345,
+    "title": "Z Nation - no usable Wikipedia plot text for S4:8 (13 Nov 2026 revision)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-11-13T09:27:51.957Z"
+  },
+  {
+    "tmdbId": 62852,
+    "title": "Billions - no usable Wikipedia plot text for S2:7-11 S3:4-11 S4:2-12 S6:3-12 S7:8-12 (13 Nov 2026 revision)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-11-13T09:27:52.303Z"
+  },
+  {
+    "tmdbId": 65466,
+    "title": "Marseille - no usable Wikipedia plot text for S1:4-8 S2:1-8 (13 Nov 2026 revision)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-11-13T09:27:52.615Z"
+  },
+  {
+    "tmdbId": 72597,
+    "title": "Manhunt - no usable Wikipedia plot text for S2:2-10 (13 Nov 2026 revision)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-11-13T09:27:52.936Z"
+  },
+  {
+    "tmdbId": 84773,
+    "title": "The Lord of the Rings: The Rings of Power - no usable Wikipedia plot text for S3:2-4 (13 Nov 2026 revision)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-11-13T09:27:53.237Z"
+  },
+  {
+    "tmdbId": 100757,
+    "title": "Outer Banks - no usable Wikipedia plot text for S5:1-9 (13 Nov 2026 revision)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-11-13T09:27:53.565Z"
+  },
+  {
+    "tmdbId": 108255,
+    "title": "All Creatures Great & Small - no usable Wikipedia plot text for S7:1-6 (13 Nov 2026 revision)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-11-13T09:27:53.852Z"
+  },
+  {
+    "tmdbId": 112745,
+    "title": "Ethos - no usable Wikipedia plot text for S2:1-4 (13 Nov 2026 revision)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-11-13T09:27:54.138Z"
+  },
+  {
+    "tmdbId": 117376,
+    "title": "Vincenzo - no usable Wikipedia plot text for S1:6-15 (13 Nov 2026 revision)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-11-13T09:27:54.496Z"
+  },
+  {
+    "tmdbId": 126280,
+    "title": "Sex/Life - no usable Wikipedia plot text for S1:7-8 S2:1-6 (13 Nov 2026 revision)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-11-13T09:27:54.832Z"
+  },
+  {
+    "tmdbId": 215072,
+    "title": "A Shop for Killers - no usable Wikipedia plot text for S2:1-8 (13 Nov 2026 revision)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-11-13T09:27:55.152Z"
   }
 ]
