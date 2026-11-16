@@ -1,8 +1,8 @@
 {
-  "lastRun": "2026-11-09",
+  "lastRun": "2026-11-16",
   "dossiersRefreshed": 0,
-  "worldWatchRoles": 1,
+  "worldWatchRoles": 3,
   "retroDue": false,
   "acceptRate": null,
-  "notes": "Security Architect due (weekly) -- the previewed 2026-11-03 Next.js release shipped (1 High + 6 Medium); none apply, binge is a static export with no server/Image Optimization. Legal/GDPR Counsel and DPO not due (monthly, scanned 2026-10-12). Archived 2 shipped plan files (radgivaren-hushall, vart-det). Retro schedule already satisfied."
+  "notes": "Security Architect, Legal/GDPR Counsel and DPO all due. No material finding meets the auto-ticket bar -- one unverified single-source React RSC-RCE lead (binge runs no RSC server) and one unverified IMY enforcement-decision lead, neither filed. Snapshot correction: AI Act Digital Omnibus is already in force, not pending. bin-505-plan.md (PII leak, Tier top) not yet shipped -- left in place, not archived. No other plan files to sweep."
 }
