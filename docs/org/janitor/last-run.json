@@ -1,8 +1,8 @@
 {
-  "lastRun": "2026-11-16",
+  "lastRun": "2026-11-23",
   "dossiersRefreshed": 0,
-  "worldWatchRoles": 3,
+  "worldWatchRoles": 1,
   "retroDue": false,
   "acceptRate": null,
-  "notes": "Security Architect, Legal/GDPR Counsel and DPO all due. No material finding meets the auto-ticket bar -- one unverified single-source React RSC-RCE lead (binge runs no RSC server) and one unverified IMY enforcement-decision lead, neither filed. Snapshot correction: AI Act Digital Omnibus is already in force, not pending. bin-505-plan.md (PII leak, Tier top) not yet shipped -- left in place, not archived. No other plan files to sweep."
+  "notes": "Dossier-staleness dir absent (expected, gitignored local state). World-watch: only Security Architect due (weekly); Legal/GDPR Counsel and DPO not due (monthly, scanned 7 days ago). No new Next.js or Firebase JS SDK security content since 2026-11-16 (package-lock.json unchanged at next@16.4.3); closed last cycle's open lead -- CVE-2026-126187 (React Server Components RCE) confirmed not material, since package-lock.json has zero react-server-dom-* packages and next.config.mjs stays output:'export'. No ticket filed. bin-505-plan.md still carries 22 unchecked boxes -- left in place per rule even though the core rules-lock (owner-only users/{uid}, publicProfiles projection) appears live in firestore.rules. No other *-plan.md files to sweep. Retro not due (shakedown and full retro types both already have a matching event in events.jsonl)."
 }
